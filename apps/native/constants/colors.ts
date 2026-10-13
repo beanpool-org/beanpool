@@ -24,7 +24,7 @@
  *   emerald  → brand + OFFER + success      (the "bean"; commit buttons)
  *   orange   → NEED + primary action (FAB)
  *   amber    → TRUST tiers + star rating     (deepens with tier)
- *   violet   → app accent (chat, nav, projects, currency UI)
+ *   sage     → app accent (chat, nav, projects, currency UI); charcoal words on its fill in dark
  *   red      → danger / destructive
  *   gray     → text, surfaces, metadata      (the calm majority)
  */
@@ -148,6 +148,10 @@ export const palette = {
     purple700: '#7e22ce',
     purple800: '#6b21a8',
 
+    // Sage (the web's nature scale) — the accent's borders; its fill, ink and tint come from core
+    nature200: '#dce3dc',
+    nature800: '#434e43',
+
     // Indigo — category picker + circulation / forecast accents
     indigo50: '#eef2ff',
     indigo100: '#e0e7ff',
@@ -215,10 +219,10 @@ export const lightColors = {
         tint: palette.emerald50,
     },
     accent: {
-        primary: brandLight.ink.accent, // professional indigo-slate accent instead of violet
-        fill: brandLight.accent.fill,   // an indigo fill under text.onAccent
-        tint: palette.indigo50,
-        border: palette.indigo100,
+        primary: brandLight.ink.accent,     // sage words and icons
+        fill: brandLight.accent.fill,       // a sage fill under text.onAccent (white)
+        tint: brandLight.chip.accent.tint,  // pale sage ground; accent.primary reads on it
+        border: palette.nature200,
     },
 
     // Marketplace listing type — the one loud signal per card (core chip.ok / chip.need)
@@ -345,10 +349,10 @@ export const darkColors = {
         tint: palette.emerald950,
     },
     accent: {
-        primary: brandDark.ink.accent, // indigo for dark mode
-        fill: brandDark.accent.fill,
-        tint: palette.indigo950,
-        border: palette.indigo800,
+        primary: brandDark.ink.accent,      // light sage words and icons
+        fill: brandDark.accent.fill,        // the same light sage as a fill, under text.onAccent (charcoal)
+        tint: brandDark.chip.accent.tint,   // deep sage ground; accent.primary reads on it
+        border: palette.nature800,
     },
 
     // Marketplace listing type

@@ -175,7 +175,7 @@ export default function SettingsScreen() {
             alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         },
         reminderTickOn: { backgroundColor: colors.accent.fill },
-        reminderTickMark: { color: colors.text.inverse, fontSize: 14, fontWeight: '900', lineHeight: 16 },
+        reminderTickMark: { color: colors.text.onAccent, fontSize: 14, fontWeight: '900', lineHeight: 16 },
         reminderLabel: { flex: 1, fontSize: 15, color: colors.text.body },
         reminderNote: { fontSize: 12, color: colors.text.secondary, paddingHorizontal: 14, paddingVertical: 10 },
         menuIconWrap: {
@@ -2582,7 +2582,7 @@ export default function SettingsScreen() {
                                 accessibilityRole="button"
                             >
                                 <Text style={{ fontSize: 16 }}>🔄</Text>
-                                <Text style={styles.primaryBtnText}>Re-Run Structural Diagnostic Check</Text>
+                                <Text style={[styles.primaryBtnText, { color: colors.text.onAccent }]}>Re-Run Structural Diagnostic Check</Text>
                             </Pressable>
 
                             {/* Re-Sync Database Button */}

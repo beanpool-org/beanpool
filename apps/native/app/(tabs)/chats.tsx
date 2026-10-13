@@ -125,7 +125,7 @@ export default function ChatsScreen() {
             backgroundColor: colors.accent.fill, alignItems: 'center', justifyContent: 'center',
             borderWidth: 1.5, borderColor: colors.surface.subtle,
         },
-        talkTabBadgeText: { color: colors.text.inverse, fontSize: 10, fontWeight: '800' },
+        talkTabBadgeText: { color: colors.text.onAccent, fontSize: 10, fontWeight: '800' },
         talkTabTextActive: { color: colors.text.heading, fontWeight: '800' },
         header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle },
         title: { fontSize: 32, fontWeight: '800', color: colors.text.body, letterSpacing: -0.5 },
@@ -161,7 +161,7 @@ export default function ChatsScreen() {
         lastMessageUnread: { color: colors.text.heading, fontWeight: '700' },
         actionNeededText: { fontSize: 13, color: colors.feedback.warning.fg, fontWeight: '700', flex: 1 },
         unreadBadge: { backgroundColor: colors.accent.fill, width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-        unreadCount: { color: colors.text.inverse, fontSize: 11, fontWeight: '800' },
+        unreadCount: { color: colors.text.onAccent, fontSize: 11, fontWeight: '800' },
         contextRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
         contextPostTitle: { fontSize: 13, color: colors.text.secondary, fontWeight: '500', flex: 1, marginRight: 8 },
         statusPill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
@@ -726,7 +726,7 @@ export default function ChatsScreen() {
                 onPress={() => router.push('/(tabs)/market')}
                 style={{ marginTop: 12, backgroundColor: colors.accent.fill, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 }}
             >
-                <Text style={{ color: colors.text.inverse, fontWeight: 'bold' }}>Browse Market</Text>
+                <Text style={{ color: colors.text.onAccent, fontWeight: 'bold' }}>Browse Market</Text>
             </Pressable>
         </View>
     ) : null;
@@ -806,7 +806,7 @@ export default function ChatsScreen() {
                     style={[styles.optionsToggleBtn, (showOptions || activeFiltersCount > 0) && styles.optionsToggleBtnActive]}
                     onPress={() => setShowOptions(!showOptions)}
                 >
-                    <MaterialCommunityIcons name="tune-variant" size={20} color={showOptions || activeFiltersCount > 0 ? colors.text.inverse : palette.gray600} />
+                    <MaterialCommunityIcons name="tune-variant" size={20} color={showOptions || activeFiltersCount > 0 ? colors.text.onAccent : palette.gray600} />
                     {activeFiltersCount > 0 && (
                         <View style={styles.filterBadge}>
                             <Text style={styles.filterBadgeText}>{activeFiltersCount}</Text>

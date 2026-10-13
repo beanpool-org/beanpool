@@ -9,13 +9,18 @@
  *
  * The values are option C of the light-mode brand pass (Marty, 14 Oct 2026; scratch/global-node/
  * DESIGN-light-brand-pass-fable.md §2), a rule by role:
- *   1. Calls to action and commit buttons (terracotta, emerald, red, orange, indigo) are WHITE words on a fill one
- *      step deeper than before, and "hover"/pressed goes darker still, never lighter.
+ *   1. Calls to action and commit buttons (terracotta, emerald, red, orange) are WHITE words on a fill one step deeper
+ *      than before, and "hover"/pressed goes darker still, never lighter.
  *   2. Gold (Vouch, Approve, rating) is CHARCOAL words on amber-500, amber-400 when hovered/pressed: bronze stops
  *      reading as gold.
  *   3. Small badges and chips (the verified tick, Offer/Need, counts) are dark ink on a pale tint in light, and a pale
  *      ink on a deep tint in dark.
  * Buttons keep the same deep fill in both themes; only the inks and the chips change with the theme.
+ *
+ * The accent is sage green (Marty, 14 Oct 2026), the web's nature-600: white words on #647664 in light. In dark it is
+ * a light sage (nature-300) with charcoal words, as gold is, so it reads on the near-black pages as words and as a
+ * fill. As words in light it is a half step deeper (#5b6b5b), because #647664 is only 4.23:1 on the phone's sunken
+ * row and the web's oat page.
  *
  * Every words-on-fill pair, and every ink on every page or card it can sit on in either app, is at least 4.5:1 (WCAG
  * 2.x AA for normal text; the audience reads at 320 dp with 130 % text, where a button label is still "small").
@@ -67,9 +72,14 @@ const RED_300 = '#fca5a5';
 const RED_700 = '#b91c1c';
 const RED_800 = '#991b1b';
 const RED_950 = '#450a0a';
-const INDIGO_300 = '#a5b4fc';
-const INDIGO_600 = '#4f46e5';
-const INDIGO_700 = '#4338ca';
+// The web's sage scale (tailwind `nature`). sage-650 sits halfway between nature-600 and 700.
+const NATURE_100 = '#eef1ee';
+const NATURE_200 = '#dce3dc';
+const NATURE_300 = '#c0ccc0';
+const NATURE_600 = '#647664';
+const SAGE_650 = '#5b6b5b';
+const NATURE_700 = '#526052';
+const NATURE_900 = '#384038';
 
 /** A filled control: words (`on`) on a `fill`, and the darker `hover` (web) / pressed (phone) fill. */
 export interface FillRole {
@@ -99,14 +109,18 @@ export const BRAND_COLOURS = {
     danger: { fill: same(RED_700), hover: same(RED_800), on: same(WHITE) },
     /** Gold: Vouch, Approve, rating. Charcoal words, never white. */
     gold: { fill: same(AMBER_500), hover: same(AMBER_400), on: same(CHARCOAL) },
-    /** The indigo accent as a fill: chat's unread badge and send button, progress bars, selected toggles. */
-    accent: { fill: same(INDIGO_600), hover: same(INDIGO_700), on: same(WHITE) },
-    /** Small badges and chips. `ok` is also the Offer chip, `need` the Need chip. */
+    /**
+     * The sage accent as a fill: chat's unread badge and send button, progress bars, selected toggles. White words on
+     * nature-600 in light; charcoal words on a light sage in dark (pressed goes lighter there, as gold does).
+     */
+    accent: { fill: themed(NATURE_600, NATURE_300), hover: themed(NATURE_700, NATURE_200), on: themed(WHITE, CHARCOAL) },
+    /** Small badges and chips. `ok` is also the Offer chip, `need` the Need chip, `accent` a selected sage chip. */
     chip: {
         ok: { tint: themed(EMERALD_100, EMERALD_950), ink: themed(EMERALD_800, EMERALD_300) },
         need: { tint: themed(ORANGE_100, ORANGE_900), ink: themed(ORANGE_800, ORANGE_300) },
         warn: { tint: themed(AMBER_100, AMBER_950), ink: themed(AMBER_800, AMBER_300) },
         danger: { tint: themed(RED_100, RED_950), ink: themed(RED_700, RED_300) },
+        accent: { tint: themed(NATURE_100, NATURE_900), ink: themed(SAGE_650, NATURE_300) },
     },
     /** Words and icons drawn straight on a page or card (never on one of the fills above). */
     ink: {
@@ -118,8 +132,8 @@ export const BRAND_COLOURS = {
         danger: themed(RED_700, RED_300),
         /** Gold as words and icons (Action Required, a tip, a nudge): never the gold fill as words. */
         warning: themed(AMBER_800, AMBER_400),
-        /** The indigo accent as text and icons. */
-        accent: themed(INDIGO_600, INDIGO_300),
+        /** The sage accent as text and icons. */
+        accent: themed(SAGE_650, NATURE_300),
     },
 } as const satisfies {
     readonly [role: string]: FillRole | { readonly [name: string]: ChipRole } | { readonly [name: string]: Themed };

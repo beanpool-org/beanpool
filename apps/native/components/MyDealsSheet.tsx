@@ -318,7 +318,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             borderRadius: 12,
         },
         ctaBtnText: {
-            color: colors.text.inverse,
+            color: colors.text.onAccent,
             fontWeight: '800',
             fontSize: 14,
         },

@@ -47,7 +47,7 @@ describe('brand colours are readable in both themes', () => {
 
     it('covers every role, in both themes', () => {
         const roles = new Set(pairs.map((p) => p.role));
-        for (const role of ['cta', 'commit', 'action', 'danger', 'gold', 'accent', 'chip.ok', 'chip.need', 'chip.warn', 'chip.danger', 'ink.brand', 'ink.success', 'ink.danger', 'ink.warning', 'ink.accent']) {
+        for (const role of ['cta', 'commit', 'action', 'danger', 'gold', 'accent', 'chip.ok', 'chip.need', 'chip.warn', 'chip.danger', 'chip.accent', 'ink.brand', 'ink.success', 'ink.danger', 'ink.warning', 'ink.accent']) {
             expect(roles, role).toContain(role);
         }
         // fills: on/fill + on/hover; chips: ink/tint; inks: one per ground of that theme.
@@ -88,6 +88,23 @@ describe('brand colours are readable in both themes', () => {
             const fill = node as { fill: { light: string }; hover: { light: string } };
             expect(contrastRatio('#ffffff', fill.hover.light), role).toBeGreaterThan(contrastRatio('#ffffff', fill.fill.light));
         }
+    });
+
+    it('presses toward more contrast with its own words, in both themes', () => {
+        // Darker under white words, lighter under charcoal (gold; the sage accent in dark, Marty 14 Oct 2026).
+        for (const [role, node] of Object.entries(BRAND_COLOURS)) {
+            if (role === 'chip' || role === 'ink') continue;
+            const fill = node as { fill: Record<'light' | 'dark', string>; hover: Record<'light' | 'dark', string>; on: Record<'light' | 'dark', string> };
+            for (const theme of ['light', 'dark'] as const) {
+                expect(contrastRatio(fill.on[theme], fill.hover[theme]), `${theme} ${role}`).toBeGreaterThan(contrastRatio(fill.on[theme], fill.fill[theme]));
+            }
+        }
+    });
+
+    it('the accent is sage: nature-600 under white words in light, a light sage under charcoal in dark', () => {
+        expect(BRAND_COLOURS.accent.fill.light).toBe('#647664');
+        expect(BRAND_COLOURS.accent.on).toEqual({ light: '#ffffff', dark: '#1d231d' });
+        expect(BRAND_COLOURS.ink.accent.dark).toBe(BRAND_COLOURS.accent.fill.dark);
     });
 });
 

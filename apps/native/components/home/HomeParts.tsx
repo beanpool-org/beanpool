@@ -251,7 +251,7 @@ function make(colors: AppColors) {
         },
         chipOn: { backgroundColor: colors.accent.fill, borderColor: colors.accent.primary },
         chipText: { fontSize: 14, fontWeight: '700', color: colors.text.body },
-        chipTextOn: { color: colors.text.inverse },
+        chipTextOn: { color: colors.text.onAccent },
         note: { fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginBottom: 6 },
         faces: { flexDirection: 'row', marginRight: 2, flexShrink: 0 },
     });

@@ -199,6 +199,7 @@ export default function MarketScreen() {
         },
         chipText: { fontSize: 13, fontWeight: '700', color: colors.text.secondary },
         chipTextActive: { color: colors.text.inverse },
+        chipTextOnAccent: { color: colors.text.onAccent },
         chipAllActive: {
             backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.gray800,
             borderColor: theme === 'dark' ? colors.border.strong : palette.gray800
@@ -434,7 +435,7 @@ export default function MarketScreen() {
             color: colors.text.secondary,
         },
         favTagTextActive: {
-            color: colors.text.inverse,
+            color: colors.text.onAccent,
         },
         favSummaryBanner: {
             flexDirection: 'row',
@@ -895,7 +896,8 @@ export default function MarketScreen() {
     // "Beans only" is not offered where there are no Beans.
     const rowExtras = secondRow.kind === 'filters' ? marketExtras(secondRow.extras, nodeProfile?.features) : [];
     // The second row's chips fill with the type's colour, as the map's category chip does.
-    // Fill for the selected type pill, each carrying white text (docs/brand-colours.md: deep fills, 4.5:1 or more).
+    // Fill for the selected type pill, each carrying white text (docs/brand-colours.md: deep fills, 4.5:1 or more),
+    // except For You's sage accent, which carries text.onAccent (charcoal on the light sage in dark).
     const typeColors: Record<MarketTypeFilter, string> = {
         all: theme === 'dark' ? palette.gray600 : palette.gray800,
         'for-you': colors.accent.fill,
@@ -1039,6 +1041,7 @@ export default function MarketScreen() {
                     selected={filter}
                     onSelect={selectType}
                     activeColor={typeColors[filter]}
+                    activeTextColor={filter === 'for-you' ? colors.text.onAccent : undefined}
                     fill
                     // One line that scrolls sideways at 320dp + 1.3x text (wrapping cost a second 38dp line).
                     moreHint
@@ -1126,7 +1129,7 @@ export default function MarketScreen() {
                             accessibilityRole="button"
                             accessibilityState={{ selected: groupFilter === 'all' }}
                         >
-                            <Text style={[styles.chipText, groupFilter === 'all' && styles.chipTextActive]}>
+                            <Text style={[styles.chipText, groupFilter === 'all' && styles.chipTextOnAccent]}>
                                 👥 All Groups & Public
                             </Text>
                         </Pressable>

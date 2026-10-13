@@ -2183,7 +2183,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     }
                                 }
                             }}
-                            className="px-3 py-1 bg-white dark:bg-nature-900 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 font-bold rounded-lg text-xs cursor-pointer hover:bg-red-50 shrink-0"
+                            className="px-3 py-1 bg-white dark:bg-nature-900 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 font-bold rounded-lg text-xs cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/30 shrink-0"
                         >
                             Unblock
                         </button>

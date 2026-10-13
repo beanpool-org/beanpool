@@ -326,7 +326,7 @@ async function hoverStops(page) {
     const found = [];
     const seen = [];
     const targets = page.locator('button[class*="hover:bg-"][class*="dark:bg-"], a[class*="hover:bg-"][class*="dark:bg-"]');
-    const n = Math.min(await targets.count(), 8);
+    const n = Math.min(await targets.count(), 60); // every such control on the screen (8 missed the event cards' Going/Interested)
     let hovered = 0;
     for (let i = 0; i < n; i++) {
         const el = targets.nth(i);

@@ -242,7 +242,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                 {isSelf ? (
                     <button 
                         onClick={onEditProfile}
-                        className="shrink-0 min-h-[48px] flex items-center gap-1 px-3 py-1 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 font-extrabold text-sm cursor-pointer hover:bg-emerald-100/50"
+                        className="shrink-0 min-h-[48px] flex items-center gap-1 px-3 py-1 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 font-extrabold text-sm cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-950/40"
                     >
                         ✏️ Edit
                     </button>

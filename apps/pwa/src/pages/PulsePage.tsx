@@ -362,7 +362,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                     <button
                         type="button"
                         onClick={() => void loadFeed(false, selectedCategory)}
-                        className="px-3 py-1 rounded-xl text-xs font-bold bg-white dark:bg-nature-800 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-50 cursor-pointer shrink-0"
+                        className="px-3 py-1 rounded-xl text-xs font-bold bg-white dark:bg-nature-800 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer shrink-0"
                     >
                         Retry
                     </button>

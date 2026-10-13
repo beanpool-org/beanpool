@@ -161,22 +161,22 @@ export function setPlatformRequestForTests(fn: PlatformRequest | null): void {
 const INSTAGRAM_ROLE_HINT =
     'Instagram did not say which account this is. While the BeanPool Pulse app is in review, only accounts added as Instagram Testers can connect.';
 
+/** A platform id as the platform sent it. A number only when JSON.parse kept every digit. */
 function stringId(value: unknown): string | null {
     if (typeof value === 'string' && value.length > 0 && value.length <= 128) return value;
-    if (typeof value === 'number' && Number.isSafeInteger(value)) return String(value);
+    if (typeof value === 'number' && Number.isSafeInteger(value) && value > 0) return String(value);
     return null;
 }
 
 /**
  * Ask the platform who the access token belongs to. One call; only the id and username fields.
  *
- * `tokenAccountId` is the id the token response itself carried (Instagram's `user_id`), kept as
- * the stable id where the design says so. Throws `IdentityUnavailable` on any answer that does not
- * name an account; never falls back to a display name.
+ * Instagram's stable id is `/me`'s `id`, a string. The token response's `user_id` is a JSON
+ * NUMBER above 2^53 (17 digits), so `JSON.parse` rounds it, and two accounts can round to the same
+ * value: as the rename-match key that would badge the wrong account. Throws `IdentityUnavailable`
+ * on any answer that does not name an account; never falls back to a display name.
  */
-export async function readPlatformIdentity(
-    platform: 'tiktok' | 'instagram', accessToken: string, tokenAccountId?: unknown,
-): Promise<PlatformIdentity> {
+export async function readPlatformIdentity(platform: 'tiktok' | 'instagram', accessToken: string): Promise<PlatformIdentity> {
     if (platform === 'tiktok') {
         let res: PlatformResponse;
         try {
@@ -201,7 +201,7 @@ export async function readPlatformIdentity(
         throw new IdentityUnavailable('Instagram could not be reached to confirm the account. Try again.');
     }
     const handle = foldHandle(res.json?.username);
-    const accountId = stringId(tokenAccountId) ?? stringId(res.json?.id);
+    const accountId = stringId(res.json?.id);
     if (res.status >= 400 || res.json?.error || !accountId || !handle) {
         throw new IdentityUnavailable(INSTAGRAM_ROLE_HINT);
     }

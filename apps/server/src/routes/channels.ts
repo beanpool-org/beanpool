@@ -435,11 +435,11 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
          * Ask the platform who the token belongs to and set the badge, or answer the refusal.
          * Returns null when a response has been written.
          */
-        const identify = async (accessToken: string, tokenAccountId?: unknown): Promise<{ channel: CreatorChannel; found: PlatformIdentity } | null> => {
+        const identify = async (accessToken: string): Promise<{ channel: CreatorChannel; found: PlatformIdentity } | null> => {
             if (!target) return null;
             let found: PlatformIdentity;
             try {
-                found = await readPlatformIdentity(platform, accessToken, tokenAccountId);
+                found = await readPlatformIdentity(platform, accessToken);
             } catch (e: any) {
                 if (e instanceof IdentityUnavailable) {
                     console.log(`[PulseOAuthRelay] ${platform} identity unavailable`);
@@ -561,7 +561,7 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
             return;
         }
 
-        const result = await identify(tokenJson.access_token, tokenJson.user_id);
+        const result = await identify(tokenJson.access_token);
         if (!result) return;
 
         // Exchange the short-lived token for a long-lived one (60 days) only once the account is proven.

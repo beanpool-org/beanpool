@@ -16,7 +16,7 @@
  *
  * Run: node e2e/people-near-check.mjs (in apps/pwa; @beanpool/core, engine and signin built)
  */
-/* global URL, console, process, setTimeout, document, indexedDB, localStorage, getComputedStyle -- Node, and the page's side of evaluate() */
+/* global URL, console, process, setTimeout, document, indexedDB, localStorage -- Node, and the page's side of evaluate() */
 import { build } from 'vite';
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';

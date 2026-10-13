@@ -20,6 +20,9 @@ interface Counts {
 }
 
 const counts = new Map<string, Counts>();
+/** Every grant's calls today together, for the owners' daily line (design §8): kept when a grant is revoked. */
+let nodeDay = '';
+let nodeDayCalls = 0;
 
 function utcDay(now: number): string {
     return new Date(now).toISOString().slice(0, 10);
@@ -66,6 +69,8 @@ export function admitAgentCall(grantId: string, now = Date.now()): Admission {
     }
     c.minute++;
     c.dayCalls++;
+    if (nodeDay !== c.day) { nodeDay = c.day; nodeDayCalls = 0; }
+    nodeDayCalls++;
     return { ok: true };
 }
 
@@ -91,7 +96,12 @@ export function returnAgentBackup(grantId: string, now = Date.now()): void {
     if (c.dayBackups > 0) c.dayBackups--;
 }
 
-/** A revoked grant's counts go with it. */
+/** Calls let in today (UTC) from every assistant, revoked ones included. */
+export function agentCallsTodayAll(now = Date.now()): number {
+    return nodeDay === utcDay(now) ? nodeDayCalls : 0;
+}
+
+/** A revoked grant's counts go with it (the node's day total keeps its calls). */
 export function forgetAgentGrant(grantId: string): void {
     counts.delete(grantId);
 }
@@ -99,4 +109,6 @@ export function forgetAgentGrant(grantId: string): void {
 /** For tests. */
 export function resetAgentLimits(): void {
     counts.clear();
+    nodeDay = '';
+    nodeDayCalls = 0;
 }

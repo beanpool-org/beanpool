@@ -5,7 +5,7 @@ import { ProjectsPage } from './ProjectsPage';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { Treasury, BalanceInfo } from '../lib/api';
-import { getTreasuries, getBalance, getDecisions, createEnterprise } from '../lib/api';
+import { getTreasuries, getBalance, getDecisions, createEnterprise, getAllMembers } from '../lib/api';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -655,5 +655,29 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
         await waitFor(() => expect(screen.getByText(/Propose Community Action/)).toBeInTheDocument());
         expect(sectionTabs()).toHaveLength(2);
+    });
+});
+
+describe('Commons with members on demand (review of #1861, N1)', () => {
+    const localInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local' as const, features: {} };
+    beforeEach(() => { vi.clearAllMocks(); });
+    afterEach(() => { vi.mocked(communityInfoOnce).mockImplementation(async () => localInfo as never); });
+
+    it('global: the whole directory is never read, at open or after', async () => {
+        const globalInfo = { ...localInfo, profile: 'global' as const, features: { beans: false, decisions: false, membersOnDemand: true } };
+        vi.mocked(communityInfoOnce).mockImplementation(async () => globalInfo as never);
+        render(<ProjectsPage identity={backerIdentity} />);
+        await waitFor(() => expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument());
+        await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
+        await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+        expect(getTreasuries).toHaveBeenCalled();
+        expect(getAllMembers).not.toHaveBeenCalled();
+    });
+
+    it('local: the directory is read once at open, as before', async () => {
+        render(<ProjectsPage identity={backerIdentity} />);
+        await waitFor(() => expect(getAllMembers).toHaveBeenCalledTimes(1));
+        await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+        expect(getAllMembers).toHaveBeenCalledTimes(1);
     });
 });

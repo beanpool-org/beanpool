@@ -107,6 +107,7 @@ import { createOffboxBackupRoutes } from './routes/offbox-backups.js';
 import { createAlertsRoutes } from './routes/alerts.js';
 import { createAutomationTokenRoutes } from './routes/automation-tokens.js';
 import { createMcpRoutes } from './agent/mcp-route.js';
+import { createAgentGrantRoutes } from './agent/grants-route.js';
 import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
 import { identityReadOnlyGuard } from './services/identity-epoch.js';
 import { createOwnerWordsCheckRoutes } from './routes/owner-words-check.js';
@@ -1816,6 +1817,7 @@ export async function startHttpsServer(port: number): Promise<number> {
         createAlertsRoutes(deps),
         createAutomationTokenRoutes(deps),
         createMcpRoutes(deps),
+        createAgentGrantRoutes(deps),
         createTakeoverEnvelopeRoutes(deps),
         createOwnerWordsCheckRoutes(deps),
         createOwnerUnlockRoutes(deps),

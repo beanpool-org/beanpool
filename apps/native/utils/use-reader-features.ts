@@ -18,25 +18,51 @@ import type { BeanPoolIdentity } from './identity';
 
 /** How long one account's answer is used before it is asked again, as the node's own (an hour). */
 const READER_FRESH_MS = 60 * 60 * 1000;
+/** A refusal (a visitor's 403) or no answer at all is asked again sooner, but never on every focus. */
+const READER_RETRY_MS = 10 * 60 * 1000;
 const READER_ASK_MS = 10_000;
-const cache = new Map<string, { features: NodeFeatures; at: number }>();
+/**
+ * Every answer is kept, a null one too: an older node's 200 without `features` is as settled as a W1 node's, and six
+ * screens read this on every focus, so an unkept null was a signed ask per focus (review of #1852, finding 1).
+ */
+const cache = new Map<string, { features: NodeFeatures | null; at: number; freshMs: number }>();
+/** One ask in flight per node and account: screens that come into view together wait for the same answer. */
+const asking = new Map<string, Promise<NodeFeatures | null>>();
 const cacheKey = (url: string, publicKey: string) => `${url.trim().replace(/\/+$/, '').toLowerCase()}|${publicKey}`;
 
-/** The account's own features from `GET /api/community/me`, or null when the node doesn't say or can't be asked. */
-export async function askReaderFeatures(url: string, identity: BeanPoolIdentity, fetchTimeoutMs = READER_ASK_MS): Promise<NodeFeatures | null> {
+async function askReader(url: string, identity: BeanPoolIdentity, fetchTimeoutMs: number): Promise<{ features: NodeFeatures | null; freshMs: number }> {
     const stop = new AbortController();
     const timer = setTimeout(() => stop.abort(), fetchTimeoutMs);
     try {
         const res = await signedGet(url, '/api/community/me', identity, stop.signal);
-        if (!res.ok) return null;
+        if (!res.ok) return { features: null, freshMs: READER_RETRY_MS };
         const body = (await res.json().catch(() => null)) as { features?: unknown } | null;
-        if (!body?.features || typeof body.features !== 'object') return null;
-        return readNodeProfile({ features: body.features })?.features ?? null;
+        if (!body?.features || typeof body.features !== 'object') return { features: null, freshMs: READER_FRESH_MS };
+        return { features: readNodeProfile({ features: body.features })?.features ?? null, freshMs: READER_FRESH_MS };
     } catch {
-        return null;
+        return { features: null, freshMs: READER_RETRY_MS };
     } finally {
         clearTimeout(timer);
     }
+}
+
+/** The account's own features from `GET /api/community/me`, or null when the node doesn't say or can't be asked. */
+export async function askReaderFeatures(url: string, identity: BeanPoolIdentity, fetchTimeoutMs = READER_ASK_MS): Promise<NodeFeatures | null> {
+    return (await askReader(url, identity, fetchTimeoutMs)).features;
+}
+
+/** This account's answer from the node, asked once however many screens ask at the same moment, and kept. */
+function readerFeaturesFor(key: string, url: string, identity: BeanPoolIdentity): Promise<NodeFeatures | null> {
+    const inFlight = asking.get(key);
+    if (inFlight) return inFlight;
+    const ask = askReader(url, identity, READER_ASK_MS)
+        .then((answer) => {
+            cache.set(key, { features: answer.features, at: Date.now(), freshMs: answer.freshMs });
+            return answer.features;
+        })
+        .finally(() => { asking.delete(key); });
+    asking.set(key, ask);
+    return ask;
 }
 
 export interface ReaderFeatures {
@@ -65,9 +91,8 @@ export function useReaderFeatures(): ReaderFeatures {
                 const known = cache.get(key);
                 // Only this node's and this account's answer: never one from the node or account before a switch.
                 setReader(known?.features ?? null);
-                if (known && Date.now() - known.at < READER_FRESH_MS) return;
-                const asked = await askReaderFeatures(url, identity as BeanPoolIdentity);
-                if (asked) cache.set(key, { features: asked, at: Date.now() });
+                if (known && Date.now() - known.at < known.freshMs) return;
+                const asked = await readerFeaturesFor(key, url, identity as BeanPoolIdentity);
                 if (!cancelled && asked) setReader(asked);
             })();
             return () => { cancelled = true; };

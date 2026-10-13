@@ -1,6 +1,7 @@
 // "Your groups" (groups decisions 6, 7 and 13, 2026-09-19): one list of every group-like chat a member is in —
-// their Commons groups, the enterprises they keep (🥖) and the events they host or are Going to (📅) — each
-// with its latest message and the member's unread count, computed here per member.
+// their Commons groups, the enterprises they keep (🥖) and the projects they lead or help (🎯), and the events
+// they host or are Going to (📅) — each with its latest message and the member's unread count, computed here
+// per member.
 //
 // Built from the authorities, not from the participants mirror: an active group_members row, a keepership,
 // an RSVP. So a group the member left or was removed from, a pending request, an open invitation, or an
@@ -28,6 +29,9 @@ export const YOUR_CHAT_BADGES: Readonly<Record<YourChatKind, string | null>> = {
     event: '📅',
 };
 
+/** A project's badge (a goal): an enterprise-kind row whose lifecycle is 'bounded' (group decisions §3.1). */
+export const PROJECT_BADGE = '🎯';
+
 export interface YourChatLastMessage {
     id: string;
     authorPubkey: string;
@@ -46,15 +50,20 @@ export const LOCKED_PREVIEW = '🔒 Message';
 
 export interface YourChat {
     kind: YourChatKind;
-    /** 🥖 for an enterprise, 📅 for an event, null for a group. */
+    /** 🥖 for an enterprise, 🎯 for a project, 📅 for an event, null for a group. */
     badge: string | null;
+    /**
+     * An enterprise-kind row only: 'bounded' is a project (a leader and collaborators), 'ongoing' an enterprise (its
+     * keepers). Both open the same chat; an app too old to read this calls both an enterprise.
+     */
+    lifecycle?: 'ongoing' | 'bounded';
     /** The owner: group id, enterprise pubkey, or event post id. */
     id: string;
     /** Open the chat with this id (it equals `id` for all three kinds). */
     conversationId: string;
     name: string;
     avatarUrl: string | null;
-    /** Group: convenor | member | observer. Enterprise: lead | keeper. Event: host | going. */
+    /** Group: convenor | member | observer. Enterprise or project: lead | keeper. Event: host | going. */
     role: string;
     category?: string;
     joinPolicy?: string;
@@ -200,7 +209,7 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
 
     // Enterprises the member keeps (a keeper whose operator capability is live), not hidden ones.
     const enterprises = db.prepare(`
-        SELECT o.treasury_pubkey AS id, o.role, e.callsign, e.avatar_ref, e.status, e.joined_at
+        SELECT o.treasury_pubkey AS id, o.role, e.callsign, e.avatar_ref, e.status, e.joined_at, e.lifecycle
         FROM treasury_operators o JOIN members e ON e.public_key = o.treasury_pubkey
         WHERE o.member_pubkey = ? AND COALESCE(e.is_treasury, 0) = 1
     `).all(pubkey) as any[];
@@ -208,8 +217,10 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
         if (isEnterpriseThreadHidden(e.status) || !isKeeperOfEnterprise(pubkey, e.id)) continue;
         ensureEnterpriseThread(e.id);
         ensureKeeperReadCursor(e.id, pubkey);
+        const project = e.lifecycle === 'bounded';
         finish({
-            kind: 'enterprise', badge: YOUR_CHAT_BADGES.enterprise, id: e.id, conversationId: e.id, name: e.callsign,
+            kind: 'enterprise', badge: project ? PROJECT_BADGE : YOUR_CHAT_BADGES.enterprise, lifecycle: project ? 'bounded' : 'ongoing',
+            id: e.id, conversationId: e.id, name: e.callsign,
             avatarUrl: avatarUrlOf(e.id, e.avatar_ref), role: e.role === 'lead' ? 'lead' : 'keeper',
             readOnly: isEnterpriseThreadReadOnly(e.status),
         }, 'removed by a keeper', e.joined_at);

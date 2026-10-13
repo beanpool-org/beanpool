@@ -54,6 +54,12 @@ export const GROUP_CHAT_LOCKED_NOTICE = "End-to-end encrypted: only this group's
 export const GROUP_CHAT_LOCK_LOST_TEXT = "This node now says this chat isn't locked. This phone has held its keys, so it still locks every message, and sends nothing it can't lock.";
 /** A node that refuses this phone the group's keys and its chat (a removed member): it said nothing about locking. */
 export const GROUP_CHAT_NOT_MEMBER_TEXT = 'Only members of this group can open its chat';
+/**
+ * A conversation this phone knows as a direct message, asked to act as a group's chat (to post, edit, join or rotate its
+ * keys): refused, so a known DM never gets a group's keys here and never becomes a held group (confirmation 2 of #1788,
+ * finding 2).
+ */
+export const GROUP_KEYS_FOR_DM_TEXT = "This phone knows this conversation as a direct message, not a group's chat. Nothing was sent.";
 
 /** The group chat's notice: the phone's own words for what it decided, never the node's text. */
 export function groupChatNotice(state: { nodeSaysLocked: boolean; seenLocked: boolean }): string {
@@ -101,6 +107,8 @@ export async function sendSealedGroupLine(nodeUrl: string, identity: BeanPoolIde
 
 /** Refused before anything is sent: this phone doesn't hold the key the line was sealed under. */
 export const GROUP_EDIT_NO_KEY_TEXT = "This message's key isn't on this phone, so it can't be edited here.";
+/** The node answers the chat, but its edit route says it no longer has this line (confirmation 2 of #1788, J2). */
+export const GROUP_EDIT_LINE_GONE_TEXT = 'This message is no longer in this chat.';
 
 /** Edit one of my lines: re-sealed under ITS epoch (part 'edit', after its own id, still answering what it answered). */
 export async function editSealedGroupLine(

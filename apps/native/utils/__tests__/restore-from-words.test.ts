@@ -344,6 +344,8 @@ describe('a 12-word Replace takes the old account\'s push alerts and communities
         expect(mem.async.has(SAVED_NODES_STORE_KEY)).toBe(false);
         expect(removeCommunityCaches).toHaveBeenCalled();
         expect([...vi.mocked(removeCommunityCaches).mock.calls[0][0]].sort()).toEqual([BYRON, MULLUM]);
+        // With every other community copy on the phone (confirmation 2 of #1788, finding 5).
+        expect(vi.mocked(removeCommunityCaches).mock.calls[0][1]).toEqual({ everyCopy: true });
     });
 
     it('a community that can\'t be reached neither holds up nor fails the replace', async () => {

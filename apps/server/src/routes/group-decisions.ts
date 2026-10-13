@@ -13,6 +13,8 @@ import {
     scopedTallyForReader, groupRollNow, decisionsOn, canVoteOnScoped, observesGroupNow, groupNameableNow, ScopedNotFoundError, type Decision,
 } from '../decisions-engine.js';
 import { groupClosedAt } from '../state-engine.js';
+import { db } from '../db/db.js';
+import { getMember } from '@beanpool/engine';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { FEATURE_OFF } from '../config/node-profile.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
@@ -24,6 +26,23 @@ function notFound(ctx: any): void {
     ctx.body = { error: 'Not found' };
 }
 
+/**
+ * The callsigns of the vote's author and subject (#1794 N7). A removed voter's screen has no roster to name them from, and
+ * a callsign is what the community directory already shows any member; every reader of a card is already on its roll
+ * or in the group. A deleted account keeps a row whose callsign is "Deleted Member" (state-engine purgeMemberSelf), so the
+ * card names them that, which is true. Only a key with no member row, or a blank callsign, is left out, and the apps then
+ * say "someone in the group".
+ */
+function cardNames(d: Decision): Record<string, string> {
+    const names: Record<string, string> = {};
+    for (const pk of [d.authorPubkey, d.subject]) {
+        if (!pk || names[pk]) continue;
+        const callsign = (getMember(db, pk) as any)?.callsign;
+        if (typeof callsign === 'string' && callsign.trim()) names[pk] = callsign;
+    }
+    return names;
+}
+
 function card(d: Decision, actor: string) {
     const mine = getOwnDecisionVotes(actor, [d.id]).get(d.id);
     return {
@@ -33,6 +52,7 @@ function card(d: Decision, actor: string) {
         // Yes / No follow this vote's own roll, frozen when it opened (§2.6), never the group's roll now: someone removed or
         // made an observer since still votes on it, someone who joined since does not.
         canVote: canVoteOnScoped(d, actor),
+        names: cardNames(d),
     };
 }
 

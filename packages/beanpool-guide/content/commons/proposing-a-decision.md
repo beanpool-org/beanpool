@@ -19,7 +19,7 @@ related: decisions, rules, polls, enterprises
 - Choose what it is about: **Member** or **Commons Pool**.
 - **Title:** one line, like "Grant 200 beans to the Tool Library".
 - **Description & Case:** explain why, in at least 10 characters. Say it plainly. People vote on what they read here.
-- From the list below that, choose exactly what should happen. For example, for a member: Remove Member, Suspend Member or Freeze Credit. For the Commons: Grant to Enterprise, Hardship Grant or Write Off Deficit.
+- From the list below that, choose exactly what should happen. For example, for a member: Remove Member, Suspend Member or Freeze Credit. For the Commons: Give Beans to a project or enterprise, Hardship Grant, or Pay off a project's or enterprise's debt.
 - Fill in who it is for, and how many beans if there are any.
 - Tap **Submit Community Decision**.
 

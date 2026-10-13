@@ -7,11 +7,13 @@ related: messages, mute, mentions, enterprises, event-chat, posting, decisions, 
 
 ## What a group is
 
-A group is a place for some people rather than everyone: your street, a garden crew, a choir, a guild. Every group has its own chat. Groups do not hold beans. Being in one does not change your trust or your vote.
+A group is a place for some people rather than everyone: your street, a garden crew, a choir, a guild. Every group has its own chat. Some groups hold Beans: a project or an enterprise (see "Projects and enterprises"). The others (a social circle, a working group, a guild) hold none. Being in a group does not change your trust or your vote.
+
+The people who look after a chat group are its **convenors**; one of them is the **lead convenor**. They hold no Beans.
 
 ## Your groups
 
-Tap **Talk**, then **Groups**. Every group you are in is listed there, newest message first, with the enterprises you keep (🥖) and the events you are going to (📅). An enterprise's chat is its public discussion: any member of your community can read it. See "Messages". Each shows its latest message and how many you have not read.
+Tap **Talk**, then **Groups**. Every group you are in is listed there, newest message first, with the projects and enterprises you keep (🥖) and the events you are going to (📅). An enterprise's chat is its public discussion: any member of your community can read it. See "Messages". Each shows its latest message and how many you have not read.
 
 - The number on **Groups** at the top adds up your unread messages, except in chats you have muted.
 - Tap a group to open its chat. That marks it read.
@@ -23,11 +25,11 @@ The same list is in **Commons**, under **Groups**, as **Your groups**, without t
 
 - In **Talk**, under **Groups**, tap **New group**. Or in **Commons**, under **Groups**, tap the round **+** button. Both open the same **Create a Group** form.
 - Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.
-- Choose a **Category**: **Social Circle** is chosen for you; the others are **General**, **Working Group**, **Project Team** and **Guild**.
+- Choose a **Category**: **Social Circle** is chosen for you; the others are **General**, **Working Group** and **Guild**.
 - Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.
 - Tap **Create Group**. You become its **lead convenor**, and the app takes you straight into the new group's chat.
 
-Running something together, with beans involved? Tap **Start an enterprise** at the bottom of the categories instead. See "Enterprises".
+With Beans involved? Start a project or an enterprise instead, from the bottom of the categories: on the phone **Start a project or an enterprise**, on the web **Start a project** or **Start an enterprise**. See "Projects and enterprises".
 
 ## Inviting people
 

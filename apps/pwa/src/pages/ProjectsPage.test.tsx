@@ -215,8 +215,10 @@ describe('ProjectsPage regression: Project Detail scroll container & pledge form
         });
 
         // Click propose button to open modal
-        const proposeBtn = screen.getByRole('button', { name: /\+ Propose/i });
-        fireEvent.click(proposeBtn);
+        // The one Create form hands over to the enterprise form when Beans are involved (§3.1).
+        fireEvent.click(screen.getByRole('button', { name: '+ Create Group' }));
+        expect(screen.queryByText('Project Team')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: '🏛️ Start an enterprise' }));
 
         const modalHeading = screen.getByRole('heading', { name: 'Propose an Enterprise / Project' });
         expect(modalHeading).toBeInTheDocument();
@@ -323,10 +325,11 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
         const tabs = stickies[0] as HTMLElement;
         expect(tabs).toHaveAttribute('data-testid', 'commons-section-tabs');
         expect(within(tabs).getByText('Decide')).toBeInTheDocument();
-        expect(within(tabs).getByText('Enterprises')).toBeInTheDocument();
+        // One Groups list holds projects, enterprises and chat groups (pick 7): no Enterprises tab.
+        expect(within(tabs).queryByText('Enterprises')).toBeNull();
         expect(within(tabs).getByText('Groups')).toBeInTheDocument();
 
-        for (const text of ['The Commons', 'Commons Pool', 'Voice credits for money votes', 'All Enterprises', 'Bounded Projects']) {
+        for (const text of ['The Commons', 'Commons Pool', 'Voice credits for money votes', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']) {
             expect(screen.getByText(text).closest('.sticky')).toBeNull();
         }
     });
@@ -365,27 +368,32 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
         // The page scroller clips sideways overflow instead of dragging the whole page.
         expect(container.firstElementChild as HTMLElement).toHaveStyle({ overflowX: 'hidden' });
 
-        // Below `sm` each tab stacks its emoji over its label and may shrink, so all three fit.
+        // Below `sm` each tab stacks its emoji over its label and may shrink, so both fit.
         const tabs = within(screen.getByTestId('commons-section-tabs')).getAllByRole('button');
-        expect(tabs).toHaveLength(3);
+        expect(tabs).toHaveLength(2);
         for (const tab of tabs) {
             expect(tab).toHaveClass('flex-1', 'min-w-0', 'flex-col', 'sm:flex-row', 'px-1');
             expect(tab.className).not.toMatch(/(^|\s)px-3(\s|$)/);
         }
     });
 
-    it('lets the enterprise chips scroll on their own row without a visible scrollbar', async () => {
+    it('shows one Groups list: the kind chips pick projects, enterprises or chat groups', async () => {
         render(<ProjectsPage identity={backerIdentity} />);
 
         await waitFor(() => {
             expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument();
         });
-
-        const row = screen.getByTestId('enterprise-filter-chips');
-        expect(row).toHaveClass('overflow-x-auto', 'scrollbar-none');
-        for (const chip of within(row).getAllByRole('button')) {
-            expect(chip).toHaveClass('shrink-0', 'whitespace-nowrap');
-        }
+        const row = screen.getByTestId('group-filter-chips');
+        expect(within(row).getAllByRole('button').map(b => b.textContent)).toEqual(['All', 'My groups', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']);
+        // All: the enterprises and the chat groups together.
+        expect(screen.getByTestId('commons-chat-groups')).toBeInTheDocument();
+        fireEvent.click(within(row).getByText('👥 Chat groups'));
+        expect(screen.queryByText('Community Garden Solar Irrigation')).toBeNull();
+        expect(screen.getByTestId('commons-chat-groups')).toBeInTheDocument();
+        fireEvent.click(within(row).getByText('🌱 Projects'));
+        expect(screen.queryByTestId('commons-chat-groups')).toBeNull();
+        expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument();
+        expect(screen.queryByText(/Project Team|Bounded|Ongoing|Treasur/)).toBeNull();
     });
 
     it('lets the group chips scroll on their own row without a visible scrollbar', async () => {
@@ -492,10 +500,11 @@ describe('ProjectsPage: an enterprise photo goes through the canvas resize, neve
 
         render(<ProjectsPage identity={backerIdentity} />);
         await screen.findByText('Community Garden Solar Irrigation');
-        fireEvent.click(screen.getByRole('button', { name: /\+ Propose/i }));
+        fireEvent.click(screen.getByRole('button', { name: '+ Create Group' }));
+        fireEvent.click(screen.getByRole('button', { name: '🏛️ Start an enterprise' }));
         const dialog = screen.getByRole('dialog');
 
-        fireEvent.click(within(dialog).getByRole('button', { name: /Ongoing Enterprise/i }));
+        fireEvent.click(within(dialog).getByRole('button', { name: /^🏛️ Enterprise/ }));
         fireEvent.change(within(dialog).getByPlaceholderText(/Community Tool Shed/i), { target: { value: 'Shade House' } });
         fireEvent.change(within(dialog).getByPlaceholderText(/State clearly what this enterprise exists to do/i), { target: { value: 'We build a shade house' } });
 
@@ -551,9 +560,10 @@ describe('ProjectsPage: an enterprise photo goes through the canvas resize, neve
     async function openProposeFormAndPick(): Promise<HTMLElement> {
         render(<ProjectsPage identity={backerIdentity} />);
         await screen.findByText('Community Garden Solar Irrigation');
-        fireEvent.click(screen.getByRole('button', { name: /\+ Propose/i }));
+        fireEvent.click(screen.getByRole('button', { name: '+ Create Group' }));
+        fireEvent.click(screen.getByRole('button', { name: '🏛️ Start an enterprise' }));
         const dialog = screen.getByRole('dialog');
-        fireEvent.click(within(dialog).getByRole('button', { name: /Ongoing Enterprise/i }));
+        fireEvent.click(within(dialog).getByRole('button', { name: /^🏛️ Enterprise/ }));
         fireEvent.change(within(dialog).getByPlaceholderText(/Community Tool Shed/i), { target: { value: 'Shade House' } });
         fireEvent.change(within(dialog).getByPlaceholderText(/State clearly what this enterprise exists to do/i), { target: { value: 'We build a shade house' } });
         const raw = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe1, 0x00, 0x08, 0x45, 0x78, 0x69, 0x66, 0x00, 0x00])], 'IMG_0001.jpg', { type: 'image/jpeg' });
@@ -604,8 +614,8 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         vi.mocked(communityInfoOnce).mockResolvedValueOnce(globalInfo);
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
         await waitFor(() => expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(false));
-        expect(sectionTabs()).toHaveLength(2);
-        expect(screen.getByText('Groups & Teams:')).toBeInTheDocument();
+        expect(sectionTabs()).toHaveLength(1);
+        expect(screen.getByText('Groups:')).toBeInTheDocument();
         expect(screen.queryByText(/Propose Community Action/)).toBeNull();
         expect(screen.queryByText(/Propose a Community Decision/)).toBeNull();
         expect(screen.getByRole('button', { name: '+ Create Group' })).toBeInTheDocument();
@@ -617,7 +627,7 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
         await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
         await waitFor(() => expect(screen.getByText(/Propose Community Action/)).toBeInTheDocument());
-        expect(sectionTabs()).toHaveLength(3);
+        expect(sectionTabs()).toHaveLength(2);
         expect(sectionTabs()[0]).toContain('Decide');
     });
 
@@ -625,6 +635,6 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         vi.mocked(communityInfoOnce).mockRejectedValueOnce(new Error('offline'));
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
         await waitFor(() => expect(screen.getByText(/Propose Community Action/)).toBeInTheDocument());
-        expect(sectionTabs()).toHaveLength(3);
+        expect(sectionTabs()).toHaveLength(2);
     });
 });

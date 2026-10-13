@@ -87,8 +87,10 @@ import {
     setNodeRoleBreakGlassHash,
     getNodeRoleBreakGlassHash,
     NODE_ROLE_ACTS,
+    dropNodeRoleRow,
     type MemberNodeRole,
     type NodeRoleRecord,
+    type RoleChangeBy,
 } from './engine/node-roles.js';
 export {
     nodeRoleOf,
@@ -7034,7 +7036,7 @@ export function actionReport(
             // writes the same 'suspended', and a cancel puts back the status it recorded (member-wizards.ts
             // cancelRekeyCode). From now on that status is this report's 'suspended', which no cancel may undo.
             db.prepare("UPDATE rekey_requests SET prior_status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE old_pubkey = ? AND status IN ('pending', 'expired')").run(subject);
-            try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(subject); } catch { }
+            try { dropNodeRoleRow(subject, { actor: opts?.actor ?? undefined, how: 'suspended on a report' }); } catch { }
             noteTakeoverInputsChanged('member suspended by a report');
             // #172 CR: Pause all active posts of the suspended member so other members cannot initiate deals
             db.prepare("UPDATE posts SET active = 0, status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE author_pubkey = ? AND active = 1").run(subject);
@@ -7555,14 +7557,15 @@ export function isAdminPubkey(publicKey: string): boolean {
  *
  * The row write and the announcement are therefore separate, and the prune announces after it commits.
  */
-export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
+export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled' | 'pruned', by?: RoleChangeBy) {
     // An account its owner deleted stays closed, whoever asks (isDeletedByOwner). Each path that could ask answers first in
     // its own words (a reinstate vote, an admin halting a removal); this is the last line, and throws inside the caller's
     // transaction so nothing it wrote alongside stays either.
     if (status !== 'pruned' && isDeletedByOwner(publicKey)) throw new Error(OWNER_DELETED_REFUSAL);
     db.prepare("UPDATE members SET status=? WHERE public_key=?").run(status, publicKey);
+    // A role it takes away is told to the owners (engine/node-roles.ts dropNodeRoleRow), as by whom the caller says.
     if (status !== 'active') {
-        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
+        try { dropNodeRoleRow(publicKey, by ?? { how: status === 'pruned' ? 'removed from the community' : 'suspended' }); } catch { }
     }
     // Either way the owner set may have changed: an owner disabled or pruned, or one made active again.
     noteTakeoverInputsChanged(`member ${status === 'active' ? 'reactivated' : status}`);
@@ -7947,7 +7950,7 @@ export function adminPruneUser(publicKey: string, actor: string) {
         // `setUserStatusRow`, not `adminSetUserStatus` — the latter broadcasts, and a broadcast cannot be
         // rolled back. The posts UPDATE below can still fail, so announcing from in here would tell every
         // client the member was pruned while the database reverted.
-        setUserStatusRow(publicKey, 'pruned');
+        setUserStatusRow(publicKey, 'pruned', { actor, how: 'removed from the community' });
         // Removed within a day of joining through the open door: their network asks the most door work for 7 days from
         // the join (engine/door-signal.ts). Local, and nothing happens for anyone else.
         noteRemovedNewcomer(publicKey);
@@ -7964,7 +7967,7 @@ export function adminPruneUser(publicKey: string, actor: string) {
         const prunedAt = new Date().toISOString();
         scrubChannelRows({ ownerPubkey: publicKey }, prunedAt);
         scrubPulseItems({ ownerPubkey: publicKey }, prunedAt);
-        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
+        // The node role went with setUserStatusRow above, told once; the one a suspension held aside goes here.
         deletePlainRows('suspended_node_roles', 'member_pubkey = ?', publicKey);
         // Their groups' chats are locked to a roster they are no longer in: the next line waits for a rotation (§2.3).
         markGroupEpochsStaleFor(publicKey);
@@ -8221,7 +8224,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         try {
             if (db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ?").run(publicKey).changes > 0) engine.keepersChanged(db, publicKey);
         } catch { }
-        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
+        try { dropNodeRoleRow(publicKey, { actor: publicKey, how: 'by deleting their own account' }); } catch { }
         // The same line `adminPruneUser` carries, and for the same reason. A SUSPENDED member's node
         // role is not in node_roles at all — the suspension parked it in `suspended_node_roles`, to be
         // given back if the community does not keep the suspension — and the request-signing middleware

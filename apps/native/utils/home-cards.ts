@@ -158,7 +158,8 @@ export interface HomeCards {
     find?: HomeFind;
     steps?: { joinedAt: string | null; firstOffer: boolean; firstPost: boolean; photo: boolean; interests: boolean; invited: boolean | null; area: boolean; knocked: null };
     deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null };
-    enterprise?: { id: string; name: string; requests: number; others: number };
+    /** `lifecycle` 'bounded': the one kept is a project (§3.1); absent from an older node. */
+    enterprise?: { id: string; name: string; requests: number; others: number; lifecycle?: 'ongoing' | 'bounded' };
     events?: { items: HomeEventItem[]; radiusKm: number | null };
     market?: { items: HomeMarketItem[]; total14d: number; more: boolean; examples?: true };
     decide?: { open: number; soonestClosesAt: string | null; polls: number; pollsMore: boolean };
@@ -1065,6 +1066,8 @@ export function marketCaption(profile: string): string {
 /** A card's caption: its type's name (fixed words, never member text); the Market's and the community's depend on the node. */
 export function cardCaption(type: HomeCardId, answer: Pick<HomeAnswer, 'profile' | 'cards'>): string {
     if (type === 'community') return communityLines(answer.cards.community, answer.profile, false).title;
+    // The one you keep is a project: "Your project" (group decisions §3.1). A node too old to say: "Your enterprise".
+    if (type === 'enterprise' && answer.cards.enterprise?.lifecycle === 'bounded') return 'Your project';
     return cardName(type, answer.profile);
 }
 

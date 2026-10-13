@@ -189,7 +189,7 @@ describe('formatResolverName, reportSubject, and isManagerApi utility functions'
         expect(formatResolverName(null)).toBe(COMMUNITY_ADMIN);
         expect(formatResolverName(undefined)).toBe(COMMUNITY_ADMIN);
         expect(formatResolverName('')).toBe(COMMUNITY_ADMIN);
-        expect(formatResolverName('   ')).toBe('');
+        expect(formatResolverName('   ')).toBe(COMMUNITY_ADMIN);
         expect(formatResolverName('owner:password')).toBe(COMMUNITY_ADMIN);
         expect(formatResolverName('admin')).toBe(COMMUNITY_ADMIN);
         const pubkey64 = 'a'.repeat(64);

@@ -878,6 +878,8 @@ async function main(): Promise<void> {
         const on = await get('/api/home?cards=enterprise', alice);
         assert(on.body?.features?.enterprises === true && on.body?.cards?.enterprise?.id === ent.publicKey,
             `setup: Alice keeps HomeSentinel Ent, and with enterprises and treasuries on she gets its card (${JSON.stringify(on.body?.cards?.enterprise)})`);
+        assert(on.body?.cards?.enterprise?.lifecycle === 'ongoing',
+            `the card says it is an enterprise, so its heading is "Your enterprise" (${on.body?.cards?.enterprise?.lifecycle})`);
         setOverride('treasuries', 'false');
         const s = getProfileSwitches();
         const off = await get('/api/home?cards=enterprise', alice);

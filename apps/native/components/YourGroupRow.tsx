@@ -10,7 +10,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { chatEmoji, previewLine, rowTime, rowBadge, isMuted, type YourChat } from '../utils/your-groups';
+import { chatEmoji, ownerKindWord, previewLine, rowRoleWord, rowTime, rowBadge, isMuted, type YourChat } from '../utils/your-groups';
 
 interface Props {
     item: YourChat;
@@ -61,19 +61,22 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
     const badge = rowBadge(item, showUnread);
     const unread = badge ? item.unreadCount : 0;
     const muted = isMuted(item.mute);
-    const kindWord = item.kind === 'enterprise' ? 'Enterprise' : item.kind === 'event' ? 'Event' : null;
+    // A project is a project (🎯) and an enterprise an enterprise (🥖), §3.1. The member's part (Leader, Collaborator,
+    // Lead keeper, Keeper) is in the spoken label only: drawn beside the kind it would leave the preview a few dp at 320dp.
+    const kindWord = item.kind === 'group' ? null : ownerKindWord(item.kind, item.lifecycle).replace(/^./, c => c.toUpperCase());
+    const roleWord = rowRoleWord(item);
     const preview = previewLine(item, myPubkey);
     const time = rowTime(item.lastMessage?.timestamp ?? null);
 
     return (
         <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`${item.name}${kindWord ? `, ${kindWord.toLowerCase()}` : ', group'}${unread ? `, ${unread} unread` : ''}${muted ? ', muted' : ''}. ${preview}`}
+            accessibilityLabel={`${item.name}${kindWord ? `, ${kindWord.toLowerCase()}` : ', group'}${roleWord ? `, ${roleWord.toLowerCase()}` : ''}${unread ? `, ${unread} unread` : ''}${muted ? ', muted' : ''}. ${preview}`}
             style={[styles.row, flush && { marginHorizontal: 0 }]}
             onPress={() => onPress(item)}
         >
             <View style={[styles.icon, item.kind === 'enterprise' && styles.iconEnterprise, item.kind === 'event' && styles.iconEvent]}>
-                <Text style={styles.iconText} allowFontScaling={false}>{chatEmoji(item.kind, item.category)}</Text>
+                <Text style={styles.iconText} allowFontScaling={false}>{chatEmoji(item.kind, item.category, item.lifecycle)}</Text>
             </View>
             <View style={styles.body}>
                 <View style={styles.top}>

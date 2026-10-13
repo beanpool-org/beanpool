@@ -14,6 +14,7 @@ import { useIdentity } from '../IdentityContext';
 import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, isKnownDmConversation, isHeldGroupChat } from '../../utils/db';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
+import { chatRouteView } from '../../utils/chat-route';
 import { isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { ReviewModal } from '../../components/ReviewModal';
@@ -80,13 +81,16 @@ function ChatImage({ conversationId, messageId, onOpen }: { conversationId: stri
 }
 
 /**
- * `/chat/:id` serves two kinds of conversation. A DM or group is the screen below. An event chat is its
- * own screen (docs/events-on-the-map.md §2.2): node-readable `plaintext-v1`, members that follow the
- * RSVPs, a host who can remove a message, read-only once the event ends — none of which the DM pipeline
- * below (E2E, edits, reactions, deals) knows about, and all of which it would quietly get wrong.
+ * `/chat/:id` serves several kinds of conversation, and utils/chat-route.ts decides which screen, in this order: a group
+ * whose keys this phone has held (its group chat, sealed or refused), a known DM (the DM screen), an event chat, a group's
+ * or an enterprise's thread, else a DM. An event chat is its own screen (docs/events-on-the-map.md §2.2): node-readable
+ * `plaintext-v1`, members that follow the RSVPs, a host who can remove a message, read-only once the event ends — none of
+ * which the DM pipeline below (E2E, edits, reactions, deals) knows about, and all of which it would quietly get wrong.
  *
- * Both callers that can open one — the Inbox row and the event detail — say so with `event=1`, so a DM
- * never waits on a database read to decide. The lookup is the fallback for an older link or a push.
+ * Nothing draws until the phone has asked its own key memory and its DM list (a SecureStore read and a few small SQLite
+ * reads): every screen here can post, and which one may is what is being decided. The Inbox row, the event detail and
+ * "Your groups" say the kind on the way in (`event=1`, `group=1`, `enterprise=1`); the conversation's type is the
+ * fallback for an older link or a push.
  */
 export default function ChatRoute() {
     const { id, event, group, enterprise, created, name, info } = useLocalSearchParams<{
@@ -100,8 +104,8 @@ export default function ChatRoute() {
     );
 
     // A DM stays a DM (utils/db.ts, the DM guard): a conversation this phone has seen as a DM, or that holds an encrypted
-    // line, opens only in the DM screen below, whatever type the node now gives it or a link says. Asked before any
-    // node-readable view opens; null while asking.
+    // line, opens only in the DM screen below, whatever type the node now gives it or a link says, unless this phone has
+    // held a group's keys under its id (asked first, below). Asked before any node-readable view opens; null while asking.
     const [knownDm, setKnownDm] = useState<boolean | null>(null);
     useEffect(() => {
         if (!id) return;
@@ -111,20 +115,22 @@ export default function ChatRoute() {
     }, [id]);
 
     // A group whose keys this phone has held opens only in its group chat (sealed or refused), whatever type the local
-    // row says, with no row (a sync pruned it, a push tap landed first), or whatever a link says: never the DM screen or
-    // the event chat, which would send it readable words (confirmation of #1788, finding 1). Null while asking.
-    const [heldGroup, setHeldGroup] = useState<boolean | null>(null);
+    // row says, with no row (a sync pruned it, a push tap landed first), whatever a link says, or once something called
+    // it a DM: never the DM screen or the event chat (confirmation of #1788, finding 1; confirmation 2, finding 2). Null
+    // while asking; 'error' when the key memory couldn't be read, which never counts as "not held" (finding 1).
+    const [heldGroup, setHeldGroup] = useState<boolean | null | 'error'>(null);
     useEffect(() => {
         if (!id) return;
         let alive = true;
-        isHeldGroupChat(String(id)).then(h => { if (alive) setHeldGroup(h); }, () => { if (alive) setHeldGroup(false); });
+        isHeldGroupChat(String(id)).then(h => { if (alive) setHeldGroup(h); }, () => { if (alive) setHeldGroup('error'); });
         return () => { alive = false; };
     }, [id]);
 
     useEffect(() => {
         if (isEventChat || threadKind || !id) return;
         let alive = true;
-        getConversationKind(String(id)).then(kind => {
+        // No row yet (a push tap before the sync): the node is asked, so a group's chat opens in its own screen.
+        getConversationKind(String(id), { askNode: true }).then(kind => {
             if (!alive) return;
             if (kind === 'event_thread') setIsEventChat(true);
             else if (kind === 'group_thread') setThreadKind('group');
@@ -133,11 +139,15 @@ export default function ChatRoute() {
         return () => { alive = false; };
     }, [id, isEventChat, threadKind]);
 
-    if (knownDm) return <ChatScreen />;
-    if (knownDm === null || heldGroup === null) return null;
-    if (heldGroup && id) return <GroupChatView kind="group" id={String(id)} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
-    if (isEventChat && id) return <EventChatView eventId={String(id)} />;
-    if (threadKind && id) return <GroupChatView kind={threadKind} id={String(id)} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
+    const view = chatRouteView({ held: heldGroup, knownDm, isEventChat, threadKind });
+    if (view === 'wait' || !id) return null;
+    // Ids are UUIDs, lower-case as the node makes them; a link or a push may carry one in capitals (push routes match
+    // them case-insensitively). The node-readable screens get the node's spelling, which is the one this phone's group
+    // key memory is kept under (isHeldGroupChat asks both).
+    const nodeId = String(id).toLowerCase();
+    if (view === 'group' || view === 'group_thread') return <GroupChatView kind="group" id={nodeId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
+    if (view === 'event') return <EventChatView eventId={nodeId} />;
+    if (view === 'enterprise_thread') return <GroupChatView kind="enterprise" id={nodeId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
     return <ChatScreen />;
 }
 

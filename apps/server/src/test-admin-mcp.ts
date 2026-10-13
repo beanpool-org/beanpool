@@ -403,6 +403,10 @@ async function main(): Promise<void> {
             `every tool call is logged with the grant, 16 characters of the member's key, the tool, argument names, rows and ms (${reads.length})`);
         assert(!agentLog.some(l => /IGNORE ALL|Bike repair|Kim Knocker|nearby/.test(l.message + l.metadata)), 'the AGENT log never holds member text');
 
+        const batch = await call('POST', '/mcp', { body: Array.from({ length: 50 }, (_, i) => rpc('tools/call', i + 1, { name: 'take_backup', arguments: {} })), headers: { ...MCP_HEADERS, ...bearer(AGENT) } });
+        assert(batch.status === 400 && /one MCP message per request/.test(batch.body?.error?.message ?? ''),
+            `a JSON-RPC batch (50 calls in one request, past the limits) is refused (${show(batch)})`);
+
         resetAgentLimits();
         const statuses: number[] = [];
         let last: Reply | null = null;

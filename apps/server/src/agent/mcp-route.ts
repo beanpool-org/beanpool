@@ -219,10 +219,17 @@ export function createMcpRoutes(deps: RouteDeps): Router {
                 return;
             }
         }
-        const methods = (Array.isArray(parsed) ? parsed : [parsed])
-            .map((m: any) => (m && typeof m.method === 'string' ? m.method : null))
-            .filter((m): m is string => !!m && m !== 'tools/call' && m !== 'prompts/get' && !m.startsWith('notifications/'));
-        if (methods.length) logger.info('AGENT', 'Assistant request', { grant: grant.id, member: grant.member.slice(0, 16), methods: methods.slice(0, 5) });
+        // One message per request: a JSON-RPC batch would carry hundreds of calls past the per-call limits (MCP dropped
+        // batching in 2025-06-18; the SDK's client never sends one).
+        if (Array.isArray(parsed)) {
+            logger.warn('AGENT', 'Assistant sent a batch: refused', { grant: grant.id, messages: parsed.length });
+            jsonRpcError(ctx, 400, 'Send one MCP message per request: batches are not accepted', -32600);
+            return;
+        }
+        const method = parsed && typeof (parsed as any).method === 'string' ? String((parsed as any).method).slice(0, 60) : null;
+        if (method && method !== 'tools/call' && method !== 'prompts/get' && !method.startsWith('notifications/')) {
+            logger.info('AGENT', 'Assistant request', { grant: grant.id, member: grant.member.slice(0, 16), method });
+        }
 
         // 6. One server and transport for this request: stateless, JSON answers.
         const server = buildAgentServer(grant, welcomeFacts(ctx, grant));

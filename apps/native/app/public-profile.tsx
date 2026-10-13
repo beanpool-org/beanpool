@@ -22,6 +22,9 @@ import { useTheme, useStyles } from './ThemeContext';
 import { HIDDEN_AUTHOR, isHiddenAuthor } from '../utils/posts-view';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { cardNeedsFetch, fetchCardByKey } from '../utils/members-lookup';
+import { useShowcaseMode } from '../utils/use-reader-features';
+import { LocalCommunityMark } from '../components/showcase/LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import { beansOn } from '../utils/node-profile';
 
 
@@ -393,6 +396,8 @@ export default function PublicProfileScreen() {
     // a listing has no price: the card and the figures are not drawn.
     const nodeProfile = useNodeProfile();
     const showsBeans = beansOn(nodeProfile?.features);
+    // Where the node previews Beans, the trust card's slot says where badges and Beans are earned (design §1 row 9).
+    const beansPreview = useShowcaseMode('beans') === 'preview';
     const [given, setGiven] = useState<any[]>([]);
     const [friendsCount, setFriendsCount] = useState(0);
     const [trust, setTrust] = useState<any>(null);
@@ -1059,6 +1064,12 @@ export default function PublicProfileScreen() {
                             )}
                         </>
                     ) : null
+                )}
+
+                {!showsBeans && beansPreview && (
+                    <View style={{ marginHorizontal: 16 }}>
+                        <LocalCommunityMark variant="line" feature="beans" text={LOCAL_COMMUNITY_LINES.profile} />
+                    </View>
                 )}
 
                 {/* Trust summary (self only) — links to the full Ledger */}

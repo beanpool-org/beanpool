@@ -534,7 +534,7 @@ export default function LedgerScreen() {
                         backgroundColor: theme === 'dark' ? colors.feedback.success.bg : palette.green50,
                     }]}>
                         <MaterialCommunityIcons name="check-circle" size={13} color={colors.brand.primary} />
-                        <Text style={[styles.perkText, { color: colors.brand.dark }]}>Invite Members</Text>
+                        <Text style={[styles.perkText, { color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.dark }]}>Invite Members</Text>
                     </View>
                 </View>
             </View>
@@ -967,7 +967,7 @@ export default function LedgerScreen() {
                     <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: theme === 'dark' ? colors.feedback.success.bg : palette.green50, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.success.border : palette.green200, borderRadius: 12, padding: 12 }}>
                         <Text style={{ fontSize: 20 }}>🌱</Text>
                         <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 14, fontWeight: '800', color: colors.brand.dark }}>No credit line yet</Text>
+                            <Text style={{ fontSize: 14, fontWeight: '800', color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.dark }}>No credit line yet</Text>
                             <Text style={{ fontSize: 12.5, color: colors.text.body, lineHeight: 18, marginTop: 2 }}>
                                 You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)
                             </Text>

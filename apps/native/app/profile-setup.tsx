@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
@@ -18,7 +18,8 @@ import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterP
 import { buildSignedHeaders } from '../utils/crypto';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { checkCallsignAvailable, suggestCallsigns, type CallsignStatus } from '../utils/callsign-suggest';
-import { colors, palette } from '../constants/colors';
+import { palette, type AppColors } from '../constants/colors';
+import { useOnboardingColors } from './ThemeContext';
 import { AreaPicker } from '../components/AreaPicker';
 import { profileSteps, rememberAreaPlace, type ProfileStep } from '../utils/member-area';
 
@@ -32,6 +33,9 @@ type Step = ProfileStep;
  * EXISTING identity; it never creates a key or touches invites.
  */
 export default function ProfileSetupScreen() {
+    // Follows light/dark like the rest of the app; light draws exactly as before (utils/onboarding-colors.ts).
+    const { colors, dark } = useOnboardingColors();
+    const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     const { identity, setIdentity } = useIdentity();
     // When launched as the wizard-on-join, `redirect` says where to land after
     // finishing (or cancelling) — the member has already joined, so there's no
@@ -230,7 +234,7 @@ export default function ProfileSetupScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar style="dark" />
+            <StatusBar style={dark ? 'light' : 'dark'} />
             <ScrollView contentContainerStyle={styles.scroll}>
                 {/* Step indicator */}
                 <View style={styles.steps}>
@@ -393,7 +397,8 @@ export default function ProfileSetupScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppColors, dark: boolean) {
+return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface.page },
     scroll: { padding: 20, paddingBottom: 48 },
     steps: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
@@ -419,11 +424,11 @@ const styles = StyleSheet.create({
     secondaryBtnText: { color: colors.text.body, fontSize: 15, fontWeight: '600' },
     backBtn: { padding: 12, alignItems: 'center', marginTop: 4 },
     backBtnText: { color: colors.text.secondary, fontSize: 14, fontWeight: '600' },
-    error: { color: palette.red600 || '#dc2626', fontSize: 13, marginBottom: 12, textAlign: 'center' },
+    error: { color: dark ? colors.feedback.danger.fg : (palette.red600 || '#dc2626'), fontSize: 13, marginBottom: 12, textAlign: 'center' },
     // Name-step availability hints
     hintMuted: { color: colors.text.secondary, fontSize: 13, marginTop: -8, marginBottom: 12 },
-    hintOk: { color: palette.green700 || '#15803d', fontSize: 13, fontWeight: '600', marginTop: -8, marginBottom: 12 },
-    hintTaken: { color: palette.red600 || '#dc2626', fontSize: 13, fontWeight: '600', marginTop: -8, marginBottom: 10 },
+    hintOk: { color: dark ? palette.emerald400 : (palette.green700 || '#15803d'), fontSize: 13, fontWeight: '600', marginTop: -8, marginBottom: 12 },
+    hintTaken: { color: dark ? colors.feedback.danger.fg : (palette.red600 || '#dc2626'), fontSize: 13, fontWeight: '600', marginTop: -8, marginBottom: 10 },
     suggestRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 },
     suggestChip: {
         backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong,
@@ -431,3 +436,4 @@ const styles = StyleSheet.create({
     },
     suggestChipText: { color: colors.text.body, fontSize: 14, fontWeight: '600' },
 });
+}

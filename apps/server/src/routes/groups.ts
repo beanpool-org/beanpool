@@ -59,16 +59,23 @@ import { getMembersVersion } from '../engine/versions.js';
 import { sendMembersSnapshot, SNAPSHOT_SEND_WEIGHT, snapshotSendWeight } from '../members-snapshot.js';
 import { noteRosterSent, rosterSlot, rosterSnapshotKey, rosterSnapshotSize, storeRosterSnapshot, usableRosterSnapshot, type RosterSnapshot, type RosterView } from '../roster-snapshots.js';
 import { formerKeysReader } from '../engine/key-succession.js';
+import { accountsDeletedAmong } from '../engine/message-tombstone.js';
 
 /**
  * Each active row gains `formerKeys`: the keys a re-key replaced with the member's, each with the succession statement
  * their new key signed, newest first (engine/key-succession.ts; line-display design §5). An app names an old line's
  * signer by that chain, verified, never by the node's word. A row with none, or a node from before, serves `[]` or nothing.
+ *
+ * A member who deleted their account serves `[]`, as a DM does (key-succession.ts withDmFormerKeys; #1898 review finding
+ * 2): their row stays active, but the deletion took these keys out of the logs and push notices, and their group lines
+ * are blanked, so no app has a line to name by them.
  */
 function withFormerKeys<T extends { memberPubkey: string; status?: string }>(rows: T[]): (T & { formerKeys?: unknown[] })[] {
     if (!rows.some((r) => r.status === 'active')) return rows;
     const formerKeysOf = formerKeysReader();
-    return rows.map((r) => (r.status === 'active' ? { ...r, formerKeys: formerKeysOf(r.memberPubkey) } : r));
+    const chains = rows.map((r) => (r.status === 'active' ? formerKeysOf(r.memberPubkey) : null));
+    const deleted = new Set(accountsDeletedAmong(rows.filter((_, i) => chains[i]?.length).map((r) => r.memberPubkey)));
+    return rows.map((r, i) => (chains[i] ? { ...r, formerKeys: deleted.has(r.memberPubkey) ? [] : chains[i] } : r));
 }
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

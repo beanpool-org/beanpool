@@ -11,7 +11,7 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 import { forgetGroupKeys } from '../lib/group-chat-keys';
-import { getMembers, getMemberCards, getGroupChat, createConversationApi, type Conversation, type ApiMessage } from '../lib/api';
+import { getMembers, getMemberCards, getGroupChat, getFriends, createConversationApi, type Conversation, type ApiMessage } from '../lib/api';
 
 if (typeof window !== 'undefined' && window.HTMLElement) window.HTMLElement.prototype.scrollIntoView = vi.fn();
 
@@ -72,6 +72,7 @@ vi.mock('../lib/api', () => ({
         const names: Record<string, string> = { ['c'.repeat(64)]: 'Cleo', ['d'.repeat(64)]: 'Dov' };
         return keys.filter(k => names[k]).map(k => ({ publicKey: k, callsign: names[k], joinedAt: '2026-01-01' }));
     }),
+    getFriends: vi.fn(async () => []),
     getMyMarketplaceTransactions: vi.fn(async () => []),
     markConversationReadApi: vi.fn(async () => ({ success: true })),
     createConversationApi: vi.fn(async (_t: string, participants: string[]) => ({
@@ -133,6 +134,52 @@ describe('Messages with members on demand', () => {
         render(<MessagesPage identity={identity} />);
         await screen.findByText('Dov');
         expect(keysAsked()).toEqual([DOV]);
+        expect(getMembers).not.toHaveBeenCalled();
+    });
+
+    // Review of #1861, N5 (design §2.3, "recents + friends"): a friend is offered from the friends list itself, though no
+    // card for them is held and no chat with them exists.
+    it('New DM: friends are offered too, each person once, never a blocked one; picking one starts the DM', async () => {
+        const friend = (publicKey: string, callsign: string) => ({ publicKey, callsign, addedAt: '2026-09-01T00:00:00Z', isGuardian: false, avatarUrl: null });
+        vi.mocked(getFriends).mockResolvedValue([friend(CLEO, 'Cleo'), friend(BOB, 'Bob'), friend(BLOCKED, 'Blocked'), friend(DOV, 'Dov')]);
+        render(<MessagesPage identity={identity} />);
+        await act(async () => { fireEvent.click(await screen.findByRole('button', { name: /New DM/ })); });
+        const friends = await screen.findByTestId('new-message-friends');
+        expect(getFriends).toHaveBeenCalledWith(ME);
+        expect([...friends.querySelectorAll('[data-testid="dm-pick"]')].map(b => b.textContent))
+            .toEqual([expect.stringMatching(/Cleo$/), expect.stringMatching(/Dov$/)]);
+        // Bob is already under "People you've talked to".
+        expect(screen.getByTestId('new-message-recents')).toHaveTextContent('Bob');
+        expect(friends).not.toHaveTextContent('Bob');
+        expect(screen.queryByText('Blocked')).toBeNull();
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Cleo/ })); });
+        expect(createConversationApi).toHaveBeenCalledWith('dm', [ME, CLEO], ME);
+        expect(getMembers).not.toHaveBeenCalled();
+        expect(getMemberCards).not.toHaveBeenCalled();
+    });
+
+    it("New DM: a friends list that couldn't be read says so; the search and the people talked to still work", async () => {
+        vi.mocked(getFriends).mockRejectedValue(new TypeError('Failed to fetch'));
+        render(<MessagesPage identity={identity} />);
+        await act(async () => { fireEvent.click(await screen.findByRole('button', { name: /New DM/ })); });
+        expect(await screen.findByTestId('new-message-friends-failed')).toHaveTextContent("Couldn't load your friends just now.");
+        expect(screen.getByTestId('new-message-recents')).toHaveTextContent('Bob');
+        expect(screen.getByLabelText('Find someone by name')).toBeInTheDocument();
+        expect(getMembers).not.toHaveBeenCalled();
+    });
+
+    // Review of #1861, N3 (G4): a request that failed is asked again on the page's next change, never given up for good.
+    it('a keys request that fails is asked again on the next change, and the name then shows', async () => {
+        state.conversations = [dm('conv-bob', BOB, 'Bob'), dm('conv-dov', DOV)];
+        vi.mocked(getMemberCards).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+        render(<MessagesPage identity={identity} />);
+        await waitFor(() => expect(keysAsked()).toEqual([DOV]));
+        const row = await screen.findByText(`${DOV.slice(0, 12)}…`);
+        expect(screen.queryByText('Dov')).toBeNull();
+        // The next change: the member opens that chat.
+        await act(async () => { fireEvent.click(row); });
+        expect((await screen.findAllByText('Dov')).length).toBeGreaterThan(0);
+        expect(keysAsked()).toEqual([DOV, DOV]);
         expect(getMembers).not.toHaveBeenCalled();
     });
 

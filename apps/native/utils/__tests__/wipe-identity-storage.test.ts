@@ -54,10 +54,11 @@ describe('wipeIdentityScopedStorage', () => {
             beanpool_blocked_users_moved: '1',
             // The key each of the account's DMs is sealed to (dm-peer-pins.ts), kept like its block list (Marty, 13 Oct):
             // restored here, its DMs aren't met as first sight again.
-            [`beanpool_dm_peer_pins:${'ab'.repeat(32)}`]: JSON.stringify({ d0: { peer: 'cd'.repeat(32), since: '', by: 'first-seen' } }),
-            // And the lines the update held of a DM its rows didn't pin (db.ts), kept with the pins: restored here, that DM is
-            // still judged on what the phone held at the update.
-            [`beanpool_dm_lines_at_update:${'ab'.repeat(32)}`]: JSON.stringify({ d1: [] }),
+            [`beanpool_dm_peer_pins:${'ab'.repeat(32)}`]: JSON.stringify({ pins: { d0: { peer: 'cd'.repeat(32), since: '', by: 'first-seen' } }, seeded: ['beanpool_test.beanpool.org.db'] }),
+            // And the lines the update held of a DM its rows didn't pin (db.ts), one key per community file, kept with the
+            // pins: restored here, that DM is still judged on what the phone held at the update (§3.4 amendment 5).
+            [`beanpool_dm_lines_at_update:${'ab'.repeat(32)}:beanpool_test.beanpool.org.db`]: JSON.stringify({ d1: [] }),
+            [`beanpool_dm_lines_at_update:${'ab'.repeat(32)}:community_castlemaine.db`]: JSON.stringify({}),
             // The leave statements not yet confirmed (push-leave.ts), and the phone's push stamp: they are how the
             // leaving account's alerts stop where the phone had no connection as it left, so they outlive the wipe.
             beanpool_push_leave_statements: JSON.stringify([{ community: 'https://test.beanpool.org', publicKey: 'ab'.repeat(32) }]),
@@ -69,7 +70,8 @@ describe('wipeIdentityScopedStorage', () => {
         expect([...storage.data.keys()].sort()).toEqual([
             `beanpool_blocked_users:${'ab'.repeat(32)}`,
             'beanpool_blocked_users_moved',
-            `beanpool_dm_lines_at_update:${'ab'.repeat(32)}`,
+            `beanpool_dm_lines_at_update:${'ab'.repeat(32)}:beanpool_test.beanpool.org.db`,
+            `beanpool_dm_lines_at_update:${'ab'.repeat(32)}:community_castlemaine.db`,
             `beanpool_dm_peer_pins:${'ab'.repeat(32)}`,
             `beanpool_pending_abuse_reports:${'ab'.repeat(32)}`,
             'beanpool_push_leave_statements',

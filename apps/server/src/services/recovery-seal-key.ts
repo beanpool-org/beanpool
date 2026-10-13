@@ -123,6 +123,7 @@ import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { KEEPER_ALG_SSO_SINGLE } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { closeOpenCopies } from '../engine/open-copies.js';
+import { closeWashSnapshotHandle } from '@beanpool/engine';
 import { createKeyFileOnce, fsyncDir, writeExclusive } from './key-files.js';
 
 export const RECOVERY_SEAL_KEY_FILE = 'recovery-seal.key';
@@ -797,7 +798,9 @@ function dropCopiesMainServerDeleted(wholeCopy: RecoveryRowKey[] | null): void {
         }
         // A copy this server is serving in pages holds a reader on the WAL, which a truncating checkpoint would wait on for
         // the whole busy timeout with the event loop held, and then leave as it was (engine/open-copies.ts): closed first.
+        // So is the wash analysis's refresh snapshot, a reader too.
         closeOpenCopies('the recovery seal empties the WAL of the copies it removed');
+        closeWashSnapshotHandle(db);
         try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* best effort: the next checkpoint writes over them */ }
         console.log(`🔐 Recovery seal: removed ${copies(gone.length)} its main server deleted before the seal, zeroed where they lay.`);
     }
@@ -1129,6 +1132,7 @@ function askWholeCopyAfterReseal(old: number): void {
  */
 export function vacuumAndCheckpoint(): { seconds: number; before: number; after: number } {
     const closed = closeOpenCopies('the recovery seal clears state.db (one VACUUM)');
+    closeWashSnapshotHandle(db); // the wash analysis's refresh snapshot is a reader too
     if (closed > 0) console.log(`🔐 Recovery seal: closed ${closed} cop${closed === 1 ? 'y' : 'ies'} being served to a standby first; it asks for a new one.`);
     const before = fileBytes(dbFile());
     const t0 = performance.now();

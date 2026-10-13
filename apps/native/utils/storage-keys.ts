@@ -45,13 +45,15 @@ export function dmPeerPinsStoreKey(publicKey: string): string {
 }
 
 /**
- * The encrypted lines one account's phone held, at the update, of each DM its rows didn't pin (utils/db.ts, the update's
- * seed): an object, conversation id lower-cased → those lines. Written the first time a build with pins meets the account
- * and never overwritten, so a DM judged in a later run is judged on what the phone held then, not on what the node wrote
- * since. Kept with {@link dmPeerPinsStoreKey} when the account leaves the phone, and never read for another account.
+ * The encrypted lines one account's phone held, at the update, in one community file, of each DM its rows there didn't pin
+ * (utils/db.ts, the update's seed of that file, §3.4 amendment 5): an object, conversation id lower-cased → those lines.
+ * Written the first time a build with pins reads that file for the account and never overwritten (only shrunk), so a DM
+ * judged in a later run is judged on what the phone held then, not on what the node wrote since; one key per file, so a
+ * conversation id two communities share is judged in each on its own lines. Kept with {@link dmPeerPinsStoreKey} when the
+ * account leaves the phone, and never read for another account. `file`: the name db.ts opens the community under.
  */
-export function dmLinesAtUpdateStoreKey(publicKey: string): string {
-    return `beanpool_dm_lines_at_update:${publicKey.toLowerCase()}`;
+export function dmLinesAtUpdateStoreKey(publicKey: string, file: string): string {
+    return `beanpool_dm_lines_at_update:${publicKey.toLowerCase()}:${file}`;
 }
 
 /**

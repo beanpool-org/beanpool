@@ -12,9 +12,10 @@
  * key signed (slice 4). Never by a sync, a push, a route or the prune. When the node lists the DM without the pinned key,
  * the other key is only `offered`: sends stop until the member decides, and a listing with the pinned key again clears it.
  *
- * One object per account, `beanpool_dm_peer_pins:<my key>` → { conversation id lower-cased → pin }. Kept when the account
- * leaves the phone, as its block list is (Marty, 13 Oct, pick 2), and never read for another account's key. Ids are
- * folded, as the held check and the DM guard fold them, so a twin the node writes in other capitals is the same DM here.
+ * One value per account, `beanpool_dm_peer_pins:<my key>` → { pins: { conversation id lower-cased → pin }, seeded: the
+ * community files the update's seed has read (§3.4 amendment 5) }. Kept when the account leaves the phone, as its block
+ * list is (Marty, 13 Oct, pick 2), and never read for another account's key. Ids are folded, as the held check and the
+ * DM guard fold them, so a twin the node writes in other capitals is the same DM here.
  *
  * The storage is passed in. db.ts keeps one copy per account in memory for the app's run ({@link createDmPinBook}): read
  * from storage once, and every change goes through one queue that writes it through.
@@ -190,34 +191,42 @@ export async function readDmPeerPins(storage: Pick<PinStorage, 'getItem'>, myPub
     return (await readStoredPins(storage, myPubkey)).pins;
 }
 
-/** As readDmPeerPins, and whether storage held nothing at all for this account (no build with pins has met it yet). */
-async function readStoredPins(storage: Pick<PinStorage, 'getItem'>, myPubkey: string): Promise<{ pins: DmPeerPins; absent: boolean }> {
+/**
+ * What one account keeps (§3.4 amendment 5): its pins, and `seeded`, the community files whose update seed has run (names
+ * as db.ts's dbFileOf keeps them). One value, so the record and the pins land together or not at all. Nothing stored: no
+ * pins, no file seeded.
+ */
+interface StoredPins { pins: DmPeerPins; seeded: string[] }
+
+async function readStoredPins(storage: Pick<PinStorage, 'getItem'>, myPubkey: string): Promise<StoredPins> {
     let raw: string | null;
     try {
         raw = await storage.getItem(dmPeerPinsStoreKey(myPubkey));
     } catch {
         throw new DmPinStoreError();
     }
-    if (raw == null) return { pins: Object.create(null), absent: true };
+    if (raw == null) return { pins: Object.create(null), seeded: [] };
     let parsed: unknown;
     try {
         parsed = JSON.parse(raw);
     } catch {
         throw new DmPinStoreError();
     }
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new DmPinStoreError();
+    const stored = parsed as Record<string, unknown> | null;
+    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) throw new DmPinStoreError();
+    if (!stored.pins || typeof stored.pins !== 'object' || Array.isArray(stored.pins) || !Array.isArray(stored.seeded)) throw new DmPinStoreError();
     const pins: DmPeerPins = Object.create(null);
-    for (const [id, value] of Object.entries(parsed as Record<string, unknown>)) {
+    for (const [id, value] of Object.entries(stored.pins as Record<string, unknown>)) {
         const pin = pinOf(value);
         if (pin) setPin(pins, dmPinId(id), pin);
     }
-    return { pins, absent: false };
+    return { pins, seeded: [...new Set(stored.seeded.filter((f): f is string => typeof f === 'string'))] };
 }
 
-/** Write one account's pins. Throws DmPinStoreError when the storage refuses. */
-export async function writeDmPeerPins(storage: Pick<PinStorage, 'setItem'>, myPubkey: string, pins: DmPeerPins): Promise<void> {
+/** Write one account's pins and the files seeded, in one value. Throws DmPinStoreError when the storage refuses. */
+export async function writeDmPeerPins(storage: Pick<PinStorage, 'setItem'>, myPubkey: string, pins: DmPeerPins, seeded: ReadonlyArray<string> = []): Promise<void> {
     try {
-        await storage.setItem(dmPeerPinsStoreKey(myPubkey), JSON.stringify(pins));
+        await storage.setItem(dmPeerPinsStoreKey(myPubkey), JSON.stringify({ pins, seeded }));
     } catch {
         throw new DmPinStoreError();
     }
@@ -229,79 +238,109 @@ export async function writeDmPeerPins(storage: Pick<PinStorage, 'setItem'>, myPu
  * which changes that copy and writes it through: a key resolve never re-reads or re-parses the store, and two writers
  * (a sync pass, a first sight, the refresh) can't each write a copy of their own that drops the other's pin.
  *
+ * Every ask names the handle the caller reads or writes (`at`: db.ts passes the community database it holds), and the
+ * book seeds that handle's file once before it answers (§3.4 amendment 5): see {@link createDmPinBook}.
+ *
  * Unreadable store: `read` throws DmPinStoreError and keeps nothing, so the next ask reads again. A write the storage
  * refuses: `update` throws DmPinStoreError and drops the copy, so the next ask reads what storage holds. The copy is the
  * book's own object: callers read it, and change it only inside `update`.
  */
-export interface DmPinBook {
-    /** This account's pins (read from storage the first time). */
-    read(myPubkey: string): Promise<DmPeerPins>;
-    /**
-     * Run `change` on this account's pins after every change queued before it; written through when it returns true.
-     * `fresh`: storage held nothing for this account when the copy was read and nothing has been written since, so this is
-     * the first change a build with pins makes for it (design §3.4 amendment, the update case). The book's own seed
-     * (`seedWhenNew`) has already run on the pins then.
-     */
-    update(myPubkey: string, change: (pins: DmPeerPins, state: { fresh: boolean }) => boolean): Promise<boolean>;
+export interface DmPinBook<H> {
+    /** This account's pins (read from storage the first time), once `at`'s file is seeded. */
+    read(myPubkey: string, at: H): Promise<DmPeerPins>;
+    /** Run `change` on this account's pins after every change queued before it, once `at`'s file is seeded; written through when it returns true. */
+    update(myPubkey: string, at: H, change: (pins: DmPeerPins) => boolean): Promise<boolean>;
     /** Drop every copy: the next ask reads storage again (a fresh app session). */
     forget(): void;
 }
 
 /**
- * `seedWhenNew`: called once per account per app run, the first time the book finds storage holding nothing for it, and
- * awaited before that read returns; what it returns is run on the pins at the account's first change, whoever makes it.
- * So it sees the rows this phone held before this run asked for the pins, and a caller that reads the pins before it
- * writes rows from the node (the sync pass, a push's refresh, a key resolve) never has those rows seeded (#1872 round 4).
- * Kept when a write is refused and the copy dropped: rows written since are not the phone's own from before.
+ * `fileOf`: the community file a handle reads (none: refused, fail closed). `seedFile`: the update's seed of one file,
+ * run once per (account, file) at the account's first ask with that file's handle, through the handle it was given, and
+ * only for a file the stored record doesn't name: what it returns is run on the pins, the file is added to the record,
+ * and both are written in one value before that ask (and every ask waiting on the same seed) answers. So every writer of
+ * a file's rows, which asks for the pins first, writes after its seed has read them; and a seed whose write is refused
+ * (or that throws) records nothing: the ask throws DmPinStoreError, and the next one seeds again from the same rows.
+ * `afterWrite`: run once each write stands, in the same turn, with the file of the handle the write was asked with.
  */
-export function createDmPinBook(
+export function createDmPinBook<H>(
     storage: PinStorage,
-    seedWhenNew?: (myPubkey: string) => Promise<(pins: DmPeerPins) => boolean>,
-    afterWrite?: (myPubkey: string, pins: DmPeerPins) => Promise<void>,
-): DmPinBook {
-    const copies = new Map<string, Promise<DmPeerPins>>();
+    fileOf: (at: H) => string | null | undefined,
+    seedFile?: (myPubkey: string, at: H, file: string) => Promise<(pins: DmPeerPins) => boolean>,
+    afterWrite?: (myPubkey: string, pins: DmPeerPins, file: string) => Promise<void>,
+): DmPinBook<H> {
+    const copies = new Map<string, Promise<StoredPins>>();
     const queues = new Map<string, Promise<unknown>>();
-    const absent = new Set<string>();
-    const seeds = new Map<string, Promise<(pins: DmPeerPins) => boolean>>();
-    function read(myPubkey: string): Promise<DmPeerPins> {
+    const seeds = new Map<string, Promise<void>>();
+    function load(myPubkey: string): Promise<StoredPins> {
         const key = dmPeerPinsStoreKey(myPubkey);
         const held = copies.get(key);
         if (held) return held;
-        const loading = readStoredPins(storage, myPubkey).then(async (r) => {
-            if (r.absent) absent.add(key); else absent.delete(key);
-            if (r.absent && seedWhenNew && !seeds.has(key)) seeds.set(key, seedWhenNew(myPubkey).catch(() => () => false));
-            await seeds.get(key);
-            return r.pins;
-        });
+        const loading = readStoredPins(storage, myPubkey);
         copies.set(key, loading);
         loading.catch(() => { if (copies.get(key) === loading) copies.delete(key); });
         return loading;
     }
-    function update(myPubkey: string, change: (pins: DmPeerPins, state: { fresh: boolean }) => boolean): Promise<boolean> {
+    function inTurn<T>(myPubkey: string, run: () => Promise<T>): Promise<T> {
         const key = dmPeerPinsStoreKey(myPubkey);
-        const turn = (queues.get(key) ?? Promise.resolve()).catch(() => {}).then(async () => {
-            const copy = read(myPubkey);
-            const pins = await copy;
-            const fresh = absent.has(key);
-            // The account's first change on a build with pins, whoever makes it: the phone's own rows first (the update).
-            const seed = fresh ? seeds.get(key) : undefined;
-            if (seed) (await seed)(pins);
-            if (!change(pins, { fresh }) && !seed) return false;
-            try {
-                await writeDmPeerPins(storage, myPubkey, pins);
-                absent.delete(key);
-            } catch (e) {
-                if (copies.get(key) === copy) copies.delete(key);
-                throw e;
-            }
-            // In the same turn, once the write stands (db.ts drops the update's held lines of each DM now pinned).
-            await afterWrite?.(myPubkey, pins).catch(() => {});
-            return true;
-        });
+        const turn = (queues.get(key) ?? Promise.resolve()).catch(() => {}).then(run);
         queues.set(key, turn);
         return turn;
     }
-    return { read, update, forget: () => { copies.clear(); queues.clear(); absent.clear(); seeds.clear(); } };
+    async function writeThrough(myPubkey: string, copy: Promise<StoredPins>, stored: StoredPins, file: string): Promise<void> {
+        const key = dmPeerPinsStoreKey(myPubkey);
+        try {
+            await writeDmPeerPins(storage, myPubkey, stored.pins, stored.seeded);
+        } catch (e) {
+            if (copies.get(key) === copy) copies.delete(key);
+            throw e;
+        }
+        // In the same turn, once the write stands (db.ts drops the update's held lines of each DM now pinned).
+        await afterWrite?.(myPubkey, stored.pins, file).catch(() => {});
+    }
+    function seeded(myPubkey: string, at: H): Promise<void> {
+        const file = fileOf(at);
+        if (!file) return Promise.reject(new DmPinStoreError());
+        const once = `${dmPeerPinsStoreKey(myPubkey)}\n${file}`;
+        const running = seeds.get(once);
+        if (running) return running;
+        const seeding = (async () => {
+            if ((await load(myPubkey)).seeded.includes(file)) return;
+            await inTurn(myPubkey, async () => {
+                const copy = load(myPubkey);
+                const stored = await copy;
+                if (stored.seeded.includes(file)) return;
+                let seed: ((pins: DmPeerPins) => boolean) | null = null;
+                try {
+                    if (seedFile) seed = await seedFile(myPubkey, at, file);
+                } catch {
+                    throw new DmPinStoreError();
+                }
+                seed?.(stored.pins);
+                stored.seeded = [...stored.seeded, file];
+                await writeThrough(myPubkey, copy, stored, file);
+            });
+        })();
+        seeds.set(once, seeding);
+        seeding.catch(() => { if (seeds.get(once) === seeding) seeds.delete(once); });
+        return seeding;
+    }
+    async function read(myPubkey: string, at: H): Promise<DmPeerPins> {
+        await seeded(myPubkey, at);
+        return (await load(myPubkey)).pins;
+    }
+    async function update(myPubkey: string, at: H, change: (pins: DmPeerPins) => boolean): Promise<boolean> {
+        await seeded(myPubkey, at);
+        const file = fileOf(at) as string;
+        return inTurn(myPubkey, async () => {
+            const copy = load(myPubkey);
+            const stored = await copy;
+            if (!change(stored.pins)) return false;
+            await writeThrough(myPubkey, copy, stored, file);
+            return true;
+        });
+    }
+    return { read, update, forget: () => { copies.clear(); queues.clear(); seeds.clear(); } };
 }
 
 /** The entry kept under this id: own entries only, so an id the node chose ("__proto__", "constructor") is never a pin. */

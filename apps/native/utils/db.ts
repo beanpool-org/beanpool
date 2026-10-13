@@ -1225,7 +1225,7 @@ export async function getConversations(myPubkey: string) {
     // A DM's newest line opens under the key this phone pinned for it (utils/dm-peer-pins.ts), as its thread does: never
     // under a key the node listed in its place. Unreadable pins: nothing opens (fail closed).
     let previewPins: DmPeerPins | null = null;
-    try { previewPins = previewIdentity?.publicKey ? await dmPins.read(previewIdentity.publicKey) : null; } catch { previewPins = null; }
+    try { previewPins = previewIdentity?.publicKey ? await dmPins.read(previewIdentity.publicKey, database) : null; } catch { previewPins = null; }
 
     return rows.map(row => {
         let displayMsg = row.lastMessage ? '[Message]' : 'Started conversation';
@@ -2740,6 +2740,17 @@ async function heldConversationType(conversationId: string, nodeType: string | n
     return t;
 }
 
+/**
+ * A conversation this phone holds or takes as a DM: the node lists it as one, its row here is one, or the DM guard knows
+ * it as one (any doubt: a DM). While the pins can't be read nothing of the node's is written into these (§3.4 amendment 5).
+ */
+async function isDmHere(database: SQLite.SQLiteDatabase, conversationId: string, nodeType: string | null | undefined): Promise<boolean> {
+    if ((nodeType || 'dm') === 'dm') return true;
+    const row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]).catch(() => undefined);
+    if (row === undefined || (row && (row.type || 'dm') === 'dm')) return true;
+    return await isKnownDmConversation(conversationId).catch(() => true);
+}
+
 /** Any conversation this phone holds under another type that is a known DM goes back to being one (logged). */
 async function holdDmTypes(): Promise<void> {
     try {
@@ -3968,13 +3979,25 @@ export async function syncMessages(publicKey: string) {
         const deletedAccounts = new Set<string>(
             Array.isArray(convData.deletedAccounts) ? convData.deletedAccounts.filter((k: unknown): k is string => typeof k === 'string') : []
         );
-        // The pins before any line is blanked: on the account's first meeting with pins, the update's seed keeps the lines
-        // this phone held before this pass changes one (§3.4 amendment 3, companion a).
-        if (myIdentity?.publicKey) await dmPins.read(myIdentity.publicKey).catch(() => {});
-        try {
-            await blankLinesOfDeletedAccounts(database, deletedAccounts, myIdentity?.publicKey);
-        } catch (e) {
-            console.warn('[Sync] Could not blank the lines of deleted accounts:', e);
+        // The pins before any line is blanked, through this pass's handle: the account's first read with this community's
+        // file open seeds it from the rows and lines this phone holds there (§3.4 amendments 3 and 5). The gate: a pin store
+        // that can't be read (or a seed that couldn't be written) stops this pass writing anything of the node's into the
+        // DMs here, blanked lines included; they stand still until it reads, and the seed then runs over the phone's rows.
+        let pinsUnread = false;
+        if (myIdentity?.publicKey) {
+            try {
+                await dmPins.read(myIdentity.publicKey, database);
+            } catch (e) {
+                pinsUnread = true;
+                console.warn('[Sync] Could not read the DM pins: the DMs here wait for the next pass', e);
+            }
+        }
+        if (!pinsUnread) {
+            try {
+                await blankLinesOfDeletedAccounts(database, deletedAccounts, myIdentity?.publicKey);
+            } catch (e) {
+                console.warn('[Sync] Could not blank the lines of deleted accounts:', e);
+            }
         }
         // And anyone a page below shows as deleted (a tombstone of theirs), who may no longer be in that chat.
         const seenDeleted = new Set<string>();
@@ -3983,22 +4006,21 @@ export async function syncMessages(publicKey: string) {
         // the DMs this phone already holds are pinned from its own rows first, then the listing offers another key for a
         // pinned DM, or pins one it meets for the first time, and never moves a pinned key. Kept apart from the rows below,
         // so the prune at the end of the pass can't touch them. Unreadable: left alone (every send refuses).
-        if (myIdentity?.publicKey) {
+        if (myIdentity?.publicKey && !pinsUnread) {
             const me = myIdentity.publicKey;
             try {
-                // The pins first (the update's seed keeps what this phone holds), then the DMs it couldn't pin from its rows
+                // The pins first (this file's seed keeps what this phone holds), then the DMs it couldn't pin from its rows
                 // are judged on the lines it held then, before this pass writes a row or a line (§3.4 amendment 3).
-                const before = await dmPins.read(me);
-                const sights = myIdentity.privateKey ? await judgeHeldAtUpdate(me, myIdentity.privateKey, before, convData.conversations) : [];
-                const held = await dmPeersHeld();
-                await dmPins.update(me, (pins, { fresh }) => {
-                    // The book seeded the rows held before this run asked for the pins, checked; any held beyond those
-                    // were written since, from the node, and pin unchecked: the lines judge them first.
+                const before = await dmPins.read(me, database);
+                const sights = myIdentity.privateKey ? await judgeHeldAtUpdate(me, database, myIdentity.privateKey, before, convData.conversations) : [];
+                const held = await dmPeersHeld(database);
+                await dmPins.update(me, database, (pins) => {
+                    // The book seeded this file's rows, checked, before this run's first write here; any held beyond
+                    // those were written since, from the node, and pin unchecked: the lines judge them first.
                     const seeded = seedPinsFromRows(pins, me, held, false);
                     const judged = applyHeldSights(pins, sights);
                     const listed = applyListingsToPins(pins, me, convData.conversations);
-                    // Written on the first pass even with nothing to pin, so only rows held before this build seed checked.
-                    return seeded || judged || listed || fresh;
+                    return seeded || judged || listed;
                 });
             } catch (e) {
                 console.warn('[Sync] Could not read or write the DM pins:', e);
@@ -4010,6 +4032,8 @@ export async function syncMessages(publicKey: string) {
             // writing. This loop runs on every full message-sync (badge backstop,
             // inbox focus, WS nudges); unconditionally rewriting every conv row was
             // one of the writers starving the sync lock (2026-07-18 on-device logs).
+            // The gate: with the pins unread, nothing of the node's goes into a DM here this pass (its rows, lines, cursors).
+            if (pinsUnread && await isDmHere(database, conv.id, conv.type)) continue;
             const postPhotoString = conv.postPhoto ? JSON.stringify([conv.postPhoto]) : null;
             // The chat's ⋮ menu reads this to show Mute or Unmute without a request of its own.
             if ('mute' in conv) rememberChatMute(conv.id, conv.mute ?? null);
@@ -4153,7 +4177,7 @@ export async function syncMessages(publicKey: string) {
             }
         }
 
-        if (seenDeleted.size > 0) {
+        if (seenDeleted.size > 0 && !pinsUnread) {
             try {
                 await blankLinesOfDeletedAccounts(database, seenDeleted, myIdentity?.publicKey);
             } catch (e) {
@@ -4161,7 +4185,8 @@ export async function syncMessages(publicKey: string) {
             }
         }
 
-        // Local cleanup of conversations that were deleted/consolidated on the server
+        // Local cleanup of conversations that were deleted/consolidated on the server; none while the pins are unread (the
+        // gate: a prune is the node's word on a DM's rows too).
         try {
             const serverIds = convData.conversations.map((c: any) => c.id);
             const localConvs = await database.getAllAsync<any>(
@@ -4169,7 +4194,7 @@ export async function syncMessages(publicKey: string) {
                 [publicKey]
             );
             const localIds = localConvs.map(lc => lc.conversation_id);
-            const toDelete = localIds.filter(id => !serverIds.includes(id));
+            const toDelete = pinsUnread ? [] : localIds.filter(id => !serverIds.includes(id));
             if (toDelete.length > 0) {
                 console.log(`[Sync] Pruning ${toDelete.length} legacy/consolidated conversations locally...`);
                 await acquireSyncLock();
@@ -4253,9 +4278,16 @@ export async function syncSingleConversation(conversationId: string) {
         // Read receipts: apply peers' read cursors (newer servers include them),
         // so ticks flip to read while the chat is open. Monotonic — never regress.
         const myIdentity = await loadIdentity();
-        // The pins before the node's lines: on the account's first meeting with pins, the update's seed keeps the lines held
-        // before these (dmPins), and first sight judges on those (§3.4 amendment 3).
-        if (myIdentity?.publicKey) await dmPins.read(myIdentity.publicKey).catch(() => {});
+        // The pins before the node's lines, through this poll's handle: the account's first read with this file open seeds
+        // it from the lines held before these (dmPins), and first sight judges on those (§3.4 amendments 3 and 5). The gate:
+        // with the pins unread, nothing of the node's is written into a DM here.
+        if (myIdentity?.publicKey) {
+            try {
+                await dmPins.read(myIdentity.publicKey, database);
+            } catch {
+                if (await isDmHere(database, conversationId, msgData.conversation?.type)) return;
+            }
+        }
         const cursors = msgData.conversation?.readCursors;
         let cursorAdvances: Array<{ publicKey: string; lastReadAt: string }> = [];
         if (Array.isArray(cursors) && myIdentity?.publicKey) {
@@ -4366,14 +4398,16 @@ export async function getConversation(id: string, myPubkey?: string) {
 }
 
 /**
- * The lines the update's seed held for each DM it couldn't pin from its rows (§3.4 amendments 3 and 4), per account
- * (lower-cased): by the DM's folded id, each line as the open needs it ({@link HeldLine}), in the order this phone stored
- * them. First sight judges those DMs on these, whatever the node rewrites, tombstones or prunes meanwhile. Kept in
- * storage too (dmLinesAtUpdateStoreKey), so a DM the update's run didn't judge (listed with several keys, or not listed)
- * is judged on them in a later run (#1872/#1873 confirmation 2, finding 1). This is the run's copy; `stored`: it is
- * what the store holds, so removing a DM's lines may be written there (the store is written from the database once).
+ * The lines the update's seed held for each DM it couldn't pin from its rows (§3.4 amendments 3-5), per account and
+ * community file ({@link heldKey}): by the DM's folded id, each line as the open needs it ({@link HeldLine}), in the order
+ * this phone stored them. First sight in that file judges those DMs on these, whatever the node rewrites, tombstones or
+ * prunes meanwhile. Kept in storage too (dmLinesAtUpdateStoreKey, one key per file), so a DM the seed's run didn't judge
+ * (listed with several keys, or not listed) is judged on them in a later run (#1872/#1873 confirmation 2, finding 1).
+ * This is the run's copy; `stored`: it is what the store holds, so removing a DM's lines may be written there (the store
+ * is written from the database once).
  */
 const dmLinesHeldAtUpdate = new Map<string, { lines: Map<string, HeldLine[]>; stored: boolean }>();
+const heldKey = (me: string, file: string) => `${me.toLowerCase()}\n${file}`;
 
 /** One line as the update held it: the open's inputs only, never a date, a type or a decrypted word. */
 interface HeldLine { id: string; conversation_id: string; author_pubkey: string; ciphertext: string; nonce: string; metadata: unknown }
@@ -4394,33 +4428,54 @@ function parseLinesHeldAtUpdate(raw: string): Map<string, HeldLine[]> | null {
 }
 
 /**
- * The update's held lines for this account: the run's copy, or the stored one, read once a run (none stored, or not an
- * object: none). Null when the store can't be read: tried again on the next call, and until then nothing that needs
- * judging is judged (a send refuses), since what the update held can't be told apart from what the node wrote since.
+ * The most one file's held lines may take in the store (§3.4 amendment 5, finding 3 of confirmation 3): Android's store
+ * reads a value through a window of about 2 MB, so a bigger one is written and then never read again.
  */
-async function linesHeldAtUpdate(me: string): Promise<Map<string, HeldLine[]> | null> {
-    const key = me.toLowerCase();
+const HELD_LINES_MAX_BYTES = 1024 * 1024;
+
+/** True when `value`, as UTF-8, is over {@link HELD_LINES_MAX_BYTES}. */
+function overHeldLinesCap(value: string): boolean {
+    if (value.length > HELD_LINES_MAX_BYTES) return true;
+    let bytes = 0;
+    for (let i = 0; i < value.length; i++) {
+        const c = value.charCodeAt(i);
+        if (c < 0x80) bytes += 1;
+        else if (c < 0x800) bytes += 2;
+        else if (c >= 0xd800 && c <= 0xdbff) { bytes += 4; i++; }
+        else bytes += 3;
+    }
+    return bytes > HELD_LINES_MAX_BYTES;
+}
+
+/**
+ * The update's held lines for this account in this file: the run's copy, or the stored one, read once a run (none
+ * stored, or not an object: none). Null when the store can't be read: tried again on the next call, and until then
+ * nothing that needs judging there is judged (a send refuses), since what the update held can't be told apart from what
+ * the node wrote since.
+ */
+async function linesHeldAtUpdate(me: string, file: string): Promise<Map<string, HeldLine[]> | null> {
+    const key = heldKey(me, file);
     const copy = dmLinesHeldAtUpdate.get(key);
     if (copy) return copy.lines;
     let raw: string | null;
-    try { raw = await AsyncStorage.getItem(dmLinesAtUpdateStoreKey(me)); } catch { return null; }
+    try { raw = await AsyncStorage.getItem(dmLinesAtUpdateStoreKey(me, file)); } catch { return null; }
     const parsed = raw == null ? null : parseLinesHeldAtUpdate(raw);
     dmLinesHeldAtUpdate.set(key, { lines: parsed ?? new Map(), stored: parsed != null });
     return dmLinesHeldAtUpdate.get(key)!.lines;
 }
 
 /**
- * The seed's held lines, kept for every later run (§3.4 amendment 4): written only when none are stored (`{}` when the
- * rows pin every DM), so a later run that finds the pins absent again can't replace the update's memory with what the node
- * has written since. True when the store holds them. False when it can't (the write failed: the store is full, or
- * storage that can't be read, which is never written over, or holds something that isn't held lines): this run judges on
- * `lines`, and the seed marks those DMs heldLost.
+ * The seed's held lines for one file, kept for every later run (§3.4 amendments 4 and 5): written only when none are
+ * stored for that file (`{}` when the rows pin every DM), so a later run that seeds the file again can't replace the
+ * update's memory with what the node has written since. True when the store holds them. False when it can't: the write
+ * failed (the store is full), the value is over {@link HELD_LINES_MAX_BYTES}, or the key can't be read (never written
+ * over) or holds something that isn't held lines. Then this run judges on `lines`, and the seed marks those DMs heldLost.
  */
-async function keepLinesHeldAtUpdate(me: string, lines: Map<string, HeldLine[]>): Promise<boolean> {
-    const key = me.toLowerCase();
+async function keepLinesHeldAtUpdate(me: string, file: string, lines: Map<string, HeldLine[]>): Promise<boolean> {
+    const key = heldKey(me, file);
     let stored: string | null;
     try {
-        stored = await AsyncStorage.getItem(dmLinesAtUpdateStoreKey(me));
+        stored = await AsyncStorage.getItem(dmLinesAtUpdateStoreKey(me, file));
     } catch {
         dmLinesHeldAtUpdate.set(key, { lines, stored: false });
         return false;
@@ -4430,12 +4485,13 @@ async function keepLinesHeldAtUpdate(me: string, lines: Map<string, HeldLine[]>)
         dmLinesHeldAtUpdate.set(key, { lines: parsed, stored: true });
         return true;
     }
-    if (stored != null) {
+    const value = JSON.stringify(Object.fromEntries(lines));
+    if (stored != null || overHeldLinesCap(value)) {
         dmLinesHeldAtUpdate.set(key, { lines, stored: false });
         return false;
     }
     try {
-        await AsyncStorage.setItem(dmLinesAtUpdateStoreKey(me), JSON.stringify(Object.fromEntries(lines)));
+        await AsyncStorage.setItem(dmLinesAtUpdateStoreKey(me, file), value);
     } catch {
         dmLinesHeldAtUpdate.set(key, { lines, stored: false });
         return false;
@@ -4445,14 +4501,14 @@ async function keepLinesHeldAtUpdate(me: string, lines: Map<string, HeldLine[]>)
 }
 
 /**
- * After each pin write (§3.4 amendment 4): the held lines of each DM now pinned are dropped from the store, since first
- * sight never reads them again. An unchecked first-seen pin keeps them (its send or check judges it on them), as do
- * rule 5 and a DM never listed again. The key stays, `{}` once every DM is pinned. A store this run couldn't keep, or
- * read, is left alone.
+ * After each pin write (§3.4 amendment 4), in the file the writer named: the held lines of each DM now pinned are dropped
+ * from that file's store, since first sight never reads them again. An unchecked first-seen pin keeps them (its send or
+ * check judges it on them), as do rule 5 and a DM never listed again. The key stays, `{}` once every DM is pinned. A
+ * store this run couldn't keep, or read, is left alone.
  */
-async function dropHeldLinesOfPinned(me: string, pins: DmPeerPins): Promise<void> {
-    if (!(await linesHeldAtUpdate(me))) return;
-    const copy = dmLinesHeldAtUpdate.get(me.toLowerCase());
+async function dropHeldLinesOfPinned(me: string, pins: DmPeerPins, file: string): Promise<void> {
+    if (!(await linesHeldAtUpdate(me, file))) return;
+    const copy = dmLinesHeldAtUpdate.get(heldKey(me, file));
     if (!copy?.stored) return;
     const left = new Map(copy.lines);
     for (const id of copy.lines.keys()) {
@@ -4460,34 +4516,42 @@ async function dropHeldLinesOfPinned(me: string, pins: DmPeerPins): Promise<void
         if (e && !isUnplacedSight(e) && (e.checked || e.by !== 'first-seen')) left.delete(id);
     }
     if (left.size === copy.lines.size) return;
-    await AsyncStorage.setItem(dmLinesAtUpdateStoreKey(me), JSON.stringify(Object.fromEntries(left)));
+    await AsyncStorage.setItem(dmLinesAtUpdateStoreKey(me, file), JSON.stringify(Object.fromEntries(left)));
     copy.lines = left;
 }
 
 /**
- * This phone's DM pins, one copy per account in memory, changed through one queue (utils/dm-peer-pins.ts). The rows a
- * build with pins first meets an account with are read when the pins are first found absent, before any row or line
- * from the node is written in this run (every writer of a DM's participant rows or lines reads the pins first): the
- * update's seed. A DM its rows pin is pinned from them; one whose rows name more than one other key keeps the encrypted
- * lines first sight reads (judgeThread), as held now and kept for every later run, and the first sync pass judges it
- * on them before it writes a line (§3.4 amendment 3, companion a). The lines are kept first, then the rows' pins, in one
- * seed: where the lines couldn't be kept, the same first pin write marks those DMs heldLost (amendment 4). The pin's
- * memory starts at the update (§3.7): a rewrite, a tombstone or a prune the node serves after it moves nothing; one
- * before it is the phone's history as it stands.
+ * This phone's DM pins, one copy per account in memory, changed through one queue (utils/dm-peer-pins.ts), and the
+ * update's seed, once per community file (§3.4 amendment 5). Every reader and writer names the database handle it holds
+ * (never the open file looked up again afterwards), and the book seeds that handle's file at this account's first ask
+ * with it, before answering: every writer of a DM's participant rows or lines asks first, and writes nothing of the
+ * node's there when the ask throws, so the seed reads the rows and lines this phone held before this run's node writes.
+ * A DM its rows pin is pinned from them, checked; one whose rows name more than one other key keeps the encrypted lines
+ * first sight reads (judgeThread), as held now and kept for every later run in that file's own key, and the first sync
+ * pass judges it on them before it writes a line (§3.4 amendment 3, companion a). The lines are kept first, then the
+ * rows' pins and the file's name go in one pin write: where the lines couldn't be kept, that same write marks those DMs
+ * heldLost (amendment 4). The pin's memory starts at the update (§3.7): a rewrite, a tombstone or a prune the node serves
+ * after it moves nothing; one before it is the phone's history as it stands.
  */
-const dmPins = createDmPinBook(AsyncStorage, async (me) => {
-    const held = await dmPeersHeld();
+const dmPins = createDmPinBook<SQLite.SQLiteDatabase>(AsyncStorage, (database) => dbFileOf.get(database), async (me, database, file) => {
+    // Through the handle the caller named, and thrown when the rows can't be read: a seed records nothing it didn't read.
+    const held = await readDmPeersHeld(database);
     const lines = new Map<string, HeldLine[]>();
     for (const id of dmsTheRowsDontPin(held, me)) {
-        const window = await sightWindow(id);
+        const window = await sightWindow(id, database);
         if (window.length) lines.set(id, window.map(heldLineOf));
     }
-    const kept = await keepLinesHeldAtUpdate(me, lines);
+    const kept = await keepLinesHeldAtUpdate(me, file, lines);
     return (pins) => {
         const seeded = seedPinsFromRows(pins, me, held, true);
         return (!kept && markHeldLost(pins, lines.keys(), new Date().toISOString())) || seeded;
     };
 }, dropHeldLinesOfPinned);
+
+/** The community file a handle reads, as the pins and the held lines name it. */
+function fileOfDb(database: SQLite.SQLiteDatabase): string {
+    return dbFileOf.get(database) ?? '';
+}
 
 /** For tests: a fresh app session (an update, a restore): the DM pins are read from storage again. */
 export function _resetDmPeerPinsForTests(): void {
@@ -4521,10 +4585,9 @@ const FIRST_SIGHT_END = 20;
  * date line): a flood dated before and after the thread lands at the new end, where it can only be offered, never
  * pinned (P21). The node serves each batch oldest-first by its own insert order (engine getConversationMessages), so
  * within one batch arrival is honest order too. Only encrypted lines count toward the 20 (exact prefix, no tombstones),
- * so rows that aren't lines can't push the old end out.
+ * so rows that aren't lines can't push the old end out. Read through `database`, the handle the caller holds.
  */
-async function sightWindow(conversationId: string): Promise<any[]> {
-    const database = await getDb();
+async function sightWindow(conversationId: string, database: SQLite.SQLiteDatabase): Promise<any[]> {
     // The pin is kept under the folded id, so first sight reads the thread under every spelling of it this phone holds.
     const lines = `SELECT id, conversation_id, author_pubkey, ciphertext, nonce, type, metadata FROM messages
         WHERE (conversation_id = ? OR conversation_id IN (SELECT id FROM conversations WHERE lower(id) = lower(?)))
@@ -4547,8 +4610,8 @@ async function sightWindow(conversationId: string): Promise<any[]> {
  * (the node writes the rows, and a re-key moves old lines' author to the new key). One DH derivation per key tried, and
  * only lines not yet placed are tried again.
  */
-async function judgeThread(conversationId: string, myPrivHex: string, me: string, listed: string | null, heard: DmHeard | undefined, held: ReadonlyMap<string, HeldLine[]>): Promise<SightVerdict> {
-    const rows: Array<HeldLine & { type?: string | null }> = held.get(dmPinId(conversationId)) ?? await sightWindow(conversationId);
+async function judgeThread(conversationId: string, myPrivHex: string, me: string, listed: string | null, heard: DmHeard | undefined, held: ReadonlyMap<string, HeldLine[]>, database: SQLite.SQLiteDatabase): Promise<SightVerdict> {
+    const rows: Array<HeldLine & { type?: string | null }> = held.get(dmPinId(conversationId)) ?? await sightWindow(conversationId, database);
     if (!rows.length) return judgeFirstSight([], listed);
     const mine = me.toLowerCase();
     const tries = [listed, ...(heard?.tryKeys ?? []), ...rows.map(r => pinKeyOf(r.author_pubkey))];
@@ -4578,16 +4641,16 @@ function sightToJudge(entry: DmPinEntry | null): boolean {
 
 /**
  * Whether a send or the screen's check judges this DM now, with the update's held lines to judge it on (§3.4 amendment
- * 4). A heldLost mark is judged only on held lines of its own, and stays refused with none. Anything else
+ * 4), in this DM's community file. A heldLost mark is judged only on held lines of its own, and stays refused with none. Anything else
  * {@link sightToJudge} names is judged; with the held lines unreadable, it is refused this time ('refuse').
  */
-async function sightToJudgeNow(me: string, conversationId: string, entry: DmPinEntry | null): Promise<{ held: ReadonlyMap<string, HeldLine[]> } | 'refuse' | null> {
+async function sightToJudgeNow(me: string, file: string, conversationId: string, entry: DmPinEntry | null): Promise<{ held: ReadonlyMap<string, HeldLine[]> } | 'refuse' | null> {
     if (isHeldLostSight(entry)) {
-        const held = await linesHeldAtUpdate(me);
+        const held = await linesHeldAtUpdate(me, file);
         return held?.get(dmPinId(conversationId))?.length ? { held } : null;
     }
     if (!sightToJudge(entry)) return null;
-    const held = await linesHeldAtUpdate(me);
+    const held = await linesHeldAtUpdate(me, file);
     return held ? { held } : 'refuse';
 }
 
@@ -4620,16 +4683,16 @@ async function getDmKeyContext(conversationId: string, use: 'seal' | 'check' | '
     const conv = await database.getFirstAsync<any>('SELECT type, created_by FROM conversations WHERE id = ?', [conversationId]);
     if (!conv || conv.type !== 'dm') return null;
     const me = identity.publicKey;
-    let entry = dmSightFor(await dmPins.read(me), conversationId);
+    let entry = dmSightFor(await dmPins.read(me, database), conversationId);
     const parts = await database.getAllAsync<any>('SELECT public_key FROM conversation_participants WHERE conversation_id = ?', [conversationId]);
     let peers = parts.map(p => p.public_key).filter((pk: string) => pk && pk !== identity.publicKey);
-    const judging = use === 'open' ? null : await sightToJudgeNow(me, conversationId, entry);
+    const judging = use === 'open' ? null : await sightToJudgeNow(me, fileOfDb(database), conversationId, entry);
     if (judging === 'refuse') return null;
     if (judging) {
         let listed: string | null;
         let heard: DmHeard | undefined;
         if (!entry) {
-            peers = await peersFromThread(conversationId, conv.created_by, me, peers);
+            peers = await peersFromThread(database, conversationId, conv.created_by, me, peers);
             if (peers.length !== 1) return null; // not a clean 2-party DM — don't encrypt
             listed = pinKeyOf(peers[0]);
         } else if (isUnplacedSight(entry)) {
@@ -4639,28 +4702,28 @@ async function getDmKeyContext(conversationId: string, use: 'seal' | 'check' | '
             listed = entry.offered ? entry.offered.peer : entry.peer;
             heard = entry.heard;
         }
-        const verdict = await judgeThread(conversationId, identity.privateKey, me, listed, heard, judging.held);
+        const verdict = await judgeThread(conversationId, identity.privateKey, me, listed, heard, judging.held, database);
         const judged = entry;
         const now = new Date().toISOString();
         // Through the pins' queue, and only over what was kept when the lines were read: another writer's change stands,
         // but for the update's heldLost mark (the seed's, in this same write), which a verdict on its held lines replaces.
         const onHeld = judging.held.has(dmPinId(conversationId));
-        await dmPins.update(me, (pins) => {
+        await dmPins.update(me, database, (pins) => {
             const kept = dmSightFor(pins, conversationId);
             return (kept === judged || (onHeld && isHeldLostSight(kept))) && applySightVerdict(pins, conversationId, verdict, listed, heard, now);
         });
-        entry = dmSightFor(await dmPins.read(me), conversationId);
+        entry = dmSightFor(await dmPins.read(me, database), conversationId);
     }
     if (!entry || isUnplacedSight(entry)) {
         if (use !== 'open') return null;
         // Reading only, with no key pinned: the rows' one other key, as before pins. Nothing is written from a read.
-        peers = await peersFromThread(conversationId, conv.created_by, me, peers);
+        peers = await peersFromThread(database, conversationId, conv.created_by, me, peers);
         if (peers.length !== 1) return null;
         return { myEdPrivHex: identity.privateKey, peerEdPubHex: peers[0], conversationId, formerPeers: [], keyChanged: false, offeredPeer: null, myPubHex: me };
     }
     const pin = entry;
     if (use === 'seal' && !pin.checked && pin.by === 'first-seen' && !pin.offered) {
-        await dmPins.update(me, (pins) => settleFirstSight(pins, conversationId));
+        await dmPins.update(me, database, (pins) => settleFirstSight(pins, conversationId));
     }
     if (peers.length !== 1 || peers[0] !== pin.peer) {
         await database.runAsync('DELETE FROM conversation_participants WHERE conversation_id = ? AND public_key NOT IN (?, ?)', [conversationId, identity.publicKey, pin.peer]).catch(() => {});
@@ -4674,8 +4737,7 @@ async function getDmKeyContext(conversationId: string, use: 'seal' | 'check' | '
  * The other person of a DM with no pin yet, when its participant rows haven't been written: from the thread's history,
  * or its creator. The rows are written for the one found. `peers` as the rows give them otherwise.
  */
-async function peersFromThread(conversationId: string, createdBy: string | null, me: string, peers: string[]): Promise<string[]> {
-    const database = await getDb();
+async function peersFromThread(database: SQLite.SQLiteDatabase, conversationId: string, createdBy: string | null, me: string, peers: string[]): Promise<string[]> {
     // Resilient fallback: if local participants cache hasn't populated yet, find peer from thread history or creator
     if (peers.length === 0) {
         const msgPeer = await database.getFirstAsync<any>(
@@ -4738,14 +4800,14 @@ function dmsTheRowsDontPin(rows: ReadonlyArray<any>, myPubkey: string): string[]
 }
 
 /**
- * The update's judgement (§3.4 amendment 3, companion a): each DM the seed kept lines of and still keeps nothing for,
+ * The update's judgement (§3.4 amendment 3, companion a): each DM the seed of `database`'s file kept lines of and still keeps nothing for,
  * that `conversations` lists cleanly with one other key, judged on the lines held at the update with that key as the
  * listed one. Run by a sync pass or a push's refresh before it writes a row or line from the node, and applied in the
  * same change of the pins as the listing ({@link applyHeldSights}). A DM listed otherwise (several keys, or not at all)
  * waits for the send or the screen's check, in this run or a later one, which judge it on the same held lines.
  */
-async function judgeHeldAtUpdate(me: string, myPrivHex: string, pins: DmPeerPins, conversations: ReadonlyArray<any>): Promise<HeldSight[]> {
-    const held = await linesHeldAtUpdate(me);
+async function judgeHeldAtUpdate(me: string, database: SQLite.SQLiteDatabase, myPrivHex: string, pins: DmPeerPins, conversations: ReadonlyArray<any>): Promise<HeldSight[]> {
+    const held = await linesHeldAtUpdate(me, fileOfDb(database));
     if (!held?.size) return [];
     const mine = me.toLowerCase();
     const listings = new Map<string, any[]>();
@@ -4761,7 +4823,7 @@ async function judgeHeldAtUpdate(me: string, myPrivHex: string, pins: DmPeerPins
         if (!others.every((o) => o.length === 1 && o[0] === others[0][0])) continue;
         const key = others[0][0] as string;
         const heard = listed.length === 1 ? heardFromListing(listed[0], listed[0].participants.filter((p: unknown) => typeof p === 'string' && !!p && p.toLowerCase() !== mine)) : undefined;
-        sights.push({ id, listed: key, heard, verdict: await judgeThread(id, myPrivHex, me, key, heard, held) });
+        sights.push({ id, listed: key, heard, verdict: await judgeThread(id, myPrivHex, me, key, heard, held, database) });
     }
     return sights;
 }
@@ -4779,12 +4841,16 @@ function applyHeldSights(pins: DmPeerPins, sights: ReadonlyArray<HeldSight>): bo
     return changed;
 }
 
-/** Every DM's participant rows this phone holds, for {@link seedPinsFromRows}. Unreadable: none (the listing is still heard). */
-async function dmPeersHeld(): Promise<any[]> {
-    const database = await getDb();
+/** Every DM's participant rows in this file, for {@link seedPinsFromRows}; throws when they can't be read. */
+async function readDmPeersHeld(database: SQLite.SQLiteDatabase): Promise<any[]> {
     return await database.getAllAsync<any>(
         "SELECT cp.conversation_id AS id, cp.public_key AS pk FROM conversation_participants cp JOIN conversations c ON c.id = cp.conversation_id WHERE c.type = 'dm'"
-    ).catch(() => [] as any[]);
+    );
+}
+
+/** As {@link readDmPeersHeld}, for a sync pass after the seed. Unreadable: none (the listing is still heard). */
+async function dmPeersHeld(database: SQLite.SQLiteDatabase): Promise<any[]> {
+    return await readDmPeersHeld(database).catch(() => [] as any[]);
 }
 
 /**
@@ -4845,12 +4911,15 @@ async function refreshConversationFromNode(conversationId: string): Promise<void
         const conv = (await res.json())?.conversation;
         if (!conv?.id || typeof conv.type !== 'string') return;
         const database = await getDb();
-        // The pins before the node's rows: on the account's first meeting with pins, the update's seed reads the rows and
-        // lines held before these (dmPins), so the node's answer is only ever a listing, judged on the lines held then.
+        // The pins before the node's rows, through the handle they are written with: the account's first read with this file
+        // open seeds it from the rows and lines held before these (dmPins), so the node's answer is only ever a listing,
+        // judged on the lines held then.
         const identity = await loadIdentity().catch(() => null);
         const me = identity?.publicKey;
-        const before = me ? await dmPins.read(me).catch(() => null) : null;
-        const sights = me && before && identity?.privateKey ? await judgeHeldAtUpdate(me, identity.privateKey, before, [conv]).catch(() => []) : [];
+        const before = me ? await dmPins.read(me, database).catch(() => null) : null;
+        // The gate (§3.4 amendment 5): with the pins unread, nothing of the node's is written here.
+        if (me && !before) return;
+        const sights = me && before && identity?.privateKey ? await judgeHeldAtUpdate(me, database, identity.privateKey, before, [conv]).catch(() => []) : [];
         await database.runAsync(
             'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)',
             [conv.id, await heldConversationType(conv.id, conv.type), conv.postId ?? null, conv.name ?? null, conv.createdBy ?? null, conv.createdAt ?? new Date().toISOString()]
@@ -4861,7 +4930,7 @@ async function refreshConversationFromNode(conversationId: string): Promise<void
             }
         }
         // The DM's pin hears what the node says (an offer, never a move); an unreadable pin store refuses the send anyway.
-        if (me) await dmPins.update(me, (pins) => [applyHeldSights(pins, sights), applyListingsToPins(pins, me, [conv])].some(Boolean)).catch(() => {});
+        if (me) await dmPins.update(me, database, (pins) => [applyHeldSights(pins, sights), applyListingsToPins(pins, me, [conv])].some(Boolean)).catch(() => {});
     } catch {
         // Offline or refused: the lock simply fails, and says so.
     } finally {
@@ -4911,7 +4980,7 @@ export async function isDmKeyChangePending(conversationId: string): Promise<bool
 export async function isDmUnplaced(conversationId: string): Promise<boolean> {
     try {
         const me = (await loadIdentity())?.publicKey;
-        return !!me && isUnplacedSight(dmSightFor(await dmPins.read(me), conversationId));
+        return !!me && isUnplacedSight(dmSightFor(await dmPins.read(me, await getDb()), conversationId));
     } catch {
         return false;
     }
@@ -4980,14 +5049,15 @@ export async function acceptOfferedPeer(conversationId: string, expectedPeer: st
     const expected = pinKeyOf(expectedPeer);
     if (!identity?.publicKey || !expected) return false;
     const me = identity.publicKey;
+    // One handle for the pin and the rows (§3.4 amendment 5): the community this tap is in, never the one open afterwards.
+    const database = await getDb();
     const change = await getDmKeyChange(conversationId);
     if (!change || change.offeredPeer !== expected) return false;
     const now = new Date().toISOString();
     let moved = false;
-    await dmPins.update(me, (pins) => (moved = acceptOffer(pins, conversationId, expected, now)));
+    await dmPins.update(me, database, (pins) => (moved = acceptOffer(pins, conversationId, expected, now)));
     if (!moved) return false;
     // The rows follow the pin (the next resolve puts them right if this fails; the pin has moved either way).
-    const database = await getDb();
     await database.runAsync('DELETE FROM conversation_participants WHERE conversation_id = ? AND public_key NOT IN (?, ?)', [conversationId, me, expected]).catch(() => {});
     await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conversationId, expected]).catch(() => {});
     await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conversationId, me]).catch(() => {});
@@ -5694,8 +5764,10 @@ export async function createConversationApi(type: 'dm', participants: string[], 
 
     const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found.');
-    // The pins before the node's answer is written (see refreshConversationFromNode): its rows are never the update's seed.
-    await dmPins.read(identity.publicKey).catch(() => {});
+    // The pins before the node's answer is written, through the handle it is written with (see refreshConversationFromNode):
+    // its rows are never the update's seed. With the pins unread, nothing is asked or written (§3.4 amendment 5's gate).
+    const database = await getDb();
+    await dmPins.read(identity.publicKey, database);
 
     const body: any = { type, participants, createdBy };
     if (name) body.name = name;
@@ -5728,7 +5800,6 @@ export async function createConversationApi(type: 'dm', participants: string[], 
         // Persist the conv + participants locally so the Inbox sees it
         // immediately, without waiting for the next syncMessages cycle.
         if (conv?.id) {
-            const database = await getDb();
             let postTitle: string | null = null;
             let postStatus: string | null = null;
             let postPhoto: string | null = null;

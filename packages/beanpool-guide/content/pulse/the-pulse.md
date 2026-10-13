@@ -31,7 +31,7 @@ You can always open a video on YouTube instead: tap the title, or **Open on YouT
 
 ## Something wrong with a post
 
-- **Someone else's post:** tap the flag, choose why (**Spam or scam**, **Offensive content**, **Misleading post** or **Other**) and tap **Submit report**. The people who run your community's server look at it.
+- **Someone else's post:** tap the flag, choose why (**Spam or scam**, **Offensive content**, **Misleading post**, **Child safety** or **Other**) and tap **Submit report**. The people who run your community's server look at it.
 - **Your own post:** tap **Hide**, then **Hide from feed**. It comes off the Pulse for everyone.
 
 You cannot hide someone else's post just for yourself.

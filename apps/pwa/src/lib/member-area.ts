@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import { roundToArea } from '@beanpool/core';
 import { request, signedFetchWithKey, type CommunityInfo } from './api';
 import { communityInfoOnce } from './visitor-lobby-gate';
+import { bounded } from './bounded';
 
 export interface MemberArea { lat: number; lng: number; updatedAt?: string | null }
 export type AreaWriteResult = { ok: true; area: MemberArea | null } | { ok: false; error: string };
@@ -34,29 +35,6 @@ export type AreaSender = (body: { lat: number | null; lng: number | null }, sign
 export const AREA_REQUEST_TIMEOUT_MS = 30_000;
 
 const NO_REACH = "Couldn't reach the community. Check your connection and try again.";
-
-/**
- * Runs `work` with a signal that stops at `ms` or when `outer` does (Skip, Back, leaving the screen), and rejects the
- * moment it stops, even if the work ignores its signal. Rejects with `stopped` set, so a caller can tell it apart.
- */
-async function bounded<T>(work: (signal: AbortSignal) => Promise<T>, ms: number, outer?: AbortSignal): Promise<T> {
-    const stop = new AbortController();
-    const onOuter = () => stop.abort();
-    if (outer?.aborted) stop.abort();
-    else outer?.addEventListener('abort', onOuter);
-    const timer = setTimeout(() => stop.abort(), ms);
-    const stopped = () => Object.assign(new Error('stopped'), { stopped: true });
-    try {
-        return await new Promise<T>((resolve, reject) => {
-            if (stop.signal.aborted) { reject(stopped()); return; }
-            stop.signal.addEventListener('abort', () => reject(stopped()));
-            work(stop.signal).then(resolve, reject);
-        });
-    } finally {
-        clearTimeout(timer);
-        outer?.removeEventListener('abort', onOuter);
-    }
-}
 
 /**
  * Sets (a point, rounded here first) or clears (null), given up after AREA_REQUEST_TIMEOUT_MS or when `signal` stops it

@@ -3,7 +3,7 @@
  * DESIGN-global-members-by-area §2.3, slice M3): what the page asks the node, with a stored area and without one, and
  * that a community without the switch asks exactly what it asked before.
  */
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 import React from 'react';
 import { PeoplePage } from './PeoplePage';
@@ -39,6 +39,9 @@ describe('People on a community with members on demand', () => {
     let whole: MockInstance<typeof api.getMembers>;
     beforeEach(() => {
         vi.restoreAllMocks();
+        // Each case starts as a browser the node has never answered (review of #1861 fix round, F1): a node's last answer
+        // is kept in this store, so one case's answer must not decide the next.
+        localStorage.clear();
         vi.spyOn(api, 'getFriends').mockResolvedValue([]);
         whole = vi.spyOn(api, 'getMembers').mockResolvedValue([]);
         cards = vi.spyOn(api, 'getMemberCards').mockImplementation(async (path: string) => {
@@ -119,6 +122,27 @@ describe('People on a community with members on demand', () => {
         cards.mockImplementation(async () => [card('c', 'Cleo', 0)]);
         fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
         expect(await screen.findByTestId('people-near')).toHaveTextContent('Cleo');
+    });
+
+    // Review of #1861, N4: a near read that never answers ends in the failed line, never "Finding who's near you…" for good.
+    it("a near read that never answers says it couldn't check once 30 s pass, with Try again", async () => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        try {
+            cards.mockImplementation((path: string) => path.includes('lat=') ? new Promise(() => {}) : Promise.resolve([]));
+            openCommunity();
+            expect(await screen.findByText("Finding who's near you…")).toBeInTheDocument();
+            await act(async () => { await vi.advanceTimersByTimeAsync(29_000); });
+            expect(screen.getByText("Finding who's near you…")).toBeInTheDocument();
+            await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+            expect(await screen.findByTestId('people-near-failed')).toHaveTextContent("Couldn't check who's near you just now.");
+            expect(screen.queryByText(/Nobody else is here yet/)).toBeNull();
+            cards.mockImplementation(async () => [card('c', 'Cleo', 0)]);
+            fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+            expect(await screen.findByTestId('people-near')).toHaveTextContent('Cleo');
+            expect(whole).not.toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it("a search that fails says it couldn't search, never that nobody has that name", async () => {

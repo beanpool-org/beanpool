@@ -26,9 +26,11 @@ interface SyncStatusProps {
     isMember?: boolean | null;
     /** How long ago goes under the word (the mobile header, as on the phone), not beside it. */
     stacked?: boolean;
+    /** The dot alone: the header is too narrow for the tab's title beside the words (HeaderControls' useDotOnlyChip). */
+    dotOnly?: boolean;
 }
 
-export function SyncStatus({ isMember: propIsMember, stacked }: SyncStatusProps = {}) {
+export function SyncStatus({ isMember: propIsMember, stacked, dotOnly }: SyncStatusProps = {}) {
     const [sync, setSync] = useState<SyncState>({
         connected: false,
         lastSyncTime: null,
@@ -157,5 +159,5 @@ export function SyncStatus({ isMember: propIsMember, stacked }: SyncStatusProps 
         : 'offline';
 
     const ago = sync.lastSyncTime && statusMode !== 'guest' ? formatTimeAgo(sync.lastSyncTime) : null;
-    return <SyncChip mode={statusMode} ago={ago} pulsing={sync.connected} stacked={stacked} />;
+    return <SyncChip mode={statusMode} ago={ago} pulsing={sync.connected} stacked={stacked} dotOnly={dotOnly} />;
 }

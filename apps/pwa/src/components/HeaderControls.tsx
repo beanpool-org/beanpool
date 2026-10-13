@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useLayoutEffect, useState, type ReactNode, type RefObject } from 'react';
 import { openHelp } from '../lib/tour-store';
 
 /** The pill's width: profile, the "?" and Settings (72 px before the "?"). */
@@ -6,8 +6,9 @@ export const HEADER_PILL_PX = 100;
 
 /**
  * The mobile header's title: the tab's name in the middle of the room the row leaves between the sync chip and the pill
- * (the row's flexible middle, so the chip's real width counts: "● Online" is 82 px at 320 px with 130% text, not a
- * 26 px dot), cut with an ellipsis where that room is narrower than the name, never drawn over either. The padding is
+ * (the row's flexible middle, so the chip's real width counts: "● Online" is 82 px at 320 px with 130% text), never drawn
+ * over either. Where the name wouldn't fit beside the chip's words the chip goes to its dot (useDotOnlyChip); only where
+ * even that leaves too little room is the name cut, with an ellipsis. The padding is
  * room for the words' glow (text-rainbow's shadow; the cut clips at the padding box), given back by the margins so the
  * words sit where they always did. `children`: what opens under the title (the community's status).
  */
@@ -25,6 +26,57 @@ export function HeaderTitle({ title, onClick, children }: { title: string; onCli
             {children}
         </div>
     );
+}
+
+/**
+ * Whether the header row's sync chip shows its dot alone: where the tab's title, whole, wouldn't fit between the chip with
+ * its words and the pill (at 320 px with 130% text, "Commons" and "The Pulse" were cut to "Com…" and "The P…"). Measured
+ * in the row as laid out, again whenever the row, the chip or the title changes size: the chip at its dot alone keeps its
+ * words laid out but hidden (SyncChip), so the room the title would have beside them is known either way. The words come
+ * back only with a pixel to spare, so the chip can't flick between the two at the edge. `title`: null where the row has
+ * no HeaderTitle (the map's).
+ */
+export function useDotOnlyChip(row: RefObject<HTMLElement | null>, title: string | null): boolean {
+    const [dotOnly, setDotOnly] = useState(false);
+    useLayoutEffect(() => {
+        const el = row.current;
+        if (!el || title === null || typeof ResizeObserver === 'undefined') {
+            setDotOnly(false);
+            return;
+        }
+        const chip = el.querySelector<HTMLElement>('[data-testid="sync-chip"]');
+        const words = chip?.querySelector<HTMLElement>('[data-chip-words]');
+        const span = el.querySelector<HTMLElement>('[data-testid="header-title"]');
+        const box = span?.parentElement;
+        if (!chip || !words || !span || !box) return;
+        const measure = () => {
+            if (!el.getBoundingClientRect().width) return; // hidden (the md: layout)
+            const now = chip.dataset.dotOnly === 'true';
+            const cs = getComputedStyle(span);
+            const range = document.createRange();
+            range.selectNodeContents(span);
+            // The words' own width (the span itself is clamped to the room) and its padding (HeaderTitle's margins give it back).
+            const need = range.getBoundingClientRect().width + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+            const room = box.getBoundingClientRect().width - (now ? words.getBoundingClientRect().width + (parseFloat(getComputedStyle(chip).columnGap) || 0) : 0);
+            setDotOnly(now ? need > room - 1 : need > room + 0.01);
+        };
+        measure();
+        // A frame later, not inside the observer: the chip's own change of size would loop it.
+        let frame = 0;
+        const observer = new ResizeObserver(() => {
+            cancelAnimationFrame(frame);
+            frame = requestAnimationFrame(measure);
+        });
+        for (const e of [el, chip, words, span]) observer.observe(e);
+        let live = true;
+        document.fonts?.ready.then(() => live && measure());
+        return () => {
+            live = false;
+            observer.disconnect();
+            cancelAnimationFrame(frame);
+        };
+    }, [row, title]);
+    return dotOnly;
 }
 
 /** The "?" (DESIGN-getting-started-fable.md §4–§5): help for the screen you're on, in the pill and the sidebar. */

@@ -35,7 +35,7 @@ import { MessagesPage } from './pages/MessagesPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { HomePage } from './pages/HomePage';
-import { HeaderControls, HeaderTitle, HelpIcon } from './components/HeaderControls';
+import { HeaderControls, HeaderTitle, HelpIcon, useDotOnlyChip } from './components/HeaderControls';
 import { helpSheetFor, tourStepForTab, tourSteps, webHelpKey } from '@beanpool/core';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
@@ -628,6 +628,12 @@ export function App() {
         { id: 'ledger', label: 'Ledger', emoji: '📊' },
     ];
 
+    // The mobile header's title (none on the map, which shows the community's name), and the sync chip as its dot alone
+    // where the title wouldn't fit beside the chip's words.
+    const headerTitle = activeTab !== 'map' || showSettings ? ((activeTab === 'pulse' ? 'The Pulse' : TABS.find(t => t.id === activeTab)?.label) ?? '') : null;
+    const headerRef = useRef<HTMLElement>(null);
+    const chipDotOnly = useDotOnlyChip(headerRef, headerTitle);
+
     // The community's status, opened from the header's title (or, on the map, its name).
     const communityStatus = showCommunityStatus && communityHealth && (
         <div 
@@ -814,7 +820,7 @@ export function App() {
                 <FormerAddressBanner signedIn />
 
                 {/* Header with Premium Dynamic AI Banner (Mobile only) */}
-                <header className="relative shadow-md md:hidden" style={{
+                <header ref={headerRef} className="relative shadow-md md:hidden" style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
@@ -832,12 +838,12 @@ export function App() {
                     <div className="absolute inset-0 bg-black/10 dark:bg-black/50 pointer-events-none" />
 
                     <div className="relative z-10 shrink-0" style={{ marginTop: '12px' }}>
-                        <SyncStatus isMember={!isGuest} stacked />
+                        <SyncStatus isMember={!isGuest} stacked dotOnly={chipDotOnly} />
                     </div>
 
-                    {activeTab !== 'map' || showSettings ? (
-                        // The tab's own name, as the lobby's, in the room between the chip and the pill (cut, never under either).
-                        <HeaderTitle title={(activeTab === 'pulse' ? 'The Pulse' : TABS.find(t => t.id === activeTab)?.label) ?? ''} onClick={toggleCommunityStatus}>
+                    {headerTitle !== null ? (
+                        // The tab's own name, as the lobby's, in the room between the chip and the pill (never under either).
+                        <HeaderTitle title={headerTitle} onClick={toggleCommunityStatus}>
                             {communityStatus}
                         </HeaderTitle>
                     ) : (

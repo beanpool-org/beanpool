@@ -6,13 +6,14 @@
  * A step also draws its tab's own bottom button (the Market's + ADD POST, the Map's +), with the classes and offset
  * tour-check.mjs read out of MarketplacePage.tsx and MapPage.tsx (fabs.json), under the real stylesheet's offset.
  * The header view is one row per title and chip (HEADER_TITLES x HEADER_CHIPS): App.tsx's header row with the real sync chip
- * (components/SyncChip.tsx, stacked as the header draws it: Online, Online and Offline with how long ago, Guest), the real
- * title (HeaderTitle) and the real pill.
+ * (components/SyncChip.tsx, stacked as the header draws it: Online, Online and Offline with how long ago, Guest; at its dot
+ * alone where the title wouldn't fit beside its words, useDotOnlyChip), the real title (HeaderTitle) and the real pill.
  */
+import { useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { TourBar } from '../src/components/TourBar';
 import { HelpDialog } from '../src/components/HelpDialog';
-import { HeaderControls, HeaderTitle } from '../src/components/HeaderControls';
+import { HeaderControls, HeaderTitle, useDotOnlyChip } from '../src/components/HeaderControls';
 import { LobbyHeader } from '../src/components/LobbyHeader';
 import { SyncChip, type SyncMode } from '../src/components/SyncChip';
 import { helpSheetFor, tourSteps } from '@beanpool/core';
@@ -30,20 +31,25 @@ const fabs = (await (await fetch('fabs.json')).json()) as Record<'market' | 'map
 const HEADER_TITLES = ['Home', 'Market', 'Map', 'Commons', 'Chat', 'People', 'Ledger', 'The Pulse', 'Marketplace'];
 /** The chip's words: Online alone (before the first sync), Online and Offline with how long ago (Offline its widest), Guest. */
 const HEADER_CHIPS: [SyncMode, string | null][] = [['online', null], ['online', '5s ago'], ['offline', '59m ago'], ['guest', null]];
+/** One mobile header row as App.tsx draws it (its own inline styles), with the real chip, title and pill. */
+function HeaderRow({ title, mode, ago }: { title: string; mode: SyncMode; ago: string | null }) {
+    const ref = useRef<HTMLElement>(null);
+    const dotOnly = useDotOnlyChip(ref, title);
+    return (
+        <header ref={ref} data-row={title + ' · ' + mode + (ago ? ' ' + ago : '')} className="relative shadow-md" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.3rem 0.75rem', background: '#14281d' }}>
+            <div className="relative z-10 shrink-0" style={{ marginTop: '12px' }}>
+                <SyncChip mode={mode} ago={ago} pulsing={false} stacked dotOnly={dotOnly} />
+            </div>
+            <HeaderTitle title={title} />
+            <HeaderControls showSettings={false} setShowSettings={() => {}} identityPubkey="ab" onOpenProfile={() => {}} />
+        </header>
+    );
+}
 function App() {
     if (view === 'header') {
-        // The mobile header row as App.tsx draws it (its own inline styles), with the real chip, title and pill.
         return (
             <div style={{ minHeight: '100vh' }} className="bg-nature-50 dark:bg-nature-950">
-                {HEADER_TITLES.flatMap(title => HEADER_CHIPS.map(([mode, ago]) => (
-                    <header key={title + mode + ago} data-row={title + ' · ' + mode + (ago ? ' ' + ago : '')} className="relative shadow-md" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.3rem 0.75rem', background: '#14281d' }}>
-                        <div className="relative z-10 shrink-0" style={{ marginTop: '12px' }}>
-                            <SyncChip mode={mode} ago={ago} pulsing={false} stacked />
-                        </div>
-                        <HeaderTitle title={title} />
-                        <HeaderControls showSettings={false} setShowSettings={() => {}} identityPubkey="ab" onOpenProfile={() => {}} />
-                    </header>
-                )))}
+                {HEADER_TITLES.flatMap(title => HEADER_CHIPS.map(([mode, ago]) => <HeaderRow key={title + mode + ago} title={title} mode={mode} ago={ago} />))}
             </div>
         );
     }

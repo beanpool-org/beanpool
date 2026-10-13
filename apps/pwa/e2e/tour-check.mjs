@@ -5,7 +5,9 @@
  * Chromium at 320 x 569 with 130% text, light and dark (the header also at 360, 375, 390, 412 and 430 px, 100% and 130%
  * text). Fails on sideways scroll, a control under 44 px, words over four lines, contrast under 4.5:1, an axe (WCAG 2
  * A/AA) violation, a title whose box meets the real sync chip's or the pill's (or covers the "?"), a title not centred
- * in the room between them, a cut title without its ellipsis, the bar
+ * in the room between them, a tab's title cut (the chip goes to its dot first; only Marketplace, no tab's name now, may
+ * be cut, with its ellipsis), a chip at its dot alone where the title fits beside its words, a chip whose name doesn't say
+ * its state (Online, Offline, Guest: also its title at its dot alone), a dot under 3:1 against the chip, the bar
  * covering a button above it, or the bar covering the tab's own bottom button (the Market's + ADD POST, which step 2
  * names, and the Map's +: their classes and offset are read from the pages themselves). Nothing here talks to a node; every request off this machine is aborted.
  *
@@ -47,6 +49,8 @@ const origin = 'http://127.0.0.1:' + server.address().port;
 const browser = await chromium.launch();
 const problems = [];
 const rows = [];
+/** Header rows per scheme: how many, how many titles cut, how many chips at their dot alone (the PR's before/after). */
+const tally = { light: { rows: 0, cut: 0, dotOnly: 0 }, dark: { rows: 0, cut: 0, dotOnly: 0 } };
 const measure = () => {
     const rgb = (s) => (s.match(/[\d.]+/g) || []).map(Number);
     const lum = ([r, g, b]) => { const f = (x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
@@ -82,8 +86,8 @@ const measure = () => {
     }
     // Each header row: the title's box against the real chip's and the pill's, and where its words sit in the room between.
     out.headers = [...document.querySelectorAll('header[data-row]')].map(h => {
-        const t = h.querySelector('[data-testid="header-title"]');
-        const title = t.getBoundingClientRect(), chip = h.querySelector('[data-testid="sync-chip"]').getBoundingClientRect(), pill = h.querySelector('[data-testid="header-pill"]').getBoundingClientRect();
+        const t = h.querySelector('[data-testid="header-title"]'), chipEl = h.querySelector('[data-testid="sync-chip"]');
+        const title = t.getBoundingClientRect(), chip = chipEl.getBoundingClientRect(), pill = h.querySelector('[data-testid="header-pill"]').getBoundingClientRect();
         const help = h.querySelector('[data-testid="header-help"]').getBoundingClientRect();
         const meets = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
         // Cut: the laid-out words are wider than the content box (any overflow at all draws the ellipsis; fractional widths,
@@ -93,9 +97,19 @@ const measure = () => {
         const cut = w.width > content + 0.01;
         // The words' own middle: the content box's (cut, the words fill it) or the laid-out text's.
         const mid = cut ? title.left + parseFloat(cs.borderLeftWidth) + pl + content / 2 : (w.left + w.right) / 2;
+        // The chip as its dot alone (narrow headers): its words (and how long ago) hidden but still laid out, so the room
+        // the title would have beside them is the title's box less their width and the gap. A chip without the markers
+        // (before the dot-only chip) always shows its words.
+        const words = chipEl.querySelector('[data-chip-words]'), dot = chipEl.querySelector('[data-chip-dot]') ?? chipEl.firstElementChild;
+        const dotOnly = chipEl.dataset.dotOnly === 'true', wordsShown = !words || getComputedStyle(words).visibility !== 'hidden';
+        const need = w.width + pl + parseFloat(cs.paddingRight), box = t.parentElement.getBoundingClientRect().width;
+        const roomWithWords = box - (dotOnly && words ? words.getBoundingClientRect().width + (parseFloat(getComputedStyle(chipEl).columnGap) || 0) : 0);
+        const a = lum(rgb(getComputedStyle(dot).backgroundColor)), b = lum(bgOf(chipEl));
         return { row: h.dataset.row, chip: [Math.round(chip.left), Math.round(chip.right)], title: [Math.round(title.left), Math.round(title.right)], pill: [Math.round(pill.left), Math.round(pill.right)],
             gapToChip: Math.round(title.left - chip.right), gapToPill: Math.round(pill.left - title.right), meets: meets(title, chip) || meets(title, pill),
             offCentre: Math.round((mid - (chip.right + pill.left) / 2) * 10) / 10, cut, ellipsis: cs.textOverflow === 'ellipsis',
+            dotOnly, wordsShown, need: Math.round(need * 10) / 10, roomWithWords: Math.round(roomWithWords * 10) / 10, name: chipEl.getAttribute('aria-label') ?? '', tip: chipEl.getAttribute('title') ?? '',
+            dotContrast: +((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)).toFixed(2),
             helpTappable: document.elementFromPoint(help.left + help.width / 2, help.top + help.height / 2)?.closest('[data-testid="header-help"]') != null, fits: pill.right <= innerWidth };
     });
     return out;
@@ -141,6 +155,7 @@ for (const dark of [false, true]) {
     const scale = await page.addStyleTag({ content: '/* the text size */' });
     for (const text of [100, 130]) {
         await scale.evaluate((el, pc) => { el.textContent = 'html { font-size: ' + pc + '% !important; }'; }, text);
+        await page.waitForTimeout(400); // the chip eases into a new text size (its transition: all 0.3s), and the header follows it
         for (const width of [320, 360, 375, 390, 412, 430]) {
             await page.setViewportSize({ width, height: 2400 }); // every row on screen, so the "?" can be hit-tested
             await page.waitForTimeout(60);
@@ -149,7 +164,17 @@ for (const dark of [false, true]) {
             if (process.env.TOUR_SHOTS) { fs.mkdirSync(process.env.TOUR_SHOTS, { recursive: true }); await page.screenshot({ path: path.join(process.env.TOUR_SHOTS, 'header-' + scheme + '-' + width + '-' + text + '.png'), clip: { x: 0, y: 0, width, height: 1100 } }); }
             if (m.scrollW > width) problems.push(at + ': sideways ' + m.scrollW);
             for (const r of m.headers) {
-                rows.push([at, r.row, JSON.stringify({ chip: r.chip, title: r.title, pill: r.pill, gapToChip: r.gapToChip, gapToPill: r.gapToPill, offCentre: r.offCentre, cut: r.cut })]);
+                rows.push([at, r.row, JSON.stringify({ chip: r.chip, title: r.title, pill: r.pill, gapToChip: r.gapToChip, gapToPill: r.gapToPill, offCentre: r.offCentre, cut: r.cut, dotOnly: r.dotOnly, dot: r.dotContrast })]);
+                const [title, chipWords] = r.row.split(' · '), state = chipWords.split(' ')[0].replace(/^./, c => c.toUpperCase());
+                tally[scheme].rows++; if (r.cut) tally[scheme].cut++; if (r.dotOnly) tally[scheme].dotOnly++;
+                // Whole for every tab (Marketplace, a name no tab has now, may still be cut: the ellipsis is the last resort).
+                if (r.cut && (title !== 'Marketplace' || r.wordsShown)) problems.push(at + ' ' + r.row + ': the title is cut' + (r.wordsShown ? ' while the chip still shows its words ' : ' ') + JSON.stringify(r));
+                if (r.dotOnly && r.need <= r.roomWithWords - 1) problems.push(at + ' ' + r.row + ': the chip is its dot alone though the title fits beside its words ' + JSON.stringify(r));
+                if (r.dotOnly === r.wordsShown) problems.push(at + ' ' + r.row + ': dot-only and the words shown disagree ' + JSON.stringify(r));
+                // The dot alone still says which state it is: to a screen reader (the chip's name) and on hover (its title).
+                if (!r.name.includes(state) || (r.dotOnly && !r.tip.includes(state))) problems.push(at + ' ' + r.row + ': the chip has no name with "' + state + '" ' + JSON.stringify(r));
+                // A dot that carries the state on its own needs 3:1 against the chip (WCAG 1.4.11).
+                if (r.dotContrast < 3) problems.push(at + ' ' + r.row + ': the dot is ' + r.dotContrast + ':1 against the chip ' + JSON.stringify(r));
                 if (r.meets || r.gapToChip < 0 || r.gapToPill < 0) problems.push(at + ' ' + r.row + ': the title meets the chip or the pill ' + JSON.stringify(r));
                 if (!r.helpTappable || !r.fits) problems.push(at + ' ' + r.row + ': the "?" is covered or the pill is off screen ' + JSON.stringify(r));
                 if (!r.cut && Math.abs(r.offCentre) > 1.5) problems.push(at + ' ' + r.row + ': the title is ' + r.offCentre + ' px off the middle of the room ' + JSON.stringify(r));
@@ -157,6 +182,8 @@ for (const dark of [false, true]) {
             }
         }
     }
+    // The chip goes to its dot only where it must: some rows keep their words (wider phones, 100% text), some don't (320 px, 130%).
+    if (!tally[scheme].dotOnly || tally[scheme].dotOnly === tally[scheme].rows) problems.push(scheme + ' header: the chip is its dot alone in ' + tally[scheme].dotOnly + ' of ' + tally[scheme].rows + ' rows');
     await page.setViewportSize({ width: 320, height: 569 });
     for (const title of ['Home', 'Market', 'Map']) {
         const m = await open('view=lobby&title=' + encodeURIComponent(title));
@@ -169,6 +196,7 @@ for (const dark of [false, true]) {
 await browser.close();
 server.close();
 for (const r of rows) console.log(r.join(' | '));
+for (const [scheme, t] of Object.entries(tally)) console.log('header rows ' + scheme + ': ' + t.rows + ', titles cut ' + t.cut + ', chips at their dot alone ' + t.dotOnly);
 fs.rmSync(DIR, { recursive: true, force: true });
 console.log(problems.length ? 'PROBLEMS:\n' + problems.join('\n') : 'ALL CHECKS PASS');
 process.exit(problems.length ? 1 : 0);

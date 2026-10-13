@@ -1175,8 +1175,10 @@ export interface NearbySet {
  *   at most `measureAtMost` of the matching posts in the box are measured. It reads no author's row: the enterprise
  *   half of the board's rule is tested on the author's key (ENTERPRISE_ON_BOARD_BY_KEY_SQL), as the holiday half
  *   already is. A post with no place is never in it. With no area: the newest `newestWithoutArea` listings under the
- *   same rules, wherever they are. Neither holds a listing by an author the member blocked (member_blocks, their own
- *   rows only): their phone hides those, so they would only take the slots of listings it shows.
+ *   same rules, wherever they are. Neither holds a listing by an author the member blocked on the web (member_blocks,
+ *   their own rows only): they asked not to see those. The phone keeps its own list on the device (apps/native
+ *   utils/blocklist.ts never calls /api/blocks) and hides those itself, so for a phone-only member member_blocks is empty
+ *   and this leaves out nothing (#1808 review, finding 6).
  * - own(M): every listing the member wrote here, whatever its place or state.
  * - ties(M): the listings they have an open deal on (asked for, or taken and not yet done) or a conversation about,
  *   the node's side of the phone's keep rule (apps/native utils/db.ts localPostTies).
@@ -1501,9 +1503,10 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         if (filter?.type !== 'poll') {
             where += " AND p.type != 'poll'";
         }
-        // A search leaves out the listings of the authors the reader blocked, as their nearby set does (#1781): the phone
-        // hides those, so they would only take the places of listings it shows, and the web and Home show them otherwise.
-        // A read for nobody in particular has no list.
+        // A search leaves out the listings of the authors the reader blocked on the web (member_blocks), as their nearby
+        // set does (#1781): the web and Home would show them otherwise. The phone keeps its own list on the device and
+        // hides those itself; it never writes member_blocks, so for a phone-only member this leaves out nothing (#1808
+        // review, finding 6). A read for nobody in particular has no list.
         const blocked = viewer && !filter?.includeAllScopes ? authorsBlockedBy(db, viewer) : [];
         if (blocked.length > 0) {
             where += ' AND p.author_pubkey NOT IN (SELECT value FROM json_each(?))';

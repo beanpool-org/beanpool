@@ -440,6 +440,14 @@ export interface SyncInvalidatedKey {
     reason: string;
     invalidatedAt: string;
     rekeyedTo: string | null;
+    /**
+     * The succession statement the new key signed for a completed re-key (line-display design §5): its signature, the `at`
+     * it signed, and when the main server stored it (the delta's second watermark). Null until attested; absent from a
+     * main server that predates them.
+     */
+    successionSig?: string | null;
+    successionAt?: string | null;
+    successionStoredAt?: string | null;
 }
 
 /**
@@ -1370,12 +1378,18 @@ function memberBlockOfRow(r: any): SyncMemberBlock {
 
 // The keys a re-key replaced, or is replacing (apps/server engine/member-wizards.ts). A key is lower case wherever
 // this server writes one.
+/** A delta's replaced keys: re-keyed since the cursor, or attested since it (the statement does not move invalidated_at). */
+const INVALIDATED_KEYS_SINCE = 'invalidated_at >= ? OR succession_stored_at >= ?';
+
 function invalidatedKeyOfRow(r: any): SyncInvalidatedKey {
     return {
         publicKey: r.public_key,
         reason: r.reason,
         invalidatedAt: r.invalidated_at,
         rekeyedTo: r.rekeyed_to ?? null,
+        successionSig: r.succession_sig ?? null,
+        successionAt: r.succession_at ?? null,
+        successionStoredAt: r.succession_stored_at ?? null,
     };
 }
 
@@ -1456,7 +1470,8 @@ export const EXPORT_CATEGORIES: readonly ExportCategory[] = [
     { key: 'joinRequests', table: 'join_requests', delta: { watermark: 'updated_at' }, shape: eachRow(joinRequestOfRow) },
     { key: 'moderationNotices', table: 'moderation_notices', delta: { watermark: 'updated_at' }, shape: eachRow(moderationNoticeOfRow) },
     { key: 'memberBlocks', table: 'member_blocks', delta: { watermark: 'updated_at' }, shape: eachRow(memberBlockOfRow) },
-    { key: 'invalidatedKeys', table: 'invalidated_keys', delta: { watermark: 'invalidated_at' }, shape: eachRow(invalidatedKeyOfRow) },
+    // Replaced keys, by the two writes a row has: the re-key, and its succession statement.
+    { key: 'invalidatedKeys', table: 'invalidated_keys', delta: { where: INVALIDATED_KEYS_SINCE, sinceParams: 2 }, shape: eachRow(invalidatedKeyOfRow) },
     // Keepers' pledges, by the two writes a pledge has: made, and released.
     { key: 'enterprisePledges', table: 'enterprise_pledges', delta: { where: 'pledged_at >= ? OR released_at >= ?', sinceParams: 2 }, shape: eachRow(enterprisePledgeOfRow) },
     { key: 'tombstones', table: 'tombstones', delta: { watermark: 'deleted_at' }, shape: eachRow(tombstoneOfRow) },
@@ -1641,7 +1656,9 @@ export function exportSyncState(
 
     let invalidatedKeys: SyncInvalidatedKey[] = [];
     try {
-        invalidatedKeys = sel('invalidated_keys', 'invalidated_at').map(invalidatedKeyOfRow);
+        invalidatedKeys = (delta
+            ? db.prepare(`SELECT * FROM invalidated_keys WHERE ${INVALIDATED_KEYS_SINCE}`).all(since, since) as any[]
+            : db.prepare('SELECT * FROM invalidated_keys').all() as any[]).map(invalidatedKeyOfRow);
     } catch {
         // Table absent on older schema/fixtures
     }

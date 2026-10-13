@@ -89,6 +89,7 @@ async function main() {
     const { db } = await import('./db/db.js');
     const { setMemberPhoto } = await import('@beanpool/engine');
     const snaps = await import('./roster-snapshots.js');
+    const { formerKeysReader } = await import('./engine/key-succession.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
 
     initAdminPassword();
@@ -130,9 +131,15 @@ async function main() {
     se.inviteGroupMember(hidden.id, lead.pk, invitee.pk); // an invitation, waiting
     snaps.setRosterSnapshotsForTests(undefined);
 
-    /** The route's answer built afresh from the same rows, as it was sent for every read before this change. */
-    const unshared = (groupId: string, status?: string, role?: string) =>
-        Buffer.from(JSON.stringify(se.getGroupMembers(groupId, { status: status as any, role: role as any })), 'utf8');
+    /**
+     * The route's answer built afresh from the same rows, as it was sent for every read before this change: since the
+     * line-display design's §5 (#1826), each active row with its `formerKeys` (newest first), as routes/groups.ts adds them.
+     */
+    const unshared = (groupId: string, status?: string, role?: string) => {
+        const rows = se.getGroupMembers(groupId, { status: status as any, role: role as any });
+        const formerKeysOf = rows.some((r) => r.status === 'active') ? formerKeysReader() : null;
+        return Buffer.from(JSON.stringify(formerKeysOf ? rows.map((r) => (r.status === 'active' ? { ...r, formerKeys: formerKeysOf(r.memberPubkey) } : r)) : rows), 'utf8');
+    };
 
     // ---- 1. The #828 rules first, and no snapshot touched ----
     {

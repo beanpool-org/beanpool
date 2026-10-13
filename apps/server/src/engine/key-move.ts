@@ -310,8 +310,13 @@ export function mergeReplicatedInvalidatedKeys(rows: unknown): ReplacedKeyMerge 
     const upsert = db.prepare(`INSERT INTO invalidated_keys (public_key, reason, invalidated_at, rekeyed_to) VALUES (?, ?, ?, ?)
                                ON CONFLICT(public_key) DO UPDATE SET
                                    reason = excluded.reason, invalidated_at = excluded.invalidated_at, rekeyed_to = excluded.rekeyed_to`);
+    // The succession statement (line-display design §5) is set once and never cleared: a row that carries one sets it here
+    // when this row has none and names the same new key it was signed for; a row without one leaves this row's alone.
+    const attest = db.prepare(`UPDATE invalidated_keys SET succession_sig = ?, succession_at = ?, succession_stored_at = ?
+                               WHERE public_key = ? AND succession_sig IS NULL AND rekeyed_to = ?`);
     for (const raw of rows) {
-        const r = raw as { publicKey?: unknown; reason?: unknown; invalidatedAt?: unknown; rekeyedTo?: unknown } | null;
+        const r = raw as { publicKey?: unknown; reason?: unknown; invalidatedAt?: unknown; rekeyedTo?: unknown;
+                           successionSig?: unknown; successionAt?: unknown; successionStoredAt?: unknown } | null;
         const key = isText(r?.publicKey, 128) ? r.publicKey.toLowerCase() : null;
         const rekeyedTo = typeof r?.rekeyedTo === 'string' ? r.rekeyedTo.toLowerCase() : r?.rekeyedTo ?? null;
         if (!r || !key || /\s/.test(key) || !isText(r.reason, 64) || !isText(r.invalidatedAt, 40)
@@ -325,10 +330,14 @@ export function mergeReplicatedInvalidatedKeys(rows: unknown): ReplacedKeyMerge 
         if (here && (here.invalidated_at > r.invalidatedAt
             || (here.invalidated_at === r.invalidatedAt && (here.reason === 'rekeyed' || r.reason !== 'rekeyed')))) {
             merge.kept++;
-            continue;
+        } else {
+            upsert.run(key, r.reason, r.invalidatedAt, rekeyedTo);
+            merge.written++;
         }
-        upsert.run(key, r.reason, r.invalidatedAt, rekeyedTo);
-        merge.written++;
+        if (r.reason === 'rekeyed' && typeof rekeyedTo === 'string' && isText(r.successionSig, 128) && isText(r.successionAt, 40)
+            && Number.isFinite(Date.parse(r.successionAt))) {
+            attest.run(r.successionSig, r.successionAt, isText(r.successionStoredAt, 40) ? r.successionStoredAt : r.invalidatedAt, key, rekeyedTo);
+        }
     }
     merge.rekeys.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
     return merge;

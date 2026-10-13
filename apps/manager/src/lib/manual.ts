@@ -3,9 +3,9 @@
  *
  * One source: packages/beanpool-guide/operators/*.md. Its build writes generated/operators.json, bundled here.
  * Settings shows only the bundled copy and never fetches a newer one: the manual on a server describes the version
- * that server runs. There is no website copy and nothing here links to one: the guide build has it switched off
- * until the security weak spots it describes are fixed (packages/beanpool-guide/scripts/build.mjs,
- * PUBLISH_OPERATORS_WEBSITE; Marty's decision, 2026-09-19).
+ * that server runs. Nothing here links to the website: it has First-time setup only, and the rest waits until the
+ * security weak spots it describes are fixed (packages/beanpool-guide/scripts/build.mjs, OPERATOR_PAGES_ON_WEBSITE;
+ * Marty's decision, 2026-09-19; First-time setup published 2026-10-13).
  *
  * It is the same block model as the members' guide, so the checks, search and bold-splitting in @beanpool/core's
  * member-guide.ts apply unchanged.

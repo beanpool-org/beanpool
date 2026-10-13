@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { check, BUNDLED_JSON, WEBSITE_DIR, CONTENT_DIR, OPERATORS_DIR, OPERATORS_JSON, OPERATORS_WEBSITE_DIR, PUBLISH_OPERATORS_WEBSITE, expectedOutputs, sourceGuides } from '../scripts/build.mjs';
+import { check, BUNDLED_JSON, WEBSITE_DIR, CONTENT_DIR, OPERATORS_DIR, OPERATORS_JSON, OPERATORS_WEBSITE_DIR, OPERATOR_PAGES_ON_WEBSITE, expectedOutputs, sourceGuides } from '../scripts/build.mjs';
 import { parseGuideMarkdown, renderWebsite, renderOperatorsWebsite, contentHash, loadGuide, GUIDE_SCHEMA } from '../src/guide.mjs';
 
 // Two copies of each collection are tested. What a page SAYS is pinned on the pages themselves (sourceGuides), so the
@@ -144,14 +144,32 @@ test('a text change changes the hash (which publishing turns into a higher versi
 
 // ─── The operator manual (operators/) ─────────────────────────────────────────
 
-test("the operator manual is not on the website: the build writes none of it and the folder does not exist", () => {
-    // The guard for Marty's decision of 2026-09-19: the manual ships in node Settings now, and the website copy waits
-    // until the security weak spots it describes are fixed. Remove this only together with the switch in build.mjs.
-    assert.equal(PUBLISH_OPERATORS_WEBSITE, false, 'PUBLISH_OPERATORS_WEBSITE must stay off until the brake weak spots are fixed');
-    assert.ok(!fs.existsSync(OPERATORS_WEBSITE_DIR),
-        'apps/website/guide/operators/ must not exist: the operator manual is not published on beanpool.org (Marty, 2026-09-19)');
-    const { out } = expectedOutputs();
-    assert.deepEqual(Object.keys(out).filter(f => f.startsWith(OPERATORS_WEBSITE_DIR + path.sep)), []);
+/** The files under apps/website/guide/operators/, relative to it, sorted. */
+const operatorWebsiteFiles = () => fs.readdirSync(OPERATORS_WEBSITE_DIR, { recursive: true, withFileTypes: true })
+    .filter(d => d.isFile()).map(d => path.relative(OPERATORS_WEBSITE_DIR, path.join(d.parentPath ?? d.path, d.name)).split(path.sep).join('/')).sort();
+const OPERATOR_WEBSITE_FILES = ['first-time-setup.html', 'images/cold-start.webp'];
+
+test("only First-time setup of the operator manual is on the website: that page and its one picture, nothing else", () => {
+    // The guard for Marty's decision of 2026-09-19: the manual ships in node Settings, and the website copy waits until
+    // the security weak spots it describes are fixed. Reversed for First-time setup alone (pick 8, 2026-10-13). Widen
+    // this only together with OPERATOR_PAGES_ON_WEBSITE in build.mjs.
+    assert.deepEqual(OPERATOR_PAGES_ON_WEBSITE, ['first-time-setup'], 'only First-time setup is published until the brake weak spots are fixed');
+    assert.deepEqual(operatorWebsiteFiles(), OPERATOR_WEBSITE_FILES,
+        'apps/website/guide/operators/ holds only First-time setup and its picture (Marty, 2026-09-19; pick 8, 2026-10-13)');
+    const { out, manual } = expectedOutputs();
+    assert.deepEqual(Object.keys(out).filter(f => f.startsWith(OPERATORS_WEBSITE_DIR + path.sep))
+        .map(f => path.relative(OPERATORS_WEBSITE_DIR, f).split(path.sep).join('/')).sort(), OPERATOR_WEBSITE_FILES);
+    // The published page links no other operator page, no operator index, and carries no copy of the whole manual.
+    const page = fs.readFileSync(path.join(OPERATORS_WEBSITE_DIR, 'first-time-setup.html'), 'utf8');
+    for (const g of manual.guides.filter(p => p.slug !== 'first-time-setup')) {
+        assert.ok(!page.includes(`href="${g.slug}.html"`), `first-time-setup.html links the unpublished ${g.slug}`);
+    }
+    assert.ok(!page.includes('href="index.html"'), 'first-time-setup.html links no operator index');
+    assert.ok(page.includes('<li><strong>Signing in to Settings</strong> (in Settings, under Manual)</li>'), 'an unpublished Related page is named, not linked');
+    assert.ok(page.includes('<img src="images/cold-start.webp"'), 'first-time-setup.html shows its picture');
+    assert.ok(page.includes('beanpool claim'), 'first-time-setup.html walks the claim');
+    assert.ok(fs.readFileSync(path.join(OPERATORS_WEBSITE_DIR, 'images/cold-start.webp')).equals(fs.readFileSync(path.join(OPERATORS_DIR, 'images/cold-start.webp'))),
+        'the picture is the bytes Settings shows');
     const members = fs.readFileSync(path.join(WEBSITE_DIR, 'index.html'), 'utf8');
     assert.ok(!members.includes('operators/'), "the members' guide links no operator pages");
     assert.ok(members.includes("Its manual is in your server's Settings"), "the members' guide says where the manual is");
@@ -175,7 +193,7 @@ test("the operator manual is a separate collection: the members' guide carries n
     for (const p of manual.guides) assert.ok(!memberSlugs.has(p.slug), `${p.slug} is in both collections`);
 });
 
-test('the operator manual covers what an operator needs, and the (unpublished) website renderer lists and renders every page', () => {
+test('the operator manual covers what an operator needs, and the website renderer, given every page, lists and renders them all', () => {
     const slugs = new Set(sourceGuides().manual.guides.map(g => g.slug));
     for (const want of ['first-time-setup', 'signing-in', 'roles', 'members-and-invites', 'reports-and-takedowns', 'disputes',
         'decisions-and-emergencies', 'enterprises-and-keepers', 'pulse-and-announcements', 'backups-and-replicas',
@@ -213,6 +231,30 @@ test('the operator manual covers what an operator needs, and the (unpublished) w
     assert.ok(members.includes('href="operators/index.html"'), "once published, the members' guide links the operator manual");
 });
 
+test('the website renderer, given some pages, writes only those and names the rest without linking them', () => {
+    const { manual } = expectedOutputs();
+    // Settings map links a picture to nearly every page: a good test of pictures pointing at unpublished pages.
+    const only = ['settings-map', 'the-settings-screens'];
+    const site = renderOperatorsWebsite(manual, { only });
+    assert.deepEqual(Object.keys(site).sort(), ['settings-map.html', 'the-settings-screens.html'], 'no index, no operators.json, no other page');
+    const map = manual.guides.find(g => g.slug === 'settings-map');
+    const html = site['settings-map.html'];
+    const linked = map.blocks.filter(b => b.type === 'img' && b.href);
+    assert.ok(linked.some(b => !only.includes(b.href)) && linked.some(b => only.includes(b.href)), 'the test page links both kinds');
+    for (const b of linked) {
+        assert.ok(html.includes(`<img src="${b.src}"`), `renders img ${b.src}`);
+        assert.equal(html.includes(`<a href="${b.href}.html">`), only.includes(b.href), `img ${b.src} links ${b.href} only if it is published`);
+    }
+    for (const slug of map.related) {
+        const r = manual.guides.find(g => g.slug === slug);
+        assert.equal(html.includes(`href="${slug}.html"`), only.includes(slug), `Related ${slug} is a link only if it is published`);
+        if (!only.includes(slug)) assert.ok(html.includes(`<strong>${r.title}</strong> (in Settings, under Manual)`), `Related ${slug} is named`);
+    }
+    assert.ok(!html.includes('href="index.html"'), 'no link to an operator index that is not there');
+    assert.ok(html.includes('Only this part of it is on the website'), 'the foot says the rest is in Settings');
+    assert.throws(() => renderOperatorsWebsite(manual, { only: ['no-such-page'] }), /no page "no-such-page"/);
+});
+
 test('operator words: beans not Ʀ, badges gate nothing', () => {
     const text = fs.readdirSync(OPERATORS_DIR, { recursive: true }).filter(f => String(f).endsWith('.md'))
         .map(f => fs.readFileSync(path.join(OPERATORS_DIR, String(f)), 'utf8')).join('\n')
@@ -233,7 +275,7 @@ test('the operator manual has no concept-guide section; the members\' guide stil
     assert.throws(() => loadGuide(OPERATORS_DIR), /needs the "about" section/);
 });
 
-test('check() reports a stray file in the website folder, including any operator page while publishing is off', () => {
+test('check() reports a stray file in the website folder, including any operator page that is not published', () => {
     const existed = fs.existsSync(OPERATORS_WEBSITE_DIR);
     fs.mkdirSync(OPERATORS_WEBSITE_DIR, { recursive: true });
     const stray = path.join(OPERATORS_WEBSITE_DIR, 'signing-in.html');
@@ -308,10 +350,11 @@ test('validation: referenced image must exist on disk and linked href must be a 
     }
 });
 
-test('website has no operator images and no operator content', () => {
-    const webFiles = fs.readdirSync(WEBSITE_DIR, { recursive: true }).map(String);
-    assert.ok(!webFiles.some(f => f.includes('operators')), 'no operators in website folder');
-    assert.ok(!webFiles.some(f => f.endsWith('.webp')), 'no operator webp images in website folder');
+test('website has no operator images and no operator content but First-time setup and its picture', () => {
+    const webFiles = fs.readdirSync(WEBSITE_DIR, { recursive: true, withFileTypes: true }).filter(d => d.isFile())
+        .map(d => path.relative(WEBSITE_DIR, path.join(d.parentPath ?? d.path, d.name)).split(path.sep).join('/'));
+    assert.deepEqual(webFiles.filter(f => f.includes('operators')).sort(), OPERATOR_WEBSITE_FILES.map(f => `operators/${f}`), 'only First-time setup in the website folder');
+    assert.deepEqual(webFiles.filter(f => f.endsWith('.webp')), ['operators/images/cold-start.webp'], "only First-time setup's picture in the website folder");
 });
 
 // ─── Versions: set when the director publishes, never in a manifest ───────────

@@ -199,8 +199,17 @@ for (const scheme of ['light', 'dark'] as const) {
             await render(createElement('div', null,
                 createElement(LocalCommunityMark, { variant: 'strip', feature: 'beans' }),
                 createElement(CommonsPreview), createElement(DealsPreview), createElement(YourBeansPreviewCard, { colors })));
-            // Every button, twice over (the sheet's own buttons appear once a marker is pressed).
-            for (let round = 0; round < 2; round++) for (const b of [...host.querySelectorAll('button')]) if (b.isConnected) await press(b);
+            // Every button, asked afresh after each press (a sheet's own buttons appear only once a marker opens it), and
+            // the strip's ✕ last, since it folds the strip's buttons away.
+            const pressed = new Set<Element>();
+            for (let i = 0; i < 300; i++) {
+                const next = [...host.querySelectorAll('button')].find(b => !pressed.has(b) && b.getAttribute('aria-label') !== 'Make this shorter');
+                if (!next) break;
+                pressed.add(next);
+                await press(next);
+            }
+            expect(pressed.size).toBeGreaterThanOrEqual(15);
+            await press(host.querySelector('[aria-label="Make this shorter"]')!);
             // The presses ran (each of the ways forward was taken), and none of them reached a node.
             expect(routes.pushed).toEqual(expect.arrayContaining(['/start-community', '/find-community', '/(tabs)/ledger']));
             expect(net.calls).toEqual([]);

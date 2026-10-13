@@ -9,12 +9,12 @@ Status: complete
   - `getStoredOAuthToken(channelId)`: Reads credentials securely stored under `pulse_oauth_token_${channelId}`.
   - `saveStoredOAuthToken(token)`: Saves tokens exclusively to local hardware-backed keystore.
   - `deleteStoredOAuthToken(channelId)`: Clears local credentials upon disconnect.
-  - **Inviolable constraint preserved:** The node NEVER receives, holds, or proxies platform access tokens or refresh tokens. There is no token column in `creator_channels`.
+  - **Inviolable constraint:** The node never STORES a platform access or refresh token. It does relay them in transit: the code exchange runs on the node (`/api/member/pulse/oauth-exchange`, which holds the client secret), and since #1830 the node also uses the token, inside that one request, to ask the platform which account it belongs to. There is no token column in `creator_channels`; the suite `test-pulse-verify-identity` greps the data dir and the server's output for every token it issued.
 - **TikTok Login Kit v2 + Display API Integration:**
   - PKCE pair generation (`generatePkcePair`) using `expo-crypto` and `sha256` from `@noble/hashes/sha2.js`.
   - Authorization endpoint `https://www.tiktok.com/v2/auth/authorize/` with `scope=user.info.basic,user.info.profile,video.list`.
   - Device-side token exchange via `POST https://open.tiktokapis.com/v2/oauth/token/` with PKCE `code_verifier`.
-  - User identity lookup via `GET https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,username`.
+  - User identity lookup: since #1830 the NODE calls `GET https://open.tiktokapis.com/v2/user/info/?fields=open_id,username` during the exchange; the phone makes no identity call.
   - Content fetching via `POST https://open.tiktokapis.com/v2/video/list/?fields=id,title,video_description,duration,cover_image_url,share_url,create_time`.
   - Token refresh management (`refreshTokenIfNeeded`) automatically refreshing expiring access tokens using stored refresh tokens.
 - **Instagram Creator Connector Abstraction:**
@@ -52,15 +52,15 @@ Status: complete
 - Layout resilience: Form elements and action buttons wrap with `flexWrap: 'wrap', gap: 8`, touch targets >= 44dp, resilient to 320dp width and 1.3× font scale.
 
 ### 4. Server Endpoints & Ingestion Pipeline (`apps/server/src/routes/` & `engine/`)
-- `POST /api/member/channels/:id/verify-oauth`:
-  - Enforces signed request with `ctx.state.actor`.
-  - Verifies channel belongs to actor and is active (`deleted_at IS NULL`).
-  - Verifies platform match and performs case-insensitive account handle match (`cleanUsername === cleanHandle` or URL substring match).
-  - Rejects mismatched accounts with 400 `ACCOUNT_MISMATCH`.
-  - Sets `oauth_verified_at = now()` and `supports_autolist = 1` in `creator_channels`.
+- `POST /api/member/pulse/oauth-exchange` with `channelId` (#1830; replaces `verify-oauth`, which now answers 410 `update_required`):
+  - Enforces signed request with `ctx.state.actor`; the channel must be the actor's, live, of that platform and added as @handle (404/403/400 `not_verifiable`), checked before any code is spent.
+  - Exchanges the code, asks the platform who the token belongs to, and matches exactly (`engine/platform-identity.ts`): never a prefix or substring, never a display name.
+  - Rejects another account with 400 `ACCOUNT_MISMATCH` and an unanswered identity with 502 `identity_unavailable`; neither returns the token.
+  - Sets `oauth_verified_at`, `supports_autolist = 1`, `platform_account_id` and `verified_handle`; capped at 10 exchanges an hour per member, 120 per node.
+  - Badges set before #1830 carry no `platform_account_id` and are cleared at boot (`clearUnprovenOauthBadges`).
 - `POST /api/member/channels/:id/disconnect-oauth`:
   - Enforces signed request with `ctx.state.actor`.
-  - Clears `oauth_verified_at = NULL` and resets `supports_autolist` to platform native capability.
+  - Clears `oauth_verified_at`, `platform_account_id` and `verified_handle`, and resets `supports_autolist` to platform native capability.
   - Preserves all previously ingested `pulse_items` rows in place.
 - `POST /api/member/pulse/oauth-ingest`:
   - Accepts batch payload `{ channelId, items: Array<{ url, title, thumbnailUrl, publishedAt, externalId, category }> }`.

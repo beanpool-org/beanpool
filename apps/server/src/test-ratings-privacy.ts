@@ -156,17 +156,20 @@ async function main() {
     const catSpoof = await send('GET', `/api/ratings/${ana.pub}?requester=${ana.pub}`, undefined, cat);
     assert(catSpoof.status === 200 && leaks(catSpoof.text, memberKeys).length === 0 && catSpoof.body.ratings.every((r: any) => !('mine' in r)),
         `T3d. a ?requester= naming Ana gives Cat nothing more (${leaks(catSpoof.text, memberKeys).join(', ') || 'none'})`);
-    // Ben renames, and Cat takes the name he had: a review is Ben's by his key, never by a name.
+    // A review is its writer's by key, never by a name. Ben renames: his rows are still his.
     db.prepare("UPDATE members SET callsign = 'ben_renamed' WHERE public_key = ?").run(ben.pub);
-    db.prepare("UPDATE members SET callsign = 'ben_r' WHERE public_key = ?").run(cat.pub);
     const benRenamed = await send('GET', `/api/ratings/${ana.pub}`, undefined, ben);
-    const catAsBenR = await send('GET', `/api/ratings/${ana.pub}`, undefined, cat);
     assert(benRenamed.body?.ratings?.every((r: any) => r.mine === true && r.raterPubkey === ben.pub),
         `T3e. renamed, Ben's rows are still his (${benRenamed.text.slice(0, 120)})`);
-    assert(catAsBenR.status === 200 && catAsBenR.body.ratings.every((r: any) => !('mine' in r) && !('raterPubkey' in r)) && !catAsBenR.text.includes(ben.pub),
+    // Ben, back to his name, leaves (a pruned account frees its name: idx_members_callsign_unique), and Cat takes it.
+    db.prepare("UPDATE members SET callsign = 'ben_r', status = 'pruned' WHERE public_key = ?").run(ben.pub);
+    db.prepare("UPDATE members SET callsign = 'ben_r' WHERE public_key = ?").run(cat.pub);
+    const catAsBenR = await send('GET', `/api/ratings/${ana.pub}`, undefined, cat);
+    assert(catAsBenR.status === 200 && catAsBenR.body.ratings.length === 2
+        && catAsBenR.body.ratings.every((r: any) => !('mine' in r) && !('raterPubkey' in r)) && !catAsBenR.text.includes(ben.pub),
         `T3f. Cat, now called what Ben was, gets nothing of his (${catAsBenR.text.slice(0, 120)})`);
     db.prepare("UPDATE members SET callsign = 'cat_r' WHERE public_key = ?").run(cat.pub);
-    db.prepare("UPDATE members SET callsign = 'ben_r' WHERE public_key = ?").run(ben.pub);
+    db.prepare("UPDATE members SET status = 'active' WHERE public_key = ?").run(ben.pub);
 
     // ── T4: who reads at all, whatever ENFORCE_READ_AUTH says ──
     const unsigned = await send('GET', `/api/ratings/${ana.pub}`);

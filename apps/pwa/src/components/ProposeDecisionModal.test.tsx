@@ -125,13 +125,70 @@ describe('ProposeDecisionModal Accessibility & UX', () => {
             />
         );
         const dialog = screen.getByRole('dialog');
-        fireEvent.click(screen.getAllByRole('radio').find(r => r.textContent?.includes('lead keeper') || r.textContent?.includes('Lead Keeper'))!);
+        fireEvent.click(screen.getAllByRole('radio').find(r => r.textContent?.includes('Remove a lead keeper or project leader'))!);
         expect(screen.getByText('Project or enterprise')).toBeInTheDocument();
         expect(dialog.textContent).not.toMatch(/treasur/i);
         fireEvent.click(screen.getByRole('button', { name: /Commons Pool/i }));
-        fireEvent.click(screen.getAllByRole('radio').find(r => r.textContent?.includes('debt') || r.textContent?.includes('Deficit'))!);
+        fireEvent.click(screen.getAllByRole('radio').find(r => r.textContent?.includes("Pay off a project's or enterprise's debt"))!);
         expect(screen.getByText('Project or enterprise')).toBeInTheDocument();
         expect(dialog.textContent).not.toMatch(/treasur/i);
+    });
+
+    it('says the three group effects in the new words, and none of the old ones (§3.1)', () => {
+        render(
+            <ProposeDecisionModal
+                isOpen={true}
+                onClose={vi.fn()}
+                onCreated={vi.fn()}
+                identity={mockIdentity}
+                commonsBalance={100}
+            />
+        );
+        const dialog = screen.getByRole('dialog');
+        expect(screen.getByRole('radio', { name: /Remove a lead keeper or project leader/ })).toBeInTheDocument();
+        const memberText = dialog.textContent;
+        fireEvent.click(screen.getByRole('button', { name: /Commons Pool/i }));
+        expect(screen.getByRole('radio', { name: /Give Beans to a project or enterprise/ })).toBeInTheDocument();
+        expect(screen.getByRole('radio', { name: /Pay off a project's or enterprise's debt/ })).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('radio', { name: /Give Beans to a project or enterprise/ }));
+        expect(screen.getByText('Project or enterprise public key')).toBeInTheDocument();
+        for (const words of [memberText, dialog.textContent]) {
+            for (const old of ['Remove Lead Keeper', 'Grant to Enterprise', 'Write Off Deficit', 'defaulted enterprise', 'Target Enterprise']) {
+                expect(words).not.toContain(old);
+            }
+        }
+    });
+
+    it('a project picked under "remove" names its leader, an enterprise its lead keeper', async () => {
+        const roof = 'r'.repeat(64), eggs = 'e'.repeat(64);
+        render(
+            <ProposeDecisionModal
+                isOpen={true}
+                onClose={vi.fn()}
+                onCreated={vi.fn()}
+                identity={mockIdentity}
+                commonsBalance={100}
+                treasuries={[
+                    { publicKey: roof, name: 'New hall roof', lifecycle: 'bounded' },
+                    { publicKey: eggs, name: 'Egg flock', lifecycle: 'ongoing' },
+                ]}
+            />
+        );
+        fireEvent.click(screen.getByRole('radio', { name: /Remove a lead keeper or project leader/ }));
+        expect(screen.getByText('The lead keeper or leader to remove: callsign or public key')).toBeInTheDocument();
+        fireEvent.change(screen.getByPlaceholderText('e.g. Grant 200 beans to the Tool Library'), { target: { value: 'New roof lead' } });
+        fireEvent.change(screen.getByPlaceholderText(/Explain why this decision is needed/), { target: { value: 'They moved away' } });
+        fireEvent.change(screen.getByPlaceholderText("Enter the lead keeper or leader's callsign or pubkey..."), { target: { value: 'b'.repeat(64) } });
+        fireEvent.click(screen.getByRole('button', { name: 'Egg flock' }));
+        expect(screen.getByText('The lead keeper to remove: callsign or public key')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'New hall roof' }));
+        expect(screen.getByText('The leader to remove: callsign or public key')).toBeInTheDocument();
+        expect(screen.getByPlaceholderText("Enter the leader's callsign or pubkey...")).toBeInTheDocument();
+        vi.mocked(createDecision).mockResolvedValueOnce({ success: true } as any);
+        fireEvent.click(screen.getByRole('button', { name: 'Submit Decision' }));
+        await vi.waitFor(() => expect(vi.mocked(createDecision)).toHaveBeenCalledWith(expect.objectContaining({
+            effect: 'remove_lead_keeper', params: { enterprisePubkey: roof, leadPubkey: 'b'.repeat(64) },
+        })));
     });
 
     it("shows the node's grant-cap sentence as it comes, and keeps the form open", async () => {
@@ -152,7 +209,7 @@ describe('ProposeDecisionModal Accessibility & UX', () => {
         fireEvent.click(screen.getByRole('button', { name: /Commons Pool/i }));
         fireEvent.change(screen.getByPlaceholderText('e.g. Grant 200 beans to the Tool Library'), { target: { value: 'Seed money' } });
         fireEvent.change(screen.getByPlaceholderText(/Explain why this decision is needed/), { target: { value: 'For the tool library roof' } });
-        fireEvent.change(screen.getByPlaceholderText('Enter enterprise pubkey...'), { target: { value: 'ab'.repeat(32) } });
+        fireEvent.change(screen.getByPlaceholderText('Enter its public key...'), { target: { value: 'ab'.repeat(32) } });
         fireEvent.change(screen.getByPlaceholderText('e.g. 250'), { target: { value: '124.5' } });
         fireEvent.click(screen.getByRole('button', { name: 'Submit Decision' }));
 

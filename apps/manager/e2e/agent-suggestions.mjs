@@ -15,7 +15,7 @@
  *
  *   node e2e/agent-suggestions.mjs
  */
-/* global console, process, window -- Node, plus page.evaluate callbacks run in the browser */
+/* global console, process, window, URL -- Node, plus page.evaluate callbacks run in the browser */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

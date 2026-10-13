@@ -92,6 +92,21 @@ describe('AgentSuggestionsPanel', () => {
         await waitFor(() => expect(calls.some((c) => c.method === 'POST' && c.url.endsWith('/agent/suggestions/sug1/decline'))).toBe(true));
     });
 
+    it('the password session is told where Approve is (the member\'s own key); a closed report says why there is no Approve', async () => {
+        fakeNode({ items: [card({ mine: false, approve: null })] });
+        const { unmount } = render(<AgentSuggestionsPanel activeNode={node} viewer={{ kind: 'password' }} />);
+        await screen.findByTestId('agent-suggestion');
+        expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+        expect(screen.getByTestId('agent-approve-hint').textContent).toMatch(/Manage in the app, signed in with their own key/);
+        unmount();
+        vi.restoreAllMocks();
+        fakeNode({ items: [card({ mine: true, approve: null, report: { ...card().report!, status: 'actioned' } })] });
+        render(<AgentSuggestionsPanel activeNode={node} viewer={ADMIN_KEY} />);
+        await screen.findByTestId('agent-suggestion');
+        expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+        expect(screen.getByTestId('agent-approve-hint').textContent).toMatch(/Nothing left to approve/);
+    });
+
     it('a moderator sees nothing and asks nothing', async () => {
         const calls = fakeNode({ items: [card()] });
         const { container } = render(<AgentSuggestionsPanel activeNode={node} viewer={MOD_KEY} />);

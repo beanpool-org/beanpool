@@ -152,6 +152,13 @@ export function AgentSuggestionsPanel({ activeNode, viewer = { kind: 'password' 
                             <p className="text-sm text-nature-200 m-0 break-words whitespace-pre-wrap" data-testid="agent-reason">{s.reason.text}</p>
                         </div>
                         <p className="text-xs text-nature-400 m-0">Goes away in {hoursLeft(s.expiresAt)} if nobody answers.</p>
+                        {!s.approve && (viewer.kind === 'password' || s.mine) && (
+                            <p className="text-xs text-nature-300 m-0 break-words" data-testid="agent-approve-hint">
+                                {viewer.kind === 'password'
+                                    ? 'Its member approves from Manage in the app, signed in with their own key; this password session can only decline.'
+                                    : 'Nothing left to approve: the report was closed since, or what it was about is gone. Decline clears it.'}
+                            </p>
+                        )}
                         <div className="flex flex-wrap gap-2">
                             {s.mine && s.approve && (
                                 <button

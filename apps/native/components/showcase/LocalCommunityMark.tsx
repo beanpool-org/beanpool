@@ -160,7 +160,11 @@ export function LocalCommunityMark(props: MarkProps) {
         <>
             <View style={[s.strip, { backgroundColor: tone.bg, borderColor: tone.border }]} testID="local-community-strip">
                 <View style={s.stripTop}>
-                    {pill}
+                    {/* Tapping any variant opens the sheet (design §2), the strip's pill too (review of #1852, finding 12). */}
+                    <Pressable onPress={() => setOpen(true)} accessibilityRole="button" accessibilityLabel={`${LOCAL_COMMUNITY_MARK}: why?`}
+                        hitSlop={12} style={{ flexShrink: 0 }}>
+                        {pill}
+                    </Pressable>
                     <Pressable onPress={() => setCollapsed(true)} accessibilityRole="button" accessibilityLabel="Make this shorter" hitSlop={12}
                         style={s.close}>
                         <Text style={[s.closeText, { color: tone.fg }]}>✕</Text>

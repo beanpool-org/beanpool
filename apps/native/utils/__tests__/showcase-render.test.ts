@@ -234,6 +234,14 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(routes.pushed).toEqual([{ pathname: '/guide/[slug]', params: { slug: LOCAL_COMMUNITY_SHEET.guide.escrow } }]);
         });
 
+        it("the strip's pill opens the sheet too: tapping any variant does (design §2)", async () => {
+            await render(createElement(LocalCommunityMark, { variant: 'strip', feature: 'beans' }));
+            const pill = host.querySelector(`[data-testid="local-community-strip"] [aria-label="${LOCAL_COMMUNITY_MARK}: why?"]`)!;
+            expect(pill).not.toBeNull();
+            await press(pill);
+            expect(host.querySelector('[data-testid="local-community-sheet"]')?.textContent).toContain(LOCAL_COMMUNITY_SHEET.features.beans);
+        });
+
         it('the sheet on its own: Start a community and Communities near you go to their screens', async () => {
             const onClose = vi.fn();
             await render(createElement(LocalCommunitySheet, { feature: 'beans', visible: true, onClose }));

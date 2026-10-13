@@ -10,15 +10,21 @@
  *      answer whose roster names someone the members list doesn't is refused with nothing sent and no wrap made to
  *      them; a `missing` list naming them gets them no top-up (top-ups only to the epoch's signed record's members);
  *   3. across clients: Ana's web line opens with the phone's own crypto module (apps/native/utils/group-chat-crypto.ts)
- *      under Ben's key in the phone's form, and a line the phone module seals as Ben is drawn under Ben on the web.
+ *      under Ben's key in the phone's form, and a line the phone module seals as Ben is drawn under Ben on the web;
+ *   4. the review of #1816's checks: R1 an unsealed row in a locked chat is "Unverified"; R2 a held group opened from
+ *      Home's "Your groups", left out of the node's list while the node answers the event-chat route, opens as its group
+ *      chat and sends sealed; R3 no request of either browser, in the whole run, carries a sent line's words; R4 what
+ *      each browser keeps holds no words and only {highest, locked} lock rows; R5 Sign Out with a second tab open: the
+ *      signed-out tab opens a fresh lock store.
  *
  * Fails on any sideways scroll at 320 px, a readable word in the messages table, or a request to any host but this machine
  * (the shipped index.html's Google Fonts link aside: aborted, as every other host is).
  *
- * Run: node e2e/group-chat-check.mjs (from apps/pwa). GC_TMP sets where the build and the node's data go (os.tmpdir()).
+ * Run: node e2e/group-chat-check.mjs (from apps/pwa). GC_TMP sets where the build and the node's data go (os.tmpdir());
+ * GC_SHOTS a folder for screenshots; GC_REQLOG_DIR a folder for every request and each browser's storage.
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global URL, Buffer, fetch, console, process, setTimeout, document, indexedDB, localStorage -- Node, and the page's side of evaluate() */
+/* global URL, Buffer, fetch, console, process, setTimeout, document, indexedDB, localStorage, sessionStorage -- Node, and the page's side of evaluate() */
 import { build } from 'vite';
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -98,8 +104,12 @@ async function startNode(root, members) {
 
 // ---------- the browser ----------
 
+const REQS = [];
+const SHOTS = process.env.GC_SHOTS || '';
+async function shot(page, name) { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, `${name}.png`) }).catch((e) => console.error('shot', name, e?.message)); }
 async function openAs(browser, origin, identity) {
     const context = await browser.newContext({ viewport: VIEW, ignoreHTTPSErrors: true, reducedMotion: 'reduce' });
+    context.on('request', (req) => REQS.push({ who: identity.callsign, method: req.method(), url: req.url(), body: req.postData() ?? '' }));
     const otherHosts = new Set();
     await context.addInitScript(() => {
         try {
@@ -213,6 +223,7 @@ async function main() {
         await send(b.page, 'I will bring the gloves');
         await b.page.getByText('I will bring the gloves').waitFor({ timeout: 20_000 });
         await noSidewaysScroll(b.page, "Ben's group chat");
+        await shot(b.page, '1-ben-signer-line-and-lock-notice');
 
         await openGroupChat(a.page, node, 'Garden group');
         await a.page.getByText('I will bring the gloves').waitFor({ timeout: 20_000 });
@@ -245,11 +256,13 @@ async function main() {
         const isKeys = (url) => url.pathname.startsWith(`/api/groups/${G}/keys`);
         const isKeysRoot = (url) => url.pathname === `/api/groups/${G}/keys`;
         const isMissing = (url) => url.pathname === `/api/groups/${G}/keys/missing`;
-        const isPlain = (url) => url.pathname === '/api/messages' || url.pathname.startsWith('/api/messages/');
+        // The readable routes a line or an edit leaves by (mark-read and reactions carry no words; counting them raced).
+        const isPlain = (url) => url.pathname === '/api/messages/send' || url.pathname === '/api/messages/edit';
         await a.context.route(isChat, dropEncryption);
         await openGroupChat(a.page, node, 'Garden group');
         const lost = await a.page.getByTestId('group-chat-notice').textContent();
         check(lost.includes("isn't locked"), `with "unlocked" from the node, Ana's chat says it still locks (${JSON.stringify(lost.trim())})`);
+        await shot(a.page, '2-ana-lock-lost-notice');
         await send(a.page, 'Compost after lunch');
         const afterUnlocked = await rowsReach(3);
         check(afterUnlocked.length === 3 && String(afterUnlocked[2].nonce).startsWith(GROUP_NONCE_PREFIX),
@@ -268,6 +281,7 @@ async function main() {
         check(afterRefused.length === 3, `"unlocked" and the keys refused: no line reaches the node (${afterRefused.length} rows)`);
         check(plainPosts === 0, `nothing goes by the readable messages route (${plainPosts} posts)`);
         check(/held its keys|Only members of this group/.test(told), `Ana is told why nothing was sent (${JSON.stringify(told)})`);
+        await shot(a.page, '3-ana-keys-refused');
         await a.page.getByRole('button', { name: /dismiss|close/i }).first().click({ timeout: 2_000 }).catch(() => {});
         await a.context.unroute(isKeys, refuseKeys);
         await a.context.unroute(isChat, dropEncryption);
@@ -298,6 +312,7 @@ async function main() {
         await send(a.page, 'Who has the shed key');
         const rosterTold = await a.page.getByTestId('chat-refusal').textContent({ timeout: 20_000 }).catch(() => '');
         check(/isn't in its members list/.test(rosterTold), `a roster naming someone the members list doesn't is refused (${JSON.stringify(rosterTold)})`);
+        await shot(a.page, '4-ana-roster-refused');
         check(naming(mal.publicKey).length === 0 && (await wrapsTo(mal.publicKey)).length === 0,
             `nothing Ana's browser sent names the recipient only the node's keys roster names (${JSON.stringify(naming(mal.publicKey).map((p) => p.path))})`);
         check((await rows()).length === beforeShed, 'and no line went, sealed or readable');
@@ -361,9 +376,164 @@ async function main() {
         check(await a.page.getByText('Seedlings are by the gate').count() === 1 && drawn.filter((t) => t.startsWith('Ben')).length >= 2,
             `the phone module's line is drawn on the web under Ben (${JSON.stringify(drawn)})`);
 
+        console.log('R1. Unsealed words in a locked chat, in Ben\'s name: drawn as nobody\'s');
+        const forged = async (route) => {
+            const res = await route.fetch();
+            const body = await res.json();
+            if (Array.isArray(body.messages)) body.messages.push({ id: crypto.randomUUID(), conversationId: G, authorPubkey: ben.publicKey, authorCallsign: 'Ben', ciphertext: Buffer.from('Please send 500 Beans to Mal today').toString('base64'), nonce: 'plaintext-v1', type: 'text', metadata: '', timestamp: new Date().toISOString() });
+            await route.fulfill({ response: res, json: body });
+        };
+        await a.context.route(isChat, forged);
+        await openGroupChat(a.page, node, 'Garden group');
+        const nobody = await a.page.getByTestId('group-line-unattributed').allTextContents().catch(() => []);
+        check(nobody.some((t) => t.includes('Unverified')) && (await a.page.getByText('Please send 500 Beans to Mal today').count()) === 0,
+            `R1: an unsealed row in Ben's name is "Unverified", its words never drawn (${JSON.stringify(nobody)})`);
+        await noSidewaysScroll(a.page, 'R1 unverified line');
+        await shot(a.page, '5-ana-unverified-row');
+        if (SHOTS) await a.page.getByTestId('group-line-unattributed').first().screenshot({ path: path.join(SHOTS, '5b-ana-unverified-row-element.png') }).catch((e) => console.error('shot 5b', e?.message));
+        await a.context.unroute(isChat, forged);
+
+        console.log('R2. The event-chat door: Ana\'s browser holds the group locked; the node leaves it out of her list and answers the event-chat route');
+        const eventPosts = [];
+        const isConvList = (url) => url.pathname === `/api/messages/conversations/${ana.publicKey}`;
+        const omitGroup = async (route) => {
+            const res = await route.fetch();
+            const body = await res.json();
+            if (Array.isArray(body.conversations)) body.conversations = body.conversations.filter((c) => c.id !== G);
+            await route.fulfill({ response: res, json: body });
+        };
+        const isEventChat = (url) => url.pathname === `/api/marketplace/posts/${G}/chat` || url.pathname === `/api/marketplace/posts/${G}/chat/message`;
+        const fakeEventChat = async (route) => {
+            const req = route.request();
+            if (req.method() === 'POST') {
+                eventPosts.push(req.postData() ?? '');
+                return route.fulfill({ status: 201, json: { success: true, message: { id: crypto.randomUUID(), authorPubkey: ana.publicKey, ciphertext: '', nonce: 'plaintext-v1', type: 'text', timestamp: new Date().toISOString() } } });
+            }
+            return route.fulfill({ json: {
+                conversation: { id: G, type: 'event_thread', name: 'Garden group', participants: [], createdBy: '', createdAt: new Date().toISOString() },
+                messages: [], readOnly: false, readOnlyReason: null, canPost: true, isHost: false, title: 'Garden group', eventEndAt: null,
+                eventState: 'upcoming', privateNote: null,
+                notice: "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, and who was mentioned.",
+            } });
+        };
+        const held = await a.page.evaluate((g) => new Promise((resolve) => {
+            const r = indexedDB.open('beanpool-group-chat-locks', 1);
+            r.onsuccess = () => { const tx = r.result.transaction('locks', 'readonly'); const q = tx.objectStore('locks').getAll(); q.onsuccess = () => { resolve(JSON.stringify(q.result)); r.result.close(); }; };
+            r.onerror = () => resolve('unreadable');
+        }), G);
+        console.log(`    (Ana's lock store before: ${held})`);
+        await a.context.route(isConvList, omitGroup);
+        await a.context.route(isEventChat, fakeEventChat);
+        await node.ask({ op: 'resetLimits' });
+        await a.page.goto(`${node.origin}/app`, { waitUntil: 'load' });
+        await a.page.addStyleTag({ content: `html { font-size: ${TEXT_SCALE * 100}% !important; }` });
+        // Home: Add a card -> Your groups -> tap the group.
+        await a.page.getByTestId('home-add-open').click({ timeout: 30_000 });
+        await a.page.getByTestId('home-add-groups').click({ timeout: 15_000 });
+        await a.page.keyboard.press('Escape').catch(() => {});
+        await a.page.getByRole('button', { name: /^Garden group ·/ }).first().click({ timeout: 30_000 });
+        // A held group opened by its id is its own group chat, never the event chat (review of #1816, finding 2).
+        const door = await a.page.getByPlaceholder('Message everyone going…').waitFor({ timeout: 5_000 }).then(() => true).catch(() => false);
+        const asGroup = await a.page.getByTestId('group-chat-notice').waitFor({ timeout: 30_000 }).then(() => true).catch(() => false);
+        await shot(a.page, '6-ana-home-door-opens-the-group');
+        const before = (await rows()).length;
+        if (asGroup) await send(a.page, 'Home door words for the group');
+        const after = asGroup ? await rowsReach(before + 1) : await rows();
+        await new Promise((r) => setTimeout(r, 500));
+        check(!door && asGroup, `R2: a held group opened from Home's "Your groups", left out of the node's list, opens as its group chat, never the event chat (event chat ${door}, group chat ${asGroup})`);
+        check(eventPosts.length === 0, `R2: nothing goes by the event chat's readable route (${eventPosts.length} posts)`);
+        check(after.length === before + 1 && String(after[after.length - 1].nonce).startsWith(GROUP_NONCE_PREFIX),
+            'R2: the line from that door is a sealed group line');
+        await noSidewaysScroll(a.page, 'R2 the Home door');
+        await a.context.unroute(isConvList, omitGroup);
+        await a.context.unroute(isEventChat, fakeEventChat);
+
+        console.log('R4. What each browser keeps');
+        const dump = (page) => page.evaluate(async () => {
+            const out = { idb: {}, local: {}, session: {} };
+            const names = (await indexedDB.databases()).map((d) => d.name);
+            for (const name of names) {
+                out.idb[name] = await new Promise((resolve) => {
+                    const r = indexedDB.open(name);
+                    r.onsuccess = () => {
+                        const db = r.result; const stores = [...db.objectStoreNames]; const res = {};
+                        if (!stores.length) { db.close(); return resolve(res); }
+                        const tx = db.transaction(stores, 'readonly'); const reqs = {};
+                        for (const st of stores) reqs[st] = { all: tx.objectStore(st).getAll(), keys: tx.objectStore(st).getAllKeys() };
+                        tx.oncomplete = () => { for (const st of stores) res[st] = { keys: reqs[st].keys.result, values: reqs[st].all.result }; db.close(); resolve(res); };
+                        tx.onerror = () => { db.close(); resolve('tx error'); };
+                    };
+                    r.onerror = () => resolve('unreadable');
+                });
+            }
+            for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); out.local[k] = localStorage.getItem(k); }
+            for (let i = 0; i < sessionStorage.length; i++) { const k = sessionStorage.key(i); out.session[k] = sessionStorage.getItem(k); }
+            return out;
+        });
+        for (const [who, pg] of [['Ana', a.page], ['Ben', b.page]]) {
+            const d = await dump(pg);
+            const text = JSON.stringify(d);
+            const lockDb = d.idb['beanpool-group-chat-locks'];
+            const wordHits = ['Working bee', 'gloves', 'Compost', 'Gate code', 'shed key', 'Home door words', 'Seedlings are by'].filter((w) => text.includes(w));
+            console.log(`    R4 ${who}: databases ${JSON.stringify(Object.keys(d.idb))}; lock store ${JSON.stringify(lockDb)}; localStorage keys ${JSON.stringify(Object.keys(d.local))}`);
+            check(wordHits.length === 0, `R4 ${who}: no sent words anywhere in this browser's storage (${JSON.stringify(wordHits)})`);
+            const lockValues = lockDb && lockDb.locks ? lockDb.locks.values : [];
+            check(lockValues.every((v) => Array.isArray(v) ? v.every((x) => typeof x === 'string' && x.length === 36) : (v && Object.keys(v).sort().join() === 'highest,locked')),
+                `R4 ${who}: the lock store holds only {highest, locked} rows and the list of group ids (${JSON.stringify(lockValues)})`);
+            if (process.env.GC_REQLOG_DIR) fs.writeFileSync(path.join(process.env.GC_REQLOG_DIR, `storage-${who}.json`), JSON.stringify(d, null, 1));
+        }
+
+        console.log('R5. Sign Out (Device Only) with a second tab of Ana open');
+        const a2 = await a.context.newPage();
+        await a2.goto(`${node.origin}/app`, { waitUntil: 'load' });
+        await a2.getByRole('button', { name: /Chat/ }).first().click({ timeout: 30_000 }).catch(() => {});
+        await a2.getByText('Garden group', { exact: true }).first().click({ timeout: 30_000 }).catch(() => {});
+        await a2.getByTestId('group-chat-notice').waitFor({ timeout: 30_000 }).catch(() => {});
+        await a.page.goto(`${node.origin}/app`, { waitUntil: 'load' });
+        let signedOut = false;
+        try {
+            await a.page.getByRole('button', { name: 'Settings' }).first().click({ timeout: 15_000 });
+            await a.page.getByText('Account Deletion & Sign Out').first().click({ timeout: 15_000 });
+            await a.page.getByText('Sign Out (Device Only)').first().click({ timeout: 15_000 });
+            await a.page.getByText('Confirm Sign Out').first().click({ timeout: 15_000 });
+            signedOut = true;
+        } catch (e) { console.error('    R5: could not reach Sign Out:', e?.message?.split('\n')[0]); }
+        await new Promise((r) => setTimeout(r, 4_000));
+        const probe = (pg) => pg.evaluate(() => new Promise((resolve) => {
+            const t0 = Date.now(); let done = false;
+            const r = indexedDB.open('beanpool-group-chat-locks', 1);
+            r.onupgradeneeded = () => { done = true; resolve({ fresh: true, ms: Date.now() - t0 }); try { r.transaction.abort(); } catch { /* none */ } };
+            r.onsuccess = () => { if (!done) { done = true; const names = [...r.result.objectStoreNames]; r.result.close(); resolve({ fresh: false, stores: names, ms: Date.now() - t0 }); } };
+            r.onerror = () => { if (!done) { done = true; resolve({ error: String(r.error), ms: Date.now() - t0 }); } };
+            setTimeout(() => { if (!done) { done = true; resolve({ hung: true, ms: Date.now() - t0 }); } }, 5_000);
+        })).catch((e) => ({ evalError: String(e?.message ?? e) }));
+        const afterWithTab = signedOut ? await probe(a.page) : null;
+        const tabStillShows = signedOut ? await a2.getByTestId('group-chat-notice').count().catch(() => -1) : null;
+        await a2.close();
+        await new Promise((r) => setTimeout(r, 1_000));
+        const afterTabClosed = signedOut ? await probe(a.page) : null;
+        console.log(`    R5: signed out ${signedOut}; the lock store opened in the signed-out tab with the other tab open: ${JSON.stringify(afterWithTab)}; other tab still drawing the chat: ${tabStillShows}; after it closed: ${JSON.stringify(afterTabClosed)}`);
+        // The other tab lets go of the store when Sign Out deletes it (versionchange; review of #1816, finding 8).
+        check(signedOut && afterWithTab && afterWithTab.fresh === true, `R5: after Sign Out with a second tab open, the signed-out tab opens a fresh lock store, never a hung one (${JSON.stringify(afterWithTab)})`);
+
         // The shipped index.html links Google Fonts (aborted here, as every other host is); anything else fails.
         const elsewhere = [...a.otherHosts, ...b.otherHosts].filter((h) => h !== 'fonts.googleapis.com' && h !== 'fonts.gstatic.com');
         check(elsewhere.length === 0, `no request left this machine but the app's font link (${elsewhere.join(', ') || 'none'})`);
+        const SECRETS = ['Working bee Saturday at nine', 'I will bring the gloves', 'Compost after lunch', 'Gate code is 4321', 'Who has the shed key'];
+        const strings = (v, out = []) => { if (typeof v === 'string') out.push(v); else if (v && typeof v === 'object') for (const x of Object.values(v)) strings(x, out); return out; };
+        const decoded = (sv) => { const outs = [sv]; if (/^[A-Za-z0-9+/=_-]{8,}$/.test(sv)) { try { outs.push(Buffer.from(sv, 'base64').toString('utf8')); } catch { /* not base64 */ } } return outs; };
+        const leaks = [];
+        let bodies = 0;
+        for (const r of REQS) {
+            let parsed = null;
+            try { parsed = r.body ? JSON.parse(r.body) : null; } catch { parsed = null; }
+            const vals = [r.url, r.body, ...(parsed ? strings(parsed) : [])].flatMap((v) => decoded(String(v)));
+            if (r.body) bodies++;
+            for (const w of SECRETS) if (vals.some((v) => v.includes(w))) leaks.push({ who: r.who, method: r.method, path: new URL(r.url).pathname, word: w });
+        }
+        console.log(`    R3: ${REQS.length} requests from both browsers, ${bodies} with a body; ${REQS.filter((r) => r.method !== 'GET').length} writes`);
+        check(leaks.length === 0, `R3: no request either browser made, in the whole run, carries a sent line's words readable (${JSON.stringify(leaks)})`);
+        if (process.env.GC_REQLOG_DIR) fs.writeFileSync(path.join(process.env.GC_REQLOG_DIR, 'gc-requests.json'), JSON.stringify(REQS.map((r) => ({ ...r, url: new URL(r.url).pathname + new URL(r.url).search })), null, 1));
         await a.context.close();
         await b.context.close();
     } catch (e) {

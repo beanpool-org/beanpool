@@ -1551,6 +1551,17 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         expect(await sendTo(dm.id, 'Is that you, Ben?', [puppet])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
     });
 
+    it('P13 with PUPPET\'s own signed statement naming Ben as its former key (the new key\'s word, pick 4): still Ben pinned, PUPPET offered; the date only words the banner', async () => {
+        await aQuestionAndAnAnswer();
+        dm.participants = [ana.publicKey, puppet.publicKey];
+        dm.formerKeys = { [puppet.publicKey]: [makeKeySuccession({ newEdPrivHex: puppet.privateKey, oldPubHex: ben.publicKey, at: '2026-10-03T00:00:00.000Z' })] };
+        saysTo(puppet, dm, 'New phone, same Ben. What is the door code?');
+        await restoredPhone();
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey, nodeSays: { rekeyedAt: '2026-10-03T00:00:00.000Z' } } });
+        expect(await sendTo(dm.id, 'The code is 4821', [puppet])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
+    });
+
     it('P14: an honest re-key on a restored phone pauses exactly as P13 does, with K2 offered and the date; after Continue all three lines read and the next goes to K2 only', async () => {
         await p13();
         await isDmKeyChangePending(dm.id);

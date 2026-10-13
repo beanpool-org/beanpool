@@ -2,7 +2,7 @@
  * The reader's own features (scratch/global-node/DESIGN-global-showcase-fable.md §4): the node's set from
  * `GET /api/community/info` (useNodeProfile) and this account's from `GET /api/community/me` (W1's `features`, signed by
  * the account), so a screen's mode is per reader: when a node switches Beans on for one verified member, that member's
- * Ledger goes live and nobody else's changes. The reader's set only ever narrows the node's (effectiveFeatures).
+ * Ledger goes live and nobody else's changes. The reader's set decides, switch by switch (effectiveFeatures).
  *
  * Signed out, before the answer, or from an older node that doesn't say: the node's set alone, as before.
  */

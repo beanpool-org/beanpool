@@ -12,7 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, LOCAL_COMMUNITY_LINES, SAMPLE_COMMUNITY } from '@beanpool/core';
-import { darkColors, lightColors } from '../../constants/colors';
+import { darkColors, lightColors, type AppColors } from '../../constants/colors';
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -106,7 +106,7 @@ function contrast(a: string, b: string): number {
 }
 
 for (const scheme of ['light', 'dark'] as const) {
-    const colors = scheme === 'dark' ? darkColors : lightColors;
+    const colors: AppColors = scheme === 'dark' ? (darkColors as unknown as AppColors) : lightColors;
     describe(`the showcase in ${scheme} at 320 dp and 1.3× text`, () => {
         beforeEach(() => { theme.dark = scheme === 'dark'; });
 
@@ -125,10 +125,10 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(text()).toContain(LOCAL_COMMUNITY_STRIP.body);
             expect(styleOf(strip)).toMatchObject({ borderStyle: 'dashed', borderWidth: 1, backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border });
             expect(styleOf(strip).opacity).toBeUndefined();
-            const buttons = [...strip.querySelectorAll('button')].filter(b => /Start a community|Communities near you/.test(b.textContent ?? ''));
+            const buttons = Array.from(strip.querySelectorAll('button')).filter(b => /Start a community|Communities near you/.test(b.textContent ?? ''));
             expect(buttons).toHaveLength(2);
             for (const b of buttons) expect(styleOf(b)).toMatchObject({ alignSelf: 'stretch', minHeight: 48 });
-            const pillText = [...strip.querySelectorAll('span')].find(s => /Local community/.test(s.textContent ?? ''))!;
+            const pillText = Array.from(strip.querySelectorAll('span')).find(s => /Local community/.test(s.textContent ?? ''))!;
             expect(pillText.getAttribute('data-lines')).toBe('1');
             await press(host.querySelector('[aria-label="Make this shorter"]')!);
             expect(text()).toContain(LOCAL_COMMUNITY_STRIP.collapsed);
@@ -149,7 +149,7 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(sheet.textContent).toContain(LOCAL_COMMUNITY_SHEET.common);
             expect(styleOf(sheet).backgroundColor).toBe(colors.surface.card);
             for (const w of [LOCAL_COMMUNITY_SHEET.start, LOCAL_COMMUNITY_SHEET.nearYou, LOCAL_COMMUNITY_SHEET.howItWorks]) expect(sheet.textContent).toContain(w);
-            const how = [...sheet.querySelectorAll('button')].find(b => b.textContent === LOCAL_COMMUNITY_SHEET.howItWorks)!;
+            const how = Array.from(sheet.querySelectorAll('button')).find(b => b.textContent === LOCAL_COMMUNITY_SHEET.howItWorks)!;
             await press(how);
             expect(routes.pushed).toEqual([{ pathname: '/guide/[slug]', params: { slug: LOCAL_COMMUNITY_SHEET.guide.escrow } }]);
         });
@@ -157,7 +157,7 @@ for (const scheme of ['light', 'dark'] as const) {
         it('the sheet on its own: Start a community and Communities near you go to their screens', async () => {
             const onClose = vi.fn();
             await render(createElement(LocalCommunitySheet, { feature: 'beans', visible: true, onClose }));
-            const buttons = [...host.querySelectorAll('[data-testid="local-community-sheet"] button')];
+            const buttons = Array.from(host.querySelectorAll('[data-testid="local-community-sheet"] button'));
             await press(buttons.find(b => b.textContent === LOCAL_COMMUNITY_SHEET.start)!);
             await press(buttons.find(b => b.textContent === LOCAL_COMMUNITY_SHEET.nearYou)!);
             expect(routes.pushed).toEqual(['/start-community', '/find-community']);
@@ -172,7 +172,7 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(text()).toContain('640 Beans');
             expect(text()).not.toMatch(/Ʀ|🔒/);
             for (const label of ['Pledge', 'Pause', 'Vote']) {
-                const b = [...host.querySelectorAll('[data-testid="local-community-action"]')].find(x => x.textContent?.startsWith(label))!;
+                const b = Array.from(host.querySelectorAll('[data-testid="local-community-action"]')).find(x => x.textContent?.startsWith(label))!;
                 await press(b);
                 expect(host.querySelector('[data-testid="local-community-sheet"]')).not.toBeNull();
             }
@@ -191,7 +191,7 @@ for (const scheme of ['light', 'dark'] as const) {
         it("Home's Your Beans card: the pill, the sentence, and the link to the example ledger", async () => {
             await render(createElement(YourBeansPreviewCard, { colors }));
             expect(text()).toContain(LOCAL_COMMUNITY_LINES.yourBeansCard);
-            await press(host.querySelector('[data-testid="home-beans-preview-ledger"]') ?? [...host.querySelectorAll('button')].find(b => b.textContent?.includes('See an example ledger'))!);
+            await press(host.querySelector('[data-testid="home-beans-preview-ledger"]') ?? Array.from(host.querySelectorAll('button')).find(b => b.textContent?.includes('See an example ledger'))!);
             expect(routes.pushed).toContain('/(tabs)/ledger');
         });
 
@@ -203,7 +203,7 @@ for (const scheme of ['light', 'dark'] as const) {
             // the strip's ✕ last, since it folds the strip's buttons away.
             const pressed = new Set<Element>();
             for (let i = 0; i < 300; i++) {
-                const next = [...host.querySelectorAll('button')].find(b => !pressed.has(b) && b.getAttribute('aria-label') !== 'Make this shorter');
+                const next = Array.from(host.querySelectorAll('button')).find(b => !pressed.has(b) && b.getAttribute('aria-label') !== 'Make this shorter');
                 if (!next) break;
                 pressed.add(next);
                 await press(next);

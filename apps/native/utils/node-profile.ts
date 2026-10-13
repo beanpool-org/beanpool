@@ -251,16 +251,18 @@ export function wordsDoorOn(features: NodeFeatures | null | undefined): boolean 
 }
 
 /**
- * The reader's own feature set: the node's (`GET /api/community/info`), each switch also off where the reader's own
- * (`features` on `GET /api/community/me`) says so. Signed out, or before the reader's is known, the node's. A switch
- * the node has off stays off whatever the reader's says (design §4: per reader, never wider than the node).
+ * The reader's own feature set: the node's (`GET /api/community/info`), each switch as the reader's own (`features` on
+ * `GET /api/community/me`) says where it says one. The reader's set decides (design §4, pick 6, as @beanpool/core
+ * featureModeFor): a verified member on a node with Beans off reads Beans on while the rest stay in preview, and a
+ * switch the reader's has off is off. `showcase` is always the node's. Signed out, or before the reader's is known, the
+ * node's. Writes stay gated on the server whatever this says.
  */
 export function effectiveFeatures(node: NodeFeatures | null | undefined, reader?: NodeFeatures | null): NodeFeatures {
     const out: NodeFeatures = { ...(node ?? {}) };
     if (!reader) return out;
     for (const key of FEATURE_KEYS) {
         if (key === 'showcase') continue;
-        if (reader[key] === false) out[key] = false;
+        if (typeof reader[key] === 'boolean') out[key] = reader[key];
     }
     return out;
 }
@@ -268,9 +270,12 @@ export function effectiveFeatures(node: NodeFeatures | null | undefined, reader?
 /**
  * How one switched-off feature shows to this reader (@beanpool/core featureModeFor): `live`, `read-only` (the node
  * has it, the reader not yet), `preview` (from the sample community, on a node whose `showcase` is on) or `hidden`.
+ * The reader's set goes in as effectiveFeatures makes it, so a mode and the `effective` set never disagree: a reader's
+ * answer that says nothing of a switch leaves the node's.
  */
 export function showcaseMode(feature: ShowcaseFeature, node: NodeFeatures | null | undefined, reader?: NodeFeatures | null): FeatureMode {
-    return featureModeFor(feature, node as Record<string, unknown> | null | undefined, reader as Record<string, unknown> | null | undefined);
+    const readerSet = reader ? effectiveFeatures(node, reader) : undefined;
+    return featureModeFor(feature, node as Record<string, unknown> | null | undefined, readerSet as Record<string, unknown> | undefined);
 }
 
 /** The tabs a node hides. Only a node that says outright that Beans are off hides any, and not one that previews them. */

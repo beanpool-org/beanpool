@@ -46,12 +46,17 @@ describe('modes per feature and per reader', () => {
         expect(showcaseMode('beans', null)).toBe('live');
     });
 
-    it('a reader\'s own set narrows the node\'s, never widens it', () => {
+    it('a reader\'s own set decides, switch by switch (§4 pick 6, as #1845\'s featureModeFor); showcase stays the node\'s', () => {
         const node = { beans: true, decisions: true, showcase: true };
         expect(showcaseMode('decisions', node, { decisions: false })).toBe('read-only');
         expect(showcaseMode('beans', node, { beans: true })).toBe('live');
-        expect(showcaseMode('beans', GLOBAL.features, { beans: true })).toBe('preview');
-        expect(effectiveFeatures(GLOBAL.features, { beans: true }).beans).toBe(false);
+        // A verified member on global with Beans on for them: their Beans live, the rest still preview.
+        expect(showcaseMode('beans', GLOBAL.features, { ...GLOBAL.features, beans: true })).toBe('live');
+        expect(showcaseMode('decisions', GLOBAL.features, { ...GLOBAL.features, beans: true })).toBe('preview');
+        expect(effectiveFeatures(GLOBAL.features, { beans: true }).beans).toBe(true);
+        // A reader's answer that says nothing of a switch leaves the node's: mode and effective set agree.
+        expect(showcaseMode('beans', GLOBAL.features, {})).toBe('preview');
+        expect(effectiveFeatures(GLOBAL.features, {}).beans).toBe(false);
         expect(effectiveFeatures({ beans: true, showcase: true }, { beans: false, showcase: false })).toEqual({ beans: false, showcase: true });
         expect(effectiveFeatures(null)).toEqual({});
     });

@@ -17,7 +17,7 @@ import {
     getPublicCommunityHealth,
     seedGenesisMember,
     addRating, getRatings, getAverageRating, getRatingsGiven,
-    submitReport, getReports, getReportCount, getReportablePulseItemOwner, getReportablePostAuthor, findPendingReport, isReportRateLimited,
+    submitReport, getReports, getReportCount, getReportablePulseItemOwner, getReportablePostAuthor, findPendingReport, updatePendingReportReason, isReportRateLimited,
     getFriends, addFriend, removeFriend,
     recordActivity,
     markConversationRead, getUnreadCounts,
@@ -87,7 +87,7 @@ import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type Adm
 import { restampPasswordSession } from '../admin-key-auth.js';
 import { avatarUrlOf } from '@beanpool/core';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
-import { noteNewReport } from '../services/alerts.js';
+import { noteNewReport, reportKind } from '../services/alerts.js';
 import { cleanLabel } from '../config/clean-label.js';
 import { getPlatformFloor } from '../app-store-versions.js';
 import { APP_VERSION_HEADER, parseAppVersionHeader } from '../app-version-counts.js';
@@ -2117,6 +2117,18 @@ router.post('/api/reports', async (ctx) => {
     // report is already on file.
     const pending = findPendingReport(activeReporter, targetPubkey, targetPostId, targetPulseItemId || undefined);
     if (pending) {
+        // Reported again with "Child safety" after another reason (the review of #1895, finding 3): the report on file
+        // becomes child safety and is told as a new one would be. Once: it is child safety from then on, and a member's
+        // are bounded like any (alerts.ts childAtOnce). Judged on the 500 characters the queue keeps, as the report on
+        // file was: words past them would make every repeat look like a change.
+        if (reportKind(reason.slice(0, 500)) === 'child safety' && reportKind(pending.reason) !== 'child safety') {
+            const changed = updatePendingReportReason(pending.id, reason);
+            if (changed) {
+                noteNewReport(reason, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A report changed to child safety could not be told: ${e instanceof Error ? e.message : String(e)}`));
+                ctx.body = { success: true, report: changed, duplicate: true };
+                return;
+            }
+        }
         ctx.body = { success: true, report: pending, duplicate: true };
         return;
     }
@@ -2139,9 +2151,23 @@ router.post('/api/reports', async (ctx) => {
 
 // ======================== FRIENDS ========================
 
+// A member's friends list (each friend's name and face) is read by that member alone, whatever ENFORCE_READ_AUTH says:
+// every app asks only for its own. Anyone else, an admin and the owner included, is refused before any lookup with one
+// answer whatever key is named, so a refusal says nothing of whether that key is a member or has friends; walking
+// friends of friends would otherwise list a members-on-demand node's people past the search's floor and caps.
 router.get('/api/friends/:publicKey', async (ctx) => {
-    const pubkey = ctx.params.publicKey;
-    ctx.body = getFriends(pubkey);
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (ctx.params.publicKey !== actor) {
+        ctx.status = 403;
+        ctx.body = { error: 'You may only read your own friends' };
+        return;
+    }
+    ctx.body = getFriends(actor);
 });
 
 router.post('/api/friends/add', async (ctx) => {

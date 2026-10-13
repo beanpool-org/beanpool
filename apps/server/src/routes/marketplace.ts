@@ -560,6 +560,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
         id, ids, type, types, excludeEvents, category, query: q, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
         targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined,
     };
+    // On a node with members on demand and no by-area listings, a member's plain delta sends again each listing whose
+    // author changed their card since, as a set's delta does: the phone holds no card for most of its listings' authors,
+    // and shows the name and face the row carried (opus-1859-confirm1 NB-2). Every other node's delta is as before.
+    const localAuthorCardsChanged = switches.membersOnDemand && !switches.nearbyListings && !!updatedAfter && !guestView;
     let posts: MarketplacePost[];
     if (nearbySet) {
         // The rows of the set, read as the phone's sync reads them (every state, so a listing taken off goes as its
@@ -579,7 +583,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
         // the delta's rows, and at least PHOTO_HEAL_MIN_PAGE_ROWS, so an answer is about as large as main's largest (a
         // first sync) and a phone on a slow link still gets it inside its 30 s; a node with more listings heals over the
         // key's next syncs.
-        const delta = getPosts({ ...listing, limit, offset, updatedAfter, sync, syncPage });
+        const delta = getPosts({ ...listing, limit, offset, updatedAfter, sync, syncPage, localAuthorCardsChanged });
         const pageRows = Math.max(PHOTO_HEAL_MIN_PAGE_ROWS, PHOTO_HEAL_PAGE_ROWS - delta.length);
         const read = { after: heal.after, limit: Math.min(limit, pageRows), next: null as string | null };
         const inDelta = new Set(delta.map(p => p.id));
@@ -592,7 +596,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
         // That bounds the whole read only with no radius and no filter; with either, the scan and sort before the bound
         // still grow with the posts (engine PostFilter.measureAtMost): F5 is still open for those reads.
         posts = getPosts({
-            ...listing, limit, offset, updatedAfter, sync, syncPage,
+            ...listing, limit, offset, updatedAfter, sync, syncPage, localAuthorCardsChanged,
             near: point ? { ...point, radiusKm } : undefined, sortByDistance: byDistance,
             measureAtMost: point ? ONE_PASS_MAX_MEASURED : undefined,
         });

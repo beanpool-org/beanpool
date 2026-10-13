@@ -38,6 +38,7 @@
 
 import { db } from '../db/db.js';
 import { closeOpenCopies } from '../engine/open-copies.js';
+import { closeWashSnapshotHandle } from '@beanpool/engine';
 import {
     ImageStoreUnavailableError, getImageStore, postPhotoKey, attachmentKey, sha256Hex, type ImageStore,
 } from '../storage/image-store.js';
@@ -323,6 +324,7 @@ export function reclaimSpaceOnce(): void {
         // wait on it for the whole busy timeout, with the event loop held, and the VACUUM's rewrite would stay in the WAL.
         // It is closed first, in the same step, as the recovery seal closes it, and the standby asks for a new copy.
         const closed = closeOpenCopies('the image evacuation reclaims space (one VACUUM)');
+        closeWashSnapshotHandle(db); // the wash analysis's refresh snapshot is a reader too
         if (closed > 0) console.log(`🖼️  [ImageEvacuation] Closed ${closed} cop${closed === 1 ? 'y' : 'ies'} being served to a standby first; it asks for a new one.`);
         db.pragma('wal_checkpoint(TRUNCATE)');
         // VACUUM cannot run inside a transaction, and nothing here opens one.

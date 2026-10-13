@@ -818,8 +818,10 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
  */
 export async function getPosts(filter?: { type?: string; category?: string; targetGroupId?: string; audienceScope?: string; includeEvents?: boolean; includeGroupsOf?: string; allScopes?: boolean }) {
     let database = await waitForInit();
+    // A held card is the author's face, even when it has none: a photo the author removed must not fall back to the
+    // face the listing carried when the node last sent it (getMyPosts and getPost read it the same way).
     let query = `
-        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, COALESCE(m.avatar_url, p.carried_avatar) as author_avatar, m.joined_at, g.name as target_group_name
+        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, CASE WHEN m.public_key IS NOT NULL THEN m.avatar_url ELSE p.carried_avatar END as author_avatar, m.joined_at, g.name as target_group_name
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         LEFT JOIN groups g ON p.target_group_id = g.id
@@ -963,7 +965,7 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
 export async function getMyPosts(pubkey: string) {
     const database = await waitForInit();
     const rows = await database.getAllAsync(`
-        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, COALESCE(m.avatar_url, p.carried_avatar) as author_avatar, m.joined_at
+        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, CASE WHEN m.public_key IS NOT NULL THEN m.avatar_url ELSE p.carried_avatar END as author_avatar, m.joined_at
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         WHERE p.author_pubkey = ? AND p.status IN ('active', 'pending', 'completed', 'paused') AND p.type != 'event'
@@ -1065,7 +1067,7 @@ export async function getPost(id: string) {
     if (anchorUrl) void refreshCachedPost(database, anchorUrl, id).catch(() => false);
 
     const row = await database.getFirstAsync<any>(`
-        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, COALESCE(m.avatar_url, p.carried_avatar) as author_avatar, a.callsign as accepted_by_callsign, a.avatar_url as accepted_by_avatar, m.joined_at
+        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, CASE WHEN m.public_key IS NOT NULL THEN m.avatar_url ELSE p.carried_avatar END as author_avatar, a.callsign as accepted_by_callsign, a.avatar_url as accepted_by_avatar, m.joined_at
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         LEFT JOIN members a ON p.accepted_by = a.public_key

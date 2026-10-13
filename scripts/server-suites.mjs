@@ -303,6 +303,7 @@ export const SUITES = [
     'test-trust-tiers-one-source',
     'test-vouch-covenant',
     'test-wash-sybil-defense',
+    'test-wash-background',
     'test-apple-probe',
     'test-apple-return',
     'test-recovery-backup-durability',
@@ -460,6 +461,7 @@ export const SUITES = [
     'test-group-keys-http',
     'test-group-keys-over-time',
     'test-key-succession',
+    'test-dm-former-keys-readers',
     'test-group-history-after-rekey',
     'test-dm-line-relay',
     'test-dm-standby-order',
@@ -520,6 +522,9 @@ export const VARIANTS = [
     // default, so the plain run is the pass that matters (the public-read allowlist under enforcement); this covers a
     // node whose operator set ENFORCE_READ_AUTH=false.
     { name: 'test-keeper-http', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // On an open node anyone may read anyone's DM list or DM: only the routes' own choice of reader keeps a DM's former keys
+    // to its people (#1871 review NB1).
+    { name: 'test-dm-former-keys-readers', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
     // A member's own balance answer carries tierCredit (the apps' trust figure) with read auth opted out too (#1644 r4183873149).
     { name: 'test-balance-tier-credit-http', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
 
@@ -541,6 +546,8 @@ export const VARIANTS = [
     // An invite bound to a names-list entry (community modes slice 3) reaches nobody but its maker under the opt-out too:
     // /api/invite/mine/:publicKey, open to anyone then, leaves bound invites out for anyone but the maker.
     { name: 'test-invite-bound-name', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // A member's friends list is read by its owner alone under the opt-out too: unsigned 401, anyone else's key 403.
+    { name: 'test-friends-routes', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
 
     // Consolidated/legacy conversation-id resolution: a send to a legacy id remaps to the active DM, preserves
     // metadata.originalConversationId (the E2EE AAD fallback), and survives a malformed-metadata row. Always run

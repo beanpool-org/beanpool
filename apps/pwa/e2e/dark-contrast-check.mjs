@@ -67,6 +67,7 @@ async function startNode(root, profile, members) {
         stdio: ['pipe', 'pipe', 'pipe'],
     });
     const log = [];
+    const waiting = new Map();
     let ready;
     const readyAt = new Promise((resolve, reject) => {
         ready = resolve;
@@ -74,17 +75,27 @@ async function startNode(root, profile, members) {
     });
     readline.createInterface({ input: child.stdout }).on('line', (line) => {
         if (line.startsWith('FIXTURE_READY ')) ready(JSON.parse(line.slice('FIXTURE_READY '.length)));
-        else log.push(line);
+        else if (line.startsWith('FIXTURE_ANSWER ')) {
+            const a = JSON.parse(line.slice('FIXTURE_ANSWER '.length));
+            waiting.get(a.id)?.(a);
+            waiting.delete(a.id);
+        } else log.push(line);
     });
     readline.createInterface({ input: child.stderr }).on('line', (line) => log.push(line));
     const { port } = await readyAt;
+    let n = 0;
+    const ask = (req) => new Promise((resolve, reject) => {
+        const id = ++n;
+        waiting.set(id, (a) => (a.ok ? resolve(a.result) : reject(new Error(`node: ${a.error}`))));
+        child.stdin.write(`${JSON.stringify({ id, ...req })}\n`);
+    });
     const stop = async () => {
         child.kill('SIGTERM');
         await wait(300);
         if (child.exitCode === null) child.kill('SIGKILL');
         fs.rmSync(dataDir, { recursive: true, force: true });
     };
-    return { port, log, stop, origin: `https://localhost:${port}` };
+    return { port, log, ask, stop, origin: `https://localhost:${port}` };
 }
 
 // ---------- the browser ----------
@@ -324,7 +335,8 @@ async function focusStops(page) {
             const best = Math.max(0, outline ? ratio(outline, behind) : 0, ...ringColours.map((c) => ratio(c, behind)));
             const label = (el.getAttribute('aria-label') || el.innerText || el.getAttribute('placeholder') || el.tagName).replace(/\s+/g, ' ').trim().slice(0, 40);
             const id = el.getAttribute('data-testid');
-            return { key: `${el.tagName}|${label}|${id}`, el: `${el.tagName.toLowerCase()}${id ? `[${id}]` : ''}`, text: label, ratio: best, need: 3, how: outline ? 'outline' : ringColours.length ? 'ring' : 'none' };
+            const hex = (c) => `#${[c.r, c.g, c.b].map((v) => Math.round(v).toString(16).padStart(2, '0')).join('')}`;
+            return { key: `${el.tagName}|${label}|${id}`, el: `${el.tagName.toLowerCase()}${id ? `[${id}]` : ''}`, fg: outline ? hex(outline) : '', bg: hex(behind), text: label, ratio: best, need: 3, how: outline ? 'outline' : ringColours.length ? 'ring' : 'none' };
         });
         if (!r || seen.has(r.key)) continue;
         seen.add(r.key);
@@ -389,6 +401,8 @@ async function main() {
         console.log(`The web app as built (${BUILD_FROM === PWA_DIR ? 'this checkout' : BUILD_FROM}); Chromium at 320 px, 1.3x text, ${THEME} mode.`);
         for (const s of screens) {
             const node = nodes[s.profile];
+            // One member lands ~20 times: the gateway and sign-in limiters start again for each screen, as for a fresh visit.
+            await node.ask({ op: 'resetLimits' });
             const { context, page } = await openContext(browser, node.origin, s.who ? member : null);
             const r = { name: s.name, reached: true };
             try {
@@ -419,7 +433,7 @@ async function main() {
             for (const x of r.fields) console.log(`      field edge ${fmt(x)}`);
             for (const x of r.icons) console.log(`      icon ${fmt(x)}`);
             for (const x of r.slabs) console.log(`      light slab ${x.bg} ${x.size} ${x.el} "${x.text}"`);
-            for (const x of r.focus) console.log(`      focus ${x.how} ${x.ratio.toFixed(2)}:1 ${x.el} "${x.text}"`);
+            for (const x of r.focus) console.log(`      focus ${x.how} ${x.ratio.toFixed(2)}:1 ${x.fg} on ${x.bg} ${x.el} "${x.text}"`);
             if (!SWEEP && n) failures.push(`${s.name}: ${n} below`);
         }
     } finally {

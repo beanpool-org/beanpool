@@ -146,7 +146,7 @@ export function DecideSection({
             paddingHorizontal: 6,
             paddingVertical: 2,
             borderRadius: 10,
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
         },
         badgePillText: {
             color: colors.text.inverse,
@@ -184,7 +184,7 @@ export function DecideSection({
             marginBottom: 12,
         },
         proposeBtn: {
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             borderRadius: 12,
             paddingVertical: 12,
             paddingHorizontal: 16,
@@ -509,7 +509,7 @@ export function DecideSection({
             borderColor: colors.border.default,
         },
         filterBtnActive: {
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             borderColor: colors.brand.dark,
         },
         filterBtnText: {

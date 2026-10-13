@@ -158,7 +158,7 @@ export function PricingInfoModal({ isOpen, onClose, initialTab, onOpenFullCatalo
 
                     <Pressable
                         style={{
-                            backgroundColor: colors.brand.primary,
+                            backgroundColor: colors.brand.fill,
                             borderRadius: 12,
                             paddingVertical: 14,
                             paddingHorizontal: 16,

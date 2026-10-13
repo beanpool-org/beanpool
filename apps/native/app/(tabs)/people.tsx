@@ -97,21 +97,21 @@ export default function PeopleScreen() {
         dateText: { fontSize: 12, color: colors.text.muted, marginTop: 2, fontWeight: '500' },
         // The distance a member on demand reads (the near list): 4.5:1 on a card, light and dark.
         distanceText: { color: colors.text.secondary },
-        addBtn: { backgroundColor: colors.brand.dark, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, flexShrink: 0, marginLeft: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
+        addBtn: { backgroundColor: colors.brand.fill, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, flexShrink: 0, marginLeft: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
         addBtnText: { color: colors.text.inverse, fontWeight: 'bold', fontSize: 12 },
 
         searchWrap: { paddingHorizontal: 16, paddingTop: 16, backgroundColor: colors.surface.app },
         searchInput: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 12, fontSize: 15, color: colors.text.heading, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
         sortRow: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4, backgroundColor: colors.surface.app, gap: 6 },
         sortPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default },
-        sortPillActive: { backgroundColor: colors.brand.dark, borderColor: colors.brand.dark },
+        sortPillActive: { backgroundColor: colors.brand.fill, borderColor: colors.brand.dark },
         sortPillText: { fontSize: 11, fontWeight: '600', color: colors.text.secondary },
         sortPillTextActive: { color: colors.text.inverse },
 
         sectionHeader: { fontSize: 20, fontWeight: '800', color: colors.text.heading, marginBottom: 6 },
         sectionDesc: { fontSize: 13, color: colors.text.secondary, marginBottom: 20, lineHeight: 18 },
         input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, padding: 16, borderRadius: 12, fontSize: 15, fontWeight: '500', marginBottom: 16, color: colors.text.heading },
-        btnGenerate: { backgroundColor: colors.brand.dark, padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 24, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
+        btnGenerate: { backgroundColor: colors.brand.fill, padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 24, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
         btnGenerateText: { color: colors.text.inverse, fontSize: 15, fontWeight: 'bold' },
 
         qrCard: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50, borderWidth: 2, borderColor: colors.brand.primary, borderRadius: 16, padding: 20, alignItems: 'center', marginBottom: 24 },
@@ -135,7 +135,7 @@ export default function PeopleScreen() {
         msgBtn: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50, width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.green100 },
         msgBtnText: { fontSize: 18 },
         removeFriendBtn: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.red50, width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red200 },
-        removeFriendBtnText: { fontSize: 16, color: colors.feedback.danger.solid, fontWeight: '700' },
+        removeFriendBtnText: { fontSize: 16, color: colors.feedback.danger.fg, fontWeight: '700' },
 
         // Community virtualized row (fixed height)
         communityRow: {
@@ -1202,7 +1202,7 @@ export default function PeopleScreen() {
                         )}
                         <Pressable
                             accessibilityRole="button"
-                            style={{ backgroundColor: colors.brand.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 8 }}
+                            style={{ backgroundColor: colors.brand.fill, paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 8 }}
                             onPress={handleRedeem}
                             disabled={redeeming || !redeemCode.trim()}
                         >

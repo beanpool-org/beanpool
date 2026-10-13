@@ -312,7 +312,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             marginBottom: 20,
         },
         ctaBtn: {
-            backgroundColor: colors.accent.primary,
+            backgroundColor: colors.accent.fill,
             paddingHorizontal: 24,
             paddingVertical: 12,
             borderRadius: 12,

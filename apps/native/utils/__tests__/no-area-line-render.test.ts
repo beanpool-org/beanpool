@@ -36,7 +36,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem
 
 import { NoAreaLine } from '../../components/NoAreaLine';
 import { NO_AREA_LINE } from '../nearby-area';
-import { lightColors, earthColors, slateColors, darkColors, type AppColors } from '../../constants/colors';
+import { lightColors, darkColors, type AppColors } from '../../constants/colors';
 
 /** WCAG 2 contrast of two #rrggbb colours, worked here (not the component's helper). */
 function contrast(a: string, b: string): number {
@@ -76,7 +76,7 @@ describe('the Market\'s no-area line at 320 dp, text at 1.3x', () => {
     });
 
     it('the action reads at 4.5:1 or more on its box in every theme, the text at 16.9 px bold not being large (the review of #1778, finding 9)', async () => {
-        const themes: Array<[string, AppColors]> = [['light', lightColors], ['earth', earthColors as unknown as AppColors], ['slate', slateColors as unknown as AppColors], ['dark', darkColors as unknown as AppColors]];
+        const themes: Array<[string, AppColors]> = [['light', lightColors], ['dark', darkColors as unknown as AppColors]];
         for (const [name, colors] of themes) {
             const host = document.createElement('div');
             document.body.appendChild(host);

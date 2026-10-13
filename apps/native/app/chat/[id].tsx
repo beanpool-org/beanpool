@@ -227,10 +227,10 @@ function ChatScreen({ id }: { id: string }) {
         dealCardMeta: { fontSize: 12, color: colors.text.secondary, marginTop: 2, marginBottom: 8 },
         dealCardActions: { flexDirection: 'row', gap: 6, alignItems: 'center' },
         dealBtn: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-        dealBtnRelease: { backgroundColor: colors.brand.dark, flex: 1 },
+        dealBtnRelease: { backgroundColor: colors.brand.fill, flex: 1 },
         dealBtnReleaseText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },
         dealBtnCancel: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.red50, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red200 },
-        dealBtnCancelText: { color: colors.feedback.danger.solid, fontWeight: '700', fontSize: 13 },
+        dealBtnCancelText: { color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 13 },
         dealBtnReview: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.amber50, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.amber200, flex: 1 },
         dealBtnReviewText: { color: theme === 'dark' ? colors.text.body : palette.amber600, fontWeight: '800', fontSize: 13 },
         dealAwaiting: { color: colors.text.secondary, fontSize: 12, fontWeight: '600', fontStyle: 'italic' },
@@ -241,12 +241,12 @@ function ChatScreen({ id }: { id: string }) {
         // Inline Action Bar
         inlineActionBar: { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 10, gap: 8, backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.yellow50, borderBottomWidth: 1, borderBottomColor: theme === 'dark' ? colors.border.default : palette.yellow200 },
         inlineActionBtn: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 10, borderRadius: 10 },
-        inlineActionRelease: { backgroundColor: colors.brand.dark },
+        inlineActionRelease: { backgroundColor: colors.brand.fill },
         inlineActionReleaseText: { color: colors.text.inverse, fontWeight: '800', fontSize: 14 },
         inlineActionCancel: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red300 },
-        inlineActionCancelText: { color: colors.feedback.danger.solid, fontWeight: '700', fontSize: 14 },
+        inlineActionCancelText: { color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 14 },
         blockedNotice: { padding: 14, alignItems: 'center', marginHorizontal: 12, borderRadius: 12, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border },
-        blockedNoticeText: { color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700' },
+        blockedNoticeText: { color: colors.feedback.danger.fg, fontSize: 13, fontWeight: '700' },
     }));
 
     const promptedRef = useRef(false);
@@ -903,7 +903,7 @@ function ChatScreen({ id }: { id: string }) {
         }
         if (item.systemType === 'ESCROW_CANCELLED') {
             iconName = 'cash-refund';
-            iconColor = colors.feedback.danger.solid;
+            iconColor = colors.feedback.danger.fg;
             bgColor = colors.chatSystem.cancelledBg;
             borderColor = colors.feedback.danger.solid;
         }
@@ -1075,7 +1075,7 @@ function ChatScreen({ id }: { id: string }) {
             item.sendState === 'sending' ? (
                 <Text style={{ fontSize: 10, color: colors.chat.tickUnread }}> ◷</Text>
             ) : item.sendState === 'failed' ? (
-                <Text style={{ fontSize: 10, color: colors.feedback.danger.solid, fontWeight: '800' }}> ! not delivered</Text>
+                <Text style={{ fontSize: 10, color: colors.feedback.danger.fg, fontWeight: '800' }}> ! not delivered</Text>
             ) : (
                 <Text style={{ fontSize: 10, color: item.readByPeer ? palette.cyan200 : colors.chat.tickUnread }}>
                     {item.readByPeer ? ' ✓✓' : ' ✓'}
@@ -1292,7 +1292,7 @@ function ChatScreen({ id }: { id: string }) {
                             onPress={handleCancelEscrow}
                             disabled={actionLoading}
                         >
-                            <MaterialCommunityIcons name="close-circle-outline" size={18} color={colors.feedback.danger.solid} style={{ marginRight: 6 }} />
+                            <MaterialCommunityIcons name="close-circle-outline" size={18} color={colors.feedback.danger.fg} style={{ marginRight: 6 }} />
                             <Text style={styles.inlineActionCancelText}>Cancel</Text>
                         </Pressable>
                     </View>

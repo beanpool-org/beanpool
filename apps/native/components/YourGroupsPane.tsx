@@ -21,7 +21,7 @@ export function NewGroupButton({ onPress, compact }: { onPress: () => void; comp
     const styles = useStyles(({ colors }) => StyleSheet.create({
         btn: {
             flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 48,
-            borderRadius: 14, paddingHorizontal: 16, backgroundColor: colors.brand.primary,
+            borderRadius: 14, paddingHorizontal: 16, backgroundColor: colors.brand.fill,
         },
         text: { color: colors.text.inverse, fontSize: 15, fontWeight: '800' },
     }));

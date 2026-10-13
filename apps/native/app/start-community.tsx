@@ -42,7 +42,7 @@ export default function StartCommunityScreen() {
         cardBody: { fontSize: 14, color: colors.text.body, lineHeight: 20, marginTop: 2 },
         label: { fontSize: 13, fontWeight: '700', color: colors.text.secondary, marginTop: 10, marginBottom: 4 },
         input: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, color: colors.text.heading, fontSize: 16, paddingHorizontal: 12, paddingVertical: 10 },
-        primary: { minHeight: 48, paddingHorizontal: 18, borderRadius: 12, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center', marginTop: 14 },
+        primary: { minHeight: 48, paddingHorizontal: 18, borderRadius: 12, backgroundColor: colors.brand.fill, alignItems: 'center', justifyContent: 'center', marginTop: 14 },
         primaryText: { color: colors.text.inverse, fontSize: 15, fontWeight: '800', textAlign: 'center' },
         link: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 48, marginTop: 8 },
         linkText: { fontSize: 15, fontWeight: '700', color: colors.brand.primary, flexShrink: 1, textDecorationLine: 'underline' },

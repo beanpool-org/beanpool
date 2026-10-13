@@ -3550,7 +3550,7 @@ const styles = StyleSheet.create({
     /** A way off "Your Name" while Next is out: drawn faded, as well as disabled. */
     closedWhileNextIsOut: { opacity: 0.4 },
     backBtnText: { color: colors.text.secondary, fontSize: 14 },
-    error: { color: colors.feedback.danger.solid, fontSize: 14, marginBottom: 16, textAlign: 'center' },
+    error: { color: colors.feedback.danger.fg, fontSize: 14, marginBottom: 16, textAlign: 'center' },
     checkbox: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, padding: 12, backgroundColor: colors.surface.subtle, borderRadius: 8 },
     checkboxActive: { backgroundColor: dark ? colors.feedback.info.bg : palette.blue100 },
     checkboxText: { color: colors.text.heading, fontSize: 14, fontWeight: '600' },

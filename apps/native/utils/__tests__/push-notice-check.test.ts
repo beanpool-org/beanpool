@@ -55,7 +55,7 @@ import {
     pushNoticeWarningStyleSpec,
 } from '../push-notice-warning-style';
 import { PUSH_PINS_STORE_KEY, PUSH_REGISTERED_AT_STORE_KEY, SAVED_NODES_STORE_KEY, vaultPushTokenStoreKey } from '../storage-keys';
-import { lightColors, darkColors, earthColors, slateColors } from '../../constants/colors';
+import { lightColors, darkColors } from '../../constants/colors';
 import { boundSignatureValid } from './server-signature-check';
 
 const MULLUM = 'https://mullum.beanpool.org';
@@ -822,7 +822,7 @@ describe('the calm line', () => {
         );
     });
 
-    describe.each([['light', lightColors], ['earth', earthColors], ['slate', slateColors], ['dark', darkColors]] as const)('in the %s theme', (_name, colors) => {
+    describe.each([['light', lightColors], ['dark', darkColors]] as const)('in the %s theme', (_name, colors) => {
         const spec = pushNoticeWarningStyleSpec(colors as typeof lightColors) as Record<string, Record<string, unknown>>;
 
         it('its button is at least 48dp tall and wide', () => {

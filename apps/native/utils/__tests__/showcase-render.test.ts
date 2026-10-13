@@ -14,7 +14,7 @@ import Module from 'node:module';
 import { act, createElement, Fragment } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_MARK, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, LOCAL_COMMUNITY_LINES, SAMPLE_COMMUNITY } from '@beanpool/core';
-import { darkColors, earthColors, lightColors, slateColors, type AppColors } from '../../constants/colors';
+import { darkColors, lightColors, type AppColors } from '../../constants/colors';
 
 // MyDealsSheet draws the bean with require('…/bean.png'), which Metro resolves; here a number stands in, as on the phone.
 (Module as any)._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
@@ -66,11 +66,11 @@ vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElem
 // The review form writes; in preview it must never open.
 const review = vi.hoisted(() => ({ opened: 0, txIds: [] as string[] }));
 vi.mock('../../components/ReviewModal', () => ({ ReviewModal: ({ txId }: { txId: string }) => { review.opened++; review.txIds.push(txId); return createElement('div', { 'data-testid': 'review-modal' }); } }));
-// The light palette Settings offers (classic, earth or slate), or dark.
-const theme = vi.hoisted(() => ({ dark: false, palette: 'classic' as 'classic' | 'earth' | 'slate' }));
+// Light or dark: the two sets the phone has (docs/brand-colours.md).
+const theme = vi.hoisted(() => ({ dark: false }));
 vi.mock('../../app/ThemeContext', async () => {
-    const { lightColors: light, darkColors: dark, earthColors: earth, slateColors: slate } = await import('../../constants/colors');
-    const colors = () => (theme.dark ? dark : ({ classic: light, earth, slate } as Record<string, unknown>)[theme.palette]);
+    const { lightColors: light, darkColors: dark } = await import('../../constants/colors');
+    const colors = () => (theme.dark ? dark : light);
     return {
         useTheme: () => ({ theme: theme.dark ? 'dark' : 'light', colors: colors() }),
         useStyles: (make: (t: { theme: string; colors: unknown }) => unknown) => make({ theme: theme.dark ? 'dark' : 'light', colors: colors() }),
@@ -145,15 +145,13 @@ function hue(hex: string): number {
 }
 
 // Review of #1852, finding 6: earth's info tone is terra (4.17:1 on its own box, 4.42:1 on the card), and slate's dashed
-// border faded into the card (1.49:1). Every palette Settings offers, and dark.
+// border faded into the card (1.49:1). Light and dark (Earth and Slate are gone).
 describe('the marker in every palette', () => {
     const palettes: Array<[string, AppColors, () => void]> = [
-        ['classic', lightColors, () => { theme.dark = false; theme.palette = 'classic'; }],
-        ['earth', earthColors as unknown as AppColors, () => { theme.dark = false; theme.palette = 'earth'; }],
-        ['slate', slateColors as unknown as AppColors, () => { theme.dark = false; theme.palette = 'slate'; }],
+        ['light', lightColors, () => { theme.dark = false; }],
         ['dark', darkColors as unknown as AppColors, () => { theme.dark = true; }],
     ];
-    afterEach(() => { theme.dark = false; theme.palette = 'classic'; });
+    afterEach(() => { theme.dark = false; });
     for (const [name, colors, use] of palettes) {
         it(`${name}: its words read at 4.5:1 or more on its own box, the card and the page, in a blue, never amber or red; its dashed edge at 3:1 on the card`, async () => {
             use();

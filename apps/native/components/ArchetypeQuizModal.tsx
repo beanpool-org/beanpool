@@ -401,7 +401,7 @@ export function ArchetypeQuizModal({
                                         styles.progressFill,
                                         {
                                             width: `${Math.round(progress * 100)}%`,
-                                            backgroundColor: colors.brand.primary,
+                                            backgroundColor: colors.brand.fill,
                                         },
                                     ]}
                                 />
@@ -610,7 +610,7 @@ export function ArchetypeQuizModal({
                                 style={({ pressed }) => [
                                     styles.saveBtn,
                                     {
-                                        backgroundColor: colors.brand.dark,
+                                        backgroundColor: colors.brand.fill,
                                         opacity: pressed || saving ? 0.85 : 1,
                                     },
                                 ]}

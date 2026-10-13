@@ -164,7 +164,7 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
                         accessibilityRole="button"
                         accessibilityLabel="Create First Post"
                         accessibilityHint="Opens form to create a new offer or need post"
-                        style={[styles.primaryButton, { backgroundColor: colors.brand.primary }]}
+                        style={[styles.primaryButton, { backgroundColor: colors.brand.fill }]}
                         onPress={onCreatePostPress}
                     >
                         <Text style={[styles.primaryButtonText, { color: colors.text.inverse }]}>+ Create First Post</Text>

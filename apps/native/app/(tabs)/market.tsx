@@ -212,7 +212,7 @@ export default function MarketScreen() {
             borderColor: colors.market.need.fg
         },
         chipActive: {
-            backgroundColor: colors.accent.primary,
+            backgroundColor: colors.accent.fill,
             borderColor: colors.accent.primary
         },
         chipDistanceActive: {
@@ -425,7 +425,7 @@ export default function MarketScreen() {
             elevation: 1,
         },
         favTagActive: {
-            backgroundColor: colors.accent.primary,
+            backgroundColor: colors.accent.fill,
             borderColor: colors.accent.primary,
         },
         favTagText: {
@@ -895,16 +895,16 @@ export default function MarketScreen() {
     // "Beans only" is not offered where there are no Beans.
     const rowExtras = secondRow.kind === 'filters' ? marketExtras(secondRow.extras, nodeProfile?.features) : [];
     // The second row's chips fill with the type's colour, as the map's category chip does.
-    // Fill for the selected type pill, each carrying white text; the map's colours for Offers / Needs / Events.
+    // Fill for the selected type pill, each carrying white text (docs/brand-colours.md: deep fills, 4.5:1 or more).
     const typeColors: Record<MarketTypeFilter, string> = {
         all: theme === 'dark' ? palette.gray600 : palette.gray800,
-        'for-you': colors.accent.primary,
-        offers: '#10b981',
-        needs: '#ea580c',
+        'for-you': colors.accent.fill,
+        offers: colors.brand.fill,
+        needs: colors.action.fab,
         events: EVENT_ACCENT,
         polls: '#7c3aed',
     };
-    const filterColor = filter === 'offers' || filter === 'needs' ? typeColors[filter] : colors.brand.dark;
+    const filterColor = filter === 'offers' || filter === 'needs' ? typeColors[filter] : colors.brand.fill;
     const filterCtx = { blockedUsers, favCategories };
 
     let filteredPosts = basePosts.filter(p => {
@@ -1138,7 +1138,7 @@ export default function MarketScreen() {
                                     onPress={() => setGroupFilter(isSelected ? 'all' : g.id)}
                                     style={[
                                         styles.chip,
-                                        isSelected && { backgroundColor: colors.brand.primary, borderColor: colors.brand.primary }
+                                        isSelected && { backgroundColor: colors.brand.fill, borderColor: colors.brand.primary }
                                     ]}
                                     accessibilityRole="button"
                                     accessibilityState={{ selected: isSelected }}
@@ -1680,7 +1680,7 @@ export default function MarketScreen() {
                             </Text>
                             <Pressable
                                 accessibilityRole="link"
-                                style={{ backgroundColor: colors.brand.primary, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, maxWidth: '100%' }}
+                                style={{ backgroundColor: colors.brand.fill, paddingHorizontal: 20, paddingVertical: 12, borderRadius: 12, maxWidth: '100%' }}
                                 onPress={() => { Linking.openURL(GLOBAL_NODE_URL).catch(() => {}); }}
                             >
                                 <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14, textAlign: 'center' }}>🌍 Look around the global community</Text>
@@ -1709,7 +1709,7 @@ export default function MarketScreen() {
                             </Text>
                             <Pressable
                                 accessibilityRole="button"
-                                style={{ backgroundColor: colors.brand.primary, paddingHorizontal: 22, paddingVertical: 11, borderRadius: 12 }}
+                                style={{ backgroundColor: colors.brand.fill, paddingHorizontal: 22, paddingVertical: 11, borderRadius: 12 }}
                                 onPress={() => { armSyncWait(); requestSync(); }}
                             >
                                 <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14 }}>Retry</Text>

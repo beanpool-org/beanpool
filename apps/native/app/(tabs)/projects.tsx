@@ -136,7 +136,7 @@ export default function ProjectsScreen() {
         sectionTabBtnActive: { backgroundColor: colors.brand.tint, borderColor: colors.brand.primary },
         sectionTabText: { fontSize: 13, fontWeight: '700', color: colors.text.secondary },
         sectionTabTextActive: { color: colors.brand.primary },
-        sectionBadge: { position: 'absolute', top: 4, right: 6, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 10, backgroundColor: colors.brand.primary },
+        sectionBadge: { position: 'absolute', top: 4, right: 6, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 10, backgroundColor: colors.brand.fill },
         sectionBadgeText: { color: colors.text.inverse, fontSize: 11, fontWeight: '800' },
 
 
@@ -144,7 +144,7 @@ export default function ProjectsScreen() {
         groupsHeading: { fontSize: 13, fontWeight: '800', color: colors.text.secondary, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 8 },
         groupsNone: { fontSize: 14, color: colors.text.secondary, lineHeight: 20 },
         filterBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default },
-        filterBtnActive: { backgroundColor: colors.brand.primary, borderColor: colors.brand.dark },
+        filterBtnActive: { backgroundColor: colors.brand.fill, borderColor: colors.brand.dark },
         filterBtnText: { fontSize: 12, color: colors.text.secondary, fontWeight: '600' },
         filterBtnTextActive: { color: colors.text.inverse },
 
@@ -173,7 +173,7 @@ export default function ProjectsScreen() {
         badgeOngoingText: { fontSize: 10, fontWeight: '800', color: colors.brand.primary, letterSpacing: 0.5 },
         badgeProject: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.indigo100 },
         badgeProjectText: { fontSize: 10, fontWeight: '800', color: theme === 'dark' ? colors.brand.primary : palette.indigo600, letterSpacing: 0.5 },
-        badgeFunded: { backgroundColor: colors.brand.primary },
+        badgeFunded: { backgroundColor: colors.brand.fill },
         badgeFundedText: { fontSize: 10, fontWeight: '800', color: colors.text.inverse, letterSpacing: 0.5 },
 
         cardBody: { paddingHorizontal: 14, paddingBottom: 14 },
@@ -195,16 +195,16 @@ export default function ProjectsScreen() {
         progressBarBg: { height: 7, width: '100%', backgroundColor: colors.surface.subtle, borderRadius: 4, overflow: 'hidden' },
         progressBarFill: { height: '100%', borderRadius: 4 },
         deadlineText: { fontSize: 11, fontWeight: '700', color: colors.brand.primary, marginTop: 4 },
-        deadlineExpired: { color: colors.feedback.danger.solid },
+        deadlineExpired: { color: colors.feedback.danger.fg },
 
-        pledgeCardBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12, paddingVertical: 10, borderRadius: 10, backgroundColor: colors.brand.primary },
+        pledgeCardBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12, paddingVertical: 10, borderRadius: 10, backgroundColor: colors.brand.fill },
         pledgeCardBtnText: { color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.3 },
 
         emptyState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60, paddingHorizontal: 32 },
         emptyEmoji: { fontSize: 48, opacity: 0.4, marginBottom: 16 },
         emptyTitle: { fontSize: 18, fontWeight: '700', color: colors.text.heading, marginBottom: 8, textAlign: 'center' },
         emptyDesc: { fontSize: 14, color: colors.text.muted, textAlign: 'center', lineHeight: 20, marginBottom: 24 },
-        emptyBtn: { backgroundColor: colors.brand.primary, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3 },
+        emptyBtn: { backgroundColor: colors.brand.fill, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 3 },
         emptyBtnText: { color: colors.text.inverse, fontSize: 14, fontWeight: '700' },
 
         skeletonCard: { backgroundColor: colors.surface.card, borderRadius: 16, marginBottom: 16, borderWidth: 1, borderColor: colors.border.default, padding: 16, gap: 12 },
@@ -219,7 +219,7 @@ export default function ProjectsScreen() {
             width: 60,
             height: 60,
             borderRadius: 30,
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             justifyContent: 'center',
             alignItems: 'center',
             shadowColor: '#000',
@@ -469,7 +469,7 @@ export default function ProjectsScreen() {
                                 <View
                                     style={[
                                         styles.progressBarFill,
-                                        { width: `${progress}%`, backgroundColor: isFunded ? colors.brand.primary : colors.accent.primary }
+                                        { width: `${progress}%`, backgroundColor: isFunded ? colors.brand.fill : colors.accent.fill }
                                     ]}
                                 />
                             </View>
@@ -515,7 +515,7 @@ export default function ProjectsScreen() {
                         <Text style={styles.cardTitle} numberOfLines={2}>{item.name}</Text>
                         {isInvited ? (
                             <View style={styles.badgeRow}>
-                                <View style={[styles.badge, { backgroundColor: colors.brand.primary }]}>
+                                <View style={[styles.badge, { backgroundColor: colors.brand.fill }]}>
                                     <Text style={styles.badgeFundedText} numberOfLines={1}>INVITED</Text>
                                 </View>
                             </View>

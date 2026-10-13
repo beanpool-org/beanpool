@@ -242,7 +242,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
         fontWeight: '600',
     },
     resetText: {
-        color: colors.feedback.danger.solid,
+        color: colors.feedback.danger.fg,
         fontSize: 16,
         fontWeight: '600',
     },

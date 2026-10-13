@@ -234,7 +234,7 @@ export const makeStyles = ({ colors, theme }: { colors: typeof lightColors; them
             width: 14,
             height: 14,
             borderRadius: 7,
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             alignItems: 'center',
             justifyContent: 'center',
         },

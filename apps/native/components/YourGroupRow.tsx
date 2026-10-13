@@ -52,7 +52,7 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
         previewUnread: { color: colors.text.heading, fontWeight: '700' },
         badge: {
             flexShrink: 0, minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6,
-            backgroundColor: colors.accent.primary, alignItems: 'center', justifyContent: 'center',
+            backgroundColor: colors.accent.fill, alignItems: 'center', justifyContent: 'center',
         },
         badgeMuted: { backgroundColor: colors.text.muted },
         badgeText: { color: colors.text.inverse, fontSize: 11, fontWeight: '800' },

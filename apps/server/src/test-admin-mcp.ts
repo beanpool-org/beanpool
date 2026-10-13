@@ -385,11 +385,12 @@ async function main(): Promise<void> {
         // ── 6. Limits, take_backup ────────────────────────────────────────────────────────────────
         console.log('── 6. 60 calls a minute; take_backup works, is logged, 2 a day ──');
         const snaps0 = listSnapshots().length;
+        const tBackup = Date.now() - 5;
         const bk1 = await client.callTool({ name: 'take_backup', arguments: { kind: 'snapshot' } });
         const bk2 = await client.callTool({ name: 'take_backup', arguments: {} });
         const bk3 = await client.callTool({ name: 'take_backup', arguments: { kind: 'snapshot' } });
         const snaps2 = listSnapshots().length;
-        assert(!bk1.isError && structured(bk1)?.taken === true && !bk2.isError && structured(bk2)?.taken === true && structured(bk2)?.backupsToday === 2 && snaps2 > snaps0,
+        assert(!bk1.isError && structured(bk1)?.taken === true && !bk2.isError && structured(bk2)?.taken === true && structured(bk2)?.backupsToday === 2 && (listSnapshots()[0]?.createdAt ?? 0) >= tBackup && snaps2 >= Math.max(1, snaps0),
             `take_backup takes a snapshot, twice (${JSON.stringify(structured(bk1))}; ${snaps0} → ${snaps2} on disk)`);
         assert(bk3.isError === true && /2 backups today/.test((bk3.content as any)?.[0]?.text ?? '') && listSnapshots().length === snaps2,
             `a 3rd backup in a day is refused, in words (${JSON.stringify(bk3.content)})`);
@@ -428,7 +429,7 @@ async function main(): Promise<void> {
             && !t2Tools.includes('take_backup') && t2Backup.isError === true,
         `its maker demoted to admin: the assistant is an admin's, with no backups (${t2Tools.length} tools)`);
         await c2.close();
-        revokeNodeRole(owner2.pub, 'admin');
+        revokeNodeRole(owner2.pub, 'admin', owner.pub);
         const gone = await call('POST', '/mcp', { body: init, headers: { ...MCP_HEADERS, ...bearer(t2.body.token) } });
         assert(gone.status === 401, `its maker no longer an owner or admin: 401 (${show(gone)})`);
 
@@ -466,6 +467,10 @@ async function main(): Promise<void> {
         // ── 9. No secret in any log ───────────────────────────────────────────────────────────────
         const leaked = secrets.filter(s => logged.some(l => l.includes(s.slice(16))));
         assert(leaked.length === 0, `no token's secret is in any log line (${logged.length} lines)`);
+    } catch (e) {
+        // A throw is a failure, never a quiet end: the count would otherwise stop short and the exit say 0.
+        console.error(e);
+        process.exitCode = 1;
     } finally {
         console.log(`\n${passed}/${run} passed`);
         process.exit(process.exitCode ?? 0);

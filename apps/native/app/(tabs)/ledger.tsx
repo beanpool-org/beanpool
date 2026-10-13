@@ -26,6 +26,9 @@ import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../compo
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { ledgerItemNote } from '../../utils/ledger-note';
 import { RepaymentCard } from '../../components/RepaymentCard';
+import { useNodeProfile } from '../../utils/use-node-profile';
+import { showcaseMode } from '../../utils/node-profile';
+import { LedgerPreview } from '../../components/showcase/Previews';
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../../utils/credit-line-card';
 
 // ── Trust model constants (from @beanpool/core) ──
@@ -52,6 +55,8 @@ export default function LedgerScreen() {
     useTabRetapScrollTop(listRef);
     const { theme, colors } = useTheme();
     const { identity } = useIdentity();
+    // On a node that previews Beans (the showcase, DESIGN-global-showcase-fable §1 row 3), Example Valley's ledger.
+    const beansMode = showcaseMode('beans', useNodeProfile()?.features);
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     // Tiers are recognition milestones; where each starts comes from @beanpool/core TIER_LEVELS.
@@ -1007,6 +1012,15 @@ export default function LedgerScreen() {
             </View>
         </View>
     );
+
+    if (beansMode === 'preview') {
+        return (
+            <View style={styles.root}>
+                <PageTitle title="Ledger" collapsed={false} testID="page-title-ledger" />
+                <LedgerPreview />
+            </View>
+        );
+    }
 
     return (
         <View style={styles.root}>

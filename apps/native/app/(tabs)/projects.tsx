@@ -6,7 +6,8 @@ import { getBalance, getTreasuries, getDecisions, getAllCommunityMembers, fetchG
 import { loadIdentity } from '../../utils/identity';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
 import { useNodeProfile } from '../../utils/use-node-profile';
-import { beansOn } from '../../utils/node-profile';
+import { beansOn, showcaseMode } from '../../utils/node-profile';
+import { CommonsPreview } from '../../components/showcase/Previews';
 import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, isProject, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
 import { CommonsInfoModal } from '../../components/CommonsInfoModal';
 import { DecideSection } from '../../components/DecideSection';
@@ -40,6 +41,8 @@ export default function ProjectsScreen() {
     // the header's vote icon): there it draws no pool balance, no voice credits and no pool info, which are all Beans.
     const nodeProfile = useNodeProfile();
     const showsBeans = beansOn(nodeProfile?.features);
+    // Enterprises and Decide previewed from Example Valley where the node shows its switched-off features (§1 row 6).
+    const enterprisesPreview = showcaseMode('enterprises', nodeProfile?.features) === 'preview';
     // Decide only where formal Decisions are on; Groups is one list of projects, enterprises and chat groups, with
     // projects and enterprises only where the node has them (utils/commons-sections.ts). With Groups all that is left
     // (the worldwide community, reached from Talk's "Find groups"), this is its groups list.
@@ -548,6 +551,7 @@ export default function ProjectsScreen() {
                         colors={[colors.brand.primary]}
                     />
                 }
+                ListFooterComponent={enterprisesPreview ? <CommonsPreview /> : null}
                 ListHeaderComponent={
                     <View style={styles.headerContainer}>
                         <View style={styles.headerInfo}>

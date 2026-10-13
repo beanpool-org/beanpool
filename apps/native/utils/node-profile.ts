@@ -270,7 +270,7 @@ export function effectiveFeatures(node: NodeFeatures | null | undefined, reader?
  * has it, the reader not yet), `preview` (from the sample community, on a node whose `showcase` is on) or `hidden`.
  */
 export function showcaseMode(feature: ShowcaseFeature, node: NodeFeatures | null | undefined, reader?: NodeFeatures | null): FeatureMode {
-    return featureModeFor(feature, node ?? undefined, reader ?? undefined);
+    return featureModeFor(feature, node as Record<string, unknown> | null | undefined, reader as Record<string, unknown> | null | undefined);
 }
 
 /** The tabs a node hides. Only a node that says outright that Beans are off hides any, and not one that previews them. */

@@ -82,11 +82,15 @@ export function formerKeysReader(): (memberPubkey: string) => FormerKey[] {
     };
 }
 
-/** Each statement's verdict, by everything its signature covers: a member's DM list is read on every sync. */
+/**
+ * Each statement's verdict, by everything its signature covers: a member's DM list is read on every sync. Keyed as JSON,
+ * never joined with a separator: `at` holds colons, so a row with `at` cut at one and the rest moved onto `sig` would
+ * join to a verified statement's key and be served from here unchecked (#1871 review NB2).
+ */
 const verdicts = new Map<string, boolean>();
 const VERDICTS_MAX = 4096;
 function statementVerifies(former: FormerKey, successor: string): boolean {
-    const key = `${successor}:${former.pubkey}:${former.at}:${former.sig}`;
+    const key = JSON.stringify([successor, former.pubkey, former.at, former.sig]);
     let ok = verdicts.get(key);
     if (ok === undefined) {
         ok = verifyKeySuccession(former, successor);

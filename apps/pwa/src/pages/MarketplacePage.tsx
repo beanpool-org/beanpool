@@ -1819,7 +1819,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 className={`w-full py-3.5 rounded-xl font-bold text-white text-[15px] transition-all shadow-md ${
                                     accepting
                                         ? 'bg-nature-400 cursor-not-allowed opacity-60'
-                                        : selectedPost.type === 'offer' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-terra-600 hover:bg-terra-700'
+                                        : selectedPost.type === 'offer' ? 'bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700' : 'bg-terra-600 hover:bg-terra-700'
                                 }`}
                             >
                                  {accepting ? 'Processing...' : (selectedPost.type === 'offer' ? '🤝 Accept Offer' : '✋ Offer to Fulfill')}
@@ -2453,8 +2453,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 onChange={(e) => setGroupFilter(e.target.value)}
                                 className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
                                     groupFilter !== 'all'
-                                        ? 'bg-emerald-600 dark:bg-emerald-500 text-white border-emerald-700/25 shadow-sm'
-                                        : 'bg-white dark:bg-nature-900 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-800'
+                                        ? 'bg-emerald-600 dark:bg-emerald-700 text-white border-emerald-700/25 shadow-sm'
+                                        : 'bg-white dark:bg-nature-900 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-600'
                                 }`}
                                 aria-label="Filter feed by group"
                             >

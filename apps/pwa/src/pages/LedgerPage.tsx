@@ -310,7 +310,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     </div>
                     <div>
                         <h2 className="text-lg font-bold text-nature-950 dark:text-white leading-tight">{identity.callsign}</h2>
-                        <div className="mt-1 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400 border border-nature-200 dark:border-nature-700 w-fit">
+                        <div className="mt-1 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300 border border-nature-200 dark:border-nature-700 w-fit">
                             <span>{tier.emoji}</span>
                             <span>{tier.name}</span>
                         </div>
@@ -462,7 +462,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                         style={{
                                             background: isSel ? t.bg : 'var(--tier-card)',
                                             borderColor: isSel ? t.color : 'var(--tier-card-border)',
-                                            opacity: reached ? 1 : 0.55,
+                                            opacity: reached ? 1 : 'var(--tier-unreached-opacity)',
                                             fontFamily: 'inherit',
                                         }}
                                     >
@@ -530,7 +530,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
                             <h3 className="font-extrabold text-[15px] text-nature-950 dark:text-white mb-2">🚀 Reach {nextTier.emoji} {nextTier.name}</h3>
                             <p className="text-sm font-black text-indigo-650 dark:text-indigo-300 mb-2">{creditsToNext} trust to go</p>
-                            <p className="text-xs text-nature-500 leading-relaxed mb-4">
+                            <p className="text-xs text-nature-500 dark:text-nature-400 leading-relaxed mb-4">
                                 Trust grows with the real value you trade. Trading with someone NEW counts fastest —
                                 value with any one partner is capped, so a wide circle beats repeat trades with the same person.
                             </p>
@@ -538,7 +538,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                 <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-xl relative">
                                     <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{Number.isFinite(valueToNext) ? `~${valueToNext}` : '—'}</div>
                                     <div className="text-[9px] font-bold text-nature-400 uppercase mt-1">beans of value to trade</div>
-                                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-emerald-500 text-white font-black text-[8px] uppercase tracking-wider">the lever</span>
+                                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-emerald-500 dark:bg-emerald-700 text-white font-black text-[8px] uppercase tracking-wider">the lever</span>
                                 </div>
                                 <div className="p-3 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 rounded-xl">
                                     <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{partnersToNext || '—'}</div>

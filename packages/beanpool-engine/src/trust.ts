@@ -365,19 +365,20 @@ const snapshotHandles = new WeakMap<Db, Db | null>();
 
 /**
  * The read-only handle a refresh reads its snapshot through, opened the first time (WAL lets it read one moment's rows
- * while the node's own handle writes). None for an in-memory database or one it can't open: the refresh then reads
- * through the node's own handle, the rows as they stand when each step comes, which it says once.
+ * while the node's own handle writes). None for an in-memory database (tests): the refresh then reads through the node's
+ * own handle, which it says once. A file database's handle that does not open throws, and is tried again at the next
+ * refresh: a file database never refreshes without a snapshot (rows read at different moments could miss a ring), so
+ * until one opens its analysis is worked out in one go at a read, as before.
  */
 function snapshotHandleFor(db: Db): Db | null {
     const kept = snapshotHandles.get(db);
     if (kept === null) return null;
     if (kept?.open) return kept;
-    const none = (why: string) => {
-        console.warn(`[Wash] The wash analysis refreshes through the node's own handle, with no snapshot: ${why}`);
+    if (db.memory) {
+        console.warn('[Wash] The wash analysis refreshes through the node\'s own handle, with no snapshot: the database is in memory.');
         snapshotHandles.set(db, null);
         return null;
-    };
-    if (db.memory) return none('the database is in memory.');
+    }
     try {
         const Ctor = db.constructor as unknown as new (file: string, options: Database.Options) => Db;
         const handle = new Ctor(db.name, { readonly: true, fileMustExist: true });
@@ -385,7 +386,7 @@ function snapshotHandleFor(db: Db): Db | null {
         snapshotHandles.set(db, handle);
         return handle;
     } catch (e) {
-        return none(`the read-only handle did not open (${e instanceof Error ? e.message : String(e)}).`);
+        throw new Error(`the refresh's read-only snapshot did not open (${e instanceof Error ? e.message : String(e)})`);
     }
 }
 

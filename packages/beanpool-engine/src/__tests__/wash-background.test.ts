@@ -194,6 +194,18 @@ describe('wash analysis: paged pair totals (S1)', () => {
         db.close();
     });
 
+    it('a file database whose snapshot does not open: the refresh lands nothing, and the next tries again', async () => {
+        const db = fileDb();
+        seedPagedWorld(db);
+        const file = db.name;
+        fs.renameSync(file, `${file}.away`); // the node's handle keeps the file open; a new handle on the path can't
+        await expect(runWashAnalysisInSlices(db)).rejects.toThrow(/snapshot did not open/);
+        fs.renameSync(`${file}.away`, file);
+        expect(json((await runWashAnalysisInSlices(db)).analysis)).toBe(json(runWashTradingAnalysis(db)));
+        closeWashSnapshotHandle(db);
+        db.close();
+    });
+
     it('counts every complete analysis for the node\'s own handle, a refresh through the snapshot included', async () => {
         const db = fileDb();
         seedPagedWorld(db);

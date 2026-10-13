@@ -108,7 +108,7 @@ import { createAlertsRoutes } from './routes/alerts.js';
 import { createAutomationTokenRoutes } from './routes/automation-tokens.js';
 import { createMcpRoutes } from './agent/mcp-route.js';
 import { createAgentGrantRoutes } from './agent/grants-route.js';
-import { createOAuthRoutes } from './agent/oauth-route.js';
+import { createOAuthRoutes, oauthDoorOff } from './agent/oauth-route.js';
 import { createAgentSuggestionRoutes } from './agent/suggestions-route.js';
 import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
 import { identityReadOnlyGuard } from './services/identity-epoch.js';
@@ -1255,6 +1255,10 @@ export async function startHttpsServer(port: number): Promise<number> {
         }
         await next();
     });
+
+    // The AI assistant's OAuth door with the owners' switch off: 404 for every verb, before the CORS layer below answers
+    // OPTIONS 204 or a router answers 405 (agent/oauth-route.ts).
+    app.use(oauthDoorOff());
 
     // Gateway Configuration Middlewares (CORS Allowed Origins, Admin IP Allowlist, Feature Toggles, Rate Limiting)
 

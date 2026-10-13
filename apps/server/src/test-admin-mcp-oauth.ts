@@ -311,16 +311,17 @@ async function main(): Promise<void> {
         // ── 3. Refusals at authorize ──
         const cid = reg.body.client_id;
         const noPkce = await call('GET', authorizeUrl(cid, { code_challenge: null, code_challenge_method: null }));
-        const loc = (r: Reply) => { try { return new URL(r.headers.get('location') ?? ''); } catch { return null; } };
-        assert(noPkce.status === 302 && loc(noPkce)?.searchParams.get('error') === 'invalid_request' && loc(noPkce)?.origin === 'https://assistant.example',
-            `no PKCE → refused, back to the assistant with invalid_request (${noPkce.status} ${noPkce.headers.get('location')?.slice(0, 100)})`);
+        // A client nobody has approved on a phone yet: its address is only its own word, so an error is our page, never a
+        // redirect there (RFC 9700 §4.11.2; #1881 review, finding 3).
+        assert(noPkce.status === 400 && !noPkce.headers.get('location') && /PKCE/.test(noPkce.text) && !/var id=/.test(noPkce.text),
+            `no PKCE → refused, a page: nothing sent to an address nobody approved (${noPkce.status} ${noPkce.headers.get('location')?.slice(0, 100)})`);
         const plainPkce = await call('GET', authorizeUrl(cid, { code_challenge_method: 'plain' }));
-        assert(plainPkce.status === 302 && loc(plainPkce)?.searchParams.get('error') === 'invalid_request', 'plain PKCE → refused (S256 only)');
+        assert(plainPkce.status === 400 && !plainPkce.headers.get('location'), 'plain PKCE → refused (S256 only), a page: nothing sent to an address nobody approved');
         const wrongRedirect = await call('GET', authorizeUrl(cid, { redirect_uri: 'https://evil.example/cb' }));
         assert(wrongRedirect.status === 400 && !wrongRedirect.headers.get('location') && !/var id=/.test(wrongRedirect.text),
             `a redirect it did not register → a page, nothing sent anywhere, no QR (${wrongRedirect.status})`);
         const wrongResource = await call('GET', authorizeUrl(cid, { resource: 'https://evil.example/mcp' }));
-        assert(wrongResource.status === 302 && loc(wrongResource)?.searchParams.get('error') === 'invalid_target', 'a wrong resource at authorize → invalid_target');
+        assert(wrongResource.status === 400 && !wrongResource.headers.get('location'), `a wrong resource at authorize → refused, a page (${wrongResource.status})`);
         const unknownClient = await call('GET', authorizeUrl('bpc_' + '0'.repeat(32)));
         assert(unknownClient.status === 400 && !unknownClient.headers.get('location'), 'an unknown client → a page, no redirect');
 

@@ -10,8 +10,15 @@
  *   POST /oauth/token                                 code → tokens (PKCE S256, exact redirect, resource), refresh rotation
  *   POST /oauth/revoke                                RFC 7009
  *
- * The owners' switch off → every one of these answers 404, as /mcp does. Nothing here signs a browser in to Settings:
- * the phone's approval of an assistant yields a code for the assistant, never a session.
+ * The owners' switch off → every one of these paths answers 404 to every verb, OPTIONS included (oauthDoorOff, mounted
+ * before the CORS layer), so a node with the door off doesn't say it has one (#1881 review, finding 7). Nothing here signs
+ * a browser in to Settings: the phone's approval of an assistant yields a code for the assistant, never a session.
+ *
+ * Nothing is sent on automatically to an address only a registration names (RFC 9700 §4.11.2): anyone can register any
+ * https address, so until a member has approved that client on a phone, an error at authorize is our own page, and after
+ * a No on the phone the page goes nowhere (#1881 review, finding 3). Registrations write no line of their own; one
+ * refused for volume goes through /mcp's refusal budget, and the connect and reuse lines are AUTH SECURITY lines, so no
+ * number of unauthenticated requests empties the assistants' ring or the audit trail (finding 4).
  */
 import Router from '@koa/router';
 import QRCode from 'qrcode';
@@ -22,16 +29,17 @@ import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { directoryName } from '../state-engine.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { logger } from '../logger.js';
+import { logAddressTag } from '../log-address.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
 import {
     bindingCookieName, confirmPairing, createPairing, isPairingId, redeemPairing, waitForPairing, type RedeemResult,
 } from '../settings-signin-pairing.js';
 import { cleanMemberText } from './fence.js';
 import { forgetAgentGrant } from './limits.js';
-import { aiAssistantsAllowed, MCP_PATH, nodeUrlFor } from './mcp-route.js';
+import { aiAssistantsAllowed, logRefusal, MCP_PATH, nodeUrlFor } from './mcp-route.js';
 import {
-    consentRequest, dropConsentRequest, exchangeCode, findClient, holdConsentRequest, issueCode, OAUTH_SCOPE, redirectHost,
-    refreshGrant, registerClient, revokeByToken, type OAuthGrantView, type TokenResult,
+    consentRequest, dropConsentRequest, exchangeCode, findClient, holdConsentRequest, isPendingRegistration, issueCode,
+    markRegistrationOpened, OAUTH_SCOPE, redirectHost, refreshGrant, registerClient, revokeByToken, type OAuthGrantView, type TokenResult,
 } from './oauth.js';
 import { dropSuggestionsOf } from './suggestions.js';
 import { offersSuggestions } from './tools.js';
@@ -57,6 +65,17 @@ function off(ctx: any): boolean {
     ctx.status = 404;
     ctx.body = 'Not Found';
     return true;
+}
+
+/** The door's paths (the routes below, any verb). */
+export const OAUTH_DOOR_PATH = /^\/(?:\.well-known\/oauth-(?:protected-resource(?:\/mcp)?|authorization-server)|oauth\/(?:register|authorize(?:\/[^/]+\/(?:wait|confirm))?|token|revoke))\/?$/;
+
+/** Switch off: 404 for every verb on the door's paths, before the CORS layer answers OPTIONS or a router answers 405. */
+export function oauthDoorOff() {
+    return async (ctx: any, next: () => Promise<unknown>) => {
+        if (OAUTH_DOOR_PATH.test(ctx.path) && off(ctx)) return;
+        await next();
+    };
 }
 
 function oauthError(ctx: any, status: number, error: string, description: string): void {
@@ -123,7 +142,7 @@ function tokenAnswer(ctx: any, res: TokenResult, from: string): void {
     if (!res.ok) {
         if (res.revoked) {
             forgetGrant(res.revoked.id);
-            logger.security('AGENT', 'Assistant disconnected: a used code or refresh token was presented again', { grant: res.revoked.id, from });
+            logger.security('AUTH', 'Assistant disconnected: a used code or refresh token was presented again', { grant: res.revoked.id, from });
             tellOwners('reuse', res.revoked, null);
         }
         oauthError(ctx, res.status, res.error, res.description);
@@ -131,7 +150,7 @@ function tokenAnswer(ctx: any, res: TokenResult, from: string): void {
     }
     for (const id of res.replaced ?? []) forgetGrant(id);
     if (res.created) {
-        logger.security('AGENT', 'Assistant connected through OAuth', { grant: res.grant.id, member: res.grant.member.slice(0, 16), sendsTo: redirectHost(res.grant.redirectUri) });
+        logger.security('AUTH', 'Assistant connected through OAuth', { grant: res.grant.id, member: res.grant.member.slice(0, 16), sendsTo: redirectHost(res.grant.redirectUri) });
         tellOwners('connected', res.grant, null);
     }
     ctx.set('Cache-Control', 'no-store');
@@ -164,8 +183,12 @@ function errorPage(ctx: any, status: number, message: string): void {
     ctx.body = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Connect an AI assistant</title></head><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:2rem auto;padding:0 1rem"><h1 style="font-size:1.25rem">This assistant cannot connect</h1><p>${escapeHtml(message)}</p></body></html>`;
 }
 
-/** A redirect back to the assistant with an OAuth error (only once its redirect address is known to be its own). */
-function redirectWithError(ctx: any, redirectUri: string, error: string, description: string, state: string | null): void {
+/**
+ * A redirect back to the assistant with an OAuth error: only for a client a member has approved on a phone before
+ * (`trusted`). Otherwise our own page: an address only its registration names is not one we send a browser to.
+ */
+function redirectWithError(ctx: any, redirectUri: string, error: string, description: string, state: string | null, trusted: boolean): void {
+    if (!trusted) { errorPage(ctx, 400, `${description}. Nothing was sent anywhere.`); return; }
     const u = new URL(redirectUri);
     u.searchParams.set('error', error);
     u.searchParams.set('error_description', description);
@@ -227,12 +250,11 @@ export function createOAuthRoutes(deps: RouteDeps): Router {
         if (!res.ok) {
             if (res.status === 429) {
                 ctx.set('Retry-After', '60');
-                logger.warn('AGENT', 'Assistant registration refused: too many', { from: clientLimiterKey(ctx as any).slice(0, 24) });
+                logRefusal('Assistant refused a registration: too many', { from: logAddressTag(clientLimiterKey(ctx as any)) }, '429');
             }
             oauthError(ctx, res.status, res.error, res.description);
             return;
         }
-        logger.info('AGENT', 'Assistant registered (waiting for a phone to approve)', { sendsTo: redirectHost(res.client.redirectUris[0]) });
         ctx.status = 201;
         ctx.set('Cache-Control', 'no-store');
         ctx.body = {
@@ -260,20 +282,22 @@ export function createOAuthRoutes(deps: RouteDeps): Router {
             return;
         }
         const state = one('state');
-        if (one('response_type') !== 'code') { redirectWithError(ctx, redirectUri, 'unsupported_response_type', 'Only response_type=code', state); return; }
+        // A client a grant holds was approved on a member's phone: its address is trusted with an error. A waiting one isn't.
+        const trusted = !isPendingRegistration(client.clientId);
+        if (one('response_type') !== 'code') { redirectWithError(ctx, redirectUri, 'unsupported_response_type', 'Only response_type=code', state, trusted); return; }
         const challenge = one('code_challenge');
         if (!challenge || one('code_challenge_method') !== 'S256' || !/^[A-Za-z0-9_-]{43}$/.test(challenge)) {
-            redirectWithError(ctx, redirectUri, 'invalid_request', 'PKCE with code_challenge_method=S256 is required', state);
+            redirectWithError(ctx, redirectUri, 'invalid_request', 'PKCE with code_challenge_method=S256 is required', state, trusted);
             return;
         }
         const scope = one('scope');
         if (scope !== null && scope.split(' ').some((s) => s && s !== OAUTH_SCOPE)) {
-            redirectWithError(ctx, redirectUri, 'invalid_scope', `The only scope is ${OAUTH_SCOPE}`, state);
+            redirectWithError(ctx, redirectUri, 'invalid_scope', `The only scope is ${OAUTH_SCOPE}`, state, trusted);
             return;
         }
         const resource = one('resource');
         if (resource !== null && !resourceAccepted(ctx, resource)) {
-            redirectWithError(ctx, redirectUri, 'invalid_target', 'resource is not this server', state);
+            redirectWithError(ctx, redirectUri, 'invalid_target', 'resource is not this server', state, trusted);
             return;
         }
         const sendsTo = redirectHost(redirectUri);
@@ -282,6 +306,7 @@ export function createOAuthRoutes(deps: RouteDeps): Router {
             agent: { name: client.clientName, sendsTo },
         });
         if (!created.ok) { errorPage(ctx, created.status, created.error); return; }
+        markRegistrationOpened(client.clientId);
         holdConsentRequest({
             pairingId: created.pairingId, clientId: client.clientId, clientName: client.clientName, redirectUri, state,
             codeChallenge: challenge, resource: resource ?? resourceFor(ctx), createdAt: Date.now(),
@@ -320,17 +345,9 @@ export function createOAuthRoutes(deps: RouteDeps): Router {
             case 'wrong-browser': ctx.status = 403; ctx.body = { status: 'wrong-browser', error: 'This approval belongs to the page that showed the code.' }; return;
             case 'unknown': ctx.status = 404; ctx.body = { status: 'unknown' }; return;
             default: {
-                // Declined, refused or expired: the assistant is told no, once.
-                if (r && (res.kind === 'declined' || res.kind === 'refused')) {
-                    dropConsentRequest(id);
-                    const u = new URL(r.redirectUri);
-                    u.searchParams.set('error', 'access_denied');
-                    if (r.state !== null) u.searchParams.set('state', r.state);
-                    u.searchParams.set('iss', issuerFor(ctx));
-                    ctx.status = 410;
-                    ctx.body = { status: res.kind, redirect: u.toString() };
-                    return;
-                }
+                // Declined, refused or expired: the request ends here, and the page sends the browser nowhere. The member
+                // may have said No to a phishing page, whose address would be next (RFC 9700 §4.11.2).
+                if (r && (res.kind === 'declined' || res.kind === 'refused')) dropConsentRequest(id);
                 ctx.status = 410;
                 ctx.body = { status: res.kind };
             }
@@ -364,7 +381,7 @@ export function createOAuthRoutes(deps: RouteDeps): Router {
         if (!deps.rateLimit(ctx as any)) return;
         const f = await formFields(ctx);
         if (!f) { oauthError(ctx, 413, 'invalid_request', 'Request body too large'); return; }
-        const from = clientLimiterKey(ctx as any).slice(0, 24);
+        const from = logAddressTag(clientLimiterKey(ctx as any));
         if (f.resource !== undefined && !resourceAccepted(ctx, f.resource)) { oauthError(ctx, 400, 'invalid_target', 'resource is not this server'); return; }
         if (f.grant_type === 'authorization_code') {
             tokenAnswer(ctx, exchangeCode({ code: f.code, clientId: f.client_id, redirectUri: f.redirect_uri, verifier: f.code_verifier, resource: f.resource }), from);
@@ -423,7 +440,7 @@ function show(r){
  if(r.status==='approved'){st.textContent='Connected. Taking you back to your assistant…';go(r);return}
  if(r.status==='wrong'){st.textContent=r.error+' Tries left: '+r.triesLeft;return}
  if(r.status==='waiting'){st.textContent=r.notice==='not-admin'?'That phone is not an owner or admin here. Waiting…':'Waiting for your phone…';poll();return}
- form.hidden=true;st.textContent=r.status==='declined'?'Declined on the phone: nothing was connected.':'This request ended: nothing was connected. Start again from your assistant.';go(r);
+ form.hidden=true;st.textContent=r.status==='declined'?'Declined on the phone: nothing was connected.':'This request ended: nothing was connected. Start again from your assistant.';
 }
 function post(u,b){return fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{}),credentials:'same-origin'}).then(function(x){return x.json()}).catch(function(){return null})}
 function poll(){post(base+'/wait').then(show)}

@@ -5,8 +5,10 @@
  * is asked (no registrar, DNS or relay).
  *
  * What lives where:
- * - Registrations (RFC 7591, public clients only) are in memory until used: at most OAUTH_PENDING_MAX waiting, each
- *   gone after OAUTH_PENDING_TTL_MS unused. A grant keeps its client's id, name and redirect address itself.
+ * - Registrations (RFC 7591, public clients only) are in memory until used: at most OAUTH_PENDING_MAX waiting, at most
+ *   OAUTH_PENDING_PER_ADDRESS of them from one address (an IPv6 /64 is one), each gone after OAUTH_PENDING_TTL_MS unused.
+ *   When either is full, the oldest one nobody opened a consent page for makes room, so one address can't keep the door
+ *   shut for everyone (#1881 review, finding 5). A grant keeps its client's id, name and redirect address itself.
  * - Consent requests and codes are in memory: a code lives OAUTH_CODE_TTL_MS, is good once, and a second use revokes
  *   the grant the first made (RFC 6749 §4.1.2, OAuth 2.1 §4.1.3).
  * - Grants are this server's own (local config `agentOAuthGrants`, per-server: never in a backup, the stager's copy or
@@ -22,8 +24,12 @@ import { nodeRoleOf } from '../engine/node-roles.js';
 import { cleanMemberText } from './fence.js';
 
 export const OAUTH_SCOPE = 'agent';
-/** Registrations not yet used for a grant: at most this many at once (the next is 429), each gone after an hour. */
+/**
+ * Registrations not yet used for a grant: at most this many at once, and this many from one address (its limiter key:
+ * an IPv6 /64 is one), each gone after an hour. Full, the oldest unopened one makes room; none unopened → 429.
+ */
 export const OAUTH_PENDING_MAX = 100;
+export const OAUTH_PENDING_PER_ADDRESS = 10;
 export const OAUTH_PENDING_TTL_MS = 60 * 60_000;
 /** New registrations per client address per minute (as a pairing's creation is braked). */
 export const OAUTH_REGISTRATIONS_PER_MINUTE = 10;
@@ -56,7 +62,9 @@ export interface OAuthClient {
     createdAt: number;
 }
 
-const pending = new Map<string, OAuthClient>();
+/** A waiting registration: the address it came from, and whether a consent page was opened for it. */
+type PendingClient = OAuthClient & { from: string; opened: boolean };
+const pending = new Map<string, PendingClient>();
 const registerBuckets = new Map<string, { count: number; resetAt: number }>();
 
 function prunePending(now: number): void {
@@ -92,9 +100,6 @@ export function registerClient(meta: unknown, clientKey: string, now = Date.now(
     if (bucket && now < bucket.resetAt && bucket.count >= OAUTH_REGISTRATIONS_PER_MINUTE) {
         return { ok: false, status: 429, error: 'slow_down', description: 'Too many registrations from this address: try again in a minute' };
     }
-    if (pending.size >= OAUTH_PENDING_MAX) {
-        return { ok: false, status: 429, error: 'temporarily_unavailable', description: 'Too many assistants waiting to be approved on this server: try again later' };
-    }
     const m = meta && typeof meta === 'object' && !Array.isArray(meta) ? meta as Record<string, unknown> : {};
     const uris = m.redirect_uris;
     if (!Array.isArray(uris) || uris.length === 0 || uris.length > REDIRECTS_MAX || !uris.every(redirectAllowed)) {
@@ -103,6 +108,18 @@ export function registerClient(meta: unknown, clientKey: string, now = Date.now(
     const grantTypes = m.grant_types;
     if (grantTypes !== undefined && (!Array.isArray(grantTypes) || grantTypes.some((g) => g !== 'authorization_code' && g !== 'refresh_token'))) {
         return { ok: false, status: 400, error: 'invalid_client_metadata', description: 'Only authorization_code and refresh_token' };
+    }
+    // Room: this address's own oldest unopened registration goes first, then anyone's (the Map keeps insertion order).
+    const fromHere = [...pending.values()].filter((p) => p.from === clientKey);
+    if (fromHere.length >= OAUTH_PENDING_PER_ADDRESS) {
+        const oldest = fromHere.find((p) => !p.opened);
+        if (!oldest) return { ok: false, status: 429, error: 'temporarily_unavailable', description: 'Too many assistants from this address are waiting to be approved: approve one on a phone, or try again in an hour' };
+        pending.delete(oldest.clientId);
+    }
+    if (pending.size >= OAUTH_PENDING_MAX) {
+        const oldest = [...pending.values()].find((p) => !p.opened);
+        if (!oldest) return { ok: false, status: 429, error: 'temporarily_unavailable', description: 'Too many assistants waiting to be approved on this server: try again later' };
+        pending.delete(oldest.clientId);
     }
     if (bucket && now < bucket.resetAt) bucket.count++;
     else registerBuckets.set(clientKey, { count: 1, resetAt: now + 60_000 });
@@ -114,7 +131,7 @@ export function registerClient(meta: unknown, clientKey: string, now = Date.now(
         redirectUris: [...new Set(uris as string[])],
         createdAt: now,
     };
-    pending.set(clientId, client);
+    pending.set(clientId, { ...client, from: clientKey, opened: false });
     return { ok: true, client };
 }
 
@@ -123,12 +140,19 @@ export function findClient(clientId: unknown, now = Date.now()): OAuthClient | n
     if (typeof clientId !== 'string' || !clientId) return null;
     prunePending(now);
     const p = pending.get(clientId);
-    if (p) return p;
+    if (p) return { clientId: p.clientId, clientName: p.clientName, redirectUris: p.redirectUris, createdAt: p.createdAt };
     const g = grantRecords().find((x) => x.clientId === clientId);
     return g ? { clientId: g.clientId, clientName: g.clientName, redirectUris: [g.redirectUri], createdAt: g.createdAt } : null;
 }
 
 export const pendingRegistrations = (now = Date.now()): number => { prunePending(now); return pending.size; };
+/** A registration no grant holds yet: nobody has approved it on a phone, so its redirect address is only its own word. */
+export const isPendingRegistration = (clientId: string): boolean => pending.has(clientId);
+/** A consent page was opened for it: it is no longer the first to make room. */
+export function markRegistrationOpened(clientId: string): void {
+    const p = pending.get(clientId);
+    if (p) p.opened = true;
+}
 
 // ───────────────────────── consent requests and codes ─────────────────────────
 

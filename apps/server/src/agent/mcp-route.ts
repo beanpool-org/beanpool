@@ -32,7 +32,7 @@ import { getVersion } from '../version.js';
 import { logger } from '../logger.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
 import { logAddressTag } from '../log-address.js';
-import { clientLimiterKey } from '../client-ip.js';
+import { clientLimiterKey, isTrustedProxy } from '../client-ip.js';
 import { cleanMemberText, newBoundary } from './fence.js';
 import { admitAgentCall } from './limits.js';
 import { offersSuggestions, toolDescription, toolsFor, type AgentGrant } from './tools.js';
@@ -61,11 +61,19 @@ function ownOrigin(): string | null {
     try { return new URL(url).origin; } catch { return null; }
 }
 
-/** The address the welcome names: the public one, else the host the assistant reached (a LAN node). */
+/**
+ * The address the welcome names, and the OAuth issuer: the public one, else the host the assistant reached (a LAN or
+ * bare-IP node can name itself no other way). X-Forwarded-Host is believed only from our own proxy (client-ip.ts
+ * isTrustedProxy: loopback, this machine's private subnets, TRUSTED_PROXIES), as X-Forwarded-For is; Koa's ctx.host
+ * under app.proxy would take it from anyone (#1881 review, finding 6).
+ */
 export function nodeUrlFor(ctx: any): string {
     const pub = resolvePublicNodeUrl();
     if (pub) return pub.replace(/\/+$/, '');
-    const host = String(ctx.host || '');
+    const socket = ctx.req?.socket;
+    const host = socket && !isTrustedProxy(socket.remoteAddress)
+        ? String(ctx.req.headers?.[':authority'] || ctx.req.headers?.host || '').split(',')[0].trim()
+        : String(ctx.host || '');
     return /^[a-z0-9.\-:[\]]{1,255}$/i.test(host) ? `https://${host}` : 'this server';
 }
 
@@ -103,9 +111,10 @@ function writeRefusalSummary(): void {
 
 /**
  * Write a refused request's line (`message` starts "Assistant refused") within the minute's budget, else count it, by
- * `kind` and by the grant a token check found (`metadata.grant`).
+ * `kind` and by the grant a token check found (`metadata.grant`). The OAuth door's registrations refused for volume
+ * (agent/oauth-route.ts) share it: the same budget and ring.
  */
-function logRefusal(message: string, metadata: Record<string, unknown>, kind: RefusalKind, now = Date.now()): void {
+export function logRefusal(message: string, metadata: Record<string, unknown>, kind: RefusalKind, now = Date.now()): void {
     if (now - refusalWindowStart >= REFUSAL_LOG_WINDOW_MS) {
         writeRefusalSummary();
         refusalWindowStart = now;

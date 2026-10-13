@@ -35,6 +35,7 @@ import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js'
 import { countWebAppPageLoad } from '../engine/web-visits.js';
 import type { RouteDeps } from './types.js';
 import { PROTOCOL_CONSTANTS } from '@beanpool/core';
+import { setStartCommunityUrl, START_COMMUNITY_URL_MAX } from '../config/start-community.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -325,6 +326,20 @@ router.get('/api/local/admin/community-health', async (ctx) => {
     if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can open Community health.')) return;
     ctx.set('Cache-Control', 'no-store');
     ctx.body = { ...healthSummary(), log: readHealthAccessLog(100, 'balance'), tradeLog: readHealthAccessLog(100, 'trades') };
+});
+
+// Where the 🏘️ Local community sheet's Start a community leads (config/start-community.ts). Owner only: it is the
+// community's own word to strangers. `{ url }`: an http(s) address; null, empty or the default goes back to beanpool.org's.
+router.post('/api/local/admin/start-community-url', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this community can change where Start a community leads.')) return;
+    const set = setStartCommunityUrl(((ctx as any).requestBody || {}).url);
+    if (!set.ok) {
+        ctx.status = 400;
+        ctx.body = { error: `Send url as a web address starting https:// (at most ${START_COMMUNITY_URL_MAX} characters), or null for the default.` };
+        return;
+    }
+    ctx.body = { startCommunityUrl: set.startCommunityUrl };
 });
 
 router.post('/api/local/admin/community-health', async (ctx) => {

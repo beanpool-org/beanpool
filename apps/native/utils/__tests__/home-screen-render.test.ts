@@ -2660,3 +2660,66 @@ describe('sun and moon: worked out on the phone, from the place it already has (
         expect(JSON.parse(after[0].body).preferences['home.layout'].cards[0]).toEqual({ id: 'sky', type: 'sky', settings: { place: 'me' } });
     });
 });
+
+// Where Beans are previewed (the worldwide community with its showcase on), Home's Your Beans card (scratch/global-node/
+// DESIGN-global-showcase-fable.md §1 row 1): "hideable, default-on for new members like steps" — its own card, which only
+// its own "Hide this card" puts away. It rode inside First steps before, and went whenever First steps did.
+describe('the Your Beans card where Beans are previewed: its own card, put away only by its own Hide', () => {
+    const showcase = (): HomeAnswer => { const base = everyCard('global', 1); return { ...base, features: { ...base.features, showcase: true } }; };
+    const beansCard = () => document.querySelector('[data-testid="home-card-beans-preview"]');
+    beforeEach(() => { mem.store.set(homeHintStoreKey(who.identity.publicKey), '1'); });
+
+    it('sits right under First steps while that is up', async () => {
+        node.answer = showcase();
+        await render();
+        const ids = cards();
+        expect(ids).toContain('steps');
+        expect(ids[ids.indexOf('steps') + 1]).toBe('beans-preview');
+    });
+
+    it('stays when First steps is removed through its "…" menu', async () => {
+        node.answer = showcase();
+        await render();
+        await removeVia('steps');
+        expect(cards()).not.toContain('steps');
+        expect(beansCard()).not.toBeNull();
+    });
+
+    it('stays when the node sends no First steps (every line done, or past its days)', async () => {
+        const a = showcase();
+        node.answer = { ...a, cards: { ...a.cards, steps: undefined } };
+        await render();
+        expect(cards()).not.toContain('steps');
+        expect(beansCard()).not.toBeNull();
+    });
+
+    it('its own Hide puts it away and First steps stays; on the next visit it never shows, not for a frame', async () => {
+        node.answer = showcase();
+        await render();
+        await act(async () => { byLabel('Hide the Your Beans card')!.click(); });
+        await settle();
+        expect(beansCard()).toBeNull();
+        expect(cards()).toContain('steps');
+        act(() => root?.unmount());
+        host?.remove();
+        let seen = false;
+        const watch = new MutationObserver(() => { if (document.querySelector('[data-testid="home-card-beans-preview"]')) seen = true; });
+        watch.observe(document.body, { childList: true, subtree: true });
+        await render();
+        watch.disconnect();
+        expect(seen).toBe(false);
+        expect(cards()).toContain('steps');
+    });
+
+    it('no such card on a local community, nor on the worldwide one with its showcase off', async () => {
+        node.answer = everyCard('local', 1);
+        await render();
+        expect(beansCard()).toBeNull();
+        act(() => root?.unmount());
+        host?.remove();
+        node.answer = everyCard('global', 1);
+        await render();
+        expect(cards()).toContain('steps');
+        expect(beansCard()).toBeNull();
+    });
+});

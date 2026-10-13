@@ -4,8 +4,9 @@
  * preview). No API: nothing here is read from or written to a node.
  *
  * Hideable on its own (§1 row 1: "hideable, default-on for new members like steps"): "Hide this card" puts it away on
- * this phone for this community, as the strip's ✕ remembers its fold, and First steps stays. The Ledger tab still shows
- * the example.
+ * this phone for this community, as the strip's ✕ remembers its fold, and First steps stays. It is the only way out:
+ * Home draws it whether or not First steps is up. The Ledger tab still shows the example. Nothing is drawn until the
+ * phone's record is read (a moment), so a card put away never shows for a frame.
  */
 import React, { useEffect, useState } from 'react';
 import { Text } from 'react-native';
@@ -21,21 +22,24 @@ export const beansCardKey = (nodeUrl: string) => `beanpool_showcase_card:${nodeU
 
 export function YourBeansPreviewCard({ colors }: { colors: AppColors }) {
     const s = homeStyles(colors);
-    const [hidden, setHidden] = useState(false);
+    // `undefined` until this phone's record for the community is read.
+    const [hidden, setHidden] = useState<boolean | undefined>(undefined);
     const [key, setKey] = useState<string | null>(null);
     useEffect(() => {
         let cancelled = false;
         (async () => {
             const url = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
-            if (!url || cancelled) return;
+            if (cancelled) return;
+            // No community to keep it for, or storage that can't be read: shown (put away for this visit only).
+            if (!url) { setHidden(false); return; }
             const k = beansCardKey(url);
             setKey(k);
             const v = await AsyncStorage.getItem(k).catch(() => null);
-            if (!cancelled && v === '1') setHidden(true);
+            if (!cancelled) setHidden(v === '1');
         })();
         return () => { cancelled = true; };
     }, []);
-    if (hidden) return null;
+    if (hidden !== false) return null;
     const hide = () => {
         setHidden(true);
         if (key) AsyncStorage.setItem(key, '1').catch(() => {});

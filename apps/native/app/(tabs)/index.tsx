@@ -726,10 +726,7 @@ export default function HomeScreen() {
             case 'steps': {
                 if (!c.steps) return null;
                 const steps = firstSteps(answer, { interests, role, knocked });
-                const stepsCard = frame(<StepsBody lines={steps.lines} note={steps.note} colors={colors} onStep={onStep} />);
-                // Where Beans are previewed, Your Beans rides under First steps (design §1 row 1): no API, the Ledger's
-                // example behind its link; its own "Hide this card" puts it away, and it goes when First steps does.
-                return homeBeansPreview(answer) ? <>{stepsCard}<YourBeansPreviewCard colors={colors} /></> : stepsCard;
+                return frame(<StepsBody lines={steps.lines} note={steps.note} colors={colors} onStep={onStep} />);
             }
             case 'interests': return frame(<InterestsBody interests={interests} colors={colors} onToggle={toggleInterest} />);
             case 'tips': return tipsView ? frame(
@@ -802,6 +799,11 @@ export default function HomeScreen() {
     // Each card in the member's order: the drawn ones, and the "one way back" card while it may be up (it decides).
     const list = ordered.filter(c => drawn.some(d => d.id === c.id) || (c.type === 'safety' && !!answer));
     const firstDrawn = list.find(c => c.type !== 'safety' || safetyUp);
+    // Where Beans are previewed, the Your Beans card (design §1 row 1): no API, the Ledger's example behind its link. It
+    // sits under First steps while that is up, else under the first card, and only its own "Hide this card" puts it away:
+    // First steps done, removed or out of its days leaves it.
+    const beansPreviewCard = !!answer && homeBeansPreview(answer);
+    const beansCardUnder = beansPreviewCard ? (list.find(c => c.type === 'steps') ?? firstDrawn)?.id ?? null : null;
 
     let empty: React.ReactNode = null;
     if (!answer) {
@@ -899,8 +901,10 @@ export default function HomeScreen() {
                                         </Pressable>
                                     </View>
                                 )}
+                                {c.id === beansCardUnder && <YourBeansPreviewCard colors={colors} />}
                             </View>
                         ))}
+                        {beansPreviewCard && beansCardUnder === null && <YourBeansPreviewCard colors={colors} />}
                     </Animated.View>
                 </ScrollView>
 

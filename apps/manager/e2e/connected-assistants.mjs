@@ -12,7 +12,7 @@
  *     line, web storage or the page's title), and of every answer the page received, only the connect call's carried it;
  *   - Done: it is gone from the page;
  *   - an admin sees the card and their own, is told only an owner turns assistants off, and, with no Connect button, that
- *     admins connect theirs with the phone's approval in a coming update (only owners make a token until then).
+ *     admins connect theirs from their assistant with the phone's approval (the four steps); only owners make a token.
  * Screenshots of each go to $SHOTS_DIR (default: a temp folder), named connected-assistants-<scheme>-<scale>-<step>.png.
  *
  *   node e2e/connected-assistants.mjs
@@ -180,9 +180,14 @@ try {
             const aCard = admin.page.getByTestId('connected-assistants-card');
             check(await aCard.isVisible() && await admin.page.getByText('Only an owner turns this on or off.').isVisible()
                 && await admin.page.getByRole('switch').count() === 0, `${at}: an admin sees the card, without the switch`);
-            check(await aCard.getByTestId('agent-admin-soon').isVisible() && /phone’s\s+approval/.test(await aCard.getByTestId('agent-admin-soon').innerText())
+            const steps = aCard.getByTestId('agent-connect-oauth');
+            check(await steps.isVisible() && /Add custom connector/.test(await steps.innerText()) && /type the two digits/.test(await steps.innerText())
+                && await aCard.getByRole('button', { name: 'Copy address' }).isVisible()
+                && await aCard.getByTestId('agent-admin-oauth').isVisible() && await aCard.getByTestId('agent-admin-soon').count() === 0
                 && await aCard.getByRole('button', { name: 'Connect', exact: true }).count() === 0 && await aCard.getByLabel('Assistant’s name').count() === 0,
-            `${at}: an admin is told owners connect for now, theirs comes with the phone's approval, and has no Connect button`);
+            `${at}: an admin gets the four steps to connect from their assistant (S2), and no token form`);
+            check(await aCard.getByTestId('agent-grant-sends-to').first().isVisible() && /Sends what it reads to claude\.ai/.test(await aCard.getByTestId('agent-grant-sends-to').first().innerText()),
+                `${at}: an assistant connected from the phone shows where it sends, beside its name`);
             const aClipped = await clippedButtons(admin.page);
             check(aClipped.length === 0, `${at}: every button shows all its words, for the admin`, JSON.stringify(aClipped));
             o = await horizontalOverflow(admin.page);

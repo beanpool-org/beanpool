@@ -175,6 +175,7 @@ export const SUITES = [
     'test-admin-mcp',
     'test-admin-mcp-settings',
     'test-admin-mcp-suggestions',
+    'test-admin-mcp-oauth',
     'test-settings-qr-signin',
     'test-challenge-token-leak',
     'test-moderator-routes',

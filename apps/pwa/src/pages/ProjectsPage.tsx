@@ -18,6 +18,9 @@ import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { decisionsOn } from '../lib/node-decisions';
 import { useMembersOnDemand } from '../lib/members-on-demand';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
+import { modeFor, readerFeaturesOnce } from '../lib/features';
+import type { FeatureMode } from '@beanpool/core';
+import { CommonsPreview } from '../components/ShowcasePreviews';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -59,11 +62,28 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [votes, setVotes] = useState(true);
     // Projects and enterprises hold Beans: where the node has Beans off, the Create form offers neither.
     const [beansOn, setBeansOn] = useState(true);
+    // Enterprises or Decisions off here and the node shows previews: the Commons shows Example Valley's, each by its own
+    // mode (lib/features.ts).
+    const [enterprisesMode, setEnterprisesMode] = useState<FeatureMode>('hidden');
+    const [decisionsMode, setDecisionsMode] = useState<FeatureMode>('hidden');
     useEffect(() => {
         let cancelled = false;
         Promise.resolve()
             .then(() => communityInfoOnce())
-            .then((info) => { if (!cancelled) { setVotes(decisionsOn(info)); setBeansOn(info?.features?.beans !== false); } })
+            .then((info) => {
+                if (cancelled) return;
+                // The node's info alone sets Decide and the Beans create options, as before: no wait on the reader's set.
+                setVotes(decisionsOn(info));
+                setBeansOn(info?.features?.beans !== false);
+                // The modes wait for the reader's set too (none is read where it cannot matter): no preview flashes and goes.
+                return readerFeaturesOnce(info).then((reader) => {
+                    if (cancelled) return;
+                    setEnterprisesMode(modeFor('enterprises', info, reader));
+                    const decisions = modeFor('decisions', info, reader);
+                    setDecisionsMode(decisions);
+                    setVotes(decisions === 'live');
+                });
+            })
             .catch(() => { /* Not answered: keep what the page shows; the node refuses a vote itself. */ });
         return () => { cancelled = true; };
     }, []);
@@ -352,7 +372,14 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     )}
                 </div>
 
+                {/* Enterprises or Decisions off here and the node shows previews: Example Valley's, under the strip; Groups below stay real. */}
+                {(enterprisesMode === 'preview' || decisionsMode === 'preview') && (
+                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full bg-white dark:bg-nature-900 rounded-2xl p-3">
+                        <CommonsPreview enterprises={enterprisesMode === 'preview'} decisions={decisionsMode === 'preview'} onNearYou={onNavigate ? () => onNavigate('home') : undefined} onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
+                    </div>
+                )}
                 {/* Commons Pool & Available Governance Credits */}
+                {enterprisesMode !== 'preview' && (<>
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-2 gap-3 pt-1">
                     <div className="bg-nature-950/70 border border-nature-800 rounded-xl p-3">
                         <div className="text-[10px] font-bold uppercase tracking-wider text-nature-400">
@@ -376,6 +403,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         </div>
                     </div>
                 </div>
+                </>)}
             </header>
 
             {/* Section Switcher: Decide vs Groups — the one sticky row */}

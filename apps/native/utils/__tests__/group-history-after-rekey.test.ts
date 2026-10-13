@@ -844,14 +844,14 @@ describe('review of #1844: path B against a node that rewrites names, wraps list
         await vi.waitFor(async () => expect(await keyReplacedHere(URL_BASE, pk(cat))).toBe(true));
         off();
         // The card shows only while the note is kept, and says the words are this account's and belong in no other phone.
-        const card = readFileSync(fileURLToPath(new URL('../../components/KeyMovedCard.tsx', import.meta.url)), 'utf8');
+        const card = readFileSync(fileURLToPath(new URL('../../components/KeyMovedCard.tsx', import.meta.url).href), 'utf8');
         expect(card).toContain('{KEY_MOVED_OWN_ONLY}');
         expect(card).toMatch(/const yes = await keyReplacedHere\(url, identity\.publicKey\);/);
         expect(card).toMatch(/if \(!moved\) return null;/);
         expect(KEY_MOVED_OWN_ONLY).toBe("These are this account's own words. Type them only into your own new phone, never into a phone someone else holds out.");
         expect(KEY_MOVED_SHOW).toBe('Show my old 12 words, so my new phone can unlock earlier messages');
         // db.ts: every signed GET tells the watch whether it was signed; a signed write the node took clears the note.
-        const db = readFileSync(fileURLToPath(new URL('../db.ts', import.meta.url)), 'utf8');
+        const db = readFileSync(fileURLToPath(new URL('../db.ts', import.meta.url).href), 'utf8');
         expect(db).toMatch(/watchForReplacedKey\(anchorUrl, identity\.publicKey, res, signed\);/);
         expect(db).toMatch(/headers = \{ \.\.\.headers, \.\.\.signedHeaders \};\n\s+signed = true;/);
         expect(db).toMatch(/void noteKeyAnswered\(anchorUrl, identity\.publicKey\);\n\s+return await res\.json\(\);/);

@@ -792,7 +792,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                     alert(`Export failed${e instanceof Error && e.message ? `: ${e.message}` : ''}`);
                                 }
                             }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 rounded-lg text-[11px] font-bold hover:bg-nature-200 transition-colors border border-nature-200 dark:border-nature-700 shadow-sm cursor-pointer"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 rounded-lg text-[11px] font-bold hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors border border-nature-200 dark:border-nature-700 shadow-sm cursor-pointer"
                         >
                             ⬇️ Export mine
                         </button>

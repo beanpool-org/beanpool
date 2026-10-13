@@ -2142,7 +2142,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                                 {/* Repeatable Toggle */}
                                 <div className="mb-4">
-                                    <label className="flex items-center gap-3 p-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50 dark:bg-nature-900/50 cursor-pointer hover:bg-white transition-colors cursor-pointer group">
+                                    <label className="flex items-center gap-3 p-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50 dark:bg-nature-900/50 cursor-pointer hover:bg-white dark:hover:bg-nature-900 transition-colors cursor-pointer group">
                                         <div className="relative flex items-center justify-center w-6 h-6 shrink-0">
                                             <input 
                                                 type="checkbox" 
@@ -2155,7 +2155,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             </svg>
                                         </div>
                                         <div className="flex flex-col">
-                                            <span className="text-[14px] font-bold text-nature-900 dark:text-white group-hover:text-terra-600 transition-colors">Recurring Need / Offer</span>
+                                            <span className="text-[14px] font-bold text-nature-900 dark:text-white group-hover:text-terra-600 dark:group-hover:text-terra-400 transition-colors">Recurring Need / Offer</span>
                                             <span className="text-[11px] text-nature-500 font-medium">Post remains active after completion for repeat business.</span>
                                         </div>
                                     </label>

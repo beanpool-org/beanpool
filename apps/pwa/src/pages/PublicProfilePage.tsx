@@ -265,7 +265,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             aria-label={`${isBlocked ? 'Unblock' : 'Block'} user ${profile?.callsign || ''}`}
                             className={`min-h-[48px] min-w-[48px] px-2.5 py-1 rounded-lg border font-bold text-xs cursor-pointer transition-colors flex items-center justify-center gap-1 ${
                                 isBlocked
-                                    ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200'
+                                    ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700'
                                     : 'border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30'
                             }`}
                         >
@@ -957,7 +957,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 disabled={isBlocking}
                                 className={`flex-1 py-3 px-4 rounded-xl border font-bold text-sm cursor-pointer transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-60 ${
                                     isBlocked
-                                        ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200'
+                                        ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700'
                                         : 'border-red-300 dark:border-red-900/60 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30'
                                 }`}
                             >

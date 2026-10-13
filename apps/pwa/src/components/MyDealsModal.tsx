@@ -263,7 +263,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                     className={`px-3 py-1 text-xs font-bold rounded-full border transition-colors ${
                                         historyFilter === f.id
                                             ? 'bg-nature-800 dark:bg-nature-200 text-white dark:text-nature-900 border-nature-900 dark:border-nature-100'
-                                            : 'bg-white dark:bg-nature-900 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-700 hover:bg-oat-50'
+                                            : 'bg-white dark:bg-nature-900 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-700 hover:bg-oat-50 dark:hover:bg-nature-800'
                                     }`}
                                 >
                                     {f.label}
@@ -396,7 +396,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                                 targetRole: isBuyer ? 'provider' : 'receiver',
                                                             });
                                                         }}
-                                                        className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 text-amber-800 dark:text-amber-500 text-xs font-bold rounded-lg border border-amber-300 dark:border-amber-800 transition-colors shadow-sm"
+                                                        className="px-3 py-1.5 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900/40 dark:hover:bg-amber-900/60 text-amber-800 dark:text-amber-500 text-xs font-bold rounded-lg border border-amber-300 dark:border-amber-800 transition-colors shadow-sm"
                                                     >
                                                         Leave Review
                                                     </button>

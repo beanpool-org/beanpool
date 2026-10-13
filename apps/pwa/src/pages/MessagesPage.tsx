@@ -1414,7 +1414,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 aria-label={isPeerBlocked ? 'Unblock user' : 'Block user'}
                                 className={`px-2.5 py-1 rounded-lg border font-bold text-xs cursor-pointer transition-colors flex items-center gap-1 ${
                                     isPeerBlocked
-                                        ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200'
+                                        ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700'
                                         : 'border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30'
                                 }`}
                             >
@@ -2183,7 +2183,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     }
                                 }
                             }}
-                            className="px-3 py-1 bg-white dark:bg-nature-900 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 font-bold rounded-lg text-xs cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/30 shrink-0"
+                            className="px-3 py-1 bg-white dark:bg-nature-900 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-300 font-bold rounded-lg text-xs cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/30 shrink-0"
                         >
                             Unblock
                         </button>

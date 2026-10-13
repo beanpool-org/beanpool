@@ -548,7 +548,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                     await handleSetPrimary(crossPostPrompt.rivalChannel.id);
                                     setCrossPostPrompt(null);
                                 }}
-                                className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-800 dark:text-nature-200 hover:bg-nature-50 cursor-pointer"
+                                className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-800 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 cursor-pointer"
                             >
                                 {platformMeta(crossPostPrompt.rivalChannel.platform).label} {crossPostPrompt.rivalChannel.supportsAutolist ? '(updates itself)' : ''}
                             </button>
@@ -587,7 +587,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                             <button
                                 type="button"
                                 onClick={() => setChannelToRemove(null)}
-                                className="px-4 py-2 rounded-xl text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-200 hover:bg-nature-50 cursor-pointer"
+                                className="px-4 py-2 rounded-xl text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-200 hover:bg-nature-50 dark:hover:bg-nature-700 cursor-pointer"
                             >
                                 Keep it
                             </button>

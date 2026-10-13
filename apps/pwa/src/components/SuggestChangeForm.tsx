@@ -56,7 +56,7 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
                 <button
                     type="button"
                     onClick={onDone}
-                    className="w-full min-h-[48px] py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                    className="w-full min-h-[48px] py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 transition-colors text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                 >
                     ← Back to Settings
                 </button>
@@ -137,7 +137,7 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
             <button
                 type="button"
                 onClick={onDone}
-                className="w-full min-h-[48px] py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                className="w-full min-h-[48px] py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 transition-colors text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
                 ← Back to Settings
             </button>

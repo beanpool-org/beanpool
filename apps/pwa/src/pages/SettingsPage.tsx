@@ -1321,7 +1321,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         <button
                             onClick={() => setMode('menu')}
-                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 transition-colors text-sm"
                         >
                             ← Back to Settings
                         </button>
@@ -1404,7 +1404,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         <button
                             onClick={() => setMode('menu')}
-                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 transition-colors text-sm"
                         >
                             ← Back to Settings
                         </button>
@@ -1529,7 +1529,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         <button
                             onClick={() => setMode('menu')}
-                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 transition-colors text-sm"
                         >
                             ← Back to Settings
                         </button>
@@ -1615,7 +1615,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         <button
                             onClick={() => setMode('menu')}
-                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 transition-colors text-sm"
                         >
                             ← Back to Settings
                         </button>

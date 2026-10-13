@@ -132,6 +132,8 @@ const node = {
     photos: new Map<string, { data: string; nonce: string }>(),
     /** The node answering every send 503 (a phone's send then stays on it as failed). */
     refuseSends: false,
+    /** The lines the node serves for a conversation, in its order (default: its newest 50 by time, oldest first). */
+    serve: null as null | ((conv: Conv) => Line[]),
 };
 let clock = Date.parse('2026-10-01T09:00:00.000Z');
 const tick = () => new Date(clock += 60_000).toISOString();
@@ -181,8 +183,8 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
     if (page) {
         const conv = node.convs.find((c) => c.id === page[1]);
         if (!conv) return answer(404, { error: 'Conversation not found' });
-        const lines = node.lines.filter((l) => l.conversationId === conv.id).sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-        return answer(200, { conversation: { id: conv.id, type: conv.type, participants: conv.participants }, messages: lines.slice(-50).map((l) => ({ ...l })) });
+        const lines = node.serve ? node.serve(conv) : node.lines.filter((l) => l.conversationId === conv.id).sort((a, b) => a.timestamp.localeCompare(b.timestamp)).slice(-50);
+        return answer(200, { conversation: { id: conv.id, type: conv.type, participants: conv.participants }, messages: lines.map((l) => ({ ...l })) });
     }
     if (u.pathname === '/api/members') return answer(200, []);
     return answer(404, { error: 'not here' });
@@ -255,7 +257,7 @@ beforeEach(async () => {
     ana = person('Ana');
     ben = person('Ben');
     dm = { id: randomUUID(), type: 'dm', participants: [ana.publicKey, ben.publicKey] };
-    Object.assign(node, { lines: [], convs: [dm], photos: new Map(), refuseSends: false });
+    Object.assign(node, { lines: [], convs: [dm], photos: new Map(), refuseSends: false, serve: null });
     (globalThis as any).fetch = fetchMock;
     await getDb();
 });
@@ -2018,26 +2020,37 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         return () => { (globalThis as any).fetch = realFetch; };
     }
 
-    it('T2: restored phone, a twin with a PUPPET line and Ben\'s row listed [Ana, PUPPET] with his history; Ana opens the twin first: both rows pause on Ben, nothing goes', async () => {
-        await aQuestionAndAnAnswer();
-        const twin: Conv = { id: dm.id.toUpperCase(), type: 'dm', participants: [ana.publicKey, puppet.publicKey] };
-        dm.participants = [ana.publicKey, puppet.publicKey];
-        node.convs = [twin, dm];
-        saysTo(puppet, twin, 'Hi Ana, it is Ben on my new number');
-        await restoredPhone();
-        expect(await isDmKeyChangePending(twin.id)).toBe(true);
-        await syncMessages(ana.publicKey);
-        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey, firstSight: true } });
-        expect(await isDmKeyChangePending(dm.id)).toBe(true);
-        expect(await sendTo(dm.id, 'Ben, the code is 4821', [puppet, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
-        expect(await sendTo(twin.id, 'Is that you, Ben?', [puppet, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
-    });
-
-    for (const variant of ['the twin has a PUPPET line; Ana opens it', 'the twin is empty; Ana sends there first (#1863 E2)'] as const) {
-        it(`T: restored phone, then the node refuses its listings; ${variant}, then Ben's row: Ben's row never seals to PUPPET`, async () => {
+    // Which row the node lists first is the order a restored phone first stores their lines in (§3.4 amendment 3): Ben's
+    // first, his lines are the old end and the twin's PUPPET line is new (a pause on Ben); the twin first, PUPPET's line is
+    // the old end and Ben's lines come after it under a key the listing doesn't name (rule 5: no pin, sends refused).
+    // Nothing goes to PUPPET in either order.
+    for (const first of ['Ben\'s row', 'the twin'] as const) {
+        const paused = first === 'Ben\'s row';
+        const refused = paused ? 'DmKeyChangedError' : 'DmNotLockedError';
+        it(`T2: restored phone, a twin with a PUPPET line and Ben's row listed [Ana, PUPPET] with his history, ${first} listed first; Ana opens the twin first: ${paused ? 'both rows pause on Ben' : 'rule 5, no pin'}, nothing goes`, async () => {
             await aQuestionAndAnAnswer();
             const twin: Conv = { id: dm.id.toUpperCase(), type: 'dm', participants: [ana.publicKey, puppet.publicKey] };
-            node.convs = [twin, dm];
+            dm.participants = [ana.publicKey, puppet.publicKey];
+            node.convs = paused ? [dm, twin] : [twin, dm];
+            saysTo(puppet, twin, 'Hi Ana, it is Ben on my new number');
+            await restoredPhone();
+            expect(await isDmKeyChangePending(twin.id)).toBe(paused);
+            await syncMessages(ana.publicKey);
+            if (paused) expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey, firstSight: true } });
+            else expect(pinOf(ana, dm.id)).toMatchObject({ unplaced: true, listed: puppet.publicKey });
+            expect(await isDmKeyChangePending(dm.id)).toBe(paused);
+            expect(await sendTo(dm.id, 'Ben, the code is 4821', [puppet, ben])).toEqual({ err: refused, posts: 0, rowsAdded: 0, readBy: [] });
+            expect(await sendTo(twin.id, 'Is that you, Ben?', [puppet, ben])).toEqual({ err: refused, posts: 0, rowsAdded: 0, readBy: [] });
+        });
+    }
+
+    for (const [variant, first] of [['the twin has a PUPPET line; Ana opens it', 'Ben\'s row'], ['the twin has a PUPPET line; Ana opens it', 'the twin'], ['the twin is empty; Ana sends there first (#1863 E2)', 'the twin']] as const) {
+        it(`T: restored phone, ${first} listed first, then the node refuses its listings; ${variant}, then Ben's row: Ben's row never seals to PUPPET`, async () => {
+            await aQuestionAndAnAnswer();
+            const twin: Conv = { id: dm.id.toUpperCase(), type: 'dm', participants: [ana.publicKey, puppet.publicKey] };
+            node.convs = first === 'the twin' ? [twin, dm] : [dm, twin];
+            // PUPPET's twin line stored before Ben's lines: rule 5 for the folded id (no pin, every send refused as not locked).
+            const unplaced = first === 'the twin' && variant.startsWith('the twin has');
             if (variant.startsWith('the twin has')) saysTo(puppet, twin, 'Hi Ana, it is Ben on my new number');
             await restoredPhone();
             const restore = listingsFail();
@@ -2048,9 +2061,12 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
                     expect(await sendTo(twin.id, 'Hi, who is this?', [puppet, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
                 }
                 await syncMessages(ana.publicKey);
-                expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey } });
+                if (unplaced) expect(pinOf(ana, dm.id)).toMatchObject({ unplaced: true });
+                else expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey } });
                 expect((await getMessages(dm.id)).map((m: any) => m.text)).toEqual(['Shall I cancel the order?', 'No']);
                 expect(await sendTo(dm.id, 'Ben, the code is 4821', [puppet, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
+                // The send's refresh names Ben: rule 5 judged again is rule 4 by the phone's clock, PUPPET's line first (B's pause).
+                if (unplaced) expect(pinOf(ana, dm.id)).toMatchObject({ peer: puppet.publicKey, checked: true, offered: { peer: ben.publicKey, firstSight: true } });
             } finally { restore(); }
         });
     }

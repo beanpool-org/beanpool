@@ -179,6 +179,7 @@ describe('the "?": every screen with one has a help: line or a fallback (guide c
         expect(webHelpKey({ tab: 'home', settings: true, settingsView: 'privacy' })).toBe('settings/privacy');
         expect(webHelpKey({ tab: 'marketplace', lobby: true })).toBe('lobby/market');
         expect(webHelpKey({ tab: 'join', lobby: true })).toBe('lobby/join');
+        expect(webHelpKey({ tab: 'ledger', lobby: true })).toBe('lobby/ledger');
     });
 
     it('the sheet: help line, else summary, else the section, else Search and the tour only (never dead)', () => {

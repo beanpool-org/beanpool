@@ -4,8 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import {
-    PER_COUNTERPARTY_VOLUME_CAP, WASH_PAIR_PAGE_BUYERS, runWashTradingAnalysis, runWashAnalysisInSlices, closeWashSnapshotHandle,
-    washAnalysisCount, type WashAnalysis,
+    PER_COUNTERPARTY_VOLUME_CAP, WASH_PAIR_PAGE_BUYERS, WASH_KEEP_MS, WASH_MIN_DUE_MS, WASH_HARD_CAP_MS, runWashTradingAnalysis,
+    runWashAnalysisInSlices, closeWashSnapshotHandle, washAnalysisCount, getWashTradingEnforcement, qualifiedTradeValue,
+    clearWashTradingCache, refreshWashTradingInBackground, washRefreshRunning, type WashAnalysis,
 } from '../trust.js';
 
 // The wash analysis in the background (#1811, scratch/global-node/DESIGN-wash-analysis-background-fable.md).
@@ -200,6 +201,241 @@ describe('wash analysis: paged pair totals (S1)', () => {
         runWashTradingAnalysis(db);
         await runWashAnalysisInSlices(db);
         expect(washAnalysisCount(db) - before).toBe(2);
+        closeWashSnapshotHandle(db);
+        db.close();
+    });
+});
+
+// --- S2: what floors read: modes, due time, hard cap, newer wins, the live pair rule ---
+
+/** Date.now and performance.now under the test's hand: \`perStep\` is what each performance.now read adds (a step's time). */
+function fakeClocks() {
+    const realNow = Date.now;
+    const realPerf = performance.now;
+    const c = { wall: realNow(), perf: 0, perStep: 0 };
+    Date.now = () => c.wall;
+    performance.now = () => (c.perf += c.perStep);
+    return Object.assign(c, { restore: () => { Date.now = realNow; performance.now = realPerf; } });
+}
+let clock: ReturnType<typeof fakeClocks> | null = null;
+afterEach(() => { clock?.restore(); clock = null; });
+const turn = () => new Promise<void>((resolve) => setImmediate(resolve));
+
+/** Old members with honest trades, a pair (pa, pb) each with an honest partner, and a ring of four members three days old. */
+function seedRaceWorld(db: Database.Database) {
+    for (const k of ['o1', 'o2', 'o3', 'o4', 'pa', 'pb']) member(db, k, 90);
+    const ring = ['r1', 'r2', 'r3', 'r4'];
+    for (const k of ring) member(db, k, 3);
+    trade(db, 'pa', 'o1', 120);
+    trade(db, 'o2', 'pb', 130);
+    trade(db, 'o3', 'o4', 75);
+    return ring;
+}
+function completeRaceTrades(db: Database.Database, ring: string[]): void {
+    trade(db, 'pa', 'pb', 300, daysAgo(0));
+    trade(db, 'pb', 'pa', 290, daysAgo(0));
+    for (let i = 0; i < ring.length; i++) for (let j = i + 1; j < ring.length; j++) trade(db, ring[i], ring[j], 90, daysAgo(0));
+}
+
+describe('wash analysis: what floors read (S2)', () => {
+    it('race: writes between a refresh\'s slices never give more than today\'s rules; pairs are caught at once, rings when a refresh with them lands', async () => {
+        const db = fileDb();
+        const ring = seedRaceWorld(db);
+        const members = ['pa', 'pb', ...ring, 'o1', 'o2'];
+        clock = fakeClocks();
+        clock.perStep = 60; // every step "holds the loop" 60 ms: background mode
+        const before = getWashTradingEnforcement(db); // none yet: one go, now
+        expect(washRefreshRunning(db)).toBeNull();
+        clock.wall += WASH_KEEP_MS;
+        expect(getWashTradingEnforcement(db)).toBe(before); // due: a refresh starts, the read gets the last one at once
+        const refresh = washRefreshRunning(db);
+        expect(refresh).not.toBeNull();
+        await turn(); // the refresh takes its snapshot and its first slice
+        completeRaceTrades(db, ring);
+        let reads = 0;
+        while (washRefreshRunning(db)) {
+            const now = runWashTradingAnalysis(db);
+            for (const k of members) {
+                const q = qualifiedTradeValue(db, k);
+                expect(q).toBeLessThanOrEqual(Math.max(qualifiedTradeValue(db, k, before), qualifiedTradeValue(db, k, now)));
+            }
+            // The pair counts for nothing from the first read after its trades; each keeps its honest partner.
+            expect(qualifiedTradeValue(db, 'pa')).toBe(120);
+            expect(qualifiedTradeValue(db, 'pb')).toBe(130);
+            // The ring's trades count, as they did with the analysis in hand before (today's rule within its window).
+            for (const k of ring) expect(qualifiedTradeValue(db, k)).toBe(qualifiedTradeValue(db, k, before));
+            reads++;
+            await turn();
+        }
+        expect(reads).toBeGreaterThan(2);
+        // That refresh read the rows from before the trades: the ring is still not flagged.
+        const landed = getWashTradingEnforcement(db);
+        expect(landed).not.toBe(before);
+        for (const k of ring) expect(qualifiedTradeValue(db, k)).toBeGreaterThan(0);
+        // The next refresh, due 10 s after that snapshot, reads them: then the ring counts for nothing, as a one go now.
+        clock.wall += WASH_KEEP_MS;
+        getWashTradingEnforcement(db);
+        await washRefreshRunning(db);
+        const now = runWashTradingAnalysis(db);
+        for (const k of members) expect(qualifiedTradeValue(db, k)).toBe(qualifiedTradeValue(db, k, now));
+        for (const k of ring) expect(qualifiedTradeValue(db, k)).toBe(0);
+        closeWashSnapshotHandle(db);
+        db.close();
+    });
+
+    it('the live pair rule: a wash pair counts for nothing with an analysis from before its trades; lopsided pairs still count', () => {
+        const db = new Database(':memory:');
+        db.exec(SCHEMA);
+        seedRaceWorld(db);
+        const before = runWashTradingAnalysis(db);
+        completeRaceTrades(db, []);
+        trade(db, 'o3', 'o4', 500);
+        trade(db, 'o4', 'o3', 60);
+        expect(qualifiedTradeValue(db, 'pa', before)).toBe(120);
+        expect(qualifiedTradeValue(db, 'pb', before)).toBe(130);
+        expect(qualifiedTradeValue(db, 'o3', before)).toBe(500);
+        // Exactly on the line is not a wash pair (r < 0.15): 287.50 / 212.50 over a gross of 500.
+        trade(db, 'o1', 'o2', 287.5);
+        trade(db, 'o2', 'o1', 212.5);
+        expect(qualifiedTradeValue(db, 'o1', before)).toBe(120 + 500);
+    });
+
+    it('no analysis: one is worked out in one go at the read, with no turn given; a clear drops a refresh in flight', async () => {
+        const db = fileDb();
+        seedRaceWorld(db);
+        clock = fakeClocks();
+        clock.perStep = 60;
+        const n0 = washAnalysisCount(db);
+        const first = getWashTradingEnforcement(db);
+        expect(washAnalysisCount(db) - n0).toBe(1);
+        expect(washRefreshRunning(db)).toBeNull();
+        expect(qualifiedTradeValue(db, 'pa')).toBe(qualifiedTradeValue(db, 'pa', runWashTradingAnalysis(db)));
+        // A refresh takes its snapshot; the cache is cleared; it lands nothing, and the next read works one out now.
+        clock.wall += WASH_KEEP_MS;
+        expect(getWashTradingEnforcement(db)).toBe(first);
+        await turn();
+        clearWashTradingCache(db);
+        completeRaceTrades(db, []);
+        await washRefreshRunning(db);
+        const n1 = washAnalysisCount(db);
+        const fresh = getWashTradingEnforcement(db);
+        expect(washAnalysisCount(db) - n1).toBe(1);
+        expect(fresh.flaggedPairs.has('pa|pb')).toBe(true);
+        closeWashSnapshotHandle(db);
+        db.close();
+    });
+
+    it('a background result whose snapshot is older than the one serving never replaces it (the boot\'s refresh, a read first)', async () => {
+        const db = fileDb();
+        seedRaceWorld(db);
+        clock = fakeClocks();
+        clock.perStep = 60;
+        const boot = refreshWashTradingInBackground(db);
+        await turn(); // its snapshot is taken
+        clock.wall += 1;
+        const atRead = getWashTradingEnforcement(db); // none yet: one go, now, a later snapshot
+        await boot;
+        expect(getWashTradingEnforcement(db)).toBe(atRead);
+        closeWashSnapshotHandle(db);
+        db.close();
+    });
+
+    it('hard cap: a snapshot 60 s old is worked out in one go at the read; 1 ms short of it, the read waits for nothing', () => {
+        const db = fileDb();
+        seedRaceWorld(db);
+        clock = fakeClocks();
+        clock.perStep = 60;
+        const first = getWashTradingEnforcement(db);
+        const n = washAnalysisCount(db);
+        // The loop never turns here, so the refresh each due read starts never lands.
+        clock.wall += WASH_HARD_CAP_MS - 1;
+        expect(getWashTradingEnforcement(db)).toBe(first);
+        expect(washAnalysisCount(db)).toBe(n);
+        clock.wall += 1;
+        const capped = getWashTradingEnforcement(db);
+        expect(capped).not.toBe(first);
+        expect(washAnalysisCount(db)).toBe(n + 1);
+        closeWashSnapshotHandle(db);
+        db.close();
+    });
+
+    it('mode: a quick analysis (under 50 ms of steps) stays one go, every 10 s of reads, and never starts a refresh', () => {
+        const db = fileDb();
+        seedRaceWorld(db);
+        clock = fakeClocks();
+        clock.perStep = 0.1;
+        const n = washAnalysisCount(db);
+        for (let i = 0; i < 100; i++) {
+            getWashTradingEnforcement(db);
+            expect(washRefreshRunning(db)).toBeNull();
+            clock.wall += 600;
+        }
+        // 60 s of reads: one at the start, then one each 10 s (the reads at 10.2, 20.4, ... s).
+        expect(washAnalysisCount(db) - n).toBe(6);
+        closeWashSnapshotHandle(db);
+        db.close();
+    });
+
+    it('due time: 10 s after the snapshot less the time a refresh\'s turns took, never sooner than 7 s', async () => {
+        const db = fileDb();
+        seedRaceWorld(db);
+        clock = fakeClocks();
+        clock.perStep = 60;
+        const first = getWashTradingEnforcement(db);
+        // After a one-go analysis, due within 10 s and not before 7 s (here each clock read "takes" 60 ms, so D > c a little).
+        clock.wall += WASH_MIN_DUE_MS - 1;
+        expect(getWashTradingEnforcement(db)).toBe(first);
+        expect(washRefreshRunning(db)).toBeNull();
+        clock.wall += WASH_KEEP_MS - WASH_MIN_DUE_MS + 1;
+        getWashTradingEnforcement(db);
+        const running = washRefreshRunning(db);
+        expect(running).not.toBeNull();
+        const snapshotAt = clock.wall;
+        // Each turn the refresh gives costs it 1 s of wall time: D − c is several seconds.
+        let turns = 0;
+        // The wall clock moves too, so a stamp at the finish would be seconds later than the snapshot.
+        while (washRefreshRunning(db)) { await turn(); clock.perf += 1000; clock.wall += 500; turns++; }
+        expect(turns).toBeGreaterThanOrEqual(4); // D − c ≥ 4 s
+        const landed = getWashTradingEnforcement(db);
+        expect(landed).not.toBe(first);
+        // D − c > 3 s: due at the 7 s floor, not before.
+        clock.wall = snapshotAt + WASH_MIN_DUE_MS - 1;
+        getWashTradingEnforcement(db);
+        expect(washRefreshRunning(db)).toBeNull();
+        clock.wall = snapshotAt + WASH_MIN_DUE_MS;
+        getWashTradingEnforcement(db);
+        expect(washRefreshRunning(db)).not.toBeNull();
+        await washRefreshRunning(db);
+        closeWashSnapshotHandle(db);
+        db.close();
+    });
+
+    it('a due read starts the refresh at the loop\'s next turn, never inside the read', async () => {
+        const db = fileDb();
+        seedRaceWorld(db);
+        clock = fakeClocks();
+        clock.perStep = 60;
+        getWashTradingEnforcement(db);
+        clock.wall += WASH_KEEP_MS;
+        getWashTradingEnforcement(db);
+        // Written in the same turn as the read: the refresh has read nothing yet, so it lands with these rows.
+        completeRaceTrades(db, []);
+        await washRefreshRunning(db);
+        expect(getWashTradingEnforcement(db).flaggedPairs.has('pa|pb')).toBe(true);
+        closeWashSnapshotHandle(db);
+        db.close();
+    });
+
+    it('a refresh asked for while one runs starts when that one ends', async () => {
+        const db = fileDb();
+        seedRaceWorld(db);
+        const n = washAnalysisCount(db);
+        const a = refreshWashTradingInBackground(db);
+        const b = refreshWashTradingInBackground(db);
+        await a;
+        await b;
+        expect(washAnalysisCount(db) - n).toBe(2);
+        expect(washRefreshRunning(db)).toBeNull();
         closeWashSnapshotHandle(db);
         db.close();
     });

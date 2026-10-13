@@ -2004,6 +2004,11 @@ export function clearWashTradingCache() {
     engine.clearWashTradingCache(db);
 }
 
+/** How many complete wash analyses have run for the node's database, by any path (a test counts them). */
+export function washAnalysisCount(): number {
+    return engine.washAnalysisCount(db);
+}
+
 function qualifiedTradeValue(publicKey: string): number {
     return engine.qualifiedTradeValue(db, publicKey);
 }

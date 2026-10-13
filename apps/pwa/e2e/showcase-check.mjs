@@ -10,12 +10,13 @@
  *      this machine (map tiles aside, aborted), and the reader's own features read from /api/community/me;
  *   3. a member of a local node (Beans live): the real Ledger, no strip, no line, the real deal button.
  *
- * Fails on any sideways scroll, a write, a `sample-` id on the wire, or a marker in a locked or greyed style.
+ * Fails on any sideways scroll, a write, a `sample-` id on the wire, a marker in a locked or greyed style, or a control in
+ * a preview, a marker, the sheet or the Start screen smaller than 44 x 44 px.
  *
  * Run: pnpm --filter @beanpool/pwa showcase-check   (SHOWCASE_SHOTS: where the pictures go)
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global URL, console, process, setTimeout, document, window, indexedDB, localStorage, getComputedStyle, HTMLButtonElement -- Node, and the page's side of evaluate() */
+/* global URL, console, process, setTimeout, document, window, indexedDB, localStorage, getComputedStyle, HTMLButtonElement, Element -- Node, and the page's side of evaluate() */
 import { build } from 'vite';
 import { chromium } from 'playwright';
 import { spawn } from 'node:child_process';
@@ -144,6 +145,19 @@ async function markersNeverLocked(page, where) {
     check(bad.length === 0, `${where}: no marker looks locked, greyed or dimmed${bad.length ? ` (${bad.join('; ')})` : ''}`);
 }
 
+/** Every control the showcase draws (previews, markers, the sheet, the Start screen, My Deals' preview) is 44 x 44 px or more. */
+async function targetsAtLeast44(page, where) {
+    const small = await page.evaluate(() => {
+        const ours = '[data-testid$="-preview"], [data-testid^="local-community-"], [data-testid="start-community-screen"], [role="dialog"][aria-label="My Deals"]';
+        return Array.from(document.querySelectorAll('button, a[href], [role="button"], input, select, textarea'))
+            .filter((el) => el instanceof Element && (el.matches(ours) || el.closest(ours)) && el.getClientRects().length > 0)
+            .map((el) => ({ el, r: el.getBoundingClientRect() }))
+            .filter(({ r }) => r.width < 43.5 || r.height < 43.5)
+            .map(({ el, r }) => `"${(el.getAttribute('aria-label') || el.textContent || '').trim().slice(0, 30)}" ${Math.round(r.width)}x${Math.round(r.height)}`);
+    });
+    check(small.length === 0, `${where}: every control is at least 44 x 44 px${small.length ? ` (${small.join('; ')})` : ''}`);
+}
+
 async function tab(page, label) {
     await page.locator('[data-testid="mobile-bottom-nav"] button', { hasText: label }).first().click();
 }
@@ -168,22 +182,26 @@ async function globalMember(browser, root, dark) {
         await page.getByTestId('ledger-preview').waitFor({ timeout: 10_000 });
         check(await page.getByTestId('local-community-strip').isVisible(), 'Ledger: Example Valley under the strip');
         await noSideScroll(page, 'Ledger preview');
+        await targetsAtLeast44(page, 'Ledger preview');
         await markersNeverLocked(page, 'Ledger preview');
         await shot(page, `ledger-strip-${scheme}`);
         await page.getByRole('button', { name: /Send Beans/ }).click();
         await page.getByTestId('local-community-sheet').waitFor();
         await noSideScroll(page, 'the sheet');
+        await targetsAtLeast44(page, 'the sheet');
         await shot(page, `sheet-${scheme}`);
         await page.getByTestId('local-community-start').click();
         await page.getByTestId('start-community-screen').waitFor();
         const runANode = await page.getByTestId('start-community-run-a-node').getAttribute('href');
         check(runANode === 'https://beanpool.org/#run-a-node', `Start a community: How to run a node leads to the node's start link (${runANode})`);
         await noSideScroll(page, 'Start a community');
+        await targetsAtLeast44(page, 'Start a community');
         await shot(page, `start-community-${scheme}`);
         await page.getByRole('button', { name: 'Back' }).click();
         await page.getByTestId('local-community-strip-close').click();
         check(await page.getByTestId('local-community-strip-collapsed').isVisible(), 'Ledger: ✕ makes the strip one line');
         await noSideScroll(page, 'Ledger, strip collapsed');
+        await targetsAtLeast44(page, 'Ledger, strip collapsed');
         await shot(page, `ledger-collapsed-${scheme}`);
         await page.getByRole('button', { name: 'Show the whole note' }).click();
 
@@ -194,6 +212,7 @@ async function globalMember(browser, root, dark) {
         await page.getByTestId('local-community-sheet').waitFor();
         await closeSheet(page);
         await noSideScroll(page, 'Commons preview');
+        await targetsAtLeast44(page, 'Commons preview');
         await markersNeverLocked(page, 'Commons preview');
         await shot(page, `commons-${scheme}`);
 
@@ -201,7 +220,9 @@ async function globalMember(browser, root, dark) {
         await tab(page, 'Market');
         await page.getByRole('button', { name: /My Deals/ }).first().click();
         await page.getByTestId('deals-preview').waitFor({ timeout: 10_000 });
+        check(await page.getByRole('button', { name: 'Close My Deals' }).count() === 0 && await page.getByRole('dialog').count() === 1, 'My Deals: the preview alone, never the live My Deals');
         await noSideScroll(page, 'My Deals preview');
+        await targetsAtLeast44(page, 'My Deals preview');
         await shot(page, `deals-${scheme}`);
         await page.getByTestId('deals-preview').getByTestId('local-community-action').first().click();
         await page.getByTestId('local-community-sheet').waitFor();
@@ -217,6 +238,7 @@ async function globalMember(browser, root, dark) {
         await deal.click();
         await page.getByTestId('local-community-sheet').waitFor();
         await noSideScroll(page, 'listing with the sheet');
+        await targetsAtLeast44(page, 'listing with the sheet');
         await shot(page, `listing-sheet-${scheme}`);
         await closeSheet(page);
         await markersNeverLocked(page, 'listing');
@@ -229,6 +251,7 @@ async function globalMember(browser, root, dark) {
         await page.getByTestId('invites-local-line').waitFor({ timeout: 10_000 });
         check(/12 words or a sign-in/.test(await page.locator('body').innerText()), 'Invites: "12 words or a sign-in"');
         await noSideScroll(page, 'Invites');
+        await targetsAtLeast44(page, 'Invites');
         await shot(page, `invites-${scheme}`);
 
         // The composer, on the Map: no price field, the line in its slot.
@@ -252,6 +275,7 @@ async function globalMember(browser, root, dark) {
         await page.getByTestId('profile-local-line').waitFor({ timeout: 20_000 });
         check(/Trust badges and Beans are earned in a local community/.test(await page.getByTestId('profile-local-line').innerText()), 'profile: the line in the trust card\'s slot, and no live-empty trust card');
         await noSideScroll(page, 'profile');
+        await targetsAtLeast44(page, 'profile');
         await shot(page, `profile-${scheme}`);
 
         // The net spy. Every preview screen and marker above, between landing and the reload: no write at all. Over the

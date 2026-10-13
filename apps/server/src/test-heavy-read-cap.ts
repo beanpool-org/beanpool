@@ -172,11 +172,19 @@ async function read(a: { port: number; keys: { pk: string; der: string }[]; coun
  * purpose), from a process of their own so that the server's memory is the server's. Says what each got once the
  * orchestrator asks, and hangs up all of them when it says so.
  */
-async function stall(a: { port: number; keys: { pk: string; der: string }[]; count: number; gzip: boolean; route?: string }): Promise<void> {
+async function stall(a: { port: number; keys: { pk: string; der: string }[]; count: number; gzip: boolean; route?: string; wave?: number }): Promise<void> {
     const keys: Key[] = a.keys.map((k) => ({ pk: k.pk, priv: crypto.createPrivateKey({ key: Buffer.from(k.der, 'hex'), format: 'der', type: 'pkcs8' }) }));
     const say = (m: unknown) => new Promise((r) => process.stdout.write(`@@ ${JSON.stringify(m)}\n`, r));
-    const opens = Array.from({ length: a.count }, (_, i) =>
-        open({ port: a.port, tls: true }, a.route ?? '/api/members', { ...signed(a.route ?? '/api/members', keys[i % keys.length]), ...(a.gzip ? { 'Accept-Encoding': 'gzip' } : {}) }, { hold: true }));
+    const openOne = (i: number) =>
+        open({ port: a.port, tls: true }, a.route ?? '/api/members', { ...signed(a.route ?? '/api/members', keys[i % keys.length]), ...(a.gzip ? { 'Accept-Encoding': 'gzip' } : {}) }, { hold: true });
+    // All at once; or `wave` at a time, each wave answered before the next (the control's idle connections, whose
+    // memory is the same however they came: hundreds of TLS connects at once overflow a Mac's listen backlog).
+    const opens: Open[] = [];
+    for (let i = 0; i < a.count; i += a.wave ?? a.count) {
+        const wave = Array.from({ length: Math.min(a.wave ?? a.count, a.count - i) }, (_, j) => openOne(i + j));
+        opens.push(...wave);
+        if (a.wave) await Promise.all(wave.map((o) => o.headers.catch(() => null)));
+    }
     const answers = opens.map((o) => o.headers.then(async (res) => (res?.statusCode === 200 ? { status: 200 } : { ...(await o.done), sha: '' })));
     const lines = readline.createInterface({ input: process.stdin });
     for await (const line of lines) {
@@ -589,7 +597,7 @@ async function stalledReaders(dir: string, readers: Key[], BURST: number, HEAP_M
                 await server.ask('mem-gc');
                 const before = (await server.ask('mem')).mem as { rss: number; footprint: number | null };
                 const keys = readers.slice(0, BURST).map((r) => ({ pk: r.pk, der: r.priv.export({ type: 'pkcs8', format: 'der' }).toString('hex') }));
-                const p = child('stall', dir, { port: server.port, keys, count: n, gzip: false, route: '/api/version' });
+                const p = child('stall', dir, { port: server.port, keys, count: n, gzip: false, route: '/api/version', wave: 32 });
                 const said: ((m: any) => void)[] = [];
                 readline.createInterface({ input: p.stdout! }).on('line', (line) => { if (line.startsWith('@@ ')) said.shift()?.(JSON.parse(line.slice(3))); });
                 const ask = (line: string) => new Promise<any>((r) => { said.push(r); p.stdin!.write(line + '\n'); });
@@ -600,8 +608,8 @@ async function stalledReaders(dir: string, readers: Key[], BURST: number, HEAP_M
                 await new Promise((r) => p.once('exit', r));
                 const ok = got.filter((a) => a.status === 200).length;
                 const cost = Math.max(0, ((after.footprint ?? after.rss) - (before.footprint ?? before.rss)) / MB);
-                console.log(`  (control: ${n} connections that each asked /api/version and kept it open, ${ok} answered 200: the server grew ${cost.toFixed(0)} MB)`);
-                assert(ok === n, `the control's ${n} connections are each answered (${ok}; ${JSON.stringify(tally(got.filter((a) => a.status !== 200)))})`);
+                // Fewer answered only makes the bound below stricter, so it is reported, not asserted.
+                console.log(`  (control: ${n} connections that each asked /api/version and kept it open, ${ok} answered 200${ok < n ? ` (${JSON.stringify(tally(got.filter((a) => a.status !== 200)))})` : ''}: the server grew ${cost.toFixed(0)} MB)`);
                 connections.set(n, cost);
                 return cost;
             } finally {

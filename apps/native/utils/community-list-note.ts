@@ -14,6 +14,24 @@ export function communityListNote(note: CommunityListNote, typed: string): strin
     }
 }
 
+/**
+ * The New message picker on a community that says `membersOnDemand`: its list is the cards held (recents, friends, the
+ * people this member has dealt with) plus what the node answered a search of 2 letters or more. `node` is what became of
+ * that search: 'none' (nothing asked), 'answered', or 'unreachable' (offline, busy, refused). Never "sync to populate":
+ * no sync fills a directory here.
+ */
+export function pickerHeading(typed: string): string {
+    return typed.trim() ? '🔍 Results' : "People you've dealt with";
+}
+
+export function pickerEmpty(typed: string, node: 'none' | 'answered' | 'unreachable'): { title: string; subtitle: string } {
+    const q = typed.trim();
+    if (q === '') return { title: 'No one here yet', subtitle: 'Type 2 letters of a name to find anyone in the community.' };
+    if (q.length < 2) return { title: 'No one you have dealt with matches', subtitle: 'Type at least 2 letters of a name to search everyone.' };
+    if (node === 'unreachable') return { title: 'No one you have dealt with matches', subtitle: 'Connect to search everyone.' };
+    return { title: 'No members match your search', subtitle: 'Try a different name.' };
+}
+
 export function communityListEmpty(note: CommunityListNote | null, typed: string): string {
     if (note === 'search') return 'No members match your search.';
     if (note === 'near') return 'No one near you yet.';

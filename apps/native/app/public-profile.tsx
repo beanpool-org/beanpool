@@ -89,6 +89,8 @@ export default function PublicProfileScreen() {
         },
         bioText: { marginTop: 10, fontSize: 14, color: colors.text.secondary, fontStyle: 'italic', textAlign: 'center', lineHeight: 20 },
         joinedText: { fontSize: 12, color: colors.text.muted, fontWeight: '600', marginTop: 6 },
+        // The way on when no card is held offline: read at 4.5:1 in both schemes, unlike the muted lines around it.
+        unreachableText: { fontSize: 13, color: colors.text.secondary, fontWeight: '600', marginTop: 6, textAlign: 'center' },
 
         // Quick stats strip (self)
         statStrip: { flexDirection: 'row', backgroundColor: colors.surface.card, marginHorizontal: 16, marginTop: 12, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, paddingVertical: 14, alignItems: 'center' },
@@ -738,7 +740,7 @@ export default function PublicProfileScreen() {
                         <MaterialCommunityIcons name="check-decagram" size={22} color={colors.brand.primary} style={{ marginLeft: 6, marginTop: 2, flexShrink: 0 }} />
                     </View>
                     <Text style={styles.pubkeyText}>{pubKeyStr?.slice(0, 16)}...</Text>
-                    {cardUnreachable && <Text style={styles.joinedText} numberOfLines={2}>Connect to see more</Text>}
+                    {cardUnreachable && <Text style={styles.unreachableText} numberOfLines={2}>Connect to see more</Text>}
                     {profile?.joined_at && (
                         <Text style={styles.joinedText} numberOfLines={1}>📅 Joined {new Date(profile.joined_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</Text>
                     )}

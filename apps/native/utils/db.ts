@@ -12,6 +12,7 @@ import {
 } from './e2e-crypto';
 import { DmNotLockedError, isNodeReadableChatType } from './dm-lock';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
+import { getCachedNodeProfile } from './node-profile';
 import { communityCachesRenamed } from './cache-file-migration';
 import { isPlainNodeAddress } from './node-url';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
@@ -1261,7 +1262,9 @@ export async function getConversations(myPubkey: string) {
             postCredits: row.postCredits,
             postPhoto,
             type: row.convType || 'dm',
-            peer: row.name || row.otherCallsign || row.id.slice(0, 8),
+            // No card held for the other member (a community that says `membersOnDemand`, before the cycle that fetches
+            // it by key): the key's first 8 characters, never the conversation's (DESIGN-global-members-by-area §2.4).
+            peer: row.name || row.otherCallsign || (row.otherPubkey ? String(row.otherPubkey).slice(0, 8) : row.id.slice(0, 8)),
             peerAvatar: row.otherAvatar || null,
             peerUpdatedAt: row.otherProfileUpdatedAt || null,
             peerPubkey: row.otherPubkey || null,
@@ -3798,9 +3801,13 @@ export async function syncMessages(publicKey: string) {
             localMembersCount = membersRow?.count || 0;
         } catch (e) {}
 
-        const shouldFetchMembers = !lastMembersSync || 
+        // A community that says `membersOnDemand` (the worldwide one): never the whole directory, nor its `membersComplete`
+        // garbage collection over the cards held (DESIGN-global-members-by-area §1, §2.4 (d)). pillar-sync fetches the cards
+        // this phone has a reason to show by key. Anywhere else, as it always was.
+        const membersOnDemand = (await getCachedNodeProfile(anchorUrl).catch(() => null))?.features.membersOnDemand === true;
+        const shouldFetchMembers = !membersOnDemand && (!lastMembersSync ||
                                    (Date.now() - parseInt(lastMembersSync, 10)) > 3600_000 ||
-                                   localMembersCount === 0;
+                                   localMembersCount === 0);
 
         // Separate 10s budgets: one shared controller let a slow conversations response use up the
         // directory fetch's time too, so it was aborted by us rather than by the network.

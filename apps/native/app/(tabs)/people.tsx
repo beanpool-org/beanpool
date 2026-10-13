@@ -206,6 +206,7 @@ export default function PeopleScreen() {
     // offline. Anywhere else, the whole list from the copy as always.
     const membersOnDemand = nodeProfile?.features.membersOnDemand === true;
     const [listNote, setListNote] = useState<CommunityListNote | null>(null);
+    const onDemandOpened = useRef(false);
     // A guest on a node that takes no invites has no code to enter: say so rather than offer a form every code fails.
     const guestNoInvites = isGuest && !makesInvites;
     // A guest of the global community joins it through its door, as the account on this phone (utils/global-join-existing.ts),
@@ -267,6 +268,9 @@ export default function PeopleScreen() {
         if (view === 'community') {
             setSearchQuery('');
             loadMembers('', sortOption);
+            // On a community that says `membersOnDemand` the list is a read of the node: made here, not again by the
+            // debounced effect's run 400 ms later for the same empty search.
+            onDemandOpened.current = membersOnDemand;
         }
         if (view === 'invites') {
             loadOfflineInvites();
@@ -666,6 +670,11 @@ export default function PeopleScreen() {
     // Debounced Search Effect
     useEffect(() => {
         if (view !== 'community') return;
+        if (onDemandOpened.current && membersOnDemand && searchQuery.trim() === '') {
+            onDemandOpened.current = false;
+            return;
+        }
+        onDemandOpened.current = false;
         const timeout = setTimeout(() => {
             loadMembers(searchQuery, sortOption);
         }, 400);

@@ -395,8 +395,10 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
             const isCompleted = item.status === 'completed';
             const isPending = item.status === 'pending';
             const needsReview = isCompleted && ((isBuyer && !item.ratedByBuyer) || (!isBuyer && !item.ratedBySeller));
-            const partnerCallsign = isBuyer ? item.sellerCallsign : item.buyerCallsign;
             const partnerPubkey = isBuyer ? item.sellerPublicKey : item.buyerPublicKey;
+            // No card held for the partner yet (a community that says `membersOnDemand`): the key's first 8 characters,
+            // never a blank after "From " (DESIGN-global-members-by-area §2.4).
+            const partnerCallsign = (isBuyer ? item.sellerCallsign : item.buyerCallsign) || (partnerPubkey || '').slice(0, 8);
             const partnerAvatar = isBuyer ? item.sellerAvatar : item.buyerAvatar;
 
             const card = (

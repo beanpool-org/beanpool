@@ -34,11 +34,27 @@ describe('the preview sources', () => {
 
     it('the Ledger and Commons tabs show the preview only in preview mode, and it is the only sample reader there', () => {
         const ledger = read('app/(tabs)/ledger.tsx');
-        expect(ledger).toMatch(/if \(beansMode === 'preview'\) \{[\s\S]{0,300}<LedgerPreview \/>/);
+        // One component (design §4): the member's own Ledger, fed the sample only in preview, never a second screen.
+        expect(ledger).not.toMatch(/LedgerPreview/);
+        expect(ledger).toMatch(/if \(preview\) \{ setBalanceState\(sampleBalance\(\)\); setTxns\(sampleTransactions\(\)\); return; \}/);
         expect(ledger).not.toMatch(/SAMPLE_COMMUNITY/);
         const commons = read('app/(tabs)/projects.tsx');
-        expect(commons).toMatch(/enterprisesPreview \? <CommonsPreview \/> : null/);
+        expect(commons).toMatch(/enterprisesPreview \? <View style=\{\{ marginHorizontal: -16 \}\}><CommonsPreview \/><\/View> : null/);
         expect(commons).not.toMatch(/SAMPLE_COMMUNITY/);
+    });
+
+    it("the member's own Ledger in preview: every path to a node or a transfer returns first, and Send and Export are the marker", () => {
+        const ledger = read('app/(tabs)/ledger.tsx');
+        // Each of these reads the node or moves Beans; in preview each one's first line returns (or opens the sheet).
+        for (const fn of ['loadMembers = () =>', 'handleSend = async () =>', 'handleExport = async () =>', 'openSend = async () =>']) {
+            const at = ledger.indexOf(fn);
+            expect(at, fn).toBeGreaterThan(-1);
+            expect(ledger.slice(at, at + 140), fn).toMatch(/\{\s*if \(preview\) (return;|\{ setSheetOpen\(true\); return; \})/);
+        }
+        expect(ledger).toMatch(/\{preview \? <LocalCommunityMark variant="action" feature="beans" label="Send Beans" \/> : <Pressable/);
+        expect(ledger).toMatch(/\{preview \? <LocalCommunityMark variant="action" feature="beans" label="Export CSV" \/> : \(/);
+        expect(ledger).toMatch(/\{showSend && !preview && \(/);
+        expect(ledger).toMatch(/\{!preview && <RepaymentCard \/>\}/);
     });
 
     it('the sample is read only by the preview components', () => {
@@ -51,7 +67,7 @@ describe('the preview sources', () => {
             }
         };
         for (const d of ['app', 'components', 'utils', 'services']) if (fs.existsSync(path.resolve(__dirname, '../..', d))) walk(d);
-        expect(hits.sort()).toEqual(['components/showcase/Previews.tsx']);
+        expect(hits.sort()).toEqual(['components/showcase/Previews.tsx', 'components/showcase/sample-screens.ts']);
     });
 
     it('the marker never locks, greys or talks tiers', () => {

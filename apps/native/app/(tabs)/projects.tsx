@@ -551,7 +551,9 @@ export default function ProjectsScreen() {
                         colors={[colors.brand.primary]}
                     />
                 }
-                ListFooterComponent={enterprisesPreview ? <CommonsPreview /> : null}
+                // The preview's cards carry their own 16 dp sides; the negative margin undoes the list's, so at 320 dp they
+                // line up with the groups above rather than sitting 32 dp in.
+                ListFooterComponent={enterprisesPreview ? <View style={{ marginHorizontal: -16 }}><CommonsPreview /></View> : null}
                 ListHeaderComponent={
                     <View style={styles.headerContainer}>
                         <View style={styles.headerInfo}>

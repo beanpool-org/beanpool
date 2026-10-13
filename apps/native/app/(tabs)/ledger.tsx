@@ -28,7 +28,8 @@ import { ledgerItemNote } from '../../utils/ledger-note';
 import { RepaymentCard } from '../../components/RepaymentCard';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { showcaseMode } from '../../utils/node-profile';
-import { LedgerPreview } from '../../components/showcase/Previews';
+import { LocalCommunityMark, LocalCommunitySheet, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
+import { sampleBalance, sampleTransactions, SAMPLE_MEMBER } from '../../components/showcase/sample-screens';
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../../utils/credit-line-card';
 
 // ── Trust model constants (from @beanpool/core) ──
@@ -56,7 +57,11 @@ export default function LedgerScreen() {
     const { theme, colors } = useTheme();
     const { identity } = useIdentity();
     // On a node that previews Beans (the showcase, DESIGN-global-showcase-fable §1 row 3), Example Valley's ledger.
+    // The same screen either way: in preview it reads Example Valley (components/showcase/sample-screens.ts) instead of
+    // the node, and every press that would move Beans or export opens the marker's sheet.
     const beansMode = showcaseMode('beans', useNodeProfile()?.features);
+    const preview = beansMode === 'preview';
+    const [sheetOpen, setSheetOpen] = useState(false);
     const [keyboardHeight, setKeyboardHeight] = useState(0);
 
     // Tiers are recognition milestones; where each starts comes from @beanpool/core TIER_LEVELS.
@@ -341,6 +346,7 @@ export default function LedgerScreen() {
     }));
 
     const loadData = () => {
+        if (preview) { setBalanceState(sampleBalance()); setTxns(sampleTransactions()); return; }
         if (identity?.publicKey) {
             getBalance(identity.publicKey).then(setBalanceState).catch(console.error);
             getTransactions(identity.publicKey).then(setTxns).catch(console.error);
@@ -352,6 +358,7 @@ export default function LedgerScreen() {
     };
 
     const handleExport = async () => {
+        if (preview) { setSheetOpen(true); return; }
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl || !identity?.publicKey) return;
         setExporting(true);
@@ -374,6 +381,7 @@ export default function LedgerScreen() {
         }
     };
     const loadMembers = () => {
+        if (preview) return;
         getAllCommunityMembers().then(m => setMembers(m.filter(mm => mm.publicKey !== identity?.publicKey))).catch(console.error);
     };
 
@@ -384,10 +392,11 @@ export default function LedgerScreen() {
             const s2 = DeviceEventEmitter.addListener('sync_data_updated', loadData);
             const s3 = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, (list: string[]) => setBlocked(new Set(Array.isArray(list) ? list : [])));
             return () => { s1.remove(); s2.remove(); s3.remove(); };
-        }, [identity])
+        }, [identity, preview])
     );
 
     const handleSend = async () => {
+        if (preview) return;
         if (!sendTo || !sendAmount || !identity?.publicKey) return;
         const amount = parseFloat(sendAmount);
         if (isNaN(amount) || amount <= 0) { setSendError('Enter a valid amount'); return; }
@@ -413,6 +422,7 @@ export default function LedgerScreen() {
 
     // Open the Send flow from anywhere (Levels hero or Wallet). Surfaces the form in the Wallet tab.
     const openSend = async () => {
+        if (preview) { setSheetOpen(true); return; }
         if (!canSend) {
             if (earned <= 0) {
                 Alert.alert(
@@ -794,8 +804,8 @@ export default function LedgerScreen() {
                     </View>
                 )}
 
-                {/* ── Send Credits ── */}
-                <Pressable
+                {/* ── Send Credits ── (in preview the marker's action: it keeps its place and words, and opens the sheet) */}
+                {preview ? <LocalCommunityMark variant="action" feature="beans" label="Send Beans" /> : <Pressable
                     style={[styles.sendBtn, showSend && styles.sendBtnOpen, !canSend && styles.sendBtnLocked]}
                     accessibilityRole="button"
                     onPress={showSend ? () => { setShowSend(false); setSendError(null); setSendSuccess(false); } : openSend}
@@ -812,9 +822,9 @@ export default function LedgerScreen() {
                                 : showSend ? 'Cancel' : 'Send Credits'}
                         </Text>
                     </View>
-                </Pressable>
+                </Pressable>}
 
-                {showSend && (
+                {showSend && !preview && (
                     <View style={styles.sendForm}>
                         <Pressable style={styles.recipientRow} accessibilityRole="button" onPress={() => setShowMemberPicker(!showMemberPicker)}>
                             <Text style={[styles.recipientText, !selectedMember && { color: colors.text.muted }]}>{selectedMember?.callsign || 'Select recipient...'}</Text>
@@ -862,10 +872,11 @@ export default function LedgerScreen() {
 
                 <View style={styles.txnHeaderRow}>
                     <Text style={styles.sectionLabel}>RECENT TRANSACTIONS</Text>
+                    {preview ? <LocalCommunityMark variant="action" feature="beans" label="Export CSV" /> : (
                     <Pressable style={styles.exportBtn} accessibilityRole="button" accessibilityLabel="Export CSV" onPress={handleExport} disabled={exporting}>
                         <MaterialCommunityIcons name="download" size={14} color={colors.text.secondary} />
                         <Text style={styles.exportBtnText}>{exporting ? 'Exporting…' : 'Export CSV'}</Text>
-                    </Pressable>
+                    </Pressable>)}
                 </View>
             </View>
         );
@@ -921,15 +932,18 @@ export default function LedgerScreen() {
     // Commons below it. The negative margins undo the list's padding: the header runs edge to edge as before.
     const renderLedgerHeader = () => (
         <View style={{ marginHorizontal: -16, marginTop: -16, marginBottom: 16 }}>
+            {/* In preview: the strip, then "Example Valley · an example member" (design §1 row 3). */}
+            {preview && <LocalCommunityMark variant="strip" feature="beans" />}
+            {preview && <ExampleHeader />}
             {/* ── Compact profile + balance bar ── */}
             <View style={styles.topBar}>
                 {/* Avatar + name + tier — left side */}
-                <Pressable style={styles.profileChunk} accessibilityRole="button" onPress={() => identity?.publicKey && router.push({ pathname: '/public-profile', params: { publicKey: identity.publicKey, callsign: identity.callsign } })}>
+                <Pressable style={styles.profileChunk} accessibilityRole="button" onPress={() => preview ? setSheetOpen(true) : identity?.publicKey && router.push({ pathname: '/public-profile', params: { publicKey: identity.publicKey, callsign: identity.callsign } })}>
                     <View style={styles.avatarRing}>
-                        <MemberAvatar avatarUrl={avatarUrl} pubkey={identity?.publicKey || ''} callsign={identity?.callsign || 'G'} size={48} />
+                        <MemberAvatar avatarUrl={preview ? null : avatarUrl} pubkey={preview ? '' : identity?.publicKey || ''} callsign={preview ? SAMPLE_MEMBER : identity?.callsign || 'G'} size={48} />
                     </View>
                     <View>
-                        <Text style={styles.profileName}>{identity?.callsign || 'GUEST'}</Text>
+                        <Text style={styles.profileName}>{preview ? SAMPLE_MEMBER : identity?.callsign || 'GUEST'}</Text>
                         <View style={[styles.tierChip, { backgroundColor: tier.bg, borderColor: tier.border }]}>
                             <Text style={styles.tierChipEmoji}>{tier.emoji}</Text>
                             <Text style={[styles.tierChipText, { color: tier.color }]}>{tier.name}</Text>
@@ -997,7 +1011,7 @@ export default function LedgerScreen() {
             )}
 
             {/* Working off a debt (#1597): what is left, and Pay the Commons (a pay-back code from an admin). */}
-            <RepaymentCard />
+            {!preview && <RepaymentCard />}
 
             {/* ── Tab bar ── */}
             <View style={styles.tabBar} onLayout={e => { tabBarY.current = e.nativeEvent.layout.y; }}>
@@ -1012,15 +1026,6 @@ export default function LedgerScreen() {
             </View>
         </View>
     );
-
-    if (beansMode === 'preview') {
-        return (
-            <View style={styles.root}>
-                <PageTitle title="Ledger" collapsed={false} testID="page-title-ledger" />
-                <LedgerPreview />
-            </View>
-        );
-    }
 
     return (
         <View style={styles.root}>
@@ -1057,6 +1062,7 @@ export default function LedgerScreen() {
             <CirculationInfoModal isOpen={showCirculationInfo} onClose={() => setShowCirculationInfo(false)} />
             <TrustInfoModal isOpen={showTrustInfo} onClose={() => setShowTrustInfo(false)} initialTab={trustInfoTab} />
             <SliderInfoModal isOpen={showSliderInfo} onClose={() => setShowSliderInfo(false)} />
+            {preview && <LocalCommunitySheet feature="beans" visible={sheetOpen} onClose={() => setSheetOpen(false)} />}
         </View>
     );
 }

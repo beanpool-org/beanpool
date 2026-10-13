@@ -169,7 +169,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // #108: beans-only browse, so a cash requirement can't ambush anyone. A browse preference,
     // so it persists across sessions.
     // Never for a visitor, whose list has no such chip to undo it.
-    const [beansOnly, setBeansOnly] = useState(() => !visitor && localStorage.getItem('bp_beans_only') === 'true');
+    const [beansOnlyPicked, setBeansOnly] = useState(() => !visitor && localStorage.getItem('bp_beans_only') === 'true');
     const [foundingOnly, setFoundingOnly] = useState(false); // show only newcomers needing a founding trade
     const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
     const [groupFilter, setGroupFilter] = useState<string>('all');
@@ -329,6 +329,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // Beans and deals that live in a local community (preview or read-only): the price slot and the deal action carry the
     // 🏘️ marker instead of a price and a Request that would move Beans (design §1 rows 2 and 4). Live and hidden: as before.
     const priceMarked = marked(useFeatureMode('beans'));
+    // There the Beans-only chip and the Pricing Guide are hidden (design §1, "Hidden on global"), and a Beans-only picked
+    // before does not quietly filter the feed.
+    const beansOnly = beansOnlyPicked && !priceMarked;
     const dealMarked = marked(dealsMode);
     const markWays = {
         onNearYou: onNavigate ? () => { setSelectedPost(null); onNavigate('home'); } : undefined,
@@ -2434,6 +2437,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     new members and the pricing guide are about listings. */}
                 <div className="flex flex-wrap items-center gap-2 my-1.5">
                     {typeFilter !== 'event' && !isVisitor && (<>
+                    {!priceMarked && (
                     <button
                         onClick={() => {
                             const next = !beansOnly;
@@ -2450,6 +2454,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         🫘 Beans only{beansOnly ? ' ✓' : ''}
                     </button>
+                    )}
 
                     <button
                         onClick={() => setFoundingOnly(v => !v)}
@@ -2463,6 +2468,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         🌱 New members{foundingOnly ? ' ✓' : ''}
                     </button>
 
+                    {!priceMarked && (
                     <button
                         onClick={() => setShowPricingGuide(true)}
                         className="px-3 py-1 rounded-full text-xs font-extrabold border transition-colors cursor-pointer bg-white dark:bg-nature-900 text-indigo-700 dark:text-indigo-400 border-indigo-300/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
@@ -2470,6 +2476,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         💡 Pricing Guide
                     </button>
+                    )}
                     </>)}
 
                     {userGroups.length > 0 && (

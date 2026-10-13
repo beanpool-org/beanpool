@@ -41,8 +41,6 @@ interface TreeNode {
 }
 
 export function InvitePage({ identity, onNavigate }: Props) {
-    // Invites live in a local community here (preview or read-only, lib/features.ts): the line under the link (§1 row 8).
-    const reader = useReaderFeatures();
     const [invites, setInvites] = useState<InviteCode[]>([]);
     const [generating, setGenerating] = useState(false);
     const [newCode, setNewCode] = useState<string | null>(null);
@@ -60,6 +58,8 @@ export function InvitePage({ identity, onNavigate }: Props) {
     // The node's own words, when it refused a generate before this page had heard it takes no invites.
     const [refused, setRefused] = useState<string | null>(null);
     const [nodeInfo, setNodeInfo] = useState<CommunityInfo | null>(null);
+    // Invites live in a local community here (preview or read-only, lib/features.ts): the line under the link (§1 row 8).
+    const reader = useReaderFeatures(nodeInfo);
     useEffect(() => {
         let cancelled = false;
         Promise.resolve()
@@ -314,7 +314,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
                     📤 Bring someone here
                 </h2>
                 <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-5 leading-relaxed">
-                    {refused ?? 'This community doesn’t use invites. Anyone can join it with 12 words or a sign-in, so just share its link.'}
+                    {refused ?? `This community doesn’t use invites. Anyone can join it with ${nodeInfo?.features?.wordsDoor === false ? '' : '12 words or '}a sign-in, so just share its link.`}
                 </p>
                 {linkActions()}
                 {marked(modeFor('invites', nodeInfo, reader)) && (

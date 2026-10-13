@@ -35,15 +35,15 @@ afterEach(() => { vi.unstubAllGlobals(); });
 
 describe('the reader\'s features', () => {
     it('a visitor (no key) asks nothing and reads the node\'s set', async () => {
-        expect(await readerFeaturesOnce()).toBeNull();
+        expect(await readerFeaturesOnce(NODE)).toBeNull();
         expect(calls).toEqual([]);
         expect(modeFor('beans', NODE, null)).toBe('preview');
     });
 
     it('a member reads /me once per page load, a GET, and the answer decides the mode', async () => {
         identity.current = { publicKey: 'aa'.repeat(32), privateKey: 'bb'.repeat(32) };
-        const first = await readerFeaturesOnce();
-        const second = await readerFeaturesOnce();
+        const first = await readerFeaturesOnce(NODE);
+        const second = await readerFeaturesOnce(NODE);
         expect(calls).toEqual([{ path: '/api/community/me', method: 'GET' }]);
         expect(second).toBe(first);
         expect(modeFor('beans', NODE, first)).toBe('preview');
@@ -54,7 +54,7 @@ describe('the reader\'s features', () => {
         // The node has Beans on (under BeanID's verified mode) and this reader's own set says on: live for them.
         const nodeOn = { ...NODE, features: { ...NODE.features, beans: true } } as unknown as CommunityInfo;
         meAnswer = () => new Response(JSON.stringify({ features: { ...NODE.features, beans: true } }), { status: 200 });
-        const reader = await readerFeaturesOnce();
+        const reader = await readerFeaturesOnce(NODE);
         expect(modeFor('beans', nodeOn, reader)).toBe('live');
         expect(modeFor('decisions', nodeOn, reader)).toBe('preview');
         // The same node, a reader not yet verified: real data, no writes.
@@ -64,7 +64,7 @@ describe('the reader\'s features', () => {
     it('Beans off on the node, on for this verified reader: the reader\'s set alone makes their Ledger live', async () => {
         identity.current = { publicKey: '33'.repeat(32), privateKey: '44'.repeat(32) };
         meAnswer = () => new Response(JSON.stringify({ features: { ...NODE.features, beans: true } }), { status: 200 });
-        const reader = await readerFeaturesOnce();
+        const reader = await readerFeaturesOnce(NODE);
         expect(modeFor('beans', NODE, reader)).toBe('live');
         expect(modeFor('decisions', NODE, reader)).toBe('preview');
         // Signed out on the same node: the node's set, so the preview.
@@ -74,16 +74,43 @@ describe('the reader\'s features', () => {
     it('a failed read is not kept: the node\'s set stands, and the next caller asks again', async () => {
         identity.current = { publicKey: 'ee'.repeat(32), privateKey: 'ff'.repeat(32) };
         meAnswer = () => new Response(JSON.stringify({ error: 'down' }), { status: 503 });
-        expect(await readerFeaturesOnce()).toBeNull();
+        expect(await readerFeaturesOnce(NODE)).toBeNull();
+        meAnswer = () => { throw new TypeError('Failed to fetch'); };
+        expect(await readerFeaturesOnce(NODE)).toBeNull();
         meAnswer = () => new Response(JSON.stringify({ features: { beans: false, showcase: true } }), { status: 200 });
-        expect(await readerFeaturesOnce()).toEqual({ beans: false, showcase: true });
-        expect(calls.length).toBe(2);
+        expect(await readerFeaturesOnce(NODE)).toEqual({ beans: false, showcase: true });
+        expect(calls.length).toBe(3);
+    });
+
+    it('a 401 or 403 (a key that is not a member here) is kept as null for the page load: asked once', async () => {
+        for (const status of [401, 403]) {
+            resetReaderFeaturesOnce();
+            calls = [];
+            identity.current = { publicKey: String(status).repeat(22).slice(0, 64), privateKey: 'ab'.repeat(32) };
+            meAnswer = () => new Response(JSON.stringify({ error: 'not a member' }), { status });
+            expect(await readerFeaturesOnce(NODE)).toBeNull();
+            expect(await readerFeaturesOnce(NODE)).toBeNull();
+            expect(calls.length).toBe(1);
+        }
+    });
+
+    it('a node with every feature on and no showcase (a local community, or one from before the switches) is never asked', async () => {
+        identity.current = { publicKey: '55'.repeat(32), privateKey: '66'.repeat(32) };
+        const local = { profile: 'local', features: { beans: true, escrow: true, enterprises: true, decisions: true, invites: true, showcase: false } } as unknown as CommunityInfo;
+        const old = { profile: 'local' } as unknown as CommunityInfo;
+        expect(await readerFeaturesOnce(local)).toBeNull();
+        expect(await readerFeaturesOnce(old)).toBeNull();
+        expect(await readerFeaturesOnce(null)).toBeNull();
+        expect(calls).toEqual([]);
+        // One feature off, even with no showcase, or showcase on with all on: the reader's set can matter, so it is read.
+        expect(await readerFeaturesOnce({ ...local, features: { ...local.features, decisions: false } } as unknown as CommunityInfo)).toEqual(NODE.features);
+        expect(calls).toEqual([{ path: '/api/community/me', method: 'GET' }]);
     });
 
     it('a node from before W1 sends no features: null, so the node\'s set stands', async () => {
         identity.current = { publicKey: '11'.repeat(32), privateKey: '22'.repeat(32) };
         meAnswer = () => new Response(JSON.stringify({ publicKey: 'x', probation: {} }), { status: 200 });
-        expect(await readerFeaturesOnce()).toBeNull();
+        expect(await readerFeaturesOnce(NODE)).toBeNull();
     });
 });
 

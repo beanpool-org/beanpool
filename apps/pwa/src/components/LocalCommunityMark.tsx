@@ -66,7 +66,7 @@ export function LocalCommunitySheet({ feature, onClose, onStart, onNearYou, onGu
                         type="button"
                         onClick={onClose}
                         aria-label="Close"
-                        className="-mr-1 -mt-1 rounded-lg px-2 py-1 text-nature-500 dark:text-nature-400 hover:bg-nature-100 dark:hover:bg-nature-800"
+                        className="-mr-2 -mt-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-nature-500 dark:text-nature-400 hover:bg-nature-100 dark:hover:bg-nature-800"
                     >✕</button>
                 </div>
                 <h2 id="local-community-sheet-title" className="mb-2 text-lg font-extrabold text-nature-900 dark:text-nature-50">{LOCAL_COMMUNITY_SHEET.title}</h2>
@@ -141,16 +141,17 @@ export function LocalCommunityStrip({ feature, ...ways }: { feature: ShowcaseFea
     return (
         <WithSheet feature={feature} ways={ways}>
             {(open, start) => collapsed ? (
-                <div className={`${TONE} mb-4 flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold`} data-testid="local-community-strip-collapsed">
-                    <button type="button" onClick={open} className="min-w-0 flex-1 text-left">{LOCAL_COMMUNITY_STRIP.collapsed}</button>
-                    <button type="button" onClick={() => collapse(false)} aria-label="Show the whole note" className="shrink-0 rounded px-1">▾</button>
+                <div className={`${TONE} mb-4 flex items-center gap-1 rounded-xl pl-3 text-sm font-bold`} data-testid="local-community-strip-collapsed">
+                    <button type="button" onClick={open} className="min-h-[44px] min-w-0 flex-1 py-2 text-left">{LOCAL_COMMUNITY_STRIP.collapsed}</button>
+                    <button type="button" onClick={() => collapse(false)} aria-label="Show the whole note" data-testid="local-community-strip-open"
+                        className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center shrink-0 rounded-lg">▾</button>
                 </div>
             ) : (
                 <section className={`${TONE} mb-4 rounded-2xl p-4`} data-testid="local-community-strip" aria-label={LOCAL_COMMUNITY_MARK}>
                     <div className="mb-2 flex items-start justify-between gap-2">
                         <LocalCommunityPill />
                         <button type="button" onClick={() => collapse(true)} aria-label="Make this note one line" data-testid="local-community-strip-close"
-                            className="-mr-1 -mt-1 shrink-0 rounded-lg px-2 py-0.5">✕</button>
+                            className="-mr-3 -mt-3 inline-flex min-h-[44px] min-w-[44px] items-center justify-center shrink-0 rounded-lg">✕</button>
                     </div>
                     <p className="text-sm text-nature-800 dark:text-nature-100">
                         <strong>{LOCAL_COMMUNITY_STRIP.lead[feature]}</strong> {LOCAL_COMMUNITY_STRIP.body}

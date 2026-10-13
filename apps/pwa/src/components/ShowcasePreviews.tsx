@@ -84,7 +84,7 @@ export function LedgerPreview(ways: LocalCommunityWays) {
             <section className={`${CARD} mb-4`}>
                 <div className="mb-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                     <h3 className="font-bold text-nature-900 dark:text-nature-50">Transactions</h3>
-                    <button type="button" onClick={() => setCommonsInfo(true)} className="shrink-0 text-sm font-semibold text-blue-700 dark:text-blue-300" aria-label="How the Commons and the circulation fee work">ⓘ The Commons</button>
+                    <button type="button" onClick={() => setCommonsInfo(true)} className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center shrink-0 text-sm font-semibold text-blue-700 dark:text-blue-300" aria-label="How the Commons and the circulation fee work">ⓘ The Commons</button>
                 </div>
                 <ul className="divide-y divide-nature-200 dark:divide-nature-800" data-testid="sample-transactions">
                     {S.transactions.map((t) => <TxRow key={t.id} t={t} />)}
@@ -95,18 +95,24 @@ export function LedgerPreview(ways: LocalCommunityWays) {
     );
 }
 
-export function CommonsPreview(ways: LocalCommunityWays) {
+/**
+ * The Commons in preview: the pool and an enterprise where enterprises are previewed, a Decision where Decisions are,
+ * each by its own mode, so a node that turns one on loses only that one's sample (design §4).
+ */
+export function CommonsPreview({ enterprises = true, decisions = true, ...ways }: { enterprises?: boolean; decisions?: boolean } & LocalCommunityWays) {
     const [commonsInfo, setCommonsInfo] = useState(false);
     const e = S.enterprises[0];
     const d = S.decisions[0];
+    if (!enterprises && !decisions) return null;
     return (
         <div data-testid="commons-preview">
-            <LocalCommunityStrip feature="enterprises" {...ways} />
+            <LocalCommunityStrip feature={enterprises ? 'enterprises' : 'decisions'} {...ways} />
             <SampleHeader />
+            {enterprises && (<>
             <section className={`${CARD} mb-4`}>
                 <div className="flex items-center justify-between gap-2">
                     <p className="text-xs font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">Commons pool</p>
-                    <button type="button" onClick={() => setCommonsInfo(true)} className="shrink-0 text-sm font-semibold text-blue-700 dark:text-blue-300" aria-label="How the Commons works">ⓘ</button>
+                    <button type="button" onClick={() => setCommonsInfo(true)} className="-my-2 -mr-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center shrink-0 text-sm font-semibold text-blue-700 dark:text-blue-300" aria-label="How the Commons works">ⓘ</button>
                 </div>
                 <p className="text-2xl font-black text-nature-900 dark:text-nature-50">{S.pool} Beans</p>
             </section>
@@ -122,6 +128,8 @@ export function CommonsPreview(ways: LocalCommunityWays) {
                     <LocalCommunityAction feature="enterprises" label="Pause" className="w-full" {...ways} />
                 </div>
             </section>
+            </>)}
+            {decisions && (
             <section className={`${CARD} mb-4`} data-testid="sample-decision">
                 <p className="text-xs font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">Decide · closes in {d.closesInDays} days</p>
                 <h3 className="font-bold text-nature-900 dark:text-nature-50">{d.question}</h3>
@@ -130,6 +138,7 @@ export function CommonsPreview(ways: LocalCommunityWays) {
                     <LocalCommunityAction feature="decisions" label="Vote" className="w-full" {...ways} />
                 </div>
             </section>
+            )}
             <CommonsInfoModal isOpen={commonsInfo} onClose={() => setCommonsInfo(false)} commonsBalance={S.pool} />
         </div>
     );
@@ -173,7 +182,7 @@ export function DealsPreviewDialog({ onClose, ...ways }: { onClose: () => void }
                 className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white dark:bg-nature-900 p-4 shadow-xl">
                 <div className="mb-3 flex items-center justify-between gap-2">
                     <h2 className="text-lg font-extrabold text-nature-900 dark:text-nature-50">🤝 My Deals</h2>
-                    <button type="button" onClick={onClose} aria-label="Close" className="rounded-lg px-2 py-1 text-nature-500 dark:text-nature-400 hover:bg-nature-100 dark:hover:bg-nature-800">✕</button>
+                    <button type="button" onClick={onClose} aria-label="Close" className="-mr-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-nature-500 dark:text-nature-400 hover:bg-nature-100 dark:hover:bg-nature-800">✕</button>
                 </div>
                 <DealsPreview {...ways} />
             </div>

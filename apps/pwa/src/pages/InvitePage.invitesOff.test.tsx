@@ -80,6 +80,13 @@ describe('the Invites page where the node takes no invites (the global node)', (
         expect(screen.getByTestId('local-community-sheet').textContent).toContain(LOCAL_COMMUNITY_SHEET.features.invites);
     });
 
+    it('a node whose 12-words door is shut (wordsDoor false): the plain words say a sign-in only', async () => {
+        vi.mocked(communityInfoOnce).mockResolvedValue({ ...GLOBAL, features: { ...GLOBAL.features, wordsDoor: false } });
+        render(<InvitePage identity={IDENTITY} />);
+        await waitFor(() => expect(screen.getByText(/Anyone can join it with a sign-in/)).toBeInTheDocument());
+        expect(screen.queryByText(/12 words/)).toBeNull();
+    });
+
     it('the global node without showcase (a server from before it): no line, as today', async () => {
         vi.mocked(communityInfoOnce).mockResolvedValue(GLOBAL);
         render(<InvitePage identity={IDENTITY} />);

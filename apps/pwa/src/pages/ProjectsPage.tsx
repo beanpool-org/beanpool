@@ -61,13 +61,28 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [votes, setVotes] = useState(true);
     // Projects and enterprises hold Beans: where the node has Beans off, the Create form offers neither.
     const [beansOn, setBeansOn] = useState(true);
-    // Enterprises off here and the node shows previews: the Commons shows Example Valley's (lib/features.ts).
+    // Enterprises or Decisions off here and the node shows previews: the Commons shows Example Valley's, each by its own
+    // mode (lib/features.ts).
     const [enterprisesMode, setEnterprisesMode] = useState<FeatureMode>('hidden');
+    const [decisionsMode, setDecisionsMode] = useState<FeatureMode>('hidden');
     useEffect(() => {
         let cancelled = false;
         Promise.resolve()
-            .then(() => Promise.all([communityInfoOnce(), readerFeaturesOnce()]))
-            .then(([info, reader]) => { if (!cancelled) { setVotes(decisionsOn(info)); setBeansOn(info?.features?.beans !== false); setEnterprisesMode(modeFor('enterprises', info, reader)); } })
+            .then(() => communityInfoOnce())
+            .then((info) => {
+                if (cancelled) return;
+                // The node's info alone sets Decide and the Beans create options, as before: no wait on the reader's set.
+                setVotes(decisionsOn(info));
+                setBeansOn(info?.features?.beans !== false);
+                // The modes wait for the reader's set too (none is read where it cannot matter): no preview flashes and goes.
+                return readerFeaturesOnce(info).then((reader) => {
+                    if (cancelled) return;
+                    setEnterprisesMode(modeFor('enterprises', info, reader));
+                    const decisions = modeFor('decisions', info, reader);
+                    setDecisionsMode(decisions);
+                    setVotes(decisions === 'live');
+                });
+            })
             .catch(() => { /* Not answered: keep what the page shows; the node refuses a vote itself. */ });
         return () => { cancelled = true; };
     }, []);
@@ -341,10 +356,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     )}
                 </div>
 
-                {/* Enterprises off here and the node shows previews: Example Valley's, under the strip; Groups below stay real. */}
-                {enterprisesMode === 'preview' && (
+                {/* Enterprises or Decisions off here and the node shows previews: Example Valley's, under the strip; Groups below stay real. */}
+                {(enterprisesMode === 'preview' || decisionsMode === 'preview') && (
                     <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full bg-white dark:bg-nature-900 rounded-2xl p-3">
-                        <CommonsPreview onNearYou={onNavigate ? () => onNavigate('home') : undefined} onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
+                        <CommonsPreview enterprises={enterprisesMode === 'preview'} decisions={decisionsMode === 'preview'} onNearYou={onNavigate ? () => onNavigate('home') : undefined} onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
                     </div>
                 )}
                 {/* Commons Pool & Available Governance Credits */}

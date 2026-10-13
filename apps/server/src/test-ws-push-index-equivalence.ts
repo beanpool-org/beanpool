@@ -17,7 +17,8 @@
  *      Members near a listing block its author and unblock them, its parties block it, and its author blocks members
  *      near it, between pushes too (#1812): every push is checked on its own, both ways, against who it must reach
  *      worked out from the rows: every party, blocked or not, and every member near it who did not block its author;
- *      nobody else, so not a near non-party who did (#1831)
+ *      nobody else, so not a near non-party who did (#1831). Each kind of block is also made once at a fixed point of
+ *      every run, followed by pushes of its listing of every kind, so no radius leaves one to luck
  *   2b. no code writes a socket's key but the connect (before the socket is in the set) and wsClients.setKey: a key
  *      written any other way would leave the socket filed under the old one (#1809 review, NB-1)
  *   3. the cost at 3,500 and 10,000 sockets: a push near a dense spot (its author blocked by 300 members) and one
@@ -139,12 +140,13 @@ async function main(): Promise<void> {
         return made;
     };
     // A party who blocked the author, whom every push of it still reaches: the member who took it, or one with an open
-    // deal on it (asked for, or taken and not yet done), near it or not.
-    const blockParty = (id: string): number => {
+    // deal on it (asked for, or taken and not yet done), near it or not. Not the author, when they took their own listing:
+    // nobody can block themselves (addBlocks throws, as seed 1 found).
+    const blockParty = (id: string, chosen?: string): number => {
         const p = db.prepare('SELECT author_pubkey, accepted_by FROM posts WHERE id = ?').get(id) as { author_pubkey: string; accepted_by: string | null };
         let party = p.accepted_by;
-        if (!party || rand() < 0.5) {
-            party = rand() < 0.5 ? (pick(nearMembers(id)) ?? pick(members)) : pick(members);
+        if (chosen || !party || party === p.author_pubkey || rand() < 0.5) {
+            party = chosen ?? (rand() < 0.5 ? (pick(nearMembers(id)) ?? pick(members)) : pick(members));
             if (party === p.author_pubkey) return 0;
             db.prepare('INSERT INTO marketplace_transactions (id, post_id, buyer_pubkey, seller_pubkey, credits, status) VALUES (?, ?, ?, ?, 1, ?)')
                 .run(crypto.randomUUID(), id, party, p.author_pubkey, rand() < 0.5 ? 'requested' : 'pending');
@@ -287,15 +289,68 @@ async function main(): Promise<void> {
         else { did('nothing'); }
     };
 
-    const push = () => {
-        const id = pick(posts);
-        const kind = rand();
+    // Each kind of block once more at a fixed point of every run, not only when a random change makes one: a member near a
+    // listing blocks its author, a party of one blocks its author, and an author blocks a member near their listing, each
+    // a member with an open socket and none of the listing's parties but the party, and each followed by pushes of that
+    // listing of every kind (no other change between), which must not reach the first and must reach the other two. A
+    // random block near a listing needs a listing with a member near it, and at a 20 km radius most have nobody: CI run
+    // 38403194007 made no author's block of a near member at all, and its check that each kind happened failed.
+    const blocks = (owner: string, blocked: string) => !!db.prepare('SELECT 1 FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?').get(owner, blocked);
+    const partiesOf = (id: string): Set<string | null> => {
+        const p = db.prepare('SELECT author_pubkey, accepted_by FROM posts WHERE id = ?').get(id) as { author_pubkey: string; accepted_by: string | null };
+        const deals = db.prepare("SELECT buyer_pubkey, seller_pubkey FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending')").all(id) as { buyer_pubkey: string; seller_pubkey: string }[];
+        return new Set([p.author_pubkey, p.accepted_by, ...deals.flatMap(d => [d.buyer_pubkey, d.seller_pubkey])]);
+    };
+    const shuffled = <T>(xs: T[]): T[] => {
+        const a = [...xs];
+        for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+        return a;
+    };
+    // A listing with a place and a member near it with an open socket, none of its parties, whom `ok` takes; the listings
+    // in a seeded order. With no such pair anywhere (no radius rules that out), a member with an open socket sets their
+    // area at a listing's place, and is the one.
+    const nearPair = (ok: (author: string, pk: string) => boolean): { id: string; author: string; pk: string } => {
+        const open = new Set(liveMembers());
+        const placed = shuffled(posts).filter(id => placeOf(id).lat != null);
+        for (const id of placed) {
+            const author = placeOf(id).author_pubkey, parties = partiesOf(id);
+            const pk = nearMembers(id).find(k => open.has(k) && !parties.has(k) && ok(author, k));
+            if (pk) return { id, author, pk };
+        }
+        const id = placed[0], p = placeOf(id), parties = partiesOf(id);
+        const pk = [...open].find(k => !parties.has(k) && ok(p.author_pubkey, k))!;
+        area.setMemberArea(pk, { lat: p.lat!, lng: p.lng! });
+        did('area set or moved');
+        return { id, author: p.author_pubkey, pk };
+    };
+    const forcedBlocks: (() => string)[] = [
+        () => {
+            const { id, author, pk } = nearPair((author, k) => !blocks(k, author));
+            if (addBlocks(pk, [author]).length > 0) did('a member near a listing blocks its author');
+            return id;
+        },
+        () => {
+            const id = pick(posts), author = placeOf(id).author_pubkey, parties = partiesOf(id);
+            if (blockParty(id, pick(liveMembers().filter(k => !parties.has(k) && !blocks(k, author)))) > 0) did("a listing's party blocks its author");
+            return id;
+        },
+        () => {
+            const { id, author, pk } = nearPair((author, k) => !blocks(k, author) && !blocks(author, k));
+            if (addBlocks(author, [pk]).length > 0) did("a listing's author blocks a member near it");
+            return id;
+        },
+    ];
+
+    // A push of a listing at random, or the one given (`forced`): of its kind, with no parties of a removal.
+    const push = (forced?: { id: string; type: string }) => {
+        const id = forced?.id ?? pick(posts);
+        const kind = forced ? -1 : rand();
         const row = db.prepare('SELECT author_pubkey, lat, lng FROM posts WHERE id = ?').get(id) as { author_pubkey: string; lat: number | null; lng: number | null };
-        const event = kind < 0.4 ? { type: 'new_post', post: { id, authorPublicKey: row.author_pubkey, title: 'x', lat: row.lat, lng: row.lng } }
-            : kind < 0.8 ? { type: 'post_updated', id } : { type: 'post_removed', id };
+        const type = forced?.type ?? (kind < 0.4 ? 'new_post' : kind < 0.8 ? 'post_updated' : 'post_removed');
+        const event = type === 'new_post' ? { type, post: { id, authorPublicKey: row.author_pubkey, title: 'x', lat: row.lat, lng: row.lng } } : { type, id };
         // A removal's parties (a deal it just closed), now and then one who blocked the author.
         const blocker = () => (db.prepare('SELECT owner_pubkey FROM member_blocks WHERE blocked_pubkey = ? LIMIT 1').get(row.author_pubkey) as { owner_pubkey: string } | undefined)?.owner_pubkey;
-        const opts = rand() < 0.15 ? { listingParties: [pick(members), (rand() < 0.5 ? blocker() : undefined) ?? pick(members)] } : undefined;
+        const opts = !forced && rand() < 0.15 ? { listingParties: [pick(members), (rand() < 0.5 ? blocker() : undefined) ?? pick(members)] } : undefined;
         return { event, opts };
     };
     const through = (index: boolean, p: { event: any; opts?: any }) => {
@@ -344,9 +399,18 @@ async function main(): Promise<void> {
     let differ = 0, reached = 0, emptyPushes = 0;
     const firstDiffs: string[] = [];
     inspect('setup');
+    // The forced blocks at a quarter, half and three quarters of the way, each with its listing's pushes queued after it.
+    const forcedAt = forcedBlocks.map((_, k) => Math.floor(PUSHES * (k + 1) / (forcedBlocks.length + 1)));
+    const queued: { id: string; type: string }[] = [];
+    let nextForced = 0;
     for (let i = 0; i < PUSHES; i++) {
-        if (rand() < 0.5) { lastChange = 'nothing'; change(); inspect(lastChange); }
-        const p = push();
+        if (queued.length === 0 && nextForced < forcedBlocks.length && i >= forcedAt[nextForced]) {
+            lastChange = 'nothing';
+            const id = forcedBlocks[nextForced++]();
+            inspect(lastChange);
+            for (const type of ['new_post', 'post_updated', 'post_removed']) queued.push({ id, type });
+        } else if (queued.length === 0 && rand() < 0.5) { lastChange = 'nothing'; change(); inspect(lastChange); }
+        const p = push(queued.shift());
         const full = through(false, p), indexed = through(true, p);
         inspect(`a ${p.event.type} push`);
         reached += full.frames.length;

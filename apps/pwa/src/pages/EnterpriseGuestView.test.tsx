@@ -82,7 +82,7 @@ describe('Enterprise page for a guest', () => {
         render(<TreasuryDetailPage identity={guestIdentity} isMember={false} pubkey="enterprise-bakery-pubkey" onBack={() => {}} />);
 
         expect(await screen.findByRole('heading', { level: 1, name: 'Community Bakery' })).toBeInTheDocument();
-        expect(screen.queryByText('Error loading enterprise')).not.toBeInTheDocument();
+        expect(screen.queryByText("Couldn't load this group")).not.toBeInTheDocument();
         expect(api.getBalance).not.toHaveBeenCalled();
 
         // What the node returned is shown: purpose, funding, P&L, the thread.
@@ -100,8 +100,8 @@ describe('Enterprise page for a guest', () => {
 
         expect(screen.queryByText('Back this initiative')).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Pledge Beans/ })).not.toBeInTheDocument();
-        expect(screen.queryByText('Ask to Join as a Keeper')).not.toBeInTheDocument();
-        expect(screen.queryByLabelText('Message the enterprise')).not.toBeInTheDocument();
+        expect(screen.queryByText('Ask to join as a collaborator')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('Message the project')).not.toBeInTheDocument();
         expect(screen.getByTestId('thread-guest-note')).toHaveTextContent('Join the community to post here.');
     });
 
@@ -116,7 +116,7 @@ describe('Enterprise page for a guest', () => {
         expect(await screen.findByTestId('thread-members-only')).toBeInTheDocument();
         expect(screen.queryByText('Members only')).not.toBeInTheDocument();
         expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
-        expect(screen.queryByText('Error loading enterprise')).not.toBeInTheDocument();
+        expect(screen.queryByText("Couldn't load this group")).not.toBeInTheDocument();
     });
 
     it('still opens the enterprise when a signed-in viewer\'s balance lookup fails', async () => {
@@ -125,7 +125,7 @@ describe('Enterprise page for a guest', () => {
 
         expect(await screen.findByRole('heading', { level: 1, name: 'Community Bakery' })).toBeInTheDocument();
         await waitFor(() => expect(api.getBalance).toHaveBeenCalledWith('guest-pubkey-unknown-to-node'));
-        expect(screen.queryByText('Error loading enterprise')).not.toBeInTheDocument();
+        expect(screen.queryByText("Couldn't load this group")).not.toBeInTheDocument();
         expect(screen.queryByText('Member not found')).not.toBeInTheDocument();
     });
 
@@ -136,8 +136,8 @@ describe('Enterprise page for a guest', () => {
 
         await screen.findByRole('heading', { level: 1, name: 'Community Bakery' });
         expect(screen.getByText('Back this initiative')).toBeInTheDocument();
-        expect(screen.getByText('Ask to Join as a Keeper')).toBeInTheDocument();
-        expect(await screen.findByLabelText('Message the enterprise')).toBeInTheDocument();
+        expect(screen.getByText('Ask to join as a collaborator')).toBeInTheDocument();
+        expect(await screen.findByLabelText('Message the project')).toBeInTheDocument();
     });
 });
 
@@ -185,7 +185,7 @@ describe('Enterprise page at 320px with 1.3x text', () => {
         } as any);
         render(<TreasuryDetailPage identity={guestIdentity} isMember={false} pubkey="enterprise-bakery-pubkey" onBack={() => {}} />);
 
-        const region = await screen.findByRole('region', { name: 'Enterprise ledger transactions' });
+        const region = await screen.findByRole('region', { name: 'Project ledger transactions' });
         // Only sm and up may scroll sideways; the table has no minimum width below sm.
         expect(region).not.toHaveClass('overflow-x-auto');
         expect(region).toHaveClass('sm:overflow-x-auto');

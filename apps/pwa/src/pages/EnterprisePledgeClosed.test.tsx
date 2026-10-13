@@ -72,7 +72,7 @@ describe('The pledge box on an enterprise that is not taking pledges', () => {
 
     it('a funded enterprise says it has reached its goal, with no box to pledge in', async () => {
         await openWell('funded', 20);
-        expect(screen.getByText('This enterprise has reached its goal, so it isn’t taking more pledges.')).toBeInTheDocument();
+        expect(screen.getByText('This project has reached its goal, so it isn’t taking more pledges.')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Pledge Beans/ })).not.toBeInTheDocument();
         expect(screen.queryByPlaceholderText('Amount (🫘)')).not.toBeInTheDocument();
         expect(screen.queryByText('Back this initiative')).not.toBeInTheDocument();
@@ -80,19 +80,19 @@ describe('The pledge box on an enterprise that is not taking pledges', () => {
 
     it('a funded enterprise whose raised figure reads short of the goal is still not taking pledges: the node goes by its status', async () => {
         await openWell('funded', 15);
-        expect(screen.getByText('This enterprise has reached its goal, so it isn’t taking more pledges.')).toBeInTheDocument();
+        expect(screen.getByText('This project has reached its goal, so it isn’t taking more pledges.')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Pledge Beans/ })).not.toBeInTheDocument();
     });
 
     it('an enterprise winding up, or closed, says so, with no box', async () => {
         await openWell('winding_up', 5);
-        expect(screen.getByText('This enterprise is winding up, so it isn’t taking pledges.')).toBeInTheDocument();
+        expect(screen.getByText('This project is winding up, so it isn’t taking pledges.')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Pledge Beans/ })).not.toBeInTheDocument();
     });
 
     it('a closed enterprise says it has closed, with no box', async () => {
         await openWell('completed', 5);
-        expect(screen.getByText('This enterprise has closed, so it isn’t taking pledges.')).toBeInTheDocument();
+        expect(screen.getByText('This project has closed, so it isn’t taking pledges.')).toBeInTheDocument();
         expect(screen.queryByRole('button', { name: /Pledge Beans/ })).not.toBeInTheDocument();
     });
 

@@ -1,13 +1,14 @@
 /**
  * "Your groups" on the phone (groups decisions 6, 7, 9, 13; 2026-09-19).
  *
- * One list of every group-like chat the member is in — Commons groups, enterprises they keep (🥖) and events they
- * host or are Going to (📅) — served by the node's GET /api/your-groups (slice 1, #924). Talk's Groups tab shows it
+ * One list of every group-like chat the member is in — Commons groups, enterprises they keep (🥖), projects they lead
+ * or help (🎯) and events they host or are Going to (📅) — served by the node's GET /api/your-groups (slice 1, #924). Talk's Groups tab shows it
  * with unread counts; Commons → Groups shows the same rows without them (decision 7: nobody clears a count twice).
  *
  * The helpers below are pure so the row wording and the one-header-for-every-chat label are unit tested.
  */
 
+import { keeperWords } from '@beanpool/core';
 import type { GroupCategory, GroupItem } from './db';
 
 export type YourChatKind = 'group' | 'enterprise' | 'event';
@@ -32,6 +33,8 @@ export interface YourChatMute {
 export interface YourChat {
     kind: YourChatKind;
     badge: string | null;
+    /** An enterprise-kind row: 'bounded' is a project, 'ongoing' an enterprise (§3.1). A node too old to say: an enterprise. */
+    lifecycle?: 'ongoing' | 'bounded';
     id: string;
     conversationId: string;
     name: string;
@@ -73,7 +76,16 @@ export const OWNER_KIND_WORD: Readonly<Record<YourChatKind | 'dm', string>> = {
     dm: 'message',
 };
 
-export function chatEmoji(kind: YourChatKind, category?: string | null): string {
+/** An enterprise-kind chat is a project when the node says its lifecycle is 'bounded' (group decisions §3.1). */
+const isProject = (kind: YourChatKind, lifecycle?: string | null) => kind === 'enterprise' && lifecycle === 'bounded';
+
+/** The kind word a member reads: a project is a project, never an enterprise (§3.1). */
+export function ownerKindWord(kind: YourChatKind, lifecycle?: string | null): string {
+    return isProject(kind, lifecycle) ? 'project' : OWNER_KIND_WORD[kind];
+}
+
+export function chatEmoji(kind: YourChatKind, category?: string | null, lifecycle?: string | null): string {
+    if (isProject(kind, lifecycle)) return '🎯';
     if (kind === 'enterprise') return '🥖';
     if (kind === 'event') return '📅';
     return GROUP_CATEGORY_EMOJI[(category as GroupCategory)] ?? '👥';
@@ -83,11 +95,11 @@ export function chatEmoji(kind: YourChatKind, category?: string | null): string 
  * The owner line every chat header carries: "🌻 Garden Crew" over "group". Split in two so the name can truncate
  * on a narrow screen while the kind word always shows.
  */
-export function ownerHeader(kind: YourChatKind, name: string, category?: string | null): { title: string; kindWord: string; a11y: string } {
-    const clean = (name || '').trim() || (kind === 'event' ? 'Event' : kind === 'enterprise' ? 'Enterprise' : 'Group');
-    const word = OWNER_KIND_WORD[kind];
+export function ownerHeader(kind: YourChatKind, name: string, category?: string | null, lifecycle?: string | null): { title: string; kindWord: string; a11y: string } {
+    const word = ownerKindWord(kind, lifecycle);
+    const clean = (name || '').trim() || (kind === 'group' ? 'Group' : word.charAt(0).toUpperCase() + word.slice(1));
     return {
-        title: `${chatEmoji(kind, category)} ${clean}`,
+        title: `${chatEmoji(kind, category, lifecycle)} ${clean}`,
         kindWord: word,
         a11y: `${clean}, ${word}. Opens the ${word} page.`,
     };
@@ -235,6 +247,21 @@ export function chatMuteFromRows(items: ReadonlyArray<Pick<YourChat, 'id' | 'con
     return row?.mute ?? null;
 }
 
+/** Whether "Your groups" last knew this chat as a project ('bounded'): what names the chat header's kind. */
+export function chatLifecycleFromRows(items: ReadonlyArray<Pick<YourChat, 'id' | 'conversationId' | 'lifecycle'>> | null | undefined, conversationId: string): 'ongoing' | 'bounded' | undefined {
+    return (items || []).find(i => i.conversationId === conversationId || i.id === conversationId)?.lifecycle;
+}
+
+/**
+ * The member's part in an enterprise-kind row, in its kind's words: Leader / Collaborator on a project, Lead keeper /
+ * Keeper on an enterprise (core keeperWords). Null for a group or an event, whose rows say no role.
+ */
+export function rowRoleWord(item: Pick<YourChat, 'kind' | 'role' | 'lifecycle'>): string | null {
+    if (item.kind !== 'enterprise') return null;
+    const w = keeperWords(item.lifecycle);
+    return item.role === 'lead' ? w.Lead : w.Keeper;
+}
+
 /** The chat's answer wins when it carries a mute (null included); an answer without the field keeps what we had. */
 export function chatMuteFromAnswer(answer: { mute?: YourChatMute | null } | null | undefined, current: YourChatMute | null): YourChatMute | null {
     return answer && 'mute' in answer ? (answer.mute ?? null) : current;
@@ -321,7 +348,7 @@ export function inviteLandingFacts(p: { category?: string | null; memberCount?: 
 }
 
 export const GROUP_CATEGORY_WORDS: Readonly<Record<GroupCategory, string>> = {
-    social: 'Social Circle', general: 'General', working_group: 'Working Group', project: 'Project Team', guild: 'Guild',
+    social: 'Social Circle', general: 'General', working_group: 'Working Group', project: 'Team', guild: 'Guild',
 };
 
 export const JOIN_POLICY_WORDS: Readonly<Record<string, string>> = {

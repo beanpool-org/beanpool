@@ -13,7 +13,7 @@ vi.mock('expo-secure-store', () => ({ getItemAsync: vi.fn(), setItemAsync: vi.fn
 vi.mock('expo-crypto', () => ({ getRandomBytes: vi.fn((n: number) => new Uint8Array(n)) }));
 
 import {
-    HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canRemoveCard, cardLabelName, cardName, cardRowName, cardOrder, cardsToAsk, cardsToDraw, communityLines,
+    HOME_DRAWN, HOME_DOORBELL_SETTLE_MS, beansLines, canRemoveCard, cardCaption, cardLabelName, cardName, cardRowName, cardOrder, cardsToAsk, cardsToDraw, communityLines,
     DECIDE_HREF, POLLS_HREF, canTailor, cardOnNode, createDoorbellDebounce, decideLines, dealsLine, dismissSafety, effectiveInterests, enterpriseLine, eventDay, formatBeans, groupLine,
     invitesForReader, ASK_WITHIN_KM, FIND_PINNED_DAYS, askPinned, canMoveCard, findPinned, firstSteps, globalStepLines, isFindCard, joinedNames, marketInOrder,
     pinnedCards, probationSentence,
@@ -618,6 +618,13 @@ describe('each card\'s words', () => {
         expect(sentence('Who has a drill?  ')).toBe('Who has a drill?');
         expect(needsLineA11y({ kind: 'deal', count: 1, accent: true, label: 'A deal is waiting for you: Bread.', target: { to: 'my-deals' } }))
             .toBe('A deal is waiting for you: Bread. Waiting on you.');
+    });
+
+    it('the card for the one you keep: "Your project" for a project, "Your enterprise" otherwise (group decisions §3.1)', () => {
+        const ent = (lifecycle?: 'ongoing' | 'bounded') => ({ profile: 'local', cards: { enterprise: { id: 'e', name: 'Hall roof', requests: 0, others: 0, lifecycle } } }) as Pick<HomeAnswer, 'profile' | 'cards'>;
+        expect(cardCaption('enterprise', ent('bounded'))).toBe('Your project');
+        expect(cardCaption('enterprise', ent('ongoing'))).toBe('Your enterprise');
+        expect(cardCaption('enterprise', ent())).toBe('Your enterprise');
     });
 
     it('deals, enterprise, decide, groups, an event\'s day', () => {

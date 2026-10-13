@@ -1,7 +1,7 @@
 /* global process, URL, console, document, getComputedStyle, innerHeight, innerWidth, window */
 /**
  * Getting started at the floor (scratch/global-node/DESIGN-getting-started-fable.md): the tour's bar on every step
- * (local 9, global 7), the "?" dialog for each tab, and the mobile header's pill with each tab's title, in headless
+ * (local 9, global 7, global with the showcase 9), the "?" dialog for each tab, and the mobile header's title, in headless
  * Chromium at 320 x 569 with 130% text, light and dark (the header also at 360, 375, 390, 412 and 430 px, 100% and 130%
  * text). Fails on sideways scroll, a control under 44 px, words over four lines, contrast under 4.5:1, an axe (WCAG 2
  * A/AA) violation, a title whose box meets the real sync chip's or the pill's (or covers the "?"), a title not centred
@@ -112,19 +112,19 @@ for (const dark of [false, true]) {
     };
     const axe = async (sel) => { await page.addScriptTag({ content: AXE }); return page.evaluate(async (s) => (await window.axe.run(s, { runOnly: ['wcag2a', 'wcag2aa'] })).violations.map(v => v.id + ':' + v.nodes.length), sel); };
     const scheme = dark ? 'dark' : 'light';
-    for (const global of [false, true]) {
-        const n = global ? 7 : 9;
+    // Global with the showcase on has the Commons and Ledger preview steps (T5).
+    for (const [kind, qs, n] of [['local', '', 9], ['global', '&global=1', 7], ['global showcase', '&global=1&showcase=1', 9]]) {
         for (let i = 0; i < n; i++) {
-            const m = await open('view=step&i=' + i + (global ? '&global=1' : ''));
+            const m = await open('view=step&i=' + i + qs);
             const v = i === 0 ? await axe('[data-testid="tour-bar"]') : [];
-            rows.push([scheme, (global ? 'global' : 'local') + ' step ' + (i + 1), JSON.stringify({ bar: m.bar, lines: m.lines, c: m.contrast, behind: m.behindTappable, fab: m.fab, axe: v })]);
-            if (m.scrollW > 320) problems.push(scheme + ' step ' + i + ': sideways scroll ' + m.scrollW);
-            if (m.small.length) problems.push(scheme + ' step ' + i + ': under 44 px: ' + m.small.join(', '));
-            if (!m.behindTappable) problems.push(scheme + ' step ' + i + ': the button behind is covered');
-            if (!m.fab.tappable || m.fab.bottom > m.fab.barTop) problems.push(scheme + ' step ' + i + ': the tab\'s bottom button is under the bar ' + JSON.stringify(m.fab));
-            if (m.lines > 4) problems.push(scheme + ' step ' + i + ': ' + m.lines + ' lines');
-            for (const [k, r] of Object.entries(m.contrast)) if (r < 4.5) problems.push(scheme + ' step ' + i + ' ' + k + ' contrast ' + r);
-            if (v.length) problems.push(scheme + ' step ' + i + ' axe ' + v.join(' '));
+            rows.push([scheme, kind + ' step ' + (i + 1), JSON.stringify({ bar: m.bar, lines: m.lines, c: m.contrast, behind: m.behindTappable, fab: m.fab, axe: v })]);
+            if (m.scrollW > 320) problems.push(scheme + ' ' + kind + ' step ' + i + ': sideways scroll ' + m.scrollW);
+            if (m.small.length) problems.push(scheme + ' ' + kind + ' step ' + i + ': under 44 px: ' + m.small.join(', '));
+            if (!m.behindTappable) problems.push(scheme + ' ' + kind + ' step ' + i + ': the button behind is covered');
+            if (!m.fab.tappable || m.fab.bottom > m.fab.barTop) problems.push(scheme + ' ' + kind + ' step ' + i + ': the tab\'s bottom button is under the bar ' + JSON.stringify(m.fab));
+            if (m.lines > 4) problems.push(scheme + ' ' + kind + ' step ' + i + ': ' + m.lines + ' lines');
+            for (const [k, r] of Object.entries(m.contrast)) if (r < 4.5) problems.push(scheme + ' ' + kind + ' step ' + i + ' ' + k + ' contrast ' + r);
+            if (v.length) problems.push(scheme + ' ' + kind + ' step ' + i + ' axe ' + v.join(' '));
         }
     }
     for (const key of ['home', 'market', 'map', 'talk', 'commons', 'ledger', 'people', 'settings', 'lobby/join']) {

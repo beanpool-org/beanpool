@@ -637,7 +637,8 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     // ── The tour's Home side (DESIGN-getting-started-fable.md §2–§3) ──
     // The bar is App's (lib/tour-store.ts); Home lends it the chips (Add's own path) and applies the end as it opens: one
     // layout write, then the account's record. Nothing here starts a tour by itself.
-    const tourNode = { global: String(answer?.profile) === 'global', beans: answer?.features.beans !== false };
+    // With the global showcase on, Commons and Ledger are previews there and the tour has their steps, as the phone's does (T5).
+    const tourNode = { global: String(answer?.profile) === 'global', beans: answer?.features.beans !== false, showcase: answer?.features.showcase === true };
     const tourTotal = tourSteps('web', tourNode).length;
     const member = !!answer?.me && !answer.welcome && !visitor;
     const chips = member && answer ? tourChips(frameOf(answer), null, { members: answer.cards.community?.members ?? null }) : [];

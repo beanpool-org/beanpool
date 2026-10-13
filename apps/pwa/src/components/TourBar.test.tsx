@@ -18,9 +18,9 @@ const home = (on: string[] = []) => ({
 });
 
 describe('the tour bar', () => {
-    for (const node of [{ global: false, beans: true }, { global: true, beans: false }]) {
+    for (const node of [{ global: false, beans: true }, { global: true, beans: false }, { global: true, beans: false, showcase: true }]) {
         const steps = tourSteps('web', node);
-        it(`${node.global ? 'global' : 'local'}: each of the ${steps.length} steps says "Step n of ${steps.length}", its words (a polite live region), Skip and Next (Done last)`, () => {
+        it(`${node.global ? ('showcase' in node ? 'global with the showcase' : 'global') : 'local'}: each of the ${steps.length} steps says "Step n of ${steps.length}", its words (a polite live region), Skip and Next (Done last)`, () => {
             steps.forEach((step, i) => {
                 const on = { onNext: vi.fn(), onSkip: vi.fn(), onDone: vi.fn() };
                 render(<TourBar steps={steps} index={i} home={home()} {...on} />);

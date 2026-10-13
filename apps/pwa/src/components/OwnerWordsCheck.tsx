@@ -80,7 +80,7 @@ export function OwnerWordsCheck({ identity, startOpen = false, hasWords = true }
 
     return (
         <div data-testid="owner-words-check">
-            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                 COMMUNITY KEYS
             </div>
             <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 p-4 space-y-3">

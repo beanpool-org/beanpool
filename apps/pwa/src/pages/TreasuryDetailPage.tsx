@@ -2231,7 +2231,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             </button>
                                                         )}
                                                     </div>
-                                                    <div className={`mt-1 leading-relaxed ${isRemoved ? 'italic text-nature-400 dark:text-nature-500' : 'text-nature-800 dark:text-nature-200'}`}>
+                                                    <div className={`mt-1 leading-relaxed ${isRemoved ? 'italic text-nature-400 dark:text-nature-400' : 'text-nature-800 dark:text-nature-200'}`}>
                                                         {textContent}
                                                     </div>
                                                 </div>

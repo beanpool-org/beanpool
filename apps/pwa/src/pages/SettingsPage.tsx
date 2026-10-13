@@ -620,7 +620,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             {profile?.avatar ? (
                                 <img src={resolveAvatarUrl(profile.avatar)!} className="w-full h-full object-cover" alt={identity.callsign} />
                             ) : (
-                                <span className="text-2xl font-bold text-nature-400 dark:text-nature-500 select-none">
+                                <span className="text-2xl font-bold text-nature-400 dark:text-nature-400 select-none">
                                     {identity.callsign.charAt(0).toUpperCase()}
                                 </span>
                             )}
@@ -675,7 +675,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <OwnerUnlockCard identity={identity} />
                         {/* ─── COMMUNITY WORKING STYLE ─── */}
                         <div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                                 COMMUNITY WORKING STYLE
                             </div>
                             {(() => {
@@ -714,7 +714,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             )}
 
                                             <div className="border-t border-nature-100 dark:border-nature-800 pt-3">
-                                                <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2">
+                                                <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2">
                                                     🌟 What you tend to enjoy
                                                 </div>
                                                 <ul className="space-y-1.5 m-0 p-0 list-none">
@@ -792,7 +792,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         {/* ─── ACCOUNT & IDENTITY ─── */}
                         <div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                                 ACCOUNT & IDENTITY
                             </div>
                             <div className="space-y-2.5">
@@ -827,7 +827,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             <div className="text-[15px] font-bold">Re-run Setup</div>
                                             <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Update your name & photo, and how BeanPool works</div>
                                         </div>
-                                        <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                        <span className="text-nature-400 dark:text-nature-400 group-hover:translate-x-1 transition-transform">→</span>
                                     </button>
                                 )}
 
@@ -844,7 +844,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             {hasWords ? 'View your 12-word backup seed' : 'Not saved in this browser'}
                                         </div>
                                     </div>
-                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                    <span className="text-nature-400 dark:text-nature-400 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
                                 <SignInRecoveryLine enrolled={signInRecovery} hasWords={hasWords} />
                             </div>
@@ -852,7 +852,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         {/* ─── APP SETTINGS ─── */}
                         <div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                                 APP SETTINGS
                             </div>
                             <div className="space-y-2.5">
@@ -916,7 +916,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         <div className="text-[15px] font-bold">Notification Preferences</div>
                                         <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Phone app push notification settings</div>
                                     </div>
-                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                    <span className="text-nature-400 dark:text-nature-400 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
 
                                 {/* Your area: a community that syncs listings by area */}
@@ -931,7 +931,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             <div className="text-[15px] font-bold">{AREA_STEP_WORDS.settingsRow}</div>
                                             <div className="text-xs font-normal text-nature-500 dark:text-nature-400 break-words">{areaLine}</div>
                                         </div>
-                                        <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                        <span className="text-nature-400 dark:text-nature-400 group-hover:translate-x-1 transition-transform">→</span>
                                     </button>
                                 )}
 
@@ -980,7 +980,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         {/* ─── LEGAL & PRIVACY ─── */}
                         <div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                                 LEGAL & PRIVACY
                             </div>
                             <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 overflow-hidden divide-y divide-nature-100 dark:divide-nature-800">
@@ -1009,7 +1009,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         {/* ─── SYSTEM ─── */}
                         <div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                                 SYSTEM
                             </div>
                             <div className="space-y-2.5">
@@ -1022,7 +1022,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         <div className="text-[15px] font-bold">Database Health & Stats</div>
                                         <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Local storage metrics & integrity checks</div>
                                     </div>
-                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                    <span className="text-nature-400 dark:text-nature-400 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
 
                                 <button
@@ -1034,7 +1034,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         <div className="text-[15px] font-bold">Advanced / Subsystem</div>
                                         <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Node management & cache controls</div>
                                     </div>
-                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                    <span className="text-nature-400 dark:text-nature-400 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
                             </div>
                         </div>
@@ -1586,7 +1586,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 <div className="text-sm font-bold text-nature-900 dark:text-white truncate">
                                                     {item.callsign}
                                                 </div>
-                                                <div className="text-[11px] text-nature-400 dark:text-nature-500 font-mono truncate">
+                                                <div className="text-[11px] text-nature-400 dark:text-nature-400 font-mono truncate">
                                                     {item.pubkey.slice(0, 16)}...{item.pubkey.slice(-8)}
                                                 </div>
                                             </div>
@@ -1748,7 +1748,7 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
     const rowClass = 'w-full min-h-[56px] p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center gap-3 hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors bg-transparent border-none cursor-pointer text-left no-underline';
     return (
         <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                 BEANPOOL
             </div>
             <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 overflow-hidden divide-y divide-nature-100 dark:divide-nature-800">

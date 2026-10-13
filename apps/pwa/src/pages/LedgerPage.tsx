@@ -378,7 +378,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
                         activeTab === 'trust'
                             ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-extrabold'
-                            : 'border-transparent text-nature-400 dark:text-nature-500 hover:text-nature-600'
+                            : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600'
                     }`}
                     onClick={() => setActiveTab('trust')}
                 >
@@ -388,7 +388,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
                         activeTab === 'financials'
                             ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-extrabold'
-                            : 'border-transparent text-nature-400 dark:text-nature-500 hover:text-nature-600'
+                            : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600'
                     }`}
                     onClick={() => setActiveTab('financials')}
                 >
@@ -574,7 +574,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         </div>
                     </div>
 
-                    <span className="text-[10px] font-medium text-nature-400 dark:text-nature-500 text-center italic block">
+                    <span className="text-[10px] font-medium text-nature-400 dark:text-nature-400 text-center italic block">
                         💡 Trust is a saturating curve over the real value you trade — diverse trades climb fastest, and it levels off near the top so no one runs away. Gifts don't build trust.
                     </span>
                 </div>

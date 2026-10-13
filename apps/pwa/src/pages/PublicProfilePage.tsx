@@ -299,7 +299,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 <img src={avatarResolved} alt="avatar" className="w-full h-full object-cover" />
                             </button>
                         ) : (
-                            <span className="text-4xl font-bold text-nature-400 dark:text-nature-500">{initial}</span>
+                            <span className="text-4xl font-bold text-nature-400 dark:text-nature-400">{initial}</span>
                         )}
                     </div>
                     
@@ -308,7 +308,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         <span className="text-emerald-500">✓</span>
                     </div>
                     
-                    <div className="text-xs text-nature-400 dark:text-nature-500 font-mono bg-nature-200/50 dark:bg-nature-900 px-2 py-1 rounded mt-1">
+                    <div className="text-xs text-nature-400 dark:text-nature-400 font-mono bg-nature-200/50 dark:bg-nature-900 px-2 py-1 rounded mt-1">
                         {pubkey.slice(0, 16)}...
                     </div>
 
@@ -676,7 +676,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 flex flex-col items-center justify-center shadow-sm">
                                     <div className="text-amber-500 text-sm mb-1">{renderStars(stats.average)}</div>
                                     <div className="text-xl font-black text-nature-900 dark:text-white">{stats.average.toFixed(1)}</div>
-                                    <div className="text-[10px] font-bold text-nature-400 dark:text-nature-500 uppercase mt-1">Overall</div>
+                                    <div className="text-[10px] font-bold text-nature-400 dark:text-nature-400 uppercase mt-1">Overall</div>
                                 </div>
                                 <div className="bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-xl p-3 flex flex-col items-center justify-center shadow-sm">
                                     <div className="text-sm mb-1">📤</div>
@@ -697,7 +697,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all ${
                                     activeTab === 'listings'
                                         ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-extrabold'
-                                        : 'border-transparent text-nature-400 dark:text-nature-500 hover:text-nature-600'
+                                        : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600'
                                 }`}
                                 onClick={() => setActiveTab('listings')}
                             >
@@ -707,7 +707,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all ${
                                     activeTab === 'reviews'
                                         ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-extrabold'
-                                        : 'border-transparent text-nature-400 dark:text-nature-500 hover:text-nature-600'
+                                        : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600'
                                 }`}
                                 onClick={() => setActiveTab('reviews')}
                             >
@@ -718,7 +718,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all ${
                                         activeTab === 'given'
                                             ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-extrabold'
-                                            : 'border-transparent text-nature-400 dark:text-nature-500 hover:text-nature-600'
+                                            : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600'
                                     }`}
                                     onClick={() => setActiveTab('given')}
                                 >

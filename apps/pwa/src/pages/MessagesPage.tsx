@@ -2054,7 +2054,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         {(conv.unreadCount || 0) > 0 && (
                                             <span style={{
                                                 position: 'absolute', top: '-4px', left: '-4px',
-                                                background: 'var(--danger)', color: '#fff', fontSize: '0.6rem', fontWeight: 700,
+                                                background: 'var(--danger)', color: 'var(--on-danger, #fff)', fontSize: '0.6rem', fontWeight: 700,
                                                 minWidth: '16px', height: '16px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                 padding: '0 3px', lineHeight: 1, boxShadow: '0 0 6px var(--danger)',
                                             }}>{conv.unreadCount! > 99 ? '99+' : conv.unreadCount}</span>
@@ -2077,7 +2077,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         {(conv.unreadCount || 0) > 0 && (
                                             <span style={{
                                                 position: 'absolute', top: '-4px', right: '-4px',
-                                                background: 'var(--danger)', color: '#fff', fontSize: '0.6rem', fontWeight: 700,
+                                                background: 'var(--danger)', color: 'var(--on-danger, #fff)', fontSize: '0.6rem', fontWeight: 700,
                                                 minWidth: '16px', height: '16px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                 padding: '0 3px', lineHeight: 1, boxShadow: '0 0 6px var(--danger)',
                                             }}>{conv.unreadCount! > 99 ? '99+' : conv.unreadCount}</span>

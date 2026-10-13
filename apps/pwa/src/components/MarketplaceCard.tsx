@@ -346,7 +346,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             </span>
                         )}
                         {post.authorFoundingNeeded && (
-                            <span className={`font-bold bg-emerald-500/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
+                            <span className={`font-bold bg-emerald-500/90 dark:bg-emerald-700/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
                                 🌱 FOUNDING TRADE
                             </span>
                         )}
@@ -389,7 +389,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             </span>
                         )}
                         {post.authorFoundingNeeded && (
-                            <span className={`font-bold bg-emerald-500/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
+                            <span className={`font-bold bg-emerald-500/90 dark:bg-emerald-700/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
                                 🌱 FOUNDING TRADE
                             </span>
                         )}

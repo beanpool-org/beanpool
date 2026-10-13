@@ -27,6 +27,8 @@
   --accent: #647664;          /* nature-600 (Sage Green) */
   --accent-hover: #526052;    /* nature-700 */
   --danger: #c2583b;          /* terra-600 (Soft Terracotta) */
+  --on-danger: #fff;
+  --link: #2563eb;
   --success: #647664;         /* nature-600 */
   --scrollbar-thumb: #c0ccc0; /* nature-300 */
   --header-bg: #fbfaf8;       /* oat-50 */
@@ -70,13 +72,15 @@
   --text-primary: #f6f4f0;
   --text-secondary: #dce3dc;
   --text-muted: #9eaf9e;
-  --text-faint: #647664;
+  --text-faint: #9eaf9e;
   --border-primary: #434e43;
   --border-secondary: #384038;
-  --border-input: #526052;
+  --border-input: #809380;
   --accent: #809380;
   --accent-hover: #9eaf9e;
   --danger: #e5967f;
+  --on-danger: #1d231d;
+  --link: #93c5fd;
   --success: #809380;
   --scrollbar-thumb: #526052;
   --header-bg: #1d231d;
@@ -291,6 +295,17 @@ html, body, #root {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Dark: the sage ring is under 3:1 on the cards; a pale ring, and placeholders at 4.5:1 on the dark fields. */
+:root.dark-theme :focus-visible {
+  outline-color: #c0ccc0;
+}
+
+:root.dark-theme input::placeholder,
+:root.dark-theme textarea::placeholder {
+  color: #9eaf9e;
+  opacity: 1;
 }
 
 /* Dark Aura Glow for Typography Isolation */

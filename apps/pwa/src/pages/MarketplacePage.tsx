@@ -1126,7 +1126,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         )}
 
                         {selectedPost.description && (
-                            <p className="text-base text-nature-600 leading-relaxed mb-5 whitespace-pre-wrap">
+                            <p className="text-base text-nature-600 dark:text-nature-300 leading-relaxed mb-5 whitespace-pre-wrap">
                                 {selectedPost.description}
                             </p>
                         )}
@@ -1185,7 +1185,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                 {/* Author section */}
                 <div className="bg-white dark:bg-nature-950 rounded-2xl border border-nature-200 dark:border-nature-800 p-4 shadow-sm mb-4">
-                    <p className="text-[0.65rem] text-nature-400 dark:text-nature-500 font-bold uppercase tracking-widest mb-3">
+                    <p className="text-[0.65rem] text-nature-400 dark:text-nature-400 font-bold uppercase tracking-widest mb-3">
                         Posted by
                     </p>
                     <button 
@@ -2341,7 +2341,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             placeholder="Search marketplace..."
-                            className="w-full py-2 pl-10 pr-4 rounded-full border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all hover:shadow-md"
+                            className="w-full py-2 pl-10 pr-4 rounded-full border border-nature-200 dark:border-nature-600 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all hover:shadow-md"
                         />
                     </div>
 
@@ -2439,7 +2439,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                     <button
                         onClick={() => setShowPricingGuide(true)}
-                        className="px-3 py-1 rounded-full text-xs font-extrabold border transition-colors cursor-pointer bg-white dark:bg-nature-900 text-indigo-700 dark:text-indigo-400 border-indigo-300/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                        className="px-3 py-1 rounded-full text-xs font-extrabold border transition-colors cursor-pointer bg-white dark:bg-nature-900 text-indigo-700 dark:text-indigo-300 border-indigo-300/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
                         title="Browse benchmark community prices"
                     >
                         💡 Pricing Guide

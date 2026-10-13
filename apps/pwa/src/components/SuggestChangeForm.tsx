@@ -130,7 +130,7 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
             <button
                 type="submit"
                 disabled={sending || over}
-                className="w-full min-h-[48px] py-3 rounded-xl font-bold bg-emerald-600 text-white border-none cursor-pointer hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm mb-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                className="w-full min-h-[48px] py-3 rounded-xl font-bold bg-emerald-600 dark:bg-emerald-700 text-white border-none cursor-pointer hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-sm mb-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             >
                 {sending ? 'Sending…' : 'Send'}
             </button>

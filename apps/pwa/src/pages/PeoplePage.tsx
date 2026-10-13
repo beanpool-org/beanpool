@@ -244,7 +244,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                             >
                                                 {f.callsign}
                                             </button>
-                                            <div className="text-[11px] text-nature-400 dark:text-nature-500 font-medium mt-0.5">
+                                            <div className="text-[11px] text-nature-400 dark:text-nature-400 font-medium mt-0.5">
                                                 Added {relativeDate(f.addedAt)}
                                             </div>
                                         </div>
@@ -326,7 +326,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                                 >
                                                     {m.callsign}
                                                 </button>
-                                                <div className="text-[11px] text-nature-400 dark:text-nature-500 font-medium mt-0.5">
+                                                <div className="text-[11px] text-nature-400 dark:text-nature-400 font-medium mt-0.5">
                                                     Joined {relativeDate(m.joinedAt)}
                                                 </div>
                                             </div>

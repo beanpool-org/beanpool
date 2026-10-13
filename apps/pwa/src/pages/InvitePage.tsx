@@ -289,7 +289,7 @@ export function InvitePage({ identity }: Props) {
                     </button>
                     <button
                         onClick={handleShareLink}
-                        className="py-3 px-6 rounded-xl border-none bg-emerald-600 text-white text-[14px] font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all"
+                        className="py-3 px-6 rounded-xl border-none bg-emerald-600 dark:bg-emerald-700 text-white text-[14px] font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all"
                         aria-label="Share this community's link"
                         title="Share this community's link"
                     >
@@ -322,7 +322,7 @@ export function InvitePage({ identity }: Props) {
                     onClick={() => setActiveSection('invites')} 
                     className={`flex-1 py-3 rounded-xl border-none text-[14px] font-bold cursor-pointer transition-all shadow-sm ${
                         activeSection === 'invites' 
-                            ? 'bg-emerald-600 text-white shadow-md' 
+                            ? 'bg-emerald-600 dark:bg-emerald-700 text-white shadow-md' 
                             : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400 hover:bg-oat-200 dark:hover:bg-nature-700'
                     }`}
                 >
@@ -332,7 +332,7 @@ export function InvitePage({ identity }: Props) {
                     onClick={() => setActiveSection('tree')} 
                     className={`flex-1 py-3 rounded-xl border-none text-[14px] font-bold cursor-pointer transition-all shadow-sm ${
                         activeSection === 'tree' 
-                            ? 'bg-emerald-600 text-white shadow-md' 
+                            ? 'bg-emerald-600 dark:bg-emerald-700 text-white shadow-md' 
                             : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400 hover:bg-oat-200 dark:hover:bg-nature-700'
                     }`}
                 >
@@ -378,7 +378,7 @@ export function InvitePage({ identity }: Props) {
                         className={`w-full p-4 rounded-xl text-[15px] font-bold border-none cursor-pointer mb-6 transition-all shadow-md ${
                             generating 
                                 ? 'bg-nature-400 text-white cursor-not-allowed' 
-                                : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-lg'
+                                : 'bg-emerald-600 dark:bg-emerald-700 text-white hover:bg-emerald-700 hover:shadow-lg'
                         }`}
                     >
                         {generating ? 'Generating...' : '✨ Generate New Invite'}
@@ -411,7 +411,7 @@ export function InvitePage({ identity }: Props) {
                                 </button>
                                 <button 
                                     onClick={() => handleShare(newCode)} 
-                                    className="py-3 px-6 rounded-xl border-none bg-emerald-600 text-white text-[14px] font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all"
+                                    className="py-3 px-6 rounded-xl border-none bg-emerald-600 dark:bg-emerald-700 text-white text-[14px] font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all"
                                     aria-label="Share invite link"
                                     title="Share invite link"
                                 >
@@ -463,7 +463,7 @@ export function InvitePage({ identity }: Props) {
                                             </button>
                                         </div>
                                     </div>
-                                    <p className="text-nature-400 dark:text-nature-500 text-[11px] font-semibold mt-2 uppercase tracking-wide">
+                                    <p className="text-nature-400 dark:text-nature-400 text-[11px] font-semibold mt-2 uppercase tracking-wide">
                                         Created {new Date(inv.createdAt).toLocaleDateString()}
                                     </p>
                                 </div>
@@ -548,14 +548,14 @@ function TreeNodeView({ node, depth, identity }: { node: TreeNode; depth: number
                 } ${depth > 0 ? 'border-l-2 border-nature-200 dark:border-nature-700 pl-4' : ''}`}
             >
                 {/* Expand/collapse */}
-                <span className="text-[12px] text-nature-400 dark:text-nature-500 w-4 text-center">
+                <span className="text-[12px] text-nature-400 dark:text-nature-400 w-4 text-center">
                     {hasChildren ? (expanded ? '▼' : '▶') : '·'}
                 </span>
 
                 {/* Avatar dot */}
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold shrink-0 shadow-sm ${
                     isMe 
-                        ? 'bg-emerald-600 text-white border-2 border-emerald-300 dark:border-emerald-800' 
+                        ? 'bg-emerald-600 dark:bg-emerald-700 text-white border-2 border-emerald-300 dark:border-emerald-800' 
                         : 'bg-oat-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300'
                 }`}>
                     {node.callsign.charAt(0).toUpperCase()}

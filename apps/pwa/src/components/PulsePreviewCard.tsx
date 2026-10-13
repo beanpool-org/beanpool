@@ -113,7 +113,7 @@ export function PulsePreviewCard({
                 <div className="flex-1 min-w-0">
                     <h4
                         className={`font-semibold text-sm sm:text-base text-nature-950 dark:text-white line-clamp-3 leading-snug mb-1.5 ${
-                            !isOptedIn ? 'line-through text-nature-400 dark:text-nature-500' : ''
+                            !isOptedIn ? 'line-through text-nature-400 dark:text-nature-400' : ''
                         }`}
                     >
                         {preview.title || 'Untitled Post'}

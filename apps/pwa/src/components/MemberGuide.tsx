@@ -186,7 +186,7 @@ export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE, i
                             })}
                         </div>
 
-                        <p className="text-center text-xs text-nature-400 dark:text-nature-500 mt-6">
+                        <p className="text-center text-xs text-nature-400 dark:text-nature-400 mt-6">
                             Guide version {guide.version}{source === 'bundled' ? ' · built into the app' : ' · updated from beanpool.org'}
                             <br />Works without a connection.
                         </p>

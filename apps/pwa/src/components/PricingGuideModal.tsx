@@ -177,7 +177,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                         onClick={() => setSelectedCategory('all')}
                         className={`flex-shrink-0 px-3 py-1.5 min-h-[44px] rounded-full text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors ${
                             selectedCategory === 'all'
-                                ? 'bg-emerald-600 text-white'
+                                ? 'bg-emerald-600 dark:bg-emerald-700 text-white'
                                 : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                         }`}
                     >
@@ -193,7 +193,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                 onClick={() => setSelectedCategory(cat.id)}
                                 className={`flex-shrink-0 px-3 py-1.5 min-h-[44px] rounded-full text-xs font-semibold flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 transition-colors ${
                                     active
-                                        ? 'bg-emerald-600 text-white'
+                                        ? 'bg-emerald-600 dark:bg-emerald-700 text-white'
                                         : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700'
                                 }`}
                             >
@@ -304,7 +304,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                         <div className="flex items-center gap-1 mt-1.5">
                                             {onSelectOfferItem && (
                                                 <span
-                                                    className="px-2 py-0.5 bg-emerald-600 text-white rounded text-[11px] font-semibold pointer-events-none"
+                                                    className="px-2 py-0.5 bg-emerald-600 dark:bg-emerald-700 text-white rounded text-[11px] font-semibold pointer-events-none"
                                                 >
                                                     Offer →
                                                 </span>

@@ -226,7 +226,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                     maxLength={200}
                     className="w-full py-3 px-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50 text-nature-900 dark:text-white text-base focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-h-[90px] resize-none transition-all placeholder:text-nature-400"
                 />
-                <p className="text-nature-400 dark:text-nature-500 text-xs text-right mt-1 font-medium">
+                <p className="text-nature-400 dark:text-nature-400 text-xs text-right mt-1 font-medium">
                     {bio.length}/200
                 </p>
             </div>

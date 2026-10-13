@@ -25,7 +25,7 @@ import type { BeanPoolIdentity } from './identity';
 import { signedGet, signedPost } from './node-post';
 import { groupKeyring, type GroupKeyStore } from './group-chat-keys';
 import { makeTopUp, openMyKey, verifiedFormerKeys, verifyGroupEpochRecord, type GroupEpochRecord, type GroupServedWrap } from './group-chat-crypto';
-import { keysThisPhoneKnewFor } from './name-key-memory';
+import { keysThisPhoneKnewFor, namesThisPhoneSawFor } from './name-key-memory';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ─── What the screens say (§7, §3, §4) ──────────────────────────────────────────────────────────────────────────────
@@ -124,6 +124,10 @@ export function newPhoneNotListedText(name: string): string {
 }
 export function newPhoneMismatchText(name: string): string {
     return `This phone's record of ${name}'s old key doesn't match what the community says. Don't continue; tell an owner.`;
+}
+/** The code's old key was another name's key on this phone (§4 amendment 2): the node may have named the new phone. */
+export function newPhoneKeyWasOtherText(name: string, other: string): string {
+    return `This phone knew that key as ${other}, not ${name}. Don't continue; tell an owner.`;
 }
 export function newPhoneNoMemoryText(name: string): string {
     return `This phone never knew ${name}'s old key. A longer-standing member's phone can confirm them.`;
@@ -364,7 +368,9 @@ const fold = (s: string) => s.trim().replace(/[A-Z]/g, (c) => c.toLowerCase());
  * THIS phone's memory says the name was on that old key before any move the phone saw without a statement
  * (name-key-memory.ts). The last one is the anchor. The memory was written from rosters the node served, so it holds only
  * through its order (§4 amendment): once a name moved to a key with no statement from that key over the one it left, the
- * key it moved to never counts, so a phone the node once showed "Cat" on Zed's key refuses, never hands Zed's.
+ * key it moved to never counts, so a phone the node once showed "Cat" on Zed's key refuses, never hands Zed's. A chain
+ * that places the moved-to key older than the key the move left never confirms it, and a key this phone saw under another
+ * name is refused (§4 amendment 2). What stays the node's word: a phone that never saw the old key under its owner's name.
  */
 export async function checkNewPhone(input: {
     nodeUrl: string;
@@ -398,6 +404,11 @@ export async function checkNewPhone(input: {
     const knew = await keysThisPhoneKnewFor(input.nodeUrl, name, code.newKey);
     if (knew.length === 0) return { ok: false, reason: 'no_memory', text: newPhoneNoMemoryText(name) };
     if (!chainNamesOld || !knew.includes(code.oldKey)) return { ok: false, reason: 'mismatch', text: newPhoneMismatchText(name) };
+    // The node names the new phone (rekey-redeem.ts: its `bound` callsign), so the name on the code may be one this phone
+    // never saw: a key this phone saw as another name's never counts as this name's old key (§4 amendment 2).
+    const listed = name;
+    const other = (await namesThisPhoneSawFor(input.nodeUrl, code.oldKey)).find((n) => fold(n) !== fold(listed));
+    if (other) return { ok: false, reason: 'mismatch', text: newPhoneKeyWasOtherText(name, other) };
     return { ok: true, name, oldKey: code.oldKey, newKey: code.newKey, groups: shared };
 }
 

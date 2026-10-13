@@ -67,7 +67,7 @@ import {
     unlockWithOldWords, oldKeyFromWords, newPhoneQrPayload, parseNewPhoneQr, checkNewPhone, confirmNewPhone, newPhoneConfirmText, NEW_PHONE_QR_TAG,
     handOversHeld, noteConfirmations, confirmedNotes, newPhoneProgressText,
     newPhoneEnd, newPhoneDoneText, newPhoneRefusedRestText, oldWordsEnd, oldWordsNothingText, OLD_WORDS_DONE, OLD_WORDS_NOTHING_LISTED,
-    lockedHistoryCounts, noteLockedHistoryCount,
+    lockedHistoryCounts, noteLockedHistoryCount, newPhoneKeyWasOtherText,
 } from '../group-history-unlock';
 import { rememberRosterNames } from '../name-key-memory';
 import { sendSealedGroupLine, openGroupThread, chatIsLocked } from '../group-chat-lines';
@@ -855,5 +855,154 @@ describe('review of #1844: path B against a node that rewrites names, wraps list
         expect(db).toMatch(/watchForReplacedKey\(anchorUrl, identity\.publicKey, res, signed\);/);
         expect(db).toMatch(/headers = \{ \.\.\.headers, \.\.\.signedHeaders \};\n\s+signed = true;/);
         expect(db).toMatch(/void noteKeyAnswered\(anchorUrl, identity\.publicKey\);\n\s+return await res\.json\(\);/);
+    });
+});
+
+// ─── Confirmation 1 of #1844 (§4 amendment 2): the chain's order, the name the node gives the new phone, first sight ───
+describe('confirmation 1 of #1844: a chain in the wrong order, a lookalike name, and the first-sight residual', () => {
+    const memKey = () => `beanpool_name_keys:${URL_BASE}`;
+    const byKeyKey = () => `beanpool_names_by_key:${URL_BASE}`;
+    const memoryOf = (name: string) => JSON.parse(mem.async.get(memKey()) ?? '{}')[name.trim().replace(/[A-Z]/g, (c) => c.toLowerCase())];
+    const benSees = async (ben: Phone, gs: readonly string[]) => { for (const g of gs) await rememberRosterNames(URL_BASE, await roster(ben, g)); };
+    const fromEpoch1 = (g: string, key: string) => control('sql', { sql: 'UPDATE group_members SET from_epoch = 1 WHERE group_id = ? AND member_pubkey = ?', params: [g, key] });
+    /** Every members answer with `rows` rewritten. */
+    const rowsHook = (path: RegExp | string, rewrite: (rows: any[]) => any[]): Hook => async (r) => {
+        if (r.method !== 'GET' || (typeof path === 'string' ? r.path !== path : !path.test(r.path))) return undefined;
+        return jsonResponse(200, rewrite(await (await realFetch(r.input, r.init)).json()));
+    };
+    const withHook = async <T,>(hook: Hook, run: () => Promise<T>): Promise<T> => {
+        hooks.unshift(hook);
+        try { return await run(); } finally { hooks.splice(hooks.indexOf(hook), 1); }
+    };
+    let hooksBefore: Hook[] = [];
+    beforeEach(() => { hooksBefore = [...hooks]; });
+    afterEach(() => { hooks.splice(0, hooks.length, ...hooksBefore); });
+
+    /** G: Ben starts (1), Zed joins (2) and writes a line Cat never saw, Cat joins (3) and writes, Ben writes. H: Ben and Zed. */
+    async function poisonSetup(tag: string) {
+        await control('limiters');
+        forgetGroupKeys();
+        mem.async.delete(memKey());
+        mem.async.delete(byKeyKey());
+        const ben = phone(`Ben${tag}`);
+        const zed = phone(`Zed${tag}`);
+        const cat = phone(`Cat${tag}`);
+        await control('members', { members: [ben, zed, cat].map((p) => ({ key: pk(p), callsign: p.name })) });
+        const g = await newGroup(ben, `Poison G ${tag}`);
+        await say(ben, g, 'Ben alone');
+        await join_(zed, g);
+        await writes(zed, g, 'Zed before Cat');
+        await join_(cat, g);
+        await writes(cat, g, 'Cat here');
+        await writes(ben, g, 'Ben with both');
+        const h = await newGroup(ben, `Side H ${tag}`);
+        await join_(zed, h);
+        await writes(zed, h, 'side line');
+        return { ben, zed, cat, g, h, ctx: { nodeUrl: URL_BASE, identity: ben.identity, groups: [{ id: g, name: 'G' }, { id: h, name: 'H' }] } };
+    }
+
+    it('MP-CHAIN (finding 1): a puppet\'s claim over her key, one relabel to Zed\'s, then her one misled statement over the puppet with the puppet\'s claim over Zed: the chain places Zed\'s key older than the puppet\'s, so it never counts; refused, nothing handed', async () => {
+        const { ben, zed, cat, g, h, ctx } = await poisonSetup('c');
+        await benSees(ben, [g, h]);
+        expect(memoryOf(cat.name)).toEqual({ key: pk(cat) });
+        const pup = phone('Pupc');
+        await control('members', { members: [{ key: pk(pup), callsign: pup.name }] });
+        // Roster 1 of H: a row for the puppet under her name, with its claim over her honest key: taken as a move, unmarked.
+        await withHook(rowsHook(`/api/groups/${h}/members`, (rows) => [...rows, { memberPubkey: pk(pup), callsign: cat.name, status: 'active', formerKeys: [claim(pup, pk(cat))] }]),
+            () => benSees(ben, [h]));
+        expect(memoryOf(cat.name)).toEqual({ key: pk(pup), was: [pk(cat)] });
+        // Roster 2 of H: Zed's row under her name: the taint, with the puppet as the key the move left.
+        await withHook(rowsHook(`/api/groups/${h}/members`, (rows) => rows.map((m) => (m.memberPubkey === pk(zed) ? { ...m, callsign: cat.name } : m))), () => benSees(ben, [h]));
+        expect(memoryOf(cat.name)).toEqual({ key: pk(zed), changedFrom: pk(pup), was: [pk(cat)] });
+        // Her re-key: the node lists the puppet as her old key and her new phone signs that once; the puppet's claim over
+        // Zed's key completes the chain C2 → P → Z, which says Zed's key came BEFORE the puppet's. This phone saw the reverse.
+        const cat2 = await rekeyed(cat, cat.name);
+        const chain = [claim(cat2, pk(pup)), claim(pup, pk(zed))];
+        const herRow = (m: any) => (m.memberPubkey === pk(cat2) ? { ...m, formerKeys: chain } : m);
+        hooks.push(rowsHook(/\/members$/, (rows) => rows.map(herRow)));
+        await fromEpoch1(g, pk(cat2));
+        // Roster 3, of G, Zed left out: the chain reaches the puppet (the taint clears) and Zed's key, which stays out.
+        const m3 = await withHook(rowsHook(`/api/groups/${g}/members`, (rows) => rows.filter((m) => m.memberPubkey !== pk(zed)).map(herRow)),
+            async () => rememberRosterNames(URL_BASE, await roster(ben, g)));
+        expect(m3.size).toBe(0);
+        expect(memoryOf(cat.name)).toEqual({ key: pk(cat2), was: [pk(pup), pk(cat)] });
+        await benSees(ben, [g]);
+        // Her code names the key her phone signed for (the puppet's would plan nothing the puppet didn't hold); the node's
+        // story says Zed's: both are refused or empty, and Zed's key is never handed anything.
+        const check = await checkNewPhone({ ...ctx, scanned: JSON.stringify([NEW_PHONE_QR_TAG, pk(cat2), pk(zed), cat.name]) });
+        expect(check).toMatchObject({ ok: false, reason: 'mismatch' });
+        expect(await topUps(pk(ben), pk(cat2))).toEqual([]);
+        forgetGroupKeys();
+        const read = await reads(cat2, g);
+        expect(read).not.toContain(`${zed.name}: Zed before Cat`);
+        console.log(`MEASURED MP-CHAIN: memory {key: C2, was: [P, C1]}; check ${JSON.stringify(check)}; Cat₂ reads ${JSON.stringify(read)}`);
+        expect(elsewhere).toEqual([]);
+    });
+
+    it('LN (finding 2): the node names the re-keyed phone "Cаtl" (Cyrillic а): Zed\'s key was "Zedl" on this phone, so it never counts as the lookalike\'s old key; refused in every group, nothing handed', async () => {
+        const { ben, zed, cat, g, h, ctx } = await poisonSetup('l');
+        await benSees(ben, [g, h]);
+        expect(memoryOf(cat.name)).toEqual({ key: pk(cat) });
+        expect(memoryOf(zed.name)).toEqual({ key: pk(zed) });
+        const look = 'Cаtl'; // "Catl" with a Cyrillic а: rekey-redeem.ts makes the new identity with the node's `bound` callsign
+        expect(look).not.toBe(cat.name);
+        const cat2 = await rekeyed(cat, look);
+        const misled = claim(cat2, pk(zed));
+        const herRow = (m: any) => (m.memberPubkey === pk(cat2) ? { ...m, formerKeys: [misled], callsign: look } : m);
+        hooks.push(rowsHook(/\/members$/, (rows) => rows.map(herRow)));
+        await join_(cat2, h);
+        await fromEpoch1(g, pk(cat2));
+        await fromEpoch1(h, pk(cat2));
+        // One roster of H: Zed's row under the lookalike, hers left out (a first sight of that name); then G's, Zed left out.
+        await withHook(rowsHook(`/api/groups/${h}/members`, (rows) => rows.filter((m) => m.memberPubkey !== pk(cat2)).map((m) => (m.memberPubkey === pk(zed) ? { ...m, callsign: look } : m))),
+            () => benSees(ben, [h]));
+        expect(memoryOf(look)).toEqual({ key: pk(zed) });
+        const marked = await withHook(rowsHook(`/api/groups/${g}/members`, (rows) => rows.filter((m) => m.memberPubkey !== pk(zed)).map(herRow)),
+            async () => rememberRosterNames(URL_BASE, await roster(ben, g)));
+        expect(marked.size).toBe(0);
+        expect(memoryOf(look)).toEqual({ key: pk(cat2), was: [pk(zed)] });
+        // The name memory alone would pass it: the names this phone saw Zed's key under refuse it.
+        const check = await checkNewPhone({ ...ctx, scanned: newPhoneQrPayload(cat2.identity, pk(zed)) });
+        expect(check).toEqual({ ok: false, reason: 'mismatch', text: newPhoneKeyWasOtherText(look, zed.name) });
+        expect(await topUps(pk(ben), pk(cat2))).toEqual([]);
+        forgetGroupKeys();
+        const readG = await reads(cat2, g);
+        expect(readG).not.toContain(`${zed.name}: Zed before Cat`);
+        console.log(`MEASURED LN: check ${JSON.stringify(check)}; top-ups 0; Cat₂ reads G ${JSON.stringify(readG)}`);
+        expect(elsewhere).toEqual([]);
+    });
+
+    it('FS (the first-sight residual, §4 amendment 2): a phone with no memory of her name is refused only while it has seen Zed\'s key under his own name; one that never has takes the node\'s first word', async () => {
+        const { ben, zed, cat, g, h, ctx } = await poisonSetup('f');
+        await benSees(ben, [g, h]);
+        // Ben restores his phone from his 12 words: his key and his wraps on the node are the same; his memory is empty.
+        mem.async.delete(memKey());
+        mem.async.delete(byKeyKey());
+        const cat2 = await rekeyed(cat, cat.name);
+        const misled = claim(cat2, pk(zed));
+        const herRow = (m: any) => (m.memberPubkey === pk(cat2) ? { ...m, formerKeys: [misled] } : m);
+        hooks.push(rowsHook(/\/members$/, (rows) => rows.map(herRow)));
+        await fromEpoch1(g, pk(cat2));
+        const code = JSON.stringify([NEW_PHONE_QR_TAG, pk(cat2), pk(zed), cat.name]);
+        // (a) The first roster with her name shows Zed's key under it (H); the shared group's roster is honest but for her
+        // chain, and shows Zed under his own name. The name memory "knew" Zed's key as hers; the key's own names refuse it.
+        await withHook(rowsHook(`/api/groups/${h}/members`, (rows) => rows.map((m) => (m.memberPubkey === pk(zed) ? { ...m, callsign: cat.name } : m))), () => benSees(ben, [h]));
+        expect(memoryOf(cat.name)).toEqual({ key: pk(zed) });
+        await benSees(ben, [g]);
+        expect(memoryOf(cat.name)).toEqual({ key: pk(cat2), changedFrom: pk(zed) });
+        expect(await checkNewPhone({ ...ctx, scanned: code })).toEqual({ ok: false, reason: 'mismatch', text: newPhoneKeyWasOtherText(cat.name, zed.name) });
+        expect(await topUps(pk(ben), pk(cat2))).toEqual([]);
+        // (b) The residual: restored again, and the node hides Zed from every roster this phone loads until the scan. Nothing
+        // on this phone tells a first lie from a first truth: the check passes (documented in §4 amendment 2 and the guide:
+        // confirm only someone you've chatted with in that group before).
+        mem.async.delete(memKey());
+        mem.async.delete(byKeyKey());
+        await withHook(rowsHook(`/api/groups/${h}/members`, (rows) => rows.map((m) => (m.memberPubkey === pk(zed) ? { ...m, callsign: cat.name } : m))), () => benSees(ben, [h]));
+        await withHook(rowsHook(`/api/groups/${g}/members`, (rows) => rows.filter((m) => m.memberPubkey !== pk(zed)).map(herRow)), () => benSees(ben, [g]));
+        expect(memoryOf(cat.name)).toEqual({ key: pk(cat2), was: [pk(zed)] });
+        const residual = await checkNewPhone({ ...ctx, scanned: code });
+        expect(residual.ok).toBe(true);
+        console.log(`MEASURED FS: seen as Zedf → refused; never seen under his name → check ${residual.ok ? 'passes (the documented residual)' : JSON.stringify(residual)}`);
+        expect(elsewhere).toEqual([]);
     });
 });

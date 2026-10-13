@@ -11,7 +11,7 @@
  * the same roster doesn't count, and a name two rows share is neither moved nor cleared.
  *
  * Per community and per name (ASCII case folded, as the node's own lower(callsign) uniqueness is), in AsyncStorage:
- * { key, changedFrom? }.
+ * { key, changedFrom?, was? }; and per key, the names it was seen under (noteNamesByKey).
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { verifiedFormerKeys, type FormerKey } from './group-chat-crypto';
@@ -64,7 +64,9 @@ export function noteRosterNames(memory: NameKeyMemory, roster: readonly MemoryRo
             if (seen?.changedFrom && seen.key === r.memberPubkey) changed.add(r.memberPubkey);
             continue;
         }
-        const former = new Set(verifiedFormerKeys(r).filter((k) => !current.has(k)));
+        // Newest first: each link is the newer key's signature over the one before it.
+        const path = verifiedFormerKeys(r).filter((k) => !current.has(k));
+        const former = new Set(path);
         const reaches = (k: string) => former.has(k);
         if (!seen) {
             next[n] = { key: r.memberPubkey };
@@ -74,9 +76,14 @@ export function noteRosterNames(memory: NameKeyMemory, roster: readonly MemoryRo
         } else if (reaches(seen.key)) {
             // An unconfirmed move taints the name (DESIGN-group-history-after-rekey-fable.md, §4 amendment; review of #1844,
             // finding 1): a chain to the key it moved TO confirms nothing, so the mark and changedFrom stay and that key never
-            // enters `was`. Only a chain that also reaches the key the move left (each link the newer key's signature) confirms it.
+            // enters `was`. Only a chain that also reaches the key the move left (each link the newer key's signature) confirms it,
+            // and the moved-to key enters only where that chain places it NEWER than the key the move left, the order this phone
+            // saw them in (§4 amendment 2; confirmation 1 of #1844, finding 1): a chain C2 → P → Z says Z came before P.
             if (!seen.changedFrom) next[n] = { key: r.memberPubkey, was: withWas(seen.was, seen.key) };
-            else if (reaches(seen.changedFrom)) next[n] = { key: r.memberPubkey, was: withWas(withWas(seen.was, seen.changedFrom), seen.key) };
+            else if (reaches(seen.changedFrom)) {
+                const inOrder = path.indexOf(seen.key) < path.indexOf(seen.changedFrom);
+                next[n] = { key: r.memberPubkey, was: inOrder ? withWas(withWas(seen.was, seen.changedFrom), seen.key) : withWas(seen.was, seen.changedFrom) };
+            }
             else { next[n] = { key: r.memberPubkey, changedFrom: seen.changedFrom, ...(seen.was ? { was: seen.was } : {}) }; changed.add(r.memberPubkey); }
         } else {
             next[n] = { key: r.memberPubkey, changedFrom: seen.changedFrom ?? seen.key, ...(seen.was ? { was: seen.was } : {}) };
@@ -87,6 +94,40 @@ export function noteRosterNames(memory: NameKeyMemory, roster: readonly MemoryRo
 }
 
 const storageKey = (nodeUrl: string) => `beanpool_name_keys:${nodeUrl.replace(/\/+$/, '')}`;
+const byKeyStorageKey = (nodeUrl: string) => `beanpool_names_by_key:${nodeUrl.replace(/\/+$/, '')}`;
+
+/** The names each key was a current row under, newest last; one per folded name, at most 8 a key. */
+export type NamesByKey = Record<string, string[]>;
+const NAMES_MAX = 8;
+
+/**
+ * Pure: `prior` with the name each row of `roster` shows on its key (§4 amendment 2; confirmation 1 of #1844, finding 2).
+ * The memory above is keyed by name, and the node names a re-keyed phone: a lookalike ("Cаt", Cyrillic а) is a name this
+ * phone never saw. This is the other way round: a key this phone saw as another name's never counts as the old key in a
+ * new-phone code under this one.
+ */
+export function noteNamesByKey(prior: NamesByKey, roster: readonly MemoryRosterRow[]): NamesByKey {
+    const next: NamesByKey = { ...prior };
+    for (const r of roster) {
+        if (!r?.callsign || typeof r.memberPubkey !== 'string' || !r.callsign.trim()) continue;
+        const had = Array.isArray(next[r.memberPubkey]) ? next[r.memberPubkey].filter((x) => typeof x === 'string') : [];
+        const n = nameKey(r.callsign);
+        if (!had.some((x) => nameKey(x) === n)) next[r.memberPubkey] = [...had, r.callsign.trim()].slice(-NAMES_MAX);
+    }
+    return next;
+}
+
+/** The names this phone saw `key` under as a current row; [] when none, or the memory can't be read. */
+export async function namesThisPhoneSawFor(nodeUrl: string, key: string): Promise<string[]> {
+    try {
+        const raw = await AsyncStorage.getItem(byKeyStorageKey(nodeUrl));
+        const v = raw ? JSON.parse(raw) : {};
+        const names = v && typeof v === 'object' ? v[key] : undefined;
+        return Array.isArray(names) ? names.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+        return [];
+    }
+}
 
 /** Reads this community's memory, notes the roster, writes it back: the keys to mark. Storage failing marks nothing. */
 export async function rememberRosterNames(nodeUrl: string, roster: readonly MemoryRosterRow[]): Promise<Set<string>> {
@@ -95,6 +136,9 @@ export async function rememberRosterNames(nodeUrl: string, roster: readonly Memo
         const memory = raw ? (JSON.parse(raw) as NameKeyMemory) : {};
         const { memory: next, changed } = noteRosterNames(memory && typeof memory === 'object' ? memory : {}, roster);
         await AsyncStorage.setItem(storageKey(nodeUrl), JSON.stringify(next));
+        const rawByKey = await AsyncStorage.getItem(byKeyStorageKey(nodeUrl));
+        const byKey = rawByKey ? JSON.parse(rawByKey) : {};
+        await AsyncStorage.setItem(byKeyStorageKey(nodeUrl), JSON.stringify(noteNamesByKey(byKey && typeof byKey === 'object' ? byKey : {}, roster)));
         return changed;
     } catch {
         return new Set();

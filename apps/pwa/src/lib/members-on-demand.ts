@@ -9,8 +9,12 @@
  * answered this browser, and as one without only when it never has.
  */
 import { useEffect, useState } from 'react';
-import { getMemberCards, getNodeApiUrl, type CommunityInfo, type MemberCard } from './api';
+import { getMemberCards, type MemberCard } from './api';
 import { communityInfoOnce } from './visitor-lobby-gate';
+import { bounded } from './bounded';
+import { membersOnDemandOn, membersOnDemandLastSeen, noteMembersOnDemand } from './members-on-demand-seen';
+
+export { membersOnDemandOn, membersOnDemandLastSeen, MEMBERS_ON_DEMAND_SEEN_PREFIX } from './members-on-demand-seen';
 
 /** The node's floors and ceilings (apps/server routes/community.ts answerMembersOnDemand): asked within them, never refused. */
 export const MEMBERS_SEARCH_MIN_CHARS = 2;
@@ -21,13 +25,16 @@ export const MEMBERS_KEYS_MAX = 100;
 export const MEMBERS_KEYS_BATCHES = 3;
 /** The pause after typing before a search goes to the node, as on the phone. */
 export const MEMBERS_SEARCH_DEBOUNCE_MS = 400;
+/**
+ * Each small form's time limit (review of #1861, N4): without one, a node that never answers left "Finding who's near
+ * you…" or "Searching…" up for good. The node's own caps make it generous: an answer is at most 50 cards near, 20 for a
+ * name, 100 by key (each card about 400 bytes, so 20, 8 and 40 KB), built from an index, and sent straight past the
+ * heavy-read cap, so it is never queued or answered busy and only the network takes time. 40 KB at 64 kbit/s is 5 s
+ * plus the handshake; past 30 s the node isn't answering. The same as the area read's (lib/member-area).
+ */
+export const MEMBERS_REQUEST_TIMEOUT_MS = 30_000;
 
 const MEMBER_KEY = /^[0-9a-f]{64}$/;
-
-/** Whether this community wants people asked for, not read whole. A node that doesn't say: no. */
-export function membersOnDemandOn(info: CommunityInfo | null | undefined): boolean {
-    return info?.features?.membersOnDemand === true;
-}
 
 /** The search's path, or null when what was typed is too short to ask (the node refuses under 2 characters). */
 export function memberSearchPath(typed: string): string | null {
@@ -65,21 +72,26 @@ export function memberKeysPaths(keys: Iterable<string>): string[] {
     return memberKeysBatches(keys).map(memberKeysPath);
 }
 
+/** One small form's answer, given up (rejected) after MEMBERS_REQUEST_TIMEOUT_MS or when `signal` stops it. */
+function cardsWithin(path: string, signal?: AbortSignal): Promise<MemberCard[]> {
+    return bounded(stop => getMemberCards(path, stop), MEMBERS_REQUEST_TIMEOUT_MS, signal);
+}
+
 /** The members whose name starts with what was typed; none, without asking, under 2 characters. */
 export async function searchMembers(typed: string, signal?: AbortSignal): Promise<MemberCard[]> {
     const path = memberSearchPath(typed);
-    return path ? getMemberCards(path, signal) : [];
+    return path ? cardsWithin(path, signal) : [];
 }
 
 /** The 50 members nearest a stored area, nearest first; none, without asking, with no area. */
 export async function membersNear(point: { lat: number; lng: number } | null | undefined, signal?: AbortSignal): Promise<MemberCard[]> {
     const path = membersNearPath(point);
-    return path ? getMemberCards(path, signal) : [];
+    return path ? cardsWithin(path, signal) : [];
 }
 
 /** One batch of people's cards (memberKeysBatches): those the node holds, in the order asked. */
 export async function membersByKeys(batch: string[], signal?: AbortSignal): Promise<MemberCard[]> {
-    return batch.length ? getMemberCards(memberKeysPath(batch), signal) : [];
+    return batch.length ? cardsWithin(memberKeysPath(batch), signal) : [];
 }
 
 /**
@@ -101,27 +113,6 @@ export function useMemberSearch(typed: string, enabled: boolean): { found: Membe
         return () => { clearTimeout(timer); stop.abort(); };
     }, [typed, enabled]);
     return { found, state };
-}
-
-/** Where this browser keeps each node's last answer about the switch: `<prefix><node address>` = '1' or '0'. */
-export const MEMBERS_ON_DEMAND_SEEN_PREFIX = 'bp_members_on_demand:';
-
-function seenKey(): string {
-    return MEMBERS_ON_DEMAND_SEEN_PREFIX + (getNodeApiUrl() || (typeof window !== 'undefined' ? window.location.origin : ''));
-}
-
-/** This node's last answer to this browser, or null when it never gave one (or the store can't be read). */
-export function membersOnDemandLastSeen(): boolean | null {
-    try {
-        const v = localStorage.getItem(seenKey());
-        return v === '1' ? true : v === '0' ? false : null;
-    } catch {
-        return null;
-    }
-}
-
-function noteMembersOnDemand(on: boolean): void {
-    try { localStorage.setItem(seenKey(), on ? '1' : '0'); } catch { /* this page still has the answer */ }
 }
 
 /**

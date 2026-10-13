@@ -25,7 +25,9 @@
  *  10b. a member near a listing who blocked its author (member_blocks, their own list, as their set reads it) hears
  *      nothing of it, the block made with their socket open: not its new_post, its edit, its id-only event nor its
  *      removal; a tie (an open deal on it) still reaches them, as their set
- *      keeps it; an unblock lets the next push through; the author's own block of them changes nothing (#1812)
+ *      keeps it; an unblock lets the next push through; a block and an unblock written by another connection to
+ *      state.db (an ops tool in its own process) each hold from the next push (#1867); the author's own block of them
+ *      changes nothing (#1812)
  *  11. the cost: 3,500 sockets, the filter on against off, interleaved, with the load printed: a member's listing and an
  *      enterprise's, whose keepers are read once an event, never once a socket
  *  12. the local profile, in its own process: every member socket still gets every listing in full
@@ -514,6 +516,21 @@ async function main(): Promise<void> {
         const unblocked = await postNear('After the unblock');
         reachIs("her new listing after Noel unblocked her", 'new_post', unblocked, { ana: true, nia: false, noel: true, unsigned: false });
         assert(noelsSet().includes(unblocked) && noelsSet().includes(blocked), 'and his set holds her listings again');
+        // His block written by another connection to state.db (an ops tool in its own process), which no trigger of the
+        // node's own connection counts, after a push kept who blocked Ana: it holds from her next push all the same, and
+        // its removal there lets the one after through (#1867).
+        const Database = (await import('better-sqlite3')).default;
+        const other = new Database(db.name);
+        const otherAt = new Date().toISOString();
+        other.prepare('INSERT INTO member_blocks (owner_pubkey, blocked_pubkey, created_at, updated_at) VALUES (?, ?, ?, ?)').run(noel.pk, ana.pk, otherAt, otherAt);
+        clear();
+        const otherBlocked = await postNear('Blocked from another connection');
+        reachIs('her new listing after another connection wrote his block', 'new_post', otherBlocked, { ana: true, nia: false, noel: false, unsigned: false });
+        other.prepare('DELETE FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?').run(noel.pk, ana.pk);
+        other.close();
+        clear();
+        const otherUnblocked = await postNear('Unblocked from another connection');
+        reachIs('her new listing after another connection removed it', 'new_post', otherUnblocked, { ana: true, nia: false, noel: true, unsigned: false });
         // The other direction is the author's own list, which a member's set never reads: Ana's block of Noel changes
         // nothing he hears of her listings.
         await blocksCall(ana, '/api/blocks', noel, 'Ana blocks Noel');

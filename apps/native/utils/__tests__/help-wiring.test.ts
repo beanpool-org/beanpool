@@ -30,6 +30,8 @@ describe('the phone\'s "?" opens the words for the screen on show', () => {
         expect(layout).toMatch(/DeviceEventEmitter\.addListener\(OPEN_HELP_EVENT, \(\) => setHelpOpen\(true\)\)/);
         expect(layout).toMatch(/helpSheetFor\(guide\.guide, phoneHelpKey\(pathname, helpContext\(\)\)\)/);
         expect(layout).toMatch(/<HelpSheet\s+visible=\{helpOpen\}\s+sheet=\{helpWords\}/);
+        // Take the tour again: the sheet's button reaches Home's restart (review of #1857, NB1).
+        expect(layout).toMatch(/onTour=\{\(\) => \{[^}]*if \(tourRunning\) return;\s*if \(tourHomeNow\?\.restart\) tourHomeNow\.restart\(\);/);
     });
 
     it('the Market names Polls while it shows them, and Talk names Groups and People', () => {

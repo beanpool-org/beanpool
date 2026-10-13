@@ -21,7 +21,7 @@ import {
     postFormCredits, postFormPriceType, postFormPriceMissing, postFormPriceInvalid, postFormSubmitLabel, type PostFormState,
 } from '../market-global';
 import { readNodeProfile, nodeProfileIsFresh, NODE_PROFILE_FRESH_MS, type NodeProfile } from '../node-profile';
-import { START_COMMUNITY_COPY, communityDetailsText, canCopyDetails } from '../start-community';
+import { START_COMMUNITY_COPY, RUN_A_NODE_URL, communityDetailsText, canCopyDetails, runANodeUrl, runANodeLabel } from '../start-community';
 import { KNOCK_MESSAGES } from '../knock';
 import { WANTS_TO_JOIN_HELP } from '../knock-inbox';
 
@@ -203,7 +203,35 @@ describe('start a community', () => {
         expect(canCopyDetails({ name: 'V', place: '', contact: '' })).toBe(false);
         expect(canCopyDetails({ name: 'Va', place: '', contact: '' })).toBe(true);
     });
+
+    // No domain lock-in: "How to run a node" opens the community's own page when its node names one
+    // (GET /api/community/info's `startCommunityUrl`, apps/server config/start-community.ts), beanpool.org's only without one.
+    it('opens the page the community\'s node names, and says where; beanpool.org\'s only when it names none', () => {
+        const own = readNodeProfile({ ...GLOBAL_INFO_FOR_START, startCommunityUrl: 'https://start.example.org/run' })!;
+        expect(runANodeUrl(own)).toBe('https://start.example.org/run');
+        expect(runANodeLabel(runANodeUrl(own))).toBe('How to run a node, on start.example.org');
+        const none = readNodeProfile(GLOBAL_INFO_FOR_START)!;
+        expect(runANodeUrl(none)).toBe(RUN_A_NODE_URL);
+        expect(RUN_A_NODE_URL).toBe('https://beanpool.org/#run-a-node');
+        expect(runANodeLabel(runANodeUrl(none))).toBe(START_COMMUNITY_COPY.website);
+        expect(runANodeUrl(null)).toBe(RUN_A_NODE_URL);
+        // Only an address an app may open for a stranger, as the server's own rule says: https, a host, no user name.
+        for (const bad of ['http://start.example.org/run', 'javascript:alert(1)', 'https://me:pw@start.example.org/', 'https://a b.org/', '', 42, null]) {
+            expect(runANodeUrl(readNodeProfile({ ...GLOBAL_INFO_FOR_START, startCommunityUrl: bad })), String(bad)).toBe(RUN_A_NODE_URL);
+        }
+        expect(runANodeUrl(readNodeProfile({ ...GLOBAL_INFO_FOR_START, startCommunityUrl: 'https://x.org/' + 'a'.repeat(300) }))).toBe(RUN_A_NODE_URL);
+    });
+
+    it('the screen opens that page, from the community it is on (source check)', () => {
+        const screen = fs.readFileSync(path.resolve(__dirname, '../../app/start-community.tsx'), 'utf-8');
+        expect(screen).toMatch(/const runANode = runANodeUrl\(useNodeProfile\(\)\);/);
+        expect(screen).toMatch(/WebBrowser\.openBrowserAsync\(runANode\)/);
+        expect(screen).toMatch(/\{runANodeLabel\(runANode\)\}/);
+        expect(screen).not.toMatch(/RUN_A_NODE_URL/);
+    });
 });
+
+const GLOBAL_INFO_FOR_START = { profile: 'global', features: { beans: false, showcase: true } };
 
 describe('the screens draw Beans only behind that rule (source check)', () => {
     const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, rel), 'utf-8');

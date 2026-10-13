@@ -51,6 +51,19 @@ describe('the replaced-key note under a lie that races an honest answer', () => 
         expect(mem.store.has(storageKey)).toBe(false);
     });
 
+    it('a burst (home\'s signed reads at once): six successes and a lie in flight together each read storage, may leave the note, and one more signed success clears it (confirmation 2 of #1844)', async () => {
+        mem.store.clear();
+        mem.gate.length = 0;
+        const inFlight = [noteKeyAnswered(URL, KEY), noteKeyAnswered(URL, KEY), noteKeyAnswered(URL, KEY), noteKeyReplaced(URL, KEY), noteKeyAnswered(URL, KEY), noteKeyAnswered(URL, KEY), noteKeyAnswered(URL, KEY)];
+        await tick();
+        expect(mem.gate.length).toBe(7);
+        release(7);
+        await Promise.all(inFlight);
+        expect(mem.store.has(storageKey)).toBe(true);
+        await laterSuccess();
+        expect(mem.store.has(storageKey)).toBe(false);
+    });
+
     it('a lie after every success has landed is kept until the next success', async () => {
         mem.store.clear();
         mem.gate.length = 0;

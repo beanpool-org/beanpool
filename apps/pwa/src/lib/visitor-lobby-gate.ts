@@ -6,6 +6,7 @@
 import { getCommunityInfo, type CommunityInfo } from './api';
 import { loadInviteSent, loadPendingJoin } from './identity';
 import { captureAuthReturn } from './web-join';
+import { membersOnDemandOn, noteMembersOnDemand } from './members-on-demand-seen';
 
 let infoOnce: Promise<CommunityInfo> | null = null;
 
@@ -15,7 +16,8 @@ let infoOnce: Promise<CommunityInfo> | null = null;
  */
 export function communityInfoOnce(): Promise<CommunityInfo> {
     if (!infoOnce) {
-        infoOnce = getCommunityInfo().catch((e) => {
+        // A good read keeps the node's members-on-demand answer, so a later start that can't ask still knows it.
+        infoOnce = getCommunityInfo().then((info) => { noteMembersOnDemand(membersOnDemandOn(info)); return info; }).catch((e) => {
             infoOnce = null;
             throw e;
         });

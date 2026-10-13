@@ -26,7 +26,7 @@ import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark
 import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import { invitesOn } from '../../utils/node-profile';
 import {
-    GUEST_DOOR_BUTTON, GUEST_DOOR_TEXT, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, bringSomeoneHereText, onlyAdminsInvite, mayInviteHere,
+    guestDoorButton, guestDoorText, joinWays, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, bringSomeoneHereText, onlyAdminsInvite, mayInviteHere,
     mayMakeOfflineTicket, adminsOnlyText, adminsOnlyRefusal, offlineTicketRefusal, type InviteRole,
 } from '../../utils/invite-entries';
 import { doorOfferedToAccount, isGlobalCommunity } from '../../utils/global-join-existing';
@@ -203,7 +203,7 @@ export default function PeopleScreen() {
     const nodeProfile = useNodeProfile();
     const isGlobalNode = nodeProfile?.profile === 'global';
     const takesKnocks = !isGlobalNode && nodeProfile?.features.knocks !== false;
-    // Where the node takes no invites (the worldwide community: anyone joins with a sign-in), nothing here makes one: no
+    // Where the node takes no invites (the worldwide community: anyone joins with 12 words or a sign-in), nothing here makes one: no
     // code, QR or offline ticket, only the community's own link to share. Unknown (not heard yet, or an older node): as before.
     const makesInvites = invitesOn(nodeProfile?.features);
     // On a community that says `membersOnDemand` (the worldwide one) this phone holds only the people it has dealt with:
@@ -1043,7 +1043,7 @@ export default function PeopleScreen() {
                             </Text>
                             <Text style={{ color: theme === 'dark' ? colors.text.body : palette.amber700, fontSize: 13, lineHeight: 18 }}>
                                 {guestDoor
-                                    ? GUEST_DOOR_TEXT
+                                    ? guestDoorText(nodeProfile?.features)
                                     : guestNoInvites
                                     ? guestNoInvitesText(guestAtGlobal && !globalDoorOpen && !accountClosed)
                                     : 'You are currently connected to this node in **Guest Mode**. You cannot generate invites or participate in community trade until you register your identity.'}
@@ -1051,11 +1051,11 @@ export default function PeopleScreen() {
                             {guestDoor && (
                                 <Pressable
                                     accessibilityRole="button"
-                                    accessibilityLabel="Join the global community with a sign-in"
+                                    accessibilityLabel={`Join the global community with ${joinWays(nodeProfile?.features)}`}
                                     style={[styles.btnGenerate, { marginTop: 12, marginBottom: 0 }]}
                                     onPress={() => router.push('/join-global')}
                                 >
-                                    <Text style={styles.btnGenerateText}>{GUEST_DOOR_BUTTON}</Text>
+                                    <Text style={styles.btnGenerateText}>{guestDoorButton(nodeProfile?.features)}</Text>
                                 </Pressable>
                             )}
                         </View>
@@ -1067,7 +1067,7 @@ export default function PeopleScreen() {
                             {identity && isGlobalNode && <MyJoinRequests identity={identity} />}
 
                             {!makesInvites ? (
-                                // No invites here: anyone joins with a sign-in, so the community's link is all there is to share.
+                                // No invites here: anyone joins without one (the helper's words say how), so the community's link is all there is to share.
                                 <>
                                     <Text style={styles.sectionHeader}>📤 Bring someone here</Text>
                                     <Text style={styles.sectionDesc}>{bringSomeoneHereText(nodeProfile?.features)}</Text>

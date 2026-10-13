@@ -1847,6 +1847,7 @@ export default function TreasuryDetailScreen() {
                                             Alert.alert('Reported', `This ${kw.kind} has been flagged for review.`);
                                         } catch (e: any) {
                                             Alert.alert('Error', e.message || 'Could not submit report.');
+                                            throw e; // the box keeps the choice and the words
                                         }
                                     }}
                                 />

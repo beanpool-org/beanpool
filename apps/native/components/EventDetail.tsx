@@ -19,6 +19,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, Linking, Platform, DeviceEventEmitter } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
 import { fetchEventDetail, rsvpEvent, deletePost, reportAbuse } from '../utils/db';
@@ -169,6 +170,7 @@ export function EventDetail({ post }: EventDetailProps) {
             Alert.alert('Reported', "Thanks. This community's moderators will take a look.");
         } catch (e: any) {
             Alert.alert('Not sent', e?.message || 'Could not reach the node.');
+            throw e; // the box keeps the choice and the words
         }
     };
 
@@ -211,7 +213,13 @@ export function EventDetail({ post }: EventDetailProps) {
                 <View style={{ width: 72 }} />
             </View>
 
-            <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}>
+            {/*
+              * The report box's words and Submit are the last things here: under edge-to-edge the window does not resize
+              * for the keyboard, so this view moves them up (review of #1912, finding 2; the post screen's pattern). No
+              * keyboardVerticalOffset: the screen draws its own header, and keyboard-controller measures this view's frame.
+              */}
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+            <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled">
                 {photos.length > 0 && (
                     <View style={{ marginBottom: 14 }}>
                         <PhotoCarousel photos={photos} height={200} borderRadius={14} />
@@ -350,6 +358,7 @@ export function EventDetail({ post }: EventDetailProps) {
                     </>
                 )}
             </ScrollView>
+            </KeyboardAvoidingView>
 
             <NewEventModal
                 visible={!!copyDraft}

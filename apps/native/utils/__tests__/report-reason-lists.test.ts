@@ -84,6 +84,9 @@ describe('the phone\'s report lists', () => {
         expect(b).toContain('<ReportReasonBox');
         expect(b).toContain('await reportAbuse(identity.publicKey, treasuryKey, reason, treasuryKey);');
         expect(b).not.toContain('TextInput');
+        // A failed send rethrows after its alert, so the box keeps the choice and the words (review of #1912, finding 3;
+        // the event screen's side is drawn in event-report-render.test.ts).
+        expect(src).toMatch(/Alert\.alert\('Error', e\.message \|\| 'Could not submit report\.'\);\s*throw e;/);
     });
 
     it('what a report sends: the picked reason first, then any words', () => {

@@ -10,7 +10,10 @@ import { hapticTick } from '../utils/haptics';
 import { CHILD_SAFETY_HINT, CHILD_SAFETY_REASON, REPORT_REASONS, reportReasonWithWords } from '../utils/reportReasons';
 
 export function ReportReasonBox({ onSubmit, onCancel }: {
-    /** Sends the report with the reason as it goes to the server; throws to keep the box open. */
+    /**
+     * Sends the report with the reason as it goes to the server. The caller says why a send failed and then throws, so
+     * the box keeps the member's choice and words for another try (review of #1912, finding 3: a weak connection wiped them).
+     */
     onSubmit: (reason: string) => Promise<void>;
     onCancel?: () => void;
 }) {
@@ -26,6 +29,8 @@ export function ReportReasonBox({ onSubmit, onCancel }: {
             await onSubmit(reportReasonWithWords(reason, words));
             setReason('');
             setWords('');
+        } catch {
+            // The caller has said why; the choice and the words stay.
         } finally {
             setSending(false);
         }

@@ -279,7 +279,8 @@ function measure(themeIsDark) {
             fields.push({ el: describe(el), text: (el.placeholder || el.getAttribute('aria-label') || el.name || '').slice(0, 40), edge, fillStands, shadow,
                 ratio: Math.max(edge, fillStands), need: 3, disabled: disabled(el), fg: hex(over(rgba(cs.borderTopColor), outside)), bg: hex(outside) });
         }
-        if (el.tagName.toLowerCase() === 'svg') {
+        // Icons drawn in currentColor (an svg that paints its own colours, or holds an emoji, is a picture).
+        if (el.tagName.toLowerCase() === 'svg' && (el.matches('[fill="currentColor"], [stroke="currentColor"]') || el.querySelector('[fill="currentColor"], [stroke="currentColor"]'))) {
             const r = el.getBoundingClientRect();
             if (r.width >= 8 && r.height >= 8 && !el.closest('.leaflet-container')) {
                 const paint = cs.fill !== 'none' && rgba(cs.fill).a > 0 ? cs.fill : cs.stroke;
@@ -316,6 +317,7 @@ async function focusStops(page) {
     const seen = new Set();
     for (let i = 0; i < FOCUS_STOPS; i++) {
         await page.keyboard.press('Tab');
+        await wait(300); // a `transition-all` control eases its ring in from currentColor
         const r = await page.evaluate(() => {
             const el = document.activeElement;
             if (!el || el === document.body) return null;

@@ -212,16 +212,22 @@ export function suggestionCountsToday(now = Date.now()): { suggestions: number; 
     return { suggestions: s.filedToday.day === day ? s.filedToday.n : 0, approved: s.approved.day === day ? s.approved.n : 0 };
 }
 
-/** The report's subject and whether it is still open, for a card's approve call and the route's checks. */
-function reportTarget(reportId: string): { postId: string | null; pulse: boolean; open: boolean } | null {
+/** The report's subject, whether it is still open, and whether its post is still up, for a card's approve call and the route's checks. */
+function reportTarget(reportId: string): { postId: string | null; pulse: boolean; open: boolean; postLive: boolean } | null {
     const r = db.prepare('SELECT target_post_id, target_pulse_item_id, status FROM abuse_reports WHERE id = ?').get(reportId) as
         { target_post_id: string | null; target_pulse_item_id: string | null; status: string | null } | undefined;
     if (!r) return null;
-    return { postId: r.target_pulse_item_id ? null : r.target_post_id, pulse: !!r.target_pulse_item_id, open: r.status === 'pending' || r.status === null };
+    const postId = r.target_pulse_item_id ? null : r.target_post_id;
+    const post = postId ? db.prepare('SELECT active FROM posts WHERE id = ?').get(postId) as { active: number | null } | undefined : undefined;
+    return { postId, pulse: !!r.target_pulse_item_id, open: r.status === 'pending' || r.status === null, postLive: !!post && post.active !== 0 };
 }
 
-/** A dismiss or remove suggestion is about an open report: once it is closed there is nothing left to approve. */
-const closedSince = (x: Pick<Suggestion, 'kind'>, t: { open: boolean } | null): boolean => x.kind !== 'restore_post' && !!t && !t.open;
+/**
+ * Nothing left to approve: a dismiss or remove suggestion once its report is closed; a restore suggestion once its post was
+ * removed (restoring would only clear the hidden mark on a removed post, and the card would say "Restored": #1868, F3e).
+ */
+const closedSince = (x: Pick<Suggestion, 'kind'>, t: { open: boolean; postId: string | null; postLive: boolean } | null): boolean =>
+    !!t && (x.kind === 'restore_post' ? t.postId !== null && !t.postLive : !t.open);
 
 /** The existing route's own call that approves it: the card sends exactly this, with `suggestion` in the body. */
 export function approveCall(x: Suggestion): { method: 'POST'; path: string; body: Record<string, unknown> } | null {
@@ -277,7 +283,11 @@ export function admitSuggestion(ctx: any, route: SuggestionRoute, now = Date.now
     }
     if (matches && route.kind === 'restore_post') matches = reportTarget(hit.target)?.postId === route.postId;
     if (!matches) return refuse(409, 'That suggestion is for another action or another report.');
-    if (closedSince(hit, reportTarget(hit.target))) return refuse(409, 'That report was closed since the assistant suggested this: there is nothing left to approve.');
+    if (closedSince(hit, reportTarget(hit.target))) {
+        return refuse(409, hit.kind === 'restore_post'
+            ? 'That post was removed since the assistant suggested restoring it: there is nothing left to approve.'
+            : 'That report was closed since the assistant suggested this: there is nothing left to approve.');
+    }
     ctx.state.agentSuggestion = { id: hit.id, agent: hit.grant.name, kind: hit.kind, target: hit.target };
     return true;
 }

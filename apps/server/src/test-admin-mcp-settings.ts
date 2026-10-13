@@ -229,6 +229,9 @@ async function main(): Promise<void> {
         const viaOldRoute = await call('POST', '/api/local/admin/automation-tokens', { headers: asSession(ownerS), body: { name: 'old way', scope: 'agent' } });
         assert(viaOldRoute.status === 400 && viaOldRoute.body?.code === 'agent_via_grants' && !viaOldRoute.body?.token,
             `the automation-token route makes no agent token, so the switch and the cap hold for every one (${show(viaOldRoute)})`);
+        const oldList = await call('GET', '/api/local/admin/automation-tokens', { headers: asSession(ownerS) });
+        assert(oldList.status === 200 && Array.isArray(oldList.body?.scopes) && oldList.body.scopes.length > 0 && !oldList.body.scopes.includes('agent'),
+            `the automation-token route does not offer the agent scope (#1865 confirmation finding 3) (${JSON.stringify(oldList.body?.scopes)})`);
         const stale = await keySignIn(owner);
         backdateAdminSessionForTests(stale!, 6 * 60_000);
         const byStale = await make(stale, { name: 'stale' });

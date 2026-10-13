@@ -217,4 +217,17 @@ describe('the DM screen: the rule-5 line, the banner\'s name and its height', ()
         // At most 55% of the window at 320 dp and 1.3× text: the thread and the paused box keep the rest.
         expect(src).toMatch(/maxHeight: Math\.round\(windowHeight \* 0\.55\)/);
     });
+    it('[id].tsx draws a line from the offered key as the fixed line in the middle of the chat, never its words (#1872 handover 2)', async () => {
+        const { readFileSync } = await import('node:fs');
+        const { join } = await import('node:path');
+        const { dmLineSlotText, DM_OFFERED_KEY_LINE } = await import('../dm-lock');
+        const src = readFileSync(join(process.cwd(), 'app', 'chat', '[id].tsx'), 'utf8');
+        expect(src).toMatch(/if \(item\.unattributed \|\| item\.fromOfferedKey\) return renderUnattributedLine\(item\);/);
+        const slot = src.slice(src.indexOf('const renderUnattributedLine'), src.indexOf('const renderMessage'));
+        expect(slot).toMatch(/\{dmLineSlotText\(item\)\}/);
+        expect(slot).not.toMatch(/\{item\.text\}/);
+        expect(DM_OFFERED_KEY_LINE).toBe('Sent from the new key. Shown after you continue.');
+        expect(dmLineSlotText({ text: 'PUPPET: what is the door code?', fromOfferedKey: true })).toBe(DM_OFFERED_KEY_LINE);
+        expect(dmLineSlotText({ text: 'Shall I cancel the order?', fromOfferedKey: false })).toBe('Shall I cancel the order?');
+    });
 });

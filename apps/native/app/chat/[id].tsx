@@ -32,7 +32,7 @@ import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from '../../components/chat/ChatBanners';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
-import { refusedSendNotice, restoredDraft, dmKeyChangedLine, DM_UNPLACED_LINE } from '../../utils/dm-lock';
+import { refusedSendNotice, restoredDraft, dmKeyChangedLine, dmLineSlotText, DM_UNPLACED_LINE } from '../../utils/dm-lock';
 import {
     buildChatListItems, chatActionErrorMessage, dmQuoteFor, hasAnyAction, isTombstone, messageActions, tombstoneText,
     shouldFollowNewMessages, shouldShowChatLoadError, type ChatViewer,
@@ -498,7 +498,7 @@ function ChatScreen({ id }: { id: string }) {
     // what made ticks expensive once the history window grew. Metadata stays in
     // (it's tiny and carries reactions/reply refs/send state).
     const messagesSignature = (rows: any[]) => rows.map(m =>
-        [m.id, m.rawTimestamp, m.editedAt ?? '', m.readByPeer ? 1 : 0, m.sendState ?? '', m.type ?? '', m.text?.length ?? 0, m.metadata ? JSON.stringify(m.metadata) : '', m.integrityNote ?? '', m.unattributed ? 1 : 0].join('\u0001')
+        [m.id, m.rawTimestamp, m.editedAt ?? '', m.readByPeer ? 1 : 0, m.sendState ?? '', m.type ?? '', m.text?.length ?? 0, m.metadata ? JSON.stringify(m.metadata) : '', m.integrityNote ?? '', m.unattributed ? 1 : 0, m.fromOfferedKey ? 1 : 0].join('\u0001')
     ).join('\u0002');
 
     const loadMessages = async (isBackgroundPoll = false) => {
@@ -1013,13 +1013,14 @@ function ChatScreen({ id }: { id: string }) {
 
     // A DM row shown as nobody's (e2e-crypto dmLineIsUnattributed): a line that didn't open, a row in a member's name
     // that wasn't encrypted, or the admin page's message. In the middle of the chat, never in its named author's bubble,
-    // and with no actions: there is nobody's line to answer or react to.
+    // and with no actions: there is nobody's line to answer or react to. A line from the key offered in the pinned one's
+    // place shows only the fixed line (dmLineSlotText), never its words, until the member continues.
     const renderUnattributedLine = (item: any) => (
         <View style={[chat.systemMessageContainer, { marginTop: 12, marginBottom: 12 }]} testID="dm-line-unattributed">
             <View style={[chat.systemMessageBubble, { maxWidth: '90%', backgroundColor: colors.chatSystem.defaultBg, borderColor: colors.chatSystem.defaultBorder, borderWidth: 1 }]}>
                 <MaterialCommunityIcons name={item.integrityNote ? 'bullhorn-outline' : 'shield-alert-outline'} size={16} color={colors.text.secondary} style={{ marginRight: 6 }} />
                 <Text style={[chat.systemMessageText, { flexShrink: 1, color: theme === 'dark' ? colors.text.secondary : palette.gray700, fontSize: 13, fontWeight: '500' }]}>
-                    {item.text}
+                    {dmLineSlotText(item)}
                 </Text>
             </View>
             {item.integrityNote ? (
@@ -1031,7 +1032,7 @@ function ChatScreen({ id }: { id: string }) {
 
     const renderMessage = (item: any) => {
         if (item.type === 'system' || item.senderId === 'SYSTEM') return renderSystemMessage(item);
-        if (item.unattributed) return renderUnattributedLine(item);
+        if (item.unattributed || item.fromOfferedKey) return renderUnattributedLine(item);
 
         const isMe = identity?.publicKey ? item.senderId === identity.publicKey : false;
         const showActions = activeMessageActionsId === item.id;

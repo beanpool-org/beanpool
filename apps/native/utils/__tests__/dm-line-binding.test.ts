@@ -79,7 +79,7 @@ vi.mock('../crypto', async (orig) => ({
 
 import { getDb, getMessages, syncMessages, syncSingleConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, isDmUnplaced, _resetDmPeerPinsForTests, getDmKeyChange, acceptOfferedPeer } from '../db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { refusedSendNotice } from '../dm-lock';
+import { refusedSendNotice, dmLineSlotText, DM_OFFERED_KEY_LINE } from '../dm-lock';
 import { dmKeyChangeCopy } from '../dm-key-change';
 import { DM_PIN_STORE_UNREAD_TEXT } from '../dm-peer-pins';
 import { routeChat } from '../chat-route';
@@ -1934,6 +1934,9 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
     // §3.4 amendment 2, item 3, the data half (slice 2 draws the fixed line): a line that opens only under the offered key
     // is marked fromOfferedKey and shows no words, on first sight and on an existing phone's offer alike.
     const lineMarks = async (id: string) => (await getMessages(id)).map((m: any) => ({ text: m.text, offered: m.fromOfferedKey }));
+    // What the DM screen draws in each line's slot ([id].tsx renderUnattributedLine → dmLineSlotText): the fixed line for
+    // a line from the offered key, for every offer, never its words.
+    const drawn = async (id: string) => (await getMessages(id)).map((m: any) => dmLineSlotText(m));
 
     it('item 3: P13\'s PUPPET line is marked as from the offered key and shows no words, before and after "Not now"; Ben\'s lines read unmarked', async () => {
         await p13();
@@ -1944,14 +1947,17 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
             { text: NOT_VERIFIED, offered: true },
         ];
         expect(await lineMarks(dm.id)).toEqual(want);
+        expect(await drawn(dm.id)).toEqual(['Shall I cancel the order?', 'No', DM_OFFERED_KEY_LINE]);
         for (let pass = 0; pass < 2; pass++) await syncMessages(ana.publicKey);   // "Not now" writes nothing
         expect(await lineMarks(dm.id)).toEqual(want);
+        expect(await drawn(dm.id)).toEqual(['Shall I cancel the order?', 'No', DM_OFFERED_KEY_LINE]);
     });
 
     it('item 3: P14\'s K2 line is marked as from the offered key until Continue, then reads as K2\'s words, unmarked', async () => {
         await p14();
         expect(await isDmKeyChangePending(dm.id)).toBe(true);
         expect((await lineMarks(dm.id))[2]).toEqual({ text: NOT_VERIFIED, offered: true });
+        expect((await drawn(dm.id))[2]).toBe(DM_OFFERED_KEY_LINE);
         const pins = JSON.parse(h.store.get(PINS(ana))!);
         pins[dm.id.toLowerCase()] = { peer: k2.publicKey, since: '2026-10-14T00:00:00.000Z', by: 'member', former: [ben.publicKey] };
         h.store.set(PINS(ana), JSON.stringify(pins));
@@ -1961,6 +1967,7 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
             { text: 'No', offered: false },
             { text: 'New phone. Still on for Saturday?', offered: false },
         ]);
+        expect((await drawn(dm.id))[2]).toBe('New phone. Still on for Saturday?');
     });
 
     it('item 3: an existing phone\'s offer (T5\'s shape) marks PUPPET\'s line; a line that opens under no key stays unmarked', async () => {
@@ -1977,6 +1984,7 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
             { text: NOT_VERIFIED, offered: true },
             { text: NOT_VERIFIED, offered: false },
         ]);
+        expect(await drawn(dm.id)).toEqual(['Shall I cancel the order?', 'No', DM_OFFERED_KEY_LINE, NOT_VERIFIED]);
     });
 
     /** Ben's history of `n` lines (Ana's and Ben's in turn, each sealed to the other), as the node holds it. */
@@ -2074,6 +2082,10 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         expect(marks.filter((m) => m.offered)).toEqual(Array(40).fill({ text: NOT_VERIFIED, offered: true }));
         expect(marks.filter((m) => !m.offered).map((m) => m.text)).toEqual(bensTexts(30));
         expect(JSON.stringify(marks)).not.toContain('PUPPET');
+        const shown = await drawn(dm.id);
+        expect(shown.filter((t) => t === DM_OFFERED_KEY_LINE)).toHaveLength(40);
+        expect(shown.filter((t) => t !== DM_OFFERED_KEY_LINE)).toEqual(bensTexts(30));
+        expect(JSON.stringify(shown)).not.toContain('PUPPET');
     }
 
     for (const when of flooded) {
@@ -2141,6 +2153,7 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
             const marks = await lineMarks(dm.id);
             expect(marks.map((m) => m.text)).toEqual(Array(30).fill(NOT_VERIFIED));
             expect(marks.map((m) => m.offered)).toEqual(Array.from({ length: 30 }, (_, i) => i % 2 === 0));
+            expect(await drawn(dm.id)).toEqual(Array.from({ length: 30 }, (_, i) => i % 2 === 0 ? DM_OFFERED_KEY_LINE : NOT_VERIFIED));
             expect(await sendTo(dm.id, 'The code is 4821', [puppet, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
         });
     }

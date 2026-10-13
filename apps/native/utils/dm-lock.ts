@@ -65,6 +65,17 @@ export function dmKeyChangedLine(peerName?: string | null): string {
 export const DM_UNPLACED_LINE = "This chat's messages were sealed to keys this phone can't place. You can read it, but sending needs a new chat, or ask an owner.";
 
 /**
+ * The fixed line drawn in the slot of a DM line that opens only under the key offered in the pinned one's place (design
+ * §3.4 amendment 2, item 3; db.ts getMessages fromOfferedKey): for every offer, first sight or not, never the line's words.
+ */
+export const DM_OFFERED_KEY_LINE = 'Sent from the new key. Shown after you continue.';
+
+/** What the DM screen draws in a line's slot: the fixed line for a line from the offered key, else its shown text. */
+export function dmLineSlotText(line: { text?: string | null; fromOfferedKey?: boolean }): string {
+    return line.fromOfferedKey ? DM_OFFERED_KEY_LINE : (line.text ?? '');
+}
+
+/**
  * What goes back in the box after a send that couldn't be locked: the unsent words, and anything typed while it was
  * trying underneath them. Neither is lost.
  */

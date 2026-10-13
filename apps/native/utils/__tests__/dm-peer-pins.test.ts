@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { readDmPeerPins, writeDmPeerPins, applyDmListings, pinAtFirstSight, dmPinFor, dmOpenPeers, createDmPinBook, DmPinStoreError, DM_PIN_STORE_UNREAD_TEXT, type DmPeerPins, type DmPeerPin } from '../dm-peer-pins';
+import { readDmPeerPins, writeDmPeerPins, applyDmListings, pinAtFirstSight, dmPinFor, dmSightFor, judgeFirstSight, applySightVerdict, settleFirstSight, dmOpenPeers, createDmPinBook, DmPinStoreError, DM_PIN_STORE_UNREAD_TEXT, type DmPeerPins, type DmPeerPin } from '../dm-peer-pins';
 import { dmPeerPinsStoreKey } from '../storage-keys';
 
 // The pin store itself (utils/dm-peer-pins.ts): what a listing may do to a pin, and what an unreadable store does. The
@@ -172,5 +172,82 @@ describe('createDmPinBook: one copy per account, one queue (#1872 review, findin
         refuse = false;
         expect(await book.update(ME, (p) => pinAtFirstSight(p, D1, PUPPET, NOW))).toBe(true);
         expect(Object.keys(stored(s)).sort()).toEqual([D0, D1].sort());
+    });
+});
+
+describe('first sight judged on the thread (§3.4 amendment): judgeFirstSight, applySightVerdict, the rule-5 record', () => {
+    const D1 = '1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed';
+    const L = PUPPET;
+    it('rules 1-5 as the amendment states them: the oldest opening line\'s key is the pin, the listing only offers', () => {
+        expect(judgeFirstSight([], L)).toEqual({ rule: 1 });
+        expect(judgeFirstSight([L, L], L)).toEqual({ rule: 2, pin: L, offer: false });
+        expect(judgeFirstSight([BEN, BEN], L)).toEqual({ rule: 3, pin: BEN, offer: true });
+        expect(judgeFirstSight([BEN, BEN, L], L)).toEqual({ rule: 4, pin: BEN, offer: true });
+        for (const lines of [[BEN, OTHER], [BEN, L, OTHER], [BEN, null, L], [null, null], [L, BEN], [BEN, L, BEN], [null]]) {
+            expect(judgeFirstSight(lines, L)).toEqual({ rule: 5 });
+        }
+        expect(judgeFirstSight([BEN, L], null)).toEqual({ rule: 5 });
+    });
+
+    it('rule 5 keeps no pin, only a record; neither the listing nor rule 1 or 2 ever pins over it; rule 3 or 4 replaces it with a pause', () => {
+        const p: DmPeerPins = {};
+        expect(applySightVerdict(p, D0, { rule: 5 }, L, undefined, NOW)).toBe(true);
+        expect(dmPinFor(p, D0)).toBeNull();
+        expect(dmSightFor(p, D0)).toEqual({ unplaced: true, since: NOW, listed: L });
+        expect(pinAtFirstSight(p, D0, L, NOW)).toBe(false);
+        expect(applyDmListings(p, D0, [[L]], NOW)).toBe(false);
+        expect(applySightVerdict(p, D0, { rule: 1 }, L, undefined, NOW)).toBe(false);
+        expect(applySightVerdict(p, D0, { rule: 2, pin: L, offer: false }, L, undefined, NOW)).toBe(false);
+        expect(dmPinFor(p, D0)).toBeNull();
+        // The listing names other keys to try: the record is judged again, and only a pause can come of it.
+        expect(applyDmListings(p, D0, [[L]], NOW, { tryKeys: [BEN] })).toBe(true);
+        expect(dmSightFor(p, D0)).toMatchObject({ unplaced: true, stale: true, heard: { tryKeys: [BEN] } });
+        expect(applySightVerdict(p, D0, { rule: 2, pin: L, offer: false }, L, { tryKeys: [BEN] }, NOW)).toBe(true);
+        expect(dmPinFor(p, D0)).toBeNull();
+        expect(dmSightFor(p, D0)).not.toHaveProperty('stale');
+        applyDmListings(p, D0, [[L]], NOW, { tryKeys: [BEN], rekeyedAt: NOW });
+        expect(applySightVerdict(p, D0, { rule: 4, pin: BEN, offer: true }, L, { tryKeys: [BEN], rekeyedAt: NOW }, NOW)).toBe(true);
+        expect(dmPinFor(p, D0)).toEqual({ peer: BEN, since: NOW, by: 'first-seen', checked: true, offered: { peer: L, at: NOW, nodeSays: { rekeyedAt: NOW } } });
+    });
+
+    it('a checked pin or one the member chose is never judged again; an unchecked one is, and a send settles it', () => {
+        const p: DmPeerPins = {};
+        pinAtFirstSight(p, D0, L, NOW);
+        expect(dmPinFor(p, D0)?.checked).toBeUndefined();
+        expect(applySightVerdict(p, D0, { rule: 1 }, L, undefined, NOW)).toBe(false);
+        expect(settleFirstSight(p, D0)).toBe(true);
+        expect(dmPinFor(p, D0)?.checked).toBe(true);
+        expect(applySightVerdict(p, D0, { rule: 3, pin: BEN, offer: true }, L, undefined, NOW)).toBe(false);
+        expect(dmPinFor(p, D0)?.peer).toBe(L);
+        const q: DmPeerPins = { [D0]: { peer: BEN, since: NOW, by: 'member' } };
+        expect(applySightVerdict(q, D0, { rule: 3, pin: OTHER, offer: true }, L, undefined, NOW)).toBe(false);
+        // An offer stops a settle: nothing is sealed while one waits.
+        const r: DmPeerPins = {};
+        pinAtFirstSight(r, D0, BEN, NOW);
+        applyDmListings(r, D0, [[L]], NOW);
+        expect(settleFirstSight(r, D0)).toBe(false);
+    });
+
+    it('the stored record survives a read: checked, heard and the rule-5 record come back as written; a stray field is dropped', async () => {
+        const s = memory();
+        const p: DmPeerPins = {};
+        pinAtFirstSight(p, D0, BEN, NOW, { tryKeys: [OTHER], rekeyedAt: NOW }, true);
+        applySightVerdict(p, D1, { rule: 5 }, L, { tryKeys: [BEN] }, NOW);
+        await writeDmPeerPins(s, ME, p);
+        const back = await readDmPeerPins(s, ME);
+        expect(dmSightFor(back, D0)).toEqual({ peer: BEN, since: NOW, by: 'first-seen', checked: true, heard: { tryKeys: [OTHER], rekeyedAt: NOW } });
+        expect(dmSightFor(back, D1)).toEqual({ unplaced: true, since: NOW, listed: L, heard: { tryKeys: [BEN] } });
+    });
+
+    it('the book says "fresh" only until its first write for the account', async () => {
+        const s = memory();
+        const book = createDmPinBook(s);
+        const seen: boolean[] = [];
+        await book.update(ME, (_p, { fresh }) => { seen.push(fresh); return false; });
+        await book.update(ME, (_p, { fresh }) => { seen.push(fresh); return true; });
+        await book.update(ME, (_p, { fresh }) => { seen.push(fresh); return false; });
+        book.forget();
+        await book.update(ME, (_p, { fresh }) => { seen.push(fresh); return false; });
+        expect(seen).toEqual([true, true, false, false]);
     });
 });

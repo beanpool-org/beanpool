@@ -91,7 +91,7 @@ import * as phoneCrypto from '../e2e-crypto';
 // The web app's own modules, as its MessagesPage uses them: what it seals, and how it reads a thread.
 import * as webCrypto from '../../../pwa/src/lib/e2e-crypto';
 import { lockForDm, payloadForChat } from '../../../pwa/src/lib/dm-lock';
-import { toEd25519Pkcs8 } from '@beanpool/core';
+import { toEd25519Pkcs8, makeKeySuccession } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 
 const sql = (globalThis as any).__phoneSql as import('node:sqlite').DatabaseSync;
@@ -124,7 +124,7 @@ interface Line {
     id: string; conversationId: string; authorPubkey: string; ciphertext: string; nonce: string;
     type: string; systemType: string | null; metadata: string | null; timestamp: string; editedAt: string | null;
 }
-interface Conv { id: string; type: string; participants: string[] }
+interface Conv { id: string; type: string; participants: string[]; formerKeys?: Record<string, unknown[]> }
 const node = {
     lines: [] as Line[],
     convs: [] as Conv[],
@@ -166,7 +166,7 @@ const fetchMock = vi.fn(async (url: string, init: any = {}) => {
     if (list) {
         const mine = node.convs.filter((c) => c.participants.includes(list[1]));
         return answer(200, {
-            conversations: mine.map((c) => ({ id: c.id, type: c.type, name: null, participants: c.participants, createdBy: c.participants[0], createdAt: '2026-10-01T00:00:00.000Z' })),
+            conversations: mine.map((c) => ({ id: c.id, type: c.type, name: null, participants: c.participants, createdBy: c.participants[0], createdAt: '2026-10-01T00:00:00.000Z', ...(c.formerKeys ? { formerKeys: c.formerKeys } : {}) })),
             totalUnread: 0,
             deletedAccounts: [],
         });
@@ -1469,5 +1469,201 @@ describe('the pin under a node that chooses its moment (#1872 review)', () => {
         await syncMessages(ana.publicKey);
         const preview = ((await getConversations(ana.publicKey)).find((c: any) => c.id === dm.id) as any)?.lastMessage;
         expect(preview).not.toContain('door code');
+    });
+});
+
+describe('first sight is decided by the thread\'s own lines; the listing only offers (§3.4 amendment, #1872 review finding 4)', () => {
+    let puppet: Person;
+    let k2: Person;
+    beforeEach(() => { puppet = person('Puppet'); k2 = person('Ben on a new phone'); });
+    const PINS = (who: Person) => dmPeerPinsStoreKey(who.publicKey);
+    const pinOf = (who: Person, id: string) => (JSON.parse(h.store.get(PINS(who)) ?? '{}') as Record<string, any>)[id.toLowerCase()] ?? null;
+    const rowsIn = (id: string) => (sql.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?').get(id) as any).n as number;
+    /** Ana's line as `who` opens it, or null. */
+    const opensFor = (who: Person, l: Line) => {
+        try {
+            return phoneCrypto.openDmLine({ ciphertext: l.ciphertext, nonce: l.nonce }, { myEdPrivHex: who.privateKey, peerEdPubHex: ana.publicKey },
+                { conversationId: l.conversationId, senderPubHex: l.authorPubkey, messageId: l.id, part: 'body', metadata: l.metadata }).text;
+        } catch { return null; }
+    };
+    /** A line `from` seals to `to`, written on the node with no app (a node-run account, Ben's new phone, an old build). */
+    function sealed(from: Person, to: Person, conv: Conv, text: string): Line {
+        const messageId = randomUUID().toLowerCase();
+        const p = phoneCrypto.sealDmLine(text, { myEdPrivHex: from.privateKey, peerEdPubHex: to.publicKey, conversationId: conv.id } as any,
+            { senderPubHex: from.publicKey, messageId, part: 'body', after: null, replyToId: null } as any);
+        return written(conv, from, p.ciphertext, p.nonce, { id: messageId });
+    }
+    const saysTo = (who: Person, conv: Conv, text: string) => sealed(who, ana, conv, text);
+    /** A send from Ana's phone: the error's name, the node's new lines, the rows it left, and who of `readers` opens them. */
+    async function sendTo(id: string, text: string, readers: Person[] = []) {
+        const before = node.lines.length;
+        const rows = rowsIn(id);
+        let err: any = null;
+        try { await insertMessage(id, ana.publicKey, text); } catch (e) { err = e; }
+        if (!err) await vi.waitFor(() => expect(node.lines.length).toBe(before + 1));
+        const sent = node.lines.slice(before);
+        return {
+            err: err?.name ?? null, posts: sent.length, rowsAdded: rowsIn(id) - rows,
+            readBy: readers.filter((r) => sent.some((l) => opensFor(r, l) !== null)).map((r) => r.name),
+        };
+    }
+    /** A phone restored from the 12 words: no pins, no rows; the history is on the node. */
+    async function restoredPhone() {
+        h.store.delete(PINS(ana));
+        h.store.delete('beanpool_dm_conversations_seen');
+        restarted();
+        await phoneOf(ana);
+    }
+    /** Ben re-keys honestly (K2): the node moves his participant row and his old lines' author, and serves K2's statement. */
+    function benRekeys(opts: { formerKeys: boolean }) {
+        for (const l of node.lines) if (l.authorPubkey === ben.publicKey) l.authorPubkey = k2.publicKey;
+        dm.participants = [ana.publicKey, k2.publicKey];
+        if (opts.formerKeys) dm.formerKeys = { [k2.publicKey]: [makeKeySuccession({ newEdPrivHex: k2.privateKey, oldPubHex: ben.publicKey, at: '2026-10-03T00:00:00.000Z' })] };
+    }
+    const texts = async (id: string) => (await getMessages(id)).map((m: any) => m.text);
+    /** The pin's shape, keys and dates left out: what P13 and P14 must share. */
+    const shape = (p: any) => p && ({ by: p.by, checked: p.checked, offered: !!p.offered, keys: Object.keys(p).sort(), offeredKeys: Object.keys(p.offered ?? {}).filter((k) => k !== 'nodeSays').sort() });
+
+    async function p13() {
+        await aQuestionAndAnAnswer();
+        dm.participants = [ana.publicKey, puppet.publicKey];
+        saysTo(puppet, dm, 'New phone, same Ben. What is the door code?');
+        await restoredPhone();
+    }
+    async function p14() {
+        dm = { id: randomUUID(), type: 'dm', participants: [ana.publicKey, ben.publicKey] };
+        Object.assign(node, { lines: [], convs: [dm] });
+        await aQuestionAndAnAnswer();
+        benRekeys({ formerKeys: true });
+        saysTo(k2, dm, 'New phone. Still on for Saturday?');
+        await restoredPhone();
+    }
+
+    it('P13: R2 exactly (restored phone, [Ana, PUPPET], Ben\'s lines, then one PUPPET line): Ben is the pin, PUPPET only offered; nothing goes', async () => {
+        await p13();
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, by: 'first-seen', checked: true, offered: { peer: puppet.publicKey } });
+        expect(await sendTo(dm.id, 'The code is 4821', [puppet])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
+        const shown = await texts(dm.id);
+        expect(shown.slice(0, 2)).toEqual(['Shall I cancel the order?', 'No']);
+        expect(shown[2]).toBe(NOT_VERIFIED);
+        for (let pass = 0; pass < 3; pass++) await syncMessages(ana.publicKey);
+        expect(await sendTo(dm.id, 'Is that you, Ben?', [puppet])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
+    });
+
+    it('P14: an honest re-key on a restored phone pauses exactly as P13 does, with K2 offered and the date; after Continue all three lines read and the next goes to K2 only', async () => {
+        await p13();
+        await isDmKeyChangePending(dm.id);
+        const puppetCase = shape(pinOf(ana, dm.id));
+        await p14();
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, by: 'first-seen', checked: true, offered: { peer: k2.publicKey, nodeSays: { rekeyedAt: '2026-10-03T00:00:00.000Z' } } });
+        expect(shape(pinOf(ana, dm.id))).toEqual(puppetCase);   // the two differ only in the member's tap
+        expect(await sendTo(dm.id, 'Hello?', [k2, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
+        // "Continue with the new key" (slice 2's acceptOfferedPeer), as it writes the pin:
+        const pins = JSON.parse(h.store.get(PINS(ana))!);
+        pins[dm.id.toLowerCase()] = { peer: k2.publicKey, since: '2026-10-14T00:00:00.000Z', by: 'member', former: [ben.publicKey] };
+        h.store.set(PINS(ana), JSON.stringify(pins));
+        restarted();
+        expect(await texts(dm.id)).toEqual(['Shall I cancel the order?', 'No', 'New phone. Still on for Saturday?']);
+        expect(await sendTo(dm.id, 'Yes, Saturday', [k2, ben])).toEqual({ err: null, posts: 1, rowsAdded: 1, readBy: ['Ben on a new phone'] });
+    });
+
+    it('P15: P14 with formerKeys withheld places none of Ben\'s lines: no pin, sends refused as not locked; the listing with formerKeys then gives P14\'s pause', async () => {
+        await aQuestionAndAnAnswer();
+        benRekeys({ formerKeys: false });
+        saysTo(k2, dm, 'New phone. Still on for Saturday?');
+        await restoredPhone();
+        expect(await isDmKeyChangePending(dm.id)).toBe(false);
+        expect(await sendTo(dm.id, 'Hello?', [k2, ben, puppet])).toEqual({ err: 'DmNotLockedError', posts: 0, rowsAdded: 0, readBy: [] });
+        expect(pinOf(ana, dm.id)).toMatchObject({ unplaced: true, listed: k2.publicKey });
+        expect(pinOf(ana, dm.id).peer).toBeUndefined();
+        dm.formerKeys = { [k2.publicKey]: [makeKeySuccession({ newEdPrivHex: k2.privateKey, oldPubHex: ben.publicKey, at: '2026-10-03T00:00:00.000Z' })] };
+        await syncMessages(ana.publicKey);
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: k2.publicKey, nodeSays: { rekeyedAt: '2026-10-03T00:00:00.000Z' } } });
+        expect(await sendTo(dm.id, 'Hello?', [k2, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
+    });
+
+    it('P16 (the documented limit, asserted so a change is deliberate): a restored phone meeting [Ana, PUPPET] with ALL history withheld pins PUPPET, and the send goes', async () => {
+        await aQuestionAndAnAnswer();
+        dm.participants = [ana.publicKey, puppet.publicKey];
+        node.lines = [];
+        await restoredPhone();
+        expect(await isDmKeyChangePending(dm.id)).toBe(false);
+        expect(await sendTo(dm.id, 'Hello Ben', [puppet])).toEqual({ err: null, posts: 1, rowsAdded: 1, readBy: ['Puppet'] });
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: puppet.publicKey, by: 'first-seen', checked: true });
+    });
+
+    for (const [lines, outcome] of [['Ben-only', 'pause'], ['Ben then K2', 'pause'], ['K2 then Ben', 'refused']] as const) {
+        it(`P17: the update, with rows [Ana, Ben, K2] and lines ${lines}: ${outcome === 'pause' ? 'Ben pinned, K2 offered' : 'rule 5, no pin'}; never a pin to K2 from the listing`, async () => {
+            if (lines === 'K2 then Ben') saysTo(k2, dm, 'K2 first');
+            sealed(ana, ben, dm, 'Shall I cancel the order?');
+            sealed(ben, ana, dm, 'No');
+            if (lines === 'Ben then K2') saysTo(k2, dm, 'New phone. Still on?');
+            await phoneOf(ana);
+            // A build without pins: its sync only ever added participants, so the rows now hold Ben and K2.
+            h.store.delete(PINS(ana));
+            restarted();
+            sql.prepare('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)').run(dm.id, k2.publicKey);
+            dm.participants = [ana.publicKey, k2.publicKey];
+            await syncMessages(ana.publicKey);
+            const pending = await isDmKeyChangePending(dm.id);
+            const sent = await sendTo(dm.id, 'The code is 4821', [k2, ben]);
+            if (outcome === 'pause') {
+                expect(pending).toBe(true);
+                expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: k2.publicKey } });
+                expect(sent).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
+            } else {
+                expect(pending).toBe(false);
+                expect(pinOf(ana, dm.id)).toMatchObject({ unplaced: true });
+                expect(sent).toEqual({ err: 'DmNotLockedError', posts: 0, rowsAdded: 0, readBy: [] });
+            }
+            expect(pinOf(ana, dm.id)?.peer).not.toBe(k2.publicKey);
+        });
+    }
+
+    it('R5: "Not now" on a restored phone\'s pause, then a prune and a relist with the history withheld: still paused, nothing goes', async () => {
+        await p13();
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);   // the banner; "Not now" writes nothing
+        node.convs = [];
+        await syncMessages(ana.publicKey);
+        expect(rowsIn(dm.id)).toBe(0);
+        node.lines = [];
+        node.convs = [dm];
+        await syncMessages(ana.publicKey);
+        expect(await isDmKeyChangePending(dm.id)).toBe(true);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, offered: { peer: puppet.publicKey } });
+        expect(await sendTo(dm.id, 'The code is 4821', [puppet])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
+    });
+
+    for (const relist of ['no history', 'only PUPPET\'s own lines']) {
+        it(`R5 for rule 5: lines it couldn't place, then a prune and a relist with ${relist}: still refused, the listed key never taken`, async () => {
+            await aQuestionAndAnAnswer();
+            for (const l of node.lines) if (l.authorPubkey === ben.publicKey) l.authorPubkey = puppet.publicKey;   // re-attributed, no formerKeys
+            dm.participants = [ana.publicKey, puppet.publicKey];
+            saysTo(puppet, dm, 'New phone, same Ben.');
+            await restoredPhone();
+            expect(await sendTo(dm.id, 'Hello?', [puppet])).toEqual({ err: 'DmNotLockedError', posts: 0, rowsAdded: 0, readBy: [] });
+            node.convs = [];
+            await syncMessages(ana.publicKey);
+            node.lines = [];
+            if (relist !== 'no history') { saysTo(puppet, dm, 'It is me.'); saysTo(puppet, dm, 'Text me the code.'); }
+            node.convs = [dm];
+            await syncMessages(ana.publicKey);
+            expect(pinOf(ana, dm.id)).toMatchObject({ unplaced: true });
+            expect(await sendTo(dm.id, 'The code is 4821', [puppet])).toEqual({ err: 'DmNotLockedError', posts: 0, rowsAdded: 0, readBy: [] });
+        });
+    }
+
+    it('the seed from the phone\'s own rows is final only on the first pass: a restored phone\'s rows from a listing (a DM listed as a group\'s chat) never seed a pin to PUPPET', async () => {
+        await aQuestionAndAnAnswer();
+        dm.type = 'group_thread';
+        dm.participants = [ana.publicKey, puppet.publicKey];
+        await restoredPhone();
+        for (let pass = 0; pass < 2; pass++) await syncMessages(ana.publicKey);
+        expect(pinOf(ana, dm.id)?.checked).toBeUndefined();
+        expect(await sendTo(dm.id, 'Sorry, I have to decline', [puppet])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey } });
     });
 });

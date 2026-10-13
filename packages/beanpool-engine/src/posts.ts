@@ -4,6 +4,8 @@
 
 import type Database from 'better-sqlite3';
 import {
+    elidedWord,
+    foldApostrophes,
     parseReachPeers,
     type PostReach,
     type AudienceScope
@@ -1093,11 +1095,31 @@ const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
  */
 export const SEARCH_TERMS_MAX = 256;
 
-/** The words a search asks posts_fts for, each once, at most SEARCH_TERMS_MAX. */
+/** An apostrophe at either end of a word (U+02BC included), which is no part of it: 'eggs', james'. */
+const APOSTROPHES_AROUND = /^['\u2019\u02bc]+|['\u2019\u02bc]+$/g;
+
+/**
+ * The words a search asks posts_fts for, each once, at most SEARCH_TERMS_MAX.
+ *
+ * An apostrophe inside a word stays, as a hyphen does (#1828 check, finding 1): FTS5 reads "don't"* as the phrase don t*,
+ * which is how posts_fts's unicode61 parted "Don't" and "Don’t" in the listing, so it finds them and not every word
+ * starting "don". Taken out, "dont"* found neither. An elided word is also asked on its own ("l'eau" asks "eau" too, core's
+ * elidedWord), so "Eau de cologne" is found as when the word was parted. unicode61 reads U+02BC as a letter, not as
+ * punctuation, so a listing typed with it holds "пʼять" as one token: a word typed with it is also asked as typed.
+ */
 export function searchTermsOfQuery(query: string | undefined): string[] {
     // Control characters part words, as core's searchTermsFor reads them, here too: a raw `q` (the route's, from any
-    // client) carrying a NUL threw and answered 500 (#1781); it now finds what the words without it find.
-    const words = (query ?? '').replace(CONTROL_CHARACTERS, ' ').trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
+    // client) carrying a NUL threw and answered 500 (#1781); it now finds what the words without it find. A quote mark
+    // would end the FTS5 string, so it goes.
+    const words: string[] = [];
+    for (const typed of (query ?? '').replace(CONTROL_CHARACTERS, ' ').replace(/"/g, '').split(/\s+/)) {
+        const word = foldApostrophes(typed).replace(APOSTROPHES_AROUND, '');
+        if (!word) continue;
+        words.push(word);
+        if (typed.includes('\u02bc')) words.push(typed.replace(APOSTROPHES_AROUND, ''));
+        const elided = elidedWord(word);
+        if (elided) words.push(elided);
+    }
     return [...new Set(words)].slice(0, SEARCH_TERMS_MAX);
 }
 

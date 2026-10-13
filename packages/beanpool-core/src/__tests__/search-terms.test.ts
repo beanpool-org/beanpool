@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { expandSearchTerms, searchTermsFor } from '../search-terms.js';
+import { elidedWord, expandSearchTerms, foldApostrophes, searchTermsFor } from '../search-terms.js';
 
 describe('expandSearchTerms', () => {
     it('adds the forward synonyms and the stem', () => {
@@ -90,6 +90,22 @@ describe('expandSearchTerms', () => {
         // An apostrophe around a word still comes off, and one with a hyphen in the same word still parts it.
         expect(searchTermsFor("'eggs'")).toEqual(searchTermsFor('eggs'));
         expect(searchTermsFor("james'")).toEqual(searchTermsFor('james'));
+        // The modifier letter apostrophe (U+02BC) reads as the plain one too.
+        expect(searchTermsFor('Donʼt')).toEqual(["don't", 'dont']);
+    });
+    it('asks the word an elision is written onto on its own too, so its synonyms come (#1828 check, finding 1)', () => {
+        expect(searchTermsFor("l'eau")).toEqual(["l'eau", 'leau', 'eau']);
+        expect(searchTermsFor('L’eau')).toEqual(["l'eau", 'leau', 'eau']);
+        expect(searchTermsFor("dell'arte")).toEqual(["dell'arte", 'dellarte', 'arte']);
+        // "olive" brings its synonyms, as when "d'olive" was parted.
+        expect(searchTermsFor("l'huile d'olive")).toEqual(expect.arrayContaining(["l'huile", 'huile', "d'olive", 'olive', 'food', 'oil']));
+        expect(elidedWord("qu'il")).toBe('il');
+        expect(elidedWord("c'est")).toBe('est');
+        // An English contraction or a name is not an elision, and a one-letter word after one is no word.
+        for (const w of ["don't", "it's", "o'clock", "can't", "children's", "o'brien", "qu'a"]) expect(elidedWord(w)).toBeNull();
+    });
+    it('folds the typographic apostrophes into the plain one', () => {
+        expect(foldApostrophes('Don’t miss ʼn it')).toBe("Don't miss 'n it");
     });
 });
 

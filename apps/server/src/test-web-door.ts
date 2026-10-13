@@ -55,10 +55,10 @@ function assert(cond: boolean, msg: string): void {
 }
 
 /** The header every document had before G11, which the old Settings page, the /auth/ pages and the invite page keep. */
-const TODAYS_DOCUMENT_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org https://api.qrserver.com; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'";
+const TODAYS_DOCUMENT_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com; font-src 'self'; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org https://api.qrserver.com; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'";
 
 /** The app document's policy, as design G11 §3.6 change 3 states it, with the tile host the web app uses today. */
-const APP_DOCUMENT_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.tile.openstreetmap.org; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'";
+const APP_DOCUMENT_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://*.tile.openstreetmap.org; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'";
 
 /** A GET with the path sent exactly as written. fetch() would normalise dot segments and backslashes first. */
 function rawGet(rawPath: string): Promise<{ status: number; type: string; csp: string | null; referrer: string | null; body: string }> {

@@ -12,14 +12,15 @@
  *
  * Small screens: three stacked full-width controls, each at least 48 dp, and five short lines; holds at 320 dp, 1.3x.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import * as Location from 'expo-location';
 import { AREA_TOWN_SEARCH_WORDS, type AddressResult } from '@beanpool/core';
 import { AddressSearch } from './AddressSearch';
 import { AREA_READING_TIMEOUT_MS, AREA_WORDS, areaWhyLine, withTimeLimit, writeMemberArea, type MemberArea } from '../utils/member-area';
 import type { NodeFeatures } from '../utils/node-profile';
-import { colors, palette } from '../constants/colors';
+import { palette, type AppColors } from '../constants/colors';
+import { useOnboardingColors } from '../app/ThemeContext';
 
 interface AreaPickerProps {
     /** The community's address; null when the phone has none (offline join), then only Skip does anything. */
@@ -34,6 +35,8 @@ interface AreaPickerProps {
 }
 
 export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel = AREA_WORDS.skip }: AreaPickerProps) {
+    const { colors, dark } = useOnboardingColors();
+    const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     const [busy, setBusy] = useState<'location' | 'town' | null>(null);
     const [showTown, setShowTown] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -153,21 +156,23 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
     );
 }
 
-const styles = StyleSheet.create({
-    title: { fontSize: 24, fontWeight: '800', color: colors.text.heading, marginBottom: 6 },
-    body: { fontSize: 14, color: colors.text.secondary, marginBottom: 10, lineHeight: 20 },
-    primaryBtn: { backgroundColor: palette.blue600, borderRadius: 12, padding: 14, minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 6, marginBottom: 10 },
-    primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: '700', textAlign: 'center' },
-    secondaryBtn: {
-        backgroundColor: colors.surface.subtle, borderRadius: 12, padding: 14, minHeight: 48, alignItems: 'center', justifyContent: 'center',
-        marginBottom: 10, borderWidth: 1, borderColor: colors.border.strong,
-    },
-    secondaryBtnText: { color: colors.text.body, fontSize: 15, fontWeight: '600', textAlign: 'center' },
-    disabledBtn: { opacity: 0.5 },
-    townBox: { marginBottom: 10 },
-    townSpinner: { marginTop: 8 },
-    error: { color: palette.red600 || '#dc2626', fontSize: 13, marginBottom: 8, textAlign: 'center' },
-    skipBtn: { minHeight: 48, padding: 12, alignItems: 'center', justifyContent: 'center' },
-    skipText: { color: colors.text.secondary, fontSize: 15, fontWeight: '600', textDecorationLine: 'underline' },
-    footnote: { fontSize: 13, color: colors.text.muted, textAlign: 'center', lineHeight: 18, marginTop: 4 },
-});
+function makeStyles(colors: AppColors, dark: boolean) {
+    return StyleSheet.create({
+        title: { fontSize: 24, fontWeight: '800', color: colors.text.heading, marginBottom: 6 },
+        body: { fontSize: 14, color: colors.text.secondary, marginBottom: 10, lineHeight: 20 },
+        primaryBtn: { backgroundColor: palette.blue600, borderRadius: 12, padding: 14, minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 6, marginBottom: 10 },
+        primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: '700', textAlign: 'center' },
+        secondaryBtn: {
+            backgroundColor: colors.surface.subtle, borderRadius: 12, padding: 14, minHeight: 48, alignItems: 'center', justifyContent: 'center',
+            marginBottom: 10, borderWidth: 1, borderColor: colors.border.strong,
+        },
+        secondaryBtnText: { color: colors.text.body, fontSize: 15, fontWeight: '600', textAlign: 'center' },
+        disabledBtn: { opacity: 0.5 },
+        townBox: { marginBottom: 10 },
+        townSpinner: { marginTop: 8 },
+        error: { color: dark ? colors.feedback.danger.fg : (palette.red600 || '#dc2626'), fontSize: 13, marginBottom: 8, textAlign: 'center' },
+        skipBtn: { minHeight: 48, padding: 12, alignItems: 'center', justifyContent: 'center' },
+        skipText: { color: colors.text.secondary, fontSize: 15, fontWeight: '600', textDecorationLine: 'underline' },
+        footnote: { fontSize: 13, color: colors.text.muted, textAlign: 'center', lineHeight: 18, marginTop: 4 },
+    });
+}

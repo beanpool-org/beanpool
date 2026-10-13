@@ -45,7 +45,7 @@ import { pruneAgedOut } from './engine/plain-tables.js';
 import { isAcceptableAvatarValue, isAcceptablePhotoValue, AVATAR_FORMAT_ERROR, getAvatarService } from './engine/avatar.js';
 import { stripImageValue } from './storage/image-metadata.js';
 import { pruneOldActivity, renameMemberInActivity } from './db/activity-feed-db.js';
-import { scrubChannelRows } from './engine/creator-channels.js';
+import { scrubChannelRows, clearUnprovenOauthBadges } from './engine/creator-channels.js';
 import { getUnhandledRejectionSummary } from './process-handlers.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { adminActorName } from './engine/admin-actor-name.js';
@@ -226,6 +226,8 @@ import {
     getMembers as getMembersEngine,
     getAllMembers as getAllMembersEngine,
     getMemberDirectoryRows as getMemberDirectoryRowsEngine,
+    getMemberDirectoryRowsByKeys as getMemberDirectoryRowsByKeysEngine,
+    searchMemberDirectoryRows as searchMemberDirectoryRowsEngine,
     checkInvite as checkInviteEngine,
     verifyOfflineTicket as verifyOfflineTicketEngine,
     getInvitesByMember as getInvitesByMemberEngine,
@@ -646,6 +648,9 @@ export function initStateEngine(): void {
     bumpPostsVersion();
     bumpMembersVersion();
     initSchema();
+    // A verified-account badge no platform was asked about proves nothing (#1830): cleared once, re-verified on connect.
+    // Never blocks a boot: it is idempotent, so a failure here is retried at the next one.
+    try { clearUnprovenOauthBadges(); } catch (e) { console.error('[Boot] Could not clear unproven channel badges:', e); }
     clearEnterpriseFloorCache();
     migrateLegacyState();
     // NODE_PROFILE decides what the node runs as; node_config.nodeProfile records it, and a main server recorded as
@@ -1812,6 +1817,16 @@ export function getAllMembers(): Member[] {
 /** The member directory's rows, every one or those changed after a delta cursor (engine members.ts). */
 export function getMemberDirectoryRows(updatedAfter?: unknown): DirectoryRow[] {
     return getMemberDirectoryRowsEngine(db, updatedAfter);
+}
+
+/** The directory's rows of these members, in the order asked; with `updatedAfter`, only those changed after it (engine members.ts). */
+export function getMemberDirectoryRowsByKeys(keys: string[], updatedAfter?: string): DirectoryRow[] {
+    return getMemberDirectoryRowsByKeysEngine(db, keys, updatedAfter);
+}
+
+/** The members whose name starts with `prefix`, shortest first, at most `limit` (engine members.ts). */
+export function searchMemberDirectoryRows(prefix: string, limit: number): DirectoryRow[] {
+    return searchMemberDirectoryRowsEngine(db, prefix, limit);
 }
 
 // ===================== INVITE CODES =====================

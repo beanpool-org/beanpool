@@ -50,4 +50,4 @@ Owners and admins see the same screens. Some buttons only work for owners, and S
 
 ## Some figures are placeholders
 
-A few numbers in Settings are not calculated yet: the trust score on a member's page, the "Live Request Traffic" meter under Gateway & Peers, the "Backed up recently" line on Home, and everything on the Commons Pool tab. That tab always shows "240.0 beans", "✓ Solvent & Fully Backed", "0.0 drift" and "0 queued", whatever the real figures are. Check the real thing (the member's history, the logs, the backups list, the community's Decisions) before you act on them.
+A few numbers in Settings are not calculated yet: the "Trust Rating" on a member's page, the "Live Request Traffic vs Limit" meter under Gateway & Peers, the "Backed up recently" line on Home, and everything on the Commons Pool tab. That tab always shows "240.0 beans", "✓ Solvent & Fully Backed", "0.0 drift" and "0 queued", whatever the real figures are. Check the real thing (the member's history, the logs, the backups list, the community's Decisions) before you act on them.

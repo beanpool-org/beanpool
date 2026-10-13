@@ -48,6 +48,7 @@ export type PulseOAuthFailure =
     | 'cancelled'
     | 'no-token'
     | 'account-mismatch'
+    | 'not-verifiable'
     | 'expired'
     | 'network'
     | 'provider';
@@ -231,6 +232,98 @@ async function openAuthSessionWithFallback(
 }
 
 /**
+ * What the node answered for a connect: the token for this phone, the channel as the node now holds
+ * it, and the handle the PLATFORM named (#1830).
+ */
+interface RelayConnect {
+    data: any;
+    channel: any;
+    handle: string;
+}
+
+/**
+ * The member-facing words for a refused connect. The node asked the platform which account the
+ * member signed in to; the phone never says who it is, so every refusal here is the node's finding.
+ */
+export function connectRefusal(
+    platformLabel: string,
+    channelHandle: string | null,
+    status: number,
+    json: any
+): PulseOAuthError {
+    const code = typeof json?.error === 'string' ? json.error : '';
+    const named = channelHandle ? channelHandle : 'the account on this channel';
+    switch (code) {
+        case 'account_mismatch':
+            return new PulseOAuthError(
+                'account-mismatch',
+                `The ${platformLabel} account you signed in to is not ${named}. Sign in to that account and connect again.`
+            );
+        case 'not_verifiable':
+            return new PulseOAuthError(
+                'not-verifiable',
+                `BeanPool can only verify a ${platformLabel} channel added as @handle. Remove this one and add it again as @handle.`
+            );
+        case 'identity_unavailable':
+            return new PulseOAuthError(
+                'provider',
+                typeof json?.message === 'string' && json.message
+                    ? json.message
+                    : `${platformLabel} did not say which account you signed in to. Try again.`
+            );
+        case 'update_required':
+            return new PulseOAuthError('provider', 'Update BeanPool to connect this channel.');
+        case 'rate_limited':
+            return new PulseOAuthError('provider', 'Too many connection attempts. Try again in an hour.');
+    }
+    if (status === 403 || status === 404) {
+        return new PulseOAuthError('provider', 'This channel is not on your profile any more. Reload and try again.');
+    }
+    const msg = json?.error_description
+        || json?.error_message
+        || (typeof json?.error === 'string' ? json.error : json?.error?.message)
+        || json?.data?.description
+        || json?.message
+        || `Could not connect ${platformLabel}.`;
+    return new PulseOAuthError('provider', msg);
+}
+
+/**
+ * Exchange a code (or a refresh token) through the node, naming the channel. The node asks the
+ * platform who the token belongs to, sets the badge only on an exact match, and answers with the
+ * token. Nothing here sends a username: there is no field the node would trust.
+ */
+async function relayConnect(
+    nodeUrl: string,
+    identity: BeanPoolIdentity,
+    body: Record<string, unknown>,
+    platformLabel: string,
+    channelHandle: string | null
+): Promise<RelayConnect> {
+    let status = 0;
+    let json: any;
+    try {
+        const res = await signedPost(nodeUrl, '/api/member/pulse/oauth-exchange', body, identity);
+        status = res.status;
+        const text = await res.text();
+        try {
+            json = JSON.parse(text);
+        } catch {
+            json = { error: text || `HTTP ${res.status}` };
+        }
+        if (!res.ok) throw connectRefusal(platformLabel, channelHandle, status, json);
+    } catch (e: any) {
+        if (e instanceof PulseOAuthError) throw e;
+        throw new PulseOAuthError('network', `Could not reach your community node: ${e.message}`);
+    }
+    const data = json?.data || {};
+    if (!data.access_token || !json?.channel) {
+        throw connectRefusal(platformLabel, channelHandle, status, json);
+    }
+    return { data, channel: json.channel, handle: json?.identity?.handle || json.channel.verifiedHandle || '' };
+}
+
+/**
  * Connect a TikTok Creator Channel via TikTok Login Kit + Display API.
  */
 export async function connectTikTokChannel(
@@ -290,110 +383,31 @@ export async function connectTikTokChannel(
         throw new PulseOAuthError('no-token', 'TikTok authorization completed without a code.');
     }
 
-    // Token exchange via node relay
-    console.log('[PulseOAuth] Exchanging TikTok authorization code for access token via node relay');
-    let tokenData: any;
-    try {
-        const exchangeRes = await signedPost(
-            nodeUrl,
-            '/api/member/pulse/oauth-exchange',
-            {
-                platform: 'tiktok',
-                grantType: 'authorization_code',
-                code,
-                codeVerifier: verifier,
-                redirectUri,
-            },
-            identity
-        );
-        const text = await exchangeRes.text();
-        try {
-            tokenData = JSON.parse(text);
-        } catch {
-            tokenData = { error: text || `HTTP ${exchangeRes.status}` };
-        }
-        if (!exchangeRes.ok && !tokenData?.error) {
-            tokenData.error = `HTTP error ${exchangeRes.status}`;
-        }
-    } catch (e: any) {
-        throw new PulseOAuthError('network', `Could not reach node for token exchange: ${e.message}`);
-    }
-
-    const data = tokenData?.access_token ? tokenData : (tokenData?.data || {});
-    if (!data.access_token) {
-        const msg = tokenData?.error_description
-            || tokenData?.error_message
-            || (typeof tokenData?.error === 'string' ? tokenData.error : tokenData?.error?.message)
-            || tokenData?.data?.description
-            || tokenData?.message
-            || (typeof tokenData === 'string' ? tokenData : 'Failed to obtain access token from TikTok.');
-        throw new PulseOAuthError('provider', msg);
-    }
-
+    // The node exchanges the code, asks TikTok who the token belongs to and badges the channel
+    // only when TikTok names exactly this account (#1830). The phone sends no username.
+    console.log('[PulseOAuth] Connecting TikTok through the node relay');
+    const connected = await relayConnect(
+        nodeUrl,
+        identity,
+        {
+            platform: 'tiktok',
+            grantType: 'authorization_code',
+            code,
+            codeVerifier: verifier,
+            redirectUri,
+            channelId: channel.id,
+        },
+        'TikTok',
+        channel.handle
+    );
+    const data = connected.data;
+    const verifiedChannel = connected.channel;
+    const platformUsername = connected.handle;
     const accessToken = data.access_token;
     const refreshToken = data.refresh_token;
     const expiresInSec = data.expires_in || 86400;
     const refreshExpiresInSec = data.refresh_expires_in || 31536000;
     const openId = data.open_id;
-
-    // Fetch user profile from TikTok
-    console.log('[PulseOAuth] Fetching TikTok user profile');
-    let profileData: any;
-    try {
-        const userRes = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,username', {
-            headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        profileData = await userRes.json();
-    } catch (e: any) {
-        throw new PulseOAuthError('network', `Could not verify TikTok user profile: ${e.message}`);
-    }
-
-    // Defensive fallback if TikTok rejects username field (e.g. legacy token missing user.info.profile scope)
-    if (profileData?.error && profileData?.error?.code !== 'ok' && profileData?.error?.code !== 0 && profileData?.error?.code !== '') {
-        try {
-            const fallbackRes = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name', {
-                headers: { Authorization: `Bearer ${accessToken}` },
-            });
-            const fallbackJson = await fallbackRes.json();
-            if (fallbackJson?.data?.user) {
-                profileData = fallbackJson;
-            }
-        } catch {
-            // Keep original profileData error
-        }
-    }
-
-    const user = profileData?.data?.user || {};
-    const platformUsername = user.username || '';
-
-    if (!platformUsername) {
-        const errMsg = profileData?.error?.message
-            || (user.display_name && !user.username
-                ? 'TikTok did not return a username (user.info.profile scope required). Please reconnect.'
-                : 'TikTok did not return an account username.');
-        throw new PulseOAuthError('provider', errMsg);
-    }
-
-    // Verify ownership on node
-    console.log(`[PulseOAuth] Verifying channel on node with TikTok username: ${platformUsername}`);
-    const verifyRes = await signedPost(
-        nodeUrl,
-        `/api/member/channels/${channel.id}/verify-oauth`,
-        {
-            platform: 'tiktok',
-            platformUsername,
-        },
-        identity
-    );
-
-    const verifyJson = await verifyRes.json().catch(() => ({}));
-    if (!verifyRes.ok) {
-        const errorMsg = verifyJson?.message || verifyJson?.error || 'Verification refused by node.';
-        if (verifyJson?.error === 'account_mismatch' || errorMsg.includes('does not match')) {
-            throw new PulseOAuthError('account-mismatch', errorMsg);
-        }
-        throw new PulseOAuthError('provider', errorMsg);
-    }
 
     // Persist token in device SecureStore
     const now = Date.now();
@@ -418,7 +432,7 @@ export async function connectTikTokChannel(
         console.warn('[PulseOAuth] Initial video sync error (non-fatal):', syncErr);
     }
 
-    return { channel: verifyJson.channel, newItemsCount };
+    return { channel: verifiedChannel, newItemsCount };
 }
 
 /**
@@ -463,86 +477,28 @@ export async function connectInstagramChannel(
         throw new PulseOAuthError('cancelled', 'Instagram Creator connection was cancelled or refused.');
     }
 
-    // Token exchange via node relay
-    console.log('[PulseOAuth] Exchanging Instagram authorization code for access token via node relay');
-    let tokenData: any;
-    try {
-        const exchangeRes = await signedPost(
-            nodeUrl,
-            '/api/member/pulse/oauth-exchange',
-            {
-                platform: 'instagram',
-                grantType: 'authorization_code',
-                code,
-                redirectUri,
-            },
-            identity
-        );
-        const text = await exchangeRes.text();
-        try {
-            tokenData = JSON.parse(text);
-        } catch {
-            tokenData = { error: text || `HTTP ${exchangeRes.status}` };
-        }
-        if (!exchangeRes.ok && !tokenData?.error) {
-            tokenData.error = `HTTP error ${exchangeRes.status}`;
-        }
-    } catch (e: any) {
-        throw new PulseOAuthError('network', `Could not reach node for Instagram token exchange: ${e.message}`);
-    }
-
-    const data = tokenData?.data || tokenData || {};
-    if (!data.access_token) {
-        const msg = tokenData?.error_message
-            || tokenData?.error?.message
-            || (typeof tokenData?.error === 'string' ? tokenData.error : undefined)
-            || tokenData?.error_description
-            || tokenData?.data?.description
-            || tokenData?.message
-            || (typeof tokenData === 'string' ? tokenData : 'Failed to obtain access token from Instagram.');
-        throw new PulseOAuthError('provider', msg);
-    }
-
-    const accessToken = data.access_token;
-    const expiresInSec = data.expires_in || 5184000; // 60 days for long-lived token
-
-    // Fetch user profile from Instagram Graph API
-    console.log('[PulseOAuth] Fetching Instagram user profile');
-    let profileData: any;
-    try {
-        const userRes = await fetch(
-            `https://graph.instagram.com/v21.0/me?fields=id,username,name&access_token=${encodeURIComponent(accessToken)}`
-        );
-        profileData = await userRes.json();
-    } catch (e: any) {
-        throw new PulseOAuthError('network', `Could not verify Instagram user profile: ${e.message}`);
-    }
-
-    const platformUsername = profileData?.username || profileData?.name || '';
-    if (!platformUsername) {
-        throw new PulseOAuthError('provider', 'Instagram did not return an account username.');
-    }
-
-    // Verify ownership on node
-    console.log(`[PulseOAuth] Verifying channel on node with Instagram username: ${platformUsername}`);
-    const verifyRes = await signedPost(
+    // The node exchanges the code, asks Instagram who the token belongs to and badges the channel
+    // only when Instagram names exactly this account (#1830). No display-name fallback: an answer
+    // without a username is a refusal, on the node.
+    console.log('[PulseOAuth] Connecting Instagram through the node relay');
+    const connected = await relayConnect(
         nodeUrl,
-        `/api/member/channels/${channel.id}/verify-oauth`,
+        identity,
         {
             platform: 'instagram',
-            platformUsername,
+            grantType: 'authorization_code',
+            code,
+            redirectUri,
+            channelId: channel.id,
         },
-        identity
+        'Instagram',
+        channel.handle
     );
-
-    const verifyJson = await verifyRes.json().catch(() => ({}));
-    if (!verifyRes.ok) {
-        const errorMsg = verifyJson?.message || verifyJson?.error || 'Verification refused by node.';
-        if (verifyJson?.error === 'account_mismatch' || errorMsg.includes('does not match')) {
-            throw new PulseOAuthError('account-mismatch', errorMsg);
-        }
-        throw new PulseOAuthError('provider', errorMsg);
-    }
+    const data = connected.data;
+    const verifiedChannel = connected.channel;
+    const platformUsername = connected.handle;
+    const accessToken = data.access_token;
+    const expiresInSec = data.expires_in || 5184000; // 60 days for long-lived token
 
     // Persist token in device SecureStore
     const now = Date.now();
@@ -552,7 +508,7 @@ export async function connectInstagramChannel(
         accessToken,
         expiresAt: now + expiresInSec * 1000,
         platformUsername,
-        openId: profileData?.id,
+        openId: verifiedChannel?.platformAccountId ?? undefined,
     };
     await saveStoredOAuthToken(storedToken);
 
@@ -565,7 +521,50 @@ export async function connectInstagramChannel(
         console.warn('[PulseOAuth] Initial video sync error (non-fatal):', syncErr);
     }
 
-    return { channel: verifyJson.channel, newItemsCount };
+    return { channel: verifiedChannel, newItemsCount };
+}
+
+/**
+ * Bring back a verified badge without a tap (#1830, Marty 13 Oct).
+ *
+ * Badges set before the node asked the platform itself were cleared. A TikTok channel whose token
+ * is still on this phone re-verifies through a refresh that names the channel: the node asks TikTok
+ * who the token belongs to and badges only an exact match. Returns the channel when the badge is
+ * back, null when this phone holds nothing to try with. A token for another account is dropped.
+ */
+export async function restoreVerifiedBadge(
+    channel: { id: string; platform: string; handle: string | null },
+    identity: BeanPoolIdentity,
+    nodeUrl: string
+): Promise<any | null> {
+    if (channel.platform !== 'tiktok') return null;
+    const stored = await getStoredOAuthToken(channel.id);
+    const now = Date.now();
+    if (!stored?.refreshToken || (stored.refreshExpiresAt && stored.refreshExpiresAt <= now)) return null;
+    let connected: RelayConnect;
+    try {
+        connected = await relayConnect(
+            nodeUrl,
+            identity,
+            { platform: 'tiktok', grantType: 'refresh_token', refreshToken: stored.refreshToken, channelId: channel.id },
+            'TikTok',
+            channel.handle
+        );
+    } catch (e) {
+        if (e instanceof PulseOAuthError && e.reason === 'account-mismatch') {
+            await deleteStoredOAuthToken(channel.id);
+        }
+        throw e;
+    }
+    await saveStoredOAuthToken({
+        ...stored,
+        accessToken: connected.data.access_token,
+        refreshToken: connected.data.refresh_token || stored.refreshToken,
+        expiresAt: now + (connected.data.expires_in || 86400) * 1000,
+        refreshExpiresAt: now + (connected.data.refresh_expires_in || 31536000) * 1000,
+        platformUsername: connected.handle || stored.platformUsername,
+    });
+    return connected.channel;
 }
 
 /**
@@ -619,6 +618,9 @@ export async function refreshTokenIfNeeded(
                         platform: 'tiktok',
                         grantType: 'refresh_token',
                         refreshToken: storedToken.refreshToken,
+                        // Naming the channel lets the node re-verify an unbadged one silently (#1830);
+                        // a channel already proven costs no identity call.
+                        channelId: storedToken.channelId,
                     },
                     identity
                 );

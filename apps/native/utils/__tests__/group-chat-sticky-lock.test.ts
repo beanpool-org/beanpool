@@ -164,6 +164,14 @@ describe('a group chat this phone has held a key of stays locked here', () => {
         expect(groupChatNotice({ nodeSaysLocked: false, seenLocked: false })).toBe(GROUP_CHAT_OLD_NODE_NOTICE);
     });
 
+    it('the locked notice names everything the node still sees: replies and reactions too (#1843 check, finding 1)', () => {
+        expect(GROUP_CHAT_LOCKED_NOTICE).toMatch(/^End-to-end encrypted: only this group's members can read it\./);
+        for (const seen of ['who wrote', 'when', 'mentions', 'what each line answers', 'reactions']) {
+            expect(GROUP_CHAT_LOCKED_NOTICE).toContain(seen);
+        }
+        expect(GROUP_CHAT_LOCKED_NOTICE).not.toMatch(/\bonly who\b|sees only/);
+    });
+
     it('sign-out (clearDB identityLeaves) drops the four group-key tables; every wipe forgets every opened key (finding 8)', async () => {
         const ring = groupKeyring('https://test.beanpool.org', who.me, G, memoryGroupKeyStore());
         store.execs.length = 0;

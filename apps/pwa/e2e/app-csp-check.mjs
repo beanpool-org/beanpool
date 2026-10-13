@@ -43,7 +43,7 @@ async function loadPolicy() {
 }
 
 /** Hosts the policy lets the web app reach, and so the only ones it may ask. */
-const ALLOWED_EXTERNAL = [/^fonts\.googleapis\.com$/, /^fonts\.gstatic\.com$/, /^[a-z]\.tile\.openstreetmap\.org$/, /^nominatim\.openstreetmap\.org$/];
+const ALLOWED_EXTERNAL = [/^[a-z]\.tile\.openstreetmap\.org$/, /^nominatim\.openstreetmap\.org$/];
 
 const ONE_PIXEL_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
 
@@ -90,7 +90,7 @@ async function checkView(browser, origin, view, me) {
     const violations = [];
     const consoleCsp = [];
     const unexpectedHosts = new Set();
-    const asked = { fontCss: 0, tiles: 0 };
+    const asked = { fonts: 0, tiles: 0 };
 
     const context = await browser.newContext({ viewport: view.viewport, reducedMotion: 'reduce' });
     await context.exposeBinding('__reportCspViolation', (_source, v) => { violations.push(v); });
@@ -106,15 +106,11 @@ async function checkView(browser, origin, view, me) {
         if (!ALLOWED_EXTERNAL.some((re) => re.test(host))) unexpectedHosts.add(host);
         return route.abort();
     });
-    await context.route('https://fonts.googleapis.com/**', (route) => {
-        asked.fontCss++;
-        return route.fulfill({
-            status: 200,
-            contentType: 'text/css',
-            body: "@font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/inter/v0/harness.woff2) format('woff2'); }",
-        });
+    // Inter is the node's own file (public/fonts), never a font host's.
+    context.on('request', (req) => {
+        const url = new URL(req.url());
+        if (url.origin === origin && /^\/fonts\/inter-[a-z-]+\.woff2$/.test(url.pathname)) asked.fonts++;
     });
-    await context.route('https://fonts.gstatic.com/**', (route) => route.fulfill({ status: 404, body: '' }));
     await context.route(/^https:\/\/[a-z]\.tile\.openstreetmap\.org\//, (route) => {
         asked.tiles++;
         return route.fulfill({ status: 200, contentType: 'image/png', body: ONE_PIXEL_PNG });
@@ -203,7 +199,12 @@ async function checkView(browser, origin, view, me) {
     await page.waitForLoadState('networkidle').catch(() => {});
     await page.waitForTimeout(500);
 
-    if (asked.fontCss === 0) failures.push('the Inter stylesheet was never asked for');
+    if (asked.fonts === 0) failures.push("Inter's files were never asked for from the node");
+    const interLoaded = await page.evaluate(async () => {
+        await document.fonts.ready;
+        return [...document.fonts].some((f) => f.family.replace(/["']/g, '') === 'Inter' && f.status === 'loaded');
+    });
+    if (!interLoaded) failures.push('Inter never loaded: the page is drawing in the fallback font');
     if (asked.tiles === 0) failures.push('no map tile was asked for');
     if (unexpectedHosts.size) failures.push(`asked hosts outside the policy's list: ${[...unexpectedHosts].join(', ')}`);
     const seen = violations.slice();
@@ -257,7 +258,7 @@ async function main() {
                 for (const f of result.failures) console.error(`    ${f}`);
             } else {
                 console.log(`✓ ${view.name}: welcome page, the 12-words door's work in a same-origin Web Worker, Market and Map drew; `
-                    + `Inter asked ${result.asked.fontCss}x, ${result.asked.tiles} tile(s); 0 violations; the canary inline script was blocked and reported`);
+                    + `Inter from the node (${result.asked.fonts} file(s)), ${result.asked.tiles} tile(s); 0 violations; the canary inline script was blocked and reported`);
             }
         }
     } finally {

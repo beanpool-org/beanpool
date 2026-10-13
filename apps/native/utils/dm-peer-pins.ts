@@ -175,6 +175,28 @@ export function applyDmListings(pins: DmPeerPins, conversationId: string, listin
     return true;
 }
 
+/**
+ * The member's "Continue with the new key" (slice 2, pick 1): `peer` becomes the pinned key, `by: 'member'`, and the key
+ * before it goes first in `former`, so the old lines still open (pick 3). Only the key on offer moves a pin; a first-seen
+ * pin the member continues with (none of the thread's lines opened under it) is kept and becomes theirs. Any other key,
+ * an offer of several keys (peer null), or a DM with no pin: nothing changes. True when it changed.
+ */
+export function acceptOffer(pins: DmPeerPins, conversationId: string, peer: string, now: string): boolean {
+    const id = dmPinId(conversationId);
+    const key = pinKeyOf(peer);
+    const pin = pins[id];
+    if (!key || !pin) return false;
+    if (pin.offered) {
+        if (pin.offered.peer !== key) return false;
+        const former = [...new Set([pin.peer, ...(pin.former ?? [])])].filter((k) => k !== key);
+        pins[id] = { peer: key, since: now, by: 'member', ...(former.length ? { former } : {}) };
+        return true;
+    }
+    if (pin.peer !== key || pin.by !== 'first-seen') return false;
+    pins[id] = { ...pin, since: now, by: 'member' };
+    return true;
+}
+
 /** The keys a thread's old lines may open under: the pinned one, then the ones before it. */
 export function dmOpenPeers(pin: DmPeerPin): string[] {
     return [pin.peer, ...(pin.former ?? []).filter((k) => k !== pin.peer)];

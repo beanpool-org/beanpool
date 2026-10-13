@@ -35,6 +35,7 @@ import {
     type ConfirmedNote, type HistoryGroup, type NewPhoneCheck, type OldWordsResult,
 } from './group-history-unlock';
 import { oldKeySignedHere, rekeysToMe } from './key-succession';
+import { isKeyReplacedAnswer, noteKeyReplaced, watchForReplacedKey } from './key-replaced';
 import { sqliteGroupKeyStore } from './group-chat-store';
 import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT } from './group-chat-lines';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
@@ -5249,6 +5250,8 @@ async function _signedRequest(endpoint: string, payload: any) {
         let nodeMessage: string | undefined;
         try {
             const errJson = await res.json();
+            // This key was replaced by a re-key: the old phone's offer of its old words (utils/key-replaced.ts).
+            if (isKeyReplacedAnswer(res.status, errJson)) void noteKeyReplaced(anchorUrl, identity.publicKey);
             if (errJson.error) { errorMsg = errJson.error; nodeAnswered = true; }
             if (typeof errJson.message === 'string' && errJson.message.trim()) nodeMessage = errJson.message.trim();
         } catch {
@@ -5316,11 +5319,13 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
         }
     }
 
-    return fetch(`${anchorUrl}${path}`, {
+    const res = await fetch(`${anchorUrl}${path}`, {
         method: 'GET',
         headers,
         signal: options?.signal,
     });
+    if (identity?.publicKey) watchForReplacedKey(anchorUrl, identity.publicKey, res);
+    return res;
 }
 
 /**

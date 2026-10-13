@@ -67,6 +67,7 @@ import { rememberRosterNames } from '../name-key-memory';
 import { sendSealedGroupLine, openGroupThread, chatIsLocked } from '../group-chat-lines';
 import { type DisplayRosterRow } from '../group-line-display';
 import { attestJustCompletedRekey, oldKeySignedHere } from '../key-succession';
+import { isKeyReplacedAnswer, keyReplacedHere, watchForReplacedKey } from '../key-replaced';
 import { makeKeySuccession } from '../group-chat-crypto';
 import type { BeanPoolIdentity } from '../identity';
 
@@ -287,6 +288,16 @@ describe('path A: the old 12 words bring the history back to the new phone (desi
         const cat2: Phone = { ...(await rekeyed(cat, 'Cat')), store: rec.store };
         expect(await attestJustCompletedRekey(URL_BASE, cat2.identity)).toBe(1);
         expect(await oldKeySignedHere(URL_BASE, cat2.identity)).toBe(pk(cat));
+        // Her old phone, if found: the node answers its key's signed requests with the replaced-key code, which that phone
+        // keeps so it can offer its old words to the new one (utils/key-replaced.ts, components/KeyMovedCard.tsx).
+        const oldAsk = await signedGet(URL_BASE, `/api/groups/${g1.id}/members`, cat.identity);
+        expect(isKeyReplacedAnswer(oldAsk.status, await oldAsk.clone().json())).toBe(true);
+        expect(await keyReplacedHere(URL_BASE, pk(cat))).toBe(false);
+        watchForReplacedKey(URL_BASE, pk(cat), oldAsk);
+        await vi.waitFor(async () => expect(await keyReplacedHere(URL_BASE, pk(cat))).toBe(true));
+        const newAsk = await signedGet(URL_BASE, `/api/groups/${g1.id}/members`, cat2.identity);
+        expect(isKeyReplacedAnswer(newAsk.status, await newAsk.clone().json().catch(() => null))).toBe(false);
+        expect(await keyReplacedHere(URL_BASE, pk(cat2))).toBe(false);
         for (const g of groups) await writes(ben, g.id, `Ben after the change in ${g.name}`);
         forgetGroupKeys();
         expect(await reads(cat2, g1.id)).toEqual([`Ben: Ben after the change in ${g1.name}`]);

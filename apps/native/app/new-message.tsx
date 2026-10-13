@@ -15,7 +15,6 @@ import { useNodeProfile } from '../utils/use-node-profile';
 import { keepCards, lookUpMembers, searchPath } from '../utils/members-lookup';
 import { pickerEmpty, pickerHeading } from '../utils/community-list-note';
 import { MemberAvatar } from '../components/MemberAvatar';
-import { colors, palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
 
 // ── Fixed Row Height for getItemLayout ──────────────────────────────────────

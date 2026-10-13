@@ -13,7 +13,7 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Alert } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useIdentity } from '../app/IdentityContext';
-import { colors } from '../constants/colors';
+import { useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { SSO_PROVIDER_NAMES } from '../utils/sso-providers';
 import { finishMove, moveLater, removeInstead, vaultMoveOffer, type VaultMoveOffer } from '../utils/vault-move';
@@ -45,6 +45,7 @@ export const VAULT_MOVE_COPY = {
 } as const;
 
 export function VaultMoveCard({ onMoved }: { onMoved?: (result: KeeperEnrolmentResult | null) => void }) {
+    const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
     const [offer, setOffer] = useState<VaultMoveOffer | null>(null);
     const [sheetOpen, setSheetOpen] = useState(false);
@@ -122,7 +123,8 @@ export function VaultMoveCard({ onMoved }: { onMoved?: (result: KeeperEnrolmentR
     );
 }
 
-const styles = StyleSheet.create({
+// Themed: this card sits in Settings, and the light amber box glared on the dark page.
+const makeStyles = ({ colors }: ThemeContextType) => StyleSheet.create({
     card: {
         backgroundColor: colors.feedback.warning.bg,
         borderColor: colors.feedback.warning.border,

@@ -560,9 +560,12 @@ export default function LedgerScreen() {
                         <MaterialCommunityIcons name={canSend ? 'send' : 'lock-outline'} size={13} color={canSend ? colors.brand.primary : colors.text.muted} />
                         <Text style={[styles.perkText, { color: canSend ? colors.brand.dark : colors.text.muted }]}>{canSend ? 'Send Credits' : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</Text>
                     </Pressable>}
-                    <View style={[styles.perkPill, { borderColor: palette.green200, backgroundColor: palette.green50 }]}>
+                    <View style={[styles.perkPill, {
+                        borderColor: theme === 'dark' ? colors.feedback.success.border : palette.green200,
+                        backgroundColor: theme === 'dark' ? colors.feedback.success.bg : palette.green50,
+                    }]}>
                         <MaterialCommunityIcons name="check-circle" size={13} color={colors.brand.primary} />
-                        <Text style={[styles.perkText, { color: colors.brand.dark }]}>Invite Members</Text>
+                        <Text style={[styles.perkText, { color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.dark }]}>Invite Members</Text>
                     </View>
                 </View>
             </View>
@@ -997,10 +1000,11 @@ export default function LedgerScreen() {
                 </View>
             ) : balanceState.activated === false ? (
                 <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 16, backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: palette.green50, borderWidth: 1, borderColor: palette.green200, borderRadius: 12, padding: 12 }}>
+                    {/* text.body on green50 was near-white on near-white in dark; the success box there. */}
+                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: theme === 'dark' ? colors.feedback.success.bg : palette.green50, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.success.border : palette.green200, borderRadius: 12, padding: 12 }}>
                         <Text style={{ fontSize: 20 }}>🌱</Text>
                         <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 14, fontWeight: '800', color: colors.brand.dark }}>No credit line yet</Text>
+                            <Text style={{ fontSize: 14, fontWeight: '800', color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.dark }}>No credit line yet</Text>
                             <Text style={{ fontSize: 12.5, color: colors.text.body, lineHeight: 18, marginTop: 2 }}>
                                 You can trade right now with the beans you hold. Complete your first trade and your credit line opens automatically — the more value you trade, the deeper it grows. (A community voucher can also give you a starter line.)
                             </Text>

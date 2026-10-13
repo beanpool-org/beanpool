@@ -38,6 +38,8 @@ The code isn't secret. It's safe to read out.
 
 Tap **Not now**. Nothing is sent and nothing changes. You can come back to the chat later.
 
+A paused chat stays paused until you continue. To keep talking without the new key, start a new chat.
+
 If the code doesn't match, don't continue. Tell the person and your community's admins: someone may be trying to read your messages.
 
 ## If the banner offers no key to continue with
@@ -50,9 +52,17 @@ To keep talking, you can start a new chat with the person. A new chat shows no c
 
 After you restore your phone from your 12 words, or update the app, your phone checks each chat against its own earlier messages. If those came from a different key than the one your community now gives for the person, the banner starts with **This phone is checking this chat from the start, as it does after you restore it or update the app.** Check the code with the person as above.
 
-## If the message box says your phone can't place the keys
+## If the message box says your phone can't match the chat to one key
 
-Sometimes the earlier messages in a chat were locked to keys your phone can't match to anyone. The message box then says **This chat's messages were sealed to keys this phone can't place.** You can still read the chat, but there is nothing to continue with. To keep talking, start a new chat with the person, or ask one of your community's owners.
+Sometimes the earlier messages in a chat were locked to keys your phone can't match to one person. The message box then says **This phone can't match this chat to one key, so sending is off.** There is nothing to continue with.
+
+Some messages may still show. They may not be from the person whose name is on the chat: their own earlier messages can be the ones that show as **couldn't be verified**. To keep talking, start a new chat with them, and talk to them in person or on a call first.
+
+## What your phone can check, and what it can't
+
+Your phone checks a chat against the messages it already holds. A restored phone, or an existing phone at the update, is steered only by a server that holds back or surrounds the oldest part of the chat in what it sends. A phone that already held that oldest part is steered by nothing the server sends after the update.
+
+So a phone you have just restored, or just updated, can be misled about a chat's key. A banner can't rule that out. **Confirm a changed key in person**, or on a call where you know it's them.
 
 ## If the community gives a date
 

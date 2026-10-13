@@ -79,7 +79,7 @@ vi.mock('../crypto', async (orig) => ({
 
 import { getDb, getMessages, syncMessages, syncSingleConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, isDmUnplaced, _resetDmPeerPinsForTests, getDmKeyChange, acceptOfferedPeer } from '../db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { refusedSendNotice, dmLineSlotText, DM_OFFERED_KEY_LINE } from '../dm-lock';
+import { refusedSendNotice, dmLineSlotText, DM_OFFERED_KEY_LINE, DM_UNPLACED_LINE } from '../dm-lock';
 import { dmKeyChangeCopy } from '../dm-key-change';
 import { DM_PIN_STORE_UNREAD_TEXT } from '../dm-peer-pins';
 import { routeChat } from '../chat-route';
@@ -2127,6 +2127,13 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         expect(await isDmKeyChangePending(dm.id)).toBe(false);
         expect(await isDmUnplaced(dm.id)).toBe(true);
         expect(await sendTo(dm.id, 'Hello Ben', [puppet, ben])).toEqual({ err: 'DmNotLockedError', posts: 0, rowsAdded: 0, readBy: [] });
+        // What Ana meets here (#1872 handover 4): rule 5's composer line. The only lines that read are the listed key's
+        // (PUPPET's 20); Ben's own 30 are the ones that couldn't be verified. So the line never says the chat reads as theirs.
+        const shown = await getMessages(dm.id);
+        expect(shown.filter((m: any) => m.text === NOT_VERIFIED)).toHaveLength(30);
+        expect(shown.filter((m: any) => m.text !== NOT_VERIFIED).map((m: any) => m.senderId)).toEqual(Array(20).fill(puppet.publicKey));
+        expect(DM_UNPLACED_LINE).toContain('What you can read here may not be from them.');
+        expect(DM_UNPLACED_LINE).not.toMatch(/You can read it/);
     });
 
     /** PUPPET's copy of a line, under its id: sealed to Ana as PUPPET's own (Ben's lines) or in Ana's name (hers), marked edited. */
@@ -2406,7 +2413,13 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
                 expect((await getMessages(dm.id)).map((m: any) => m.text)).toEqual(['Shall I cancel the order?', 'No']);
                 expect(await sendTo(dm.id, 'Ben, the code is 4821', [puppet, ben])).toEqual({ err: 'DmKeyChangedError', posts: 0, rowsAdded: 0, readBy: [] });
                 // The send's refresh names Ben: rule 5 judged again is rule 4 by the phone's clock, PUPPET's line first (B's pause).
-                if (unplaced) expect(pinOf(ana, dm.id)).toMatchObject({ peer: puppet.publicKey, checked: true, offered: { peer: ben.publicKey, firstSight: true } });
+                if (unplaced) {
+                    expect(pinOf(ana, dm.id)).toMatchObject({ peer: puppet.publicKey, checked: true, offered: { peer: ben.publicKey, firstSight: true } });
+                    // Option H (#1872 handover 3): B's banner offers Ben's key, so its code is Ben's, and no sync clears it.
+                    expect(await getDmKeyChange(dm.id)).toMatchObject({ offeredPeer: ben.publicKey, firstSight: true });
+                    for (let pass = 0; pass < 2; pass++) await syncMessages(ana.publicKey);
+                    expect(await getDmKeyChange(dm.id)).toMatchObject({ offeredPeer: ben.publicKey, firstSight: true });
+                }
             } finally { restore(); }
         });
     }

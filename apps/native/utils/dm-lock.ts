@@ -60,9 +60,11 @@ export function dmKeyChangedLine(peerName?: string | null): string {
 
 /**
  * The one line under the box when first sight found lines it couldn't place (utils/dm-peer-pins.ts rule 5, design §3.4
- * amendment): no key is pinned, nothing is offered, so there is no Continue. It names no key.
+ * amendment): no key is pinned, nothing is offered, so there is no Continue. It names no key. It never says the chat
+ * reads as theirs: on a restored phone whose node served PUPPET's lines first (P23b, twin-first T2) the only lines that
+ * read are the listed key's, and the person's own history is the part that "couldn't be verified" (#1872 handover 4).
  */
-export const DM_UNPLACED_LINE = "This chat's messages were sealed to keys this phone can't place. You can read it, but sending needs a new chat, or ask an owner.";
+export const DM_UNPLACED_LINE = "This phone can't match this chat to one key, so sending is off. What you can read here may not be from them. To keep talking, start a new chat.";
 
 /**
  * The fixed line drawn in the slot of a DM line that opens only under the key offered in the pinned one's place (design

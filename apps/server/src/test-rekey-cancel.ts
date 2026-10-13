@@ -128,9 +128,13 @@ async function runTests() {
         });
         return { status: res.status, json: await res.json().catch(() => ({})) as any };
     }
+    /** The new phone asks with the code, and the owner binds its number (since #1768 an ask binds nothing): the move's answer. */
     async function reEnroll(code: string, kp: Keypair) {
-        const signature = crypto.sign(null, Buffer.from(code, 'utf8'), kp.privateKey).toString('base64');
-        return signed(kp, '/api/member/re-enroll', { code, newPublicKey: kp.pubKeyHex, signature });
+        const signature = crypto.sign(null, Buffer.concat([Buffer.from([0xff]), Buffer.from(`beanpool-re-enroll/2\nlocalhost\n${code}`, 'utf8')]), kp.privateKey).toString('base64');
+        const asked = await signed(kp, '/api/member/re-enroll', { code, newPublicKey: kp.pubKeyHex, signature, signedFor: 'localhost' });
+        if (asked.status !== 200 || asked.json.state !== 'waiting') return asked;
+        const oldPk = (db.prepare('SELECT old_pubkey FROM rekey_requests WHERE code = ?').get(code) as { old_pubkey: string }).old_pubkey;
+        return as(ownerSession, 'POST', `/api/local/admin/members/${oldPk}/rekey/complete`, { code, newPubkey: kp.pubKeyHex });
     }
     const issue = (session: string, pk: string) => as(session, 'POST', `/api/local/admin/members/${pk}/rekey/issue-code`);
     const cancel = (session: string | null, pk: string) => as(session, 'POST', `/api/local/admin/members/${pk}/rekey/cancel`);

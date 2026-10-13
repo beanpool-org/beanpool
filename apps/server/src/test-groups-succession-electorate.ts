@@ -37,7 +37,7 @@ process.env.ADMIN_PASSWORD = 'ElectoratePass123!';
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import { initStateEngine, createGroup, joinGroup, setMemberRole, seedGenesisMember, tickGroupSuccession, GROUP_SUCCESSION_WINDOW_MS } from './state-engine.js';
-import { issueRekeyCode } from './engine/member-wizards.js';
+import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
@@ -285,10 +285,12 @@ async function main(): Promise<void> {
         const before = (db.prepare('SELECT joined_at FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(g, kestrel.pk) as any)?.joined_at;
         const rekey = issueRekeyCode(kestrel.pk, founder.pk);
         const newPhone = keypair('Kestrel');
-        const proof = crypto.sign(null, Buffer.from(rekey.code), newPhone.privateKey).toString('base64');
-        const done = await call('POST', '/api/member/re-enroll', newPhone, { code: rekey.code, newPublicKey: newPhone.pk, signature: proof });
+        // The new phone asks, and the operator binds its number (since #1768 an ask binds nothing).
+        const proof = crypto.sign(null, Buffer.concat([Buffer.from([0xff]), Buffer.from(`beanpool-re-enroll/2\nlocalhost\n${rekey.code}`, 'utf8')]), newPhone.privateKey).toString('base64');
+        const asked = await call('POST', '/api/member/re-enroll', newPhone, { code: rekey.code, newPublicKey: newPhone.pk, signature: proof, signedFor: 'localhost' });
+        const done = asked.status === 200 ? completeRekey(kestrel.pk, newPhone.pk, rekey.code, founder.pk) : null;
         const after = (db.prepare('SELECT joined_at FROM group_members WHERE group_id = ? AND member_pubkey = ?').get(g, newPhone.pk) as any)?.joined_at;
-        assert(done.status === 200 && after === before, `setup: Kestrel re-keys; the membership moves to the new key with its time (${show(done)}, ${after})`);
+        assert(!!done?.success && after === before, `setup: Kestrel re-keys; the membership moves to the new key with its time (${show(asked)}, ${after})`);
         const seen = await call('GET', `/api/groups/${g}/succession`, newPhone);
         assert(seen.body?.canPropose === true && sameSet(seen.body?.voters, [newPhone, marram]), `the new key takes part (${show(seen)})`);
         const opened = await call('POST', `/api/groups/${g}/succession/propose`, newPhone, { candidatePubkey: marram.pk });

@@ -113,11 +113,27 @@ export function importedArea(rm: { areaLat?: unknown; areaLng?: unknown; areaUpd
  */
 let areasByKey: Map<string, { lat: number; lng: number }> | null = null;
 
+/**
+ * Told of every change to the map, right after it: the keys read again, or null when it was loaded again whole. The
+ * sockets' index by area (ws-area-index.ts) files each open socket's member by this map, so it moves with it.
+ */
+type AreaListener = (keys: string[] | null) => void;
+const areaListeners: AreaListener[] = [];
+export function onMemberAreasChanged(listener: AreaListener): void {
+    areaListeners.push(listener);
+}
+
+/** Loads the map if nothing has yet. */
+export function memberAreasReady(): void {
+    if (!areasByKey) loadMemberAreas();
+}
+
 /** Loads (or loads again) every member's area from the table. */
 export function loadMemberAreas(): void {
     const rows = db.prepare('SELECT public_key, area_lat, area_lng FROM members WHERE area_lat IS NOT NULL AND area_lng IS NOT NULL').all() as
         { public_key: string; area_lat: number; area_lng: number }[];
     areasByKey = new Map(rows.map(r => [r.public_key, { lat: r.area_lat, lng: r.area_lng }]));
+    for (const listener of areaListeners) listener(null);
 }
 
 /** A member's area as the pushes see it (the map above), or undefined. */
@@ -140,5 +156,6 @@ export function refreshMemberAreas(keys: Iterable<string>): void {
             if (row && row.area_lat != null && row.area_lng != null) areasByKey.set(key, { lat: row.area_lat, lng: row.area_lng });
             else areasByKey.delete(key);
         }
+        for (const listener of areaListeners) listener(list);
     });
 }

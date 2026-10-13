@@ -14,6 +14,7 @@ import {
     getPendingOnboarding, setPendingOnboarding, updatePendingOnboarding, clearPendingOnboarding, resumePlan, keyMadeForThisJoin,
     recordJoinKeyMade, type OnboardingFlow,
 } from '../utils/onboarding-state';
+import { rekeySlotStore } from '../utils/rekey-slot-store';
 import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
 import { askGlobalDoorOffer, globalDoorOffered } from '../utils/global-door-offer';
 import {
@@ -717,6 +718,13 @@ export default function WelcomeScreen() {
 
         return () => { mounted = false; };
     }, [params?.invite, params?.t, inviteLink]);
+
+    // A re-key ask the app was closed in the middle of (utils/rekey-redeem.ts): back to its screen, which asks once more.
+    useEffect(() => {
+        let alive = true;
+        rekeySlotStore.get().then((held) => { if (alive && held) router.push('/rekey-code'); }).catch(() => {});
+        return () => { alive = false; };
+    }, []);
 
     // Resume a join wizard that was interrupted after the keypair was created
     // (Step 1). A fresh incoming invite link outranks a stale half-done wizard,
@@ -2800,6 +2808,11 @@ export default function WelcomeScreen() {
 
                         <Pressable style={styles.recoverBtn} onPress={() => { setMode('recover'); setError(null); }} accessibilityRole="button">
                             <Text style={styles.recoverBtnText}>🔑 Recover with 12 Words</Text>
+                        </Pressable>
+
+                        {/* Lost the phone and the words: an admin's re-key code (app/rekey-code.tsx, #1768). */}
+                        <Pressable style={styles.recoverBtn} onPress={() => { setError(null); router.push('/rekey-code'); }} accessibilityRole="button">
+                            <Text style={styles.recoverBtnText}>🪪 An admin gave me a re-key code</Text>
                         </Pressable>
 
                         <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel="Back to Home">

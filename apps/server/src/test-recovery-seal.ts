@@ -15,9 +15,10 @@
  *   7. the reverse migration (the rollback command, run as a command) restores the rows byte for byte;
  *   8. a standby (NODE_ROLE=backup) makes no key file, a main server makes one (0600), and an unreadable key
  *      file never stops a boot;
- *   9. moving a member to a new key (the re-key wizard) keeps their copy openable, and stamps what it moves;
- *  10. without the key file, a re-key is refused and changes nothing, and the same code works once the key is back;
- *  11. a copy locked with another key stays under the old key it is bound to, and the re-key does not wait on it.
+ *   9. moving a member to a new key (the re-key) deletes their own copies, which rebuild the replaced seed, with a
+ *      tombstone, and renames and stamps a copy they keep for someone else (#1768, Marty's pick 2, 2026-10-11);
+ *  10. without the key file, a re-key still completes: the copies are deleted, never opened;
+ *  11. a copy locked with another key is deleted with the rest, and the re-key completes.
  *  12. copies a main server dropped BEFORE the seal (re-deposits, removals, a purge, the way the code before it deleted:
  *      secure_delete off) are gone from state.db and its WAL after the upgrade's boot: one VACUUM, once, retried at the
  *      next boot when the disk has no room, and posts' search still finds the right post after it;
@@ -303,15 +304,17 @@ async function main(): Promise<void> {
         check(fs.readFileSync(path.join(badDir, KEY_FILE)).toString() === 'short', '...and is never overwritten: it may be the only copy someone can repair');
     });
 
-    // ── 9. a member moved to a new key keeps an openable copy ───────────────────────────────────
-    await section('9. moving a member to a new key keeps their copy openable', async () => {
+    // ── 9. a member moved to a new key: their own copies go, a copy they keep for someone moves ──
+    // Since #1768 (DESIGN-rekey-redeem-fable.md §4, Marty's pick 2, 2026-10-11) a re-key deletes the member's own copies:
+    // they rebuild the replaced seed, so a sign-in restore after the move would land on the key just replaced.
+    await section('9. moving a member to a new key deletes their own copies (with a tombstone) and renames a copy they keep', async () => {
         const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
         const m9 = newId();
         addMember(m9, 'SealRekey');
         const sealed9 = await sealSeedToSso(new Uint8Array(m9.seed), 'google', GOOGLE_SUB) as Sealed;
         const { res } = await deposit(m9, sealed9);
         check(res.status === 200, `setup: the member deposits a copy (got ${res.status})`);
-        // A copy another member holds for m9 (a member keeper), so the rename is seen too. Both rows stamped long ago.
+        // A copy m9 keeps for another member (a member keeper), so the rename is seen too. Stamped long ago.
         const other9 = newId();
         addMember(other9, 'SealRekeyOther');
         const keeperRowId = Number(db.prepare(`INSERT INTO recovery_shares
@@ -321,22 +324,20 @@ async function main(): Promise<void> {
         db.prepare('UPDATE recovery_shares SET updated_at = ? WHERE id IN (?, ?)').run(STALE, ownRowId, keeperRowId);
         const moved = newId();
         const { code } = issueRekeyCode(m9.pk, 'owner:password');
-        completeRekey(m9.pk, moved.pk, code, 'owner:password');
-        const shares = getCurrentShares(moved.pk);
-        check(shares.length === 1 && shares[0].encryptedShare === sealed9.encryptedShare && shares[0].kdfParams === sealed9.kdfParams,
-            'after the move, the copy is filed under the new key and still opens with the server\'s key');
-        const seed = shares[0] ? await openShareFromSso(shares[0] as Sealed, 'google', GOOGLE_SUB) : null;
-        check(!!seed && Buffer.from(seed).equals(m9.seed), '...to the seed it was made from');
-        const own = db.prepare('SELECT owner_pubkey, updated_at FROM recovery_shares WHERE id = ?').get(ownRowId) as any;
-        check(own?.owner_pubkey === moved.pk && own.updated_at > STALE,
-            `the moved copy is stamped, so a standby is sent the move (updated_at ${own?.updated_at})`);
+        const done = completeRekey(m9.pk, moved.pk, code, 'owner:password');
+        check(done.signInCopiesRemoved === 1, `the move removes the member's own copy (${done.signInCopiesRemoved})`);
+        check(getCurrentShares(moved.pk).length === 0 && getCurrentShares(m9.pk).length === 0,
+            'neither key holds a copy of the replaced seed: the member links their sign-in again');
+        check(!db.prepare('SELECT 1 FROM recovery_shares WHERE id = ?').get(ownRowId), '...its row is gone from the table');
+        check(!!db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'recovery_shares' AND row_key LIKE ?").get(`${m9.pk}|%`),
+            '...with a tombstone, so a standby drops it too');
         const keeper = db.prepare('SELECT holder_ref, updated_at FROM recovery_shares WHERE id = ?').get(keeperRowId) as any;
         check(keeper?.holder_ref === moved.pk && keeper.updated_at > STALE,
-            `...and so is a copy the member keeps for someone else, renamed to the new key (updated_at ${keeper?.updated_at})`);
+            `a copy the member keeps for someone else is renamed to the new key, and stamped (updated_at ${keeper?.updated_at})`);
     });
 
-    // ── 10. without the key file, a re-key moves nothing, and runs once the key is back ────────
-    await section('10. without the key file, a re-key is refused and changes nothing, and runs once the key is back', async () => {
+    // ── 10. without the key file, a re-key still completes: nothing is opened ───────────────────
+    await section('10. without the key file, a re-key completes: the member\'s copies are deleted, never opened', async () => {
         const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
         const { getMember } = await import('./state-engine.js');
         const m10 = newId();
@@ -352,26 +353,16 @@ async function main(): Promise<void> {
         try {
             let refused = '';
             try { completeRekey(m10.pk, moved.pk, code, 'owner:password'); } catch (e) { refused = (e as Error)?.message ?? String(e); }
-            check(refused === SENTENCE, `the re-key is refused with the sentence (got ${refused || 'no refusal'})`);
+            check(refused === '' && !!getMember(moved.pk) && !getMember(m10.pk), `the re-key completes without the key (${refused || 'no refusal'})`);
             const under = (pk: string) => (db.prepare('SELECT COUNT(*) AS n FROM recovery_shares WHERE owner_pubkey = ?').get(pk) as any).n;
-            check(under(m10.pk) === 1 && under(moved.pk) === 0, 'the copy stays under the old key, where it is bound');
-            check(!!getMember(m10.pk) && !getMember(moved.pk), '...and nothing else moved: the whole re-key rolled back');
-            const req = db.prepare('SELECT status FROM rekey_requests WHERE code = ?').get(code) as any;
-            check(req?.status === 'pending', `the re-enrolment code is still pending (got ${req?.status})`);
-
-            if (saved) fs.writeFileSync(keyPath, saved, { mode: 0o600 });
-            completeRekey(m10.pk, moved.pk, code, 'owner:password');
-            const shares = getCurrentShares(moved.pk);
-            const seed = shares[0] ? await openShareFromSso(shares[0] as Sealed, 'google', GOOGLE_SUB) : null;
-            check(shares.length === 1 && !!seed && Buffer.from(seed).equals(m10.seed),
-                'with the key back, the same code moves the member, and the copy opens under the new key to their seed');
+            check(under(m10.pk) === 0 && under(moved.pk) === 0, 'and the copy is gone from both keys');
         } finally {
             if (saved && !fs.existsSync(keyPath)) fs.writeFileSync(keyPath, saved, { mode: 0o600 });
         }
     });
 
-    // ── 11. a copy another key locked stays where it is bound, and the re-key does not wait on it ──
-    await section('11. a copy locked with another key stays under the old key, where it still opens, and the re-key completes', async () => {
+    // ── 11. a copy another key locked goes too: it rebuilds the replaced seed all the same ──────
+    await section('11. a copy locked with another key is deleted with the rest, and the re-key completes', async () => {
         const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
         const { getMember } = await import('./state-engine.js');
         const m11 = newId();
@@ -389,15 +380,9 @@ async function main(): Promise<void> {
             let threw = '';
             try { completeRekey(m11.pk, moved.pk, code, 'owner:password'); } catch (e) { threw = (e as Error)?.message ?? String(e); }
             check(threw === '' && !!getMember(moved.pk) && !getMember(m11.pk), `the re-key completes (${threw || 'no error'})`);
-            const row = db.prepare('SELECT owner_pubkey FROM recovery_shares WHERE id = ?').get(rowId) as any;
-            check(row?.owner_pubkey === m11.pk, 'the copy it cannot open stays under the old key it is bound to');
-            check(getCurrentShares(moved.pk).length === 0, '...so the new key holds no copy that could never open');
-
+            check(!db.prepare('SELECT 1 FROM recovery_shares WHERE id = ?').get(rowId), 'the copy it cannot open is deleted too: it rebuilds the replaced seed');
             fs.writeFileSync(keyPath, saved, { mode: 0o600 });
-            const back = getCurrentShares(m11.pk);
-            const seed = back[0] ? await openShareFromSso(back[0] as Sealed, 'google', GOOGLE_SUB) : null;
-            check(back.length === 1 && back[0].encryptedShare === sealed11.encryptedShare && !!seed && Buffer.from(seed).equals(m11.seed),
-                'with the key that locked it back, the copy left there still opens, to the seed it was made from');
+            check(getCurrentShares(moved.pk).length === 0 && getCurrentShares(m11.pk).length === 0, '...so no key holds it');
         } finally {
             fs.writeFileSync(keyPath, saved, { mode: 0o600 });
         }

@@ -26,6 +26,7 @@ import { getFirstNodeAdminPubkey } from './engine/node-roles.js';
 import { issueAutomationToken } from './automation-tokens.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
 import { db } from './db/db.js';
+import { REKEY_OWN_KEY } from './engine/member-wizards.js';
 import { consumeHandshakeToken, createAdminChallenge, verifyAndSolveChallenge, validateAdminSession, PHONE_HANDOFF_IDLE_TTL_MS, SESSION_IDLE_TTL_MS, PHONE_STEP_UP_WINDOW_MS, backdateAdminSessionForTests } from './admin-key-auth.js';
 import { updateLocalConfig, getLocalConfig } from './config/local-config.js';
 import { generateTotpSecret, generateTotpCode } from './totp.js';
@@ -757,9 +758,9 @@ async function main() {
             `an owner's fresh session suspends the co-owner through it, as today (got ${byOwner.status} ${JSON.stringify(byOwner.body)})`);
     }
 
-    // ── 15. A pending re-key code is the whole credential on /api/member/re-enroll, which binds the new key with the
-    // issuer as operator: an admin who reads an owner's or admin's code from rekey/status ends with that role on a key
-    // they chose. The status answer gives the code for such a target only to its issuer or an owner; self-recovery and
+    // ── 15. A pending re-key code was the whole credential on /api/member/re-enroll, which bound the new key with the
+    // issuer as operator: an admin who read an owner's or admin's code from rekey/status ended with that role on a key
+    // they chose (since #1768 an ask binds nothing, and the code is still kept from them). The status answer gives the code for such a target only to its issuer or an owner; self-recovery and
     // an admin's re-key of a plain member keep working end to end (confirm 3, 4172310632). ──
     console.log('\n15. Re-key status: who reads a pending code');
     {
@@ -771,9 +772,11 @@ async function main() {
             const res = await fetch(`${BASE}/api/local/admin/members/${pk}/rekey/status`, { headers: as(s) });
             return { status: res.status, body: await res.json() as any };
         };
-        // Signed by the new phone, request and proof of possession, as the app sends it.
+        // The new phone's ask, signed by it, request and proof of possession, as the app sends it. Since #1768 an ask binds
+        // nothing: it answers two digits, and an operator who may binds that key (`bind`).
         const reEnroll = (code: string, nk: Identity) => {
-            const bodyString = JSON.stringify({ code, newPublicKey: nk.pub, signature: signText(nk, code) });
+            const statement = crypto.sign(null, Buffer.concat([Buffer.from([0xff]), Buffer.from(`beanpool-re-enroll/2\nlocalhost\n${code}`, 'utf8')]), nk.priv).toString('base64');
+            const bodyString = JSON.stringify({ code, newPublicKey: nk.pub, signature: statement, signedFor: 'localhost' });
             const ts = Date.now();
             const nonce = crypto.randomBytes(16).toString('hex');
             return postJson('/api/member/re-enroll', JSON.parse(bodyString), {
@@ -783,6 +786,8 @@ async function main() {
                 'X-Nonce': nonce,
             });
         };
+        const bind = (oldPk: string, code: string, nk: Identity, s: any) =>
+            postJson(`/api/local/admin/members/${oldPk}/rekey/complete`, { code, newPubkey: nk.pub }, as(s));
         const coOwner = keypair(), coOwnerB = keypair(), anAdmin = keypair(), plain = keypair(), selfOwner = keypair(), selfAdmin = keypair();
         seedMember(coOwner.pub, 'hoCoOwner15');
         seedMember(coOwnerB.pub, 'hoCoOwnerB15');
@@ -823,12 +828,15 @@ async function main() {
         const byCoOwner = await readStatus(coOwner.pub, coOwnerBFresh);
         assert(typeof byCoOwner.body.pendingRequest?.code === 'string', `a co-owner reads it too (got ${JSON.stringify(byCoOwner.body.pendingRequest)})`);
 
-        // The owner's code is still the co-owner's to finish with their new phone.
+        // The owner's code is still the co-owner's to take with their new phone: it asks, and the owner binds its number.
         const ownerCode = (await readStatus(coOwner.pub, ownerFresh)).body.pendingRequest.code as string;
         const coOwnerNew = keypair();
-        const finished = await reEnroll(ownerCode, coOwnerNew);
+        const asked = await reEnroll(ownerCode, coOwnerNew);
+        assert(asked.status === 200 && asked.body.state === 'waiting' && roleOf(coOwner.pub) === 'owner',
+            `the co-owner's new phone asks and gets a number; nothing moves yet (got ${asked.status} ${JSON.stringify(asked.body)})`);
+        const finished = await bind(coOwner.pub, ownerCode, coOwnerNew, ownerFresh);
         assert(finished.status === 200 && roleOf(coOwnerNew.pub) === 'owner' && statusOf(coOwnerNew.pub) === 'active' && roleOf(coOwner.pub) === null,
-            `the co-owner finishes it on their new phone and the new key is owner (got ${finished.status} ${JSON.stringify(finished.body)})`);
+            `the owner binds the co-owner's new phone and the new key is owner (got ${finished.status} ${JSON.stringify(finished.body)})`);
 
         // An admin's code for a plain member: the admin reads it back and the member finishes it, as before.
         const plainIssued = await issue(plain.pub, adminStale);
@@ -836,18 +844,27 @@ async function main() {
         assert(plainIssued.status === 200 && plainSt.body.pendingRequest?.code === plainIssued.body.code,
             `an admin who issued a plain member's code still reads it (got ${plainIssued.status} ${JSON.stringify(plainSt.body.pendingRequest)})`);
         const plainNew = keypair();
-        const plainDone = await reEnroll(plainIssued.body.code, plainNew);
+        const plainAsked = await reEnroll(plainIssued.body.code, plainNew);
+        const plainDone = plainAsked.status === 200 ? await bind(plain.pub, plainIssued.body.code, plainNew, adminStale) : plainAsked;
         assert(plainDone.status === 200 && statusOf(plainNew.pub) === 'active' && roleOf(plainNew.pub) === null,
-            `…and the member finishes it on /api/member/re-enroll (got ${plainDone.status} ${JSON.stringify(plainDone.body)})`);
+            `…and the member's phone asks on /api/member/re-enroll and the admin binds it (got ${plainAsked.status}/${plainDone.status} ${JSON.stringify(plainDone.body)})`);
 
-        // Self-recovery: an owner and an admin each issue a code on their own key from Manage, then finish on the member route.
+        // Self-recovery from Manage: since #1768 an ask binds nothing, and a code on their own key would end the session that
+        // could confirm it, so an owner or an admin is refused one on their own key, in plain words, and nothing changes. A
+        // co-owner re-keys them (as above), or their 12 words move them to a phone while they still have this one.
         for (const [who, me, role] of [['an owner', selfOwner, 'owner'], ['an admin', selfAdmin, 'admin']] as const) {
             const mine = await exchange((await requestLink(me)).body.handshakeToken);
             const own = await issue(me.pub, mine);
+            assert(own.status === 409 && own.body.error === REKEY_OWN_KEY && roleOf(me.pub) === role && statusOf(me.pub) === 'active',
+                `${who} is refused a re-key code on their own key, in plain words, and stays ${role} and active (got ${own.status} ${JSON.stringify(own.body)})`);
+            const stillIn = await readStatus(me.pub, mine);
+            assert(stillIn.status === 200 && !stillIn.body.pendingRequest, `…their session goes on, with no code made (got ${stillIn.status})`);
+            const byOwner = await issue(me.pub, ownerFresh);
             const nk = keypair();
-            const done = own.status === 200 ? await reEnroll(own.body.code, nk) : own;
-            assert(own.status === 200 && done.status === 200 && roleOf(nk.pub) === role && statusOf(nk.pub) === 'active' && roleOf(me.pub) === null,
-                `${who} re-keys themselves: issue-code on their own key, finish on /api/member/re-enroll, the new key is ${role} (got ${own.status}/${done.status} ${JSON.stringify(done.body)})`);
+            const asked = byOwner.status === 200 ? await reEnroll(byOwner.body.code, nk) : byOwner;
+            const done = asked.status === 200 ? await bind(me.pub, byOwner.body.code, nk, ownerFresh) : asked;
+            assert(done.status === 200 && roleOf(nk.pub) === role && roleOf(me.pub) === null,
+                `…and an owner re-keys ${who}: the new phone asks, the owner binds it, the new key is ${role} (got ${byOwner.status}/${asked.status}/${done.status})`);
         }
     }
 

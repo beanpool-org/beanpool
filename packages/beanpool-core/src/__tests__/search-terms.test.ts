@@ -28,7 +28,49 @@ describe('expandSearchTerms', () => {
         // Any space parts words, a no-break or ideographic one too.
         expect(expandSearchTerms('fresh\u00a0kale\u3000jardín')).toEqual(expect.arrayContaining(['fresh', 'kale', 'jardín']));
         expect(expandSearchTerms('eggs!')).toContain('eggs');
-        expect(expandSearchTerms('NEAR(a b)')).toEqual(['neara']);
+        // Punctuation parts words, as posts_fts's unicode61 parts them: "NEAR(a" is two words, never "neara".
+        expect(expandSearchTerms('NEAR(a b)')).toEqual(['near']);
+    });
+    it('parts words at Chinese and full-width punctuation, so a word between them is found (#1781)', () => {
+        expect(searchTermsFor('鸡蛋，牛奶')).toEqual(['鸡蛋', '牛奶']);
+        expect(searchTermsFor('鸡蛋、牛奶')).toEqual(['鸡蛋', '牛奶']);
+        expect(searchTermsFor('鸡蛋。牛奶；面包：米！鱼？')).toEqual(['鸡蛋', '牛奶', '面包', '米', '鱼']);
+        expect(searchTermsFor('（牛奶）【鸡蛋】「パン」')).toEqual(['牛奶', '鸡蛋', 'パン']);
+        expect(searchTermsFor('鸡蛋＠牛奶＃面包～米｡ﾊﾟﾝ')).toEqual(['鸡蛋', '牛奶', '面包', '米', 'ﾊﾟﾝ']);
+        expect(searchTermsFor('eggs,milk')).toEqual(expect.arrayContaining(['eggs', 'milk']));
+        // The letters inside U+3000–303F stay: 々 repeats the character before it (人々, people).
+        expect(searchTermsFor('人々、時々')).toEqual(['人々', '時々']);
+    });
+    it('parts words at the Japanese, Myanmar, Khmer and Thai list marks, written inside a run (#1808 review, finding 2)', () => {
+        expect(searchTermsFor('卵・牛乳')).toEqual(['卵', '牛乳']); // U+30FB katakana middle dot, the Japanese list mark
+        expect(searchTermsFor('卵゠牛乳')).toEqual(['卵', '牛乳']); // U+30A0 katakana double hyphen
+        expect(searchTermsFor('ကြက်ဥ၊နွားနို့')).toEqual(['ကြက်ဥ', 'နွားနို့']); // U+104A Myanmar little section (comma)
+        expect(searchTermsFor('ကြက်ဥ။နွားနို့')).toEqual(['ကြက်ဥ', 'နွားနို့']); // U+104B Myanmar section (full stop)
+        expect(searchTermsFor('ពងមាន់។ទឹកដោះគោ')).toEqual(['ពងមាន់', 'ទឹកដោះគោ']); // U+17D4 Khmer khan (full stop)
+        expect(searchTermsFor('ពងមាន់៕ទឹកដោះគោ')).toEqual(['ពងមាន់', 'ទឹកដោះគោ']); // U+17D5 Khmer bariyoosan
+        expect(searchTermsFor('ពងមាន់៖ទឹកដោះគោ')).toEqual(['ពងមាន់', 'ទឹកដោះគោ']); // U+17D6 Khmer camnuc pii kuuh (colon)
+        expect(searchTermsFor('ไข่ไก่๏นมสด')).toEqual(['ไข่ไก่', 'นมสด']); // U+0E4F Thai fongman
+        expect(searchTermsFor('ไข่ไก่๚นมสด')).toEqual(['ไข่ไก่', 'นมสด']); // U+0E5A Thai angkhankhu
+        expect(searchTermsFor('ไข่ไก่๛นมสด')).toEqual(['ไข่ไก่', 'นมสด']); // U+0E5B Thai khomut
+    });
+    it('keeps a Latin word joined by a hyphen whole, with its joined form, never two short prefixes (#1808 review, finding 1)', () => {
+        const wifi = searchTermsFor('wi-fi');
+        expect(wifi).toEqual(expect.arrayContaining(['wi-fi', 'wifi']));
+        expect(wifi).not.toContain('wi');
+        expect(wifi).not.toContain('fi');
+        // The joined form is what the synonyms are looked up on, as before the split.
+        expect(wifi).toEqual(expect.arrayContaining(['internet']));
+        expect(searchTermsFor('Co-op')).toEqual(expect.arrayContaining(['co-op', 'coop']));
+        expect(searchTermsFor('co-op')).not.toContain('co');
+        expect(searchTermsFor('(t-shirt),')).toEqual(expect.arrayContaining(['t-shirt', 'tshirt']));
+        // Digits joined by . , / stay one number.
+        expect(searchTermsFor('1,000')).toEqual(['1,000', '1000']);
+        expect(searchTermsFor('3.5')).toEqual(['3.5', '35']);
+        expect(searchTermsFor('24/7')).toEqual(['24/7', '247']);
+        // Every other punctuation still parts words.
+        expect(searchTermsFor('eggs,honey')).toEqual(expect.arrayContaining(['eggs', 'honey']));
+        expect(searchTermsFor('eggs/honey')).not.toContain('eggs/honey');
+        expect(searchTermsFor('鸡蛋，牛奶')).toEqual(['鸡蛋', '牛奶']);
     });
 });
 

@@ -37,6 +37,10 @@ import {
     confirmAppAddress,
     removeAppAddress,
     signOutEverywhere,
+    formatResolverName,
+    reportSubject,
+    isManagerApi,
+    COMMUNITY_ADMIN,
     emergencySuspendMember,
     haltDecision,
     liftMemberSuspension,
@@ -177,6 +181,41 @@ describe('resolveNodeApiUrl', () => {
         expect(url).toBe('/proxy/https/node.beanpool.org/api/local/admin/onboarding-funnel?days=30');
 
         vi.unstubAllGlobals();
+    });
+});
+
+describe('formatResolverName, reportSubject, and isManagerApi utility functions', () => {
+    it('formatResolverName formats resolver signatures cleanly', () => {
+        expect(formatResolverName(null)).toBe(COMMUNITY_ADMIN);
+        expect(formatResolverName(undefined)).toBe(COMMUNITY_ADMIN);
+        expect(formatResolverName('')).toBe(COMMUNITY_ADMIN);
+        expect(formatResolverName('   ')).toBe('');
+        expect(formatResolverName('owner:password')).toBe(COMMUNITY_ADMIN);
+        expect(formatResolverName('admin')).toBe(COMMUNITY_ADMIN);
+        const pubkey64 = 'a'.repeat(64);
+        expect(formatResolverName(pubkey64)).toBe(COMMUNITY_ADMIN);
+        expect(formatResolverName('Alice')).toBe('Alice');
+        expect(formatResolverName('  Bob  ')).toBe('Bob');
+    });
+
+    it('reportSubject identifies the target member for posts and pulse item reports', () => {
+        // Post report with author pubkey
+        expect(reportSubject({ postId: 'post-1', postAuthorPubkey: 'author-pk-123', targetPubkey: 'reporter-target-pk' })).toBe('author-pk-123');
+        // Post report without author pubkey
+        expect(reportSubject({ postId: 'post-1' })).toBeNull();
+        // Pulse item report target
+        expect(reportSubject({ targetPulseItemId: 'pulse-1', targetPubkey: 'pulse-owner-pk' })).toBe('pulse-owner-pk');
+        // Pulse item report with pulseItem object and snake_case fallback
+        expect(reportSubject({ pulseItem: { id: 'pulse-2' }, target_pubkey: 'snake-owner-pk' })).toBe('snake-owner-pk');
+        // Empty report
+        expect(reportSubject({})).toBeNull();
+    });
+
+    it('isManagerApi checks whether an endpoint path targets manager API routes', () => {
+        expect(isManagerApi('/api/manager/backups/status')).toBe(true);
+        expect(isManagerApi('api/manager/backups/history')).toBe(true);
+        expect(isManagerApi('/api/local/admin/diagnostics')).toBe(false);
+        expect(isManagerApi('/api/admin/login')).toBe(false);
     });
 });
 

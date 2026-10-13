@@ -129,6 +129,12 @@ function grantView(t: AutomationTokenView, me: string | null, now = Date.now()) 
 /** The grant a preview runs as: one the caller may see, else the caller themselves with their own role. */
 function previewGrant(ctx: any, grantId: unknown): AgentGrant | { error: string } {
     if (typeof grantId === 'string' && grantId) {
+        const o = visibleOAuthGrants(ctx).find((g) => g.id === grantId);
+        if (o) {
+            const r = nodeRoleOf(o.member);
+            if (r !== 'owner' && r !== 'admin') return { error: 'Its member is no longer an owner or admin: it reads nothing now' };
+            return { id: o.id, name: o.clientName || 'AI assistant', member: o.member, role: r, via: 'oauth', createdAt: o.createdAt, expiresAt: null };
+        }
         const t = visibleGrants(ctx).find((g) => g.id === grantId);
         if (!t) return { error: 'No such assistant' };
         const role = nodeRoleOf(t.createdBy);

@@ -25,7 +25,10 @@ interface AgentGrantRow {
     member: string | null;
     mine: boolean;
     role: 'owner' | 'admin' | null;
-    via: 'token';
+    /** token: an owner's token (S1); oauth: connected from the assistant and approved on a phone (S2). */
+    via: 'token' | 'oauth';
+    /** OAuth only: the host its answers go to. Its name is its own, so it is never shown without this. */
+    sendsTo?: string;
     createdAt: number;
     expiresAt: number | null;
     expired: boolean;
@@ -38,6 +41,8 @@ interface GrantsAnswer {
     mcpUrl: string;
     role: 'owner' | 'admin';
     canConnect: boolean;
+    /** Anyone with a role connects from their assistant, approving on their phone (S2). */
+    canConnectOAuth?: boolean;
     seesAll: boolean;
     defaultDays: number;
     maxDays: number;
@@ -308,7 +313,9 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                     </pre>
                                 ) : (
                                     <p className="text-[11px] text-amber-300 m-0 break-words" data-testid="agent-preview-answer">
-                                        It would be told: {answers[t.name].error}
+                                        {data && !data.allowed
+                                            ? 'Turned off: an assistant is told nothing while AI assistants are off, and there is nothing to show until an owner turns them on.'
+                                            : `It would be told: ${answers[t.name].error}`}
                                     </p>
                                 )
                             )}
@@ -345,6 +352,30 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
 
             {data && (
                 <>
+                    {data.allowed && data.canConnectOAuth && (
+                        <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800/80 space-y-2 min-w-0" data-testid="agent-connect-oauth">
+                            <span className="text-xs font-semibold text-nature-300">Connect an AI assistant</span>
+                            <ol className="text-[11px] text-nature-300 m-0 pl-5 space-y-1 break-words">
+                                <li>
+                                    Copy this address: <span className="font-mono text-white break-all">{data.mcpUrl}</span>{' '}
+                                    <button
+                                        type="button"
+                                        onClick={() => void copyText(data.mcpUrl, 'address')}
+                                        className="min-h-[48px] px-3 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
+                                    >
+                                        {copied === 'address' ? 'Address copied' : 'Copy address'}
+                                    </button>
+                                </li>
+                                <li>In Claude or ChatGPT: Settings → Connectors → Add custom connector → paste it.</li>
+                                <li>Approve on your phone when it asks: check it names the assistant&rsquo;s address, then type the two digits.</li>
+                                <li>Ask it: &ldquo;what needs me?&rdquo;</li>
+                            </ol>
+                            <p className="text-[11px] text-nature-400 m-0 break-words">
+                                No key is shown. It acts as you, with your role: if you stop being an owner or admin, it stops too. If a page
+                                asks you to approve an assistant you did not just add, close it.
+                            </p>
+                        </div>
+                    )}
                     {/* The owner switch (design pick 5: on, inert until someone connects; an owner can turn it off). */}
                     <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800/80 space-y-2 min-w-0" data-testid="agent-switch">
                         <p className="text-xs text-white m-0 break-words">
@@ -429,14 +460,14 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                 sign in on a computer by scanning a code.
                             </p>
                         ) : (
-                            <p className="text-xs text-nature-400 m-0 break-words" data-testid="agent-admin-soon">
-                                For now only an owner connects an AI assistant here. You will connect yours from this card with your phone&rsquo;s
-                                approval in a coming update. Until then, &ldquo;What would my assistant see?&rdquo; shows what it will read.
+                            <p className="text-xs text-nature-400 m-0 break-words" data-testid="agent-admin-oauth">
+                                Admins connect from the assistant itself (above), approving on their phone. Only an owner makes a token for a
+                                desktop agent.
                             </p>
                         )
                     ) : data.allowed ? (
                         <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800/80 space-y-3 min-w-0">
-                            <span className="text-xs font-semibold text-nature-300">Connect an AI assistant</span>
+                            <span className="text-xs font-semibold text-nature-300">Advanced: make a token for a desktop agent</span>
                             <p className="text-[11px] text-nature-400 m-0 break-words">
                                 You get an address and a token, shown once. Your assistant acts as you, with your role: if you stop being an
                                 owner or admin, it stops too. At most {data.perMember} for each member.
@@ -500,15 +531,20 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                     <li key={g.id} className="p-3 rounded-xl bg-nature-950/60 border border-nature-800/80 space-y-2 min-w-0" data-testid="agent-grant-row">
                                         <div className="min-w-0">
                                             <p className="text-xs font-bold text-white m-0 break-words">{g.name}</p>
+                                            {g.via === 'oauth' && (
+                                                <p className="text-[11px] text-nature-300 m-0 break-words" data-testid="agent-grant-sends-to">
+                                                    Sends what it reads to {g.sendsTo ?? 'an unknown address'}
+                                                </p>
+                                            )}
                                             <p className="text-[11px] text-nature-400 m-0 break-words">
                                                 {g.mine ? 'Yours' : g.member ?? 'A member'}
-                                                {g.role ? ` · ${g.role}` : ''} · by token · connected {formatDay(g.createdAt)}
+                                                {g.role ? ` · ${g.role}` : ''} · {g.via === 'oauth' ? 'approved on the phone' : 'by token'} · connected {formatDay(g.createdAt)}
                                             </p>
                                             <p className="text-[11px] text-nature-400 m-0 break-words">
                                                 Last used: {g.lastUsedAt ? formatDay(g.lastUsedAt) : 'never'} · {g.callsToday} call{g.callsToday === 1 ? '' : 's'} today
                                             </p>
                                             <p className="text-[11px] text-nature-400 m-0 break-words">
-                                                {g.expired ? 'Expired' : `Until ${g.expiresAt ? formatDay(g.expiresAt) : 'disconnected'}`}
+                                                {g.expired ? 'Expired' : g.via === 'oauth' ? 'Until disconnected, or 30 days unused' : `Until ${g.expiresAt ? formatDay(g.expiresAt) : 'disconnected'}`}
                                             </p>
                                             {g.role === null && (
                                                 <p className="text-[11px] text-amber-300 m-0 break-words">

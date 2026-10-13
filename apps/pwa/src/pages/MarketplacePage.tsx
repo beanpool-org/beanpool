@@ -66,6 +66,7 @@ import { VisitorCard, VisitorPostDetail } from '../components/VisitorListing';
 import { VISITOR_LIST_NOTE } from '../lib/visitor-lobby';
 import { shareInterests } from '../lib/home-interests';
 import { accountEpochHolds } from '../lib/account-epoch';
+import { CHILD_SAFETY_REASON, CHILD_SAFETY_HINT } from '../lib/reportReasons';
 
 /**
  * The Market as a visitor to the global lobby sees it (design G9a §7, G9b): no identity at all, the node's guest view
@@ -1999,8 +2000,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <option value="Offensive content">Offensive content</option>
                                     <option value="Misleading post">Misleading post</option>
                                     <option value="Harassment">Harassment</option>
+                                    <option value={CHILD_SAFETY_REASON}>{CHILD_SAFETY_REASON}</option>
                                     <option value="Other">Other</option>
                                 </select>
+                                <p className="text-xs text-nature-600 mb-2">
+                                    <span className="font-bold">{CHILD_SAFETY_REASON}:</span> {CHILD_SAFETY_HINT}
+                                </p>
                                 <button
                                     onClick={async () => {
                                         if (!identity || !selectedPost || !reportReason) return;

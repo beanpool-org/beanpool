@@ -11,6 +11,7 @@
 import { type ChannelPlatform, type ChannelCategory } from '@beanpool/core';
 import { anchorUrl, signedPost } from './node-post';
 import type { BeanPoolIdentity } from './identity';
+import { REPORT_REASONS } from './reportReasons';
 
 export interface PulseFeedItem {
     id: string;
@@ -332,7 +333,7 @@ export async function mutePulseItem(
 }
 
 /** The same reasons the post-detail report form offers. */
-export const PULSE_REPORT_REASONS = ['Spam or scam', 'Offensive content', 'Misleading post', 'Other'] as const;
+export const PULSE_REPORT_REASONS = REPORT_REASONS;
 
 /** A signed-in member can report an item that is not theirs. Fixture items are not on any node. */
 export function canReportPulseItem(item: PulseFeedItem, currentPubkey?: string | null): boolean {

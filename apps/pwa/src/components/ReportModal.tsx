@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { reportAbuse } from '../lib/api';
+import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT } from '../lib/reportReasons';
 
 interface Props {
     isOpen: boolean;
@@ -12,13 +13,6 @@ interface Props {
     targetPulseItemId?: string;
     onReported?: () => void;
 }
-
-const REPORT_REASONS = [
-    'Spam or scam',
-    'Offensive content',
-    'Misleading post',
-    'Other',
-];
 
 export function ReportModal({
     isOpen,
@@ -142,6 +136,9 @@ export function ReportModal({
                             );
                         })}
                     </div>
+                    <p className="mt-2 text-xs text-nature-600 dark:text-nature-300">
+                        <span className="font-bold">{CHILD_SAFETY_REASON}:</span> {CHILD_SAFETY_HINT}
+                    </p>
                 </div>
 
                 <div>

@@ -144,13 +144,15 @@ import { getBundledGuide } from '../guide';
 const NODE = 'https://mullum.beanpool.org';
 const iso = (ms: number) => new Date(ms).toISOString();
 const H = 3600_000;
+/** A member who ended the tour (Skip): a Home never saved is the starter set (DESIGN-getting-started-fable.md §1). The newcomer's own Home: tour-render.test.ts. */
+const TOUR_ENDED = { v: 1 as const, state: 'skipped' as const, at: '2026-10-01T00:00:00.000Z' };
 
 function localMember(): HomeAnswer {
     const now = Date.now();
     return {
         generatedAt: iso(now), profile: 'local',
         features: { beans: true, escrow: true, invites: true, exampleListings: false, decisions: true },
-        me: { joinedAt: iso(now - 3 * 24 * H), isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member' },
+        me: { joinedAt: iso(now - 3 * 24 * H), isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member', tour: TOUR_ENDED },
         layout: null,
         cards: {
             steps: { joinedAt: iso(now - 3 * 24 * H), firstOffer: false, firstPost: false, photo: false, interests: false, invited: false, area: false, knocked: null },

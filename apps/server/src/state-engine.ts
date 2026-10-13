@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
-import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind } from '@beanpool/core';
+import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind, TourRecord } from '@beanpool/core';
 import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY } from '@beanpool/core';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
@@ -9257,9 +9257,9 @@ export const PUSH_TOGGLE_MESSAGE = 'A notification setting is on or off: send tr
  * `reader`, the verified signer: when it is the member, their Home's keys too (engine/home-preferences.ts), each one they
  * have saved. Nobody else is ever served them, whatever ENFORCE_READ_AUTH says: a layout says what someone cares about.
  */
-export function getMemberPreferences(publicKey: string, reader?: string): Record<string, string | number[] | string[] | HomeLayout> {
+export function getMemberPreferences(publicKey: string, reader?: string): Record<string, string | number[] | string[] | HomeLayout | TourRecord> {
     const rows = db.prepare(`SELECT pref_key, pref_value FROM member_preferences WHERE public_key = ?`).all(publicKey) as any[];
-    const prefs: Record<string, string | number[] | string[] | HomeLayout> = {
+    const prefs: Record<string, string | number[] | string[] | HomeLayout | TourRecord> = {
         notify_chat: 'true',
         notify_marketplace: 'true',
         notify_escrow: 'true',

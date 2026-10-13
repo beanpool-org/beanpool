@@ -212,7 +212,7 @@ run_check "test"          pnpm turbo run test $TURBO_TEST_ARGS
 # folder, answers the node API from fixtures (no node is contacted), and fails if any screen, the menu, the manual,
 # a modal or the app's sign-in hand-off scrolls the page sideways, or a modal cannot be reached with the keyboard up.
 # The browser is downloaded once and cached; in CI --with-deps also installs its system libraries (the runner has sudo).
-run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/manager test:phone-width && pnpm --filter @beanpool/manager test:connected-assistants'
+run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/manager test:phone-width && pnpm --filter @beanpool/manager test:connected-assistants && pnpm --filter @beanpool/manager test:agent-suggestions'
 
 # The web app in dark mode, every class string at once (PR #1833: five review rounds each found a new shape of the same
 # fault). apps/pwa/e2e/dark-class-check.mjs builds src/index.css with the app's vite config (the shipped rules, byte for

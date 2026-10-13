@@ -31,11 +31,16 @@
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
-delete process.env.ENFORCE_READ_AUTH;
+// The open-reads run (scripts/server-suites.mjs VARIANTS, MEMBERS_OPEN_READS=1): a node with read auth off, where the read
+// gate lets an unsigned read of the whole directory through, so only the route's own check keeps keys= and q= signed
+// (#1847 review NB2). It runs that check and stops, on a local node: the worldwide one will not start with read auth off
+// (its guest view, config/node-profile.ts), and the forms answer on every node whatever the switch says.
+const OPEN_READS = process.env.MEMBERS_OPEN_READS === '1';
+if (OPEN_READS) process.env.ENFORCE_READ_AUTH = 'false'; else delete process.env.ENFORCE_READ_AUTH;
 delete process.env.ENFORCE_WS_AUTH;
 delete process.env.NEARBY_LISTINGS_RADIUS_KM;
 delete process.env.NEARBY_LISTINGS_MAX;
-process.env.NODE_PROFILE = 'global';
+process.env.NODE_PROFILE = OPEN_READS ? 'local' : 'global';
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -144,11 +149,14 @@ async function main() {
     // ── The world: readers, the kinds of row the directory leaves out, names that share prefixes ──
     const reader = member('Reader', { area: BUSY });
     const second = member('Second', { area: SMALL });
-    const pruned = member('Abpruned', { status: 'pruned' });
-    const treasury = member('Abtreasury', { treasury: 1 });
+    // The rows the directory leaves out have an area at the busy place, right where a reader stands, so only the near
+    // form's own people filter keeps them out of "near you" (#1847 review NB3: an older or replicated pruned row can
+    // keep its area; a treasury, escrow or project row never should have one, and must never show if it does).
+    const pruned = member('Abpruned', { status: 'pruned', area: BUSY });
+    const treasury = member('Abtreasury', { treasury: 1, area: BUSY });
     const migrated = member('Abmigrated', { status: 'migrated' });
-    member('escrow-row', { pk: 'escrow_' + crypto.randomBytes(8).toString('hex') });
-    member('project-row', { pk: 'project_' + crypto.randomBytes(8).toString('hex') });
+    const escrowRow = member('escrow-row', { pk: 'escrow_' + crypto.randomBytes(8).toString('hex'), area: BUSY });
+    const projectRow = member('project-row', { pk: 'project_' + crypto.randomBytes(8).toString('hex'), area: BUSY });
     const pct = member('ab%cd');
     const und = member('ab_cd');
     const plain = member('abxcd');
@@ -172,6 +180,21 @@ async function main() {
     let W = await whole();
     assert(W.size >= 268 && !W.has(pruned.pubKeyHex) && !W.has(treasury.pubKeyHex) && W.has(migrated.pubKeyHex),
         `the whole directory: ${W.size} people, the pruned member and the treasury left out, the migrated one in`);
+
+    if (OPEN_READS) {
+        console.log('\n── read auth off: keys= and q= still need a signed request (NB2) ──');
+        const open = await get('/api/members', null);
+        assert(open.status === 200 && Array.isArray(open.body) && open.body.length === W.size,
+            `unsigned whole read on a node with read auth off: 200 with every person (${open.status}, ${open.body?.length})`);
+        for (const q of [`keys=${reader.pubKeyHex}`, 'q=ab', `keys=${reader.pubKeyHex}&updatedAfter=${encodeURIComponent(iso(t0))}`]) {
+            const r = await get(`/api/members?${q}`, null);
+            assert(r.status === 401, `unsigned ${q.split('=')[0]}= on a node with read auth off: 401 (${r.status})`);
+            const signed = await get(`/api/members?${q}`, reader);
+            assert(signed.status === 200 && Array.isArray(signed.body), `…signed: 200 (${signed.status})`);
+        }
+        console.log(`\n${passed}/${run} passed`);
+        process.exit(passed === run ? 0 : 1);
+    }
 
     // ── 1. features ──
     console.log('\n── 1. features.membersOnDemand ──');
@@ -283,6 +306,12 @@ async function main() {
         }
     };
     await nearCheck('27 placed');
+    const leftOut = [pruned, treasury, escrowRow, projectRow].map(m => m.pubKeyHex);
+    for (const n of [50, 7]) {
+        const near = await get(`/api/members?lat=${BUSY.lat}&lng=${BUSY.lng}&limit=${n}`, reader);
+        assert(near.status === 200 && !(near.body as any[]).some((m: any) => leftOut.includes(m.publicKey)),
+            `limit=${n} at the busy place: the pruned member, the treasury, an escrow and a project row placed right there are not near anyone (NB3)`);
+    }
     db.transaction(() => { for (let i = 0; i < 300; i++) member(`Near${i}`, { area: area(i % 3 === 0 ? SMALL : BUSY, i % 5 === 0 ? 3 : 200) }); })();
     bumpMembersVersion();
     await nearCheck('327 placed, many in one area');

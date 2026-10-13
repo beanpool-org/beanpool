@@ -184,7 +184,7 @@ export function buildAgentServer(grant: AgentGrant, facts: WelcomeFacts): Server
             inputSchema: t.inputSchema as any,
             outputSchema: t.outputSchema as any,
             annotations: t.write
-                ? { title: t.title, readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false }
+                ? { title: t.title, readOnlyHint: false, idempotentHint: t.name === 'take_backup', destructiveHint: false, openWorldHint: false }
                 : { title: t.title, readOnlyHint: true, openWorldHint: false },
         })),
     }));

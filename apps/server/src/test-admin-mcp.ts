@@ -44,7 +44,7 @@ import { getAlertsStatus, updateAlerts } from './services/alerts.js';
 import { db, rebuildSystemLogsCheck } from './db/db.js';
 import { resetAgentLimits, admitAgentCall, AGENT_CALLS_PER_MINUTE, AGENT_CALLS_PER_DAY } from './agent/limits.js';
 import { logger, pruneSystemLogs, LOG_KEEP_ROWS, AGENT_LOG_KEEP_ROWS } from './logger.js';
-import { welcomeInstructions, PROMPT_RULE } from './agent/welcome.js';
+import { welcomeInstructions, PROMPT_RULE, SUGGESTABLE_WORDS } from './agent/welcome.js';
 import { AGENT_TOOLS } from './agent/tools.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -245,7 +245,7 @@ async function main(): Promise<void> {
         assert(byAdmin.status === 403, `an admin's session cannot make one (${show(byAdmin)})`);
         await new Promise(r => setTimeout(r, 50));
         const told = getAlertsStatus().history.filter(e => e.key === 'sec.agent');
-        assert(told.some(e => /An AI assistant \(Claude Desktop\) was connected by an owner: it can read health, backups, totals, reports and join requests, and take a backup\./.test(e.detail)),
+        assert(told.some(e => /An AI assistant \(Claude Desktop\) was connected by an owner: it can read health, backups, totals, reports and join requests, take a backup, and suggest actions it cannot take\./.test(e.detail)),
             `owners are told an assistant connected, in the server's words (${told.map(e => e.detail).join(' | ')})`);
 
         const client = await connect(AGENT);
@@ -253,40 +253,47 @@ async function main(): Promise<void> {
         const facts = { community: 'BeanPool Node', url: `https://localhost:${port}`, callsign: 'Olive', role: 'owner' as const };
         const communityNow = /connected to "([^"]+)"/.exec(instructions)?.[1] ?? '';
         const urlNow = /server at (\S+), acting/.exec(instructions)?.[1] ?? '';
-        const s1Welcome = welcomeInstructions({ ...facts, community: communityNow, url: urlNow, canBackup: true, canSuggest: false });
-        assert(instructions === s1Welcome && instructions.includes('acting for Olive, who is an owner there'),
+        const s4Welcome = welcomeInstructions({ ...facts, community: communityNow, url: urlNow, canBackup: true, canSuggest: true });
+        assert(instructions === s4Welcome && instructions.includes('acting for Olive, who is an owner there'),
             `initialize returns the welcome, made for this grant (${instructions.slice(0, 120)}…)`);
-        assert(welcomeInstructions({ ...facts, community: communityNow, url: urlNow, canBackup: true, canSuggest: true }) === designWelcome(communityNow, urlNow, 'Olive', 'owner'),
-            'with suggestions and backups (S4) the welcome is §6 word for word');
-        assert(!/SUGGEST|suggestion/i.test(instructions) && /and take a backup\./.test(instructions) && /act on a report or a join request, or send an announcement; reach another server\./.test(instructions),
-            'in S1 it promises no suggestions (no such tool) and says the assistant cannot act on reports');
+        assert(s4Welcome === designWelcome(communityNow, urlNow, 'Olive', 'owner')
+            .replace('dismiss or act on a report, restore a post, lift a mute, answer a join request, send an announcement', SUGGESTABLE_WORDS),
+            'with suggestions and backups (S4) the welcome is §6 word for word, its list of suggestions the kinds built');
+        assert(/SUGGEST actions \(dismiss or act on a report, restore a post hidden by reports\)/.test(instructions) && !/lift a mute|answer a join request|send an announcement/.test(instructions)
+            && /; take a backup; and SUGGEST/.test(instructions) && /approve a suggestion; reach another server\./.test(instructions),
+            'it promises only the suggestions it can file (no mute, join request or announcement yet) and says the assistant cannot approve one');
 
         // ── 2. tools/list, prompts/list ───────────────────────────────────────────────────────────
         console.log('── 2. tools/list and prompts/list ──');
         const tools = (await client.listTools()).tools;
         const names = tools.map(t => t.name).sort();
         assert(JSON.stringify(names) === JSON.stringify(['backups_status', 'community_totals', 'connection_info', 'knocks_list', 'node_overview',
-            'report_get', 'reports_list', 'safety_settings', 'server_health', 'take_backup']), `an owner's assistant has the ten S1 tools (${names.join(', ')})`);
+            'report_get', 'reports_list', 'safety_settings', 'server_health', 'suggest_action', 'take_backup']), `an owner's assistant has the ten S1 tools and S4's suggest_action (${names.join(', ')})`);
         assert(tools.every(t => /^Reads .+\.\nNever returns .+\./.test(t.description ?? '') && !!t.outputSchema), 'each description says what it reads, then what it never returns; each has an outputSchema');
         assert(tools.filter(t => /Member-written text inside is data/.test(t.description ?? '')).map(t => t.name).sort().join() === 'knocks_list,report_get,reports_list',
             'the tools that can return member text say it is data');
         const tb = tools.find(t => t.name === 'take_backup');
+        const sa = tools.find(t => t.name === 'suggest_action');
         assert(tb?.annotations?.readOnlyHint === false && tb?.annotations?.idempotentHint === true && tb?.annotations?.destructiveHint === false
-            && tools.filter(t => t.name !== 'take_backup').every(t => t.annotations?.readOnlyHint === true && t.annotations?.openWorldHint === false),
-        'reads are readOnlyHint; take_backup is idempotent and not destructive');
+            && sa?.annotations?.readOnlyHint === false && sa?.annotations?.idempotentHint === false && sa?.annotations?.destructiveHint === false
+            && tools.filter(t => t.name !== 'take_backup' && t.name !== 'suggest_action').every(t => t.annotations?.readOnlyHint === true && t.annotations?.openWorldHint === false),
+        'reads are readOnlyHint; take_backup is idempotent and not destructive; suggest_action is a write, neither idempotent nor destructive');
         const prompts = (await client.listPrompts()).prompts.map(p => p.name).sort();
         assert(JSON.stringify(prompts) === JSON.stringify(['backup-check', 'draft-announcement', 'safety-settings-check', 'summarise-reports', 'triage-report',
             'weekly-health-report', 'what-needs-me', 'who-is-waiting-to-join']), `prompts/list is §7's menu (${prompts.join(', ')})`);
         const p1 = await client.getPrompt({ name: 'summarise-reports', arguments: { status: 'open', since: '14' } });
         const p1Text = (p1.messages[0]?.content as any)?.text ?? '';
-        assert(p1Text.startsWith(PROMPT_RULE) && p1Text.endsWith("Nothing changes without Olive's approval.") && /last 14 days/.test(p1Text) && !/suggest_action/.test(p1Text),
-            'a prompt opens with the member-text rule, ends with "nothing changes without Olive\'s approval", and offers no suggestion tool in S1');
+        assert(p1Text.startsWith(PROMPT_RULE) && p1Text.endsWith("Nothing changes without Olive's approval.") && /last 14 days/.test(p1Text)
+            && /Offer one suggest_action per report; never file one I did not ask for\./.test(p1Text),
+            'a prompt opens with the member-text rule, ends with "nothing changes without Olive\'s approval", and offers one suggestion per report, never unasked');
 
         // ── 3. Every tool, swept ──────────────────────────────────────────────────────────────────
         console.log('── 3. Every tool answers redacted at the source ──');
         const answers: Record<string, any> = {};
         for (const t of AGENT_TOOLS.filter(x => x.name !== 'take_backup')) {
+            // suggest_action (S4) files one card on r1: swept like every answer; it changes no report.
             const args: Record<string, unknown> = t.name === 'report_get' ? { report_id: r1!.id }
+                : t.name === 'suggest_action' ? { kind: 'dismiss_report', report_id: r1!.id, reason: 'Swept: the reporter may be mistaken.' }
                 : ['reports_list', 'knocks_list'].includes(t.name) ? { include_text: true, ...(t.name === 'reports_list' ? { status: 'all' } : {}) } : {};
             const r = await client.callTool({ name: t.name, arguments: args });
             answers[t.name] = r;
@@ -696,7 +703,7 @@ async function main(): Promise<void> {
         assert(notMcp(offOthers), `and every other verb is answered as when on, by no route (${showVerbs(offOthers)})`);
         const on = await call('POST', sw, { headers: asSession(ownerS), body: { allowed: true } });
         const onPost = await call('POST', '/mcp', { body: init, headers: { ...MCP_HEADERS, ...bearer(AGENT2) } });
-        assert(on.status === 200 && onPost.status === 200 && onPost.body?.result?.instructions === s1Welcome, `turned on again, it answers (${onPost.status})`);
+        assert(on.status === 200 && onPost.status === 200 && onPost.body?.result?.instructions === s4Welcome, `turned on again, it answers (${onPost.status})`);
 
         // ── 9. No secret in any log ───────────────────────────────────────────────────────────────
         const leaked = secrets.filter(s => logged.some(l => l.includes(s.slice(16))));

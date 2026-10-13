@@ -2,6 +2,7 @@
 slug: map-pins
 title: What the map shows
 summary: The pins on the Map, what their colours mean, and the buttons around them.
+help: What is near you: green pins are Offers, orange are Needs, purple are events. Tap a pin to see it.
 related: pin-locations, near-you, events, posting
 ---
 

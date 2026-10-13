@@ -90,6 +90,12 @@ describe('readNodeProfile', () => {
         expect(p.features).toEqual({ knocks: false });
     });
 
+    it('keeps membersOnDemand, which the node reports from #1847 on (DESIGN-global-members-by-area §2.1)', () => {
+        expect(readNodeProfile({ profile: 'global', features: { membersOnDemand: true } })!.features).toEqual({ membersOnDemand: true });
+        expect(readNodeProfile({ profile: 'local', features: { membersOnDemand: 'yes' } })!.features).toEqual({});
+        expect(readNodeProfile({ profile: 'local', features: {} })!.features.membersOnDemand).toBeUndefined();
+    });
+
     it('is null for an answer that is not an info answer', () => {
         expect(readNodeProfile(null)).toBeNull();
         expect(readNodeProfile('global')).toBeNull();

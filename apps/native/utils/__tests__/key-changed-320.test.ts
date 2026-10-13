@@ -3,11 +3,14 @@
  * "(key changed)" is never cut at the floor: 320dp wide with the phone's text at 1.3× (memory product-audience-small-
  * screens; review of #1826, NB9). It used to ride at the end of the name's one line (the chat bubble's author, the
  * roster's callsign, both numberOfLines={1}), where the reviewer's replica measured it cut for every name on a convenor's
- * roster and from seven-letter names in a bubble. It now has its own line under the name, with no line limit: it wraps.
+ * roster and from seven-letter names in a bubble. In the bubble it has its own line under the name, with no line limit.
+ * On the roster it has its own line under the member's whole line, indented to the name: inside the name's column, the
+ * lead's three buttons left 66px and "changed)" broke mid-word (review of #1826, confirmation 1, NB4).
  *
  * The bubble is rendered here (react-native drawn as DOM, numberOfLines kept as data-lines, as home-screen-render.test.ts
- * does); the roster row is read from GroupDetailModal's source. The widths are a model of the components' own numbers,
- * with a generous glyph width (0.62em, a bold Latin face), as sso-button-layout.test.ts does.
+ * does); the roster row is read from GroupDetailModal's source. The widths are a model of the components' own numbers
+ * (each button its 48dp and 6dp margin), with a generous glyph width (0.62em, a bold Latin face), as
+ * sso-button-layout.test.ts does.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
@@ -84,19 +87,38 @@ describe('"(key changed)" at 320dp with 1.3× text', () => {
         expect(widthOf(longestWord(KEY_CHANGED_HINT), font)).toBeLessThanOrEqual(bubble / 2);
     });
 
-    it('the roster: the mark is under the callsign, outside its one line, with no limit, and fits beside three buttons', () => {
+    it('the roster: the mark is its own line under the member\'s, outside the name\'s column, and one line whatever buttons the viewer has', () => {
         const src = fs.readFileSync(path.resolve(__dirname, '../../components/GroupDetailModal.tsx'), 'utf-8');
+        const style = (name: string) => src.match(new RegExp(`\\n        ${name}: \\{([\\s\\S]*?)\\n        \\}`))![1];
+        const num = (block: string, prop: string) => Number(new RegExp(`${prop}: (\\d+)`).exec(block)?.[1]);
         const callsign = src.match(/<Text style=\{styles\.memberCallsign\} numberOfLines=\{1\}>([\s\S]*?)<\/Text>/);
         expect(callsign).toBeTruthy();
         expect(callsign![1]).not.toContain('KEY_CHANGED_HINT');
-        expect(src).toMatch(/<Text style=\{styles\.memberKeyChanged\}>\{KEY_CHANGED_HINT\}<\/Text>/);
-        const block = src.match(/memberKeyChanged: \{([\s\S]*?)\}/)![1];
-        const font = Number(/fontSize: (\d+)/.exec(block)![1]);
-        // The sheet's padding 20, the avatar 36, the info margins 12 and 4, and each 48dp button the viewer may use.
-        const info = (buttons: number) => SCREEN - 2 * 20 - 36 - 12 - 4 - buttons * 48;
-        expect(info(2)).toBe(132); // a convenor's row with Role and ✕, as the reviewer measured
-        expect(widthOf(KEY_CHANGED_HINT, font)).toBeLessThanOrEqual(info(2));
-        // The lead's row for another convenor adds "hand over": the mark wraps there, each word whole.
-        expect(widthOf(longestWord(KEY_CHANGED_HINT), font)).toBeLessThanOrEqual(info(3));
+        const mark = src.indexOf('<Text style={styles.memberKeyChanged}>{KEY_CHANGED_HINT}</Text>');
+        expect(mark).toBeGreaterThan(0);
+        // After the whole line (avatar, name's column, buttons), inside the row: not in the name's column.
+        const line = src.indexOf('<View style={styles.memberLine}>');
+        const buttons = src.indexOf('handleRemoveMember(m.memberPubkey');
+        expect(line).toBeGreaterThan(0);
+        expect(mark).toBeGreaterThan(buttons);
+        expect(src.slice(line, mark)).toContain('<View style={styles.memberInfo}>');
+        expect(style('memberRow')).not.toMatch(/flexDirection/);
+        expect(style('memberLine')).toMatch(/flexDirection: 'row'/);
+        // Indented to the name: the avatar's 36 and the name column's margin.
+        expect(src).toMatch(/<MemberAvatar [^>]*size=\{36\} \/>/);
+        expect(num(style('memberKeyChanged'), 'marginLeft')).toBe(36 + num(style('memberInfo'), 'marginLeft'));
+        const font = num(style('memberKeyChanged'), 'fontSize');
+        // The sheet's padding 20 each side, then the indent: the mark's own width, the same with 0, 2 or 3 buttons.
+        const markWidth = SCREEN - 2 * 20 - num(style('memberKeyChanged'), 'marginLeft');
+        expect(markWidth).toBe(232);
+        expect(widthOf(KEY_CHANGED_HINT, font)).toBeLessThanOrEqual(markWidth);
+        // Why it left the name's column: each button is 48dp plus its 6dp margin (manageBtn), so a convenor's row (Role,
+        // ✕) left 120px and the lead's view of another convenor (hand over, Role, ✕) 66px, where "changed)" broke
+        // mid-word at 1.3× (the reviewer's Chromium replica measured the same 120 and 66).
+        const btn = num(style('manageBtn'), 'minWidth') + num(style('manageBtn'), 'marginLeft');
+        expect(btn).toBe(54);
+        const column = (n: number) => SCREEN - 2 * 20 - 36 - num(style('memberInfo'), 'marginLeft') - num(style('memberInfo'), 'marginRight') - n * btn;
+        expect([column(2), column(3)]).toEqual([120, 66]);
+        expect(widthOf(longestWord(KEY_CHANGED_HINT), font)).toBeGreaterThan(column(3));
     });
 });

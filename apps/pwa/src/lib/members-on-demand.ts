@@ -9,9 +9,12 @@
  * answered this browser, and as one without only when it never has.
  */
 import { useEffect, useState } from 'react';
-import { getMemberCards, getNodeApiUrl, type CommunityInfo, type MemberCard } from './api';
+import { getMemberCards, type MemberCard } from './api';
 import { communityInfoOnce } from './visitor-lobby-gate';
 import { bounded } from './bounded';
+import { membersOnDemandOn, membersOnDemandLastSeen, noteMembersOnDemand } from './members-on-demand-seen';
+
+export { membersOnDemandOn, membersOnDemandLastSeen, MEMBERS_ON_DEMAND_SEEN_PREFIX } from './members-on-demand-seen';
 
 /** The node's floors and ceilings (apps/server routes/community.ts answerMembersOnDemand): asked within them, never refused. */
 export const MEMBERS_SEARCH_MIN_CHARS = 2;
@@ -32,11 +35,6 @@ export const MEMBERS_SEARCH_DEBOUNCE_MS = 400;
 export const MEMBERS_REQUEST_TIMEOUT_MS = 30_000;
 
 const MEMBER_KEY = /^[0-9a-f]{64}$/;
-
-/** Whether this community wants people asked for, not read whole. A node that doesn't say: no. */
-export function membersOnDemandOn(info: CommunityInfo | null | undefined): boolean {
-    return info?.features?.membersOnDemand === true;
-}
 
 /** The search's path, or null when what was typed is too short to ask (the node refuses under 2 characters). */
 export function memberSearchPath(typed: string): string | null {
@@ -115,27 +113,6 @@ export function useMemberSearch(typed: string, enabled: boolean): { found: Membe
         return () => { clearTimeout(timer); stop.abort(); };
     }, [typed, enabled]);
     return { found, state };
-}
-
-/** Where this browser keeps each node's last answer about the switch: `<prefix><node address>` = '1' or '0'. */
-export const MEMBERS_ON_DEMAND_SEEN_PREFIX = 'bp_members_on_demand:';
-
-function seenKey(): string {
-    return MEMBERS_ON_DEMAND_SEEN_PREFIX + (getNodeApiUrl() || (typeof window !== 'undefined' ? window.location.origin : ''));
-}
-
-/** This node's last answer to this browser, or null when it never gave one (or the store can't be read). */
-export function membersOnDemandLastSeen(): boolean | null {
-    try {
-        const v = localStorage.getItem(seenKey());
-        return v === '1' ? true : v === '0' ? false : null;
-    } catch {
-        return null;
-    }
-}
-
-function noteMembersOnDemand(on: boolean): void {
-    try { localStorage.setItem(seenKey(), on ? '1' : '0'); } catch { /* this page still has the answer */ }
 }
 
 /**

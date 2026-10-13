@@ -72,6 +72,25 @@ describe('expandSearchTerms', () => {
         expect(searchTermsFor('eggs/honey')).not.toContain('eggs/honey');
         expect(searchTermsFor('鸡蛋，牛奶')).toEqual(['鸡蛋', '牛奶']);
     });
+    it('keeps a Latin word with an apostrophe whole, with its joined form, never a two-letter prefix (#1808 review)', () => {
+        // Parted, "don't" asked for every word starting "don" (5,465 listings in the review's world) and "it's" for every
+        // word starting "it" (item, items).
+        expect(searchTermsFor("don't")).toEqual(["don't", 'dont']);
+        expect(searchTermsFor("it's")).toEqual(["it's", 'its']);
+        expect(searchTermsFor("o'clock")).toEqual(["o'clock", 'oclock']);
+        // The typographic apostrophe (iOS types it) reads as the plain one.
+        expect(searchTermsFor('Don’t')).toEqual(["don't", 'dont']);
+        // The joined form is stemmed and looked up as before; the whole one is not stemmed ("it'", "children'").
+        expect(searchTermsFor("children's toys")).toEqual(expect.arrayContaining(["children's", 'childrens', 'children', 'toys', 'toy']));
+        for (const q of ["don't", "it's", "o'clock", "children's", 'Don’t']) {
+            const terms = searchTermsFor(q);
+            expect(terms.filter(t => t.length <= 2)).toEqual([]);
+            expect(terms.filter(t => t.endsWith("'"))).toEqual([]);
+        }
+        // An apostrophe around a word still comes off, and one with a hyphen in the same word still parts it.
+        expect(searchTermsFor("'eggs'")).toEqual(searchTermsFor('eggs'));
+        expect(searchTermsFor("james'")).toEqual(searchTermsFor('james'));
+    });
 });
 
 describe('searchTermsFor', () => {

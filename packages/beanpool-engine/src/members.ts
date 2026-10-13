@@ -398,6 +398,39 @@ export function getMemberDirectoryRows(db: Db, updatedAfter?: unknown): Director
     return rows.filter(r => changedAfter(r, updatedAfter));
 }
 
+/**
+ * The directory's rows of these members only (`GET /api/members?keys=`, DESIGN-global-members-by-area §2.1): each key
+ * the directory holds, in the order asked, a pruned member left out as the whole directory leaves them. With
+ * `updatedAfter`, only those that changedAfter it, compared exactly as the delta compares. Searched on the primary key,
+ * one row a key, so it costs the same with 30 members or 30,000.
+ */
+export function getMemberDirectoryRowsByKeys(db: Db, keys: string[], updatedAfter?: string): DirectoryRow[] {
+    if (keys.length === 0) return [];
+    const rows = db.prepare(`SELECT ${directoryColumns(db)} FROM members
+        WHERE public_key IN (SELECT value FROM json_each(?)) AND status != 'pruned'`).all(JSON.stringify(keys)) as DirectoryRow[];
+    const byKey = new Map(rows.map(r => [r.public_key, r]));
+    return keys.map(k => byKey.get(k)).filter((r): r is DirectoryRow => !!r && (!updatedAfter || changedAfter(r, updatedAfter)));
+}
+
+/**
+ * The members whose name starts with `prefix`, case forgiven as the callsign check forgives it (SQLite's lower(), ASCII),
+ * shortest name first, at most `limit` (`GET /api/members?q=`). Never an account that is not a person: an escrow, a
+ * project or a treasury. Answered from idx_members_callsign_unique: a range of the index, `prefix` and every name after
+ * it that still starts with it, then LIKE with `%` and `_` escaped, so a typed wildcard is only a character. The range
+ * term is what the index answers (SQLite never turns a LIKE into a range on an index of an expression), and the
+ * `status` term is the index's own WHERE, without which the planner may not use it.
+ */
+export function searchMemberDirectoryRows(db: Db, prefix: string, limit: number): DirectoryRow[] {
+    const escaped = prefix.replace(/[\\%_]/g, c => '\\' + c);
+    return db.prepare(`SELECT ${directoryColumns(db)} FROM members
+        WHERE lower(callsign) >= lower(@p) AND lower(callsign) < (lower(@p) || char(1114111))
+          AND lower(callsign) LIKE @like ESCAPE '\\'
+          AND status NOT IN ('migrated', 'pruned')
+          AND NOT coalesce(is_treasury, 0) AND substr(public_key, 1, 7) != 'escrow_' AND substr(public_key, 1, 8) != 'project_'
+        ORDER BY length(callsign), callsign
+        LIMIT @limit`).all({ p: prefix, like: escaped + '%', limit }) as DirectoryRow[];
+}
+
 export function generateShortCode(): string {
     const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'; // base32-ish without confusing chars (0/O, 1/I)
     let part1 = '';

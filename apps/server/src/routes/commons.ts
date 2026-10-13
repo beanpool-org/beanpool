@@ -156,13 +156,18 @@ router.post('/api/commons/projects/delete', async (ctx) => {
         return;
     }
 
-    const success = deleteProject(actor, projectId);
-    if (!success) {
+    try {
+        const success = deleteProject(actor, projectId);
+        if (!success) {
+            ctx.status = 400;
+            ctx.body = { error: 'Failed to delete project. You might not own it, or it is no longer in a proposed state.' };
+            return;
+        }
+        ctx.body = { success: true };
+    } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: 'Failed to delete project. You might not own it, or it is no longer in a proposed state.' };
-        return;
+        ctx.body = { error: memberErrorText(e, 'Failed to delete project') };
     }
-    ctx.body = { success: true };
 });
 
 // ===================== COMMUNITY DECISIONS (§3.2–§3.8) =====================

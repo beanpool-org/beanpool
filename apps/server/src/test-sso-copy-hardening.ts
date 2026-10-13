@@ -587,7 +587,8 @@ async function main(): Promise<void> {
     // work, so no bound is put on the single longest. An unbatched sweep fails all three at once: one statement over these
     // piles takes seconds (an aged 125,000 took 963 ms in one at 8f4e8b64), so few statements, far more rows in one, and a
     // p95 of seconds; a batched one whose statements each scan the pile, a p95 of about a yardstick.
-    // The bounds in reads of the pile: on this Mac (a read 75-80 ms) they are the 250, 100 and 1,000 ms they were.
+    // The bounds in reads of the pile: on this Mac (a read 75-80 ms) they are the 250, 100 and 1,000 ms they were before
+    // #1887 raised the first to 500 ms to stop the flakes.
     const SHORT = 3, WAIT_MEDIAN = 1.25, WAIT_P99 = 12;
     const batch = rr.SWEEP_BATCH as number;
     assert(times.length >= 300 && batches.every(([, rows]) => rows <= batch),

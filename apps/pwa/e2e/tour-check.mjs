@@ -1,4 +1,4 @@
-/* global process, URL, document, getComputedStyle, innerHeight, innerWidth, window */
+/* global process, URL, console, document, getComputedStyle, innerHeight, innerWidth, window */
 /**
  * Getting started at the floor (scratch/global-node/DESIGN-getting-started-fable.md): the tour's bar on every step
  * (local 9, global 7), the "?" dialog for each tab, and the mobile header's pill with each tab's title, in headless

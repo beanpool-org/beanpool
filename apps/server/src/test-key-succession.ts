@@ -233,6 +233,8 @@ async function main(): Promise<void> {
     const listOf = (who: Id) => call('GET', who, `/api/messages/conversations/${who.pk}`);
     const listed = async (who: Id, id: string) => ((await listOf(who)).body?.conversations as any[] | undefined)?.find((c) => c.id === id);
     let servedToBen: unknown = null;
+    /** Ana₃'s whole chain is what `formerKeys` names: Ana₂, then Ana₁ (never true of a missing field). */
+    const anasChain = (fk: any) => JSON.stringify(fk?.[ana3.pk]?.map((f: any) => f.pubkey)) === JSON.stringify([ana2.pk, ana1.pk]);
     {
         const l = await listOf(ben);
         assert(l.status === 200 && JSON.stringify(Object.keys(l.body)) === JSON.stringify(['conversations', 'totalUnread', 'deletedAccounts']),
@@ -248,10 +250,10 @@ async function main(): Promise<void> {
         servedToBen = dm?.formerKeys;
 
         const one = await call('GET', ben, `/api/messages/${dmAna}?limit=1`);
-        assert(one.status === 200 && JSON.stringify(one.body.conversation?.formerKeys) === JSON.stringify(dm?.formerKeys),
+        assert(one.status === 200 && anasChain(one.body.conversation?.formerKeys) && JSON.stringify(one.body.conversation.formerKeys) === JSON.stringify(dm?.formerKeys),
             'the DM read by id (the phone\'s refresh of one conversation) serves the same');
         const theirs = await listed(ana3, dmAna);
-        assert(JSON.stringify(theirs?.formerKeys) === JSON.stringify(dm?.formerKeys), 'Ana₃\'s own list: the same, her own chain under her key');
+        assert(anasChain(theirs?.formerKeys) && JSON.stringify(theirs.formerKeys) === JSON.stringify(dm?.formerKeys), 'Ana₃\'s own list: the same, her own chain under her key');
 
         const plain = (l.body.conversations as any[]).find((c) => c.id === dmEve);
         assert(plain && !('formerKeys' in plain), `the DM with Eve, never re-keyed: no formerKeys field (got ${JSON.stringify(plain?.formerKeys)})`);
@@ -299,7 +301,8 @@ async function main(): Promise<void> {
         assert(JSON.stringify(brokenOlder?.formerKeys?.[ana3.pk]?.map((f: any) => f.pubkey)) === JSON.stringify([ana2.pk]),
             `Ana₁'s date altered: Ana₂ alone is served (got ${JSON.stringify(brokenOlder?.formerKeys)})`);
         db.prepare('UPDATE invalidated_keys SET succession_at = ? WHERE public_key = ?').run(AT1, ana1.pk);
-        assert(JSON.stringify((await listed(ben, dmAna))?.formerKeys) === JSON.stringify(servedToBen), 'put back: the whole chain again');
+        const putBack = (await listed(ben, dmAna))?.formerKeys;
+        assert(anasChain(putBack) && JSON.stringify(putBack) === JSON.stringify(servedToBen), 'put back: the whole chain again');
     }
 
     // ── C. replication ────────────────────────────────────────────────────────────────────────────────
@@ -354,9 +357,10 @@ async function main(): Promise<void> {
         };
         await copyInto(whole);
         const onCopy = await listed(ben, dmAna);
-        assert(onCopy && JSON.stringify(onCopy.formerKeys) === JSON.stringify(servedToBen),
+        assert(anasChain(onCopy?.formerKeys) && JSON.stringify(onCopy.formerKeys) === JSON.stringify(servedToBen),
             `the copy's Ben's list names Ana₃'s former keys, as the main server's did (got ${JSON.stringify(onCopy?.formerKeys && Object.keys(onCopy.formerKeys))})`);
-        assert(JSON.stringify((await call('GET', ben, `/api/messages/${dmAna}?limit=1`)).body.conversation?.formerKeys) === JSON.stringify(servedToBen), 'and the DM read by id');
+        const byIdOnCopy = (await call('GET', ben, `/api/messages/${dmAna}?limit=1`)).body.conversation?.formerKeys;
+        assert(anasChain(byIdOnCopy) && JSON.stringify(byIdOnCopy) === JSON.stringify(servedToBen), 'and the DM read by id');
         const plainOnCopy = await listed(ben, dmEve);
         assert(plainOnCopy && !('formerKeys' in plainOnCopy), 'the DM with Eve: none, on the copy too');
         // A copy that took a statement Ana₃ never signed (a merge takes them unchecked, key-move.ts): here the main server's

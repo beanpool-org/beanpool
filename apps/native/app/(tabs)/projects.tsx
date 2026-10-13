@@ -44,6 +44,14 @@ export default function ProjectsScreen() {
     const showsBeans = beansOn(reader.effective);
     // Enterprises and Decide previewed from Example Valley where the node shows its switched-off features (§1 row 6).
     const enterprisesPreview = showcaseMode('enterprises', reader.node, reader.reader) === 'preview';
+    // What the screen asks the node for, per feature: nothing until the phone's copy of the node's profile is read (a
+    // moment, no network), then only what is not in preview. The pool and voice credits are Beans, the members list is
+    // the Decision form's: a preview reads Example Valley and never asks for the reader's own (as the Ledger).
+    const beansPreview = showcaseMode('beans', reader.node, reader.reader) === 'preview';
+    const decisionsPreview = showcaseMode('decisions', reader.node, reader.reader) === 'preview';
+    const modesKnown = reader.known;
+    // Each load's answers land only while it is the latest: one begun under another mode never lands over the preview.
+    const loadGen = useRef(0);
     // Decide only where formal Decisions are on; Groups is one list of projects, enterprises and chat groups, with
     // projects and enterprises only where the node has them (utils/commons-sections.ts). With Groups all that is left
     // (the worldwide community, reached from Talk's "Find groups"), this is its groups list.
@@ -223,39 +231,58 @@ export default function ProjectsScreen() {
     }));
 
     const loadData = useCallback(async () => {
+        const gen = ++loadGen.current;
+        const latest = () => gen === loadGen.current;
         try {
             const id = await loadIdentity();
             setIdentity(id);
-            if (id?.publicKey) {
-                getBalance(id.publicKey).then(setBalanceState).catch(console.error);
+            if (modesKnown && !beansPreview && id?.publicKey) {
+                getBalance(id.publicKey).then(b => { if (latest()) setBalanceState(b); }).catch(console.error);
             }
         } catch (e) {
             console.error('[Commons] Failed loading identity:', e);
         }
+        if (!modesKnown || !latest()) return;
+        if (beansPreview) setBalanceState({ earnedCredit: 0, commons: 0 });
 
-        try {
-            const list = await getTreasuries();
-            setEnterprises(list);
+        if (enterprisesPreview) {
+            setEnterprises([]);
             setLoading(false);
-        } catch (err) {
-            console.error('[Commons] Failed loading enterprises:', err);
-            setLoading(false);
+        } else {
+            try {
+                const list = await getTreasuries();
+                if (!latest()) return;
+                setEnterprises(list);
+                setLoading(false);
+            } catch (err) {
+                console.error('[Commons] Failed loading enterprises:', err);
+                if (latest()) setLoading(false);
+            }
         }
 
-        try {
-            const decData = await getDecisions();
-            setDecisions(decData.decisions || []);
-            setMyPoolVoting(decData.myPoolVoting ?? null);
-            setNodeSaysCanPropose(decData.canPropose);
-        } catch (err) {
-            console.error('[Projects] Failed loading decisions:', err);
-        }
+        if (decisionsPreview) {
+            setDecisions([]);
+            setMyPoolVoting(null);
+            setNodeSaysCanPropose(null);
+            setMembersList([]);
+        } else {
+            try {
+                const decData = await getDecisions();
+                if (!latest()) return;
+                setDecisions(decData.decisions || []);
+                setMyPoolVoting(decData.myPoolVoting ?? null);
+                setNodeSaysCanPropose(decData.canPropose);
+            } catch (err) {
+                console.error('[Projects] Failed loading decisions:', err);
+            }
 
-        try {
-            const mems = await getAllCommunityMembers();
-            setMembersList(mems || []);
-        } catch (err) {
-            console.error('[Projects] Failed loading members:', err);
+            try {
+                const mems = await getAllCommunityMembers();
+                if (!latest()) return;
+                setMembersList(mems || []);
+            } catch (err) {
+                console.error('[Projects] Failed loading members:', err);
+            }
         }
 
         yourGroupsStore.refresh();
@@ -263,13 +290,14 @@ export default function ProjectsScreen() {
         try {
             setLoadingGroups(true);
             const g = await fetchGroups();
+            if (!latest()) return;
             setGroups(g || []);
             setLoadingGroups(false);
         } catch (err) {
             console.error('[Projects] Failed loading groups:', err);
-            setLoadingGroups(false);
+            if (latest()) setLoadingGroups(false);
         }
-    }, []);
+    }, [modesKnown, beansPreview, enterprisesPreview, decisionsPreview]);
 
     // The node's rule (earned standing, or a node admin); earned credit only when the node hasn't said.
     const canProposeDecision = nodeSaysCanPropose ?? (balanceState.earnedCredit || 0) > 0;

@@ -592,9 +592,15 @@ router.get('/api/marketplace/posts', async (ctx) => {
     }
     // Who took a listing, and the deal it is in, go to that trade's two people only (withoutTradeParty): its author, or
     // the member who took it, and for an enterprise's side its keepers. Everyone else sees it spoken for or done.
+    // ⚡ Bolt: Pre-compute treasury keys in O(1) set lookup to avoid repeated N+1 SQLite queries per post row during feed response mapping
+    const treasuryKeys = new Set(
+        (db.prepare("SELECT public_key FROM members WHERE is_treasury = 1").all() as { public_key: string }[]).map(r => r.public_key)
+    );
+    const isTreasuryFast = (pk: string): boolean => treasuryKeys.has(pk);
+
     const tradeSide = (p: MarketplacePost): boolean => isTradeParty(p, reader)
-        || (!!reader && isTreasury(p.authorPublicKey) && canOperateTreasury(reader, p.authorPublicKey))
-        || (!!reader && !!p.acceptedBy && isTreasury(p.acceptedBy) && canOperateTreasury(reader, p.acceptedBy));
+        || (!!reader && isTreasuryFast(p.authorPublicKey) && canOperateTreasury(reader, p.authorPublicKey))
+        || (!!reader && !!p.acceptedBy && isTreasuryFast(p.acceptedBy) && canOperateTreasury(reader, p.acceptedBy));
     const shown = guestView ? posts.map(guestPost)
         : posts.map(p => (p.acceptedBy || p.pendingTransactionId) && !tradeSide(p) ? withoutTradeParty(p) : p);
     // A member's set answers its rows and the set's ids (DESIGN-global-sync-by-area §2.3): the phone drops what it holds

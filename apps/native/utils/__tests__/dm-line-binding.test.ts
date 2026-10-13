@@ -80,6 +80,7 @@ vi.mock('../crypto', async (orig) => ({
 import { getDb, getMessages, syncMessages, syncSingleConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, isDmUnplaced, _resetDmPeerPinsForTests, getDmKeyChange, acceptOfferedPeer } from '../db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { refusedSendNotice } from '../dm-lock';
+import { dmKeyChangeCopy } from '../dm-key-change';
 import { DM_PIN_STORE_UNREAD_TEXT } from '../dm-peer-pins';
 import { routeChat } from '../chat-route';
 import { dmQuoteFor } from '../chat-actions';
@@ -1351,6 +1352,25 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
         expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, offered: { peer: puppet.publicKey } });
         const r = await trySend(dm.id, 'Still there?');
         expect({ err: r.err?.name, sent: r.sent.length }).toEqual({ err: 'DmKeyChangedError', sent: 0 });
+    });
+
+    it('the banner names the person from a key\'s member row: the pinned key\'s, else the offered key\'s once the directory moves the name; never the conversation id (#1873 review, finding 2)', async () => {
+        await aQuestionAndAnAnswer();
+        await phoneOf(ana);
+        const benNew = person('Ben (new phone)');
+        benRekeys(benNew);
+        await syncMessages(ana.publicKey);
+        sql.prepare('DELETE FROM members WHERE public_key IN (?, ?)').run(ben.publicKey, benNew.publicKey);
+        expect((await getDmKeyChange(dm.id))?.name).toBeNull();   // no row: the banner says "this person"
+        // An honest re-key: the node moves the member row to the new key and the phone's directory sync drops the old one.
+        sql.prepare('INSERT INTO members (public_key, callsign) VALUES (?, ?)').run(benNew.publicKey, 'Ben');
+        expect((await getDmKeyChange(dm.id))?.name).toBe('Ben');
+        // The pinned key's own row comes first.
+        sql.prepare('INSERT INTO members (public_key, callsign) VALUES (?, ?)').run(ben.publicKey, 'Benjamin (old)');
+        expect((await getDmKeyChange(dm.id))?.name).toBe('Benjamin (old)');
+        const title = dmKeyChangeCopy({ peerName: (await getDmKeyChange(dm.id))!.name, code: '1111 2222 3333 4444 5555', firstSight: false }).title;
+        expect(title).toBe('The key behind "Benjamin (old)" changed.');
+        expect(title).not.toContain(dm.id.slice(0, 8));
     });
 
     it('several other keys listed in place of the pinned one: the banner offers none, and nothing can be continued with', async () => {

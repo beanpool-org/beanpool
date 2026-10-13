@@ -39,6 +39,13 @@ import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITL
 const { CREDIT_MAX_EARNED, TRUST_CURVE_K, CREDIT_BASE_FLOOR } = PROTOCOL_CONSTANTS;
 const PER_COUNTERPARTY_CAP = PER_COUNTERPARTY_VOLUME_CAP;   // diversity: value with any ONE partner counts at most this much (canonical 500 from @beanpool/core)
 const CIRC_TICKS = [200, 500, 1000]; // circulation rate change points
+/** The balance before the member's own has been read. */
+const NO_BALANCE = {
+    balance: 0, floor: 0,
+    tier: { name: TIER_LEVELS[0].name, emoji: TIER_LEVELS[0].emoji },
+    earnedCredit: 0, commons: 0, trustStats: null,
+};
+const NO_TXNS: any[] = [];
 
 // Inverse of the curve: qualified value needed to reach a target earned credit.
 function valueForEarned(target: number): number {
@@ -97,14 +104,16 @@ export default function LedgerScreen() {
         const hideSub = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
         return () => { showSub.remove(); hideSub.remove(); };
     }, []);
-    const [txns, setTxns] = useState<any[]>([]);
+    const [heldTxns, setTxns] = useState<any[]>(NO_TXNS);
     // This phone's block list for this account: Beans from someone on it show the neutral line, not their note.
     const [blocked, setBlocked] = useState<ReadonlySet<string>>(new Set());
-    const [balanceState, setBalanceState] = useState<any>({
-        balance: 0, floor: 0,
-        tier: { name: TIER_LEVELS[0].name, emoji: TIER_LEVELS[0].emoji },
-        earnedCredit: 0, commons: 0, trustStats: null,
-    });
+    const [heldBalance, setBalanceState] = useState<any>(NO_BALANCE);
+    // Whether what is held is Example Valley's. It is drawn only in preview: a preview that turns live while the screen
+    // is open (an operator's switch, or the reader's own set from /me) never shows the sample's 85 Beans or rows as the
+    // member's own until the member's own land (review of #1852, finding 2).
+    const [heldSample, setHeldSample] = useState(false);
+    const balanceState = heldSample === preview ? heldBalance : NO_BALANCE;
+    const txns = heldSample === preview ? heldTxns : NO_TXNS;
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'trust' | 'financials'>('trust');
     // Where the list is and where the tab bar sits in it. Switching tab from below the tab bar (Send from Levels)
@@ -351,7 +360,8 @@ export default function LedgerScreen() {
     const loadData = () => {
         const gen = ++loadGen.current;
         if (beansMode === undefined) return;
-        if (preview) { setBalanceState(sampleBalance()); setTxns(sampleTransactions()); setEscrowTotal(0); setPledgeHistory([]); return; }
+        if (preview) { setBalanceState(sampleBalance()); setTxns(sampleTransactions()); setEscrowTotal(0); setPledgeHistory([]); setHeldSample(true); return; }
+        if (heldSample) { setBalanceState(NO_BALANCE); setTxns(NO_TXNS); setHeldSample(false); }
         const latest = <T,>(set: (v: T) => void) => (v: T) => { if (gen === loadGen.current) set(v); };
         if (identity?.publicKey) {
             getBalance(identity.publicKey).then(latest(setBalanceState)).catch(console.error);

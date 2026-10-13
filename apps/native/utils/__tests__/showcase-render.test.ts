@@ -64,8 +64,8 @@ vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => createEleme
 vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
 vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
 // The review form writes; in preview it must never open.
-const review = vi.hoisted(() => ({ opened: 0 }));
-vi.mock('../../components/ReviewModal', () => ({ ReviewModal: () => { review.opened++; return createElement('div', { 'data-testid': 'review-modal' }); } }));
+const review = vi.hoisted(() => ({ opened: 0, txIds: [] as string[] }));
+vi.mock('../../components/ReviewModal', () => ({ ReviewModal: ({ txId }: { txId: string }) => { review.opened++; review.txIds.push(txId); return createElement('div', { 'data-testid': 'review-modal' }); } }));
 const theme = vi.hoisted(() => ({ dark: false }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors: light, darkColors: dark } = await import('../../constants/colors');
@@ -234,6 +234,36 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(review.opened).toBe(0);
             expect(routes.pushed).toEqual([]);
             expect(net.calls).toEqual([]);
+        });
+
+        it('My Deals in preview, then live while open (the node\'s switch, or the reader\'s own set): Example Valley is gone at once, and no press reaches a sample id', async () => {
+            review.opened = 0;
+            review.txIds.length = 0;
+            const props = { visible: true, identity: { publicKey: 'a-real-member' }, onClose: () => {} };
+            await render(createElement(MyDealsSheet, { ...props, preview: true }));
+            const waiting = SAMPLE_COMMUNITY.deals.find(d => d.status === 'waiting-on-you')!;
+            const done = SAMPLE_COMMUNITY.deals.find(d => d.status === 'done')!;
+            expect(text()).toContain(waiting.what);
+            // Live now; the member's own deals haven't landed (the node client answers nothing yet).
+            await render(createElement(MyDealsSheet, { ...props, preview: false }));
+            await act(async () => {});
+            expect(host.querySelector('[data-testid="local-community-strip"]')).toBeNull();
+            expect(net.calls).toEqual(expect.arrayContaining(['db.getPosts']));
+            expect(text()).not.toContain(waiting.what);
+            expect(text()).not.toContain('Example Valley');
+            await press(Array.from(host.querySelectorAll('button')).find(b => b.textContent === 'History')!);
+            expect(text()).not.toContain(done.what);
+            expect(Array.from(host.querySelectorAll('button')).find(b => b.textContent === 'Review')).toBeUndefined();
+            // Every button left, pressed: nothing routes to, or opens a form on, an id from the sample.
+            const pressed = new Set<Element>();
+            for (let i = 0; i < 60; i++) {
+                const next = Array.from(host.querySelectorAll('button')).find(b => !pressed.has(b));
+                if (!next) break;
+                pressed.add(next);
+                await press(next);
+            }
+            expect(JSON.stringify(routes.pushed)).not.toMatch(/sample-/);
+            expect(review.txIds.join(' ')).not.toMatch(/sample-/);
         });
 
         it("Home's Your Beans card: the pill, the sentence, and the link to the example ledger", async () => {

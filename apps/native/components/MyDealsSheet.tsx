@@ -12,6 +12,7 @@ import { ExampleHeader, LocalCommunityMark, LocalCommunitySheet } from './showca
 import { SAMPLE_DEALS_ME, sampleDeals } from './showcase/sample-screens';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const NONE: any[] = [];
 
 interface MyDealsSheetProps {
     visible: boolean;
@@ -323,8 +324,14 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
 
     const [dealsTab, setDealsTab] = useState<'active' | 'pending' | 'history'>(initialTab);
     const [historyFilter, setHistoryFilter] = useState<'all' | 'buying' | 'selling'>('all');
-    const [posts, setPosts] = useState<any[]>([]);
-    const [transactions, setTransactions] = useState<any[]>([]);
+    const [heldPosts, setPosts] = useState<any[]>(NONE);
+    const [heldTransactions, setTransactions] = useState<any[]>(NONE);
+    // Whether what is held is Example Valley's. It is drawn only in preview: a preview that turns live while the sheet is
+    // open never shows the sample's deals as the member's own, nor lets a live press (a card, Review) reach a sample id
+    // (review of #1852, finding 2). Nor, the other way, are the member's own drawn in preview.
+    const [heldSample, setHeldSample] = useState(false);
+    const posts = heldSample === preview ? heldPosts : NONE;
+    const transactions = heldSample === preview ? heldTransactions : NONE;
     const [promptReview, setPromptReview] = useState<{ txId: string; targetPubkey: string; targetCallsign: string } | null>(null);
 
     useEffect(() => {
@@ -346,8 +353,10 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             const sample = sampleDeals();
             setPosts(sample.posts);
             setTransactions(sample.transactions);
+            setHeldSample(true);
             return;
         }
+        if (heldSample) { setPosts(NONE); setTransactions(NONE); setHeldSample(false); }
         if (!identity) return;
         try {
             // Every audience: a deal on a group listing is still my deal.

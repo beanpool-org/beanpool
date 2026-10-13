@@ -109,10 +109,14 @@ const me = vi.hoisted(() => ({ identity: { publicKey: 'a-real-member-key', calls
 vi.mock('../../app/IdentityContext', () => ({ useIdentity: () => ({ identity: me.identity }) }));
 // The net spy: every call into the node client, and node-post's signed requests (the reader's own features, the
 // repayment card), are recorded.
-const net = vi.hoisted(() => ({ calls: [] as string[], answer: null as null | ((name: string) => Promise<unknown> | undefined) }));
+const net = vi.hoisted(() => ({
+    calls: [] as string[],
+    answer: null as null | ((name: string) => Promise<unknown> | undefined),
+    signedAnswer: null as null | ((path: string) => Promise<Response> | undefined),
+}));
 vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls, name => net.answer?.(name)));
 vi.mock('../node-post', () => ({
-    signedGet: (_url: string, path: string) => { net.calls.push(`signedGet ${path}`); return new Promise(() => {}); },
+    signedGet: (_url: string, path: string) => { net.calls.push(`signedGet ${path}`); return net.signedAnswer?.(path) ?? new Promise(() => {}); },
     signedPost: (_url: string, path: string) => { net.calls.push(`signedPost ${path}`); return new Promise(() => {}); },
     anchorUrl: async () => store.map.get('beanpool_anchor_url') ?? null,
 }));
@@ -138,6 +142,7 @@ beforeEach(() => {
     routes.pushed.length = 0;
     net.calls.length = 0;
     net.answer = null;
+    net.signedAnswer = null;
     files.calls.length = 0;
     alerts.shown.length = 0;
     store.map.clear();
@@ -206,6 +211,36 @@ describe('a phone that has never heard the worldwide community\'s profile', () =
         expect(text()).toContain(SAMPLE_COMMUNITY.transactions[0].what);
         expect(text()).not.toContain("The member's own row");
         expect(text()).not.toMatch(/999/);
+    });
+});
+
+describe('a preview that turns live while the Ledger is open', () => {
+    it("the reader's own set lands (BeanID's flip): Example Valley's balance and rows go at once, before the member's own land", async () => {
+        theme.dark = false;
+        rememberProfile('global', WORLDWIDE);
+        // A member with a key: the phone asks the node for this reader's own set, and the answer is held.
+        me.identity = { publicKey: 'a-verified-member-key', privateKey: 'a-verified-member-secret', callsign: 'RealMember' };
+        let readerLands!: () => void;
+        net.signedAnswer = path => (path === '/api/community/me'
+            ? new Promise<Response>(resolve => {
+                readerLands = () => resolve(new Response(JSON.stringify({ features: { beans: true, escrow: true } }), { status: 200 }));
+            })
+            : undefined);
+        await render(createElement(LedgerScreen));
+        expect(text()).toContain(`${SAMPLE_COMMUNITY.name} · ${SAMPLE_COMMUNITY.member}`);
+        await press(host.querySelector('[data-testid="ledger-wallet-tab"]')!);
+        expect(text()).toContain(SAMPLE_COMMUNITY.transactions[0].what);
+        // Beans are on for this reader now; the node client hasn't answered for the member's own ledger.
+        readerLands();
+        for (let i = 0; i < 5; i++) await act(async () => {});
+        expect(net.calls).toEqual(expect.arrayContaining(['db.getBalance', 'db.getTransactions']));
+        expect(host.querySelector('[data-testid="local-community-strip"]')).toBeNull();
+        expect(text()).not.toContain(SAMPLE_COMMUNITY.name);
+        for (const t of SAMPLE_COMMUNITY.transactions) expect(text()).not.toContain(t.what);
+        await press(buttonNamed(/^Levels$/)!);
+        expect(text()).not.toContain(SAMPLE_COMMUNITY.member);
+        expect(host.querySelector('[data-avatar]')!.getAttribute('data-avatar')).toBe('RealMember');
+        expect(JSON.stringify(routes.pushed)).not.toMatch(/sample-/);
     });
 });
 

@@ -136,6 +136,8 @@ for (const dark of [false, true]) {
             if (m.small.length) problems.push(scheme + ' ' + kind + ' step ' + i + ': under 44 px: ' + m.small.join(', '));
             if (!m.behindTappable) problems.push(scheme + ' ' + kind + ' step ' + i + ': the button behind is covered');
             if (!m.fab.tappable || m.fab.bottom > m.fab.barTop) problems.push(scheme + ' ' + kind + ' step ' + i + ': the tab\'s bottom button is under the bar ' + JSON.stringify(m.fab));
+            // The bar itself on screen: with the offset missing its height, it slid below the bottom edge and the button check still passed (review of #1857, NB5).
+            if (m.bar.top < 0 || m.bar.bottomGap < 0) problems.push(scheme + ' ' + kind + ' step ' + i + ': the bar is off the screen ' + JSON.stringify(m.bar));
             if (m.lines > 4) problems.push(scheme + ' ' + kind + ' step ' + i + ': ' + m.lines + ' lines');
             for (const [k, r] of Object.entries(m.contrast)) if (r < 4.5) problems.push(scheme + ' ' + kind + ' step ' + i + ' ' + k + ' contrast ' + r);
             if (v.length) problems.push(scheme + ' ' + kind + ' step ' + i + ' axe ' + v.join(' '));

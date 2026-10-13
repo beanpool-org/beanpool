@@ -38,7 +38,7 @@ On the phone and in the web app, your Home is a list of cards you choose. After 
 - **Sun and moon** asks whose place to use before it is added: **Your community** (the usual choice) or **Your area**.
 - A Home holds at most 24 cards. When it is full, the list says so, and you remove a card to add another.
 - Your cards are kept on your account, so they follow you to your other phones and browsers. If your community's server has not been updated yet, they stay on this phone or in this browser, and **Edit home** says "Your community's server needs an update before your cards follow you to other devices." They are sent again each time you open Home.
-- If you had already moved or hidden cards before this change, your Home keeps your order, without the cards you had hidden. If you had not, you see **Getting started** on its own, and **Skip** or **Done** brings the five back. After a **Skip**, Home tells you once: "Home now starts with fewer cards. Add a card brings the rest back."
+- If you had already moved or hidden cards before this change, your Home keeps your order, without the cards you had hidden. If you had not, you see **Getting started** on its own, and the tour's **Skip** or **Done** gives you the five, or the cards you picked (above). If you joined more than a week ago, Home also tells you once, under **Getting started** the first time it opens: "Home now starts with fewer cards. Add a card brings the rest back."
 
 ## The cards
 

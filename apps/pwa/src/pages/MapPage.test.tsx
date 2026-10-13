@@ -863,6 +863,18 @@ describe('Edit event (events round 2, A1–A3, decision 29)', () => {
         expect(classes).toContain('md:w-[30rem]');
     });
 
+    // Review of #1857, NB2: the panel rides on the offset, which carries the tour bar's height, so a fixed 60vh
+    // pushed its title and ✕ off the top at 320 / 130%. It is capped by the room above the offset, under the
+    // header; 60vh stays as the cap where a browser has no dvh.
+    it('caps its height by the room left above the bottom bar and tour bar, so its title and ✕ stay on screen', async () => {
+        setup(hosted);
+        const view = await openEdit(hosted);
+        await waitFor(() => expect(view.getByTestId('map-new-post-panel')).toBeTruthy());
+        const classes = view.getByTestId('map-new-post-panel').className.split(/\s+/);
+        expect(classes).toContain('max-h-[60vh]');
+        expect(classes).toContain('supports-[height:100dvh]:max-h-[min(60vh,calc(100dvh_-_var(--bottom-nav-offset)_-_4.5rem))]');
+    });
+
     it('a title edit saves only the title, with the host\'s own key — silent, so no UPDATED warning', async () => {
         setup(hosted);
         const onNavigate = vi.fn();

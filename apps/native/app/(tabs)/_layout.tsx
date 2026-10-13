@@ -8,7 +8,7 @@ import { useIdentity } from '../IdentityContext';
 import { usePathname, router } from 'expo-router';
 import { useMemo } from 'react';
 import { helpSheetFor, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps } from '@beanpool/core';
-import { TourBar } from '../../components/TourBar';
+import { TourBar, tourSceneInset } from '../../components/TourBar';
 import { HelpSheet } from '../../components/HelpSheet';
 import { OPEN_HELP_EVENT, closeTour, helpContext, moveTour, startTour, useTour } from '../../utils/tour-store';
 import { useGuide } from '../../utils/use-guide';
@@ -262,6 +262,8 @@ export default function TabLayout() {
     const tourRunning = !!tour && !!identity && tour.publicKey === identity.publicKey;
     const tourIndex = tour ? Math.min(tour.step, steps.length - 1) : 0;
     const tourTab = tourRunning ? steps[tourIndex]?.tab ?? null : null;
+    // The bar's height, so the tabs end at its top and their bottom buttons ride above it (tourSceneInset).
+    const [tourBarHeight, setTourBarHeight] = useState(0);
     // The account left the phone: its tour goes with it.
     useEffect(() => { if (tour && (!identity || tour.publicKey !== identity.publicKey)) closeTour(); }, [identity?.publicKey, tour?.publicKey]);
     // Each step shows its own tab.
@@ -310,6 +312,7 @@ export default function TabLayout() {
             <View style={isMapScreen ? { height: measuredHeaderHeight } : undefined}>
                 <GlobalHeader onMeasure={onHeaderMeasure} />
             </View>
+            <View style={{ flex: 1, marginBottom: tourSceneInset(tourRunning, tourBarHeight) }} testID="tab-scenes">
             <Tabs backBehavior="none" screenOptions={{
                 tabBarPosition: 'top',
                 headerShown: false,
@@ -439,6 +442,7 @@ export default function TabLayout() {
                     }} 
                 />
             </Tabs>
+            </View>
             {tourRunning && (
                 <TourBar
                     steps={steps}
@@ -446,6 +450,7 @@ export default function TabLayout() {
                     home={tourHomeNow}
                     colors={colors}
                     bottomInset={insets.bottom}
+                    onHeight={setTourBarHeight}
                     onNext={() => moveTour(tourIndex + 1)}
                     onSkip={() => endTour('skipped')}
                     onDone={() => endTour('done')}

@@ -6,6 +6,15 @@ import type { TourHome } from '../utils/tour-store';
 
 /** The bar's buttons and chips: the floor's touch target. */
 export const TOUR_TARGET_DP = 48;
+/**
+ * What the tab screens give up at the bottom while the bar is up: the tabs' navigator ends at the bar's top, so each
+ * tab's own bottom button (the Market's + ADD POST, the Map's, Commons') rides above the bar and can be tapped, with no
+ * screen of its own changed. The bar reports its height (onHeight) as it lays out.
+ */
+export function tourSceneInset(running: boolean, barHeight: number): number {
+    return running && barHeight > 0 ? Math.ceil(barHeight) : 0;
+}
+
 /** The app's own text cap (as Home's captions and the tab labels): four lines of a step at 320 dp keep the bar short. */
 export const TOUR_TEXT_MAX_SCALE = 1.2;
 
@@ -15,12 +24,13 @@ export const TOUR_TEXT_MAX_SCALE = 1.2;
  * stays live: the bar takes only its own strip, so no tap behind it is ever held. The last step adds the three chips,
  * More cards › and Done. The words are a polite live region, so TalkBack reads each step as it comes.
  */
-export function TourBar({ steps, index, home, colors, bottomInset, onNext, onSkip, onDone }: {
+export function TourBar({ steps, index, home, colors, bottomInset, onHeight, onNext, onSkip, onDone }: {
     steps: readonly TourStep[];
     index: number;
     home: TourHome | null;
     colors: AppColors;
     bottomInset: number;
+    onHeight?: (height: number) => void;
     onNext: () => void;
     onSkip: () => void;
     onDone: () => void;
@@ -32,6 +42,7 @@ export function TourBar({ steps, index, home, colors, bottomInset, onNext, onSki
     return (
         <View
             style={[tourStyles.bar, { backgroundColor: colors.surface.card, borderTopColor: colors.border.default, paddingBottom: 8 + bottomInset }]}
+            onLayout={onHeight ? e => onHeight(e.nativeEvent.layout.height) : undefined}
             testID="tour-bar"
         >
             <Text style={[tourStyles.caption, { color: colors.text.secondary }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE} testID="tour-step-caption">

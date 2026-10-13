@@ -16,6 +16,7 @@ import { darkColors, lightColors, type AppColors } from '../../constants/colors'
 
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+(globalThis as any).__onLayout = {} as Record<string, (e: unknown) => void>;
 
 vi.mock('react-native', () => {
     const roles: Record<string, string> = { header: 'heading', button: 'button' };
@@ -30,6 +31,7 @@ vi.mock('react-native', () => {
         if (testID) attrs['data-testid'] = testID;
         if (disabled) attrs['aria-disabled'] = 'true';
         if (maxFontSizeMultiplier) attrs['data-max-scale'] = String(maxFontSizeMultiplier);
+        if (props.onLayout && testID) (globalThis as any).__onLayout[testID] = props.onLayout;
         const style = typeof props.style === 'function' ? props.style({ pressed: false }) : props.style;
         attrs['data-style'] = JSON.stringify(flat(style));
         return createElement(tag, attrs, typeof children === 'function' ? children({ pressed: false }) : children);
@@ -46,7 +48,9 @@ vi.mock('../../components/home/EditHomeSheet', () => ({
 }));
 vi.mock('@react-native-async-storage/async-storage', () => ({ default: { getItem: vi.fn(async () => null), setItem: vi.fn(), removeItem: vi.fn() } }));
 
-const { TourBar, TOUR_TARGET_DP } = await import('../../components/TourBar');
+const { TourBar, TOUR_TARGET_DP, tourSceneInset } = await import('../../components/TourBar');
+const { readFileSync } = await import('node:fs');
+const { fileURLToPath } = await import('node:url');
 const { HelpSheet } = await import('../../components/HelpSheet');
 const { getBundledGuide } = await import('../guide');
 
@@ -164,6 +168,56 @@ describe('the tour bar at 320 dp × 1.3, light and dark, on every step', () => {
             }
         }
     });
+});
+
+describe('the tabs\' own bottom buttons ride above the bar (review B1: + ADD POST, which step 2 names, was under it)', () => {
+    const src = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
+    /** Each tab's bottom button, read from the screen's own style (map.tsx is read, never changed). */
+    const FABS: [string, string][] = [['Market', '../../app/(tabs)/market.tsx'], ['Map', '../../app/(tabs)/map.tsx'], ['Commons', '../../app/(tabs)/projects.tsx']];
+    const fabBottom = (rel: string) => {
+        const m = /\bfab:\s*\{\s*position:\s*'absolute',\s*bottom:\s*(\d+)/.exec(src(rel));
+        expect(m, rel).not.toBeNull();
+        return Number(m![1]);
+    };
+    /** The bar's height at the floor on a step (the line model above), chips and their row on the last. */
+    const barAt = (words: string, last: boolean) => {
+        const scale = Math.min(FLOOR.fontScale, 1.2);
+        return 10 + 11 * scale * 1.4 + 4 + lines(words, FLOOR.width - 32, 15, scale) * 21 * scale + (last ? 10 + 2 * (TOUR_TARGET_DP + 8) : 0) + 8 + TOUR_TARGET_DP + 8;
+    };
+
+    it('the bar reports the height it lays out at', () => {
+        const steps = tourSteps('phone', NODES[0][1]);
+        const onHeight = vi.fn();
+        draw(createElement(TourBar, { steps, index: 1, home: home(), colors: lightColors, bottomInset: 0, onHeight, onNext: vi.fn(), onSkip: vi.fn(), onDone: vi.fn() }));
+        act(() => { (globalThis as any).__onLayout['tour-bar']({ nativeEvent: { layout: { x: 0, y: 400, width: 320, height: 137.5 } } }); });
+        expect(onHeight).toHaveBeenCalledWith(137.5);
+    });
+
+    it('while the tour runs the tabs end at the bar\'s top; with it closed they reach the bottom again', () => {
+        expect(tourSceneInset(true, 137.5)).toBe(138);
+        expect(tourSceneInset(false, 137.5)).toBe(0);
+        expect(tourSceneInset(true, 0)).toBe(0);
+        // The tabs' layout gives the navigator that inset and hands the bar its setter.
+        const layout = src('../../app/(tabs)/_layout.tsx');
+        expect(layout).toMatch(/<View style=\{\{ flex: 1, marginBottom: tourSceneInset\(tourRunning, tourBarHeight\) \}\}[^>]*>\s*<Tabs /);
+        expect(layout).toMatch(/onHeight=\{setTourBarHeight\}/);
+    });
+
+    for (const [tab, rel] of FABS) {
+        it(`${tab}: on every step at 320 dp × 1.3, the button's bottom edge sits at or above the bar's top (and would not without the inset)`, () => {
+            const bottom = fabBottom(rel);
+            for (const [, node] of NODES) {
+                const steps = tourSteps('phone', node);
+                steps.forEach((step, i) => {
+                    const bar = barAt(step.words, i === steps.length - 1);
+                    // Measured from the screen's bottom: the bar's top is its height; the button's bottom edge is the
+                    // tabs' inset plus the button's own offset in its screen.
+                    expect(tourSceneInset(true, bar) + bottom, `${tab} ${step.id}`).toBeGreaterThanOrEqual(bar);
+                    expect(tourSceneInset(false, bar) + bottom, `${tab} ${step.id} with no inset`).toBeLessThan(bar);
+                });
+            }
+        });
+    }
 });
 
 describe('the "?" sheet: the guide page for the screen you are on, light and dark', () => {

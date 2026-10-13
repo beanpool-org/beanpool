@@ -6,6 +6,8 @@ import type { TourHome } from '../utils/tour-store';
 
 /** The bar's buttons and chips: the floor's touch target. */
 export const TOUR_TARGET_DP = 48;
+/** The app's own text cap (as Home's captions and the tab labels): four lines of a step at 320 dp keep the bar short. */
+export const TOUR_TEXT_MAX_SCALE = 1.2;
 
 /**
  * The tour's bar (scratch/global-node/DESIGN-getting-started-fable.md §2): a card-coloured strip at the bottom of the
@@ -32,10 +34,10 @@ export function TourBar({ steps, index, home, colors, bottomInset, onNext, onSki
             style={[tourStyles.bar, { backgroundColor: colors.surface.card, borderTopColor: colors.border.default, paddingBottom: 8 + bottomInset }]}
             testID="tour-bar"
         >
-            <Text style={[tourStyles.caption, { color: colors.text.secondary }]} testID="tour-step-caption">
+            <Text style={[tourStyles.caption, { color: colors.text.secondary }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE} testID="tour-step-caption">
                 {tourStepCaption(index, steps.length).toUpperCase()}
             </Text>
-            <Text style={[tourStyles.words, { color: colors.text.heading }]} accessibilityLiveRegion="polite" accessible testID="tour-words">
+            <Text style={[tourStyles.words, { color: colors.text.heading }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE} accessibilityLiveRegion="polite" accessible testID="tour-words">
                 {step.words}
             </Text>
             {chips.length > 0 && home && (
@@ -48,35 +50,35 @@ export function TourBar({ steps, index, home, colors, bottomInset, onNext, onSki
                                 key={type}
                                 onPress={on ? undefined : () => home.addChip(type)}
                                 disabled={on}
-                                style={[tourStyles.chip, { borderColor: on ? colors.border.default : colors.brand.primary, backgroundColor: on ? colors.surface.app : colors.surface.card }]}
+                                style={[tourStyles.chip, { borderColor: on ? colors.border.default : colors.brand.dark, backgroundColor: on ? colors.surface.app : colors.surface.card }]}
                                 accessibilityRole="button"
                                 accessibilityLabel={on ? `${name} is on Home` : `Put ${name} on Home`}
                                 accessibilityState={{ disabled: on }}
                                 testID={`tour-chip-${type}`}
                             >
-                                <Text style={[tourStyles.chipText, { color: on ? colors.text.secondary : colors.text.link }]} numberOfLines={2}>
+                                <Text style={[tourStyles.chipText, { color: on ? colors.text.secondary : colors.text.link }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE} numberOfLines={2}>
                                     {on ? `${name} · On Home ✓` : name}
                                 </Text>
                             </Pressable>
                         );
                     })}
                     <Pressable onPress={home.moreCards} style={tourStyles.more} accessibilityRole="button" accessibilityLabel="More cards: open Add a card" testID="tour-more-cards">
-                        <Text style={[tourStyles.chipText, { color: colors.text.link }]}>More cards ›</Text>
+                        <Text style={[tourStyles.chipText, { color: colors.text.link }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE}>More cards ›</Text>
                     </Pressable>
                 </View>
             )}
             <View style={tourStyles.row}>
                 <Pressable onPress={onSkip} style={tourStyles.skip} accessibilityRole="button" accessibilityLabel="Skip the tour" testID="tour-skip">
-                    <Text style={[tourStyles.skipText, { color: colors.text.link }]}>Skip</Text>
+                    <Text style={[tourStyles.skipText, { color: colors.text.link }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE}>Skip</Text>
                 </Pressable>
                 <Pressable
                     onPress={last ? onDone : onNext}
-                    style={({ pressed }) => [tourStyles.next, { backgroundColor: colors.brand.primary }, pressed && { opacity: 0.85 }]}
+                    style={({ pressed }) => [tourStyles.next, { backgroundColor: colors.brand.dark }, pressed && { opacity: 0.85 }]}
                     accessibilityRole="button"
                     accessibilityLabel={last ? 'Done: end the tour' : `Next: step ${index + 2} of ${steps.length}`}
                     testID={last ? 'tour-done' : 'tour-next'}
                 >
-                    <Text style={[tourStyles.nextText, { color: colors.text.inverse }]}>{last ? 'Done' : 'Next ›'}</Text>
+                    <Text style={[tourStyles.nextText, { color: colors.text.inverse }]} maxFontSizeMultiplier={TOUR_TEXT_MAX_SCALE}>{last ? 'Done' : 'Next ›'}</Text>
                 </Pressable>
             </View>
         </View>

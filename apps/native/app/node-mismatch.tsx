@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { StatusBar } from 'expo-status-bar';
@@ -25,7 +25,8 @@ import { communitySwitched } from '../utils/community-switch';
 import { NoWordsNotice } from '../components/NoWordsNotice';
 import { NoScreenCapture, NoScreenLockNote } from '../components/WordsOnScreen';
 import { noWordsBeforeWipe } from '../utils/no-words-copy';
-import { colors, palette } from '../constants/colors';
+import { palette, type AppColors } from '../constants/colors';
+import { useOnboardingColors } from './ThemeContext';
 
 /**
  * Shown when the active node is reachable but definitively does NOT recognise this
@@ -35,6 +36,8 @@ import { colors, palette } from '../constants/colors';
  * NodeStatus recognition === 'stranger'.
  */
 export default function NodeMismatchScreen() {
+    const { colors, dark } = useOnboardingColors();
+    const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     const router = useRouter();
     const { identity, setIdentity } = useIdentity();
     const { nodeUrl, recheck } = useNodeStatus();
@@ -189,7 +192,7 @@ export default function NodeMismatchScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar style="dark" />
+            <StatusBar style={dark ? 'light' : 'dark'} />
             <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
                 <ScrollView contentContainerStyle={styles.scroll}>
                     <View style={styles.card}>
@@ -305,37 +308,39 @@ export default function NodeMismatchScreen() {
     );
 }
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.surface.page },
-    wipeWrap: { marginTop: 4 },
-    keptBox: {
-        marginTop: 4, padding: 12, borderRadius: 12, borderWidth: 1,
-        backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border,
-    },
-    keptText: { color: colors.text.body, fontSize: 14, lineHeight: 20, marginBottom: 12 },
-    wipeTitle: { color: colors.text.heading, fontSize: 15, fontWeight: '700', marginBottom: 6 },
-    wipeBody: { color: colors.text.secondary, fontSize: 13, lineHeight: 19, marginBottom: 10 },
-    wordsBox: {
-        flexDirection: 'row', flexWrap: 'wrap', gap: 6,
-        backgroundColor: colors.surface.app, borderRadius: 12, padding: 12,
-        borderWidth: 1, borderColor: colors.border.default, marginBottom: 12,
-    },
-    word: { color: colors.text.heading, fontSize: 13, fontWeight: '600', width: '45%' },
-    cancelWipeText: { color: colors.text.secondary, fontSize: 14, textAlign: 'center', fontWeight: '600' },
-    scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-    card: { backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default },
-    emoji: { fontSize: 40, marginBottom: 8 },
-    title: { fontSize: 22, fontWeight: 'bold', color: colors.text.heading, marginBottom: 10 },
-    body: { fontSize: 15, color: palette.gray600, lineHeight: 22, marginBottom: 20 },
-    currentBox: { backgroundColor: colors.surface.subtle, borderRadius: 12, padding: 12, marginBottom: 20 },
-    currentLabel: { fontSize: 12, color: colors.text.secondary, marginBottom: 2 },
-    currentUrl: { fontSize: 15, color: colors.text.heading, fontWeight: '600' },
-    inputLabel: { fontSize: 14, color: palette.gray700, fontWeight: '600', marginBottom: 6 },
-    input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 8 },
-    hint: { fontSize: 13, color: colors.text.secondary, lineHeight: 18, marginBottom: 16 },
-    error: { color: palette.red600, fontSize: 14, marginBottom: 16, lineHeight: 20 },
-    primaryBtn: { backgroundColor: palette.blue600, borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 12 },
-    primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: '600' },
-    secondaryBtn: { padding: 14, alignItems: 'center' },
-    secondaryBtnText: { color: colors.text.secondary, fontSize: 15, fontWeight: '500' },
-});
+function makeStyles(colors: AppColors, dark: boolean) {
+    return StyleSheet.create({
+        container: { flex: 1, backgroundColor: colors.surface.page },
+        wipeWrap: { marginTop: 4 },
+        keptBox: {
+            marginTop: 4, padding: 12, borderRadius: 12, borderWidth: 1,
+            backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border,
+        },
+        keptText: { color: colors.text.body, fontSize: 14, lineHeight: 20, marginBottom: 12 },
+        wipeTitle: { color: colors.text.heading, fontSize: 15, fontWeight: '700', marginBottom: 6 },
+        wipeBody: { color: colors.text.secondary, fontSize: 13, lineHeight: 19, marginBottom: 10 },
+        wordsBox: {
+            flexDirection: 'row', flexWrap: 'wrap', gap: 6,
+            backgroundColor: colors.surface.app, borderRadius: 12, padding: 12,
+            borderWidth: 1, borderColor: colors.border.default, marginBottom: 12,
+        },
+        word: { color: colors.text.heading, fontSize: 13, fontWeight: '600', width: '45%' },
+        cancelWipeText: { color: colors.text.secondary, fontSize: 14, textAlign: 'center', fontWeight: '600' },
+        scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+        card: { backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default },
+        emoji: { fontSize: 40, marginBottom: 8 },
+        title: { fontSize: 22, fontWeight: 'bold', color: colors.text.heading, marginBottom: 10 },
+        body: { fontSize: 15, color: dark ? colors.text.secondary : palette.gray600, lineHeight: 22, marginBottom: 20 },
+        currentBox: { backgroundColor: colors.surface.subtle, borderRadius: 12, padding: 12, marginBottom: 20 },
+        currentLabel: { fontSize: 12, color: colors.text.secondary, marginBottom: 2 },
+        currentUrl: { fontSize: 15, color: colors.text.heading, fontWeight: '600' },
+        inputLabel: { fontSize: 14, color: dark ? colors.text.body : palette.gray700, fontWeight: '600', marginBottom: 6 },
+        input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 8 },
+        hint: { fontSize: 13, color: colors.text.secondary, lineHeight: 18, marginBottom: 16 },
+        error: { color: dark ? colors.feedback.danger.fg : palette.red600, fontSize: 14, marginBottom: 16, lineHeight: 20 },
+        primaryBtn: { backgroundColor: palette.blue600, borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 12 },
+        primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: '600' },
+        secondaryBtn: { padding: 14, alignItems: 'center' },
+        secondaryBtnText: { color: colors.text.secondary, fontSize: 15, fontWeight: '500' },
+    });
+}

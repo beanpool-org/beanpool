@@ -101,6 +101,7 @@ describe('preview mode asks the node for its info and nothing else, and writes n
         expect(screen.getByTestId('sample-decision')).toBeInTheDocument();
         expect(screen.queryByTestId('sample-enterprise')).toBeNull();
         expect(screen.getByTestId('local-community-strip')).toHaveTextContent(LOCAL_COMMUNITY_STRIP.lead.decisions);
+        expect(screen.getByTestId('local-community-strip')).toHaveTextContent(LOCAL_COMMUNITY_STRIP.body.decisions);
         second.unmount();
         const { container } = render(<CommonsPreview enterprises={false} decisions={false} />);
         expect(container).toBeEmptyDOMElement();

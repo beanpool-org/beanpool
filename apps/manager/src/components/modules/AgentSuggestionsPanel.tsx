@@ -115,7 +115,7 @@ export function AgentSuggestionsPanel({ activeNode, viewer = { kind: 'password' 
     if (!drawn || !items || (items.length === 0 && !message)) return null;
 
     return (
-        <section aria-labelledby="agent-suggestions-title" className="bg-nature-900/80 border border-nature-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
+        <section aria-labelledby="agent-suggestions-title" data-testid="agent-suggestions-card" className="bg-nature-900/80 border border-nature-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
             <div className="border-b border-nature-800 pb-3 min-w-0">
                 <h3 id="agent-suggestions-title" className="text-base font-bold text-white m-0 break-words">
                     Suggested by an AI assistant ({items.length})

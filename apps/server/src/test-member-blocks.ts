@@ -671,8 +671,8 @@ async function main(): Promise<void> {
         // a standby applying its main server's tombstones (applyTombstoneLocally): section 8's import
         'apps/server/src/engine/sync.ts': 2,
     };
-    const WRITE = /\b(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|REPLACE\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+["'`\[]?(?:main\.)?member_blocks\b/gi;
-    const SCHEMA_CHANGE = /\b(?:DROP\s+TABLE(?:\s+IF\s+EXISTS)?|ALTER\s+TABLE)\s+["'`\[]?(?:main\.)?member_blocks\b/gi;
+    const WRITE = /\b(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|REPLACE\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+["'`[]?(?:main\.)?member_blocks\b/gi;
+    const SCHEMA_CHANGE = /\b(?:DROP\s+TABLE(?:\s+IF\s+EXISTS)?|ALTER\s+TABLE)\s+["'`[]?(?:main\.)?member_blocks\b/gi;
     const writeShapes = ['INSERT INTO member_blocks (a) VALUES (1)', 'INSERT OR IGNORE INTO member_blocks', 'insert or replace into "member_blocks"',
         'REPLACE INTO member_blocks', 'UPDATE member_blocks SET', 'UPDATE OR IGNORE member_blocks SET', 'DELETE FROM member_blocks WHERE', 'DELETE FROM\n   main.member_blocks'];
     const notWrites = ['SELECT owner_pubkey FROM member_blocks', 'CREATE INDEX idx_member_blocks_blocked ON member_blocks(blocked_pubkey)', 'DELETE FROM member_blocks_old'];

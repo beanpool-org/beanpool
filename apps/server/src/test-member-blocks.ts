@@ -37,7 +37,10 @@
  *  10. who blocked a key, as a listing's push keeps it between pushes (blockersOfKept, #1831), is held to the table
  *      before every check above, so each writer they run leaves no kept list stale; every SQL write naming member_blocks
  *      in packages/ and apps/server is one this suite runs, none is in a file with a database of its own, nothing drops
- *      or alters the table; each shape of write moves the block lists' version, a rolled-back one too, and a read does not
+ *      or alters the table; each shape of write moves the block lists' version, a rolled-back one too, and a read does not;
+ *      what the version can't see (#1867): an unblock read inside a transaction that rolls back leaves the block held
+ *      after it; a block and an unblock written by another connection hold from the next read; a counting trigger
+ *      dropped, or all of them with a run-time temp_store, is made again and the kept lists read afresh
  *
  * Run: ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-member-blocks.ts
  */
@@ -54,6 +57,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
+import Database from 'better-sqlite3';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, seedGenesisMember, adminPruneUser, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
@@ -729,6 +733,41 @@ async function main(): Promise<void> {
         assert(Object.values(each).every(Boolean) && rolledBack && blocks.blockListsVersion() > v0 && !readMoved && blocks.blockersOfKept(k1).size === 0,
             `an insert, an upsert, an update, a delete, a bare delete of every row and a rolled-back insert each move the version; a read does not (${JSON.stringify({ ...each, rolledBack: blocks.blockListsVersion() > v0, readMoved })})`);
     } else assert(false, 'each shape of write moves the block lists\' version (no version on this tree)');
+
+    // What the version can't see (#1867). An unblock inside a transaction that rolls back: read there, it is gone, and
+    // after the rollback the block holds again (nothing kept from inside). A write by another connection to state.db (an
+    // ops tool in its own process), which no trigger of this connection counts. A counting trigger dropped, or all three
+    // with a run-time temp_store, and a write while they are gone.
+    if (blocks?.blockersOfKept) {
+        const o = newKey(), o2 = newKey(), a = newKey(), at = new Date().toISOString();
+        const holds = (who: string): boolean => blocks.blockersOfKept(a).has(who);
+        const counting = () => (db.prepare("SELECT COUNT(*) AS n FROM temp.sqlite_master WHERE type = 'trigger' AND name LIKE 'member_blocks_%_counted'").get() as { n: number }).n;
+        const insertRow = 'INSERT INTO member_blocks (owner_pubkey, blocked_pubkey, created_at, updated_at) VALUES (?, ?, ?, ?)';
+        blocks.addBlocks(o, [a]);
+        const keptFirst = holds(o);
+        let insideLacks = false;
+        try { db.transaction(() => { blocks.removeBlock(o, a); insideLacks = !holds(o); throw new Error('roll back'); })(); } catch { /* rolled back */ }
+        assert(keptFirst && insideLacks && holds(o),
+            `an unblock read inside a transaction that rolls back is gone there, and the block holds after the rollback (inside: ${insideLacks ? 'gone' : 'held'}, after: ${holds(o) ? 'held' : 'gone'})`);
+        const other = new Database(db.name);
+        other.prepare(insertRow).run(o2, a, at, at);
+        const otherBlock = holds(o2);
+        other.prepare('DELETE FROM member_blocks WHERE owner_pubkey = ?').run(o2);
+        const otherUnblock = !holds(o2);
+        other.close();
+        assert(otherBlock && otherUnblock,
+            `a block and an unblock written by another connection each hold from the next read (block: ${otherBlock ? 'held' : 'missed'}, unblock: ${otherUnblock ? 'held' : 'missed'})`);
+        db.exec('DROP TRIGGER temp.member_blocks_insert_counted');
+        db.prepare(insertRow).run(o2, a, at, at);
+        const afterDrop = holds(o2), remade = counting();
+        db.pragma('temp_store = MEMORY');
+        const allGone = counting();
+        db.prepare('DELETE FROM member_blocks WHERE owner_pubkey = ?').run(o2);
+        const afterReset = !holds(o2), remadeAll = counting();
+        db.pragma('temp_store = DEFAULT');
+        assert(afterDrop && remade === 3 && allGone === 0 && afterReset && remadeAll === 3 && holds(o) && counting() === 3,
+            `a counting trigger dropped, or all of them with a run-time temp_store, is made again and the write made meanwhile holds from the next read (${JSON.stringify({ afterDrop, remade, allGone, afterReset, remadeAll })})`);
+    } else assert(false, 'what the block lists\' version can\'t see (no kept lists on this tree)');
 
     for (const s of [annTab1, annTab2, boSock, cySock, anonSock]) s.ws.close();
     console.log(`\n${passed}/${run} checks passed.`);

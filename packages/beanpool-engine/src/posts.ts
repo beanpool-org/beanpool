@@ -1563,10 +1563,10 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         // A member's set (`authorCardsChanged`): also each listing whose author changed their card since (a new name, a
         // new face), so a phone that keeps no card for its listings' authors gets the new name within a cycle
         // (DESIGN-global-members-by-area §2.1). members.profile_updated_at, which only a card edit moves, and which the
-        // member directory already gives every member: nothing a member could not read. Searched on
-        // idx_members_profile_updated_at; the set keeps the read to its few hundred listings.
+        // member directory already gives every member: nothing a member could not read. On the members row the read already
+        // LEFT JOINs (m), so the cost follows the set, not the members whose card changed since the cursor (#1847 review NB1).
         if (filter.authorCardsChanged) {
-            where += " OR p.author_pubkey IN (SELECT public_key FROM members WHERE profile_updated_at >= ?)";
+            where += " OR m.profile_updated_at >= ?";
             params.push(filter.updatedAfter);
         }
         resend = new Set(viewer ? offBoardPostsToResend(db, viewer, viewerKeeps(), filter.updatedAfter, new Date().toISOString()) : []);

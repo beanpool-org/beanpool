@@ -4342,7 +4342,10 @@ export async function getConversation(id: string, myPubkey?: string) {
 }
 
 /** This phone's DM pins, one copy per account in memory, changed through one queue (utils/dm-peer-pins.ts). */
-const dmPins = createDmPinBook(AsyncStorage);
+const dmPins = createDmPinBook(AsyncStorage, async (me) => {
+    const held = await dmPeersHeld();
+    return (pins) => seedPinsFromRows(pins, me, held, true);
+});
 
 /** For tests: a fresh app session (an update, a restore): the DM pins are read from storage again. */
 export function _resetDmPeerPinsForTests(): void {

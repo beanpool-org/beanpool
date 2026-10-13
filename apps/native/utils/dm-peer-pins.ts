@@ -233,7 +233,7 @@ export interface DmPinBook {
     forget(): void;
 }
 
-export function createDmPinBook(storage: PinStorage): DmPinBook {
+export function createDmPinBook(storage: PinStorage, seedWhenNew?: (myPubkey: string) => Promise<(pins: DmPeerPins) => boolean>): DmPinBook {
     const copies = new Map<string, Promise<DmPeerPins>>();
     const queues = new Map<string, Promise<unknown>>();
     const absent = new Set<string>();
@@ -254,7 +254,10 @@ export function createDmPinBook(storage: PinStorage): DmPinBook {
         const turn = (queues.get(key) ?? Promise.resolve()).catch(() => {}).then(async () => {
             const copy = read(myPubkey);
             const pins = await copy;
-            if (!change(pins, { fresh: absent.has(key) })) return false;
+            const fresh = absent.has(key);
+            // The account's first change on a build with pins, whoever makes it: the phone's own rows first (the update).
+            if (fresh && seedWhenNew) (await seedWhenNew(myPubkey))(pins);
+            if (!change(pins, { fresh }) && !(fresh && seedWhenNew)) return false;
             try {
                 await writeDmPeerPins(storage, myPubkey, pins);
                 absent.delete(key);

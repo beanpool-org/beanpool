@@ -213,13 +213,15 @@ export async function stopPushAlerts(account: LeavingAccount | null, storage: St
 }
 
 /**
- * The communities the leaving account saved, and their cached copies, go from this phone. Removing the list can throw,
- * and a caller decides what that means (Replace: ReplaceNotSaved). A cached copy that can't be removed is logged.
+ * The communities the leaving account saved, and their cached copies, go from this phone, with every other community copy
+ * on it (a community a Wipe left is no longer listed, and its file keeps that identity's group key memory: community-
+ * cache.ts `everyCopy`). Removing the list can throw, and a caller decides what that means (Replace: ReplaceNotSaved). A
+ * cached copy that can't be removed is logged.
  */
 export async function forgetCommunities(communities: readonly string[], storage: Storage = AsyncStorage): Promise<void> {
     try {
         const { removeCommunityCaches } = await import('./community-cache');
-        await removeCommunityCaches(communities);
+        await removeCommunityCaches(communities, { everyCopy: true });
     } catch (e) {
         console.warn('[Account] The cached community copies could not all be removed', e);
     }

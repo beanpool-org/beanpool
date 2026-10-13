@@ -18,7 +18,7 @@ delete process.env.CF_RECORD_NAME;
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import { initStateEngine, createPost, getPosts } from './state-engine.js';
-import { getPostCount, setMemberPhoto } from '@beanpool/engine';
+import { setMemberPhoto } from '@beanpool/engine';
 import { searchTermsFor } from '@beanpool/core';
 
 let run = 0, passed = 0;
@@ -109,12 +109,6 @@ async function main(): Promise<void> {
     const eightRare = Array.from({ length: 8 }, (_, i) => String.fromCodePoint(0x3400 + i)).join(' ');
     assert(!getPosts({ query: `${eightRare} 鸡蛋`, limit: 500 }).some(p => p.title === '新鲜鸡蛋出售'), 'only the first 8 unspaced words are looked for inside a run: a 9th, "鸡蛋", is not');
     assert(getPosts({ query: `${Array.from({ length: 7 }, (_, i) => String.fromCodePoint(0x3400 + i)).join(' ')} 鸡蛋`, limit: 500 }).some(p => p.title === '新鲜鸡蛋出售'), '"鸡蛋" as the 8th still finds it');
-
-    console.log('\n— The count a read gives agrees with the read');
-    assert(getPostCount(db, { query: '鸡蛋' }) === 1, 'getPostCount: "鸡蛋" counts the one listing');
-    assert(getPostCount(db, { query: 'ไข่ไก่ 自行车' }) === 2, 'getPostCount: a Thai word and a Chinese word count two');
-    assert(getPostCount(db, { query: '蛋%' }) === 0, 'getPostCount: "蛋%" counts nothing');
-    assert(getPostCount(db, { query: 'bik' }) === 1, 'getPostCount: "bik" still counts one');
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

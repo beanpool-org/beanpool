@@ -28,7 +28,7 @@ import {
     GROUP_DESCRIPTION_NOT_TEXT
 } from '../groups.js';
 import { MAX_PICTURE_BYTES, GROUP_DESCRIPTION_LIMIT, GROUP_DESCRIPTION_TOO_LONG, LIST_PREVIEW_CHARS, previewText } from '@beanpool/core';
-import { getPosts, getPostCount, getActivePostCount } from '../posts.js';
+import { getPosts, getActivePostCount } from '../posts.js';
 import { registerGeoFunctions } from '../geo.js';
 
 describe('Groups Engine & Convenor Moderation (§9)', () => {
@@ -791,7 +791,7 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         }, /does not belong to this group/i);
     });
 
-    it('audience scoping in getPosts and getPostCount excludes private posts from unauthorized viewers', () => {
+    it('audience scoping in getPosts excludes private posts from unauthorized viewers', () => {
         const group = createGroup(db, { name: 'Makers', createdBy: 'alice_pub' });
         joinGroup(db, group.id, 'bob_pub');
 
@@ -818,7 +818,6 @@ describe('Groups Engine & Convenor Moderation (§9)', () => {
         const anonPosts = getPosts(db);
         assert.strictEqual(anonPosts.length, 1);
         assert.strictEqual(anonPosts[0].id, 'p_pub');
-        assert.strictEqual(getPostCount(db), 1);
         assert.strictEqual(getActivePostCount(db), 1);
 
         // Direct ID lookup anonymously on group/direct post must fail

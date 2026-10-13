@@ -91,6 +91,7 @@ import { fetchNodeProfile } from '../node-profile';
 import { writeMemberArea } from '../member-area';
 import { nearbyAreaKeyOf, noAreaLineHere, readNearbyAreaCopy } from '../nearby-area';
 import { nearbyKm } from '../posts-nearby';
+import { nearbySetHash } from '../nearby-hash';
 import { applyLivePostChange, performSync, resetSyncFingerprints } from '../../services/pillar-sync';
 
 const SERVER_DIR = fileURLToPath(new URL('../../../server/', import.meta.url).href);
@@ -372,6 +373,8 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         const after = expectedSet(BYRON, left, ['mine-ldn']);
         const cameIn = [...after].filter(id => !before.has(id));
         expect(cameIn).toHaveLength(2);
+        // The node's world moved whatever this test finds: the tests after it start from it.
+        near = left;
 
         await sync();
         // A delta (from the cursor less the phone's 5 minutes for clock drift: every listing here changed within them, so
@@ -381,10 +384,49 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         expect(idReads(), JSON.stringify(sent.map(r => `${r.status} ${r.url.slice(0, 120)}`))).toHaveLength(1);
         expect(sorted(new URL(`${URL_BASE}${idReads()[0].url}`).searchParams.get('ids')!.split(','))).toEqual(sorted(cameIn));
         expect(sorted(heldIds())).toEqual(sorted([...after, 'tied-perth']));
-        // The set moved: the node named it in full, and the phone holds the new one with its new hash.
-        expect(postsReads()[postsReads().length - 1].keys).toEqual(['posts', 'set', 'setHash', 'tied']);
-        expect(sorted(JSON.parse((sql.prepare("SELECT v FROM nearby_held WHERE k = 'set'").get() as { v: string }).v))).toEqual(sorted(after));
+        // The set moved: the phone said setDiff=1 beside the hash it held, and the node named what changed (DESIGN-nearby-set-
+        // diff-fable §2), not the set; the phone applied it, checked it against the new hash, and holds the new set with it.
+        const last = postsReads()[postsReads().length - 1];
+        expect(last.url).toMatch(/setHash=[0-9a-f]{24}&setDiff=1/);
+        expect(last.keys).toEqual(['posts', 'setAdd', 'setDrop', 'setHash']);
+        const held = Object.fromEntries((sql.prepare('SELECT k, v FROM nearby_held').all() as { k: string; v: string }[]).map(r => [r.k, r.v]));
+        expect(sorted(JSON.parse(held.set))).toEqual(sorted(after));
+        expect(JSON.parse(held.tied)).toEqual(['mine-ldn']);
+        expect(held.hash).toBe(nearbySetHash([...after], ['mine-ldn']));
+    }, START_MS);
+
+    it('a diff that doesn\'t check out (one setAdd id flipped): nothing of it written, nearby_held forgotten, the cursor kept; the next read is named the set whole', async () => {
+        const cursorKey = [...mem.async.keys()].find(k => k.startsWith('pillar_sync_') && k.endsWith('_last-sync'))!;
+        const cursor = mem.async.get(cursorKey);
+        const before = expectedSet(BYRON, near, ['mine-ldn']);
+        const heldBefore = heldIds();
+        const gone = near.filter(p => before.has(p.id))[5];
+        await control('edit', { post: gone.id, status: 'cancelled' });
+        const left = near.filter(p => p.id !== gone.id);
+        const after = expectedSet(BYRON, left, ['mine-ldn']);
+        // The node's world moved whatever this test finds: the tests after it start from it.
         near = left;
+        tamper = (path, body) => {
+            if (!path.includes('nearby=1')) return null;
+            const b = JSON.parse(body);
+            return Array.isArray(b.setAdd) && b.setAdd.length > 0 ? JSON.stringify({ ...b, setAdd: [`${b.setAdd[0]}-flipped`, ...b.setAdd.slice(1)] }) : null;
+        };
+        await syncAllowingFailure();
+        tamper = null;
+        expect(postsReads()[postsReads().length - 1].keys).toEqual(['posts', 'setAdd', 'setDrop', 'setHash']);
+        expect(idReads()).toEqual([]);
+        expect(sorted(heldIds())).toEqual(sorted(heldBefore));
+        expect(sql.prepare('SELECT k FROM nearby_held').all()).toEqual([]);
+        expect(mem.async.get(cursorKey)).toBe(cursor);
+        // The next cycle sends no hash, and is named the set whole.
+        await sync();
+        const reads = postsReads();
+        expect(reads.every(r => !r.url.includes('setHash=') && !r.url.includes('setDiff='))).toBe(true);
+        expect(reads[reads.length - 1].keys).toEqual(['posts', 'set', 'setHash', 'tied']);
+        expect(sorted([...heldIds()].filter(id => id !== 'tied-perth'))).toEqual(sorted(after));
+        const held = Object.fromEntries((sql.prepare('SELECT k, v FROM nearby_held').all() as { k: string; v: string }[]).map(r => [r.k, r.v]));
+        expect(sorted(JSON.parse(held.set))).toEqual(sorted(after));
+        expect(held.hash).toBe(nearbySetHash([...after], JSON.parse(held.tied)));
     }, START_MS);
 
     it('a push beyond the nearest 500 is pruned; a nearer one stays and the farthest goes', async () => {

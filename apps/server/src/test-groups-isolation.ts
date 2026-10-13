@@ -4,7 +4,7 @@
  * Dedicated tests per consumer:
  * 1. Public feed isolation (GET /api/marketplace/posts & getPosts)
  * 2. Map pins isolation
- * 3. Search isolation (posts_fts, getPosts({ query }), getPostCount({ query }))
+ * 3. Search isolation (posts_fts, getPosts({ query }))
  * 4. Peer/federation sync isolation (listingsForPeer in federation-listings.ts)
  * 5. Daily Pulse gate isolation (daily-pulse active member listing count)
  * 6. Activity feed isolation (activity_feed table entries)
@@ -22,7 +22,6 @@ import {
     createPost,
     updatePost,
     getPosts,
-    getPostCount,
     getActivePostCount,
     getCommunityInfo,
     createGroup,
@@ -183,17 +182,14 @@ async function runTests() {
         // Anonymous search
         const anonResults = getPosts({ query: secretTerm });
         assert(anonResults.length === 0, '3b. Anonymous FTS search returns 0 results for group post');
-        assert(getPostCount({ query: secretTerm }) === 0, '3c. Anonymous getPostCount for term is 0');
 
         // Non-member search
         const carolResults = getPosts({ query: secretTerm, viewerPubkey: carol.pubKeyHex });
         assert(carolResults.length === 0, '3d. Non-member Carol FTS search returns 0 results');
-        assert(getPostCount({ query: secretTerm, viewerPubkey: carol.pubKeyHex }) === 0, '3e. Carol getPostCount for term is 0');
 
         // Group member search
         const bobResults = getPosts({ query: secretTerm, viewerPubkey: bob.pubKeyHex });
         assert(bobResults.length === 1 && bobResults[0].id === secretPost!.id, '3f. Active group member Bob finds the group post via search');
-        assert(getPostCount({ query: secretTerm, viewerPubkey: bob.pubKeyHex }) === 1, '3g. Bob getPostCount for term is 1');
     }
 
     console.log('\n─── CONSUMER 4: Peer / Federation Sync Isolation ───');

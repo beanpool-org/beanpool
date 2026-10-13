@@ -221,7 +221,7 @@ async function globalMembers(browser, root) {
         await tab(m.page, 'Market').click();
         await wait(2_500);
         check(whole(m.reads).length === 0, `the whole directory is never read in the visit (${whole(m.reads).map((r) => `${r.path}?${r.params}`).join(' ; ') || 'none'})`);
-        check(m.otherHosts.size === 0 || [...m.otherHosts].every((h) => h === 'fonts.googleapis.com'), `no request to any other host (${[...m.otherHosts].join(', ') || 'none'})`);
+        check(m.otherHosts.size === 0, `no request to any other host (fonts come from the node since #1858) (${[...m.otherHosts].join(', ') || 'none'})`);
         await m.context.close();
 
         console.log('A member with no area on the global node:');

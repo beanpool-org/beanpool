@@ -17,7 +17,8 @@
  *        (members-snapshot.ts), byte for byte, the heap under 75% of its 256 MB.
  *      How many are told "busy" depends on how fast the machine builds and sends (here, 24 to 40 of the 64).
  *  1b. Readers of the shared directory who stop reading (24 and 48 plain, 48 gzip), from a process of their own, each on
- *      a fresh server: its RSS, not only its heap, grows by no more than the 48 MB budget, and each reader is served or
+ *      a fresh server: its RSS, not only its heap, grows by no more than the 48 MB budget over what as many connections
+ *      with nothing to send cost a server made ready the same way in this run (#1874), and each reader is served or
  *      told "busy". Before the snapshot was sent a window at a time: +183, +445 and +107 MB.
  *  1c. The same, with the version moved before each reader (24 and 48, plain and gzip), on the shared directory and on a
  *      20,000-member roster: each reader holds a snapshot no longer current, which the cap counts once at its full size
@@ -172,11 +173,11 @@ async function read(a: { port: number; keys: { pk: string; der: string }[]; coun
  * purpose), from a process of their own so that the server's memory is the server's. Says what each got once the
  * orchestrator asks, and hangs up all of them when it says so.
  */
-async function stall(a: { port: number; keys: { pk: string; der: string }[]; count: number; gzip: boolean }): Promise<void> {
+async function stall(a: { port: number; keys: { pk: string; der: string }[]; count: number; gzip: boolean; route?: string }): Promise<void> {
     const keys: Key[] = a.keys.map((k) => ({ pk: k.pk, priv: crypto.createPrivateKey({ key: Buffer.from(k.der, 'hex'), format: 'der', type: 'pkcs8' }) }));
     const say = (m: unknown) => new Promise((r) => process.stdout.write(`@@ ${JSON.stringify(m)}\n`, r));
     const opens = Array.from({ length: a.count }, (_, i) =>
-        open({ port: a.port, tls: true }, '/api/members', { ...signed('/api/members', keys[i % keys.length]), ...(a.gzip ? { 'Accept-Encoding': 'gzip' } : {}) }, { hold: true }));
+        open({ port: a.port, tls: true }, a.route ?? '/api/members', { ...signed(a.route ?? '/api/members', keys[i % keys.length]), ...(a.gzip ? { 'Accept-Encoding': 'gzip' } : {}) }, { hold: true }));
     const answers = opens.map((o) => o.headers.then(async (res) => (res?.statusCode === 200 ? { status: 200 } : { ...(await o.done), sha: '' })));
     const lines = readline.createInterface({ input: process.stdin });
     for await (const line of lines) {
@@ -573,7 +574,46 @@ async function stalledReaders(dir: string, readers: Key[], BURST: number, HEAP_M
         // +266 MB of RSS, 48 +532 MB. Now the server's whole memory stays within the cap's budget, and any reader past
         // what the budget allows is told "busy".
         const BUDGET_MB = 48;
+        // What `n` connections with nothing to send cost the server, measured in this run, on a fresh server made ready
+        // and measured as the readers' is: each asks /api/version and keeps its connection, as a reader told "busy" does.
+        // The readers' growth is bounded by the budget over that, not by the budget alone: on CI 384 such connections are
+        // much of the growth (+34 MB with 47.9 MB counted in flight) and a busier runner's +51 failed an unrelated PR
+        // (#1874). Readers held in full, as before the cap, grow it by their bodies: 24 plain +266 MB, 48 +532 MB.
+        const connections = new Map<number, number>();
+        const connectionsCost = async (n: number): Promise<number> => {
+            if (connections.has(n)) return connections.get(n)!;
+            const server = await startServer(dir, HEAP_MB);
+            try {
+                // Made ready as the readers' server is (below): the snapshot built and the gzip copy made before the baseline.
+                for (const enc of [{}, { 'Accept-Encoding': 'gzip' }] as Record<string, string>[]) await open({ port: server.port, tls: true }, '/api/members', { ...signed('/api/members', readers[0]), ...enc }).done;
+                await sleep(1000);
+                await server.ask('mem-gc');
+                const before = (await server.ask('mem')).mem as { rss: number; footprint: number | null };
+                const keys = readers.slice(0, BURST).map((r) => ({ pk: r.pk, der: r.priv.export({ type: 'pkcs8', format: 'der' }).toString('hex') }));
+                const p = child('stall', dir, { port: server.port, keys, count: n, gzip: false, route: '/api/version' });
+                const said: ((m: any) => void)[] = [];
+                readline.createInterface({ input: p.stdout! }).on('line', (line) => { if (line.startsWith('@@ ')) said.shift()?.(JSON.parse(line.slice(3))); });
+                const ask = (line: string) => new Promise<any>((r) => { said.push(r); p.stdin!.write(line + '\n'); });
+                const got: Answer[] = await ask('report');
+                await sleep(3000);
+                const after = (await server.ask('mem')).mem as { rss: number; footprint: number | null };
+                await ask('bye');
+                await new Promise((r) => p.once('exit', r));
+                const ok = got.filter((a) => a.status === 200).length;
+                const cost = Math.max(0, ((after.footprint ?? after.rss) - (before.footprint ?? before.rss)) / MB);
+                // All at once, as the readers come: the burst's handshakes leave more resident than the same connections made
+                // a few at a time (0 MB here, against 18 all at once). On a Mac a burst this size can overflow the listen
+                // backlog (ECONNRESET, the readers' too); fewer answered only makes the bound below stricter, so it is
+                // reported, not asserted.
+                console.log(`  (control: ${n} connections that each asked /api/version and kept it open, ${ok} answered 200${ok < n ? ` (${JSON.stringify(tally(got.filter((a) => a.status !== 200)))})` : ''}: the server grew ${cost.toFixed(0)} MB)`);
+                connections.set(n, cost);
+                return cost;
+            } finally {
+                await server.stop();
+            }
+        };
         for (const [n, gzip, growth] of cases) {
+          const connMb = growth === 'report' ? 0 : await connectionsCost(n);
           // A fresh server for each: memory a process has freed is reused before its RSS grows, so after a burst, or after
           // the case before, RSS hides what readers hold. Its snapshot is built, and the gzip copy made, before the baseline.
           const server = await startServer(dir, HEAP_MB);
@@ -605,7 +645,8 @@ async function stalledReaders(dir: string, readers: Key[], BURST: number, HEAP_M
             if (growth === 'report') {
                 console.log(`  (reported, not asserted: the server's ${RSS} grew ${grew >= 0 ? '+' : ''}${grew.toFixed(0)} MB with ${(held.inFlightBytes / MB).toFixed(1)} MB counted in flight, ${served ? (grew / served).toFixed(2) : '-'} MB for each of the ${served} connections kept open; the cap gives a send's weight back once it is written, and what an open connection keeps after that is #1746)`);
             } else {
-                assert(grew <= BUDGET_MB, `and the server's ${RSS} grows by no more than the ${BUDGET_MB} MB budget (${grew >= 0 ? '+' : ''}${grew.toFixed(0)} MB)`);
+                assert(grew <= BUDGET_MB + connMb,
+                    `and the server's ${RSS} grows by no more than the ${BUDGET_MB} MB budget over what ${n} connections with nothing to send cost it in this run (${grew >= 0 ? '+' : ''}${grew.toFixed(0)} MB; the budget and ${connMb.toFixed(0)} MB)`);
             }
             assert(held.inFlightBytes <= BUDGET_MB * MB && held.peakInFlightBytes <= BUDGET_MB * MB,
                 `and what they hold is counted within the budget, now and at its most (${(held.inFlightBytes / MB).toFixed(1)} MB now, ${(held.peakInFlightBytes / MB).toFixed(1)} MB at most)`);

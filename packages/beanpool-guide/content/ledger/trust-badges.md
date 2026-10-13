@@ -26,7 +26,7 @@ What your trust does change is how deep your credit line can go. See "Your credi
 
 ## Where to see them
 
-- **Ledger**, then **Levels:** your badge, how much trust you have, and how much more to the next. **All levels** shows every badge; ones you have not reached yet are marked with a lock. That only means "not yet", not that something is locked away.
+- **Ledger**, then **Levels:** your badge, how much trust you have, and how much more to the next. **All levels** shows every badge. One you have not reached yet says **Next level** or **Up ahead**, with how much trust it takes: something to grow into, never something kept from you.
 - **What builds your trust:** how much you have traded, with how many people, and your rating.
 - On posts and profiles, next to each member's name.
 

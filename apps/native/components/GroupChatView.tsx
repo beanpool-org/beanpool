@@ -26,6 +26,8 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { markKeyChanged, rememberRosterNames } from '../utils/name-key-memory';
+import { anchorUrl } from '../utils/node-post';
 import { View, Text, StyleSheet, Pressable, FlatList, Alert, Linking, TextInput, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -112,6 +114,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     const [memberKeys, setMemberKeys] = useState<Set<string>>(new Set());
     // The roster as last read (with each row's formerKeys when the node serves them): names a sealed line's signer.
     const [rosterRows, setRosterRows] = useState<GroupMemberItem[]>([]);
+    // Members whose name this phone saw on another key, with no statement from the new key reaching it (pick 3).
+    const [keyChanged, setKeyChanged] = useState<Set<string>>(() => new Set());
     // Each sealed line's view (utils/group-line-display.ts), opened on this phone after each read.
     const [thread, setThread] = useState<OpenedGroupThread | null>(null);
     // "Securing the chat for N people…" while this phone makes a new key for a big group.
@@ -177,6 +181,10 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             .filter(m => m.status === 'active' || m.status === 'invited')
             .map(m => m.memberPubkey)));
         setRosterRows(members.filter(m => m.status === 'active'));
+        anchorUrl()
+            .then(url => (url ? rememberRosterNames(url, members.filter(m => m.status === 'active')) : new Set<string>()))
+            .then(setKeyChanged)
+            .catch(() => {});
         setInvitedCount(members.filter(m => m.status === 'invited').length);
     }, [kind, id, openInfo]);
 
@@ -265,7 +273,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 }
                 // Who this screen shows is who a key may go to (utils/group-chat-keys.ts rosterShown).
                 if (rosterRef.current.length) ring.noteShownRoster(rosterRef.current.map(r => r.memberPubkey));
-                const opened = await openGroupThread(ring, answer, rosterRef.current.map(r => ({ memberPubkey: r.memberPubkey, callsign: r.callsign, formerKeys: (r as any).formerKeys })));
+                const opened = await openGroupThread(ring, answer, rosterRef.current.map(r => ({ memberPubkey: r.memberPubkey, callsign: r.callsign, formerKeys: r.formerKeys })));
                 setThread(opened);
                 if (!servedMissing.current) {
                     servedMissing.current = true;
@@ -298,7 +306,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
     /** The node's messages in the one shape every chat's components speak, plus what this phone still owes. */
     const messages: ChatMessage[] = useMemo(() => {
         // A locked chat's lines by the display rule; anything there unsealed is nobody's (utils/group-chat-lines.ts).
-        const fromNode = groupChatShownLines(rawMessages, { locked, thread, me, kind });
+        // A name this phone saw on another key, with no statement from the new one: "(key changed)" (name-key-memory.ts).
+        const fromNode = markKeyChanged(groupChatShownLines(rawMessages, { locked, thread, me, kind }), keyChanged);
         const mine: ChatMessage[] = pending.map(p => ({
             id: p.clientId,
             senderId: me || '',
@@ -311,7 +320,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             timestamp: new Date(p.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         }));
         return [...fromNode, ...mine];
-    }, [rawMessages, pending, me, kind, locked, thread]);
+    }, [rawMessages, pending, me, kind, locked, thread, keyChanged]);
 
     const spokenCount = useMemo(
         () => rawMessages.filter(m => m.type !== 'system' && m.authorPubkey !== 'SYSTEM').length,
@@ -643,6 +652,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         ) : null;
 
         return (
+            <>
             <ChatMessageRow
                 item={item}
                 kind={kind}
@@ -684,6 +694,11 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 quote={quote}
                 status={status}
             />
+            {/* The message's details, with its actions: an earlier key of the member's, or a name on a new key (§6). */}
+            {activeMessageActionsId === item.id && !!item.integrityNote && (
+                <Text style={styles.sealedDetails} accessibilityRole="text">{item.integrityNote}</Text>
+            )}
+            </>
         );
     };
 
@@ -817,6 +832,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             {kind === 'group' && (
                 <GroupDetailModal
                     group={group}
+                    keyChanged={keyChanged}
                     isOpen={infoOpen}
                     onClose={() => setInfoOpen(false)}
                     myPubkey={me}

@@ -17,6 +17,8 @@ The community governs itself through Decisions. Members propose and vote in the 
 
 What a passed Decision can do by itself: suspend or restore a member, freeze or unfreeze, give or take away vouching, remove an enterprise's lead keeper, and pay grants from the commons. A grant the commons cannot yet afford waits in a queue; only one can wait at a time, and it fails after 90 days.
 
+Two other kinds of vote are not the community's. The keepers of an enterprise vote among themselves to pay Beans out of it, to remove a keeper, or to make another keeper the lead (see Enterprises, keepers and the commons). The members of a chat group vote on its lead convenor, its convenors, removing someone from the group, who may join, and closing it. Each runs 7 days, ends early once the result cannot change, and needs more than half of the people on its list to vote. They do not count towards a member's one open Decision. Settings does not show them, and **Halt this Decision** does not reach them: owners and admins hold no power over a group.
+
 ## Watching them
 
 **Shared Projects & Economy**, then **Proposals**, shows open votes and removals that are waiting out their grace period, with the totals so far.
@@ -34,7 +36,7 @@ For when someone is doing harm now. Open the person (People & Safety, then Membe
 - If it does not pass, the suspension lifts by itself and their role comes back.
 - You cannot suspend yourself, an enterprise, or the last owner. Only an owner can suspend an owner.
 - The suspended person gets no notification. Tell them yourself.
-- In their groups, a suspended convenor can use none of a convenor's tools until the suspension ends, and a suspended member joins no group. They stay a convenor, and a group's lead stays its lead: suspending someone never moves a group to anyone else.
+- In their groups, a suspended convenor can use none of a convenor's tools until the suspension ends, and a suspended member joins no group. They stay a convenor, and a group's lead convenor stays its lead convenor: suspending someone never moves a group to anyone else.
 
 On the global community no vote opens. The suspension lasts 7 days and then lifts by itself, and their role comes back, unless you lift it sooner. To keep someone out for longer, suspend them again, or remove their account.
 

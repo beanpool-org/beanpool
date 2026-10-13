@@ -1193,6 +1193,10 @@ export async function getConversations(myPubkey: string) {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
     // Pre-load identity so encrypted DM previews can be decrypted below.
     const previewIdentity = await loadIdentity();
+    // A DM's newest line opens under the key this phone pinned for it (utils/dm-peer-pins.ts), as its thread does: never
+    // under a key the node listed in its place. Unreadable pins: nothing opens (fail closed).
+    let previewPins: DmPeerPins | null = null;
+    try { previewPins = previewIdentity?.publicKey ? await readDmPeerPins(AsyncStorage, previewIdentity.publicKey) : null; } catch { previewPins = null; }
 
     return rows.map(row => {
         let displayMsg = row.lastMessage ? '[Message]' : 'Started conversation';
@@ -1202,7 +1206,7 @@ export async function getConversations(myPubkey: string) {
         // old-format line and the admin page's message say what they are. The node's own notices are formatted below.
         const lastView = row.lastId && !isNodeReadableChatType(row.convType)
             ? checkDmThread([{ id: row.lastId, authorPubkey: row.lastAuthor, ciphertext: row.lastMessage, nonce: row.lastNonce, type: row.lastMsgType, metadata: row.lastMetadata }],
-                previewIdentity?.privateKey && row.otherPubkey ? { myEdPrivHex: previewIdentity.privateKey, peerEdPubHex: row.otherPubkey } : null, row.id).get(row.lastId)
+                previewIdentity?.privateKey && previewPins && (dmPinFor(previewPins, row.id)?.peer ?? row.otherPubkey) ? { myEdPrivHex: previewIdentity.privateKey, peerEdPubHex: dmPinFor(previewPins, row.id)?.peer ?? row.otherPubkey } : null, row.id).get(row.lastId)
             : undefined;
         // The node's own notice in a DM: said to be one, never shown as the other person's line (formatted below).
         const lastIsDmNotice = !!row.lastId && !isNodeReadableChatType(row.convType)
@@ -3870,7 +3874,9 @@ export async function syncMessages(publicKey: string) {
         if (myIdentity?.publicKey) {
             try {
                 const pins = await readDmPeerPins(AsyncStorage, myIdentity.publicKey);
-                if (applyListingsToPins(pins, myIdentity.publicKey, convData.conversations)) await writeDmPeerPins(AsyncStorage, myIdentity.publicKey, pins);
+                const seeded = await seedPinsFromRows(pins, myIdentity.publicKey);
+                const listed = applyListingsToPins(pins, myIdentity.publicKey, convData.conversations);
+                if (seeded || listed) await writeDmPeerPins(AsyncStorage, myIdentity.publicKey, pins);
             } catch (e) {
                 console.warn('[Sync] Could not read or write the DM pins:', e);
             }
@@ -4318,6 +4324,34 @@ async function getDmKeyContext(conversationId: string): Promise<PinnedDmKeyConte
 }
 
 /**
+ * Pins for the DMs this phone already holds with exactly one other key and no pin yet, from its own rows, before the
+ * node's listing is heard: the key this phone has been sealing to there (design §3.6). A phone updated to a build with
+ * pins meets every DM it has as a DM it already knows, not as first sight on the listing's word; and a DM the first
+ * pass prunes is pinned before its rows go. True when the pins changed.
+ */
+async function seedPinsFromRows(pins: DmPeerPins, myPubkey: string): Promise<boolean> {
+    const database = await getDb();
+    const rows = await database.getAllAsync<any>(
+        "SELECT cp.conversation_id AS id, cp.public_key AS pk FROM conversation_participants cp JOIN conversations c ON c.id = cp.conversation_id WHERE c.type = 'dm'"
+    ).catch(() => [] as any[]);   // unreadable rows: nothing seeded, and the listing is still heard
+    const me = myPubkey.toLowerCase();
+    const others = new Map<string, Set<string>>();
+    for (const r of rows) {
+        const pk = typeof r?.pk === 'string' ? r.pk.toLowerCase() : '';
+        if (!pk || pk === me || typeof r?.id !== 'string') continue;
+        const id = dmPinId(r.id);
+        if (dmPinFor(pins, id)) continue;
+        let keys = others.get(id);
+        if (!keys) others.set(id, keys = new Set());
+        keys.add(pk);
+    }
+    const now = new Date().toISOString();
+    let changed = false;
+    for (const [id, keys] of others) if (keys.size === 1 && pinAtFirstSight(pins, id, [...keys][0], now)) changed = true;
+    return changed;
+}
+
+/**
  * What the node's listing of one or more conversations says about this account's DM pins: an offer where it names
  * another key in place of a pinned one, the offer cleared where it names the pinned key again, and a first-sight pin for
  * a DM it lists cleanly with one other person. `pins` is changed in place; true when it changed. The pinned key never
@@ -4337,7 +4371,7 @@ function applyListingsToPins(pins: DmPeerPins, myPubkey: string, conversations: 
     const now = new Date().toISOString();
     let changed = false;
     for (const [id, listings] of byId) {
-        if (!pins[id] && listings.some(l => !l.dm)) continue;
+        if (!dmPinFor(pins, id) && listings.some(l => !l.dm)) continue;
         if (applyDmListings(pins, id, listings.map(l => l.others), now)) changed = true;
     }
     return changed;

@@ -118,10 +118,10 @@ export async function readDmPeerPins(storage: Pick<PinStorage, 'getItem'>, myPub
         throw new DmPinStoreError();
     }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new DmPinStoreError();
-    const pins: DmPeerPins = {};
+    const pins: DmPeerPins = Object.create(null);
     for (const [id, value] of Object.entries(parsed as Record<string, unknown>)) {
         const pin = pinOf(value);
-        if (pin) pins[dmPinId(id)] = pin;
+        if (pin) setPin(pins, dmPinId(id), pin);
     }
     return pins;
 }
@@ -135,16 +135,26 @@ export async function writeDmPeerPins(storage: Pick<PinStorage, 'setItem'>, myPu
     }
 }
 
+/** The pin kept under this id: own entries only, so an id the node chose ("__proto__", "constructor") is never a pin. */
+function ownPin(pins: DmPeerPins, id: string): DmPeerPin | undefined {
+    return Object.prototype.hasOwnProperty.call(pins, id) ? pins[id] : undefined;
+}
+
+/** Keep `pin` under `id` as an own entry, whatever the id (a plain assignment of "__proto__" would set a prototype). */
+function setPin(pins: DmPeerPins, id: string, pin: DmPeerPin): void {
+    Object.defineProperty(pins, id, { value: pin, enumerable: true, writable: true, configurable: true });
+}
+
 export function dmPinFor(pins: DmPeerPins, conversationId: string): DmPeerPin | null {
-    return pins[dmPinId(conversationId)] ?? null;
+    return ownPin(pins, dmPinId(conversationId)) ?? null;
 }
 
 /** First sight: pin `peer` for this DM if nothing is pinned yet. True when it wrote one. */
 export function pinAtFirstSight(pins: DmPeerPins, conversationId: string, peer: string, now: string): boolean {
     const id = dmPinId(conversationId);
     const key = pinKeyOf(peer);
-    if (!key || pins[id]) return false;
-    pins[id] = { peer: key, since: now, by: 'first-seen' };
+    if (!key || ownPin(pins, id)) return false;
+    setPin(pins, id, { peer: key, since: now, by: 'first-seen' });
     return true;
 }
 
@@ -158,7 +168,7 @@ export function pinAtFirstSight(pins: DmPeerPins, conversationId: string, peer: 
 export function applyDmListings(pins: DmPeerPins, conversationId: string, listings: ReadonlyArray<ReadonlyArray<string>>, now: string): boolean {
     const id = dmPinId(conversationId);
     const named = listings.map((others) => [...new Set(others.map(pinKeyOf).filter((k): k is string => !!k))]);
-    const pin = pins[id];
+    const pin = ownPin(pins, id);
     if (!pin) {
         if (!named.length || named.some((o) => o.length !== 1) || new Set(named.map((o) => o[0])).size !== 1) return false;
         return pinAtFirstSight(pins, id, named[0][0], now);

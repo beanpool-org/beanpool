@@ -282,7 +282,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     creator_channels: {
         kind: 'replicated-except', payload: 'creatorChannels', watermark: 'updated_at',
-        columns: cols('id owner_pubkey platform url handle category is_primary_video supports_autolist oauth_verified_at post_count_seen autopublish syndicate_to_node created_at updated_at deleted_at'),
+        columns: cols('id owner_pubkey platform url handle category is_primary_video supports_autolist oauth_verified_at platform_account_id verified_handle post_count_seen autopublish syndicate_to_node created_at updated_at deleted_at'),
         except: {
             fail_count: { reason: "the harvester's own record of failed fetches on this server; a promoted server's harvester starts afresh" },
             last_error: { reason: "the harvester's own record of failed fetches on this server" },

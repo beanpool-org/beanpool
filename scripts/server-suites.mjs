@@ -39,6 +39,7 @@ export const SUITES = [
     'test-ssrf-fetch-timeout',
     'test-pulse-submit',
     'test-pulse-oauth',
+    'test-pulse-verify-identity',
     'test-oauth-ingest-bounds',
     'test-pulse-curated',
     'test-pulse-admin-channels',

@@ -46,7 +46,7 @@ export function namesAnId(key: string): boolean {
  */
 export const FREE_TEXT_KEYS: ReadonlySet<string> = new Set([
     'title', 'description', 'message', 'text', 'memo', 'comment', 'reason', 'name', 'bio', 'communityname',
-    'community_name', 'callsign', 'platformusername', 'slug', 'searchquery', 'contact', 'address', 'unit', 'work',
+    'community_name', 'callsign', 'slug', 'searchquery', 'contact', 'address', 'unit', 'work',
     'purpose', 'resolution', 'seasonalityhint', 'password', 'currentpassword', 'newpassword',
 ]);
 

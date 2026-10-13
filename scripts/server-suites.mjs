@@ -331,6 +331,7 @@ export const SUITES = [
     'test-harvester',
     'test-membership-probe',
     'test-friends-routes',
+    'test-trust-mutuals',
     'test-message-attachment',
     'test-social-ratings',
     'test-app-store-versions',

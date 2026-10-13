@@ -226,6 +226,8 @@ import {
     getMembers as getMembersEngine,
     getAllMembers as getAllMembersEngine,
     getMemberDirectoryRows as getMemberDirectoryRowsEngine,
+    getMemberDirectoryRowsByKeys as getMemberDirectoryRowsByKeysEngine,
+    searchMemberDirectoryRows as searchMemberDirectoryRowsEngine,
     checkInvite as checkInviteEngine,
     verifyOfflineTicket as verifyOfflineTicketEngine,
     getInvitesByMember as getInvitesByMemberEngine,
@@ -1815,6 +1817,16 @@ export function getAllMembers(): Member[] {
 /** The member directory's rows, every one or those changed after a delta cursor (engine members.ts). */
 export function getMemberDirectoryRows(updatedAfter?: unknown): DirectoryRow[] {
     return getMemberDirectoryRowsEngine(db, updatedAfter);
+}
+
+/** The directory's rows of these members, in the order asked; with `updatedAfter`, only those changed after it (engine members.ts). */
+export function getMemberDirectoryRowsByKeys(keys: string[], updatedAfter?: string): DirectoryRow[] {
+    return getMemberDirectoryRowsByKeysEngine(db, keys, updatedAfter);
+}
+
+/** The members whose name starts with `prefix`, shortest first, at most `limit` (engine members.ts). */
+export function searchMemberDirectoryRows(prefix: string, limit: number): DirectoryRow[] {
+    return searchMemberDirectoryRowsEngine(db, prefix, limit);
 }
 
 // ===================== INVITE CODES =====================

@@ -20,6 +20,7 @@ import {
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
 import { assertMayPostToday } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
+import { faceUrlsChangedAfter } from '../engine/avatar-keys.js';
 import { photoKeyMatches, photoKeyRequiredFor, photoHealFor, photoUrlsChangedAfter, PHOTO_KEYS_SINCE_ROW, notePhotoHealServed, notePhotoHealAnsweredAgain, restartPhotoHealFor, PHOTO_HEAL_PAGE_ROWS, PHOTO_HEAL_MIN_PAGE_ROWS } from '../engine/photo-keys.js';
 import { db } from '../db/db.js';
 import { getImageStore } from '../storage/image-store.js';
@@ -477,7 +478,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
             area: area ? { lat: area.lat, lng: area.lng } : null, radiusKm: setKm, max, newestWithoutArea: NEARBY_NEWEST_WITHOUT_AREA,
             types, excludeEvents, includeHidden, measureAtMost: ONE_PASS_MAX_MEASURED,
         });
-        nearbyWhole = !!updatedAfter && photoUrlsChangedAfter(updatedAfter);
+        // Or from before its members' face URLs last changed (engine/avatar-keys.ts), as the member directory answers such a
+        // delta whole: a phone that keeps no card for its listings' authors has each face from the row (DESIGN-global-
+        // members-by-area §2.2, item 6).
+        nearbyWhole = !!updatedAfter && (photoUrlsChangedAfter(updatedAfter) || faceUrlsChangedAfter(updatedAfter));
         // `tied` too: a deal opened on a listing already near the member moves no row of S, but the phone must now keep it.
         // The query without where the read starts (`updatedAfter`), its page (`paged`, `pageAfter`) and the hash the phone
         // holds (`setHash`): the tag describes the set, so every page of one read carries it, and a phone that holds it
@@ -561,7 +565,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
         // The rows of the set, read as the phone's sync reads them (every state, so a listing taken off goes as its
         // tombstone), kept to the set: whole, or what changed since the cursor (the author-standing half and the
         // listings sent again included), paged by key as any sync read.
-        posts = getPosts({ ...listing, ids: nearbySet.ids, limit, updatedAfter: nearbyWhole ? undefined : updatedAfter, sync: true, syncPage });
+        // A delta sends again each listing whose author changed their card since (a new name, a new face): the row carries
+        // them, and a phone on a node with members on demand keeps no card for its listings' authors.
+        posts = getPosts({ ...listing, ids: nearbySet.ids, limit, updatedAfter: nearbyWhole ? undefined : updatedAfter, sync: true, syncPage,
+            authorCardsChanged: !nearbyWhole && !!updatedAfter });
     } else if (ids) {
         posts = getPosts({ ...listing, limit: IDS_MAX, updatedAfter, sync });
     } else if (heal && updatedAfter) {

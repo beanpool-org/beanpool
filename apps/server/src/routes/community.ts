@@ -6,7 +6,7 @@
 import crypto from 'node:crypto';
 import Router from '@koa/router';
 import {
-    registerMember, getMembers, getAllMembers, getMember, getMemberDirectoryRows,
+    registerMember, getMembers, getAllMembers, getMember, getMemberDirectoryRows, getMemberDirectoryRowsByKeys, searchMemberDirectoryRows,
     getBalance, transfer, getTransactions,
     createPost, getPosts, removePost, updatePost,
     getCommunityInfo, getPublicCommunityInfo,
@@ -68,7 +68,7 @@ import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.j
 import { muteOf } from '../engine/auto-moderation.js';
 import { respondIfMuted, respondProfileRefusal, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
 import { assertMayMakeInvite } from '../engine/writer-bounds.js';
-import { isPoint, readMemberArea, setMemberArea, withAreaDistances } from '../engine/member-area.js';
+import { isPoint, nearestPeople, readMemberArea, setMemberArea, withAreaDistances } from '../engine/member-area.js';
 import { parsePoint, type Point } from './distance-query.js';
 import { isSyntheticAccount, CONTACT_VALUE_LIMIT, textTooLongMessage } from '@beanpool/core';
 import { getP2PNode } from '../p2p.js';
@@ -2233,10 +2233,112 @@ router.get('/api/members/callsign-available/:callsign', async (ctx) => {
 /** A member-directory delta whose cursor is this recent goes straight past the heavy-read cap; an older one is weighed. */
 const MEMBERS_DELTA_FRESH_MS = 60 * 60 * 1000;
 
+/** The three small forms of the directory (DESIGN-global-members-by-area §2.1): at most this many rows each. */
+const MEMBERS_KEYS_MAX = 100;
+const MEMBERS_SEARCH_MAX = 20;
+const MEMBERS_NEAREST_MAX = 50;
+/** A search shorter than this is refused: the callsign check's floor, so nobody lists the members by typing a letter. */
+const MEMBERS_SEARCH_MIN_CHARS = 2;
+const MEMBER_KEY_ANY_CASE = /^[0-9a-fA-F]{64}$/;
+
+/** The directory's rows as each answer of `GET /api/members` gives them, in their order. */
+function directoryMembers(rows: ReturnType<typeof getMemberDirectoryRows>) {
+    const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
+    // Each value as rowToMember made it and this route then read it (`|| null` and `?? 0`), so the bytes are the same.
+    return rows.map(r => ({
+        publicKey: r.public_key,
+        callsign: r.callsign,
+        joinedAt: r.joined_at,
+        nodeRole: rolesByPubkey.get(r.public_key) ?? null,
+        avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref ?? (r.photo_inline ? MEMBER_PHOTO_INLINE_REF : null)),
+        profileUpdatedAt: r.profile_updated_at || null,
+        earnedCredit: r.earned_credit ?? 0,
+        elderVouchedBy: r.elder_vouched_by || null,
+        archetype: r.archetype || null,
+    }));
+}
+
+/** The people the directory lists: never an escrow, a project or a treasury. */
+function directoryPeople<T extends { public_key: string; is_treasury: unknown }>(rows: T[]): T[] {
+    return rows.filter(r => !r.public_key.startsWith('escrow_') && !r.public_key.startsWith('project_') && !r.is_treasury);
+}
+
+/** A whole number from the query in [1, max], the default when absent, or undefined (refused) for anything else. */
+function wholeUpTo(raw: unknown, max: number, fallback?: number): number | undefined {
+    if (raw === undefined) return fallback;
+    if (typeof raw !== 'string' || !/^[0-9]{1,4}$/.test(raw)) return undefined;
+    const n = Number(raw);
+    return n >= 1 && n <= max ? n : undefined;
+}
+
+/**
+ * The directory's three small forms (DESIGN-global-members-by-area §2.1, #1792), for a phone that holds only the cards
+ * it has a reason to show (features.membersOnDemand), though they answer on every node:
+ * - `keys=<k1,…,kn>` (at most 100, each a key as this community spells keys): those members' rows, in the order asked,
+ *   with `updatedAfter` only those changed after it, and all of them when the face URLs changed after it (the heal the
+ *   whole read makes, below).
+ * - `q=<text>&limit=n` (at most 20): the members whose name starts with what was typed, at least 2 characters, shortest
+ *   first; 64 hexadecimal characters are one member's key.
+ * - `lat&lng&limit=n` (at most 50): the first n of the nearest-first list.
+ * Each is at most 100 rows (~40 KB), so it goes straight past the heavy-read cap, as a fresh delta does, and none is a
+ * shared answer: no ETag, never kept by any cache. A search and a keys read need a signed request, and are answered to
+ * whoever the read gate lets read the whole directory, which tells them more; a point needs a member (peoplePoint).
+ * Nothing here is logged: no line names a key looked up or a name searched, and nobody is ever told who looked them up.
+ */
+function answerMembersOnDemand(ctx: any, point: Point | null): void {
+    const refuse = (status: number, error: string) => { ctx.status = status; ctx.body = { error }; };
+    const { keys, q, limit, updatedAfter } = ctx.query;
+    const forms = (keys !== undefined ? 1 : 0) + (q !== undefined ? 1 : 0) + (point ? 1 : 0);
+    if (forms === 0) return refuse(400, 'limit goes with q, or with lat and lng');
+    if (forms > 1) return refuse(400, 'keys, q, and lat with lng are three different reads: ask one at a time');
+    if (updatedAfter !== undefined && (keys === undefined || typeof updatedAfter !== 'string' || updatedAfter === '')) {
+        return refuse(400, 'updatedAfter goes with keys only, once');
+    }
+    if (!point && !ctx.state.actor) return refuse(401, 'Looking members up needs a signed request');
+    ctx.set('Cache-Control', 'private, no-store');
+    let body: unknown[];
+    if (keys !== undefined) {
+        if (limit !== undefined) return refuse(400, 'keys takes no limit: it answers the keys asked, at most 100');
+        const asked = typeof keys === 'string' && keys !== '' ? [...new Set(keys.split(','))] : [];
+        if (asked.length === 0 || asked.length > MEMBERS_KEYS_MAX || !asked.every(isMemberKeySpelling)) {
+            return refuse(400, `keys is 1 to ${MEMBERS_KEYS_MAX} member keys (64 lower-case hexadecimal characters each), comma separated`);
+        }
+        // As the delta it stands in for: a cursor from before the face URLs changed shape is answered with every key asked.
+        const cursor = updatedAfter !== undefined && !faceUrlsChangedAfter(updatedAfter) ? updatedAfter as string : undefined;
+        if (updatedAfter !== undefined) ctx.set(EPOCH_HEADER, syncEpochHeaderValue());
+        body = directoryMembers(directoryPeople(getMemberDirectoryRowsByKeys(asked, cursor)));
+    } else if (q !== undefined) {
+        const typed = typeof q === 'string' ? q.trim() : '';
+        const n = wholeUpTo(limit, MEMBERS_SEARCH_MAX, MEMBERS_SEARCH_MAX);
+        if (typed.length < MEMBERS_SEARCH_MIN_CHARS) return refuse(400, `q is at least ${MEMBERS_SEARCH_MIN_CHARS} characters of a name`);
+        if (n === undefined) return refuse(400, `limit is a whole number from 1 to ${MEMBERS_SEARCH_MAX}`);
+        const rows = MEMBER_KEY_ANY_CASE.test(typed)
+            ? getMemberDirectoryRowsByKeys([typed.toLowerCase()])
+            : searchMemberDirectoryRows(typed, n);
+        body = directoryMembers(directoryPeople(rows));
+    } else {
+        const n = wholeUpTo(limit, MEMBERS_NEAREST_MAX);
+        if (n === undefined) return refuse(400, `limit is a whole number from 1 to ${MEMBERS_NEAREST_MAX}`);
+        const nearest = nearestPeople(point!.lat, point!.lng, n);
+        const km = new Map(nearest.map(p => [p.publicKey, p.distanceKm]));
+        body = directoryMembers(getMemberDirectoryRowsByKeys(nearest.map(p => p.publicKey)))
+            .map(m => ({ ...m, distanceKm: km.get(m.publicKey) ?? null }));
+    }
+    ctx.status = 200;
+    ctx.type = 'application/json';
+    ctx.body = JSON.stringify(body);
+}
+
 router.get('/api/members', async (ctx) => {
     // With `lat` and `lng`: each person's distance in whole km from their coarse area, nearest first (G4).
     const point = peoplePoint(ctx);
     if (point === undefined) return;
+    // The three small forms, each straight past the cap (answerMembersOnDemand). A read with none of their parameters is
+    // answered below, byte for byte as before them.
+    if (ctx.query.keys !== undefined || ctx.query.q !== undefined || ctx.query.limit !== undefined) {
+        answerMembersOnDemand(ctx, point);
+        return;
+    }
     const cursor = ctx.query.updatedAfter;
     // A delta from a phone with no sync since the face URLs changed shape (keys switched on or off, a new secret:
     // engine/avatar-keys.ts) is answered with the whole directory: every member's face at its URL as it is now. The phone
@@ -2292,22 +2394,7 @@ router.get('/api/members', async (ctx) => {
     // (db.ts MEMBER_PHOTO_INLINE_REF): a null there told the member's phone "no photo", and its offline-edit retry
     // published its own older copy over the newer one.
     const build = (): string => {
-        const rows = getMemberDirectoryRows(facesHeal ? undefined : ctx.query.updatedAfter || undefined)
-            .filter(r => !r.public_key.startsWith('escrow_') && !r.public_key.startsWith('project_') && !r.is_treasury);
-
-        const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
-        // Each value as rowToMember made it and this route then read it (`|| null` and `?? 0`), so the bytes are the same.
-        const members = rows.map(r => ({
-            publicKey: r.public_key,
-            callsign: r.callsign,
-            joinedAt: r.joined_at,
-            nodeRole: rolesByPubkey.get(r.public_key) ?? null,
-            avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref ?? (r.photo_inline ? MEMBER_PHOTO_INLINE_REF : null)),
-            profileUpdatedAt: r.profile_updated_at || null,
-            earnedCredit: r.earned_credit ?? 0,
-            elderVouchedBy: r.elder_vouched_by || null,
-            archetype: r.archetype || null,
-        }));
+        const members = directoryMembers(directoryPeople(getMemberDirectoryRows(facesHeal ? undefined : ctx.query.updatedAfter || undefined)));
 
         return JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);
     };

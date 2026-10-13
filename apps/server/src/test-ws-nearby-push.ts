@@ -475,6 +475,7 @@ async function main(): Promise<void> {
         clear();
         const beforeBlock = await postNear('Before the block');
         assert(heard('new_post', beforeBlock).noel && noelsSet().includes(beforeBlock), 'before any block, Noel hears her new listing, and his set holds it');
+        // That push kept who blocked Ana (blockersOfKept, #1831): his block, the next moment, must hold for her next push.
         await blocksCall(noel, '/api/blocks', ana, 'Noel blocks Ana');
         clear();
         const blocked = await postNear('Blocked by Noel');

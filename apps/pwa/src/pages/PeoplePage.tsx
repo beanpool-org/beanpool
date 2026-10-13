@@ -68,7 +68,7 @@ function Avatar({ callsign, avatarUrl, size = 40 }: { callsign: string; avatarUr
 
     return (
         <div 
-            className="rounded-full flex items-center justify-center font-bold text-lg border bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-700"
+            className="rounded-full flex items-center justify-center font-bold text-lg border bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300 border-nature-200 dark:border-nature-700"
             style={sizeStyle}
         >
             {initial}

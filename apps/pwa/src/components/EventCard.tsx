@@ -116,7 +116,7 @@ function RsvpButtons({ rsvp }: { rsvp: RsvpState }) {
                 aria-busy={busy === status}
                 className={`relative grow basis-auto shrink-0 min-w-fit min-h-[48px] px-2 py-1 rounded-xl border text-sm font-extrabold leading-tight whitespace-nowrap transition-colors disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1 ${
                     mine
-                        ? 'bg-violet-700 border-violet-700 text-white dark:bg-violet-500 dark:border-violet-500'
+                        ? 'bg-violet-700 border-violet-700 text-white dark:bg-violet-600 dark:border-violet-500'
                         : 'bg-white border-violet-300 text-violet-800 hover:bg-violet-50 dark:hover:bg-violet-950/40 dark:bg-nature-900 dark:border-violet-800 dark:text-violet-200'
                 }`}
             >

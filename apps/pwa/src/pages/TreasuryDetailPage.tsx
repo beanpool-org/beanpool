@@ -1870,7 +1870,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 <span aria-hidden="true">👤</span>
                                                 <span>{k.callsign}</span>
                                                 {isSuspended && (
-                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-nature-200 text-nature-700 dark:bg-nature-700 dark:text-nature-300">
+                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-nature-200 text-nature-700 dark:bg-nature-700 dark:text-nature-200">
                                                         Suspended
                                                     </span>
                                                 )}
@@ -1879,7 +1879,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         {kw.Lead}
                                                     </span>
                                                 ) : (
-                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-nature-200/70 text-nature-700 dark:bg-nature-700 dark:text-nature-300">
+                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-nature-200/70 text-nature-700 dark:bg-nature-700 dark:text-nature-200">
                                                         {kw.Keeper}
                                                     </span>
                                                 )}

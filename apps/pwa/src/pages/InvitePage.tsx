@@ -447,7 +447,7 @@ export function InvitePage({ identity }: Props) {
                                         <div className="flex gap-2">
                                             <button 
                                                 onClick={() => handleCopyProxy(inv.code)} 
-                                                className="p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-400 hover:bg-oat-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors shadow-sm"
+                                                className="p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors shadow-sm"
                                                 aria-label="Copy invite link"
                                                 title="Copy invite link"
                                             >

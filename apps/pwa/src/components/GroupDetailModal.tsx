@@ -450,7 +450,7 @@ export function GroupDetailModal({
                                                 <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
                                                     highlight
                                                         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/40'
-                                                        : 'bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400'
+                                                        : 'bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300'
                                                 }`}>
                                                     {row.isLead ? 'Lead' : m.role}
                                                 </span>
@@ -536,11 +536,11 @@ export function GroupDetailModal({
                                 Closed
                             </div>
                         ) : isPending ? (
-                            <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-400 font-bold text-sm text-center">
+                            <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-300 font-bold text-sm text-center">
                                 Request Pending Approval
                             </div>
                         ) : groupData.joinPolicy === 'invite_only' ? (
-                            <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-400 font-bold text-sm text-center">
+                            <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-300 font-bold text-sm text-center">
                                 Invite Only
                             </div>
                         ) : (

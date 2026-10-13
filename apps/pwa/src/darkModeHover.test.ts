@@ -34,6 +34,18 @@ const ALLOWED: Array<[string, string, string]> = [];
 /** [file, a piece of the class string that marks the one place, why its dark hover may read under AA]. */
 const ALLOWED_HOVER_CONTRAST: Array<[string, string, string]> = [];
 
+/**
+ * [file, or '*' for any, a piece of the class string, why its dark words may rest under AA]. Disabled controls are
+ * exempt in WCAG; white on terra-600 is the brand's selected fill in both themes (4.42:1, the same in light), a palette
+ * call for the whole app rather than a dark-mode fault (listed on PR #1833).
+ */
+const ALLOWED_REST_CONTRAST: Array<[string, string, string]> = [
+    ['pages/LedgerPage.tsx', 'dark:bg-nature-800 text-nature-500 cursor-not-allowed', 'Send and Confirm while disabled'],
+    ['components/ProfileSetup.tsx', 'dark:bg-nature-700 text-white/70 cursor-not-allowed', 'Continue while the name or photo is not ready (disabled)'],
+    ['pages/MapPage.tsx', 'dark:bg-nature-800 dark:text-nature-400 cursor-not-allowed', 'Post while the form is incomplete (disabled)'],
+    ['*', 'dark:bg-terra-600', 'white on terra-600 is 4.42:1 in light too: the brand fill, not a dark fault'],
+];
+
 const LIGHT_HOVER = /^bg-(?:white|[a-z]+-(?:50|100|200))(?:\/\d+)?$/;
 
 function files(dir: string): string[] {
@@ -298,6 +310,14 @@ describe('dark mode hover', () => {
     it('every dark hover keeps its words at 4.5:1 (3:1 when the class string makes them large)', async () => {
         const palette = await darkPalette();
         expect(darkContrastFailures(palette, all, true, ALLOWED_HOVER_CONTRAST)).toEqual([]);
+    });
+
+    it('every dark resting fill and ink in one class string read at 4.5:1 (3:1 when large)', async () => {
+        const palette = await darkPalette();
+        const allowed = ALLOWED_REST_CONTRAST.filter(([f]) => f !== '*');
+        const anywhere = ALLOWED_REST_CONTRAST.filter(([f]) => f === '*').map(([, piece]) => piece);
+        const found = darkContrastFailures(palette, all, false, allowed).filter((entry) => !anywhere.some((piece) => entry.includes(` on ${piece} `)));
+        expect(found).toEqual([]);
     });
 
     it('settles dark colours the way the CSS does', async () => {

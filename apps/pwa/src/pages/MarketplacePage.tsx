@@ -2382,10 +2382,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         const isSelected = typeFilter === t;
                         let activeStyles = 'bg-nature-800 dark:bg-white text-white dark:text-nature-900 border border-nature-900/10 shadow-sm scale-[1.01]';
                         if (t === 'offer') activeStyles = 'bg-emerald-600 dark:bg-emerald-700 text-white border border-emerald-700/25 shadow-sm scale-[1.01]';
-                        if (t === 'need') activeStyles = 'bg-terra-600 dark:bg-terra-500 text-white border border-terra-700/25 shadow-sm scale-[1.01]';
-                        if (t === 'poll') activeStyles = 'bg-purple-600 dark:bg-purple-500 text-white border border-purple-700/25 shadow-sm scale-[1.01]';
-                        if (t === 'event') activeStyles = 'bg-violet-700 dark:bg-violet-500 text-white border border-violet-800/25 shadow-sm scale-[1.01]';
-                        if (t === 'for-you') activeStyles = 'bg-violet-600 dark:bg-violet-500 text-white border border-violet-700/25 shadow-sm scale-[1.01]';
+                        if (t === 'need') activeStyles = 'bg-terra-600 dark:bg-terra-600 text-white border border-terra-700/25 shadow-sm scale-[1.01]';
+                        if (t === 'poll') activeStyles = 'bg-purple-600 dark:bg-purple-600 text-white border border-purple-700/25 shadow-sm scale-[1.01]';
+                        if (t === 'event') activeStyles = 'bg-violet-700 dark:bg-violet-600 text-white border border-violet-800/25 shadow-sm scale-[1.01]';
+                        if (t === 'for-you') activeStyles = 'bg-violet-600 dark:bg-violet-600 text-white border border-violet-700/25 shadow-sm scale-[1.01]';
 
                         return (
                             <button
@@ -2504,7 +2504,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onClick={() => setShowCategoryPicker(true)}
                         className={`w-full py-2 rounded-2xl border text-xs font-black transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer hover:shadow-sm ${
                             categoryFilter !== 'all'
-                                ? 'bg-indigo-600 border-indigo-700 text-white shadow-soft dark:bg-indigo-500 dark:border-indigo-500'
+                                ? 'bg-indigo-600 border-indigo-700 text-white shadow-soft dark:bg-indigo-600 dark:border-indigo-500'
                                 : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-900/60'
                         }`}
                     >
@@ -2533,7 +2533,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onClick={() => setShowRadiusPicker(true)}
                         className={`w-full py-2 rounded-2xl border text-xs font-black transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer hover:shadow-sm ${
                             radiusSettings
-                                ? 'bg-amber-600 border-amber-700 text-white shadow-soft dark:bg-amber-500 dark:border-amber-500'
+                                ? 'bg-amber-600 border-amber-700 text-white shadow-soft dark:bg-amber-700 dark:border-amber-500'
                                 : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-900/60'
                         }`}
                     >
@@ -2818,7 +2818,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     onClick={() => toggleFavCategory(cat.id)}
                                                     className={`px-3 py-1.5 rounded-full border text-xs font-bold transition-all duration-200 flex items-center gap-1 cursor-pointer hover:scale-105 active:scale-95 shadow-sm ${
                                                         isFav
-                                                            ? 'bg-violet-600 border-violet-700 text-white dark:bg-violet-500 dark:border-violet-500'
+                                                            ? 'bg-violet-600 border-violet-700 text-white dark:bg-violet-600 dark:border-violet-500'
                                                             : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-600 dark:text-nature-400'
                                                     }`}
                                                 >
@@ -3165,7 +3165,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <button
                                     type="button"
                                     onClick={() => setPromptReviewForTx(null)}
-                                    className="flex-1 py-3 text-nature-600 dark:text-nature-400 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 dark:hover:text-nature-200 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
+                                    className="flex-1 py-3 text-nature-600 dark:text-nature-300 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 dark:hover:text-nature-200 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                                 >
                                     Skip for now
                                 </button>

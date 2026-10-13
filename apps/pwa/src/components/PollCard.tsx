@@ -157,7 +157,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                     <span
                         className={`text-[10px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-lg border ${
                             isClosed
-                                ? 'bg-nature-100 text-nature-600 dark:bg-nature-800 dark:text-nature-400 border-nature-300/40'
+                                ? 'bg-nature-100 text-nature-600 dark:bg-nature-800 dark:text-nature-300 border-nature-300/40'
                                 : 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border-purple-200 dark:border-purple-800'
                         }`}
                     >

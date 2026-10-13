@@ -360,7 +360,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                             <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
                                                                 isCompleted ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'
                                                                 : isPending ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-400'
-                                                                : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-400'
+                                                                : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-300'
                                                             }`}>
                                                                 {item.status}
                                                             </span>
@@ -456,7 +456,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                 <div className="flex justify-between items-start mb-1">
                                                     <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
                                                         item.type === 'offer' ? 'bg-terra-100 text-terra-800 dark:bg-terra-900/40 dark:text-terra-400'
-                                                        : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-400'
+                                                        : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-300'
                                                     }`}>
                                                         {item.type}
                                                     </span>

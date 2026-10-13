@@ -111,7 +111,7 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
 
     if (loading) {
         return (
-            <div className="min-h-full bg-white dark:bg-nature-900 p-8 text-center text-nature-500 font-medium animate-pulse">
+            <div className="min-h-full bg-white dark:bg-nature-900 p-8 text-center text-nature-500 dark:text-nature-300 font-medium animate-pulse">
                 Loading profile...
             </div>
         );

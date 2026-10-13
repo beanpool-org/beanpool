@@ -283,7 +283,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                     >
                         <span>👥 Neighbours</span>
                         {neighbourItems.length > 0 && (
-                            <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-nature-200 dark:bg-nature-700 text-nature-700 dark:text-nature-300">
+                            <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-nature-200 dark:bg-nature-700 text-nature-700 dark:text-nature-200">
                                 {neighbourItems.length}
                             </span>
                         )}
@@ -300,7 +300,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                     >
                         <span>📰 Local</span>
                         {localItems.length > 0 && (
-                            <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-nature-200 dark:bg-nature-700 text-nature-700 dark:text-nature-300">
+                            <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-nature-200 dark:bg-nature-700 text-nature-700 dark:text-nature-200">
                                 {localItems.length}
                             </span>
                         )}

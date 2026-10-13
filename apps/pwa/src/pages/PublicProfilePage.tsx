@@ -1012,7 +1012,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             <div className="flex gap-2">
                                 <button
                                     onClick={() => setEditingReview(null)}
-                                    className="flex-1 py-3 text-nature-600 dark:text-nature-400 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 dark:hover:text-nature-200 rounded-xl transition-colors border-none cursor-pointer"
+                                    className="flex-1 py-3 text-nature-600 dark:text-nature-300 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 dark:hover:text-nature-200 rounded-xl transition-colors border-none cursor-pointer"
                                 >
                                     Cancel
                                 </button>

@@ -1762,7 +1762,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     aria-label="My location"
                     className={`w-12 h-12 flex items-center justify-center transition-colors ${
                         locating 
-                            ? 'text-blue-600 bg-blue-50/80 dark:bg-blue-900/30' 
+                            ? 'text-blue-600 bg-blue-50/80 dark:bg-blue-900/30 dark:text-blue-300' 
                             : 'text-nature-800 dark:text-oat-50 hover:bg-black/5 dark:hover:bg-white/10'
                     }`}
                     title="My location"

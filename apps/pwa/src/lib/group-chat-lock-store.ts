@@ -7,12 +7,14 @@
  * Its own database (`beanpool-group-chat-locks`), one per web address, as every store of this app is: a node's web app
  * never reads another node's rows. Rows are keyed "<identity public key>/<group id>", so another identity in this
  * browser starts on its own (review of #1788, finding 8). One more row per identity, "<identity public key>/", lists the
- * groups it holds locked, so the conversations list can ask once.
+ * groups it holds locked, so the conversations list can ask once; a group's row and the index row are written in one
+ * transaction (review of #1816, finding 4), so neither is kept without the other.
  *
  * Reads THROW when the store can't be read (no IndexedDB, an open or a transaction that fails): the caller fails closed,
  * never "never held" (confirmation 2 of #1788, finding 1). Writes never throw. Sign Out and the delete at the last
  * community clear it (lib/device-prefs.ts clearAccountStorage); Force Clear & Re-Sync keeps it, as the phone keeps its
- * tables (a security fact, not a cache).
+ * tables (a security fact, not a cache). Another tab's Sign Out deletes the database: this tab lets go of it at once
+ * (`versionchange`), so the delete isn't held up and this tab's next read opens the fresh one (finding 8).
  */
 import type { GroupLockState, GroupLockStore } from './group-chat-keys';
 
@@ -33,7 +35,15 @@ function openDb(): Promise<IDBDatabase> {
             return;
         }
         req.onupgradeneeded = () => { req.result.createObjectStore(STORE); };
-        req.onsuccess = () => resolve(req.result);
+        req.onsuccess = () => {
+            const db = req.result;
+            // A delete or an upgrade from another tab (Sign Out there): close, and open afresh next time.
+            (db as IDBDatabase & { onversionchange: unknown }).onversionchange = () => {
+                try { db.close(); } catch { /* already closed */ }
+                if (dbPromise === p) dbPromise = null;
+            };
+            resolve(db);
+        };
         req.onerror = () => reject(req.error ?? new Error('The group chat lock store did not open.'));
         (req as IDBOpenDBRequest & { onblocked: unknown }).onblocked = () => reject(new Error('The group chat lock store is blocked.'));
     });
@@ -53,23 +63,6 @@ function get(key: string): Promise<unknown> {
     }));
 }
 
-/** Read-modify-write one row in one transaction. Never throws. */
-function update(key: string, change: (prev: unknown) => unknown): Promise<void> {
-    return openDb().then((db) => new Promise<void>((resolve) => {
-        try {
-            const tx = db.transaction(STORE, 'readwrite');
-            const store = tx.objectStore(STORE);
-            const req = store.get(key);
-            req.onsuccess = () => { store.put(change(req.result), key); };
-            tx.oncomplete = () => resolve();
-            tx.onerror = () => resolve();
-            tx.onabort = () => resolve();
-        } catch {
-            resolve();
-        }
-    })).catch(() => { });
-}
-
 function asState(v: unknown): GroupLockState {
     const o = v && typeof v === 'object' ? v as Record<string, unknown> : {};
     const highest = typeof o.highest === 'number' && Number.isSafeInteger(o.highest) && o.highest > 0 ? o.highest : 0;
@@ -79,12 +72,27 @@ function asState(v: unknown): GroupLockState {
 const indexKey = (rowKey: string) => rowKey.slice(0, rowKey.indexOf('/') + 1);
 const groupOf = (rowKey: string) => rowKey.slice(rowKey.indexOf('/') + 1);
 
-function noteInIndex(rowKey: string): Promise<void> {
-    return update(indexKey(rowKey), (prev) => {
-        const list = Array.isArray(prev) ? prev.filter((x): x is string => typeof x === 'string') : [];
-        const g = groupOf(rowKey);
-        return list.includes(g) ? list : [...list, g];
-    });
+/** Change a group's row and list the group in its identity's index row, in ONE transaction (finding 4). Never throws. */
+function updateWithIndex(key: string, change: (prev: unknown) => unknown): Promise<void> {
+    return openDb().then((db) => new Promise<void>((resolve) => {
+        try {
+            const tx = db.transaction(STORE, 'readwrite');
+            const store = tx.objectStore(STORE);
+            const row = store.get(key);
+            row.onsuccess = () => { store.put(change(row.result), key); };
+            const index = store.get(indexKey(key));
+            index.onsuccess = () => {
+                const list = Array.isArray(index.result) ? index.result.filter((x: unknown): x is string => typeof x === 'string') : [];
+                const g = groupOf(key);
+                if (!list.includes(g)) store.put([...list, g], indexKey(key));
+            };
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => resolve();
+            tx.onabort = () => resolve();
+        } catch {
+            resolve();
+        }
+    })).catch(() => { });
 }
 
 /** The browser's store. */
@@ -93,15 +101,13 @@ export const indexedDbGroupLockStore: GroupLockStore = {
         return asState(await get(key));
     },
     async raiseHighest(key, epoch) {
-        await update(key, (prev) => {
+        await updateWithIndex(key, (prev) => {
             const s = asState(prev);
             return { highest: Math.max(s.highest, epoch), locked: true };
         });
-        await noteInIndex(key);
     },
     async markLocked(key) {
-        await update(key, (prev) => ({ ...asState(prev), locked: true }));
-        await noteInIndex(key);
+        await updateWithIndex(key, (prev) => ({ ...asState(prev), locked: true }));
     },
 };
 

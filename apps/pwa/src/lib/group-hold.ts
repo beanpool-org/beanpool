@@ -12,7 +12,7 @@
  * isHeldGroupChat and sealForGroupConversation).
  */
 import { heldConversation, isKnownDmConversation } from './dm-guard';
-import { lockedGroupsOf } from './group-chat-lock-store';
+import { indexedDbGroupLockStore, lockedGroupsOf } from './group-chat-lock-store';
 import { groupsSeenLockedInMemory } from './group-chat-keys';
 
 /** A group id as this app compares it: lower case (a UUID in capitals is the same group). */
@@ -81,5 +81,14 @@ export async function sendRouteOf(identityPub: string, conversationId: string): 
         if (groupsSeenLockedInMemory(identityPub).some((g) => groupIdKey(g) === groupIdKey(conversationId))) return 'group';
         return isKnownDmConversation(conversationId) ? 'as-typed' : 'refuse';
     }
-    return locked.has(groupIdKey(conversationId)) ? 'group' : 'as-typed';
+    const id = groupIdKey(conversationId);
+    if (locked.has(id)) return 'group';
+    // The group's own row too: held there, it is held, whatever became of the index row (finding 4).
+    try {
+        const own = await indexedDbGroupLockStore.load(`${identityPub}/${id}`);
+        if (own.locked || own.highest > 0) return 'group';
+    } catch {
+        return isKnownDmConversation(conversationId) ? 'as-typed' : 'refuse';
+    }
+    return 'as-typed';
 }

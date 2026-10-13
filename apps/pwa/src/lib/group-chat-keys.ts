@@ -26,6 +26,7 @@ import {
     makeEpochRecord, openMyKey, verifyGroupEpochRecord, groupEpochCoversExactly, makeTopUp, GroupKeyNotVerifiedError,
     type GroupEpochProgress, type GroupEpochReason, type GroupEpochRecord, type GroupLineVerifyMemo, type GroupServedWrap,
 } from './group-chat-crypto';
+import { onAccountEpochEnd } from './account-epoch';
 
 /** Exact words the chat shows: the phone's (provenance §7 rule 2; epochs-over-time §1, §5), "phone" said as "browser". */
 export const GROUP_KEY_ROLLBACK_TEXT = 'This node is serving an older key than one this app already holds.';
@@ -629,3 +630,6 @@ export function forgetGroupKeys(): void {
     wrapOpenedThisSession = false;
     wrapFailuresBeforeAnyOpened = 0;
 }
+
+// A Sign Out in another tab of this web address: this tab's opened keys go too (review of #1816, finding 8).
+onAccountEpochEnd((end) => { if (end === 'signed-out') forgetGroupKeys(); });

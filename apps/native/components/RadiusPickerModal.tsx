@@ -177,9 +177,12 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
                         step={1}
                         value={sliderIdx}
                         onValueChange={(val) => setSliderIdx(Math.round(val))}
-                        minimumTrackTintColor={palette.amber600}
-                        maximumTrackTintColor={palette.gray600}
-                        thumbTintColor={colors.surface.subtle}
+                        // Dark: the handle (surface.subtle) was 1.15:1 and the unfilled track (gray600) 2.30:1 on the
+                        // card; amber400 is 10.43:1 and text.muted 3.60:1. The filled part moves to amber400 too, or it
+                        // would sit at 1.52:1 against the lighter unfilled track (2.90:1 now). Light keeps its values.
+                        minimumTrackTintColor={theme === 'dark' ? palette.amber400 : palette.amber600}
+                        maximumTrackTintColor={theme === 'dark' ? colors.text.muted : palette.gray600}
+                        thumbTintColor={theme === 'dark' ? palette.amber400 : colors.surface.subtle}
                         accessibilityLabel="Search radius"
                         accessibilityHint="Adjusts search distance radius"
                     />

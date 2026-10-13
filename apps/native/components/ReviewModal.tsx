@@ -158,12 +158,15 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
     starsRow: { flexDirection: 'row', gap: 8, marginBottom: 24 },
     star: { fontSize: 40 },
     starActive: { color: palette.amber400 },
-    starInactive: { color: colors.border.default },
+    // Empty stars were border.default, 1.2:1 on the card. Dark takes text.muted (3.60:1) rather than text.secondary,
+    // which sits too close to the gold of a chosen star (1.52:1 against amber400).
+    starInactive: { color: theme === 'dark' ? colors.text.muted : colors.text.secondary },
     input: { width: '100%', backgroundColor: colors.surface.app, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 16, fontSize: 14, minHeight: 80, marginBottom: 24, color: colors.text.body },
     buttonRow: { flexDirection: 'row', gap: 12, width: '100%' },
     skipBtn: { flex: 1, backgroundColor: colors.surface.subtle, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
     skipText: { fontWeight: '700', color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 14 },
-    submitBtn: { flex: 1.5, backgroundColor: palette.amber500, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+    // White on amber500 was 2.15:1 in both schemes; amber700 (the post screen's offer button) is 5.02:1.
+    submitBtn: { flex: 1.5, backgroundColor: palette.amber700, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
     submitText: { fontWeight: '700', color: colors.text.inverse, fontSize: 14 },
     btnDisabled: { opacity: 0.7 },
 });

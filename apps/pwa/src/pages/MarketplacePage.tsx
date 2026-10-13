@@ -2381,7 +2381,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     {(['all', 'for-you', 'offer', 'need', 'event', 'poll'] as const).map((t) => {
                         const isSelected = typeFilter === t;
                         let activeStyles = 'bg-nature-800 dark:bg-white text-white dark:text-nature-900 border border-nature-900/10 shadow-sm scale-[1.01]';
-                        if (t === 'offer') activeStyles = 'bg-emerald-600 dark:bg-emerald-500 text-white border border-emerald-700/25 shadow-sm scale-[1.01]';
+                        if (t === 'offer') activeStyles = 'bg-emerald-600 dark:bg-emerald-700 text-white border border-emerald-700/25 shadow-sm scale-[1.01]';
                         if (t === 'need') activeStyles = 'bg-terra-600 dark:bg-terra-500 text-white border border-terra-700/25 shadow-sm scale-[1.01]';
                         if (t === 'poll') activeStyles = 'bg-purple-600 dark:bg-purple-500 text-white border border-purple-700/25 shadow-sm scale-[1.01]';
                         if (t === 'event') activeStyles = 'bg-violet-700 dark:bg-violet-500 text-white border border-violet-800/25 shadow-sm scale-[1.01]';
@@ -2417,7 +2417,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         aria-pressed={beansOnly}
                         className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
                             beansOnly
-                                ? 'bg-emerald-600 dark:bg-emerald-500 text-white border-emerald-700/25 shadow-sm'
+                                ? 'bg-emerald-600 dark:bg-emerald-700 text-white border-emerald-700/25 shadow-sm'
                                 : 'bg-transparent text-nature-500 dark:text-nature-400 border-nature-200 dark:border-nature-800 hover:text-nature-800 dark:hover:text-nature-200'
                         }`}
                         title="Hide listings that also need cash for fuel or materials"

@@ -17,6 +17,12 @@
  *   C.  replication: a whole snapshot, a delta from after the re-key and before the statement, and a copy in pages all
  *       carry both columns and agree (twin parity: exportSyncState and the spec a copy in pages reads by); a standby's merge takes a statement it lacks, never overwrites one
  *       with null, and takes none for another new key
+ *   D.  a DM's answers name its people's former keys (DESIGN-dm-peer-key-pin-fable.md §5 slice 3, P11): Ben's DM list and
+ *       the DM read by id serve formerKeys for Ana₃, each with the date it signed, walking to Ana₁; to someone in the DM
+ *       only (Cat₂ is refused both, and her own list names nothing of Ana's); nothing for an unattested re-key or a
+ *       member never re-keyed, nor on a group's chat; every other field and a DM nobody re-keyed served as before; a
+ *       statement that does not verify is dropped with every older one
+ *   DS. a standby's copy serves the same, and drops a statement its copy took that does not verify
  *
  * Run through the runner: SERVER_SUITES_ONLY=test-key-succession node scripts/run-server-suites.mjs
  */
@@ -27,7 +33,10 @@ delete process.env.NODE_PROFILE;
 import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import * as se from './state-engine.js';
-import { initStateEngine, seedGenesisMember, createGroup, joinGroup } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, createGroup, joinGroup, setNodeRole } from './state-engine.js';
+import { emptyCopiedTables } from './engine/copied-tables.js';
+import { startP2P } from './p2p.js';
+import { addConnector } from './connector-manager.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
@@ -109,6 +118,10 @@ async function main(): Promise<void> {
     const g = createGroup({ name: 'Succession', joinPolicy: 'open', createdBy: ana1.pk }).id;
     joinGroup(g, ben.pk);
     joinGroup(g, cat1.pk);
+    const eve = member('Eve');
+    // Ben's DMs, opened before anyone re-keyed: a re-key moves the participant row to the new key (key-move.ts).
+    const dmWith = (other: Id) => se.createConversation('dm', [ben.pk, other.pk], ben.pk)!.id;
+    const dmAna = dmWith(ana1), dmCat = dmWith(cat1), dmEve = dmWith(eve);
     const AT1 = '2026-10-03T04:00:00.000Z';
 
     // ── R. the route ──────────────────────────────────────────────────────────────────────────────────
@@ -215,6 +228,80 @@ async function main(): Promise<void> {
             'a ninth served would make the walker refuse the whole chain: the cap keeps the eight usable');
     }
 
+    // ── D. a DM's answers name its people's former keys ─────────────────────────────────────────────────
+    console.log('\n── D. the DM list serves formerKeys (DM peer key pin, slice 3) ──');
+    const listOf = (who: Id) => call('GET', who, `/api/messages/conversations/${who.pk}`);
+    const listed = async (who: Id, id: string) => ((await listOf(who)).body?.conversations as any[] | undefined)?.find((c) => c.id === id);
+    let servedToBen: unknown = null;
+    {
+        const l = await listOf(ben);
+        assert(l.status === 200 && JSON.stringify(Object.keys(l.body)) === JSON.stringify(['conversations', 'totalUnread', 'deletedAccounts']),
+            `Ben's list: 200, the same three fields at the top (got ${l.status} ${JSON.stringify(Object.keys(l.body ?? {}))})`);
+        const dm = (l.body.conversations as any[]).find((c) => c.id === dmAna);
+        assert(JSON.stringify([...dm?.participants ?? []].sort()) === JSON.stringify([ben.pk, ana3.pk].sort()), 'the fixture: the re-keys moved the DM to Ana₃');
+        assert(dm?.formerKeys && JSON.stringify(Object.keys(dm.formerKeys)) === JSON.stringify([ana3.pk]),
+            `the DM with Ana₃ names her former keys, and nobody else's (got ${JSON.stringify(dm?.formerKeys && Object.keys(dm.formerKeys))})`);
+        const chain = dm?.formerKeys?.[ana3.pk] ?? [];
+        assert(JSON.stringify(chain.map((f: any) => [f.pubkey, f.at])) === JSON.stringify([[ana2.pk, AT2], [ana1.pk, AT1]]),
+            `Ana₂ then Ana₁, newest first, each with the date it signed (the banner's "re-keyed on") (got ${JSON.stringify(chain.map((f: any) => f.at))})`);
+        assert(walkKeySuccession({ memberPubkey: ana3.pk, formerKeys: chain }, ana1.pk), 'and the chain walks from Ana₃ to Ana₁ on the phone\'s side');
+        servedToBen = dm?.formerKeys;
+
+        const one = await call('GET', ben, `/api/messages/${dmAna}?limit=1`);
+        assert(one.status === 200 && JSON.stringify(one.body.conversation?.formerKeys) === JSON.stringify(dm?.formerKeys),
+            'the DM read by id (the phone\'s refresh of one conversation) serves the same');
+        const theirs = await listed(ana3, dmAna);
+        assert(JSON.stringify(theirs?.formerKeys) === JSON.stringify(dm?.formerKeys), 'Ana₃\'s own list: the same, her own chain under her key');
+
+        const plain = (l.body.conversations as any[]).find((c) => c.id === dmEve);
+        assert(plain && !('formerKeys' in plain), `the DM with Eve, never re-keyed: no formerKeys field (got ${JSON.stringify(plain?.formerKeys)})`);
+        const unattested = (l.body.conversations as any[]).find((c) => c.id === dmCat);
+        assert(unattested && JSON.stringify([...unattested.participants].sort()) === JSON.stringify([ben.pk, cat2.pk].sort()) && !('formerKeys' in unattested),
+            'the DM with Cat₂, re-keyed but unattested: none');
+        const { formerKeys: _f, ...rest } = dm ?? {};
+        assert(JSON.stringify(Object.keys(rest)) === JSON.stringify(Object.keys(plain ?? {})),
+            `every other field of the re-keyed DM is the field set of one nobody re-keyed (${Object.keys(rest).length} fields)`);
+        const engine = se.getConversationsByMember(ben.pk).find((c) => c.id === dmAna);
+        assert(JSON.stringify(rest) === JSON.stringify({ ...engine, unreadCount: dm?.unreadCount, mute: dm?.mute }),
+            'and each as the listing served it before: the engine\'s conversation, its unread count and mute');
+        const others = (l.body.conversations as any[]).filter((c) => c.type !== 'dm');
+        assert(others.length > 0 && others.every((c) => !('formerKeys' in c)) && others.some((c) => c.participants?.includes(ana3.pk)),
+            `not on a group's chat, though Ana₃ is in it (${others.map((c) => c.type).join(', ')})`);
+
+        const catReadsBens = await call('GET', cat2, `/api/messages/conversations/${ben.pk}`);
+        assert(catReadsBens.status === 403 && !JSON.stringify(catReadsBens.body).includes(ana1.pk), `Cat₂ reading Ben's list: 403, nothing of Ana's (got ${catReadsBens.status})`);
+        const catReadsDm = await call('GET', cat2, `/api/messages/${dmAna}?limit=1`);
+        assert(catReadsDm.status === 403 && !JSON.stringify(catReadsDm.body).includes(ana1.pk), `Cat₂ reading the DM by id: 403, nothing of Ana's (got ${catReadsDm.status})`);
+        const catsOwn = await listOf(cat2);
+        assert(catsOwn.status === 200 && !(catsOwn.body.conversations as any[]).some((c) => c.id === dmAna) && !JSON.stringify(catsOwn.body).includes(ana1.pk),
+            'Cat₂\'s own list: the DM is not in it, and nothing names Ana\'s former keys (she shares only the group\'s chat with Ana₃)');
+
+        // The rule itself, for an open node (read auth off: anyone may read anyone's list or DM, keyless or not).
+        const { withDmFormerKeys } = await import('./engine/key-succession.js') as any;
+        const convs = se.getConversationsByMember(ben.pk);
+        assert(typeof withDmFormerKeys === 'function', 'withDmFormerKeys is there');
+        if (typeof withDmFormerKeys === 'function') {
+            const has = (rows: any[]) => rows.some((c) => 'formerKeys' in c);
+            assert(!has(withDmFormerKeys(convs, undefined)), 'a reader with no key (an open node\'s guest): none');
+            assert(!has(withDmFormerKeys(convs, cat2.pk)), 'a member not in the DMs reading Ben\'s list on an open node: none');
+            assert(JSON.stringify(withDmFormerKeys(convs, ben.pk).find((c: any) => c.id === dmAna)?.formerKeys) === JSON.stringify(dm?.formerKeys), 'Ben: Ana₃\'s');
+        }
+
+        // A statement that does not verify: the newest link, then an older one.
+        const sigOf = (pk: string) => row(pk).succession_sig as string;
+        const [sig1, sig2] = [sigOf(ana1.pk), sigOf(ana2.pk)];
+        db.prepare('UPDATE invalidated_keys SET succession_sig = ? WHERE public_key = ?').run(sig1, ana2.pk);
+        const brokenNewest = await listed(ben, dmAna);
+        assert(brokenNewest && !('formerKeys' in brokenNewest), `Ana₂'s statement altered: nothing is served, Ana₁'s with it (got ${JSON.stringify(brokenNewest?.formerKeys)})`);
+        db.prepare('UPDATE invalidated_keys SET succession_sig = ?, succession_at = ? WHERE public_key = ?').run(sig2, AT2, ana2.pk);
+        db.prepare('UPDATE invalidated_keys SET succession_at = ? WHERE public_key = ?').run('2026-10-04T04:00:00.000Z', ana1.pk);
+        const brokenOlder = await listed(ben, dmAna);
+        assert(JSON.stringify(brokenOlder?.formerKeys?.[ana3.pk]?.map((f: any) => f.pubkey)) === JSON.stringify([ana2.pk]),
+            `Ana₁'s date altered: Ana₂ alone is served (got ${JSON.stringify(brokenOlder?.formerKeys)})`);
+        db.prepare('UPDATE invalidated_keys SET succession_at = ? WHERE public_key = ?').run(AT1, ana1.pk);
+        assert(JSON.stringify((await listed(ben, dmAna))?.formerKeys) === JSON.stringify(servedToBen), 'put back: the whole chain again');
+    }
+
     // ── C. replication ────────────────────────────────────────────────────────────────────────────────
     console.log('\n── C. replication ──');
     {
@@ -250,6 +337,38 @@ async function main(): Promise<void> {
         db.prepare('UPDATE invalidated_keys SET succession_sig = NULL, succession_at = NULL, succession_stored_at = NULL WHERE public_key = ?').run(cat1.pk);
         mergeReplicatedInvalidatedKeys([{ ...pick(whole.invalidatedKeys, cat1.pk), successionSig: sig, successionAt: AT1, rekeyedTo: ben.pk }]);
         assert(row(cat1.pk).succession_sig === null, 'a statement carried with another new key than this row\'s is not taken');
+    }
+
+    // ── DS. a standby's copy ──────────────────────────────────────────────────────────────────────────
+    console.log('\n── DS. a standby\'s copy serves the DM\'s formerKeys ──');
+    {
+        // A copy is signed by the main server's node key and taken from a connector the standby knows (test-dm-standby-order).
+        const p2p = await startP2P(0, 0);
+        const nodeId = p2p.peerId.toString();
+        addConnector(`/ip4/127.0.0.1/tcp/4099/p2p/${nodeId}`, 'mirror', 'self-test-peer');
+        const whole = await se.exportSyncState(nodeId);
+        const copyInto = async (payload: any) => {
+            emptyCopiedTables(db);
+            setNodeRole('backup');
+            try { await se.importRemoteState(payload); } finally { setNodeRole('primary'); }
+        };
+        await copyInto(whole);
+        const onCopy = await listed(ben, dmAna);
+        assert(onCopy && JSON.stringify(onCopy.formerKeys) === JSON.stringify(servedToBen),
+            `the copy's Ben's list names Ana₃'s former keys, as the main server's did (got ${JSON.stringify(onCopy?.formerKeys && Object.keys(onCopy.formerKeys))})`);
+        assert(JSON.stringify((await call('GET', ben, `/api/messages/${dmAna}?limit=1`)).body.conversation?.formerKeys) === JSON.stringify(servedToBen), 'and the DM read by id');
+        const plainOnCopy = await listed(ben, dmEve);
+        assert(plainOnCopy && !('formerKeys' in plainOnCopy), 'the DM with Eve: none, on the copy too');
+        // A copy that took a statement Ana₃ never signed (a merge takes them unchecked, key-move.ts): here the main server's
+        // own row was altered before its copy was made.
+        db.prepare('UPDATE invalidated_keys SET succession_sig = ? WHERE public_key = ?').run(row(ana1.pk).succession_sig, ana2.pk);
+        const forged = await se.exportSyncState(nodeId);
+        await copyInto(forged);
+        assert(row(ana2.pk)?.succession_sig === row(ana1.pk)?.succession_sig, 'the fixture: the copy holds the altered statement');
+        const forgedOnCopy = await listed(ben, dmAna);
+        assert(forgedOnCopy && !('formerKeys' in forgedOnCopy), `and serves nothing for it (got ${JSON.stringify(forgedOnCopy?.formerKeys)})`);
+        await copyInto(whole);
+        try { await p2p.stop(); } catch { /* stopping only */ }
     }
 
     console.log(`\n${passed}/${run} passed`);

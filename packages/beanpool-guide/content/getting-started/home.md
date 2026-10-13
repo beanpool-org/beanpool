@@ -2,6 +2,7 @@
 slug: home
 title: Home
 summary: What Home is, which cards it shows on the phone and in the web app, how to add, move or remove them, picking what you're into, and privacy when you sign out.
+help: This is your Home: a few cards on what needs you and what is on nearby. Add a card at the bottom, or tap … on one to move or remove it.
 related: the-top-bar, browsing-the-market, your-profile, finding-a-community
 ---
 

@@ -2,6 +2,7 @@
 slug: the-pulse
 title: The Pulse
 summary: What your neighbours make and share elsewhere, in one feed.
+help: Links your neighbours made or shared elsewhere, in one feed. Tap one to open it.
 related: home, learn, your-channels, reporting, the-bean
 ---
 

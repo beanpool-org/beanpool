@@ -28,6 +28,8 @@ export const ABOUT_SECTION = 'about';
 /** A page's title and summary at most, as the apps' validateGuide takes them. */
 const MAX_TITLE = 120;
 const MAX_SUMMARY = 300;
+/** A page's `help:` line at most: the "?" sheet's body (packages/beanpool-core help-map.ts). */
+const MAX_HELP = 160;
 
 function fail(file, line, message) {
     throw new Error(`${file}${line ? `:${line}` : ''}: ${message}`);
@@ -57,15 +59,16 @@ export function parseGuideMarkdown(source, file = 'guide.md', { allowImages = fa
         if (!meta[key]) fail(file, null, `front matter needs "${key}"`);
     }
     for (const key of Object.keys(meta)) {
-        if (!['slug', 'title', 'summary', 'related', 'video'].includes(key)) fail(file, null, `unknown front matter "${key}"`);
+        if (!['slug', 'title', 'summary', 'related', 'video', 'help'].includes(key)) fail(file, null, `unknown front matter "${key}"`);
     }
     if (!SLUG_RE.test(meta.slug)) fail(file, null, `slug "${meta.slug}" must be lowercase letters, digits and dashes`);
     checkInline(file, null, meta.title);
     checkInline(file, null, meta.summary);
+    if (meta.help !== undefined) checkInline(file, null, meta.help);
     // The limits the apps check every page against (packages/beanpool-core member-guide.ts): one page over them makes
     // the whole guide or manual invalid there, so the build refuses the page instead.
-    for (const [key, max] of [['title', MAX_TITLE], ['summary', MAX_SUMMARY]]) {
-        if (meta[key].length > max) fail(file, null, `${key} is ${meta[key].length} characters; the apps take ${max} at most`);
+    for (const [key, max] of [['title', MAX_TITLE], ['summary', MAX_SUMMARY], ['help', MAX_HELP]]) {
+        if (meta[key] !== undefined && meta[key].length > max) fail(file, null, `${key} is ${meta[key].length} characters; the apps take ${max} at most`);
     }
     const related = meta.related.split(',').map(r => r.trim()).filter(Boolean);
     if (related.length === 0 || related.length > 8) fail(file, null, 'related lists 1 to 8 other pages');
@@ -140,6 +143,7 @@ export function parseGuideMarkdown(source, file = 'guide.md', { allowImages = fa
     if (blocks.length === 0) fail(file, null, 'has no content');
     const page = { slug: meta.slug, title: meta.title, summary: meta.summary, related };
     if (meta.video) page.video = meta.video;
+    if (meta.help) page.help = meta.help;
     page.blocks = blocks;
     return page;
 }

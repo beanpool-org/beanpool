@@ -2,6 +2,7 @@
 slug: notifications
 title: Notifications
 summary: Choose which alerts reach your phone, and when events remind you.
+help: Choose which alerts reach you, and when events remind you.
 related: mute, messages, my-deals, events, holiday-mode, the-top-bar
 ---
 

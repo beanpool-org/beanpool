@@ -34,7 +34,8 @@ export function useCommunityInfo(): CommunityInfo | null {
     const [info, setInfo] = useState<CommunityInfo | null>(null);
     useEffect(() => {
         let cancelled = false;
-        communityInfoOnce().then((i) => { if (!cancelled) setInfo(i); }, () => {});
+        // Inside a promise, so a read that throws at once is a read that failed (as ProjectsPage reads it): hidden.
+        Promise.resolve().then(() => communityInfoOnce()).then((i) => { if (!cancelled) setInfo(i); }, () => {});
         return () => { cancelled = true; };
     }, []);
     return info;

@@ -17,7 +17,8 @@ import { GroupDetailModal } from '../components/GroupDetailModal';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { decisionsOn } from '../lib/node-decisions';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
-import { useFeatureMode } from '../lib/features';
+import { modeFor } from '../lib/features';
+import type { FeatureMode } from '@beanpool/core';
 import { CommonsPreview } from '../components/ShowcasePreviews';
 
 interface Props {
@@ -60,12 +61,13 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [votes, setVotes] = useState(true);
     // Projects and enterprises hold Beans: where the node has Beans off, the Create form offers neither.
     const [beansOn, setBeansOn] = useState(true);
-    const enterprisesMode = useFeatureMode('enterprises');
+    // Enterprises off here and the node shows previews: the Commons shows Example Valley's (lib/features.ts).
+    const [enterprisesMode, setEnterprisesMode] = useState<FeatureMode>('hidden');
     useEffect(() => {
         let cancelled = false;
         Promise.resolve()
             .then(() => communityInfoOnce())
-            .then((info) => { if (!cancelled) { setVotes(decisionsOn(info)); setBeansOn(info?.features?.beans !== false); } })
+            .then((info) => { if (!cancelled) { setVotes(decisionsOn(info)); setBeansOn(info?.features?.beans !== false); setEnterprisesMode(modeFor('enterprises', info)); } })
             .catch(() => { /* Not answered: keep what the page shows; the node refuses a vote itself. */ });
         return () => { cancelled = true; };
     }, []);

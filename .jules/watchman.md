@@ -49,3 +49,9 @@ Format: `## YYYY-MM-DD - [Title]\n**Failure:** [Which test, what error]\n**Root 
 **Root Cause:** The tests expect `/api/marketplace/posts` and `/api/federation/reachable-peers` to be accessible unauthenticated (as they are compose-time / discovery reads), but `ENFORCE_READ_AUTH=true` was causing them to return 401 Unauthorized because they weren't in `PUBLIC_READ_EXACT` in `apps/server/src/https-server.ts`.
 **Fix:** Added `/api/marketplace/posts` and `/api/federation/reachable-peers` to `PUBLIC_READ_EXACT` in `apps/server/src/https-server.ts`.
 **Learning:** Public GET endpoints that aren't authenticated need to be added to `PUBLIC_READ_EXACT` or `PUBLIC_READ_PATTERNS` so that `ENFORCE_READ_AUTH=true` doesn't gate them.
+
+## 2026-10-13 - [test-admin-auth]
+**Failure:** `test-admin-auth.ts` failed at assertion `A2-4: tarpit delay grows with consecutive failures`.
+**Root Cause:** The initial bad password attempt (`bad1`) ran cold scrypt KDF / threadpool initialization taking ~400ms on top of the 250ms tarpit delay, while the second attempt (`bad2`) ran warm scrypt in ~50ms + 500ms tarpit. Under parallel CPU load, `bad1.ms` (685ms) exceeded `bad2.ms` (570ms).
+**Fix:** Added wrong password warmup request and `resetAdminAuthTarpit()` in `test-admin-auth.ts` before checking tarpit delay progression, and updated assertion to account for timing jitter.
+**Learning:** KDF timing variance during cold start/CPU contention can distort total HTTP response time assertions when testing small tarpit increment differences; warming up the execution path stabilizes delay comparison assertions.

@@ -4,15 +4,17 @@
  * on the actions) or `hidden` (as today). The rule is @beanpool/core's `featureModeFor`; this file only reads the sets.
  *
  * - **The node's set** is `features` from GET /api/community/info, read once per page load (lib/visitor-lobby-gate.ts).
- * - **The reader's set** is `features` from /api/community/me or /api/home, today equal to the node's (W1). A screen
- *   that already holds it passes it in; signed out, or before it arrives, the node's stands for it. Nothing here asks
- *   for it, so a preview asks the node for nothing but its info.
+ * - **The reader's set** is `features` from GET /api/community/me (W1's featuresFor), read once per page load and per
+ *   key, and only with a key: a visitor's preview asks the node for nothing but its info. Signed out, before it arrives,
+ *   or from a node older than it, the node's set stands for it. Today the two are equal; when BeanID turns Beans on for
+ *   one verified member, that member's screens go live from this read alone.
  * - **Before the info arrives** every feature reads `hidden`: no screen flashes a preview a live node then takes away.
  */
 
 import { useEffect, useState } from 'react';
 import { featureModeFor, START_COMMUNITY_URL_DEFAULT, type FeatureMode, type ShowcaseFeature } from '@beanpool/core';
-import type { CommunityInfo } from './api';
+import { getCommunityMe, type CommunityInfo } from './api';
+import { loadIdentity } from './identity';
 import { communityInfoOnce } from './visitor-lobby-gate';
 
 type FeatureSet = Record<string, unknown> | null | undefined;
@@ -41,7 +43,50 @@ export function useCommunityInfo(): CommunityInfo | null {
     return info;
 }
 
-/** One feature's mode, read from the node's info (and the reader's set when a screen has it). */
-export function useFeatureMode(feature: ShowcaseFeature, reader?: FeatureSet): FeatureMode {
-    return modeFor(feature, useCommunityInfo(), reader);
+let readerOnce: { key: string; set: Promise<FeatureSet> } | null = null;
+
+/**
+ * The signed reader's own `features` (GET /api/community/me), read once per page load for the key in this browser;
+ * null with no key (no request is made), from a node that sends none, or when the read fails (not kept, so the next
+ * caller asks again).
+ */
+export async function readerFeaturesOnce(): Promise<FeatureSet> {
+    const identity = await loadIdentity().catch(() => null);
+    if (!identity?.publicKey) return null;
+    if (readerOnce?.key !== identity.publicKey) {
+        const key = identity.publicKey;
+        const set = getCommunityMe().then(
+            (me) => {
+                const f = (me as { features?: unknown }).features;
+                return f && typeof f === 'object' ? f as Record<string, unknown> : null;
+            },
+            () => {
+                if (readerOnce?.key === key) readerOnce = null;
+                return null;
+            },
+        );
+        readerOnce = { key, set };
+    }
+    return readerOnce.set;
+}
+
+/** Tests only: forget the reader's set, as a new page load would. */
+export function resetReaderFeaturesOnce(): void {
+    readerOnce = null;
+}
+
+/** The reader's own set; null until it arrives, and for a visitor. */
+export function useReaderFeatures(): FeatureSet {
+    const [set, setSet] = useState<FeatureSet>(null);
+    useEffect(() => {
+        let cancelled = false;
+        readerFeaturesOnce().then((s) => { if (!cancelled) setSet(s); }, () => {});
+        return () => { cancelled = true; };
+    }, []);
+    return set;
+}
+
+/** One feature's mode for this reader: the node's info and the reader's own set (the node's until it arrives). */
+export function useFeatureMode(feature: ShowcaseFeature): FeatureMode {
+    return modeFor(feature, useCommunityInfo(), useReaderFeatures());
 }

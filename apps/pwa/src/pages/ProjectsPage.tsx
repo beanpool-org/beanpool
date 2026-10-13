@@ -17,7 +17,7 @@ import { GroupDetailModal } from '../components/GroupDetailModal';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { decisionsOn } from '../lib/node-decisions';
 import { pledgeClosedLine } from '../lib/enterprise-pledge';
-import { modeFor } from '../lib/features';
+import { modeFor, readerFeaturesOnce } from '../lib/features';
 import type { FeatureMode } from '@beanpool/core';
 import { CommonsPreview } from '../components/ShowcasePreviews';
 
@@ -66,8 +66,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     useEffect(() => {
         let cancelled = false;
         Promise.resolve()
-            .then(() => communityInfoOnce())
-            .then((info) => { if (!cancelled) { setVotes(decisionsOn(info)); setBeansOn(info?.features?.beans !== false); setEnterprisesMode(modeFor('enterprises', info)); } })
+            .then(() => Promise.all([communityInfoOnce(), readerFeaturesOnce()]))
+            .then(([info, reader]) => { if (!cancelled) { setVotes(decisionsOn(info)); setBeansOn(info?.features?.beans !== false); setEnterprisesMode(modeFor('enterprises', info, reader)); } })
             .catch(() => { /* Not answered: keep what the page shows; the node refuses a vote itself. */ });
         return () => { cancelled = true; };
     }, []);

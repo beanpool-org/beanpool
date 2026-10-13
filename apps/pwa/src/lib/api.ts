@@ -381,6 +381,8 @@ export interface CommunityStanding {
     mute: { muted: boolean; until: string | null };
     /** The member's own coarse area (0.1°), or null when they have set none. Absent on a node from before it. */
     area?: { lat: number; lng: number; updatedAt?: string | null } | null;
+    /** The reader's own effective features (lib/features.ts): today the node's. Absent on a node from before it. */
+    features?: Record<string, unknown>;
 }
 
 /** The signer's own standing: members only, and only ever their own (the node reads the signature, not a parameter). */

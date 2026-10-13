@@ -26,8 +26,7 @@ import { PageTitle, useCollapsingTitle, useTabRetapScrollTop } from '../../compo
 import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { ledgerItemNote } from '../../utils/ledger-note';
 import { RepaymentCard } from '../../components/RepaymentCard';
-import { useNodeProfile } from '../../utils/use-node-profile';
-import { showcaseMode } from '../../utils/node-profile';
+import { useShowcaseMode } from '../../utils/use-reader-features';
 import { LocalCommunityMark, LocalCommunitySheet, ExampleHeader } from '../../components/showcase/LocalCommunityMark';
 import { sampleBalance, sampleTransactions, SAMPLE_MEMBER } from '../../components/showcase/sample-screens';
 import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../../utils/credit-line-card';
@@ -59,7 +58,7 @@ export default function LedgerScreen() {
     // On a node that previews Beans (the showcase, DESIGN-global-showcase-fable §1 row 3), Example Valley's ledger.
     // The same screen either way: in preview it reads Example Valley (components/showcase/sample-screens.ts) instead of
     // the node, and every press that would move Beans or export opens the marker's sheet.
-    const beansMode = showcaseMode('beans', useNodeProfile()?.features);
+    const beansMode = useShowcaseMode('beans');
     const preview = beansMode === 'preview';
     const [sheetOpen, setSheetOpen] = useState(false);
     const [keyboardHeight, setKeyboardHeight] = useState(0);

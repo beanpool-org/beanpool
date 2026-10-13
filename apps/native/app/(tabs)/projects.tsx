@@ -5,7 +5,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { getBalance, getTreasuries, getDecisions, getAllCommunityMembers, fetchGroups, type DecisionWithTally, type MyPoolVoting, type TreasurySummary, type GroupItem } from '../../utils/db';
 import { loadIdentity } from '../../utils/identity';
 import { CurrencyDisplay } from '../../components/CurrencyDisplay';
-import { useNodeProfile } from '../../utils/use-node-profile';
+import { useReaderFeatures } from '../../utils/use-reader-features';
 import { beansOn, showcaseMode } from '../../utils/node-profile';
 import { CommonsPreview } from '../../components/showcase/Previews';
 import { commonsSections, commonsSectionFor, commonsHeading, groupKindChips, commonsGroupRows, commonsGroupsEmpty, isProject, type CommonsSection, type CommonsGroupRow, type GroupKind } from '../../utils/commons-sections';
@@ -39,17 +39,18 @@ export default function ProjectsScreen() {
     const [balanceState, setBalanceState] = useState<any>({ earnedCredit: 0, commons: 0 });
     // A community with Beans off (the worldwide one) hides this tab, but a link still opens it (Talk's "Find groups",
     // the header's vote icon): there it draws no pool balance, no voice credits and no pool info, which are all Beans.
-    const nodeProfile = useNodeProfile();
-    const showsBeans = beansOn(nodeProfile?.features);
+    // The reader's own features (the node's, narrowed by this account's on /api/community/me: design §4).
+    const reader = useReaderFeatures();
+    const showsBeans = beansOn(reader.effective);
     // Enterprises and Decide previewed from Example Valley where the node shows its switched-off features (§1 row 6).
-    const enterprisesPreview = showcaseMode('enterprises', nodeProfile?.features) === 'preview';
+    const enterprisesPreview = showcaseMode('enterprises', reader.node, reader.reader) === 'preview';
     // Decide only where formal Decisions are on; Groups is one list of projects, enterprises and chat groups, with
     // projects and enterprises only where the node has them (utils/commons-sections.ts). With Groups all that is left
     // (the worldwide community, reached from Talk's "Find groups"), this is its groups list.
-    const sections = commonsSections(nodeProfile?.features);
+    const sections = commonsSections(reader.effective);
     const showsDecide = sections.includes('decide');
-    const heading = commonsHeading(nodeProfile?.features);
-    const kindChips = groupKindChips(nodeProfile?.features);
+    const heading = commonsHeading(reader.effective);
+    const kindChips = groupKindChips(reader.effective);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
     const [treasuries, setTreasuries] = useState<any[]>([]);
     const [membersList, setMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
@@ -58,7 +59,7 @@ export default function ProjectsScreen() {
     const [groupKind, setGroupKind] = useState<GroupKind>('all');
     // The one drawn: the section picked (or linked to), where this node shows it, else its first. So a section the
     // node's profile takes away is never drawn, not even before the profile has arrived and been acted on.
-    const activeSection = commonsSectionFor(pickedSection, nodeProfile?.features);
+    const activeSection = commonsSectionFor(pickedSection, reader.effective);
     // The header's vote icon lands here with section=decide. Commons may already be open on another section,
     // so switch to Decide, on its Open list (the vote is there, not in History), and show it from the top, then
     // clear the param so a later visit keeps its place.
@@ -321,9 +322,9 @@ export default function ProjectsScreen() {
             if (!isProject(a) && isProject(b)) return 1;
             return (b.liveOffers || 0) - (a.liveOffers || 0);
         });
-        return commonsGroupRows(groupKind, groups, sorted, yourGroups, nodeProfile?.features);
-    }, [groups, enterprises, yourGroups, groupKind, nodeProfile?.features]);
-    const groupsEmpty = commonsGroupsEmpty(groupKind, nodeProfile?.features);
+        return commonsGroupRows(groupKind, groups, sorted, yourGroups, reader.effective);
+    }, [groups, enterprises, yourGroups, groupKind, reader.effective]);
+    const groupsEmpty = commonsGroupsEmpty(groupKind, reader.effective);
     // The + on Groups: a project or enterprise on those chips, otherwise the create form (which offers both, with Beans).
     const startsProject = activeSection === 'groups' && (groupKind === 'projects' || groupKind === 'enterprises');
     const openProposeProject = async () => {

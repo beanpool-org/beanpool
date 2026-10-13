@@ -29,6 +29,11 @@
  *     600-byte `settings`, a 9 KB body, a repeated id and a bad date are refused whole with their sentence; a version-1
  *     body is still kept after it, and last write still wins by `updatedAt` across the two versions; a stored version-2
  *     value is read through core's tolerant reader (a malformed instance dropped, the rest kept).
+ * 10. The tour (`tour`, scratch/global-node/DESIGN-getting-started-fable.md §2 State, slice T1): a member's Done, Skip or
+ *     "Take the tour again" is kept on the account and served in their own read and as `me.tour` in GET /api/home (so
+ *     the card never returns on another device); a shape other than { v: 1, state, at } is refused whole; a future date
+ *     is held to now; another member's read never serves it; a visitor keeps none; a member who never ended the tour
+ *     reads none and `me.tour` is null.
  *
  * Run (read auth on, the default; the opt-out is a second registered run):
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-home-preferences.ts
@@ -409,6 +414,40 @@ async function main(): Promise<void> {
     assert(JSON.stringify((await read(ida)).body?.['home.layout']) === JSON.stringify({
         v: 2, cards: [{ id: 'steps', type: 'steps' }, { id: 'zzz-1', type: 'zzz', settings: { a: 1 } }], dismissed: {}, updatedAt: '2026-10-01T00:00:00.000Z',
     }), `a stored version-2 value is read tolerantly: the malformed and repeated instances dropped, the unknown type kept (${JSON.stringify((await read(ida)).body?.['home.layout'])})`);
+
+    // ── 10. The tour, kept on the account ──
+    console.log('\n— 10. the tour record: done, skipped or open, on the account —');
+    const tia = makeMember('Tia');
+    const homeOf = (who: Id) => call('GET', '/api/home', who);
+    const tourBefore = await homeOf(tia);
+    assert(tourBefore.status === 200 && tourBefore.body?.me?.tour === null && !('tour' in (await read(tia)).body),
+        `a member who never ended the tour reads none, and me.tour is null (${JSON.stringify(tourBefore.body?.me?.tour)})`);
+    const doneAt = iso(-5_000);
+    const done = await save(tia, { tour: { v: 1, state: 'done', at: doneAt } });
+    assert(done.status === 200 && JSON.stringify(done.body?.tour) === JSON.stringify({ v: 1, state: 'done', at: doneAt }),
+        `Done is kept, and the answer carries it back (${show(done)})`);
+    const after = await homeOf(tia);
+    assert(after.body?.me?.tour?.state === 'done' && after.body?.me?.tour?.at === doneAt,
+        `GET /api/home serves it as me.tour, so no device draws Getting started again (${JSON.stringify(after.body?.me?.tour)})`);
+    assert((await read(tia)).body?.tour?.state === 'done', 'and her own preferences read serves it');
+    const again = await save(tia, { tour: { v: 1, state: 'open' } });
+    assert(again.status === 200 && again.body?.tour?.state === 'open' && Math.abs(Date.parse(again.body?.tour?.at) - Date.now()) < 5_000,
+        `Take the tour again writes open, stamped now when sent without a date (${show(again)})`);
+    const tourAhead = await save(tia, { tour: { v: 1, state: 'skipped', at: iso(3_600_000) } });
+    assert(tourAhead.status === 200 && Date.parse(tourAhead.body?.tour?.at) <= Date.now(), `a date ahead of the node's is held to now (${tourAhead.body?.tour?.at})`);
+    const keptTour = stored(tia.pk, 'tour');
+    for (const bad of [{ v: 1, state: 'later' }, { v: 2, state: 'done' }, 'done', { v: 1, state: 'done', at: 'soon' }, null]) {
+        const refused = await save(tia, { tour: bad, notify_chat: false });
+        assert(refused.status === 400 && stored(tia.pk, 'tour') === keptTour && stored(tia.pk, 'notify_chat') === undefined,
+            `refused whole, nothing written: ${JSON.stringify(bad)} (${show(refused)})`);
+    }
+    const peek = await read(tia, ann);
+    assert(!(peek.body && typeof peek.body === 'object' && 'tour' in peek.body), `another member's read never serves it (${peek.status})`);
+    const vis = makeMember('Vis', true);
+    const visitorTour = await save(vis, { tour: { v: 1, state: 'done' } });
+    assert(visitorTour.status !== 200 && stored(vis.pk, 'tour') === undefined, `a visitor keeps none (${visitorTour.status})`);
+    db.prepare('INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)').run(ida.pk, 'tour', '{"v":1,"state":"maybe"}');
+    assert((await homeOf(ida)).body?.me?.tour === null && !('tour' in (await read(ida)).body), 'a stored value that is no record is served as none');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -39,6 +39,9 @@ describe('People on a community with members on demand', () => {
     let whole: MockInstance<typeof api.getMembers>;
     beforeEach(() => {
         vi.restoreAllMocks();
+        // Each case starts as a browser the node has never answered (review of #1861 fix round, F1): a node's last answer
+        // is kept in this store, so one case's answer must not decide the next.
+        localStorage.clear();
         vi.spyOn(api, 'getFriends').mockResolvedValue([]);
         whole = vi.spyOn(api, 'getMembers').mockResolvedValue([]);
         cards = vi.spyOn(api, 'getMemberCards').mockImplementation(async (path: string) => {

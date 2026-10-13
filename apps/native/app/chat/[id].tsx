@@ -30,7 +30,7 @@ import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from '../../components/chat/ChatBanners';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
-import { isDmNotLocked, dmNotLockedLine, restoredDraft } from '../../utils/dm-lock';
+import { refusedSendNotice, restoredDraft } from '../../utils/dm-lock';
 import {
     buildChatListItems, chatActionErrorMessage, dmQuoteFor, hasAnyAction, isTombstone, messageActions, tombstoneText,
     shouldFollowNewMessages, shouldShowChatLoadError, type ChatViewer,
@@ -574,12 +574,13 @@ function ChatScreen() {
             }
             setLockNotice(null);
         } catch (err: any) {
-            if (isDmNotLocked(err)) {
-                // Nothing went. The words go back in the box (with anything typed since), an edit stays an edit, and
-                // the next Send tries the lock again.
+            const refused = refusedSendNotice(err, peerPubkey ? peerName : null);
+            if (refused) {
+                // Nothing went (the line couldn't be locked, or the phone couldn't read its group key memory). The words
+                // go back in the box (with anything typed since), an edit stays an edit, and the next Send tries again.
                 hapticWarning();
                 composerRef.current?.setText(restoredDraft(currentDraft, composerRef.current?.currentText() ?? ''));
-                setLockNotice(dmNotLockedLine(peerPubkey ? peerName : null));
+                setLockNotice(refused);
                 return;
             }
             Alert.alert(wasEditing ? "Edit Failed" : "Message Failed", err.message || "Could not execute send.");
@@ -652,7 +653,8 @@ function ChatScreen() {
                     await insertMessage(id as string, identity.publicKey, item.text, metaStr, item.id);
                     setLockNotice(null);
                 } catch (e: any) {
-                    if (isDmNotLocked(e)) setLockNotice(dmNotLockedLine(peerPubkey ? peerName : null));
+                    const refused = refusedSendNotice(e, peerPubkey ? peerName : null);
+                    if (refused) setLockNotice(refused);
                     else Alert.alert('Message Failed', e.message || 'Could not resend.');
                 }
                 loadMessages(true);
@@ -688,7 +690,8 @@ function ChatScreen() {
                 loadMessages();
             } catch (err: any) {
                 hapticWarning();
-                if (isDmNotLocked(err)) setLockNotice(dmNotLockedLine(peerPubkey ? peerName : null));
+                const refused = refusedSendNotice(err, peerPubkey ? peerName : null);
+                if (refused) setLockNotice(refused);
                 else Alert.alert('Image Failed', err.message || 'Could not send image.');
             } finally {
                 sendingRef.current = false;

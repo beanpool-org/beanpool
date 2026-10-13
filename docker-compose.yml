@@ -126,6 +126,9 @@ services:
       - ALERTS_WEBHOOK_URL=${ALERTS_WEBHOOK_URL:-}
       - ALERTS_WEBHOOK_FORMAT=${ALERTS_WEBHOOK_FORMAT:-}
       - ALERTS_WEBHOOK_TOKEN=${ALERTS_WEBHOOK_TOKEN:-}
+      # Reports coming in: the first is told at once, the rest of this many minutes as one line (1 to 1440). EMPTY = 60.
+      # A child-safety report is always told at once.
+      - ALERTS_REPORT_FOLD_MINUTES=${ALERTS_REPORT_FOLD_MINUTES:-}
       # The Expo access token this server's push notifications go with (Authorization: Bearer). EMPTY = pushes go
       # without one, as they always have. Once BeanPool's Expo project asks for it, a phone's push token alone can no
       # longer send that phone a notice. From .env only: never stored in node_config, never put in a backup, never logged.

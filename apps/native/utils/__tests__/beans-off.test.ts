@@ -131,7 +131,8 @@ describe('the screens draw Beans only behind beansOn (source check)', () => {
         expect(src.split('{showsBeans && (')[2]).toContain("{item.credits ?? '?'}");
         const market = read('app/(tabs)/market.tsx');
         const mount = market.slice(market.indexOf('<MyDealsSheet'), market.indexOf('/>', market.indexOf('<MyDealsSheet')));
-        expect(mount).toContain('showsBeans={showsBeans}');
+        // Where deals are previewed, the sample's amounts are Example Valley's Beans, drawn as a local community's are.
+        expect(mount).toContain('showsBeans={showsBeans || dealsPreview}');
     });
 
     it('a chat about a post: its header has no "0 Beans"', () => {

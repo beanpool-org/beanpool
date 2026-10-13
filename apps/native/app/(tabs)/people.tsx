@@ -21,9 +21,12 @@ import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/talk-views';
 import { useNodeProfile } from '../../utils/use-node-profile';
+import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
+import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import { invitesOn } from '../../utils/node-profile';
 import {
-    GUEST_DOOR_BUTTON, GUEST_DOOR_TEXT, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, onlyAdminsInvite, mayInviteHere,
+    GUEST_DOOR_BUTTON, GUEST_DOOR_TEXT, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, bringSomeoneHereText, onlyAdminsInvite, mayInviteHere,
     mayMakeOfflineTicket, adminsOnlyText, adminsOnlyRefusal, offlineTicketRefusal, type InviteRole,
 } from '../../utils/invite-entries';
 import { doorOfferedToAccount, isGlobalCommunity } from '../../utils/global-join-existing';
@@ -198,6 +201,13 @@ export default function PeopleScreen() {
     // Where the node takes no invites (the worldwide community: anyone joins with a sign-in), nothing here makes one: no
     // code, QR or offline ticket, only the community's own link to share. Unknown (not heard yet, or an older node): as before.
     const makesInvites = invitesOn(nodeProfile?.features);
+    // Where the node previews invites (the showcase), how a local community grows, as the marker's line (design §1 row 8).
+    // `undefined` until the phone's copy of the node's profile is read (a moment, no network): the member's own codes are
+    // not asked for until then, and never where invites are previewed (the node takes none).
+    const invitesMode = useShowcaseModeOnceKnown('invites');
+    const invitesPreview = invitesMode === 'preview';
+    const invitesModeNow = useRef(invitesMode);
+    invitesModeNow.current = invitesMode;
     // A guest on a node that takes no invites has no code to enter: say so rather than offer a form every code fails.
     const guestNoInvites = isGuest && !makesInvites;
     // A guest of the global community joins it through its door, as the account on this phone (utils/global-join-existing.ts),
@@ -261,7 +271,6 @@ export default function PeopleScreen() {
             loadMembers('', sortOption);
         }
         if (view === 'invites') {
-            loadOfflineInvites();
             checkOnlineStatus();
         }
         AsyncStorage.getItem('beanpool_anchor_url').then(async val => {
@@ -291,6 +300,10 @@ export default function PeopleScreen() {
             }).catch(() => {});
         }
     }, [view]);
+
+    useEffect(() => {
+        if (view === 'invites' && invitesMode !== undefined && invitesMode !== 'preview') loadOfflineInvites();
+    }, [view, invitesMode]);
 
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener('sync_data_updated', () => {
@@ -334,6 +347,8 @@ export default function PeopleScreen() {
             const activeAnchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
             if (activeAnchorUrl) {
                 const res = await fetch(`${activeAnchorUrl}/api/invite/mine/${identity.publicKey}`);
+                // An answer that lands after a switch to preview is dropped.
+                if (invitesModeNow.current === 'preview') return;
                 if (res.ok) {
                     const data = await res.json();
                     if (data && data.invites) {
@@ -445,7 +460,7 @@ export default function PeopleScreen() {
                     // The node takes no invites (this phone's copy of its profile was older than the switch): say so, and
                     // make no offline ticket, which it would refuse just the same.
                     const body = await res.json().catch(() => null);
-                    const refusal = invitesOffRefusal(res.status, body);
+                    const refusal = invitesOffRefusal(res.status, body, nodeProfile?.features);
                     if (refusal) {
                         Alert.alert('No invites here', refusal);
                         return;
@@ -991,7 +1006,8 @@ export default function PeopleScreen() {
                                 // No invites here: anyone joins with a sign-in, so the community's link is all there is to share.
                                 <>
                                     <Text style={styles.sectionHeader}>📤 Bring someone here</Text>
-                                    <Text style={styles.sectionDesc}>This community doesn’t use invites. Anyone can join it with a sign-in in the BeanPool app, so just share its link.</Text>
+                                    <Text style={styles.sectionDesc}>{bringSomeoneHereText(nodeProfile?.features)}</Text>
+                                    {invitesPreview && <LocalCommunityMark variant="line" feature="invites" text={LOCAL_COMMUNITY_LINES.invites} />}
                                     <Pressable
                                         accessibilityRole="button"
                                         accessibilityLabel="Share this community's link"

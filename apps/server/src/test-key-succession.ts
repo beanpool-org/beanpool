@@ -34,8 +34,6 @@ import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { mergeReplicatedInvalidatedKeys } from './engine/key-move.js';
 import { dmPublicKeyOf, keySuccessionCanonical, makeKeySuccession, walkKeySuccession } from '@beanpool/core';
 import { ed25519 } from '@noble/curves/ed25519.js';
-import { sha256 } from '@noble/hashes/sha2.js';
-import { utf8ToBytes } from '@noble/hashes/utils.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -126,7 +124,7 @@ async function main(): Promise<void> {
         const r0 = await rosterRow(ben, g, ana2.pk);
         assert(Array.isArray(r0?.formerKeys) && r0.formerKeys.length === 0, `S. before the statement, Ana₂'s roster row serves no former key (got ${JSON.stringify(r0?.formerKeys)})`);
 
-        const byOld = ed25519.sign(sha256(utf8ToBytes(keySuccessionCanonical(ana1.pk, ana2.pk, AT1))), Buffer.from(ana1.seedHex, 'hex'));
+        const byOld = ed25519.sign(crypto.createHash('sha256').update(keySuccessionCanonical(ana1.pk, ana2.pk, AT1), 'utf8').digest(), Buffer.from(ana1.seedHex, 'hex'));
         const bad = await call('POST', ana2, ROUTE, { oldPubkey: ana1.pk, at: AT1, sig: Buffer.from(byOld).toString('base64') });
         assert(bad.status === 400, `a statement the OLD key signed: 400 (got ${bad.status})`);
         const byBen = statementOf(ben, ana1, AT1);

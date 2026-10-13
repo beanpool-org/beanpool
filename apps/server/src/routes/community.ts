@@ -2119,8 +2119,9 @@ router.post('/api/reports', async (ctx) => {
     if (pending) {
         // Reported again with "Child safety" after another reason (the review of #1895, finding 3): the report on file
         // becomes child safety and is told as a new one would be. Once: it is child safety from then on, and a member's
-        // are bounded like any (alerts.ts childAtOnce).
-        if (reportKind(reason) === 'child safety' && reportKind(pending.reason) !== 'child safety') {
+        // are bounded like any (alerts.ts childAtOnce). Judged on the 500 characters the queue keeps, as the report on
+        // file was: words past them would make every repeat look like a change.
+        if (reportKind(reason.slice(0, 500)) === 'child safety' && reportKind(pending.reason) !== 'child safety') {
             const changed = updatePendingReportReason(pending.id, reason);
             if (changed) {
                 noteNewReport(reason, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A report changed to child safety could not be told: ${e instanceof Error ? e.message : String(e)}`));

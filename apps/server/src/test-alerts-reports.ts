@@ -683,6 +683,25 @@ async function main(): Promise<void> {
     assert(down12.json?.duplicate === true && ownerPushes().length === pUp12 + 1 && topicHits().length === hUp12 + 1
         && rowsDown12.length === 1 && alerts.pickedChildSafety(rowsDown12[0].reason),
         '12. another reason after it changes nothing: the report stays child safety, and nothing is told');
+    // Its words saying "child safety" past the 500 the queue keeps (the check of #1895's fix round, finding 1): the same
+    // request again is a plain repeat, not a change to child safety, so it rewrites nothing and adds nothing to a count.
+    const longR = join('LongLenaR');
+    const longT = join('LongTedR');
+    const longReason = `Spam or scam: ${'x'.repeat(600)} child safety`;
+    const long12 = await report(longR, longT, longReason);
+    await settle();
+    const longAt = () => (db.prepare(`SELECT reason, updated_at FROM abuse_reports WHERE reporter_pubkey = ? AND target_pubkey = ?`).all(longR.pk, longT.pk) as Array<{ reason: string; updated_at: string | null }>);
+    const firstLong = longAt();
+    const pLong = ownerPushes().length;
+    const hLong = topicHits().length;
+    for (let i = 0; i < 2; i++) {
+        await report(longR, longT, longReason);
+        await settle();
+    }
+    const againLong = longAt();
+    assert(long12.status === 200 && firstLong.length === 1 && firstLong[0].reason.length === 500 && againLong.length === 1
+        && againLong[0].updated_at === firstLong[0].updated_at && ownerPushes().length === pLong && topicHits().length === hLong,
+        `12. a long report sent again twice rewrites nothing and tells nothing (${firstLong[0]?.updated_at} → ${againLong[0]?.updated_at}, ${ownerPushes().length - pLong} pushes)`);
     const plain12 = await report(plain, targets[0], 'Spam or scam');
     await settle();
     const last12 = topicHits().at(-1)!;

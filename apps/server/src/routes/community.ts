@@ -2126,7 +2126,7 @@ router.post('/api/reports', async (ctx) => {
     }
     // The owners and admins hear of it (by kind and count, never who or what): not awaited, so a slow alert channel
     // never holds the reporter's answer.
-    noteNewReport(reason).catch((e) => logger.warn('SYS', `[Alerts] A new report could not be told: ${e instanceof Error ? e.message : String(e)}`));
+    noteNewReport(reason, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A new report could not be told: ${e instanceof Error ? e.message : String(e)}`));
     ctx.body = { success: true, report };
 });
 

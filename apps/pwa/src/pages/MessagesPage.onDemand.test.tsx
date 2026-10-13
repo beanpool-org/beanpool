@@ -3,12 +3,15 @@
  * DESIGN-global-members-by-area §2.3–§2.4, slice M3): the New DM picker is the people already talked to plus a search
  * the node answers; the names no row carries come by key; and a community without the switch reads as before.
  */
-import { render, screen, act, waitFor, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, act, waitFor, fireEvent, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getMembers, getMemberCards, createConversationApi, type Conversation, type ApiMessage } from '../lib/api';
+import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
+import { forgetGroupKeys } from '../lib/group-chat-keys';
+import { getMembers, getMemberCards, getGroupChat, createConversationApi, type Conversation, type ApiMessage } from '../lib/api';
 
 if (typeof window !== 'undefined' && window.HTMLElement) window.HTMLElement.prototype.scrollIntoView = vi.fn();
 
@@ -47,6 +50,13 @@ vi.mock('../lib/api', () => ({
     getConversationMessages: vi.fn(async (id: string) => ({
         conversation: (state.conversations as Conversation[]).find(c => c.id === id), messages: state.messages[id] || [],
     })),
+    // A group's chat comes by its own route (#1816, #1841): its lines, unlocked here, and its roster.
+    getGroupChat: vi.fn(async (id: string) => ({
+        conversation: (state.conversations as Conversation[]).find(c => c.id === id), messages: state.messages[id] || [], canPost: true,
+    })),
+    getGroupMembers: vi.fn(async (id: string) => ((state.conversations as Conversation[]).find(c => c.id === id)?.participants ?? [])
+        .map(pk => ({ groupId: id, memberPubkey: pk, callsign: null, role: 'member', status: 'active', joinedAt: '' }))),
+    groupKeysNet: { get: vi.fn(), post: vi.fn() },
     getMembers: vi.fn(async () => [
         { publicKey: 'b'.repeat(64), callsign: 'Bob' }, { publicKey: 'c'.repeat(64), callsign: 'Cleo' },
     ]),
@@ -81,10 +91,15 @@ const keysAsked = () => vi.mocked(getMemberCards).mock.calls.map(c => c[0]).filt
 describe('Messages with members on demand', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        // A store that opens, as in a browser: a group never seen locked here reads as unlocked (group-chat test's setup).
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        resetGroupChatLockStoreForTest();
+        forgetGroupKeys();
         info.value = GLOBAL;
         state.conversations = [dm('conv-bob', BOB, 'Bob'), dm('conv-blocked', BLOCKED, 'Blocked')];
         state.messages = {};
     });
+    afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
     it('New DM: the people already talked to, then a search the node answers; never the whole directory', async () => {
         render(<MessagesPage identity={identity} />);
@@ -125,7 +140,8 @@ describe('Messages with members on demand', () => {
         state.messages = { grp: [{ id: 'm1', conversationId: 'grp', authorPubkey: CLEO, ciphertext: 'Seeds on Saturday', nonce: '', type: 'text', timestamp: '2026-10-01T00:00:00Z' } as unknown as ApiMessage] };
         render(<MessagesPage identity={identity} openConversationId="grp" />);
         await screen.findByText('Seeds on Saturday');
-        await waitFor(() => expect(screen.getAllByText('Cleo').length).toBeGreaterThan(0));
+        await waitFor(() => expect(screen.getByTestId('group-line-author')).toHaveTextContent('Cleo'));
+        expect(getGroupChat).toHaveBeenCalledWith('grp');
         const asked = keysAsked();
         // Never the member's own key or a blocked one; each asked once; the directory never read.
         expect(new Set(asked)).toEqual(new Set([CLEO, BOB]));

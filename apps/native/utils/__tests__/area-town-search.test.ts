@@ -40,8 +40,9 @@ vi.mock('react-native', () => {
 });
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors } = await import('../../constants/colors');
+    const { onboardingColors } = await import('../onboarding-colors');
     const ctx = { colors: lightColors, theme: 'light' };
-    return { useTheme: () => ctx, useStyles: (f: (t: unknown) => unknown) => f(ctx) };
+    return { useTheme: () => ctx, useStyles: (f: (t: unknown) => unknown) => f(ctx), useOnboardingColors: () => onboardingColors('light') };
 });
 vi.mock('expo-constants', () => ({ default: { expoConfig: { version: '1.0.0' } } }));
 vi.mock('expo-location', () => ({ Accuracy: { Low: 2 }, getForegroundPermissionsAsync: vi.fn(), requestForegroundPermissionsAsync: vi.fn(), getCurrentPositionAsync: vi.fn() }));

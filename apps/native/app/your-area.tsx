@@ -6,9 +6,10 @@
  *
  * The root stack draws no headers, so this screen draws the standard one, as find-community.tsx does: ← Back and its
  * name, under react-native-safe-area-context's top inset (React Native's own SafeAreaView gives none on Android under
- * edge-to-edge), and the bottom inset under the scroll. Light only, like the signup wizard whose step it shows.
+ * edge-to-edge), and the bottom inset under the scroll. Light or dark, like the signup wizard whose step it shows; the
+ * header bar stays dark in both, so the status-bar icons stay light.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { View, Text, Pressable, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -21,9 +22,12 @@ import { useIdentity } from './IdentityContext';
 import { useNodeProfile } from '../utils/use-node-profile';
 import { AreaPicker } from '../components/AreaPicker';
 import { describeArea, readMemberArea, recallAreaPlace, rememberAreaPlace, writeMemberArea, type MemberArea } from '../utils/member-area';
-import { colors, palette } from '../constants/colors';
+import { palette, type AppColors } from '../constants/colors';
+import { useOnboardingColors } from './ThemeContext';
 
 export default function YourAreaScreen() {
+    const { colors, dark } = useOnboardingColors();
+    const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     const { identity } = useIdentity();
     const nodeProfile = useNodeProfile();
     const insets = useSafeAreaInsets();
@@ -91,7 +95,7 @@ export default function YourAreaScreen() {
                             accessibilityLabel="Clear your area"
                             testID="your-area-clear"
                         >
-                            {clearing ? <ActivityIndicator color={palette.red600 || '#dc2626'} /> : <Text style={styles.clearText}>Clear</Text>}
+                            {clearing ? <ActivityIndicator color={dark ? colors.feedback.danger.fg : (palette.red600 || '#dc2626')} /> : <Text style={styles.clearText}>Clear</Text>}
                         </Pressable>
                     )}
                     {error && <Text style={styles.error}>{error}</Text>}
@@ -116,17 +120,19 @@ export default function YourAreaScreen() {
     );
 }
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.surface.page },
-    header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: colors.text.heading },
-    backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
-    headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase' },
-    headerSpacer: { width: 48 },
-    scroll: { padding: 16 },
-    card: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, marginBottom: 12 },
-    current: { fontSize: 17, fontWeight: '700', color: colors.text.heading, marginBottom: 8 },
-    clearBtn: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: palette.red600 || '#dc2626', alignItems: 'center', justifyContent: 'center', padding: 12 },
-    clearText: { color: palette.red600 || '#dc2626', fontSize: 15, fontWeight: '700' },
-    disabled: { opacity: 0.5 },
-    error: { color: palette.red600 || '#dc2626', fontSize: 13, marginTop: 8, textAlign: 'center' },
-});
+function makeStyles(colors: AppColors, dark: boolean) {
+    return StyleSheet.create({
+        container: { flex: 1, backgroundColor: colors.surface.page },
+        header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, minHeight: 56, borderBottomWidth: 1, borderBottomColor: colors.border.default, backgroundColor: dark ? colors.surface.card : colors.text.heading },
+        backButton: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
+        headerTitle: { flex: 1, textAlign: 'center', fontSize: 16, fontWeight: 'bold', color: colors.brand.primary, letterSpacing: 0.5, textTransform: 'uppercase' },
+        headerSpacer: { width: 48 },
+        scroll: { padding: 16 },
+        card: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, marginBottom: 12 },
+        current: { fontSize: 17, fontWeight: '700', color: colors.text.heading, marginBottom: 8 },
+        clearBtn: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: dark ? colors.feedback.danger.fg : (palette.red600 || '#dc2626'), alignItems: 'center', justifyContent: 'center', padding: 12 },
+        clearText: { color: dark ? colors.feedback.danger.fg : (palette.red600 || '#dc2626'), fontSize: 15, fontWeight: '700' },
+        disabled: { opacity: 0.5 },
+        error: { color: dark ? colors.feedback.danger.fg : (palette.red600 || '#dc2626'), fontSize: 13, marginTop: 8, textAlign: 'center' },
+    });
+}

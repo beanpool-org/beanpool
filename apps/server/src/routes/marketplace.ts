@@ -40,6 +40,7 @@ import { CONVENOR_PAUSED_CODE } from '../engine/posts.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { parseDistanceQuery } from './distance-query.js';
 import { getProfileSwitches, nearbyListingsLimits } from '../config/node-profile.js';
+import { nearbySetHash, nearbySetMemory } from '../engine/nearby-set-memory.js';
 import { readMemberArea } from '../engine/member-area.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
@@ -308,18 +309,13 @@ function photoKeysSince(): string {
 const ONE_VALUE_POSTS_PARAMS = ['id', 'type', 'category', 'author', 'q', 'updatedAfter', 'audienceScope', 'targetGroupId', 'assignedTo'] as const;
 
 /**
- * A member's set's hash, in each answer beside its ids (DESIGN-global-sync-by-area §2.3), `tied` included: a deal opened on
- * a listing already in the set moves no id, and the phone must still learn the tie. A phone sends back the one it holds
- * (`setHash`), and is not sent the set again while it still holds. Of the ids as a set, not in their order: a listing in
- * it moving a little nearer changes no member of it.
+ * A by-area read's query as its ETag describes it: without where the read starts, its page, the hash the phone holds, or
+ * whether it takes a diff (`setDiff`). The tag describes the set, so a 304 means the phone's set is current whatever it
+ * sent beside it.
  */
-const nearbySetHash = (ids: string[], tied: string[]) =>
-    crypto.createHash('sha256').update(`${[...ids].sort().join(',')}\n${[...tied].sort().join(',')}`).digest('hex').slice(0, 24);
-
-/** A by-area read's query as its ETag describes it: without where the read starts, its page, or the hash the phone holds. */
 function nearbyTagQuery(querystring: string): string {
     const q = new URLSearchParams(querystring);
-    for (const k of ['updatedAfter', 'paged', 'pageAfter', 'setHash']) q.delete(k);
+    for (const k of ['updatedAfter', 'paged', 'pageAfter', 'setHash', 'setDiff']) q.delete(k);
     return q.toString();
 }
 
@@ -538,6 +534,9 @@ router.get('/api/marketplace/posts', async (ctx) => {
             // A heal answer confirmed is a page that went to the key: its row's time moves (engine/photo-keys.ts
             // restartPhotoHealFor), and nothing else, since the row already records this answer.
             if (heal) notePhotoHealAnsweredAgain(ctx.state.actor as string | undefined);
+            // A by-area 304: the phone's set is the set. Remembered, so its next changed set is a diff against it
+            // (engine/nearby-set-memory.ts), and the memory warms on every phone's first quiet cycle.
+            if (nearbySet) nearbySetMemory().confirmed(viewerPubkey!, nearbySet);
             ctx.status = 304;
             return;
         }
@@ -610,12 +609,17 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // the set would go while that is still the set (item 2): a field no node before it sends, so a phone never reads an
     // answer that merely lacks the set (a node's or a proxy's fault) as "unchanged". At a busy town an edit's delta was ~12 KB
     // of ids; now it is the hash. A phone that sends none, or another, gets the set.
+    // A phone that also says `setDiff=1` is answered `{ posts, setAdd, setDrop, setHash, tied? }` where its set changed,
+    // against a hash this node named or confirmed to this member and still holds (engine/nearby-set-memory.ts): the ids
+    // that came in, nearest first, and the ones that went, `tied` only where it moved. At a busy town a delta whose set
+    // moved named ~500 ids, 11.8-15.5 KB gzipped (REPORT-geosync-load-B); now it names the few that changed. The phone
+    // writes the result only where it hashes to `setHash`. Anything else is the whole set, as before; a phone that never
+    // says `setDiff` is never answered a diff.
     const setOnce = ctx.query.setOnce === '1';
-    const setHash = nearbySet ? nearbySetHash(nearbySet.ids, nearbySet.tied) : '';
-    const bodyStr = JSON.stringify(!nearbySet ? shown
-        : setOnce && syncPage?.next ? { posts: shown }
-        : ctx.query.setHash === setHash ? { posts: shown, setUnchanged: setHash }
-        : { posts: shown, set: nearbySet.ids, setHash, tied: nearbySet.tied });
+    const setPart = nearbySet && !(setOnce && syncPage?.next)
+        ? nearbySetMemory().answer(viewerPubkey!, nearbySet, { setHash: ctx.query.setHash, setDiff: ctx.query.setDiff === '1' })
+        : null;
+    const bodyStr = JSON.stringify(!nearbySet ? shown : { posts: shown, ...setPart });
 
     if (syncPage?.next) ctx.set(POSTS_NEXT_HEADER, syncPage.next);
     ctx.status = 200;

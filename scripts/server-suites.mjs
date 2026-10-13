@@ -204,6 +204,7 @@ export const SUITES = [
     'test-sync-reads-carry-epoch',
     'test-posts-sync-paged',
     'test-sync-nearby',
+    'test-nearby-set-memory',
     'test-posts-sync-paged-cost',
     'test-takeover-keeps-listing-times',
     'test-profile-takeover',

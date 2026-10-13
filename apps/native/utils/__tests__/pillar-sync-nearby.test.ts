@@ -103,7 +103,7 @@ const replies = new Map<number, (r: { result?: any; error?: string }) => void>()
 let nextId = 1;
 const realFetch = globalThis.fetch;
 /** Every request the phone made: method, path + query, status as the app saw it, and whether a 304 stood behind it. */
-let sent: { method: string; url: string; status: number; revalidated: boolean }[] = [];
+let sent: { method: string; url: string; status: number; revalidated: boolean; keys?: string[]; ifNoneMatch?: string }[] = [];
 const elsewhere: string[] = [];
 /** A fault: the body a by-area read answers, rewritten (null leaves it). The node never sends such a body itself. */
 let tamper: ((path: string, body: string) => string | null) | null = null;
@@ -209,10 +209,14 @@ beforeAll(async () => {
         if (method === 'GET' && me && !Object.keys(headers).some(h => /signature/i.test(h))) {
             Object.assign(headers, await buildSignedHeaders('GET', href, '', me.privateKey, me.publicKey));
         }
-        const cached = method === 'GET' ? httpCache.get(href) : undefined;
+        // A request that carries the app's own If-None-Match goes as it is, and its 304 comes back as a 304, as OkHttp does
+        // with a conditional the app set itself; otherwise the cache adds the tag it stored for the URL.
+        const appTag = Object.entries(headers).find(([k]) => k.toLowerCase() === 'if-none-match')?.[1];
+        const cached = method === 'GET' && !appTag ? httpCache.get(href) : undefined;
         if (cached) headers['If-None-Match'] = cached.etag;
         const { signal: _drop, ...rest } = init ?? {};
         const res = await realFetch(href, { ...rest, method, headers });
+        const bodyCopy = res.status === 200 && href.includes('/api/marketplace/posts?') ? await res.clone().text() : null;
 
         const path = href.slice(URL_BASE.length);
         if (res.status === 304 && cached) {
@@ -222,7 +226,10 @@ beforeAll(async () => {
             for (const [k, v] of res.headers.entries()) merged.set(k, v);
             return new Response(cached.body, { status: 200, headers: merged });
         }
-        sent.push({ method, url: path, status: res.status, revalidated: false });
+        // A posts read's answer: which fields it carried (the set once a read names it on the last page only).
+        const keys = res.status === 200 && path.startsWith('/api/marketplace/posts?')
+            ? (() => { const b = JSON.parse(String(Buffer.from(bodyCopy ?? ''))); return b && !Array.isArray(b) ? Object.keys(b).sort() : []; })() : undefined;
+        sent.push({ method, url: path, status: res.status, revalidated: false, keys, ...(appTag ? { ifNoneMatch: appTag } : {}) });
         const tampered = tamper && res.status === 200 ? tamper(path, await res.clone().text()) : null;
         if (tampered !== null) return new Response(tampered, { status: 200, headers: res.headers });
         const etag = res.headers.get('etag');
@@ -281,6 +288,10 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         expect(reads.every(r => r.url.includes('nearby=1') && r.url.includes('limit=200') && !r.url.includes('updatedAfter'))).toBe(true);
         expect(reads[0].url).toContain('paged=1');
         expect(reads.slice(1).every(r => r.url.includes('pageAfter='))).toBe(true);
+        // The set once a read (REPORT-geosync-load-B, item 1): the phone says setOnce=1, and the node names the set on the
+        // last page only, which is the one the phone reconciles with.
+        expect(reads.every(r => r.url.includes('setOnce=1'))).toBe(true);
+        expect(reads.map(r => r.keys?.join('+'))).toEqual(['posts', 'posts', 'posts+set+setHash+tied']);
         // The area was asked of the node once (the copy is new) and is kept per community.
         expect(sent.filter(r => r.url === '/api/community/me')).toHaveLength(1);
         expect(await readNearbyAreaCopy(URL_BASE, me.publicKey)).toMatchObject({ area: BYRON, whole: false });
@@ -295,6 +306,60 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         const { getPosts } = await import('../db');
         const shown = (await getPosts()).find((p: any) => p.id === 'near-000');
         expect(shown?.author_callsign).toBe(row.carried_callsign);
+    }, START_MS);
+
+    it('nothing in the set changed: the phone sends the tag of its last read with its delta, and gets the 304', async () => {
+        // Every request here comes from one address: the node's limiters cleared before and after, as the door suites do.
+        await control('limiters');
+        const tag = (sql.prepare("SELECT v FROM nearby_held WHERE k = 'tag'").get() as { v: string } | undefined)?.v;
+        expect(tag).toMatch(/^W\/"near-/);
+        const cursorKey = [...mem.async.keys()].find(k => k.startsWith('pillar_sync_') && k.endsWith('_last-sync'))!;
+        const cursor = mem.async.get(cursorKey);
+        const before = heldIds();
+        await sync();
+        let reads = postsReads();
+        // A delta (from the cursor less 5 minutes, a URL this phone never asked), its first page carrying the tag: 304.
+        expect(reads).toHaveLength(1);
+        expect(reads[0].url).toContain('updatedAfter=');
+        expect(reads[0]).toMatchObject({ status: 304, revalidated: false, ifNoneMatch: tag });
+        expect(mem.async.get(cursorKey)).toBe(cursor);
+        expect(sorted(heldIds())).toEqual(sorted(before));
+        // A listing 300 km+ away changes: still nothing in the set, still 304.
+        await control('edit', { post: 'ldn-05', lat: LONDON.lat + 0.01, lng: LONDON.lng });
+        await sync();
+        reads = postsReads();
+        expect(reads).toHaveLength(1);
+        expect(reads[0]).toMatchObject({ status: 304, ifNoneMatch: tag });
+        await control('limiters');
+    }, START_MS);
+
+    it('a listing in the set edited: a 200 with it, `setUnchanged` instead of the set, and the phone keeps what it holds', async () => {
+        const held = sql.prepare("SELECT k, v FROM nearby_held").all() as { k: string; v: string }[];
+        const hash = held.find(r => r.k === 'hash')?.v;
+        const tag = held.find(r => r.k === 'tag')?.v;
+        const storedSet = JSON.parse(held.find(r => r.k === 'set')?.v ?? '[]') as string[];
+        expect(hash).toMatch(/^[0-9a-f]{24}$/);
+        expect(sorted(storedSet)).toEqual(sorted(expectedSet(BYRON, near, ['mine-ldn'])));
+        const before = heldIds();
+        // The nearest listing moves 10 m: still in the set, the same ids, a new row.
+        const nearest = [...near].sort((a, b) => nearbyKm(BYRON.lat, BYRON.lng, a.lat, a.lng) - nearbyKm(BYRON.lat, BYRON.lng, b.lat, b.lng))[0];
+        await control('edit', { post: nearest.id, lat: nearest.lat + 0.0001, lng: nearest.lng });
+        await sync();
+        const reads = postsReads();
+        expect(reads).toHaveLength(1);
+        expect(reads[0].url).toContain(`setHash=${hash}`);
+        expect(reads[0]).toMatchObject({ status: 200, ifNoneMatch: tag, keys: ['posts', 'setUnchanged'] });
+        expect(idReads()).toEqual([]);
+        expect(sorted(heldIds())).toEqual(sorted(before));
+        expect((sql.prepare('SELECT lat FROM posts WHERE id = ?').get(nearest.id) as { lat: number }).lat).toBeCloseTo(nearest.lat + 0.0001, 6);
+        expect(sql.prepare("SELECT v FROM nearby_held WHERE k = 'hash'").get()).toEqual({ v: hash });
+        // The read landed: the phone holds its tag now, and the next cycle with nothing changed is a 304 again.
+        const newTag = (sql.prepare("SELECT v FROM nearby_held WHERE k = 'tag'").get() as { v: string } | undefined)?.v;
+        expect(newTag && newTag !== tag).toBe(true);
+        near = near.map(p => (p.id === nearest.id ? { ...p, lat: p.lat + 0.0001 } : p));
+        await sync();
+        expect(postsReads()[0]).toMatchObject({ status: 304, ifNoneMatch: newTag });
+        await control('limiters');
     }, START_MS);
 
     it('a delta: what leaves the set goes, what comes in without changing is fetched by ids=, own and tied stay', async () => {
@@ -316,6 +381,9 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         expect(idReads(), JSON.stringify(sent.map(r => `${r.status} ${r.url.slice(0, 120)}`))).toHaveLength(1);
         expect(sorted(new URL(`${URL_BASE}${idReads()[0].url}`).searchParams.get('ids')!.split(','))).toEqual(sorted(cameIn));
         expect(sorted(heldIds())).toEqual(sorted([...after, 'tied-perth']));
+        // The set moved: the node named it in full, and the phone holds the new one with its new hash.
+        expect(postsReads()[postsReads().length - 1].keys).toEqual(['posts', 'set', 'setHash', 'tied']);
+        expect(sorted(JSON.parse((sql.prepare("SELECT v FROM nearby_held WHERE k = 'set'").get() as { v: string }).v))).toEqual(sorted(after));
         near = left;
     }, START_MS);
 
@@ -434,7 +502,10 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         const before = sql.prepare('SELECT lat, updated_at FROM posts WHERE id = ?').get(edited.id) as { lat: number; updated_at: string };
         for (const bad of [
             (b: any) => ({ ...b, set: [...b.set, 7] }), // an id that isn't a string
-            (b: any) => ({ ...b, set: undefined }), // no set at all
+            (b: any) => ({ ...b, set: undefined, setUnchanged: undefined }), // no set at all, and nothing said of it
+            // No set, and the held hash as `setHash`: what a node before setUnchanged sends, cut short. Never "unchanged".
+            (b: any) => ({ posts: b.posts, setHash: (sql.prepare("SELECT v FROM nearby_held WHERE k = 'hash'").get() as { v: string }).v }),
+            (b: any) => ({ posts: b.posts, setUnchanged: '0123456789abcdef01234567' }), // "unchanged", but another hash than the one sent
             (b: any) => ({ rows: b.posts }), // another shape altogether
         ]) {
             tamper = (path, body) => (path.includes('nearby=1') ? JSON.stringify(bad(JSON.parse(body))) : null);

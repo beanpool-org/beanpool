@@ -51,7 +51,7 @@ import {
     initStateEngine, transfer, seedGenesisMember, createPost, acceptPost, completePostTransaction, generateInvite,
     getBalance, assertMemberActive,
 } from './state-engine.js';
-import { issueRekeyCode, getOffboardPreview, executeOffboard } from './engine/member-wizards.js';
+import { issueRekeyCode, completeRekey, getOffboardPreview, executeOffboard } from './engine/member-wizards.js';
 import { adminActorName } from './engine/admin-actor-name.js';
 import { authorizeKeySigner } from './admin-key-auth.js';
 import { cacheRemoteListings } from './federation-listings.js';
@@ -368,18 +368,21 @@ async function main(): Promise<void> {
         `Bob's /ws socket signed in capitals is Bob's: it gets the line Alice sent him (${show(line)}; ${bobSock.events.map(e => e.type).join(',')})`);
     bobSock.ws.close();
 
-    // A re-key: the new key in capitals is refused; in the one spelling it binds.
+    // A re-key: the new key in capitals is refused; in the one spelling the phone's ask is taken, and the operator binds it
+    // (since #1768 an ask binds nothing).
     const rex = makeMember('Rex', 0);
     const rexNew = keypair('RexNew');
     const rekey = issueRekeyCode(rex.pk, founder.pk);
-    const proof = (k: Id) => crypto.sign(null, Buffer.from(rekey.code), k.priv).toString('hex');
+    const proof = (k: Id) => crypto.sign(null, Buffer.concat([Buffer.from([0xff]), Buffer.from(`beanpool-re-enroll/2\nlocalhost\n${rekey.code}`, 'utf8')]), k.priv).toString('hex');
     {
         const before = snapshot();
-        const caps = await call('POST', rexNew, '/api/member/re-enroll', { code: rekey.code, newPublicKey: rexNew.pk.toUpperCase(), signature: proof(rexNew) }, rexNew.pk.toUpperCase());
+        const caps = await call('POST', rexNew, '/api/member/re-enroll', { code: rekey.code, newPublicKey: rexNew.pk.toUpperCase(), signature: proof(rexNew), signedFor: 'localhost' }, rexNew.pk.toUpperCase());
         assert(isBadKey(caps) && changedTables(before, snapshot()).length === 0 && hasRow(rex.pk) && !hasRow(rexNew.pk),
             `a re-key naming the new key in capitals is refused 400 bad_key and nothing moves (${show(caps)})`);
-        const ok = await call('POST', rexNew, '/api/member/re-enroll', { code: rekey.code, newPublicKey: rexNew.pk, signature: proof(rexNew) });
-        assert(ok.status === 200 && hasRow(rexNew.pk) && !hasRow(rex.pk), `…in the one spelling it binds (${show(ok)})`);
+        const ok = await call('POST', rexNew, '/api/member/re-enroll', { code: rekey.code, newPublicKey: rexNew.pk, signature: proof(rexNew), signedFor: 'localhost' });
+        assert(ok.status === 200 && ok.body?.state === 'waiting' && hasRow(rex.pk), `…in the one spelling the ask is taken (${show(ok)})`);
+        completeRekey(rex.pk, rexNew.pk, rekey.code, founder.pk);
+        assert(hasRow(rexNew.pk) && !hasRow(rex.pk), '…and the operator binds that key');
     }
 
     // ── 4. Keys named by someone else: a send, a DM, a node role, a peer's listing and buyer ──

@@ -49,11 +49,58 @@ const isIds = (v: unknown[]): v is string[] => v.every(id => typeof id === 'stri
  * refusing would stop every listing update on this build (the confirmation review of #1778, finding 2).
  */
 export function nearbySetOf(body: unknown): { posts: any[]; set: string[]; tied: string[] | null } | null {
+    const page = nearbyPageOf(body);
+    return page && page.set ? { posts: page.posts, set: page.set, tied: page.tied } : null;
+}
+
+/** One page of a read by area, as nearbyPageOf reads it. */
+export interface NearbyPage {
+    posts: any[];
+    /** The member's set, where the page names it: the read's last page, or each page from a node before `setOnce`. */
+    set: string[] | null;
+    /** As nearbySetOf reads it, beside a set only. */
+    tied: string[] | null;
+    /** The node's hash of the set, where it says one. */
+    setHash: string | null;
+    /** Where the page names no set because the one this phone holds is still the set: the hash this phone sent. */
+    setUnchanged: string | null;
+}
+
+/**
+ * One page of a read by area, or null for an answer that isn't one (a bare list: the node's switch went off; a set this
+ * phone can't read). The phone says `setOnce=1`, and a node that knows it names the set on the read's last page only
+ * (the pages before it are `{ posts }`), since the phone reconciles after the last page anyway (REPORT-geosync-load-B,
+ * item 1: at a busy town the ids are ~11 KB gzipped, and rode on each page). A node before it names the set on each.
+ */
+export function nearbyPageOf(body: unknown): NearbyPage | null {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
-    const b = body as { posts?: unknown; set?: unknown; tied?: unknown };
-    if (!Array.isArray(b.posts) || !Array.isArray(b.set)) return null;
-    if (!isIds(b.set)) return null;
-    return { posts: b.posts, set: b.set, tied: Array.isArray(b.tied) && isIds(b.tied) ? b.tied : null };
+    const b = body as { posts?: unknown; set?: unknown; tied?: unknown; setHash?: unknown; setUnchanged?: unknown };
+    if (!Array.isArray(b.posts)) return null;
+    if (b.set !== undefined && !(Array.isArray(b.set) && isIds(b.set))) return null;
+    const set = Array.isArray(b.set) ? b.set : null;
+    return {
+        posts: b.posts,
+        set,
+        tied: set && Array.isArray(b.tied) && isIds(b.tied) ? b.tied : null,
+        setHash: typeof b.setHash === 'string' && b.setHash !== '' ? b.setHash : null,
+        setUnchanged: typeof b.setUnchanged === 'string' && b.setUnchanged !== '' ? b.setUnchanged : null,
+    };
+}
+
+/**
+ * The set a read ends with, from its last page: the one the node names (`named`); or, when the page names none and says
+ * `setUnchanged` with the hash this phone sent (`held.hash`, the set it holds), that one (REPORT-geosync-load-B, item 2).
+ * A field no node before it sends: an answer that merely lacks the set (a node before it, cut or altered on the way, whose
+ * `setHash` may well equal the held one) is no end this phone can read (null), and the read is cut short there. So is
+ * another hash.
+ */
+export function nearbyLastSet(
+    last: NearbyPage,
+    held: { set: string[]; hash: string } | null,
+): { set: string[]; tied: string[] | null; setHash: string | null; named: boolean } | null {
+    if (last.set) return { set: last.set, tied: last.tied, setHash: last.setHash, named: true };
+    if (held && last.setUnchanged !== null && last.setUnchanged === held.hash) return { set: held.set, tied: null, setHash: held.hash, named: false };
+    return null;
 }
 
 /**

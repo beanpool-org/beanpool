@@ -20,7 +20,7 @@
  */
 
 import {
-    audienceOf, signAdminSignin, signSettingsSignin, buildInviteTicket, signPushLeave, utf8Bytes, toBase64, type Signer,
+    audienceOf, signAdminSignin, signSettingsSignin, buildInviteTicket, signPushLeave, signReEnroll, utf8Bytes, toBase64, type Signer,
 } from '@beanpool/core';
 import { memberSigner } from './crypto';
 import { requestSigningFormatFor } from './request-signing-version';
@@ -132,6 +132,18 @@ export async function signPushLeaveStatement(
     const host = audienceOf(nodeUrl);
     if (!host) throw new Error('Cannot sign a leave statement: the node address names no host');
     return { signature: await signPushLeave(nodeUrl, publicKey, token, leftAt, memberSigner(privateKeyHex)), signedFor: host };
+}
+
+/**
+ * A re-key ask's proof of possession (utils/rekey-redeem.ts): core's signReEnroll builds `0xFF ‖ beanpool-re-enroll/2\nHOST\nCODE`
+ * from the community's address and the code as the admin's screen spells it, signed by the key the phone wants bound.
+ * Format 2 only: no app ever asked before the route took asks, so no server takes the old form.
+ */
+export async function signReEnrollStatement(nodeUrl: string, code: string, privateKeyHex: string): Promise<Required<SignedStatement>> {
+    assertPlainNodeAddress(nodeUrl);
+    const host = audienceOf(nodeUrl);
+    if (!host) throw new Error('Cannot sign a re-key ask: the node address names no host');
+    return { signature: await signReEnroll(nodeUrl, code, memberSigner(privateKeyHex)), signedFor: host };
 }
 
 /** The old forms are plain UTF-8, which never starts with the 0xFF every format-2 signature does. */

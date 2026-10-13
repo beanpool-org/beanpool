@@ -29,7 +29,9 @@ export interface SetupState {
  */
 export function setupRedirect(segments: readonly string[], { hasIdentity, pendingOnboarding }: SetupState): '/welcome' | null {
     const root = segments[0];
-    if (!hasIdentity) return root === 'welcome' || root === 'recover-identity' ? null : '/welcome';
+    // `rekey-code`: a new phone taking over an account with an admin's re-key code (app/rekey-code.tsx) holds no identity
+    // until the admin binds it (utils/rekey-redeem.ts).
+    if (!hasIdentity) return root === 'welcome' || root === 'recover-identity' || root === 'rekey-code' ? null : '/welcome';
     if (pendingOnboarding) return root === 'welcome' ? null : '/welcome';
     return null;
 }

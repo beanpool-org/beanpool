@@ -1,15 +1,19 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, SafeAreaView, ScrollView } from 'react-native';
 import { router, ErrorBoundary } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 export { ErrorBoundary };
-import { colors } from '../constants/colors';
+import { type AppColors } from '../constants/colors';
+import { useOnboardingColors } from './ThemeContext';
 
 export default function RecoverIdentityScreen() {
+    // Follows light/dark like the rest of the app; light draws exactly as before (utils/onboarding-colors.ts).
+    const { colors, dark } = useOnboardingColors();
+    const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar style="dark" />
+            <StatusBar style={dark ? 'light' : 'dark'} />
             <ScrollView contentContainerStyle={styles.scroll}>
                 <View style={styles.card}>
                     <Text style={styles.title} accessibilityRole="header">Restore Account</Text>
@@ -67,7 +71,8 @@ export default function RecoverIdentityScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppColors, dark: boolean) {
+return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface.page },
     scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
     card: {
@@ -103,4 +108,5 @@ const styles = StyleSheet.create({
     backBtn: { marginTop: 12, alignItems: 'center', justifyContent: 'center', padding: 12, minHeight: 44 },
     backBtnText: { color: colors.text.secondary, fontSize: 14, fontWeight: '600' },
 });
+}
 

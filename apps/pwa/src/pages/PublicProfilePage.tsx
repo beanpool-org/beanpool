@@ -686,7 +686,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/30 rounded-xl p-3 flex flex-col items-center justify-center shadow-sm">
                                     <div className="text-sm mb-1">📥</div>
                                     <div className="text-xl font-black text-indigo-600 dark:text-indigo-400">{stats.asReceiver?.average.toFixed(1) || '-'}</div>
-                                    <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-500 uppercase mt-1">As Payer</div>
+                                    <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase mt-1">As Payer</div>
                                 </div>
                             </div>
                         )}
@@ -858,7 +858,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                             <div className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
                                                                 r.role === 'provider'
                                                                     ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
-                                                                    : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400'
+                                                                    : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300'
                                                             }`}>
                                                                 {r.role === 'provider' ? 'Provided Service' : 'Paid for Service'}
                                                             </div>
@@ -996,7 +996,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         aria-label={`Rate ${star} star${star === 1 ? '' : 's'}`}
                                         className="text-4xl hover:scale-110 transition-transform bg-transparent border-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-lg"
                                     >
-                                        <span className={star <= reviewStars ? "text-amber-400" : "text-nature-200 dark:text-nature-700"}>★</span>
+                                        <span className={star <= reviewStars ? "text-amber-400" : "text-nature-200 dark:text-nature-500"}>★</span>
                                     </button>
                                 ))}
                             </div>

@@ -23,10 +23,13 @@
  *     (an element with only a fill and no text is a bar, a dot or a frame). An element holding only emoji is not judged
  *     (CSS colour does not reach an emoji). A placeholder: class is judged on an input's ::placeholder.
  *   - A branch with cursor-not-allowed is the app's disabled look, and WCAG exempts disabled controls.
+ *   - A fill that is dark at rest and turns light under the pointer or with focus fails whatever its words read
+ *     (a light-theme hover left in dark mode, check 3's shape).
  *   - A pair that comes out the same in light mode is the palette's, not dark mode's: it is listed, and does not fail
  *     (light is unchanged on purpose; white on emerald-500 is 2.54:1 in both themes).
  *   - What is behind the words: each layer from the element out to the page, gradients at every stop, the page's dark
- *     colour under all; opacity of the element and its parents. A background picture makes the place unknown (skipped).
+ *     colour under all; opacity of the element and its parents. A background picture (the doodle wallpaper) counts as
+ *     the colour it sits on, as dark-contrast-check.mjs counts it.
  *   - 4.5:1, or 3:1 when Chromium sizes the words large (24 px, or 18.66 px bold) or the element is an svg icon.
  *
  * Before it reads the source it measures CANARIES, class strings of each known shape that must fail and the fixes that
@@ -302,14 +305,12 @@ function pageMeasure(count) {
         for (let n = el; n && n !== page; n = n.parentElement) chain.unshift(n);
         // What is behind, from the page out to the element: every gradient stop is a possible background.
         let unders = [pageColour];
-        let unknown = false;
         let alpha = 1;
         for (const n of chain) {
             const cs = getComputedStyle(n);
             const before = unders;
             const fill = colour(cs.backgroundColor);
             const image = cs.backgroundImage;
-            if (/url\(/.test(image)) unknown = true;
             const stops = /gradient\(/.test(image) ? (image.match(/rgba?\([^)]*\)/g) || []).map(colour) : [];
             unders = unders.map((u) => over(fill, u));
             if (stops.length) unders = unders.flatMap((u) => stops.map((s) => over(s, u))).slice(0, 24);
@@ -332,7 +333,7 @@ function pageMeasure(count) {
         const text = read(cs.color);
         let placeholder = null;
         if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') placeholder = read(getComputedStyle(el, '::placeholder').color);
-        results.push({ text, placeholder, unknown, size, weight, alpha });
+        results.push({ text, placeholder, size, weight, alpha });
     }
     return results;
 }
@@ -438,13 +439,19 @@ async function measurePlaces(browser, css, places) {
         if (p.hovers) states.push(['hover', hover[i], hoverLight[i]]);
         if (p.focuses) states.push(['focus', focus[i], focusLight[i]]);
         for (const [state, m, light] of states) {
-            if (!m || m.unknown) continue;
+            if (!m) continue;
             for (const which of ['text', 'placeholder']) {
                 const seen = m[which];
                 if (!seen || (which === 'text' && !p.setsInk && !(p.setsFill && p.holdsText)) || (which === 'placeholder' && !p.placeholderClass)) continue;
                 // Under the pointer or with focus, only what that state changes (an unchanged pair is reported at rest).
                 const base = rest[i][which];
                 if (state !== 'rest' && base && base.ink === seen.ink && base.fill === seen.fill) continue;
+                // Dark at rest and light under the pointer: a light-theme fill flashing in dark mode fails even when its
+                // light-theme ink reads on it (that pair is light mode's, so the contrast alone would file it as the palette's).
+                if (state !== 'rest' && base && lightness(seen.fill) > 0.4 && lightness(base.fill) < 0.2) {
+                    failures.push({ state, why: 'turns light', ratio: seen.ratio, need: need(m, which), at: `${p.rel}:${p.line}`, span: p.span, tag: p.tag || '(string)', ink: seen.ink, fill: seen.fill, cls: p.cls, fills: [base.fill, seen.fill] });
+                    continue;
+                }
                 if (seen.ratio >= need(m, which) - 0.005) continue;
                 if (seen.ink === ALLOWED_PAIR.ink && seen.fill === ALLOWED_PAIR.fill) continue;
                 const inLight = light?.[which];
@@ -454,6 +461,12 @@ async function measurePlaces(browser, css, places) {
         }
     });
     return { failures, palette, drawn: drawn.length, hovered, focused: focusable.length, rest, hover, focus, drawnPlaces: drawn, hoverable };
+}
+
+/** Relative luminance of an 'r,g,b' string. */
+function lightness(rgb) {
+    const [r, g, b] = rgb.split(',').map((v) => ((v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
 // ——— Canaries: each shape the rounds found must fail here, and its fix must pass ———
@@ -467,6 +480,7 @@ const CANARIES = [
     ['text-nature-500 dark:text-nature-400 hover:text-nature-700 dark:hover:text-nature-200', 'button', [], null],
     ['text-nature-500 dark:text-nature-400', 'span', ['bg-white'], 'rest'], // a light parent left in dark
     ['text-nature-900 dark:text-white group-hover:text-terra-600', 'span', ['group'], 'hover'], // group-hover
+    ['text-nature-900 dark:text-nature-200 group-hover:text-terra-600', 'span', ['group bg-white dark:bg-nature-900 hover:bg-oat-50'], 'hover'], // a row that flashes light (check 3)
     ['dark:text-nature-300 focus-visible:bg-nature-100', 'button', [], 'focus'], // a light focus fill
     ['dark:text-nature-300 focus-visible:bg-nature-100 dark:focus-visible:bg-nature-800', 'button', [], null],
     ['bg-white dark:bg-nature-800 text-nature-900 dark:text-white placeholder:text-nature-400', 'input', [], 'rest placeholder'],
@@ -525,7 +539,7 @@ try {
     console.log(`${canaryCount} canaries as expected; ${new Set(places.map((p) => p.cls)).size} class strings in ${places.length} places, ${result.drawn} drawn and measured in dark at rest, ${result.hovered} elements hovered, ${result.focused} focused (${secs} s).`);
     const show = (f) => {
         const tokens = words(f.cls).filter((t) => /(?:^|:)(?:text|bg|from|via|to)-|placeholder:/.test(t) && !/^(?:sm|md|lg|xl|2xl):/.test(t));
-        return `  ${f.at} ${f.state} ${f.ratio.toFixed(2)}:1 (needs ${f.need}) <${f.tag}> ink ${f.ink} on ${f.fill} | ${tokens.join(' ')}`;
+        return `  ${f.at} ${f.state}${f.why ? ` (${f.why})` : ''} ${f.ratio.toFixed(2)}:1 (needs ${f.need}) <${f.tag}> ink ${f.ink} on ${f.fill} | ${tokens.join(' ')}`;
     };
     const palette = [...new Set(result.palette.map(show))].sort();
     console.log(`${palette.length} place(s) under AA read the same in light mode: the palette's, not dark mode's (DARK_CLASSES_PALETTE=1 lists them).`);

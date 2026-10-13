@@ -1391,7 +1391,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                              }}
                              disabled={accepting}
                              className={`w-full py-3 mt-2 rounded-xl border font-bold text-sm transition-colors ${
-                                 accepting ? 'border-red-200 text-red-300 cursor-not-allowed' : 'border-red-300 text-red-500 hover:bg-red-50'
+                                 accepting ? 'border-red-200 text-red-300 cursor-not-allowed' : 'border-red-300 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 dark:hover:text-red-300'
                              }`}
                          >
                              ❌ Cancel Hold
@@ -1944,7 +1944,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                         <button
                             onClick={() => setShowReportForm(!showReportForm)}
-                            className="w-full py-2.5 mt-3 rounded-xl border border-nature-200 bg-transparent text-nature-500 font-semibold text-sm hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                            className="w-full py-2.5 mt-3 rounded-xl border border-nature-200 bg-transparent text-nature-500 font-semibold text-sm hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-300 hover:border-red-200 transition-colors"
                         >
                             🚩 Report
                         </button>
@@ -2018,8 +2018,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         disabled={toggling}
                                         className={`w-full py-3 rounded-xl border font-bold text-sm transition-colors ${
                                             selectedPost.status === 'paused'
-                                                ? 'border-emerald-300 text-emerald-600 hover:bg-emerald-50'
-                                                : 'border-amber-300 text-amber-600 hover:bg-amber-50'
+                                                ? 'border-emerald-300 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-300'
+                                                : 'border-amber-300 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 dark:hover:text-amber-300'
                                         }`}
                                     >
                                         {toggling ? 'Updating…' : selectedPost.status === 'paused' ? '▶️ Activate Offer' : '⏸️ Pause Offer'}
@@ -2059,7 +2059,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     }}
                                     disabled={deleting === selectedPost.id}
                                     className={`w-full py-3 rounded-xl border font-bold text-sm transition-colors mt-2 ${
-                                        deleting === selectedPost.id ? 'border-red-200 text-red-300 cursor-not-allowed' : 'border-red-300 text-red-500 hover:bg-red-50'
+                                        deleting === selectedPost.id ? 'border-red-200 text-red-300 cursor-not-allowed' : 'border-red-300 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 dark:hover:text-red-300'
                                     }`}
                                 >
                                     {deleting === selectedPost.id ? 'Deleting...' : '🗑️ Delete Post'}
@@ -2178,7 +2178,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             </div>
                                         ))}
                                         {editPhotos.length < 5 && (
-                                            <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 flex items-center justify-center cursor-pointer text-nature-400 text-2xl hover:bg-nature-50 hover:border-nature-400 transition-colors">
+                                            <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 flex items-center justify-center cursor-pointer text-nature-400 text-2xl hover:bg-nature-50 dark:hover:bg-nature-800 dark:hover:text-nature-200 hover:border-nature-400 transition-colors">
                                                 +
                                                 <input
                                                     type="file"

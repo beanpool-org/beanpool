@@ -1984,7 +1984,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             pinDropMarkerRef.current.remove();
                             pinDropMarkerRef.current = null;
                         }
-                    }} aria-label="Close new post" className="bg-transparent border-none text-nature-400 hover:text-nature-600 text-2xl cursor-pointer transition-colors leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-nature-50">
+                    }} aria-label="Close new post" className="bg-transparent border-none text-nature-400 hover:text-nature-600 text-2xl cursor-pointer transition-colors leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-nature-50 dark:hover:bg-nature-800 dark:hover:text-nature-200">
                         ✕
                     </button>
                 </div>

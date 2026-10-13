@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-    ASK_WITHIN_KM, HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, closesWords, communityFacts, communityLine, decideLine, findBody, joinedLine, probationSentence, searchCardFor, shownFrame, skyOf,
+    ASK_WITHIN_KM, HOME_CARD_IDS, SKY_NO_PLACE_LINE, beansLines, cardTitle, closesWords, communityFacts, communityLine, decideLine, findBody, joinedLine, probationSentence, searchCardFor, shownFrame, skyOf,
     starredFirst, stepLines, stepsSaySomething, toggleInterest, type HomeAnswer, type HomeCards, type HomeMe, type ShownOptions,
 } from './home-cards';
 import { cardsToAsk, type HomeLayoutV2 } from './home-layout';
@@ -128,6 +128,14 @@ describe('interests reorder, they never filter (§4.3)', () => {
 });
 
 describe('the words (§3.1, §9)', () => {
+    it('the card for the one you keep: "Your project" for a project, "Your enterprise" otherwise (group decisions §3.1)', () => {
+        const ent = (lifecycle?: 'ongoing' | 'bounded') => ({ profile: 'local', cards: { enterprise: { id: 'e', name: 'Hall roof', requests: 0, others: 0, lifecycle } } });
+        expect(cardTitle('enterprise', ent('bounded'))).toBe('Your project');
+        expect(cardTitle('enterprise', ent('ongoing'))).toBe('Your enterprise');
+        expect(cardTitle('enterprise', ent())).toBe('Your enterprise');
+        expect(cardTitle('enterprise', { profile: 'local' })).toBe('Your enterprise');
+    });
+
     it('Beans: their own balance, plain for a new member, the tier as a word only', () => {
         expect(beansLines(beans)).toEqual({ line: '0 Beans · nothing to repay', note: 'Your credit opens with a first trade.' });
         expect(beansLines({ balance: -35, room: 165, tier: 'Resident', activated: true, frozen: false })).toEqual({ line: '-35 Beans · room to spend 165', note: 'Resident' });

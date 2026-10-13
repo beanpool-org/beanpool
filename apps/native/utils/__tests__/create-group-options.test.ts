@@ -3,8 +3,8 @@ import { GROUP_CATEGORY_OPTIONS, GROUP_JOIN_POLICY_OPTIONS, CREATE_GROUP_DEFAULT
 import { chatEmoji } from '../your-groups';
 
 describe('the one Create a Group form (decisions 4, 11, 14)', () => {
-    it('lists Social Circle first, then General, Working Group, Project Team, Guild', () => {
-        expect(GROUP_CATEGORY_OPTIONS.map(c => c.label)).toEqual(['Social Circle', 'General', 'Working Group', 'Project Team', 'Guild']);
+    it('lists Social Circle first, then General, Working Group, Guild: no Project Team (pick 7)', () => {
+        expect(GROUP_CATEGORY_OPTIONS.map(c => c.label)).toEqual(['Social Circle', 'General', 'Working Group', 'Guild']);
     });
 
     it('pre-selects Social Circle and an open group', () => {
@@ -20,9 +20,9 @@ describe('the one Create a Group form (decisions 4, 11, 14)', () => {
         expect(GROUP_JOIN_POLICY_OPTIONS.map(p => p.key)).toEqual(['open', 'request_to_join', 'invite_only']);
     });
 
-    it('bridges to Start an enterprise, which is not a group category', () => {
+    it('bridges to Start a project or an enterprise, neither of them a group category', () => {
         expect(START_ENTERPRISE_BRIDGE.route).toBe('/propose-project');
-        expect(START_ENTERPRISE_BRIDGE.link).toMatch(/Start an enterprise/);
-        expect(GROUP_CATEGORY_OPTIONS.some(c => /enterprise/i.test(c.label))).toBe(false);
+        expect(START_ENTERPRISE_BRIDGE.link).toMatch(/Start a project or an enterprise/);
+        expect(GROUP_CATEGORY_OPTIONS.some(c => /enterprise|project/i.test(c.label) || c.key === 'project')).toBe(false);
     });
 });

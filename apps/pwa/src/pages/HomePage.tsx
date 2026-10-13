@@ -1034,7 +1034,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 const line = `${e.name}${e.requests ? ` · ${e.requests} ${e.requests === 1 ? 'request' : 'requests'} to approve` : ''}`;
                 return (
                     <HomeCard key={id} {...common}>
-                        <HomeLine onClick={() => onNavigate('enterprise', e.id)} label={`${line}. Opens the enterprise.`}>
+                        <HomeLine onClick={() => onNavigate('enterprise', e.id)} label={`${line}. Opens the ${e.lifecycle === 'bounded' ? 'project' : 'enterprise'}.`}>
                             <span className="min-w-0 break-words">{line}</span>
                         </HomeLine>
                         {e.others > 0 && <p className="m-0 text-xs text-nature-600 dark:text-nature-300">and {e.others} more you keep</p>}

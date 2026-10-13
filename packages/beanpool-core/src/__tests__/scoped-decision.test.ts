@@ -88,6 +88,7 @@ describe("an enterprise's keepers' vote, as the apps show it", () => {
         expect(scopedEffectWords({ effect: 'pay_out', subject: 'cat', params: { amount: 40 } }, nameOf)).toBe('Pay 40 Beans to Cat');
         expect(scopedEffectWords({ effect: 'remove_keeper', subject: 'bob', params: null }, nameOf, 'bounded')).toBe('Remove Bob as a collaborator');
         expect(scopedEffectWords({ effect: 'replace_lead', subject: 'bob', params: null }, nameOf)).toBe('Make Bob the lead keeper');
+        expect(scopedEffectWords({ effect: 'replace_lead', subject: 'bob', params: null }, nameOf, 'bounded')).toBe('Make Bob the leader');
     });
 
     it('when it closes', () => {

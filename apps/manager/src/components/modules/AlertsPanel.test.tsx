@@ -69,6 +69,22 @@ describe('AlertsPanel', () => {
         expect(screen.getByText('Nothing needs you.')).toBeInTheDocument();
     });
 
+    it('shows how many times a line was told, in the card and the history, as the channel does', async () => {
+        const s = status({
+            recent: [{ key: 'sec.role', title: 'a role changed', priority: 4, at: Date.UTC(2026, 9, 11, 1), detail: 'A moderator lost that role, suspended by an admin. Open Settings to see who.', count: 2 }],
+            history: [
+                { key: 'sec.log', title: 'a security log line', kind: 'raised', at: Date.UTC(2026, 9, 11, 2), since: Date.UTC(2026, 9, 11, 1), priority: 1, detail: "A line was written to the server's security log (sign-in, keys and codes).", count: 1002 },
+                { key: 'disk.90', title: 'disk 90% full', kind: 'raised', at: Date.UTC(2026, 9, 11, 0), since: Date.UTC(2026, 9, 11, 0), priority: 4, detail: 'The disk is 91% full.' },
+            ],
+            acknowledge: true,
+        });
+        vi.stubGlobal('fetch', vi.fn(async () => json(s)));
+        render(<AlertsPanel activeNode={node} />);
+        expect(await screen.findByText(/suspended by an admin. Open Settings to see who. \(×2\)/)).toBeInTheDocument();
+        expect(screen.getByText(/\(sign-in, keys and codes\)\. \(×1002\)/)).toBeInTheDocument();
+        expect(screen.getByText(/The disk is 91% full\.$/)).toBeInTheDocument();
+    });
+
     it('says the owners still get the app alerts when no channel is set', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => json(status({}))));
         render(<AlertsPanel activeNode={node} />);

@@ -5,6 +5,7 @@ import {
     type DecisionEffect,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
+import { keeperWords } from '@beanpool/core';
 
 interface Props {
     isOpen: boolean;
@@ -13,7 +14,7 @@ interface Props {
     identity: BeanPoolIdentity | null;
     commonsBalance: number;
     members?: Array<{ publicKey: string; callsign?: string; balance?: number }>;
-    treasuries?: Array<{ publicKey: string; name: string; balance?: number }>;
+    treasuries?: Array<{ publicKey: string; name: string; balance?: number; lifecycle?: string | null }>;
 }
 
 const TOUCH_OPTIONS: Array<{ id: DecisionTouch; label: string; icon: string }> = [
@@ -31,12 +32,12 @@ const EFFECTS_BY_TOUCH: Record<DecisionTouch, Array<{ id: DecisionEffect; label:
         { id: 'unfreeze_credit', label: 'Unfreeze Credit', desc: 'Restore credit floor (simple majority)' },
         { id: 'grant_voucher', label: 'Grant Voucher', desc: 'Authorise member to vouch for newcomers' },
         { id: 'revoke_voucher', label: 'Revoke Voucher', desc: 'Remove vouching privileges' },
-        { id: 'remove_lead_keeper', label: 'Remove Lead Keeper', desc: 'Replace rogue enterprise lead keeper' },
+        { id: 'remove_lead_keeper', label: 'Remove a lead keeper or project leader', desc: "Replace an enterprise's lead keeper or a project's leader" },
     ],
     pool: [
-        { id: 'grant_enterprise', label: 'Grant to Enterprise', desc: 'Disburse Commons funds directly to an enterprise account' },
+        { id: 'grant_enterprise', label: 'Give Beans to a project or enterprise', desc: "Pay Beans from the Commons pool straight into a project's or enterprise's account" },
         { id: 'grant_hardship', label: 'Hardship Grant', desc: 'Direct emergency support grant from Commons pool to a member' },
-        { id: 'write_off_deficit', label: 'Write Off Deficit', desc: 'Absorb bad debt of a defaulted enterprise' },
+        { id: 'write_off_deficit', label: "Pay off a project's or enterprise's debt", desc: "The Commons pool takes on the debt of a project or enterprise that can't pay it" },
     ],
 };
 
@@ -95,6 +96,9 @@ export function ProposeDecisionModal({
     }, [membersByKeyMap, subject]);
 
     const targetName = selectedMember?.callsign || subject || 'Member';
+    // The one removed is a project's leader or an enterprise's lead keeper (§3.1); until one is picked, both words.
+    const pickedGroup = treasuries.find(t => t.publicKey === enterprisePubkey.trim());
+    const leadWord = pickedGroup ? keeperWords(pickedGroup.lifecycle).lead : 'lead keeper or leader';
     const poolAmount = Math.round(commonsBalance || 0);
 
     // §3.8, with balances private (Marty, 2026-09-28): the proposer does not see the member's balance. The community
@@ -133,17 +137,17 @@ export function ProposeDecisionModal({
             params = { amount };
         } else if (effect === 'remove_lead_keeper') {
             if (!enterprisePubkey.trim()) {
-                setError('Please select or enter the enterprise public key.');
+                setError('Please pick the project or enterprise, or enter its public key.');
                 return;
             }
             if (!targetPubkey) {
-                setError('Please enter the lead keeper callsign or public key to remove.');
+                setError(`Please enter the ${leadWord}'s callsign or public key.`);
                 return;
             }
             params = { enterprisePubkey: enterprisePubkey.trim(), leadPubkey: targetPubkey };
         } else if (effect === 'write_off_deficit') {
             if (!enterprisePubkey.trim()) {
-                setError('Please select or enter the enterprise public key.');
+                setError('Please pick the project or enterprise, or enter its public key.');
                 return;
             }
         } else if (effect === 'remove_member') {
@@ -310,7 +314,7 @@ export function ProposeDecisionModal({
                     {(effect === 'remove_lead_keeper' || effect === 'write_off_deficit') && (
                         <div>
                             <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-1">
-                                Target Enterprise / Treasury
+                                Project or enterprise
                             </label>
                             {treasuries.length > 0 && (
                                 <div className="flex flex-wrap gap-1.5 mb-2">
@@ -334,7 +338,7 @@ export function ProposeDecisionModal({
                                 type="text"
                                 value={enterprisePubkey}
                                 onChange={(e) => setEnterprisePubkey(e.target.value)}
-                                placeholder="Enter enterprise pubkey..."
+                                placeholder="Or enter its public key..."
                                 className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
                                 required
                             />
@@ -345,13 +349,13 @@ export function ProposeDecisionModal({
                     {touches === 'member' && (
                         <div>
                             <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-1">
-                                {effect === 'remove_lead_keeper' ? 'Lead Keeper Callsign or Public Key to Remove' : 'Target Member Callsign or Public Key'}
+                                {effect === 'remove_lead_keeper' ? `The ${leadWord} to remove: callsign or public key` : 'Target Member Callsign or Public Key'}
                             </label>
                             <input
                                 type="text"
                                 value={subject}
                                 onChange={(e) => setSubject(e.target.value)}
-                                placeholder={effect === 'remove_lead_keeper' ? 'Enter lead keeper callsign or pubkey...' : 'Enter member callsign or pubkey...'}
+                                placeholder={effect === 'remove_lead_keeper' ? `Enter the ${leadWord}'s callsign or pubkey...` : 'Enter member callsign or pubkey...'}
                                 className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
                             />
                         </div>
@@ -360,13 +364,13 @@ export function ProposeDecisionModal({
                     {effect === 'grant_enterprise' && (
                         <div>
                             <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-1">
-                                Target Enterprise Public Key
+                                Project or enterprise public key
                             </label>
                             <input
                                 type="text"
                                 value={subject}
                                 onChange={(e) => setSubject(e.target.value)}
-                                placeholder="Enter enterprise pubkey..."
+                                placeholder="Enter its public key..."
                                 className="w-full bg-nature-800/80 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white placeholder-nature-500 focus:outline-none focus:border-emerald-500"
                             />
                             <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mt-2 mb-1">

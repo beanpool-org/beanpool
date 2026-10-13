@@ -233,6 +233,19 @@ describe('the Market\'s search in any script (review of #1716, finding 1)', () =
         expect(marketSearchMatches(spade, 'garden')).toBe(true);
     });
 
+    it('finds a word with an apostrophe whichever apostrophe the listing or the search was typed with (#1828 check, finding 1)', () => {
+        const ios = { title: 'Don’t miss: garden tools', description: 'It’s all here' };
+        const plain = { title: "Don't miss: garden tools", description: '' };
+        const modifier = { title: 'Donʼt miss', description: 'пʼять' };
+        for (const q of ["don't", 'don’t', 'donʼt']) for (const p of [ios, plain, modifier]) expect(marketSearchMatches(p, q)).toBe(true);
+        expect(marketSearchMatches(ios, "it's")).toBe(true);
+        expect(marketSearchMatches({ title: 'L’eau de source', description: '' }, "l'eau")).toBe(true);
+        expect(marketSearchMatches({ title: 'Eau de cologne', description: '' }, "l'eau")).toBe(true);
+        expect(marketSearchMatches(modifier, "п'ять")).toBe(true);
+        expect(marketSearchMatches(modifier, 'п’ять')).toBe(true);
+        expect(marketSearchMatches({ title: 'Donuts and dolls', description: '' }, "don't")).toBe(false);
+    });
+
     it('parts a Chinese list at its punctuation, so the word after the comma is asked and found mid-run (#1781)', () => {
         const milk = { title: '新鲜牛奶出售', description: '' };
         expect(marketSearchQuery('鸡蛋，牛奶')).toBe('鸡蛋 牛奶');

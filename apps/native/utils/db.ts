@@ -6510,7 +6510,8 @@ export async function fetchYourGroups(): Promise<import('./your-groups').YourCha
 export async function getGroupChat(groupId: string, limit = 50, offset = 0): Promise<any> {
     const res = await signedGet(`/api/groups/${encodeURIComponent(groupId)}/chat?limit=${limit}&offset=${offset}`);
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body?.error || 'Could not open this group chat.');
+    // The status goes with it: 403 or 404 is the node refusing someone not in the group now, not a failed read.
+    if (!res.ok) throw Object.assign(new Error(body?.error || 'Could not open this group chat.'), { status: res.status });
     return body;
 }
 

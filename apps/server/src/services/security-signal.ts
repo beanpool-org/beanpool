@@ -14,6 +14,17 @@
 
 export type SecurityAlertKey = 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.name';
 
+/**
+ * The address alert's words (sec.name), by why a name is lost, and its end: the name watch tells a change at once, and the
+ * alert book's tick reads the record every minute and says the same. Never the other community's key, nor which address.
+ */
+export const NAME_ALERT_WORDS = {
+    'another-key': "The address service names another community's key as the holder of this community's address, and the address "
+        + 'answers as that community: what apps sign for this community there is refused. Open Settings → Public address.',
+    released: 'This community released its address and the hold is over: what apps sign for it there is refused. Claiming it again brings it back.',
+    back: "This community's address is its own again.",
+} as const;
+
 /** The first this many one-shot pushes per actor and hour go at once (as many again for high ones); the rest fold into one hourly line. */
 export const SECURITY_PUSHES_PER_HOUR = 3;
 

@@ -201,11 +201,11 @@ export function RekeyMemberWizard({
                 } else if (!pending || (pending.code && pending.code !== issuedCode)) {
                     // This code is gone from the node: replaced by a new code on another screen (#1783 review D3), run out
                     // (D4: the node marks it before this page's clock does), or stopped or cancelled there (C3). The
-                    // phones and counts the node reads now are another code's, so none of them show under this one.
+                    // phones and counts the node reads now are another code's, so none of them are taken up. The cards
+                    // and the guessing warning show only beside a live code, and the next code made here starts clean
+                    // (forgetCodeState), so nothing needs clearing here (#1783 check, finding 2).
                     const ranOut = !pending && !!expiresAt && new Date(expiresAt).getTime() - Date.now() < 60000;
                     setCodeStopped((was) => was || (pending ? 'replaced' : ranOut ? 'expired' : 'elsewhere'));
-                    setProposals([]);
-                    setUnderAttack(null);
                 } else {
                     setProposals(status.proposals ?? []);
                     setWrongNumbers(status.wrongNumbers ?? 0);
@@ -240,8 +240,8 @@ export function RekeyMemberWizard({
             if (status.pendingRequest?.codeNeedsStepUp) {
                 setError("Still waiting: press Manage in the BeanPool app again (it asks for your phone's lock), then try again.");
             }
-        } catch (err: any) {
-            setError(err?.message || 'Failed to fetch re-key status');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to fetch re-key status');
         } finally {
             setRereading(false);
         }
@@ -259,8 +259,8 @@ export function RekeyMemberWizard({
             setCodeNeedsStepUp(false);
             setExpiresAt(res.expiresAt);
             setStep(2);
-        } catch (err: any) {
-            setError(err?.message || 'Failed to issue re-enrolment code');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to issue re-enrolment code');
         } finally {
             setLoading(false);
         }
@@ -282,8 +282,8 @@ export function RekeyMemberWizard({
             setRekeyStatus((s) => (s ? { ...s, pendingRequest: null, isInvalidated: false, invalidatedInfo: null } : s));
             setNotice(`Code cancelled. @${member.callsign}'s key works again; their status is ${res.status}.${res.note ? ` ${res.note}` : ''}`);
             setStep(1);
-        } catch (err: any) {
-            setError(err?.message || 'Failed to cancel the re-key code');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to cancel the re-key code');
         } finally {
             cancellingHere.current = false;
             setCancelling(false);
@@ -351,8 +351,8 @@ export function RekeyMemberWizard({
             setNewPubkey(clean);
             setStep(3);
             onSuccess?.(clean);
-        } catch (err: any) {
-            setError(err?.message || 'Failed to complete re-keying');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to complete re-keying');
         } finally {
             setCompleting(false);
         }

@@ -339,6 +339,34 @@ async function main(): Promise<void> {
 
     // ── 2b. who writes a socket's key ───────────────────────────────────────────────────────────
     // Outside the tests, only the connect (https-server.ts, before addWsClient) and setKey (ws-area-index.ts) may.
+    // A property set (.x = or ['x'] =, not a destructuring default), the key defineProperty names, an Object.assign onto
+    // ws, or an Object.assign whose object has the key (not one that reads ws._memberPubkey into another key).
+    const KEY_WRITE = /(?:\.\s*|\[\s*['"`])_memberPubkey(?:['"`]\s*\])?\s*(?:=(?!=)|\?\?=|\|\|=|&&=)|defineProperty\([^,]*,\s*['"`]_memberPubkey|Object\.assign\(\s*ws\b|Object\.assign\([^)]*[{,]\s*\[?\s*['"`]?_memberPubkey['"`]?\s*\]?\s*[:,}]/;
+    // The scan is only as good as its pattern: every shape of write is caught, and no read is (#1809's check, N1: the
+    // bracket forms and an Object.assign onto another name slipped past it; #1828's check, finding 2: a destructuring
+    // default and a read inside another object's Object.assign were taken for writes).
+    const writeShapes = [
+        `ws._memberPubkey = k;`,
+        `(ws as any)._memberPubkey = k;`,
+        `ws._memberPubkey ??= k;`,
+        `Object.assign(ws, { _memberPubkey: k });`,
+        `ws['_memberPubkey'] = k;`,
+        `(ws as any)['_memberPubkey'] = k;`,
+        `Object.assign(sock, { _memberPubkey: k });`,
+        `Object.assign(sock, { _memberPubkey });`,
+        `Object.defineProperty(ws, '_memberPubkey', { value: k });`,
+    ];
+    const readShapes = [
+        `if (ws._memberPubkey === k) return;`,
+        `const k = (ws as any)['_memberPubkey'];`,
+        `if (ws['_memberPubkey'] !== k) return;`,
+        `const { _memberPubkey = null } = ws;`,
+        `Object.assign(out, { pubkey: ws._memberPubkey });`,
+        `Object.defineProperty(out, 'pubkey', { value: ws._memberPubkey });`,
+    ];
+    const missed = writeShapes.filter(l => !KEY_WRITE.test(l)), misread = readShapes.filter(l => KEY_WRITE.test(l));
+    assert(missed.length === 0 && misread.length === 0,
+        `the scan's pattern catches all ${writeShapes.length} shapes of write and none of ${readShapes.length} reads (missed: ${missed.join(' | ') || 'none'}; read as a write: ${misread.join(' | ') || 'none'})`);
     const srcDir = path.dirname(fileURLToPath(import.meta.url));
     const writes: string[] = [];
     const walk = (dir: string) => {
@@ -347,7 +375,7 @@ async function main(): Promise<void> {
             if (entry.isDirectory()) { if (entry.name !== '__tests__' && entry.name !== 'node_modules') walk(full); continue; }
             if (!entry.name.endsWith('.ts') || entry.name.endsWith('.d.ts') || entry.name.startsWith('test-')) continue;
             fs.readFileSync(full, 'utf8').split('\n').forEach((line, n) => {
-                if (/_memberPubkey['"\]]?\s*(=(?!=)|\?\?=|\|\|=|&&=)|defineProperty\([^)]*_memberPubkey|Object\.assign\(\s*ws\b/.test(line)) {
+                if (KEY_WRITE.test(line)) {
                     writes.push(`${path.relative(srcDir, full)}:${n + 1}`);
                 }
             });

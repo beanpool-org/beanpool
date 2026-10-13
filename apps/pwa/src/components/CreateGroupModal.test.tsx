@@ -26,7 +26,7 @@ describe('CreateGroupModal Accessibility', () => {
         expect(emojiTexts).toContain('👥');
         expect(emojiTexts).toContain('ℹ️');
         expect(emojiTexts).toContain('🤝');
-        expect(emojiTexts).toContain('🛠️');
+        expect(emojiTexts).not.toContain('🛠️'); // no Project Team category (group decisions pick 7)
         expect(emojiTexts).toContain('🛡️');
         expect(emojiTexts).toContain('☕');
         expect(emojiTexts).toContain('💬');

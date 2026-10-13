@@ -2414,9 +2414,10 @@ export interface AlertsStatus {
     sentLastHour: number;
     hourlyCap: number;
     active: Array<{ key: string; title: string; priority: number; since: number; detail: string }>;
-    history: Array<{ key: string; title: string; kind: 'raised' | 'still' | 'cleared'; at: number; since: number; priority: number; detail: string }>;
+    /** `count`: the same line told this many times, kept as one (at: the latest); absent when once. */
+    history: Array<{ key: string; title: string; kind: 'raised' | 'still' | 'cleared'; at: number; since: number; priority: number; detail: string; count?: number }>;
     /** Security events of the last day not yet acknowledged; absent on a server older than security alerts. */
-    recent?: Array<{ key: string; title: string; at: number; priority: number; detail: string }>;
+    recent?: Array<{ key: string; title: string; at: number; priority: number; detail: string; count?: number }>;
     acknowledge?: boolean;
 }
 
@@ -2524,7 +2525,7 @@ export const COMMUNITY_ADMIN = 'a community admin';
 export function formatResolverName(signer?: string | null): string {
     if (!signer || typeof signer !== 'string') return COMMUNITY_ADMIN;
     const s = signer.trim();
-    if (s === 'owner:password' || s === 'admin' || /^[0-9a-f]{64}$/i.test(s)) {
+    if (!s || s === 'owner:password' || s === 'admin' || /^[0-9a-f]{64}$/i.test(s)) {
         return COMMUNITY_ADMIN;
     }
     return s;

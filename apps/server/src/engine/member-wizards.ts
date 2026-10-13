@@ -52,6 +52,7 @@ import { moveKnocks } from './knocks.js';
 import { moveKeptNotices } from './kept-notices.js';
 import { moveBlocks } from './member-blocks.js';
 import { moveMemberKeyRows } from './key-move.js';
+import { roleKeyReplacedAlert } from './node-roles.js';
 import { escapeLike } from '@beanpool/engine';
 
 // ===================== TYPES =====================
@@ -388,6 +389,9 @@ export function completeRekey(
     const nowIso = new Date().toISOString();
     /** The members whose block lists the re-key changed (moveBlocks), told after the commit. */
     let blockListsMoved: string[] = [];
+    // An owner's or admin's role moves to the new key: the owners hear of it once this commits (sec.keys). Read now.
+    const privileged = heldPrivilegedRole(cleanOld);
+    const tellOwners = privileged ? roleKeyReplacedAlert(privileged, cleanOld, (operatorPubkey || '').trim().toLowerCase()) : null;
     /** The member's own recovery copies deleted (they hold the replaced seed). */
     let signInCopiesRemoved = 0;
 
@@ -478,6 +482,7 @@ export function completeRekey(
     // node_roles.member_pubkey moved to the new key above: an owner's take-over lock must follow it now, not at the
     // next periodic check (sealed-keys.md §4).
     noteTakeoverInputsChanged('member re-keyed');
+    tellOwners?.();
 
     broadcast({ type: 'profile_updated', publicKey: cleanNew });
     broadcast({ type: 'member_rekeyed', oldPublicKey: cleanOld, newPublicKey: cleanNew });

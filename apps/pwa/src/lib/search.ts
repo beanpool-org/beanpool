@@ -4,13 +4,16 @@
  * punctuation, Chinese and full-width included ("鸡蛋，牛奶" finds 牛奶 mid-run, #1781).
  */
 
-import { HOME_SEARCH_MAX_CHARS, searchTermsFor } from '@beanpool/core';
+import { foldApostrophes, HOME_SEARCH_MAX_CHARS, searchTermsFor } from '@beanpool/core';
 
-/** Whether a listing's title or description holds one of the search's terms; an empty search matches everything. */
+/**
+ * Whether a listing's title or description holds one of the search's terms; an empty search matches everything. The
+ * apostrophes are folded on both sides, so "don't" finds "Don’t miss", typed on iOS (#1828 check, finding 1).
+ */
 export function matchesExpandedSearch(searchQuery: string, title: string, description: string): boolean {
     if (!searchQuery.trim()) return true;
-    const searchText = `${title} ${description}`.toLowerCase();
-    return searchTermsFor(searchQuery).some(term => searchText.includes(term));
+    const searchText = foldApostrophes(`${title} ${description}`.toLowerCase());
+    return searchTermsFor(searchQuery).some(term => searchText.includes(foldApostrophes(term)));
 }
 
 /**

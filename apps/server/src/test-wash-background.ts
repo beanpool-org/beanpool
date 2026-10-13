@@ -6,13 +6,18 @@
  *     the first floor read takes it rather than working one out.
  *  2. Take-over in this process: a standby's analysis, from before the final copy's rows, is dropped when the role turns
  *     to primary, and a fresh one started; the promoted server's floors then equal a one-go on its final rows.
- *  3. The refresh's read-only handle closes with the data-version probe (a restore, a shutdown): a refresh in flight lands
+ *  3. Clean storage during a refresh: its truncating checkpoint closes the refresh's snapshot first (as it closes the
+ *     standby copies), so it holds the loop well under the 5 s busy timeout and empties the WAL; the refresh lands nothing.
+ *  4. The refresh's read-only handle closes with the data-version probe (a restore, a shutdown): a refresh in flight lands
  *     nothing, and closing the node's own handle after is the last close (state.db-wal folded and gone).
+ *  5. The server starts the boot refresh (index.ts Step 6.1) once the HTTPS server listens.
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-wash-background.ts
  */
 
 import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { cleanStorageAndCompressLogs } from './engine/storage-health.js';
 import {
     initStateEngine, getWashTradingEnforcement, clearWashTradingCache, runWashTradingAnalysis, washAnalysisCount,
     startWashTradingRefreshAtBoot, setNodeRole, getNodeRole,
@@ -101,7 +106,54 @@ async function main() {
         assert(same, 'The promoted server\'s floors equal a one-go on its final rows');
         assert(ring.every((k) => qualifiedTradeValue(db, k) === 0), 'The ring counts for nothing on the promoted server');
 
-        // --- 3. The read-only handle closes with the data-version probe ---
+        // --- 3. Clean storage during a refresh ---
+        const realNow3 = Date.now;
+        let ahead3 = 0;
+        Date.now = () => realNow3() + ahead3;
+        try {
+            // 400 small trading groups this month: a refresh gives a turn after each, so it is still reading when the
+            // checkpoint comes, however many turns Clean storage gives first.
+            for (let i = 0; i < 400; i++) {
+                member(`wbg-c${i}a`, 90);
+                member(`wbg-c${i}b`, 90);
+                trade(`wbg-c${i}a`, `wbg-c${i}b`, 5, 5);
+            }
+            clearWashTradingCache();
+            const before = slowSteps(() => getWashTradingEnforcement()); // background mode
+            ahead3 = WASH_KEEP_MS;
+            slowSteps(() => getWashTradingEnforcement()); // due: a refresh starts
+            const inFlight = washRefreshRunning(db);
+            assert(inFlight !== null, 'Clean storage: a due read started a refresh');
+            await slowStepsAcross(turn); // its snapshot is taken: a reader on the WAL
+            const n3 = washAnalysisCount();
+            for (let i = 0; i < 50; i++) trade('wbg-o1', 'wbg-o3', 1); // frames in the WAL
+            // Timed by Date.now (real time here, plus a fixed offset): the refresh's steps fake performance.now.
+            let last = Date.now(), worst = 0;
+            const watcher = setInterval(() => { const t = Date.now(); worst = Math.max(worst, t - last); last = t; }, 1);
+            await turn();
+            worst = 0; last = Date.now();
+            const pragma = db.pragma;
+            let readingAtCheckpoint: boolean | null = null;
+            db.pragma = ((source: string, options?: Parameters<typeof db.pragma>[1]) => {
+                if (readingAtCheckpoint === null && /wal_checkpoint\(TRUNCATE\)/i.test(source)) readingAtCheckpoint = washRefreshRunning(db) === inFlight;
+                return pragma.call(db, source, options);
+            }) as typeof db.pragma;
+            const t0 = Date.now();
+            try { await slowStepsAcross(() => cleanStorageAndCompressLogs().then(() => undefined)); } finally { db.pragma = pragma; }
+            const ms = Date.now() - t0;
+            assert(readingAtCheckpoint === true, 'The refresh was still in flight at the truncating checkpoint');
+            await turn();
+            clearInterval(watcher);
+            await inFlight;
+            const wal = fs.statSync(`${dbPath}-wal`).size;
+            assert(ms < 1000 && worst < 1000, `Clean storage during a refresh holds the loop well under 1 s (${Math.round(ms)} ms; worst gap ${Math.round(worst)} ms)`);
+            assert(wal === 0, `Its truncating checkpoint emptied the WAL (${wal} bytes)`);
+            assert(washAnalysisCount() === n3 && slowSteps(() => getWashTradingEnforcement()) === before, 'The refresh in flight landed nothing');
+        } finally {
+            Date.now = realNow3;
+        }
+
+        // --- 4. The read-only handle closes with the data-version probe ---
         const realNow = Date.now;
         let ahead = 0;
         Date.now = () => realNow() + ahead;
@@ -126,6 +178,15 @@ async function main() {
         closeDbDataVersionProbe();
         db.close();
         assert(!fs.existsSync(`${dbPath}-wal`), 'Closing the node\'s handle after is the last close: state.db-wal is folded and gone');
+
+        // --- 5. The boot refresh starts once the server listens (index.ts Step 6.1) ---
+        const index = fs.readFileSync(fileURLToPath(new URL('./index.ts', import.meta.url)), 'utf8');
+        const https = index.indexOf('await startHttpsServer(');
+        const kick = index.indexOf('void startWashTradingRefreshAtBoot();');
+        const p2p = index.indexOf('await startP2P(');
+        const calls = index.split('startWashTradingRefreshAtBoot()').length - 1;
+        assert(https > 0 && kick > https && p2p > kick && calls === 1,
+            'index.ts starts the boot refresh once, after the HTTPS server listens and before libp2p');
 
         console.log(`\n${passed}/${run} checks passed.`);
         if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

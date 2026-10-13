@@ -45,6 +45,7 @@ async function main() {
         announceJoins: false,
         announceProfiles: false,
         nearbyListings: true,
+        membersOnDemand: true,
         showcase: true,
     };
 

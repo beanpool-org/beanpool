@@ -260,7 +260,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
             tipBannerText: {
                 flex: 1,
                 fontSize: 12.5,
-                color: theme === 'dark' ? '#34d399' : '#065f46',
+                color: colors.feedback.success.fg,
                 fontWeight: '600',
                 lineHeight: 17,
             },
@@ -349,7 +349,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem }: Props)
             priceText: {
                 fontSize: 15,
                 fontWeight: '900',
-                color: theme === 'dark' ? '#34d399' : '#047857',
+                color: colors.feedback.success.fg,
             },
             unitText: {
                 fontSize: 11,

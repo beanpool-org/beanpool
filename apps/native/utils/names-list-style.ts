@@ -4,10 +4,8 @@
  * (text wraps and boxes grow at 320dp and 1.3× text), rows of buttons that wrap rather than squeeze, and readable text
  * in light and dark. The screen passes this through StyleSheet.create inside useStyles, so the theme switch restyles it.
  */
-import { palette, type AppColors } from '../constants/colors';
+import { type AppColors } from '../constants/colors';
 
-/** The app's brand green is 3.8:1 under white text; one step darker is 5.5:1, in both themes. */
-const BUTTON_GREEN = palette.emerald700;
 
 /** Which entries are things you press. Each has minHeight ≥ 48. */
 export const NAMES_TOUCH_TARGETS = ['backButton', 'primaryBtn', 'secondaryBtn', 'dangerBtn', 'smallBtn', 'pickRow', 'switchRow', 'input', 'search'] as const;
@@ -67,7 +65,7 @@ export function namesListStyleSpec(colors: AppColors) {
 
         // Wraps: at 320dp and 1.3× text, buttons in a row stack instead of squeezing their labels.
         buttonRow: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 10 },
-        primaryBtn: { ...button, flexGrow: 1, flexBasis: 120, backgroundColor: BUTTON_GREEN },
+        primaryBtn: { ...button, flexGrow: 1, flexBasis: 120, backgroundColor: colors.brand.fill },
         primaryBtnText: { fontSize: 15, fontWeight: '700' as const, color: colors.text.inverse, textAlign: 'center' as const },
         secondaryBtn: { ...button, flexGrow: 1, flexBasis: 120, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong },
         secondaryBtnText: { fontSize: 15, fontWeight: '600' as const, color: colors.text.body, textAlign: 'center' as const },

@@ -115,7 +115,7 @@ export default function PeopleScreen() {
         btnGenerateText: { color: colors.text.inverse, fontSize: 15, fontWeight: 'bold' },
 
         qrCard: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50, borderWidth: 2, borderColor: colors.brand.primary, borderRadius: 16, padding: 20, alignItems: 'center', marginBottom: 24 },
-        qrTitle: { color: theme === 'dark' ? colors.text.body : palette.emerald700, fontSize: 14, fontWeight: '600', marginBottom: 16 },
+        qrTitle: { color: theme === 'dark' ? colors.text.body : colors.brand.primary, fontSize: 14, fontWeight: '600', marginBottom: 16 },
         qrBox: { backgroundColor: colors.surface.card, padding: 16, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2, marginBottom: 16 },
         btnCopyQR: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 10 },
         btnCopyQRText: { color: colors.text.body, fontSize: 14, fontWeight: '700' },

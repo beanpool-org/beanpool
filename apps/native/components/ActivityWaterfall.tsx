@@ -19,7 +19,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useTheme } from '../app/ThemeContext';
 import { withJitter } from '../utils/jitter';
 import { signedGet } from '../utils/db';
-import { lightColors } from '../constants/colors';
 
 export interface ActivityFeedItem {
     id: number;
@@ -179,8 +178,8 @@ export function ActivityWaterfall({ onCreatePostPress }: Props) {
         <View style={styles.container}>
             <View style={styles.headerRow}>
                 <View style={[styles.pulseBadge, { backgroundColor: isDark ? 'rgba(16, 185, 129, 0.15)' : '#ecfdf5', borderColor: isDark ? '#065f46' : '#a7f3d0' }]}>
-                    <View style={styles.pulseDot} />
-                    <Text style={[styles.pulseBadgeText, { color: isDark ? '#34d399' : '#047857' }]}>
+                    <View style={[styles.pulseDot, { backgroundColor: colors.brand.fill }]} />
+                    <Text style={[styles.pulseBadgeText, { color: colors.feedback.success.fg }]}>
                         Community Pulse
                     </Text>
                 </View>
@@ -314,7 +313,6 @@ const styles = StyleSheet.create({
         width: 6,
         height: 6,
         borderRadius: 3,
-        backgroundColor: lightColors.brand.fill, // the same deep green in both themes
     },
     pulseBadgeText: {
         fontSize: 11,

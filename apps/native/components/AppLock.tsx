@@ -20,13 +20,12 @@ import React, { createElement, type ComponentType, type ReactNode } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../app/ThemeContext';
 import { appLockScreen, askToUnlockApp, useAppLockScreen } from '../utils/app-lock-screen';
-import { lightColors } from '../constants/colors';
 
 const showsApp = () => appLockScreen() === 'none';
 
 /** The lock screen, or the plain cover, over one surface. */
 export function AppLockScreenView({ screen }: { screen: 'cover' | 'lock' }): React.JSX.Element {
-    const { theme } = useTheme();
+    const { theme, colors } = useTheme();
     const isDark = theme === 'dark';
     const background = isDark ? '#0a0a0a' : '#FAF9F6';
     if (screen === 'cover') {
@@ -70,7 +69,7 @@ export function AppLockScreenView({ screen }: { screen: 'cover' | 'lock' }): Rea
                 </Text>
                 <Pressable
                     style={{
-                        backgroundColor: lightColors.brand.fill, // the same deep green in both themes
+                        backgroundColor: colors.brand.fill,
                         paddingVertical: 14,
                         paddingHorizontal: 28,
                         borderRadius: 12,

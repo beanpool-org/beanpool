@@ -415,7 +415,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         statusActiveText: {
             fontSize: 11,
             fontWeight: '700',
-            color: theme === 'dark' ? '#34d399' : '#047857',
+            color: colors.feedback.success.fg,
         },
         statusClosed: {
             backgroundColor: theme === 'dark' ? 'rgba(107, 114, 128, 0.2)' : '#f3f4f6',

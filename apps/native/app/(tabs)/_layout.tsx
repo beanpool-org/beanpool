@@ -20,7 +20,6 @@ import { useNodeStatus } from '../NodeStatusContext';
 import { withJitter } from '../../utils/jitter';
 import { fetchNodeProfile, getCachedNodeProfile, hiddenTabsFor, type HideableTab } from '../../utils/node-profile';
 import { UNKNOWN_NODE_PROFILE, anchorRead, profileArrived, type AnchoredNodeProfile } from '../../utils/node-profile-anchor';
-import { lightColors } from '../../constants/colors';
 
 /** Each tour step's tab as a route, written out so every link into the app is checked (deep-links-resolve.test.ts). */
 const TOUR_ROUTES: Record<string, '/(tabs)' | '/(tabs)/market' | '/(tabs)/map' | '/(tabs)/chats' | '/(tabs)/projects' | '/(tabs)/ledger'> = {
@@ -48,6 +47,7 @@ function TabItem({ label, icon, focused, color, count, badge }: {
     count?: number;
     badge?: React.ReactNode;
 }) {
+    const { colors } = useTheme();
     return (
         <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', paddingBottom: UNDERLINE_HEIGHT }}>
             {/* The emoji can't take a tint, so the inactive tabs are dimmed instead and the
@@ -78,7 +78,7 @@ function TabItem({ label, icon, focused, color, count, badge }: {
             {count !== undefined && count > 0 && (
                 <View style={{
                     position: 'absolute', top: 16, left: '50%', marginLeft: 6, minWidth: 16, height: 16,
-                    borderRadius: 8, paddingHorizontal: 4, backgroundColor: lightColors.feedback.danger.solid, // the same in both themes
+                    borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.feedback.danger.solid,
                     alignItems: 'center', justifyContent: 'center',
                 }}>
                     <Text allowFontScaling={false} style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>

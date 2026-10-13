@@ -3531,7 +3531,7 @@ const styles = StyleSheet.create({
     recoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.onboarding.recoverBorder, backgroundColor: colors.onboarding.recoverBg, alignItems: 'center', marginBottom: 10 },
     recoverBtnText: { color: dark ? palette.amber400 : palette.amber800, fontSize: 16, fontWeight: '700' },
     socialRecoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.onboarding.socialRecoverBorder, backgroundColor: colors.onboarding.socialRecoverBg, alignItems: 'center', marginBottom: 10 },
-    socialRecoverBtnText: { color: dark ? palette.emerald400 : palette.emerald700, fontSize: 16, fontWeight: '700' },
+    socialRecoverBtnText: { color: colors.brand.primary, fontSize: 16, fontWeight: '700' },
 
     primaryBtn: { backgroundColor: palette.blue600, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
     primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: 'bold' },

@@ -13,8 +13,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Module from 'node:module';
 import { act, createElement, Fragment } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, LOCAL_COMMUNITY_LINES, SAMPLE_COMMUNITY } from '@beanpool/core';
-import { darkColors, lightColors, type AppColors } from '../../constants/colors';
+import { LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_MARK, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, LOCAL_COMMUNITY_LINES, SAMPLE_COMMUNITY } from '@beanpool/core';
+import { darkColors, earthColors, lightColors, slateColors, type AppColors } from '../../constants/colors';
 
 // MyDealsSheet draws the bean with require('…/bean.png'), which Metro resolves; here a number stands in, as on the phone.
 (Module as any)._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
@@ -66,10 +66,11 @@ vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElem
 // The review form writes; in preview it must never open.
 const review = vi.hoisted(() => ({ opened: 0, txIds: [] as string[] }));
 vi.mock('../../components/ReviewModal', () => ({ ReviewModal: ({ txId }: { txId: string }) => { review.opened++; review.txIds.push(txId); return createElement('div', { 'data-testid': 'review-modal' }); } }));
-const theme = vi.hoisted(() => ({ dark: false }));
+// The light palette Settings offers (classic, earth or slate), or dark.
+const theme = vi.hoisted(() => ({ dark: false, palette: 'classic' as 'classic' | 'earth' | 'slate' }));
 vi.mock('../../app/ThemeContext', async () => {
-    const { lightColors: light, darkColors: dark } = await import('../../constants/colors');
-    const colors = () => (theme.dark ? dark : light);
+    const { lightColors: light, darkColors: dark, earthColors: earth, slateColors: slate } = await import('../../constants/colors');
+    const colors = () => (theme.dark ? dark : ({ classic: light, earth, slate } as Record<string, unknown>)[theme.palette]);
     return {
         useTheme: () => ({ theme: theme.dark ? 'dark' : 'light', colors: colors() }),
         useStyles: (make: (t: { theme: string; colors: unknown }) => unknown) => make({ theme: theme.dark ? 'dark' : 'light', colors: colors() }),
@@ -132,6 +133,56 @@ describe('the net spy\'s utils/db arm', () => {
         expect(new db.RouteMissingError('/api/x')).toBeInstanceOf(Error);
         expect(db.REDEEM_NO_ANSWER).toMatch(/No answer/);
     });
+});
+
+/** The hue of a #rrggbb colour, in degrees. */
+function hue(hex: string): number {
+    const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    if (d === 0) return 0;
+    const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return (h * 60 + 360) % 360;
+}
+
+// Review of #1852, finding 6: earth's info tone is terra (4.17:1 on its own box, 4.42:1 on the card), and slate's dashed
+// border faded into the card (1.49:1). Every palette Settings offers, and dark.
+describe('the marker in every palette', () => {
+    const palettes: Array<[string, AppColors, () => void]> = [
+        ['classic', lightColors, () => { theme.dark = false; theme.palette = 'classic'; }],
+        ['earth', earthColors as unknown as AppColors, () => { theme.dark = false; theme.palette = 'earth'; }],
+        ['slate', slateColors as unknown as AppColors, () => { theme.dark = false; theme.palette = 'slate'; }],
+        ['dark', darkColors as unknown as AppColors, () => { theme.dark = true; }],
+    ];
+    afterEach(() => { theme.dark = false; theme.palette = 'classic'; });
+    for (const [name, colors, use] of palettes) {
+        it(`${name}: its words read at 4.5:1 or more on its own box, the card and the page, in a blue, never amber or red; its dashed edge at 3:1 on the card`, async () => {
+            use();
+            const tone = markTone(colors);
+            for (const behind of [tone.bg, colors.surface.card, colors.surface.page]) expect(contrast(tone.fg, behind), behind).toBeGreaterThanOrEqual(4.5);
+            expect(contrast(colors.text.body, tone.bg)).toBeGreaterThanOrEqual(4.5);
+            expect(contrast(tone.border, colors.surface.card)).toBeGreaterThanOrEqual(3);
+            expect(hue(tone.fg)).toBeGreaterThanOrEqual(200);
+            expect(hue(tone.fg)).toBeLessThanOrEqual(260);
+            // Drawn in that tone: the strip's pill and second button, the action's words, the line, the sheet's Start.
+            await render(createElement('div', null,
+                createElement(LocalCommunityMark, { variant: 'strip', feature: 'beans' }),
+                createElement(LocalCommunityMark, { variant: 'action', feature: 'beans', label: 'Send Beans' }),
+                createElement(LocalCommunityMark, { variant: 'line', feature: 'beans', text: LOCAL_COMMUNITY_LINES.poll })));
+            const strip = host.querySelector('[data-testid="local-community-strip"]')!;
+            expect(styleOf(strip)).toMatchObject({ borderColor: tone.border, backgroundColor: tone.bg });
+            const pills = Array.from(host.querySelectorAll('span')).filter(x => x.textContent === `${LOCAL_COMMUNITY_EMOJI} ${LOCAL_COMMUNITY_MARK}`);
+            expect(pills.length).toBe(2);
+            for (const pill of pills) expect(styleOf(pill).color).toBe(tone.fg);
+            const action = host.querySelector('[data-testid="local-community-action"]')!;
+            expect(styleOf(action).borderColor).toBe(tone.border);
+            expect(styleOf(Array.from(action.querySelectorAll('span')).find(x => x.textContent === 'Send Beans')!).color).toBe(tone.fg);
+            expect(styleOf(Array.from(host.querySelectorAll('span')).find(x => x.textContent === LOCAL_COMMUNITY_LINES.poll)!).color).toBe(tone.fg);
+            await press(Array.from(host.querySelectorAll('button')).find(b => b.textContent === LOCAL_COMMUNITY_LINES.poll)!);
+            const start = Array.from(host.querySelectorAll('[data-testid="local-community-sheet"] button')).find(b => b.textContent === LOCAL_COMMUNITY_SHEET.start)!;
+            expect(styleOf(start).backgroundColor).toBe(tone.fg);
+            expect(contrast(styleOf(start.querySelector('span')).color, tone.fg)).toBeGreaterThanOrEqual(4.5);
+        });
+    }
 });
 
 for (const scheme of ['light', 'dark'] as const) {

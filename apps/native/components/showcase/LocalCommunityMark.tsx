@@ -14,12 +14,24 @@ import {
     LOCAL_COMMUNITY_EMOJI, LOCAL_COMMUNITY_MARK, LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, type ShowcaseFeature,
 } from '@beanpool/core';
 import { useTheme } from '../../app/ThemeContext';
-import type { AppColors } from '../../constants/colors';
+import { lightColors, type AppColors } from '../../constants/colors';
+import { contrastRatio } from '../../utils/readable-color';
 
-/** The marker's colours: the theme's info tone, so it reads in light and dark alike. */
+/**
+ * The marker's colours: the theme's info tone, so it reads in light and dark alike. Where a palette's info tone doesn't
+ * read at 4.5:1 on its own background, the card and the page (earth's is terra, 4.17:1 and 4.42:1, and an orange-red the
+ * design rules out for the marker), the marker takes the classic blue, as on the web. Its dashed border takes the tone's
+ * solid where the border would fade into the card (slate's, 1.49:1). Review of #1852, finding 6.
+ */
 export function markTone(colors: AppColors) {
-    const info = colors.feedback.info;
-    return { fg: info.fg, bg: info.bg, border: info.border };
+    const own = colors.feedback.info;
+    // The page is 'transparent' over the doodle pattern: only a colour can be measured.
+    const reads = (fg: string, bg: string) => [bg, colors.surface.card, colors.surface.page]
+        .filter(behind => /^#[0-9a-f]{6}$/i.test(behind))
+        .every(behind => contrastRatio(fg, behind) >= 4.5);
+    const info = reads(own.fg, own.bg) ? own : lightColors.feedback.info;
+    const border = contrastRatio(info.border, colors.surface.card) >= 3 ? info.border : info.solid;
+    return { fg: info.fg, bg: info.bg, border };
 }
 
 /** Where each of the sheet's ways forward goes. */

@@ -7,7 +7,7 @@
 import {
     initStateEngine, adminSetTier,
     runWashSybilMetricsAudit, runWashSybilMetricsAuditSliced, getCommunityHealth,
-    reconcileLedgerFromDb
+    reconcileLedgerFromDb, washAnalysisCount
 } from './state-engine.js';
 import { db } from './db/db.js';
 
@@ -139,20 +139,19 @@ async function main() {
         // getWashTradingEnforcement). A walk over 100,000 members lasts minutes, so floors read that way made a new analysis
         // every 10 s of the walk, each a pass over every trade: the audit grew with the square of the members. The run takes
         // one analysis and reads every floor with it. Here each turn the run gives moves the clock on 11 s, as a long walk
-        // would, and the analyses are counted by their first query (washTradingAnalysisSteps' pair totals).
-        const pairTotals = /SUM\(credits\) as vol[\s\S]*GROUP BY buyer_pubkey, seller_pubkey/;
-        const realPrepare = (db as any).prepare;
+        // would, and the analyses are counted (engine trust.ts washAnalysisCount: every complete one, by any path; the pair
+        // totals' query, which this used to count, now runs a page of buyers at a time).
         const realNow = Date.now;
-        let analyses = 0, clockAhead = 0;
-        (db as any).prepare = function (this: any, sql: string) { if (pairTotals.test(sql)) analyses++; return realPrepare.call(this, sql); };
+        let clockAhead = 0;
+        const analysesBefore = washAnalysisCount();
         Date.now = () => realNow() + clockAhead;
         let longWalk;
         try {
             longWalk = await runWashSybilMetricsAuditSliced({ sliceMs: 0, onYield: () => { clockAhead += 11_000; } });
         } finally {
-            (db as any).prepare = realPrepare;
             Date.now = realNow;
         }
+        const analyses = washAnalysisCount() - analysesBefore;
         assert(clockAhead >= activeCount * 11_000, `The run walked past the live analysis's 10 s keep (${clockAhead / 1000} s on the clock)`);
         assert(analyses === 1, `One wash-trading analysis for the whole run (${analyses})`);
         assert(JSON.stringify(longWalk) === JSON.stringify(oneGo), 'It gives the one-go numbers');

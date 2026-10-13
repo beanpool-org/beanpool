@@ -361,8 +361,8 @@ export const TABLES: Record<string, TableEntry> = {
         columns: cols('owner_pubkey blocked_pubkey created_at updated_at'),
     },
     invalidated_keys: {
-        kind: 'replicated', payload: 'invalidatedKeys', watermark: 'invalidated_at',
-        columns: cols('public_key reason invalidated_at rekeyed_to'),
+        kind: 'replicated', payload: 'invalidatedKeys', watermark: 'invalidated_at', orWatermark: 'succession_stored_at',
+        columns: cols('public_key reason invalidated_at rekeyed_to succession_sig succession_at succession_stored_at'),
     },
     tombstones: {
         kind: 'replicated', payload: 'tombstones', watermark: 'deleted_at',

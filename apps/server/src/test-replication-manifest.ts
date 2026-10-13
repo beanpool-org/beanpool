@@ -322,6 +322,13 @@ async function main(): Promise<void> {
                         VALUES ('manifest-or-watermark', 'k', 'e', 1, '2000-01-01T00:00:00.000Z', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+1 minute'))`).run();
             return (x) => x?.id === 'manifest-or-watermark';
         },
+        // A re-key from long ago, attested now (line-display design §5): the statement does not move invalidated_at.
+        invalidated_keys: () => {
+            db.prepare(`INSERT INTO invalidated_keys (public_key, reason, invalidated_at, rekeyed_to, succession_sig, succession_at, succession_stored_at)
+                        VALUES ('manifest-or-watermark', 'rekeyed', '2000-01-01T00:00:00.000Z', ?, 's', '2000-01-01T00:00:00.000Z',
+                                strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+1 minute'))`).run('f'.repeat(64));
+            return (x) => x?.publicKey === 'manifest-or-watermark';
+        },
     };
     // A parent row carrying its rows (`inRowOf`): one planted, with one of the rows it carries.
     const IN_ROW_OF: Partial<Record<string, () => (x: any) => boolean>> = {
@@ -383,6 +390,7 @@ async function main(): Promise<void> {
     db.prepare(`DELETE FROM accounts WHERE public_key = 'manifest-whole-set'`).run();
     db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = 'manifest-whole-set'`).run();
     db.prepare(`DELETE FROM enterprise_pledges WHERE id = 'manifest-or-watermark'`).run();
+    db.prepare(`DELETE FROM invalidated_keys WHERE public_key = 'manifest-or-watermark'`).run();
     db.prepare(`DELETE FROM member_preferences WHERE public_key = 'manifest-in-row'`).run();
     db.prepare(`DELETE FROM member_photos WHERE public_key = 'manifest-in-row-photo'`).run();
     db.prepare(`DELETE FROM group_pictures WHERE group_id = 'manifest-in-row-group'`).run();

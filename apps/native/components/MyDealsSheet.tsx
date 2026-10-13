@@ -33,6 +33,15 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
     const [markOpen, setMarkOpen] = useState(false);
     const openMark = () => setMarkOpen(true);
     const { colors, theme } = useTheme();
+    // The held and pending cards' tones: light keeps its tints; dark takes the scheme's success and warning tones, with
+    // each status line in its tone's ink, so every text on them reads at 4.5:1 or more (my-deals-dark-render.test.ts).
+    const dark = theme === 'dark';
+    const heldTone = dark
+        ? { backgroundColor: colors.feedback.success.bg, borderColor: colors.feedback.success.border }
+        : { backgroundColor: palette.green50, borderColor: palette.green200 };
+    const actionTone = dark
+        ? { backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border }
+        : { backgroundColor: palette.amber50, borderColor: palette.yellow300 };
     const styles = useStyles(({ colors }) => StyleSheet.create({
         overlay: {
             flex: 1,
@@ -212,7 +221,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         statusText: {
             fontSize: 10,
             fontWeight: '800',
-            color: palette.gray600,
+            color: theme === 'dark' ? colors.text.secondary : palette.gray600,
             textTransform: 'uppercase',
         },
         statusTextCompleted: {
@@ -421,10 +430,10 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
             const partnerAvatar = isBuyer ? item.sellerAvatar : item.buyerAvatar;
 
             const card = (
-                <View style={[
+                <View testID={`deal-card-${item.id}`} style={[
                     styles.dealCard,
                     !isCompleted && !isPending && { opacity: 0.5 },
-                    isPending && { backgroundColor: palette.green50, borderColor: palette.green200 },
+                    isPending && heldTone,
                 ]}>
                     {item.coverImage && typeof item.coverImage === 'string' && item.coverImage.trim() !== '' && item.coverImage !== 'null' && item.coverImage !== 'undefined' ? (
                         <ExpoImage source={{ uri: listPhotoUrl(item.coverImage) }} style={styles.dealThumb} contentFit="cover" cachePolicy="memory-disk" transition={150} />
@@ -509,23 +518,28 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
         const relatedTx = activeTxsByPostId.get(item.id)?.[0];
         let displayStatusText = 'Active';
         let highlightStyle = {};
-        
+        // The status line's ink: light as it was (muted, amber for Action Required); dark, its card's tone.
+        let statusInk: string | undefined;
+
         if (item.status === 'pending' || relatedTx?.status === 'pending') {
             displayStatusText = '🤝 Held in Trust';
-            highlightStyle = { backgroundColor: palette.green50, borderColor: palette.green200 };
+            highlightStyle = heldTone;
+            if (dark) statusInk = colors.feedback.success.fg;
         } else if (relatedTx?.status === 'requested') {
             if (item.author_pubkey === identity?.publicKey) {
                 displayStatusText = '⚠️ Action Required';
-                highlightStyle = { backgroundColor: palette.amber50, borderColor: palette.yellow300 };
+                highlightStyle = actionTone;
+                statusInk = dark ? colors.feedback.warning.fg : palette.amber600;
             } else {
                 displayStatusText = '⏳ Awaiting Approval';
                 highlightStyle = { backgroundColor: colors.surface.subtle, borderColor: colors.border.default };
+                if (dark) statusInk = colors.text.secondary;
             }
         }
 
         return (
             <Pressable accessibilityRole="button" onPress={preview ? openMark : () => { onClose(); router.push(`/post/${item.id}`); }}>
-                <View style={[styles.dealCard, highlightStyle, item.status === 'paused' && styles.dealCardPaused]}>
+                <View testID={`deal-card-${item.id}`} style={[styles.dealCard, highlightStyle, item.status === 'paused' && styles.dealCardPaused]}>
                     {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
                         <ExpoImage source={{ uri: listPhotoUrl(coverImage) }} style={styles.dealThumb} contentFit="cover" cachePolicy="memory-disk" transition={150} />
                     ) : (
@@ -553,7 +567,7 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                             )}
                         </View>
                         <Text style={styles.dealTitle} numberOfLines={1}>{item.title}</Text>
-                        <Text style={[styles.dateText, displayStatusText.includes('Action') && { color: palette.amber600, fontWeight: '800' }, { marginTop: 2 }]}>{displayStatusText}</Text>
+                        <Text style={[styles.dateText, statusInk !== undefined && { color: statusInk }, displayStatusText.includes('Action') && { fontWeight: '800' }, { marginTop: 2 }]}>{displayStatusText}</Text>
                     </View>
                 </View>
             </Pressable>

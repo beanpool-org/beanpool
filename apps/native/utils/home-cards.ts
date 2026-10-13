@@ -25,8 +25,7 @@ import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, readSkySettings, removeCard as frameRemoveCard, skyPlaceFor,
     skyToday, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
-    type SkyToday,
-} from '@beanpool/core';
+    type SkyToday, featureModeFor } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
 import {
     NEEDS_YOU_PRIORITY, buildNeedsYou, closesInWords,
@@ -755,6 +754,15 @@ export function globalStepLines(steps: NonNullable<HomeCards['steps']>, find: Ho
     const lines: StepLine[] = [{ id: 'post', text: 'Post something free or for swap', done: steps.firstPost }];
     if (!knocked && communityToAsk(find)) lines.push({ id: 'ask', text: 'Ask a community to let you in', done: false, suggestion: true });
     return lines;
+}
+
+/**
+ * Whether this answer previews Beans: /api/home's `features` are the reader's own (W1), with the node's `showcase`.
+ * Then Home shows the Your Beans preview card; First steps gains no line for it, since the getting-started tour's Ledger
+ * step is the way in (scratch/global-node/DESIGN-getting-started-fable.md pick 10, Marty yes).
+ */
+export function homeBeansPreview(answer: Pick<HomeAnswer, 'features'>): boolean {
+    return featureModeFor('beans', answer.features as Record<string, unknown>) === 'preview';
 }
 
 /**

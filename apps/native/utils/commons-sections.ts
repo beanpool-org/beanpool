@@ -52,6 +52,11 @@ export function commonsHeading(features: NodeFeatures | null | undefined): { tit
     }
     if (decide) return { title: 'Commons', description: 'Community decisions and groups. Propose binding actions and vote on what matters.' };
     if (enterprises) return { title: 'Commons', description: 'Projects, enterprises, and groups to join or start.' };
+    // A node that shows its switched-off features (the worldwide community's showcase) keeps the Commons heading over
+    // Example Valley's pool, enterprise and Decision, drawn first, and the real groups under them (design §1 row 6).
+    if (features?.showcase === true) {
+        return { title: 'Commons', description: "A local community's Commons, from an example: a shared pool, enterprises and binding decisions. Under it, groups to join here, or start your own with +." };
+    }
     return { title: 'Groups', description: 'Find a group to join, or start your own with +.' };
 }
 

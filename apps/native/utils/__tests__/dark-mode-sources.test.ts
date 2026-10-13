@@ -154,6 +154,10 @@ describe('dark mode: themed screens draw with the theme', () => {
         'components/NeedsYouIcons.tsx': ["'#1f2937'"],                     // the count on its white or accent dot
     };
     const PROTECTED = new Set(['app/(tabs)/map.tsx', 'components/GlobalHeader.tsx']); // off-limits; map.tsx's are the map style's
+    // A fill token given to `color`: since #1904 a fill is the same deep value in both themes (emerald-700, red-700,
+    // orange-700, indigo-600), so as words on the dark card it reads 2.7–3.2:1. Words take the ink tokens (brand.primary,
+    // feedback.*.fg, accent.primary). Ink tokens and text.* are not judged here (text.muted is a known open item).
+    const FILL_TOKEN = /^(theme\.)?colors\.(brand\.(fill|dark)|accent\.fill|action\.\w+|feedback\.\w+\.solid)$/;
     it('no themed screen sets dark text without a dark branch', () => {
         const darkStep = /^palette\.(gray[5-9]00|slate[5-9]00|neutral[6-9]00|neutral950|red[7-9]00|orange[7-9]00|amber[8-9]00|emerald[8-9]00|green[8-9]00|indigo[7-9]00|blue[7-9]00|violet700|purple[7-8]00|black)$/;
         const offenders = ALL
@@ -162,7 +166,7 @@ describe('dark mode: themed screens draw with the theme', () => {
                 .filter(({ value }) => {
                     if (DARK_TEXT_ON_PALE_OK[s.file]?.includes(value)) return false;
                     if (darkStep.test(value)) return true;
-                    const c = /^['"]/.test(value) ? resolve(value) : undefined;
+                    const c = /^['"]/.test(value) || FILL_TOKEN.test(value) ? resolve(value) : undefined;
                     return !!c && c.alpha >= 0.5 && contrast(c.hex, darkColors.surface.card) < 4.5;
                 })
                 .map(({ at, value }) => `${at} ${value}`));

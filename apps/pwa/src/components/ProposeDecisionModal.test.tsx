@@ -114,6 +114,26 @@ describe('ProposeDecisionModal Accessibility & UX', () => {
         expect(hiddenEmojis.length).toBeGreaterThan(0);
     });
 
+    it('names the group it acts on "Project or enterprise", never a treasury (group decisions §3.1)', () => {
+        render(
+            <ProposeDecisionModal
+                isOpen={true}
+                onClose={vi.fn()}
+                onCreated={vi.fn()}
+                identity={mockIdentity}
+                commonsBalance={100}
+            />
+        );
+        const dialog = screen.getByRole('dialog');
+        fireEvent.click(screen.getAllByRole('radio').find(r => r.textContent?.includes('lead keeper') || r.textContent?.includes('Lead Keeper'))!);
+        expect(screen.getByText('Project or enterprise')).toBeInTheDocument();
+        expect(dialog.textContent).not.toMatch(/treasur/i);
+        fireEvent.click(screen.getByRole('button', { name: /Commons Pool/i }));
+        fireEvent.click(screen.getAllByRole('radio').find(r => r.textContent?.includes('debt') || r.textContent?.includes('Deficit'))!);
+        expect(screen.getByText('Project or enterprise')).toBeInTheDocument();
+        expect(dialog.textContent).not.toMatch(/treasur/i);
+    });
+
     it("shows the node's grant-cap sentence as it comes, and keeps the form open", async () => {
         // The node refuses a grant bigger than the Commons could pay (decisions-engine.ts grantCapRefusal); request()
         // throws its `error` field. The screen is not the rule, so it shows the node's words unchanged.

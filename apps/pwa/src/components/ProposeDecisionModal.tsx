@@ -310,7 +310,7 @@ export function ProposeDecisionModal({
                     {(effect === 'remove_lead_keeper' || effect === 'write_off_deficit') && (
                         <div>
                             <label className="block text-xs font-bold uppercase tracking-wider text-nature-400 mb-1">
-                                Target Enterprise / Treasury
+                                Project or enterprise
                             </label>
                             {treasuries.length > 0 && (
                                 <div className="flex flex-wrap gap-1.5 mb-2">

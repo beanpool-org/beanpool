@@ -21,8 +21,7 @@ export type TabId =
     | 'topology'
     | 'invites'
     | 'onboarding'
-    | 'logs'
-    | 'ai';
+    | 'logs';
 
 /**
  * `auth_required` is kept apart from `offline` because the two need different actions from
@@ -122,7 +121,6 @@ export function FleetSidebar({
         { id: 'invites', label: 'Invites & Codes', icon: '🎫' },
         { id: 'onboarding', label: 'Onboarding Funnel', icon: '🚪' },
         { id: 'logs', label: 'System Streamer', icon: '📜' },
-        { id: 'ai', label: 'Sovereign AI Copilot', icon: '🤖', badge: 'PRO' },
     ];
 
     // The drawer's open section: the current one to start with, when it has screens.

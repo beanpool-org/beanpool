@@ -30,7 +30,7 @@ function Probe() { seen = useReaderFeatures(); return null; }
 const settle = async () => { for (let j = 0; j < 6; j++) await act(async () => {}); };
 async function mount() {
     const r = createRoot(document.createElement('div'));
-    await act(async () => { r.render(createElement(Probe)); });
+    await act(async () => { r.render(createElement(Probe) as any); });
     return r;
 }
 /** n focuses: each mounts the hook, lets its ask settle, and leaves (one screen after another). */

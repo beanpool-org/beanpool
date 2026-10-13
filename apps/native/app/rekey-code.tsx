@@ -25,6 +25,7 @@ import { draftIdentity, getMnemonic, importIdentity, loadIdentity, type BeanPool
 import { buildSignedHeaders } from '../utils/crypto';
 import { signReEnrollStatement } from '../utils/member-statements';
 import { rekeySlotStore } from '../utils/rekey-slot-store';
+import { attestJustCompletedRekey } from '../utils/key-succession';
 import {
     abandonRekey, askRekey, beginRekey, cleanRekeyCode, endsRekey, finishRekey, parseRekeyLink, pollRekey, rekeyCommunityUrl, resumeRekey,
     REKEY_POLL_MS, REKEY_TEXT, RekeyHeldError, type RekeyAnswer, type RekeyDeps, type RekeySlot,
@@ -142,6 +143,10 @@ export default function RekeyCodeScreen() {
                 await moveOntoCommunity(s.community, answer.communityName);
             }
             setIdentity(done.identity as BeanPoolIdentity);
+            // This key confirms the old one was this member's, so their old group lines keep their name (line-display
+            // design §5). The member just did the re-key here, so nothing is asked; a failure is asked about at the next
+            // sign-in instead (app/_layout.tsx).
+            attestJustCompletedRekey(s.community, done.identity as BeanPoolIdentity).catch(() => {});
             if (done.newWords) {
                 setNewWords(await getMnemonic(done.identity));
                 setPhase('words');

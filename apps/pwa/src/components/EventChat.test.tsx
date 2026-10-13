@@ -3,6 +3,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventChat, decodeEventChatText } from './EventChat';
 import { EventDetail } from './EventCard';
 import * as api from '../lib/api';
+import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { indexedDbGroupLockStore, resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
+import { forgetGroupKeys } from '../lib/group-chat-keys';
+import { GROUP_HOLD_EVENT_TEXT, GROUP_HOLD_UNREAD_TEXT } from '../lib/group-hold';
 
 vi.mock('../lib/api', async () => {
     const actual = await vi.importActual('../lib/api');
@@ -17,6 +21,14 @@ vi.mock('../lib/api', async () => {
 });
 
 const identity: any = { publicKey: 'me-pk', privateKey: 'priv', callsign: 'Me' };
+
+// A browser's own storage: the record of group chats held locked here reads (lib/group-hold.ts). Each send asks it.
+beforeEach(() => {
+    vi.stubGlobal('indexedDB', memoryIndexedDB());
+    resetGroupChatLockStoreForTest();
+    forgetGroupKeys();
+});
+afterEach(() => { vi.unstubAllGlobals(); });
 const b64 = (s: string) => btoa(unescape(encodeURIComponent(s)));
 
 function message(over: Partial<api.EventThreadMessage> = {}): api.EventThreadMessage {
@@ -510,5 +522,44 @@ describe('EventChat: the refresh pauses while the tab is hidden', () => {
         unmount();
         await tick(REFRESH * 10);
         expect(api.getEventChat).not.toHaveBeenCalled();
+    });
+});
+
+describe('EventChat: a group held locked here never leaves readable by this screen (review of #1816, findings 2 and 3)', () => {
+    beforeEach(() => {
+        vi.mocked(api.getEventChat).mockReset();
+        vi.mocked(api.postEventChatMessage).mockReset();
+        vi.mocked(api.getEventChat).mockResolvedValue(view());
+        vi.mocked(api.postEventChatMessage).mockResolvedValue({ success: true, message: message({ id: 'm2' }) });
+    });
+
+    async function trySend(text: string) {
+        renderAt320(<EventChat postId="ev-1" identity={identity} refreshMs={0} />);
+        const box = await screen.findByLabelText('Message everyone going');
+        fireEvent.change(box, { target: { value: text } });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send' })); });
+        return box as HTMLTextAreaElement;
+    }
+
+    it('the id is a group this browser holds locked: nothing is posted, the words stay, and it says why', async () => {
+        await indexedDbGroupLockStore.markLocked(`${identity.publicKey}/ev-1`);
+        const box = await trySend('the gate code is 4321');
+        expect(await screen.findByText(GROUP_HOLD_EVENT_TEXT)).toBeTruthy();
+        expect(api.postEventChatMessage).not.toHaveBeenCalled();
+        expect(box.value).toBe('the gate code is 4321');
+    });
+
+    it('the record of locked groups can\'t be read: nothing is posted', async () => {
+        vi.stubGlobal('indexedDB', undefined);
+        resetGroupChatLockStoreForTest();
+        await trySend('words while the store is down');
+        expect(await screen.findByText(GROUP_HOLD_UNREAD_TEXT)).toBeTruthy();
+        expect(api.postEventChatMessage).not.toHaveBeenCalled();
+    });
+
+    it('an event that was never a held group posts as before', async () => {
+        await indexedDbGroupLockStore.markLocked(`${identity.publicKey}/another-group`);
+        await trySend('See you there');
+        await waitFor(() => expect(api.postEventChatMessage).toHaveBeenCalledWith('ev-1', 'See you there'));
     });
 });

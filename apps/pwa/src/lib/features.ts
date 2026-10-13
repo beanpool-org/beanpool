@@ -25,10 +25,10 @@ export function modeFor(feature: ShowcaseFeature, info: CommunityInfo | null | u
     return featureModeFor(feature, info.features as FeatureSet, reader);
 }
 
-/** Where Start a community leads: the node's `startCommunityUrl` (W1) when it names one, else beanpool.org's. */
+/** Where Start a community leads: the node's `startCommunityUrl` (W1) when it names an https page, else beanpool.org's. */
 export function startCommunityUrl(info: CommunityInfo | null | undefined): string {
     const url = (info as { startCommunityUrl?: unknown } | null | undefined)?.startCommunityUrl;
-    return typeof url === 'string' && /^https?:\/\//i.test(url) ? url : START_COMMUNITY_URL_DEFAULT;
+    return typeof url === 'string' && /^https:\/\//i.test(url) ? url : START_COMMUNITY_URL_DEFAULT;
 }
 
 /**

@@ -9,7 +9,8 @@ import type { CommunityInfo } from './api';
 const identity = vi.hoisted(() => ({ current: null as { publicKey: string; privateKey: string } | null }));
 vi.mock('./identity', () => ({ loadIdentity: async () => identity.current }));
 
-import { modeFor, readerFeaturesOnce, resetReaderFeaturesOnce } from './features';
+import { START_COMMUNITY_URL_DEFAULT } from '@beanpool/core';
+import { modeFor, readerFeaturesOnce, resetReaderFeaturesOnce, startCommunityUrl } from './features';
 
 const NODE = {
     profile: 'global',
@@ -60,6 +61,16 @@ describe('the reader\'s features', () => {
         expect(modeFor('beans', nodeOn, NODE.features as Record<string, unknown>)).toBe('read-only');
     });
 
+    it('Beans off on the node, on for this verified reader: the reader\'s set alone makes their Ledger live', async () => {
+        identity.current = { publicKey: '33'.repeat(32), privateKey: '44'.repeat(32) };
+        meAnswer = () => new Response(JSON.stringify({ features: { ...NODE.features, beans: true } }), { status: 200 });
+        const reader = await readerFeaturesOnce();
+        expect(modeFor('beans', NODE, reader)).toBe('live');
+        expect(modeFor('decisions', NODE, reader)).toBe('preview');
+        // Signed out on the same node: the node's set, so the preview.
+        expect(modeFor('beans', NODE, null)).toBe('preview');
+    });
+
     it('a failed read is not kept: the node\'s set stands, and the next caller asks again', async () => {
         identity.current = { publicKey: 'ee'.repeat(32), privateKey: 'ff'.repeat(32) };
         meAnswer = () => new Response(JSON.stringify({ error: 'down' }), { status: 503 });
@@ -73,5 +84,15 @@ describe('the reader\'s features', () => {
         identity.current = { publicKey: '11'.repeat(32), privateKey: '22'.repeat(32) };
         meAnswer = () => new Response(JSON.stringify({ publicKey: 'x', probation: {} }), { status: 200 });
         expect(await readerFeaturesOnce()).toBeNull();
+    });
+});
+
+describe('where Start a community leads', () => {
+    it('the node\'s https page; an http one, or none, leads to beanpool.org\'s', () => {
+        const info = (startCommunityUrl: unknown) => ({ ...NODE, startCommunityUrl }) as unknown as CommunityInfo;
+        expect(startCommunityUrl(info('https://start.example.org/how'))).toBe('https://start.example.org/how');
+        expect(startCommunityUrl(info('http://start.example.org/how'))).toBe(START_COMMUNITY_URL_DEFAULT);
+        expect(startCommunityUrl(info(undefined))).toBe(START_COMMUNITY_URL_DEFAULT);
+        expect(startCommunityUrl(null)).toBe(START_COMMUNITY_URL_DEFAULT);
     });
 });

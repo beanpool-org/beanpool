@@ -82,7 +82,7 @@ export function LedgerPreview(ways: LocalCommunityWays) {
                 <p className="text-sm text-nature-600 dark:text-nature-300">Levels are badges for trading with many neighbours. They open nothing and close nothing.</p>
             </section>
             <section className={`${CARD} mb-4`}>
-                <div className="mb-1 flex items-center justify-between gap-2">
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                     <h3 className="font-bold text-nature-900 dark:text-nature-50">Transactions</h3>
                     <button type="button" onClick={() => setCommonsInfo(true)} className="shrink-0 text-sm font-semibold text-blue-700 dark:text-blue-300" aria-label="How the Commons and the circulation fee work">ⓘ The Commons</button>
                 </div>

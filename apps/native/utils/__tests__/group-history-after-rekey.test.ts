@@ -67,7 +67,7 @@ import {
     unlockWithOldWords, oldKeyFromWords, newPhoneQrPayload, parseNewPhoneQr, checkNewPhone, confirmNewPhone, newPhoneConfirmText, NEW_PHONE_QR_TAG,
     handOversHeld, noteConfirmations, confirmedNotes, newPhoneProgressText,
     newPhoneEnd, newPhoneDoneText, newPhoneRefusedRestText, newPhoneSaidHeldText, oldWordsEnd, oldWordsNothingText, OLD_WORDS_DONE, OLD_WORDS_NOTHING_LISTED,
-    lockedHistoryCounts, noteLockedHistoryCount, newPhoneKeyWasOtherText,
+    lockedHistoryCounts, noteLockedHistoryCount, newPhoneKeyWasOtherText, newPhoneMismatchText,
 } from '../group-history-unlock';
 import { rememberRosterNames } from '../name-key-memory';
 import { sendSealedGroupLine, openGroupThread, chatIsLocked } from '../group-chat-lines';
@@ -940,6 +940,30 @@ describe('confirmation 1 of #1844: a chain in the wrong order, a lookalike name,
         const read = await reads(cat2, g);
         expect(read).not.toContain(`${zed.name}: Zed before Cat`);
         console.log(`MEASURED MP-CHAIN: memory {key: C2, was: [P, C1]}; check ${JSON.stringify(check)}; Cat₂ reads ${JSON.stringify(read)}`);
+        expect(elsewhere).toEqual([]);
+    });
+
+    it('MP-HIDDEN: the node never shows Ben\'s phone Zed under his own name, so only the name memory can refuse: "Catm" was on her key before the move to Zed\'s, and the misled code is refused', async () => {
+        const { ben, zed, cat, g, h, ctx } = await poisonSetup('m');
+        const noZed = (rows: any[]) => rows.filter((m) => m.memberPubkey !== pk(zed));
+        // Every roster of G this phone loads leaves Zed out; H shows his row under her name, once.
+        await withHook(rowsHook(`/api/groups/${g}/members`, noZed), () => benSees(ben, [g]));
+        expect(memoryOf(cat.name)).toEqual({ key: pk(cat) });
+        await withHook(rowsHook(`/api/groups/${h}/members`, (rows) => rows.map((m) => (m.memberPubkey === pk(zed) ? { ...m, callsign: cat.name } : m))), () => benSees(ben, [h]));
+        expect(memoryOf(cat.name)).toEqual({ key: pk(zed), changedFrom: pk(cat) });
+        expect(JSON.parse(mem.async.get(byKeyKey()) ?? '{}')[pk(zed)]).toEqual([cat.name]);
+        const cat2 = await rekeyed(cat, cat.name);
+        const misled = claim(cat2, pk(zed));
+        const herRow = (m: any) => (m.memberPubkey === pk(cat2) ? { ...m, formerKeys: [misled] } : m);
+        hooks.push(rowsHook(/\/members$/, (rows) => rows.map(herRow)));
+        await fromEpoch1(g, pk(cat2));
+        await withHook(rowsHook(`/api/groups/${g}/members`, (rows) => noZed(rows).map(herRow)), () => benSees(ben, [g]));
+        expect(memoryOf(cat.name)).toEqual({ key: pk(cat2), changedFrom: pk(cat) });
+        // The key's names say nothing against it (it was only ever "Catm" here): the memory refuses.
+        const check = await withHook(rowsHook(`/api/groups/${g}/members`, (rows) => noZed(rows).map(herRow)),
+            () => checkNewPhone({ ...ctx, scanned: JSON.stringify([NEW_PHONE_QR_TAG, pk(cat2), pk(zed), cat.name]) }));
+        expect(check).toEqual({ ok: false, reason: 'mismatch', text: newPhoneMismatchText(cat.name) });
+        expect(await topUps(pk(ben), pk(cat2))).toEqual([]);
         expect(elsewhere).toEqual([]);
     });
 

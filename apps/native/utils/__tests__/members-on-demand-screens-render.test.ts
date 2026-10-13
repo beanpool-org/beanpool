@@ -183,17 +183,21 @@ const community = vi.hoisted(() => ({
 }));
 vi.mock('../use-node-profile', async () => {
     const React = await import('react');
-    return {
-        useNodeProfile: () => {
-            const [late, setLate] = React.useState<ReturnType<typeof community.profile> | null>(null);
-            React.useEffect(() => {
-                if (!community.lateMs) return;
-                const t = setTimeout(() => setLate(community.profile()), community.lateMs);
-                return () => clearTimeout(t);
-            }, []);
-            return community.lateMs ? late : community.profile();
-        },
+    const useNodeProfile = () => {
+        const [late, setLate] = React.useState<ReturnType<typeof community.profile> | null>(null);
+        React.useEffect(() => {
+            if (!community.lateMs) return;
+            const t = setTimeout(() => setLate(community.profile()), community.lateMs);
+            return () => clearTimeout(t);
+        }, []);
+        return community.lateMs ? late : community.profile();
     };
+    // The showcase's hooks (#1852, use-reader-features.ts) read the same answer, with `copyRead` once it has come.
+    const useNodeProfileState = () => {
+        const profile = useNodeProfile();
+        return { profile, copyRead: profile !== null };
+    };
+    return { useNodeProfile, useNodeProfileState };
 });
 vi.mock('../node-profile', async (importOriginal) => ({
     ...(await importOriginal<object>()),

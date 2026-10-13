@@ -28,7 +28,7 @@ Every member can see:
 - its keepers;
 - its **Listings**, **Recent activity** and a **Discussion** you can write in.
 
-At the bottom, **Report Enterprise** if something is wrong.
+At the bottom, **Report Enterprise** (**Report Project** on a project) if something is wrong.
 
 ## Backing an enterprise
 

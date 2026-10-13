@@ -17,6 +17,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { getInvitablePeople, inviteGroupMemberApi } from '../utils/db';
+import { useNodeProfile } from '../utils/use-node-profile';
+import { lookUpMembers, searchPath } from '../utils/members-lookup';
 import { MemberAvatar } from './MemberAvatar';
 import { hapticSuccess, hapticTick } from '../utils/haptics';
 
@@ -41,6 +43,10 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
     const [query, setQuery] = useState('');
     const [picked, setPicked] = useState<Set<string>>(new Set());
     const [sending, setSending] = useState(false);
+    // On a community that says `membersOnDemand`: the people this member has dealt with, and a search of 2 letters or
+    // more asks the node (utils/members-lookup.ts). Anywhere else, the whole list as always.
+    const membersOnDemand = useNodeProfile()?.features.membersOnDemand === true;
+    const [nodeResults, setNodeResults] = useState<{ publicKey: string; callsign: string; avatarUrl: string | null }[]>([]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -48,16 +54,34 @@ export function InvitePeopleSheet({ isOpen, groupId, groupName, existing, myPubk
         setQuery('');
         setMembers(null);
         let alive = true;
-        getInvitablePeople().then(m => { if (alive) setMembers(m); }).catch(() => { if (alive) setMembers([]); });
+        getInvitablePeople(membersOnDemand ? { membersOnDemand } : undefined).then(m => { if (alive) setMembers(m); }).catch(() => { if (alive) setMembers([]); });
         return () => { alive = false; };
-    }, [isOpen]);
+    }, [isOpen, membersOnDemand]);
+
+    useEffect(() => {
+        if (!membersOnDemand) return;
+        const path = searchPath(query);
+        if (!path) {
+            setNodeResults([]);
+            return;
+        }
+        let alive = true;
+        const timeout = setTimeout(async () => {
+            const rows = await lookUpMembers(path);
+            if (alive) setNodeResults((rows ?? []).map(r => ({ publicKey: r.public_key, callsign: r.callsign, avatarUrl: r.avatar_url })));
+        }, 400);
+        return () => { alive = false; clearTimeout(timeout); };
+    }, [query, membersOnDemand]);
 
     const shown = useMemo(() => {
         const q = query.trim().toLowerCase();
-        return (members || [])
+        const held = (members || [])
             .filter(m => m.publicKey !== myPubkey)
             .filter(m => !q || (m.callsign || '').toLowerCase().includes(q));
-    }, [members, query, myPubkey]);
+        if (nodeResults.length === 0) return held;
+        const seen = new Set(held.map(m => m.publicKey));
+        return [...held, ...nodeResults.filter(m => m.publicKey !== myPubkey && !seen.has(m.publicKey))];
+    }, [members, query, myPubkey, nodeResults]);
 
     const styles = useStyles(({ colors }) => StyleSheet.create({
         backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },

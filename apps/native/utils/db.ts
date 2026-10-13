@@ -6752,8 +6752,14 @@ export async function postEnterpriseChatMessage(treasury: string, text: string, 
  * People who can be invited to a group: the node's own directory (it already leaves out enterprises and other
  * treasury accounts), without the system account. Falls back to the phone's copy when offline.
  */
-export async function getInvitablePeople(): Promise<{ publicKey: string; callsign: string; avatarUrl: string | null }[]> {
+export async function getInvitablePeople(options?: { membersOnDemand?: boolean }): Promise<{ publicKey: string; callsign: string; avatarUrl: string | null }[]> {
     const notPeople = (pk: string) => pk === 'SYSTEM' || pk.startsWith('escrow_');
+    // On a community that says `membersOnDemand` the whole list is never read (15 MB at 30k members): the cards held,
+    // and the sheet's search asks the node (DESIGN-global-members-by-area §2.3).
+    if (options?.membersOnDemand) {
+        const held = await getAllCommunityMembers();
+        return held.filter(m => !notPeople(m.publicKey)).map(m => ({ ...m, avatarUrl: null }));
+    }
     try {
         const res = await signedGet('/api/community/members');
         if (res.ok) {

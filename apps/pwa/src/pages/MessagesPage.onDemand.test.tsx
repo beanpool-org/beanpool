@@ -41,11 +41,14 @@ vi.mock('../lib/e2e-crypto', async (importOriginal) => {
     };
 });
 
-const info = vi.hoisted(() => ({ value: {} as Record<string, unknown> }));
-vi.mock('../lib/visitor-lobby-gate', () => ({ communityInfoOnce: vi.fn(async () => info.value) }));
+const info = vi.hoisted(() => ({ value: {} as Record<string, unknown> | Error }));
+vi.mock('../lib/visitor-lobby-gate', () => ({
+    communityInfoOnce: vi.fn(async () => { if (info.value instanceof Error) throw info.value; return info.value; }),
+}));
 
 const state = vi.hoisted(() => ({ conversations: [] as unknown[], messages: {} as Record<string, unknown[]> }));
 vi.mock('../lib/api', () => ({
+    getNodeApiUrl: vi.fn(() => ''),
     getConversations: vi.fn(async () => ({ conversations: state.conversations, totalUnread: 0 })),
     getConversationMessages: vi.fn(async (id: string) => ({
         conversation: (state.conversations as Conversation[]).find(c => c.id === id), messages: state.messages[id] || [],
@@ -96,6 +99,7 @@ describe('Messages with members on demand', () => {
         resetGroupChatLockStoreForTest();
         forgetGroupKeys();
         info.value = GLOBAL;
+        localStorage.clear();
         state.conversations = [dm('conv-bob', BOB, 'Bob'), dm('conv-blocked', BLOCKED, 'Blocked')];
         state.messages = {};
     });
@@ -146,6 +150,19 @@ describe('Messages with members on demand', () => {
         // Never the member's own key or a blocked one; each asked once; the directory never read.
         expect(new Set(asked)).toEqual(new Set([CLEO, BOB]));
         expect(asked.length).toBe(new Set(asked).size);
+        expect(getMembers).not.toHaveBeenCalled();
+    });
+
+    it('an offline start on a community that said yes before still asks, never reads the whole directory (N2)', async () => {
+        const first = render(<MessagesPage identity={identity} />);
+        await first.findByRole('button', { name: /New DM/ });
+        await waitFor(() => expect(localStorage.getItem(`bp_members_on_demand:${window.location.origin}`)).toBe('1'));
+        first.unmount();
+        info.value = new TypeError('Failed to fetch');
+        render(<MessagesPage identity={identity} />);
+        await act(async () => { fireEvent.click(await screen.findByRole('button', { name: /New DM/ })); });
+        expect(await screen.findByTestId('new-message-recents')).toHaveTextContent('Bob');
+        expect(screen.getByLabelText('Find someone by name')).toBeInTheDocument();
         expect(getMembers).not.toHaveBeenCalled();
     });
 

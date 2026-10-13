@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { memberKeysPaths, memberSearchPath, membersNearPath, membersOnDemandOn } from './members-on-demand';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { renderHook, waitFor } from '@testing-library/react';
+import {
+    memberKeysPaths, memberSearchPath, membersNearPath, membersOnDemandOn, useMembersOnDemand, MEMBERS_ON_DEMAND_SEEN_PREFIX,
+} from './members-on-demand';
+
+const info = vi.hoisted(() => ({ read: (async () => ({})) as () => Promise<unknown> }));
+vi.mock('./visitor-lobby-gate', () => ({ communityInfoOnce: vi.fn(() => info.read()) }));
 
 describe('members on demand: the requests the web app builds (DESIGN-global-members-by-area §2.1)', () => {
     it('reads the switch only when the node says true', () => {
@@ -35,5 +41,57 @@ describe('members on demand: the requests the web app builds (DESIGN-global-memb
         const asked = paths.map(p => new URLSearchParams(p.split('?')[1]).get('keys')!.split(','));
         expect(asked.map(a => a.length)).toEqual([100, 100, 100]);
         expect(asked.flat()).toEqual(Array.from({ length: 300 }, (_, i) => key(i + 1)));
+    });
+});
+
+describe('members on demand: a node that can\'t be asked counts as it last answered (review of #1861, N2)', () => {
+    const GLOBAL_NODE = 'https://global.example.test';
+    const LOCAL_NODE = 'https://local.example.test';
+    const answers = (features: Record<string, unknown>) => { info.read = async () => ({ features }); };
+    const fails = () => { info.read = async () => { throw new TypeError('Failed to fetch'); }; };
+    const switchOnce = async () => {
+        const { result, unmount } = renderHook(() => useMembersOnDemand());
+        await waitFor(() => expect(result.current).not.toBeNull());
+        const on = result.current;
+        unmount();
+        return on;
+    };
+
+    beforeEach(() => { localStorage.clear(); localStorage.setItem('bp_node_url', GLOBAL_NODE); });
+    afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
+
+    it('an offline start on a node that said yes still asks, never reads whole', async () => {
+        answers({ membersOnDemand: true });
+        expect(await switchOnce()).toBe(true);
+        expect(localStorage.getItem(MEMBERS_ON_DEMAND_SEEN_PREFIX + GLOBAL_NODE)).toBe('1');
+        fails();
+        expect(await switchOnce()).toBe(true);
+    });
+
+    it('a node that has never answered this browser reads as before; another node\'s answer is not its', async () => {
+        answers({ membersOnDemand: true });
+        expect(await switchOnce()).toBe(true);
+        localStorage.setItem('bp_node_url', LOCAL_NODE);
+        fails();
+        expect(await switchOnce()).toBe(false);
+    });
+
+    it('the node\'s newest answer wins and is the one kept', async () => {
+        answers({ membersOnDemand: true });
+        expect(await switchOnce()).toBe(true);
+        answers({});
+        expect(await switchOnce()).toBe(false);
+        expect(localStorage.getItem(MEMBERS_ON_DEMAND_SEEN_PREFIX + GLOBAL_NODE)).toBe('0');
+        fails();
+        expect(await switchOnce()).toBe(false);
+    });
+
+    it('a store that can\'t be read or written is "never answered", never a broken page', async () => {
+        vi.spyOn(localStorage, 'getItem').mockImplementation(() => { throw new Error('blocked'); });
+        vi.spyOn(localStorage, 'setItem').mockImplementation(() => { throw new Error('blocked'); });
+        answers({ membersOnDemand: true });
+        expect(await switchOnce()).toBe(true);
+        fails();
+        expect(await switchOnce()).toBe(false);
     });
 });

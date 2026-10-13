@@ -5,10 +5,11 @@
  * - who is near: the 50 nearest the member's stored area (`lat&lng&limit=50`), each "about N km";
  * - a name: what was typed, from 2 characters, 20 at most (`q=<text>&limit=20`), the node's prefix search;
  * - these people: up to 100 keys a request (`keys=`), for the names in the member's own conversations.
- * A community without the switch reads exactly what it read before; a node that can't be asked counts as one without.
+ * A community without the switch reads exactly what it read before. A node that can't be asked counts as it last
+ * answered this browser, and as one without only when it never has.
  */
 import { useEffect, useState } from 'react';
-import { getMemberCards, type CommunityInfo, type MemberCard } from './api';
+import { getMemberCards, getNodeApiUrl, type CommunityInfo, type MemberCard } from './api';
 import { communityInfoOnce } from './visitor-lobby-gate';
 
 /** The node's floors and ceilings (apps/server routes/community.ts answerMembersOnDemand): asked within them, never refused. */
@@ -102,9 +103,32 @@ export function useMemberSearch(typed: string, enabled: boolean): { found: Membe
     return { found, state };
 }
 
+/** Where this browser keeps each node's last answer about the switch: `<prefix><node address>` = '1' or '0'. */
+export const MEMBERS_ON_DEMAND_SEEN_PREFIX = 'bp_members_on_demand:';
+
+function seenKey(): string {
+    return MEMBERS_ON_DEMAND_SEEN_PREFIX + (getNodeApiUrl() || (typeof window !== 'undefined' ? window.location.origin : ''));
+}
+
+/** This node's last answer to this browser, or null when it never gave one (or the store can't be read). */
+export function membersOnDemandLastSeen(): boolean | null {
+    try {
+        const v = localStorage.getItem(seenKey());
+        return v === '1' ? true : v === '0' ? false : null;
+    } catch {
+        return null;
+    }
+}
+
+function noteMembersOnDemand(on: boolean): void {
+    try { localStorage.setItem(seenKey(), on ? '1' : '0'); } catch { /* this page still has the answer */ }
+}
+
 /**
  * Whether this community wants people asked for: null until the node's answer (the page's one shared read of
- * /api/community/info), then true or false. A read that fails is false: the page reads as it did before the switch.
+ * /api/community/info), then true or false. A read that fails takes the node's last answer to this browser, so an
+ * offline start on the worldwide community still asks, never reads whole (review of #1861, N2); only a node that has
+ * never answered here reads as it did before the switch.
  */
 export function useMembersOnDemand(): boolean | null {
     const [on, setOn] = useState<boolean | null>(null);
@@ -113,8 +137,12 @@ export function useMembersOnDemand(): boolean | null {
         // Asked inside the promise, so a read that throws before it starts is "couldn't say" too, never a broken page.
         Promise.resolve()
             .then(() => communityInfoOnce())
-            .then(info => { if (!cancelled) setOn(membersOnDemandOn(info)); })
-            .catch(() => { if (!cancelled) setOn(false); });
+            .then(info => {
+                const answer = membersOnDemandOn(info);
+                noteMembersOnDemand(answer);
+                if (!cancelled) setOn(answer);
+            })
+            .catch(() => { if (!cancelled) setOn(membersOnDemandLastSeen() ?? false); });
         return () => { cancelled = true; };
     }, []);
     return on;

@@ -7,7 +7,8 @@
  *   1. global, a member with an area (Byron): People → Community asks once for the 50 nearest that point
  *      (lat/lng/limit=50), shows each "About N km away" nearest first; one letter asks nothing, two ask the node
  *      (q=…&limit=20); the whole directory is never read anywhere in the visit (People, Market, Chat);
- *   2. global, Chat → New DM: a search the node answers, and a tap starts the chat;
+ *   2. global, Chat → New DM: the member's friends (review of #1861, N5), a search the node answers, and a tap starts
+ *      the chat;
  *   3. global, a member with no area: no nearness read, the line says how to set one, the search still answers;
  *   4. a local node: People → Community reads the whole directory as before and none of the small forms.
  *
@@ -161,6 +162,9 @@ async function globalMembers(browser, root) {
         for (const p of people) {
             if (p.at) await node.ask({ op: 'sql', sql: 'UPDATE members SET area_lat = ?, area_lng = ? WHERE public_key = ?', params: [p.at.lat, p.at.lng, p.id.publicKey] });
         }
+        // Ana's one friend, Adaeze, in Lagos: no chat with her, so New DM offers her only as a friend.
+        const adaeze = people.find((p) => p.id.callsign === 'Adaeze').id;
+        await node.ask({ op: 'sql', sql: 'INSERT INTO friends (owner_pubkey, friend_pubkey, added_at) VALUES (?, ?, ?)', params: [ana.publicKey, adaeze.publicKey, new Date().toISOString()] });
         const m = await openMember(browser, node.origin, ana);
         await tab(m.page, 'People').click();
         await m.page.getByRole('tab', { name: /Community/ }).click();
@@ -184,7 +188,8 @@ async function globalMembers(browser, root) {
         const shortP = await shortControls(m.page, '[data-testid="people-on-demand"]');
         check(shortP.length === 0, `every control in People → Community is at least 44 px (${shortP.map((c) => `${c.what} ${c.h}`).join(', ') || 'all'})`);
         fs.mkdirSync(path.join(os.tmpdir(), 'bp-people-shots'), { recursive: true });
-        await m.page.screenshot({ path: path.join(os.tmpdir(), 'bp-people-shots', 'people-near.png'), fullPage: true });
+        await near.scrollIntoViewIfNeeded();
+        await m.page.screenshot({ path: path.join(os.tmpdir(), 'bp-people-shots', `${SCHEME}-people-near.png`), fullPage: true });
 
         const box = m.page.getByLabel('Search members by name');
         const n0 = m.reads.length;
@@ -202,13 +207,22 @@ async function globalMembers(browser, root) {
         check((await sideways(m.page)) <= 0, 'no sideways scroll with search results');
         const shortS = await shortControls(m.page, '[data-testid="people-on-demand"]');
         check(shortS.length === 0, `every control with results is at least 44 px (${shortS.map((c) => `${c.what} ${c.h}`).join(', ') || 'all'})`);
-        await m.page.screenshot({ path: path.join(os.tmpdir(), 'bp-people-shots', 'people-search.png'), fullPage: true });
+        await m.page.screenshot({ path: path.join(os.tmpdir(), 'bp-people-shots', `${SCHEME}-people-search.png`), fullPage: true });
 
         console.log('Chat → New DM, the same member:');
         await tab(m.page, 'Chat').click();
         await m.page.getByRole('button', { name: /New DM/ }).click();
         const picker = m.page.getByTestId('new-message-on-demand');
         await picker.waitFor({ timeout: 10_000 });
+        const friendsBox = m.page.getByTestId('new-message-friends');
+        await friendsBox.waitFor({ timeout: 10_000 });
+        const friendNames = (await friendsBox.getByTestId('dm-pick').allTextContents()).map((t) => t.replace(/\s+/g, ' ').trim());
+        check(friendNames.length === 1 && friendNames[0].endsWith('Adaeze'), `New DM offers the member's friend, from the friends list: ${friendNames.join(' | ')}`);
+        check((await sideways(m.page)) <= 0, 'no sideways scroll on New DM with friends');
+        const shortF = await shortControls(m.page, '[data-testid="new-message-on-demand"]');
+        check(shortF.length === 0, `every control on New DM with friends is at least 44 px (${shortF.map((c) => `${c.what} ${c.h}`).join(', ') || 'all'})`);
+        await friendsBox.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+        await m.page.screenshot({ path: path.join(os.tmpdir(), 'bp-people-shots', `${SCHEME}-new-dm-friends.png`), fullPage: true });
         const n1 = m.reads.length;
         await m.page.getByLabel('Find someone by name').fill('bo');
         await m.page.getByTestId('new-message-found').waitFor({ timeout: 10_000 });
@@ -217,7 +231,7 @@ async function globalMembers(browser, root) {
         check((await sideways(m.page)) <= 0, 'no sideways scroll on New DM');
         const shortD = await shortControls(m.page, '[data-testid="new-message-on-demand"]');
         check(shortD.length === 0, `every control on New DM is at least 44 px (${shortD.map((c) => `${c.what} ${c.h}`).join(', ') || 'all'})`);
-        await m.page.screenshot({ path: path.join(os.tmpdir(), 'bp-people-shots', 'new-dm.png'), fullPage: true });
+        await m.page.screenshot({ path: path.join(os.tmpdir(), 'bp-people-shots', `${SCHEME}-new-dm.png`), fullPage: true });
         await m.page.getByTestId('new-message-found').getByRole('button', { name: /Bodhi/ }).click();
         await until(async () => (await picker.count()) === 0, 10_000);
         check((await picker.count()) === 0, 'tapping Bodhi opens the chat');
@@ -242,7 +256,7 @@ async function globalMembers(browser, root) {
         const shortC = await shortControls(c.page, '[data-testid="people-on-demand"]');
         check(shortC.length === 0, `every control is at least 44 px (${shortC.map((x) => `${x.what} ${x.h}`).join(', ') || 'all'})`);
         check(whole(c.reads).length === 0, 'and the whole directory is never read');
-        await c.page.screenshot({ path: path.join(os.tmpdir(), 'bp-people-shots', 'people-no-area.png'), fullPage: true });
+        await c.page.screenshot({ path: path.join(os.tmpdir(), 'bp-people-shots', `${SCHEME}-people-no-area.png`), fullPage: true });
         await c.context.close();
     } finally {
         await node.stop();

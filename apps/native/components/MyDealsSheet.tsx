@@ -456,19 +456,20 @@ export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview 
                         </View>
                     )}
                     <View style={{ flex: 1, padding: 12, justifyContent: 'space-between', minHeight: 96 }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                <View style={[styles.statusBadge, isCompleted && styles.statusCompleted]}>
-                                    <Text style={[styles.statusText, isCompleted && styles.statusTextCompleted]}>
-                                        {item.status.toUpperCase()}
-                                    </Text>
-                                </View>
-                                <Text style={styles.dateText}>
-                                    {new Date(item.createdAt).toLocaleDateString()}
+                        {/* Badge, date and Beans side by side, wrapping where they don't fit (320 dp at 1.3x text): the amount
+                            keeps the right edge and never shrinks, so it drops to its own line whole instead of being pushed
+                            off the card by the date. */}
+                        <View testID={`deal-top-${item.id}`} style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 6, rowGap: 2 }}>
+                            <View style={[styles.statusBadge, isCompleted && styles.statusCompleted]}>
+                                <Text style={[styles.statusText, isCompleted && styles.statusTextCompleted]}>
+                                    {item.status.toUpperCase()}
                                 </Text>
                             </View>
+                            <Text style={styles.dateText}>
+                                {new Date(item.createdAt).toLocaleDateString()}
+                            </Text>
                             {showsBeans && (
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                            <View testID={`deal-amount-${item.id}`} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: 'auto', flexShrink: 0 }}>
                                 <Text style={[styles.creditAmount, { color: isBuyer ? colors.feedback.danger.fg : colors.brand.dark }]} numberOfLines={1}>
                                     {isBuyer ? '- ' : '+ '}{item.credits}
                                 </Text>

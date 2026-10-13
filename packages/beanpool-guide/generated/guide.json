@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 129,
-  "hash": "cf71ef29462f6acf7321f7307ac064a4366cd65d2622678a8b8550e2e4be02c7",
+  "version": 130,
+  "hash": "7d4cb34d1ab03013ae59ff85e6475ee0188617f79a38ff5c063a4c0923e33c1e",
   "sections": [
     {
       "id": "about",
@@ -17,11 +17,12 @@
     {
       "id": "getting-started",
       "title": "Getting started",
-      "summary": "Home, joining, finding a community near you, your 12 words, your profile, the top bar, this guide, and getting help.",
+      "summary": "Home, joining, finding a community near you, Beans and the global community, your 12 words, your profile, the top bar, this guide, and getting help.",
       "slugs": [
         "home",
         "joining",
         "finding-a-community",
+        "beans-and-the-global-community",
         "your-12-words",
         "your-profile",
         "the-top-bar",
@@ -594,6 +595,7 @@
         "your-12-words",
         "recovery",
         "communities",
+        "beans-and-the-global-community",
         "holiday-mode",
         "leaving-or-deleting",
         "getting-help"
@@ -690,6 +692,22 @@
         {
           "type": "p",
           "text": "No. A local community lets you in with an invite from one of its members. The global community lets anyone in with 12 secret words, or with a sign-in if you would rather. If you join with 12 words alone, they are your only way back into your account, and a new account made that way starts slower for its first week. You can add a sign-in later, from any phone or browser where you are in your account, and not while your account is suspended. See \"Joining BeanPool\" and \"Your 12 words\"."
+        },
+        {
+          "type": "h2",
+          "text": "Why are there no Beans on the global community?"
+        },
+        {
+          "type": "p",
+          "text": "Beans are a promise between people who can be found again. Anyone can join the global community with 12 words, so nobody there can yet vouch for who's who. Beans, deals, enterprises and Decisions live in local communities. The global community shows them from an example community, Example Valley, marked **🏘️ Local community**. See \"Beans and the global community\"."
+        },
+        {
+          "type": "h2",
+          "text": "How do I start a community?"
+        },
+        {
+          "type": "p",
+          "text": "Tap **Start a community** in the app. A community runs on its own small server: a spare computer at home, or a rented one for a few dollars a month. The software is free, and the community doesn't need beanpool.org. See \"Beans and the global community\"."
         },
         {
           "type": "h2",
@@ -907,7 +925,8 @@
         "the-top-bar",
         "browsing-the-market",
         "your-profile",
-        "finding-a-community"
+        "finding-a-community",
+        "beans-and-the-global-community"
       ],
       "blocks": [
         {
@@ -969,7 +988,7 @@
             "**Sun and moon** asks whose place to use before it is added: **Your community** (the usual choice) or **Your area**.",
             "A Home holds at most 24 cards. When it is full, the list says so, and you remove a card to add another.",
             "Your cards are kept on your account, so they follow you to your other phones and browsers. If your community's server has not been updated yet, they stay on this phone or in this browser, and **Edit home** says \"Your community's server needs an update before your cards follow you to other devices.\" They are sent again each time you open Home.",
-            "If you had already moved or hidden cards before this change, your Home keeps your order, without the cards you had hidden. If you had not, you see **Getting started** on its own, and **Skip** or **Done** brings the five back. After a **Skip**, Home tells you once: \"Home now starts with fewer cards. Add a card brings the rest back.\""
+            "If you had already moved or hidden cards before this change, your Home keeps your order, without the cards you had hidden. If you had not, you see **Getting started** on its own, and the tour's **Skip** or **Done** gives you the five, or the cards you picked (above). If you joined more than a week ago, Home also tells you once, under **Getting started** the first time it opens: \"Home now starts with fewer cards. Add a card brings the rest back.\""
           ]
         },
         {
@@ -990,11 +1009,11 @@
             "**First steps on the global community:** post something free or for swap, and, if a community within 250 km of you is listed, a suggestion to ask it to let you in (that line never keeps the card open). It can also say the limits on a new account, such as how many posts and new chats you can make a day at first. It stays for your first 14 days, and after that until the post is done and the limits are over.",
             "**Tips:** one short tip at a time about how BeanPool works, for members. Tap **Next** for the next one, or **Read more** to open the page of this guide it comes from. A new tip also shows on your first visit of a new day. The card goes by itself once you have seen every tip, or at once when you tap **Don't show tips again**. Adding it again with **Add a card** starts the tips again from the first one.",
             "**What are you into?:** lets you star categories you like. Members only. It shows when you have no categories starred yet, or when you tap **Tune** on the Market card, and it stays on screen while you pick.",
-            "**Your deals:** shows your open deals and deals waiting on you. Not on the global community.",
-            "**Your enterprise:** shows requests waiting to be approved for enterprises you keep. It is called **Your project** when the one you keep is a project. Not on the global community.",
+            "**Your deals:** shows your open deals and deals waiting on you. Not on the global community: there, **My Deals** in the Market shows example deals from a local community instead.",
+            "**Your enterprise:** shows requests waiting to be approved for enterprises you keep. It is called **Your project** when the one you keep is a project. Not on the global community: there, **Commons** shows an example enterprise from a local community instead.",
             "**Coming up:** upcoming events near you, with your RSVP.",
             "**New in the Market:** the newest listings, with starred categories first. On the global community it is called **Near you**, and the nearest listings come first. Tap **Tune** to pick your interests, or **See all** to open the Market. While there are only a few listings, it may show a couple of example listings, marked as examples, if your community has them turned on.",
-            "**Decide:** open Decisions and open polls, as separate lines on the phone. On the phone, Decisions open **Decide** in **Commons** and polls open **Polls** in the Market. In the web app it is one line, and tapping it opens Commons. Not on the global community: polls there are in the Market's **Polls**.",
+            "**Decide:** open Decisions and open polls, as separate lines on the phone. On the phone, Decisions open **Decide** in **Commons** and polls open **Polls** in the Market. In the web app it is one line, and tapping it opens Commons. Not on the global community: polls there are in the Market's **Polls**, and **Commons** shows an example Decision from a local community.",
             "**A saved search:** listings that match words you choose. You can have up to five. Its first line is your words and the distance, such as \"eggs · within 5 km\". Then come up to four listings, each opening the listing; **See more** opens the Market with your words already in its search. It finds what the Market's search finds, so \"eggs\" also finds listings with words that mean much the same. When nothing matches it says so, such as \"No eggs within 5 km right now\". A search you have just added or changed without a connection says \"Shows when your community answers\" until your community's server answers. To change the words, tap **…** then **Settings…**: the card stays where it is.",
             "**Your groups:** your groups and chats, with unread message counts.",
             "**Who joined:** people who joined this week. On a local community it shows names and faces. On the global community it shows only a count, by area, and no names.",
@@ -1058,7 +1077,7 @@
             "A card with nothing to show right now says **Nothing to show now**. **Tips** says **All tips seen** once you have seen every tip, and **Sun and moon** says **Nothing to show now: no place is known.** while there is no place to work from.",
             "Tap **Reset to defaults** to go back to the usual five cards.",
             "There are no switches and no hidden list: a card you removed is in **Add a card**.",
-            "Only the cards your community can show are listed, on the phone and in the web app. For example, there is no **Your Beans** or **Your deals** on the global community.",
+            "Only the cards your community can show are listed, on the phone and in the web app. For example, the global community's list has no **Your Beans** or **Your deals**: there, the Ledger and **My Deals** show examples from a local community instead.",
             "**Needs you** always stays at the top, and **Your community** always stays at the bottom.",
             "**Find your community**, in your first 30 days on the global community, is not listed. It stays near the top for now.",
             "**Your way back in** is listed, with its arrows and **…**, while it is on your Home."
@@ -1135,7 +1154,7 @@
           "type": "ul",
           "items": [
             "**With an invite**, you join a community: the people near you, with its own Beans, trades and Commons. A member of that community invites you.",
-            "**Without an invite**, you can join the **global community** when it is open: people from everywhere, where you can post, message people and find a community near you. There are no Beans and no community votes there. Beans, credit, the Commons and its Decisions live in local communities."
+            "**Without an invite**, you can join the **global community** when it is open: people from everywhere, where you can post, message people and find a community near you. There are no Beans and no community votes there. Beans, credit, the Commons and its Decisions live in local communities. The global community shows you how they work, in an example community. See \"Beans and the global community\"."
           ]
         },
         {
@@ -1305,7 +1324,7 @@
         },
         {
           "type": "p",
-          "text": "The global community has no invites: anyone joins it with a sign-in, one account each. There, the invite icon opens **Bring someone here**, with **Share the link** to send the global community's address. There is nothing to generate, and an invite code made for it does not work."
+          "text": "The global community has no invites: anyone joins it in the BeanPool app, with 12 secret words or a sign-in. There, the invite icon opens **Bring someone here**, with **Share the link** to send the global community's address. There is nothing to generate, and an invite code made for it does not work."
         },
         {
           "type": "h2",
@@ -1337,6 +1356,7 @@
         "joining",
         "home",
         "communities",
+        "beans-and-the-global-community",
         "near-you",
         "recovery"
       ],
@@ -1347,7 +1367,11 @@
         },
         {
           "type": "p",
-          "text": "The global community is where people from everywhere meet. A local community is where neighbours trade: it has its own Beans, trades and Commons. The global community has no Beans, so there a post says what the person would like in return in its description: free, a swap, or ask them."
+          "text": "The global community is where people from everywhere meet. A local community is where neighbours trade: it has its own Beans, trades and Commons. On the global community you can see how those work, in an example community marked **🏘️ Local community**, but nothing there earns or spends Beans. So a post there says in its description what the person would like in return: free, a swap, or ask them. See \"Beans and the global community\"."
+        },
+        {
+          "type": "p",
+          "text": "No community near you yet? You can start one: see \"Nothing near you\", below."
         },
         {
           "type": "h2",
@@ -1426,7 +1450,7 @@
           "type": "ul",
           "items": [
             "**Tell me when one starts here:** you get a notification when a community starts near where you are. Only the area is kept, about 10 km across, never where you are exactly. You can watch up to 3 places, and stop watching one with **Stop**.",
-            "**Start a community:** every community has its own small server, looked after by someone local. The app shows three ways to run one: a spare computer at home, a small rented server, or asking for help. Fill in the name, the place and how people can reach you, and tap **Copy my community's details** to paste them into your new server's settings. How people can reach you stays off the public directory unless you turn it on there."
+            "**Start a community:** every community has its own small server, looked after by someone local. It takes a spare computer at home or a few dollars a month, and about half an hour: see \"Beans and the global community\". The app shows three ways to run one: a spare computer at home, a small rented server, or asking for help. Fill in the name, the place and how people can reach you, and tap **Copy my community's details** to paste them into your new server's settings. How people can reach you stays off the public directory unless you turn it on there."
           ]
         },
         {
@@ -1447,6 +1471,227 @@
         {
           "type": "p",
           "text": "Any member can answer: your trust badge does not matter. A community's admins can turn requests to join off."
+        }
+      ]
+    },
+    {
+      "slug": "beans-and-the-global-community",
+      "title": "Beans and the global community",
+      "summary": "What you see on the global community: the 🏘️ Local community marker, the example community Example Valley, why Beans wait there, and how to start or find a local community.",
+      "section": "getting-started",
+      "related": [
+        "finding-a-community",
+        "how-it-works",
+        "joining",
+        "communities",
+        "your-balance",
+        "decisions"
+      ],
+      "blocks": [
+        {
+          "type": "h2",
+          "text": "What the global community is for"
+        },
+        {
+          "type": "p",
+          "text": "The global community is where most people first meet BeanPool. Anyone can join it, from anywhere, with 12 words or a sign-in."
+        },
+        {
+          "type": "p",
+          "text": "It is a place to see what BeanPool is, and then to start a local community near you, or to join one."
+        },
+        {
+          "type": "h2",
+          "text": "Helping each other comes first"
+        },
+        {
+          "type": "p",
+          "text": "BeanPool is neighbours helping neighbours. You offer what you can do or spare, and ask for what you need."
+        },
+        {
+          "type": "p",
+          "text": "You can do that on the global community today:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "post something free or for swap, or ask for help;",
+            "message people, and join groups and events;",
+            "start a poll, to see what people think."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "A local community adds a record of who helped whom, in **Beans**. Help earns Beans, and getting help spends them. So help can go round in circles: you help one neighbour, another neighbour helps you, and nobody has to pay back the same person."
+        },
+        {
+          "type": "h2",
+          "text": "The 🏘️ Local community marker"
+        },
+        {
+          "type": "p",
+          "text": "Some parts of BeanPool live in a local community:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Beans and your Ledger;",
+            "deals, where the Beans are held safely until the job is done;",
+            "enterprises, and the Commons' shared Beans;",
+            "Decisions, the votes that bind a community;",
+            "invites."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "On the global community these are not hidden. They are shown with one marker: **🏘️ Local community**. It means \"this works in a local community today, and here is what it looks like\"."
+        },
+        {
+          "type": "p",
+          "text": "The marker is never a lock. Nothing is wrong with your account, and there is nothing to earn or pay to use it."
+        },
+        {
+          "type": "p",
+          "text": "You meet it in a few shapes:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "a small label on a screen or a card;",
+            "a box across the top of an example screen;",
+            "a button that keeps its place, such as **Request · Beans held safely 🏘️** on a listing;",
+            "one line where a local community is different, such as \"🏘️ In a local community this is a price in Beans ›\"."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Tap any of them to open **Why this lives in a local community**. It says why in a sentence or two, then offers **Start a community** and, where it can, **Communities near you** and **How it works**."
+        },
+        {
+          "type": "h2",
+          "text": "Example Valley"
+        },
+        {
+          "type": "p",
+          "text": "The screens with the marker show **Example Valley**: a made-up community, so you can see a local community's screens with something on them."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Ledger:** an example member with 85 Beans, room to spend down to −200, a trust badge, and a few recent trades, such as bread, an hour of gardening and some seedlings.",
+            "**Commons:** the Example Valley Bakery, an enterprise its members keep, and one Decision: a compost bay, paid for from the Commons' shared Beans.",
+            "**My Deals,** in the Market: two example deals, one waiting on you and one done."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "Nobody in Example Valley has a name. You see \"a neighbour\", \"the Commons\" or \"the Example Valley Bakery\". None of it is real, and none of it is yours."
+        },
+        {
+          "type": "p",
+          "text": "The **ⓘ** buttons and the guide pages on these screens are the real ones: they say how it works in a local community."
+        },
+        {
+          "type": "p",
+          "text": "A button that would send Beans, make a deal, vote, pledge or invite opens **Why this lives in a local community** instead. It sends nothing and changes nothing."
+        },
+        {
+          "type": "p",
+          "text": "The box at the top of an example screen has a **✕**. Tap it and the box shrinks to one line, \"🏘️ An example · Why? ›\". Your phone or browser remembers that, for this community. On the phone, tap the line to open the box again. In the web app, tap the line to see why, or **▾** to open the box again."
+        },
+        {
+          "type": "p",
+          "text": "In a web browser you can see the example Ledger before you join: it is a tab beside Home, Market and Map."
+        },
+        {
+          "type": "h2",
+          "text": "Why Beans wait on the global community"
+        },
+        {
+          "type": "p",
+          "text": "Beans are a promise between people who can be found again. The Beans you earn say that your community owes you some help back."
+        },
+        {
+          "type": "p",
+          "text": "That only works where people can vouch for who's who. On the global community anyone may join with 12 words, so nobody can do that yet. One person could make several accounts, give themselves Beans, and never be found again."
+        },
+        {
+          "type": "p",
+          "text": "So the global community has no Beans, no deals, no enterprises and no Decisions. Nothing you do there earns or spends Beans, and nobody there owes anyone."
+        },
+        {
+          "type": "p",
+          "text": "Polls still work there. They show what people think, and decide nothing."
+        },
+        {
+          "type": "p",
+          "text": "Invites stay off on the global community. Its open door is the way in."
+        },
+        {
+          "type": "p",
+          "text": "If the global community can one day check who's who, some of these may switch on there, one at a time. Until then, they are live today in every local community."
+        },
+        {
+          "type": "h2",
+          "text": "Start a community"
+        },
+        {
+          "type": "p",
+          "text": "A local community runs on its own small server, looked after by someone local. That can be you."
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**What it costs:** a spare computer that stays on at home, or a small rented server for a few dollars a month. The software is free.",
+            "**Who runs it:** you do, on your own machine or the one you rent. It doesn't need beanpool.org: it can have its own web address.",
+            "**What you take on:** reports from your members come to you. The community's data is yours to back up, with a recovery code. Keep two owners, and keep the server on and up to date.",
+            "**What you never see:** your members' chats with one person. They are locked so the server can't read them.",
+            "**How long:** about half an hour, for someone who can follow a recipe."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "To begin, tap **Start a community** in any **Why this lives in a local community** sheet, or, on the phone, on Home's **Find your community** card. It shows three ways to run one: a spare computer at home, a small rented server, or asking for help on the global community. **Copy my community's details** copies your community's name, place and how people can reach you, to paste into your new server's settings."
+        },
+        {
+          "type": "p",
+          "text": "The steps are in \"First-time setup\", in the guide for people who run a community, on beanpool.org. When your server is up, you claim it with your phone. Settings then helps you name your community, add a second owner and make your first invites. Set your community's place in Settings too, so that people near you can find it."
+        },
+        {
+          "type": "h2",
+          "text": "Join one near you"
+        },
+        {
+          "type": "p",
+          "text": "On the phone:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "**Communities near you** lists the communities nearest you that chose to be listed.",
+            "Tap **Ask to join**: any member there can let you in.",
+            "Nothing near you yet? **Tell me when one starts here** tells you when one does."
+          ]
+        },
+        {
+          "type": "p",
+          "text": "In the web app, Home's **Find your community** card links each community near you to its own page."
+        },
+        {
+          "type": "p",
+          "text": "Your account comes with you, with the same 12 words, and you stay a member of the global community. See \"Finding a community near you\"."
+        },
+        {
+          "type": "h2",
+          "text": "In a local community"
+        },
+        {
+          "type": "p",
+          "text": "Everything the marker shows is real there. Your Ledger shows your own balance, starting at zero. A deal holds Beans safely until the job is done, and a Decision binds."
+        },
+        {
+          "type": "p",
+          "text": "There is no 🏘️ marker there, and nothing from Example Valley comes with you."
         }
       ]
     },
@@ -1889,7 +2134,7 @@
         },
         {
           "type": "p",
-          "text": "Under the top bar are the tabs: **Home**, **Market**, **Map**, **Talk**, **Commons** and **Ledger**. The name of each tab sits above its icon. On the phone, a community with no Beans, like the global community, does not show **Commons** or **Ledger**."
+          "text": "Under the top bar are the tabs: **Home**, **Market**, **Map**, **Talk**, **Commons** and **Ledger**. The name of each tab sits above its icon. On the phone, a local community with no Beans does not show **Commons** or **Ledger**. The global community shows both, with examples from a local community. See \"Beans and the global community\"."
         },
         {
           "type": "p",
@@ -2091,7 +2336,7 @@
         {
           "type": "ul",
           "items": [
-            "Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Join the global community**. It is also in **Settings**, under **Advanced / Subsystem**. If you are visiting the global community as a guest, tap **Join** at the top, next to the bean, then **Join with a sign-in**.",
+            "Tap the bean at the top left. In the **BeanPool** sheet, under **Your communities**, tap **Join the global community**. It is also in **Settings**, under **Advanced / Subsystem**. If you are visiting the global community as a guest, tap **Join** at the top, next to the bean, then **Join with 12 words or a sign-in**.",
             "Choose how to join: **Create an account with 12 secret words**, which uses the 12 words your account already has (no sign-in, so no phone lock), or **Or sign in** once with Google, Apple (on an iPhone) or Facebook. For a sign-in, the app asks for your phone's lock first, because this sign-in also becomes a way back into your account.",
             "Check the name people there will see, and tap **Join**. If someone already has that name, the app suggests others.",
             "Then choose your photo for the global community, as for any new community, and then roughly where you are (**Your Area**, which you can skip): the global community shows you the listings near it. See \"Joining a community\"."
@@ -2196,7 +2441,7 @@
         },
         {
           "type": "p",
-          "text": "If you add a community without an invite, you are a guest there. A **Join** button shows at the top, next to the bean. A guest sees very little until they register with an invite. In the global community, which has no invites, a guest joins with a sign-in instead: see \"Joining the global community from your account\" above."
+          "text": "If you add a community without an invite, you are a guest there. A **Join** button shows at the top, next to the bean. A guest sees very little until they register with an invite. In the global community, which has no invites, a guest joins with their 12 words or a sign-in instead: see \"Joining the global community from your account\" above."
         }
       ]
     },
@@ -2442,7 +2687,8 @@
         "posting",
         "a-deal-step-by-step",
         "near-you",
-        "trust-badges"
+        "trust-badges",
+        "beans-and-the-global-community"
       ],
       "blocks": [
         {
@@ -2557,6 +2803,10 @@
         },
         {
           "type": "p",
+          "text": "On the global community a post has no price in Beans: it says what the person would like in return. Where the price would be, it says \"🏘️ In a local community this is a price in Beans ›\". In place of asking for it, the post shows **Request · Beans held safely 🏘️**: tap it to see how a deal works in a local community. Messaging the person works as anywhere. See \"Beans and the global community\"."
+        },
+        {
+          "type": "p",
           "text": "You cannot save or share a post yet."
         }
       ]
@@ -2617,7 +2867,7 @@
         },
         {
           "type": "p",
-          "text": "There are no Beans on the global community, so a post there has no price. In the phone app the form has no **Price**: say in the description what you would like in return, or that it is free."
+          "text": "There are no Beans on the global community, so a post there has no price. The form has no **Price**: say in the description what you would like in return, or that it is free. Where the price would go, the web app's form, and the phone's form for changing a post, say \"🏘️ In a local community this is a price in Beans ›\": tap it to see why. See \"Beans and the global community\"."
         },
         {
           "type": "p",
@@ -2706,6 +2956,10 @@
         {
           "type": "p",
           "text": "Tap **My Deals** at the top of the Market tab. A red number on it counts your deals in progress."
+        },
+        {
+          "type": "p",
+          "text": "On the global community there are no deals, so **My Deals** shows two example deals from a local community, Example Valley, marked **🏘️ Local community**: one waiting on you and one done. Their buttons say why deals live in a local community, and change nothing. See \"Beans and the global community\"."
         },
         {
           "type": "h2",
@@ -3381,7 +3635,7 @@
         },
         {
           "type": "p",
-          "text": "Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. Each person you invite sees the group in **Commons**, under **Groups**, marked **INVITED** (on the global community, under **Find groups** in **Talk**). When they join, the chat says so."
+          "text": "Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. Each person you invite sees the group in **Commons**, under **Groups**, marked **INVITED** (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). When they join, the chat says so."
         },
         {
           "type": "h2",
@@ -3471,7 +3725,7 @@
         },
         {
           "type": "p",
-          "text": "**When you confirm someone else's new phone**, your phone checks the code against what it remembers of that person's old key. Only confirm a new phone for someone you've chatted with in that group before, on this phone, and only with the phone in their hands: whoever holds it can read the earlier messages you can. If your phone says **Don't continue; tell an owner**, stop. It means what your phone saw before doesn't match what the server says now. That also happens when the person changed their name since your phone last saw them: ask an owner. A phone that was just restored from its 12 words, or never opened that group, has seen too little to check: it says it never knew their old key, or it may believe what the server says. Let a member who has been chatting with them confirm instead."
+          "text": "**When you confirm someone else's new phone**, your phone checks the code against what it remembers of that person's old key. Only confirm a new phone for someone you've chatted with in that group before, on this phone, and only with the phone in their hands: whoever holds it can read the earlier messages you can. If your phone says **Don't continue; tell an owner**, stop. It means what your phone saw before doesn't match what the server says now. It also says that, for good, about someone who changed their name after your phone had seen them: to a phone, a new name on their key looks just like a stranger's name put there, so a phone that saw both names can never confirm them in person again. Their own old 12 words still work, and so does a member whose phone only ever saw the new name. A phone that was just restored from its 12 words, or never opened that group, has seen too little to check: it says it never knew their old key, or it may believe what the server says. Let a member who has been chatting with them confirm instead."
         },
         {
           "type": "p",
@@ -3498,7 +3752,7 @@
         },
         {
           "type": "p",
-          "text": "The global community has no **Commons** tab. There, tap **Talk**, then **Groups**, then **Find groups**: it opens the same list. Before you are in any group, the link is **Find a group to join**."
+          "text": "On the phone, a local community with no Beans has no **Commons** tab. There, tap **Talk**, then **Groups**, then **Find groups**: it opens the same list. Before you are in any group, the link is **Find a group to join**. The global community has the **Commons** tab: its groups are there, under an example from a local community (see \"Beans and the global community\")."
         },
         {
           "type": "p",
@@ -3514,7 +3768,7 @@
         },
         {
           "type": "p",
-          "text": "A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED**. On the global community it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it, and who can read its chat."
+          "text": "A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED**. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it, and who can read its chat."
         },
         {
           "type": "ul",
@@ -4130,7 +4384,8 @@
         "rules",
         "polls",
         "commons-fund",
-        "the-top-bar"
+        "the-top-bar",
+        "beans-and-the-global-community"
       ],
       "blocks": [
         {
@@ -4148,6 +4403,10 @@
         {
           "type": "p",
           "text": "The global community has no Decisions. Anyone can join it, with 12 words or a sign-in, so one person with several accounts could swing a vote there. Its moderators look after it instead: see \"Reporting a problem\". Decisions belong to local communities. Polls still work everywhere."
+        },
+        {
+          "type": "p",
+          "text": "On the global community, **Commons** shows an example Decision from a local community, marked **🏘️ Local community**, so you can see how one works. Its **Vote** button says why voting lives in a local community, and casts nothing. See \"Beans and the global community\"."
         },
         {
           "type": "h2",
@@ -4309,7 +4568,8 @@
         "decisions",
         "proposing-a-decision",
         "events",
-        "rules"
+        "rules",
+        "beans-and-the-global-community"
       ],
       "blocks": [
         {
@@ -4322,7 +4582,7 @@
         },
         {
           "type": "p",
-          "text": "On the global community each poll says **An informal poll; it decides nothing**. Anyone can join it, with 12 words or a sign-in, so one person with several accounts could tip the count, and there are no Decisions there."
+          "text": "On the global community each poll says **An informal poll; it decides nothing**. Anyone can join it, with 12 words or a sign-in, so one person with several accounts could tip the count, and there are no Decisions there. Under it, \"🏘️ In a local community a Decision binds ›\" says why a vote binds only in a local community."
         },
         {
           "type": "p",
@@ -4558,7 +4818,8 @@
         "keepers",
         "commons-fund",
         "proposing-a-decision",
-        "rules"
+        "rules",
+        "beans-and-the-global-community"
       ],
       "blocks": [
         {
@@ -4568,6 +4829,10 @@
         {
           "type": "p",
           "text": "Projects and enterprises are the groups that hold Beans. Each has its own beans, its own Offers and Needs, and its own credit line."
+        },
+        {
+          "type": "p",
+          "text": "On the global community there are no enterprises, so **Commons** shows an example one from a local community, the Example Valley Bakery, marked **🏘️ Local community**. Its buttons, such as **Pledge** and **Pause**, say why enterprises live in a local community, and change nothing. See \"Beans and the global community\"."
         },
         {
           "type": "ul",
@@ -4837,7 +5102,8 @@
         "credit-line",
         "gifts",
         "circulation-fee",
-        "my-deals"
+        "my-deals",
+        "beans-and-the-global-community"
       ],
       "blocks": [
         {
@@ -4847,6 +5113,10 @@
         {
           "type": "p",
           "text": "Tap **Ledger** in the row of tabs. Your balance is at the top right, in **BEANS**. It can be below zero; see \"Your credit line\"."
+        },
+        {
+          "type": "p",
+          "text": "On the global community there are no Beans, so the Ledger shows an example member of a local community, Example Valley, marked **🏘️ Local community**. Its buttons say why Beans live in a local community, and send nothing. See \"Beans and the global community\"."
         },
         {
           "type": "p",

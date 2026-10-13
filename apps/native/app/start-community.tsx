@@ -9,7 +9,8 @@ import * as Clipboard from 'expo-clipboard';
 import * as WebBrowser from 'expo-web-browser';
 import { useTheme, useStyles } from './ThemeContext';
 import { useIdentity } from './IdentityContext';
-import { START_COMMUNITY_COPY, RUN_A_NODE_URL, communityDetailsText, canCopyDetails } from '../utils/start-community';
+import { START_COMMUNITY_COPY, communityDetailsText, canCopyDetails, runANodeLabel, runANodeUrl } from '../utils/start-community';
+import { useNodeProfile } from '../utils/use-node-profile';
 
 export { ErrorBoundary };
 
@@ -54,7 +55,9 @@ export default function StartCommunityScreen() {
         await Clipboard.setStringAsync(communityDetailsText(details));
         setCopied(true);
     };
-    const openWebsite = () => { WebBrowser.openBrowserAsync(RUN_A_NODE_URL).catch(() => {}); };
+    // The community's own page when its node names one, else beanpool.org's.
+    const runANode = runANodeUrl(useNodeProfile());
+    const openWebsite = () => { WebBrowser.openBrowserAsync(runANode).catch(() => {}); };
 
     return (
         <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -85,7 +88,7 @@ export default function StartCommunityScreen() {
                 ))}
                 <Pressable style={styles.link} onPress={openWebsite} accessibilityRole="link">
                     <MaterialCommunityIcons name="open-in-new" size={20} color={colors.brand.primary} />
-                    <Text style={styles.linkText}>{START_COMMUNITY_COPY.website}</Text>
+                    <Text style={styles.linkText}>{runANodeLabel(runANode)}</Text>
                 </Pressable>
 
                 <Text style={styles.sectionLabel}>YOUR COMMUNITY'S DETAILS</Text>

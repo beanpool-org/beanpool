@@ -202,6 +202,8 @@ describe('the tabs\' own bottom buttons ride above the bar (review B1: + ADD POS
         const layout = src('../../app/(tabs)/_layout.tsx');
         expect(layout).toMatch(/<View style=\{\{ flex: 1, marginBottom: tourSceneInset\(tourRunning, tourBarHeight\) \}\}[^>]*>\s*<Tabs /);
         expect(layout).toMatch(/onHeight=\{setTourBarHeight\}/);
+        // The bar is the wrapper's next sibling, below the shrunk tabs, not inside them (review of #1857, NB4).
+        expect(layout).toMatch(/<\/Tabs>\s*<\/View>\s*\{tourRunning && \(\s*<TourBar/);
     });
 
     for (const [tab, rel] of FABS) {

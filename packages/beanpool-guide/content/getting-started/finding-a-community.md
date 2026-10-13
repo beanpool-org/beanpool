@@ -2,12 +2,14 @@
 slug: finding-a-community
 title: Finding a community near you
 summary: From the global community, find a community near you and ask to join it, be told when one starts near you, or start one yourself.
-related: joining, home, communities, near-you, recovery
+related: joining, home, communities, beans-and-the-global-community, near-you, recovery
 ---
 
 ## Why a local community
 
-The global community is where people from everywhere meet. A local community is where neighbours trade: it has its own Beans, trades and Commons. The global community has no Beans, so there a post says what the person would like in return in its description: free, a swap, or ask them.
+The global community is where people from everywhere meet. A local community is where neighbours trade: it has its own Beans, trades and Commons. On the global community you can see how those work, in an example community marked **🏘️ Local community**, but nothing there earns or spends Beans. So a post there says in its description what the person would like in return: free, a swap, or ask them. See "Beans and the global community".
+
+No community near you yet? You can start one: see "Nothing near you", below.
 
 ## Communities near you
 
@@ -47,7 +49,7 @@ You stay a member of the global community, and can switch between them: see "Mor
 ## Nothing near you
 
 - **Tell me when one starts here:** you get a notification when a community starts near where you are. Only the area is kept, about 10 km across, never where you are exactly. You can watch up to 3 places, and stop watching one with **Stop**.
-- **Start a community:** every community has its own small server, looked after by someone local. The app shows three ways to run one: a spare computer at home, a small rented server, or asking for help. Fill in the name, the place and how people can reach you, and tap **Copy my community's details** to paste them into your new server's settings. How people can reach you stays off the public directory unless you turn it on there.
+- **Start a community:** every community has its own small server, looked after by someone local. It takes a spare computer at home or a few dollars a month, and about half an hour: see "Beans and the global community". The app shows three ways to run one: a spare computer at home, a small rented server, or asking for help. Fill in the name, the place and how people can reach you, and tap **Copy my community's details** to paste them into your new server's settings. How people can reach you stays off the public directory unless you turn it on there.
 
 ## If you are a member of a local community
 

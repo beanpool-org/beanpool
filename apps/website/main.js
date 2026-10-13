@@ -44,13 +44,27 @@ const markersLayer = L.layerGroup().addTo(nodesMap);
 // Every field of a directory row is what some community published, and anyone who runs a node can publish one. This is
 // also the site the registrar's admin page is on, so markup in a row would be script here. A popup is built from DOM
 // nodes, each value put in as text; a link is made only from an email or a phone number that passes the check for its
-// kind, and only as mailto: or tel:. A number that isn't one is left out, so Leaflet never throws on a row.
+// kind, and only as mailto: or tel:, or from the node_url, only as the https origin it names (as the server's
+// directory cache reads it). A number that isn't one is left out, so Leaflet never throws on a row.
 
 const EMAIL = /^[A-Za-z0-9._+-]{1,64}@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$/;
 const PHONE = /^\+?[0-9 ().-]{3,32}$/;
 
 function mailtoHref(email) {
     return email.length <= 254 && EMAIL.test(email) ? `mailto:${email}` : null;
+}
+
+/** A community's address: its https origin, or null (a bare host is its https address; no IP literal, no localhost). */
+function nodeHref(value) {
+    if (!value || value.length > 300) return null;
+    const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(value) ? value
+        : /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:\d{1,5})?\/?$/i.test(value) ? `https://${value}` : null;
+    if (!withScheme) return null;
+    let u;
+    try { u = new URL(withScheme); } catch { return null; }
+    if (u.protocol !== 'https:' || u.username || u.password) return null;
+    if (!/\.[a-z][a-z0-9-]*$/i.test(u.hostname)) return null;
+    return u.origin;
 }
 
 function telHref(phone) {
@@ -86,6 +100,7 @@ function readRow(node) {
         memberCount: members !== null && Number.isSafeInteger(members) && members >= 0 ? members : null,
         email: text(r.contact_email),
         phone: text(r.contact_phone),
+        url: nodeHref(text(r.node_url)),
     };
 }
 
@@ -119,6 +134,14 @@ function directoryPopup(row) {
         if (row.email && row.phone) line.appendChild(document.createTextNode(' · '));
         if (row.phone) line.appendChild(contact(row.phone, telHref(row.phone)));
         box.appendChild(line);
+    }
+    if (row.url) {
+        box.appendChild(element('br'));
+        const visit = element('a', 'color:#10b981; text-decoration:none; font-size:0.85em; display:inline-block; margin-top:4px; font-weight:600;', `Visit ${new URL(row.url).host} →`);
+        visit.setAttribute('href', row.url);
+        visit.setAttribute('target', '_blank');
+        visit.setAttribute('rel', 'noopener');
+        box.appendChild(visit);
     }
     return box;
 }

@@ -200,7 +200,7 @@ for (const scheme of ['light', 'dark'] as const) {
             await render(createElement(LocalCommunityMark, { variant: 'strip', feature: 'beans' }));
             const strip = host.querySelector('[data-testid="local-community-strip"]')!;
             expect(text()).toContain(LOCAL_COMMUNITY_STRIP.lead.beans);
-            expect(text()).toContain(LOCAL_COMMUNITY_STRIP.body);
+            expect(text()).toContain(LOCAL_COMMUNITY_STRIP.body.beans);
             expect(styleOf(strip)).toMatchObject({ borderStyle: 'dashed', borderWidth: 1, backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border });
             expect(styleOf(strip).opacity).toBeUndefined();
             const buttons = Array.from(strip.querySelectorAll('button')).filter(b => /Start a community|Communities near you/.test(b.textContent ?? ''));
@@ -210,7 +210,7 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(pillText.getAttribute('data-lines')).toBe('1');
             await press(host.querySelector('[aria-label="Make this shorter"]')!);
             expect(text()).toContain(LOCAL_COMMUNITY_STRIP.collapsed);
-            expect(text()).not.toContain(LOCAL_COMMUNITY_STRIP.body);
+            expect(text()).not.toContain(LOCAL_COMMUNITY_STRIP.body.beans);
             expect(store.map.get('beanpool_showcase_strip:https://global.example:beans')).toBe('1');
         });
 

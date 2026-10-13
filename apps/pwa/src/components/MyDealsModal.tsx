@@ -240,7 +240,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                 className={`flex-1 flex gap-2 justify-center items-center py-2 text-sm font-bold rounded-lg transition-all ${
                                     dealsTab === tab.id
                                         ? 'bg-white dark:bg-nature-900 text-nature-900 dark:text-white shadow-sm'
-                                        : 'text-nature-500 hover:text-nature-700 dark:text-nature-400 dark:hover:text-nature-300'
+                                        : 'text-nature-500 hover:text-nature-700 dark:text-nature-300 dark:hover:text-nature-300'
                                 }`}
                             >
                                 <span>{tab.label}</span>
@@ -369,7 +369,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                             </span>
                                                         </div>
                                                         <div className="flex items-center">
-                                                            <span className={`font-black text-sm ${isBuyer ? 'text-red-500' : 'text-emerald-500'}`}>
+                                                            <span className={`font-black text-sm ${isBuyer ? 'text-red-500 dark:text-red-300' : 'text-emerald-500 dark:text-emerald-400'}`}>
                                                                 {isBuyer ? '- ' : '+ '}{item.credits}
                                                             </span>
                                                             <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt="B" />
@@ -381,7 +381,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                 </div>
                                             </div>
                                             <div className="flex justify-between items-end">
-                                                <p className="text-[11px] text-nature-500 font-medium">
+                                                <p className="text-[11px] text-nature-500 dark:text-nature-400 font-medium">
                                                     {isBuyer ? 'Bought from ' : 'Sold to '}
                                                     <span className="text-nature-800 dark:text-nature-300 font-bold">{partnerCallsign}</span>
                                                 </p>
@@ -461,7 +461,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                         {item.type}
                                                     </span>
                                                     <div className="flex items-center">
-                                                        <span className="font-black text-sm text-indigo-500">
+                                                        <span className="font-black text-sm text-indigo-500 dark:text-indigo-300">
                                                             {item.credits ?? '?'}
                                                         </span>
                                                         <img src="/assets/bean.png" className="w-3.5 h-3.5 ml-1" alt="B" />
@@ -470,7 +470,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                 <h4 className="font-bold text-nature-950 dark:text-white text-[15px] truncate mb-1">
                                                     {item.title}
                                                 </h4>
-                                                <p className="text-[11px] text-nature-500 font-bold uppercase tracking-wide">
+                                                <p className="text-[11px] text-nature-500 dark:text-nature-400 font-bold uppercase tracking-wide">
                                                     {item.status === 'pending' ? '🤝 Held in Trust' : '🟢 Active'}
                                                 </p>
                                             </div>

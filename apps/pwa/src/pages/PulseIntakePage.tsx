@@ -325,7 +325,7 @@ export function PulseIntakePage({
                 />
 
                 {urlError && (
-                    <div className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 mt-2" role="alert">
+                    <div className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-300 mt-2" role="alert">
                         <span>⚠️</span>
                         <span>{urlError}</span>
                     </div>

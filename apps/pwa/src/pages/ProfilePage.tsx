@@ -192,7 +192,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                 {avatar && (
                     <button
                         onClick={() => setAvatar(null)}
-                        className="bg-transparent mt-3 border-none text-red-500 hover:text-red-700 text-xs font-semibold cursor-pointer transition-colors px-2 py-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 dark:hover:text-red-300"
+                        className="bg-transparent mt-3 border-none text-red-500 dark:text-red-300 hover:text-red-700 text-xs font-semibold cursor-pointer transition-colors px-2 py-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 dark:hover:text-red-300"
                     >
                         Remove photo
                     </button>
@@ -273,7 +273,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                                         </div>
                                     </div>
                                     {contactVisibility === opt.value && (
-                                        <div className="text-terra-500 text-lg font-bold">✓</div>
+                                        <div className="text-terra-500 dark:text-terra-400 text-lg font-bold">✓</div>
                                     )}
                                 </button>
                             ))}

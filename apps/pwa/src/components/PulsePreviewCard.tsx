@@ -89,7 +89,7 @@ export function PulsePreviewCard({
                     )}
                 </div>
 
-                <div className="inline-flex items-center gap-1 text-xs font-medium text-nature-500 dark:text-nature-400 px-2 py-0.5 rounded-md bg-nature-50 dark:bg-nature-800/50">
+                <div className="inline-flex items-center gap-1 text-xs font-medium text-nature-500 dark:text-nature-300 px-2 py-0.5 rounded-md bg-nature-50 dark:bg-nature-800/50">
                     <span aria-hidden="true">{category.icon}</span>
                     <span>{category.label}</span>
                 </div>

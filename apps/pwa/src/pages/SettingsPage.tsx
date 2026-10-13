@@ -825,9 +825,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         <span className="text-xl">✨</span>
                                         <div className="flex-1">
                                             <div className="text-[15px] font-bold">Re-run Setup</div>
-                                            <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Update your name & photo, and how BeanPool works</div>
+                                            <div className="text-xs font-normal text-nature-500 dark:text-nature-300">Update your name & photo, and how BeanPool works</div>
                                         </div>
-                                        <span className="text-nature-400 dark:text-nature-400 group-hover:translate-x-1 transition-transform">→</span>
+                                        <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                     </button>
                                 )}
 
@@ -840,11 +840,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <span className="text-xl">🔑</span>
                                     <div className="flex-1">
                                         <div className="text-[15px] font-bold">View Recovery Phrase</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">
                                             {hasWords ? 'View your 12-word backup seed' : 'Not saved in this browser'}
                                         </div>
                                     </div>
-                                    <span className="text-nature-400 dark:text-nature-400 group-hover:translate-x-1 transition-transform">→</span>
+                                    <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
                                 <SignInRecoveryLine enrolled={signInRecovery} hasWords={hasWords} />
                             </div>
@@ -914,9 +914,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <span className="text-xl">🔔</span>
                                     <div className="flex-1">
                                         <div className="text-[15px] font-bold">Notification Preferences</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Phone app push notification settings</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">Phone app push notification settings</div>
                                     </div>
-                                    <span className="text-nature-400 dark:text-nature-400 group-hover:translate-x-1 transition-transform">→</span>
+                                    <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
 
                                 {/* Your area: a community that syncs listings by area */}
@@ -929,9 +929,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         <span className="text-xl">📍</span>
                                         <div className="flex-1 min-w-0">
                                             <div className="text-[15px] font-bold">{AREA_STEP_WORDS.settingsRow}</div>
-                                            <div className="text-xs font-normal text-nature-500 dark:text-nature-400 break-words">{areaLine}</div>
+                                            <div className="text-xs font-normal text-nature-500 dark:text-nature-300 break-words">{areaLine}</div>
                                         </div>
-                                        <span className="text-nature-400 dark:text-nature-400 group-hover:translate-x-1 transition-transform">→</span>
+                                        <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                     </button>
                                 )}
 
@@ -990,19 +990,19 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     className="w-full p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors bg-transparent border-none cursor-pointer text-left"
                                 >
                                     <span className="flex items-center gap-3">🚫 Manage Blocked Members</span>
-                                    <span className="text-nature-400">›</span>
+                                    <span className="text-nature-400 dark:text-nature-300">›</span>
                                 </button>
                                 <a href="https://beanpool.org/privacy.html" target="_blank" rel="noopener noreferrer" className="p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline">
                                     <span className="flex items-center gap-3">🛡️ Privacy Policy</span>
-                                    <span className="text-nature-400">›</span>
+                                    <span className="text-nature-400 dark:text-nature-300">›</span>
                                 </a>
                                 <a href="https://beanpool.org/terms.html" target="_blank" rel="noopener noreferrer" className="p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline">
                                     <span className="flex items-center gap-3">⚖️ Terms of Service & EULA</span>
-                                    <span className="text-nature-400">›</span>
+                                    <span className="text-nature-400 dark:text-nature-300">›</span>
                                 </a>
                                 <a href="https://beanpool.org/safety.html" target="_blank" rel="noopener noreferrer" className="p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline">
                                     <span className="flex items-center gap-3">🚸 Child Safety Standards</span>
-                                    <span className="text-nature-400">›</span>
+                                    <span className="text-nature-400 dark:text-nature-300">›</span>
                                 </a>
                             </div>
                         </div>
@@ -1020,9 +1020,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <span className="text-xl">📊</span>
                                     <div className="flex-1">
                                         <div className="text-[15px] font-bold">Database Health & Stats</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Local storage metrics & integrity checks</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">Local storage metrics & integrity checks</div>
                                     </div>
-                                    <span className="text-nature-400 dark:text-nature-400 group-hover:translate-x-1 transition-transform">→</span>
+                                    <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
 
                                 <button
@@ -1032,9 +1032,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <span className="text-xl">⚙️</span>
                                     <div className="flex-1">
                                         <div className="text-[15px] font-bold">Advanced / Subsystem</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Node management & cache controls</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">Node management & cache controls</div>
                                     </div>
-                                    <span className="text-nature-400 dark:text-nature-400 group-hover:translate-x-1 transition-transform">→</span>
+                                    <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
                             </div>
                         </div>
@@ -1339,7 +1339,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         </p>
 
                         {diagLoading ? (
-                            <div className="py-10 text-center text-sm text-nature-500 animate-pulse">Running Structural Integrity Check...</div>
+                            <div className="py-10 text-center text-sm text-nature-500 dark:text-nature-400 animate-pulse">Running Structural Integrity Check...</div>
                         ) : (
                             <>
                                 {/* Status Banner */}
@@ -1355,33 +1355,33 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">👥</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.members ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 font-semibold">Community Members</div>
+                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">Community Members</div>
                                     </div>
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">🛒</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.posts ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 font-semibold">Active Posts</div>
+                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">Active Posts</div>
                                     </div>
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">💸</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.transactions ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 font-semibold">Ledger Deals</div>
+                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">Ledger Deals</div>
                                     </div>
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">💬</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.messages ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 font-semibold">Messages</div>
+                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">Messages</div>
                                     </div>
                                 </div>
 
                                 {/* Storage info */}
                                 <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50 mb-5 text-xs space-y-1.5">
                                     <div className="flex justify-between">
-                                        <span className="text-nature-500">Storage Usage:</span>
+                                        <span className="text-nature-500 dark:text-nature-400">Storage Usage:</span>
                                         <span className="font-bold text-nature-900 dark:text-white">{storageEstimate}</span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span className="text-nature-500">Active Node:</span>
+                                        <span className="text-nature-500 dark:text-nature-400">Active Node:</span>
                                         <span className="font-mono text-nature-900 dark:text-white">{window.location.origin}</span>
                                     </div>
                                 </div>
@@ -1563,7 +1563,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             </div>
                         )}
                         {blockedActionError && (
-                            <p role="alert" className="mb-4 text-xs font-semibold text-red-600 dark:text-red-400 leading-relaxed">{blockedActionError}</p>
+                            <p role="alert" className="mb-4 text-xs font-semibold text-red-600 dark:text-red-300 leading-relaxed">{blockedActionError}</p>
                         )}
                         {blockedFullNote && (
                             <p role="status" className="mb-4 text-xs font-semibold text-nature-700 dark:text-nature-300 leading-relaxed">{blockedFullNote}</p>
@@ -1586,7 +1586,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 <div className="text-sm font-bold text-nature-900 dark:text-white truncate">
                                                     {item.callsign}
                                                 </div>
-                                                <div className="text-[11px] text-nature-400 dark:text-nature-400 font-mono truncate">
+                                                <div className="text-[11px] text-nature-400 dark:text-nature-300 font-mono truncate">
                                                     {item.pubkey.slice(0, 16)}...{item.pubkey.slice(-8)}
                                                 </div>
                                             </div>
@@ -1594,7 +1594,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 type="button"
                                                 onClick={() => unblockFromList(item.pubkey)}
                                                 disabled={blockedBusy !== null}
-                                                className="bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-default"
+                                                className="bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-default"
                                             >
                                                 {blockedBusy === item.pubkey ? 'Unblocking…' : 'Unblock'}
                                             </button>
@@ -1606,7 +1606,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     type="button"
                                     onClick={unblockEveryone}
                                     disabled={blockedBusy !== null}
-                                    className="w-full py-2.5 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-default"
+                                    className="w-full py-2.5 rounded-xl text-xs font-bold text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-default"
                                 >
                                     {blockedBusy === 'all' ? 'Unblocking…' : 'Unblock All'}
                                 </button>
@@ -1667,7 +1667,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <div className="mb-6 border-b border-nature-100 dark:border-nature-800 pb-6">
                             <h4 className="text-xs font-bold uppercase tracking-wider text-nature-800 dark:text-nature-200 mb-2">🔑 Raw Private Key</h4>
                             <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs text-nature-500">View underlying Ed25519 secret seed</span>
+                                <span className="text-xs text-nature-500 dark:text-nature-400">View underlying Ed25519 secret seed</span>
                                 <button
                                     onClick={() => setShowPrivateKey(!showPrivateKey)}
                                     className="text-xs font-bold text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-1 rounded-lg border border-terra-200 cursor-pointer"
@@ -1701,8 +1701,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             </button>
                         </div>
 
-                        {error && <p className="text-red-500 text-xs mb-3">{error}</p>}
-                        {success && <p className="text-emerald-600 text-xs mb-3">{success}</p>}
+                        {error && <p className="text-red-500 dark:text-red-300 text-xs mb-3">{error}</p>}
+                        {success && <p className="text-emerald-600 dark:text-emerald-400 text-xs mb-3">{success}</p>}
 
                         <button
                             onClick={() => setMode('menu')}
@@ -1758,9 +1758,9 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                             <span className="text-xl" aria-hidden="true">🫘</span>
                             <span className="flex-1 min-w-0">
                                 <span className="block">Help & how it works</span>
-                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-400">How to use every part of the app, the rules, questions</span>
+                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-300">How to use every part of the app, the rules, questions</span>
                             </span>
-                            <span className="text-nature-400" aria-hidden="true">›</span>
+                            <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">›</span>
                         </button>
                     );
                     if (entry === 'suggest') return (
@@ -1768,9 +1768,9 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                             <span className="text-xl" aria-hidden="true">💬</span>
                             <span className="flex-1 min-w-0">
                                 <span className="block">Suggest a change</span>
-                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-400">Ideas and problems go to the BeanPool project team</span>
+                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-300">Ideas and problems go to the BeanPool project team</span>
                             </span>
-                            <span className="text-nature-400" aria-hidden="true">›</span>
+                            <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">›</span>
                         </button>
                     );
                     return (
@@ -1778,9 +1778,9 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                             <span className="text-xl" aria-hidden="true">🌐</span>
                             <span className="flex-1 min-w-0">
                                 <span className="block">beanpool.org</span>
-                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-400">The BeanPool project website</span>
+                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-300">The BeanPool project website</span>
                             </span>
-                            <span className="text-nature-400" aria-hidden="true">↗</span>
+                            <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">↗</span>
                         </a>
                     );
                 })}

@@ -318,7 +318,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                 </div>
 
                 <div className="text-right flex flex-col items-center md:items-end">
-                    <span className={`text-2xl font-black font-mono ${balance >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                    <span className={`text-2xl font-black font-mono ${balance >= 0 ? 'text-emerald-500' : 'text-red-500 dark:text-red-400'}`}>
                         {balance >= 0 ? '+' : ''}{balance.toFixed(1)}B
                     </span>
                     <span className="text-[10px] font-bold text-nature-400 uppercase tracking-wider">Beans</span>
@@ -599,14 +599,14 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                             onClick={() => setShowCommonsInfo(true)}
                             className="flex-1 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 text-center shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 hover:border-nature-300 dark:hover:border-nature-700 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/30"
                         >
-                            <p className="text-nature-500 dark:text-nature-400 text-sm font-semibold mb-2 flex items-center justify-center gap-1">
-                                Commons Pool <span className="text-xs text-nature-400">ⓘ</span>
+                            <p className="text-nature-500 dark:text-nature-300 text-sm font-semibold mb-2 flex items-center justify-center gap-1">
+                                Commons Pool <span className="text-xs text-nature-400 dark:text-nature-300">ⓘ</span>
                             </p>
                             <p className="text-2xl font-black font-mono text-amber-500 flex items-center justify-center gap-1">
                                 {(balanceInfo?.commonsBalance ?? 0).toFixed(1)}
                                 <img src="/assets/bean.png" className="w-[18px] h-[18px]" alt="B" />
                             </p>
-                            <p className="text-nature-500 dark:text-nature-400 text-[10px] mt-1 font-semibold">
+                            <p className="text-nature-500 dark:text-nature-300 text-[10px] mt-1 font-semibold">
                                 🌱 View Solvency & Tax
                             </p>
                         </button>
@@ -826,7 +826,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                                 {new Date(tx.timestamp).toLocaleString()}
                                             </p>
                                         </div>
-                                        <p style={{ whiteSpace: 'nowrap' }} className={`text-lg font-bold font-mono ${isSent ? 'text-red-500' : 'text-emerald-500'} flex items-center`}>
+                                        <p style={{ whiteSpace: 'nowrap' }} className={`text-lg font-bold font-mono ${isSent ? 'text-red-500 dark:text-red-300' : 'text-emerald-500 dark:text-emerald-400'} flex items-center`}>
                                             {isSent ? '−' : '+'}{tx.amount.toFixed(1)}
                                             <img src="/assets/bean.png" className="w-4 h-4 ml-1" alt="B" />
                                         </p>

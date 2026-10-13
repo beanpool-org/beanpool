@@ -296,9 +296,9 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                     <div className="flex flex-col items-end flex-shrink-0">
                                         <div className="flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 text-xs font-bold">
                                             <span><span aria-hidden="true">🫘</span> {effectivePrice}<span className="sr-only"> Beans</span></span>
-                                            {item.unit && <span className="text-[10px] text-emerald-600/80 font-normal">/{item.unit}</span>}
+                                            {item.unit && <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 font-normal">/{item.unit}</span>}
                                             {item.trend === 'up' && <><span className="text-emerald-500 text-[10px] ml-0.5" aria-hidden="true">▲</span><span className="sr-only">, price rising</span></>}
-                                            {item.trend === 'down' && <><span className="text-rose-500 text-[10px] ml-0.5" aria-hidden="true">▼</span><span className="sr-only">, price falling</span></>}
+                                            {item.trend === 'down' && <><span className="text-rose-500 dark:text-rose-400 text-[10px] ml-0.5" aria-hidden="true">▼</span><span className="sr-only">, price falling</span></>}
                                         </div>
 
                                         <div className="flex items-center gap-1 mt-1.5">

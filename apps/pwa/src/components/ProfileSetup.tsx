@@ -150,7 +150,7 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
                             placeholder="Your name (e.g. Sally)"
                             className="w-full py-3 px-4 rounded-xl border border-terra-400 dark:border-terra-600 bg-terra-50/40 dark:bg-terra-950/30 text-nature-900 dark:text-white text-base focus:outline-none focus:ring-2 focus:ring-terra-300 font-semibold transition-all"
                         />
-                        {error && <p className="text-red-500 text-sm mt-3">{error}</p>}
+                        {error && <p className="text-red-500 dark:text-red-300 text-sm mt-3">{error}</p>}
                         <button
                             onClick={() => { setError(null); setStep('avatar'); }}
                             disabled={!nameOk}
@@ -188,7 +188,7 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
                                 </button>
                             </div>
                         </div>
-                        {error && <p className="text-red-500 text-sm mt-3">{error}</p>}
+                        {error && <p className="text-red-500 dark:text-red-300 text-sm mt-3">{error}</p>}
                         <button
                             onClick={() => { setError(null); setStep('guide'); }}
                             disabled={!avatarOk}
@@ -209,7 +209,7 @@ export function ProfileSetup({ identity, onDone, onIdentityUpdated }: Props) {
                             A quick look at this community economy.
                         </p>
                         <OnboardingGuide />
-                        {error && <p className="text-red-500 text-sm mt-3">{error}</p>}
+                        {error && <p className="text-red-500 dark:text-red-300 text-sm mt-3">{error}</p>}
                         <button
                             onClick={handleFinish}
                             disabled={saving}

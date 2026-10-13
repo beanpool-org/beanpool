@@ -380,7 +380,7 @@ export function GroupDetailModal({
                                                             onClick={() => handleRemoveMember(p.memberPubkey, p.callsign)}
                                                             disabled={actionLoading}
                                                             aria-label={`Decline join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
-                                                            className="px-2 py-1 rounded border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 text-[11px] font-bold hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                            className="px-2 py-1 rounded border border-red-300 dark:border-red-800 text-red-600 dark:text-red-300 text-[11px] font-bold hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                                         >
                                                             Decline
                                                         </button>
@@ -491,7 +491,7 @@ export function GroupDetailModal({
                                                                 onClick={() => handleRemoveMember(m.memberPubkey, m.callsign)}
                                                                 disabled={actionLoading}
                                                                 aria-label={`Remove ${m.callsign || m.memberPubkey.slice(0, 10)} from group`}
-                                                                className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                                className="p-1 rounded text-red-500 dark:text-red-400 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                                                 title="Remove member"
                                                             >
                                                                 ✕

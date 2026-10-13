@@ -214,6 +214,13 @@ run_check "test"          pnpm turbo run test $TURBO_TEST_ARGS
 # The browser is downloaded once and cached; in CI --with-deps also installs its system libraries (the runner has sudo).
 run_check "settings_phone" bash -c 'pnpm --filter @beanpool/manager exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/manager test:phone-width'
 
+# The web app in dark mode, every class string at once (PR #1833: five review rounds each found a new shape of the same
+# fault). apps/pwa/e2e/dark-class-check.mjs builds src/index.css with the app's vite config (the shipped rules, byte for
+# byte, and no other package needs building), draws every class string in apps/pwa/src in headless Chromium in dark mode,
+# each inside its JSX parents, and fails if its words read under 4.5:1 (3:1 large) at rest, under the pointer or with
+# keyboard focus. Canaries of each known shape must fail first, so a check gone blind fails too. No node; about 30 s.
+run_check "pwa_dark_classes" bash -c 'pnpm --filter @beanpool/pwa exec playwright install --only-shell ${CI:+--with-deps} chromium && pnpm --filter @beanpool/pwa dark-class-check'
+
 run_check "lint"          pnpm turbo run lint $TURBO_AUX_ARGS
 
 # Typecheck. `build` is what typechecks most of this repo — server, pwa, core and engine all run

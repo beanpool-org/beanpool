@@ -381,7 +381,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                         <button
                                             type="button"
                                             onClick={() => setChannelToRemove(channel)}
-                                            className="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 bg-transparent border-none cursor-pointer transition-colors ml-auto"
+                                            className="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold text-red-600 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30 bg-transparent border-none cursor-pointer transition-colors ml-auto"
                                         >
                                             Remove
                                         </button>
@@ -555,7 +555,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                             <button
                                 type="button"
                                 onClick={() => setCrossPostPrompt(null)}
-                                className="w-full py-2 text-xs text-nature-500 hover:text-nature-800 dark:hover:text-white bg-transparent border-none cursor-pointer"
+                                className="w-full py-2 text-xs text-nature-500 dark:text-nature-400 hover:text-nature-800 dark:hover:text-white bg-transparent border-none cursor-pointer"
                             >
                                 {crossPostPrompt.several ? 'Keep all — I post different things' : 'Both — I post different things'}
                             </button>

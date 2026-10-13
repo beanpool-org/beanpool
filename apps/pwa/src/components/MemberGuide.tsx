@@ -42,9 +42,9 @@ function Row({ title, sub, onClick, icon }: { title: string; sub?: string; onCli
             {icon && <span className="text-xl shrink-0" aria-hidden="true">{icon}</span>}
             <span className="flex-1 min-w-0">
                 <span className="block text-[15px] font-bold break-words">{title}</span>
-                {sub && <span className="block text-xs font-normal text-nature-500 dark:text-nature-400 mt-0.5 break-words">{sub}</span>}
+                {sub && <span className="block text-xs font-normal text-nature-500 dark:text-nature-300 mt-0.5 break-words">{sub}</span>}
             </span>
-            <span className="text-nature-400 shrink-0" aria-hidden="true">›</span>
+            <span className="text-nature-400 dark:text-nature-300 shrink-0" aria-hidden="true">›</span>
         </button>
     );
 }
@@ -178,9 +178,9 @@ export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE, i
                                         <span className="text-xl shrink-0" aria-hidden="true">🌐</span>
                                         <span className="flex-1 min-w-0">
                                             <span className="block text-[15px] font-bold">beanpool.org</span>
-                                            <span className="block text-xs font-normal text-nature-500 dark:text-nature-400 mt-0.5">The public website, to share with friends</span>
+                                            <span className="block text-xs font-normal text-nature-500 dark:text-nature-300 mt-0.5">The public website, to share with friends</span>
                                         </span>
-                                        <span className="text-nature-400 shrink-0" aria-hidden="true">↗</span>
+                                        <span className="text-nature-400 dark:text-nature-300 shrink-0" aria-hidden="true">↗</span>
                                     </a>
                                 );
                             })}

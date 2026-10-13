@@ -501,7 +501,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                 <span className="text-[11px] font-bold text-nature-400 capitalize">
                                                     🏷️ {g.category.replace(/_/g, ' ')}
                                                 </span>
-                                                <span className="text-nature-600">•</span>
+                                                <span className="text-nature-600 dark:text-nature-400">•</span>
                                                 <span className="text-[11px] text-nature-400">
                                                     {g.memberCount || 0} {g.memberCount === 1 ? 'member' : 'members'}
                                                 </span>
@@ -528,7 +528,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         </p>
                                     )}
 
-                                    <div className="flex items-center justify-between pt-1 border-t border-nature-900 text-[11px] text-nature-500">
+                                    <div className="flex items-center justify-between pt-1 border-t border-nature-900 text-[11px] text-nature-500 dark:text-nature-400">
                                         <span>Join: {g.joinPolicy.replace(/_/g, ' ')}</span>
                                         <span className="text-emerald-500 font-bold hover:underline">View Details →</span>
                                     </div>

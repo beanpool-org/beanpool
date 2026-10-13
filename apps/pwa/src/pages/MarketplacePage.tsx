@@ -936,7 +936,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             setEditMode(false);
                             setEditPhotos([]);
                         }}
-                        className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 font-bold transition-colors cursor-pointer"
+                        className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:hover:text-nature-400 font-bold transition-colors cursor-pointer"
                     >
                         <span className="text-xl leading-none">←</span> Back to Market
                     </button>
@@ -965,7 +965,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             setEditMode(false);
                             setEditPhotos([]);
                         }}
-                        className="mb-4 flex items-center gap-2 text-nature-500 hover:text-nature-700 font-bold transition-colors cursor-pointer"
+                        className="mb-4 flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:hover:text-nature-400 font-bold transition-colors cursor-pointer"
                     >
                         <span className="text-xl leading-none">←</span> Back to Market
                     </button>
@@ -1038,7 +1038,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         setEditMode(false);
                         setEditPhotos([]);
                     }}
-                    className="mb-4 flex items-center gap-2 text-nature-500 hover:text-nature-700 font-bold transition-colors"
+                    className="mb-4 flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:hover:text-nature-400 font-bold transition-colors"
                 >
                     <span className="text-xl leading-none">←</span> Back to Market
                 </button>
@@ -1232,7 +1232,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 </span>
                             </p>
                             {authorProfile?.bio && (
-                                <p className="text-sm text-nature-600 leading-snug mb-0">
+                                <p className="text-sm text-nature-600 dark:text-nature-400 leading-snug mb-0">
                                     {authorProfile.bio}
                                 </p>
                             )}
@@ -1413,12 +1413,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             onClick={() => { if (onOpenProfile) onOpenProfile(req.sellerPublicKey || req.buyerPublicKey); }}
                                             className="font-bold text-nature-900 dark:text-white text-sm text-left hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors flex items-center gap-1"
                                         >
-                                            <span className="text-amber-600">🤝</span> <span className="underline decoration-nature-300 underline-offset-2">{req.sellerCallsign}</span>
+                                            <span className="text-amber-600 dark:text-amber-400">🤝</span> <span className="underline decoration-nature-300 underline-offset-2">{req.sellerCallsign}</span>
                                         </button>
                                         <span className="text-xs text-amber-500 mt-0.5 font-semibold">
                                             {req.bidderRating?.count > 0 ? `★ ${req.bidderRating.average.toFixed(1)} (${req.bidderRating.count} reviews)` : '☆☆☆☆☆ No ratings yet'}
                                         </span>
-                                        <span className="text-xs text-nature-500 mt-1">
+                                        <span className="text-xs text-nature-500 dark:text-nature-400 mt-1">
                                             {req.hours ? `${req.hours} hours estimated` : 'Offered to fulfill'}
                                         </span>
                                     </div>
@@ -1526,7 +1526,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 }
                                             }}
                                             disabled={accepting}
-                                            className="w-full py-2.5 rounded-lg border border-red-200 text-red-600 font-bold hover:bg-red-50 transition-colors text-sm"
+                                            className="w-full py-2.5 rounded-lg border border-red-200 text-red-600 dark:text-red-300 font-bold hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors text-sm"
                                         >
                                             {accepting ? 'Canceling...' : 'Cancel Offer'}
                                         </button>
@@ -1570,14 +1570,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             const net = Math.round(tot * 0.985 * 100) / 100;
                                             return (
                                                 <span>
-                                                    By proceeding, you commit {tot} B{duration} to a Trust Wallet. When finalized, the provider will receive {net.toFixed(2)} B (net of 1.5% transaction fee <span className="text-emerald-600 dark:text-emerald-500 font-bold">(100% community owned)</span> to fund the Commons Pool).
+                                                    By proceeding, you commit {tot} B{duration} to a Trust Wallet. When finalized, the provider will receive {net.toFixed(2)} B (net of 1.5% transaction fee <span className="text-emerald-600 dark:text-emerald-400 font-bold">(100% community owned)</span> to fund the Commons Pool).
                                                 </span>
                                             );
                                         } else {
                                             const net = Math.round(tot * 0.985 * 100) / 100;
                                             return (
                                                 <span>
-                                                    You will receive {net.toFixed(2)} B (after 1.5% transaction fee <span className="text-emerald-600 dark:text-emerald-500 font-bold">(100% community owned)</span> is deducted to fund the Commons Pool) when the job is completed.
+                                                    You will receive {net.toFixed(2)} B (after 1.5% transaction fee <span className="text-emerald-600 dark:text-emerald-400 font-bold">(100% community owned)</span> is deducted to fund the Commons Pool) when the job is completed.
                                                 </span>
                                             );
                                         }
@@ -1843,7 +1843,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             {messaging ? 'Opening chat...' : '💬 Message'}
                         </button>
                         {isRemotePost && (
-                            <p className="mt-1.5 text-xs text-nature-600 text-center">
+                            <p className="mt-1.5 text-xs text-nature-600 dark:text-nature-400 text-center">
                                 This post is from another community — messaging across communities isn't available yet.
                             </p>
                         )}
@@ -1884,7 +1884,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                                     {showRatingForm && (
                                         <div className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 mt-2 shadow-inner">
-                                            <p className="text-sm text-nature-600 mb-3 text-center">
+                                            <p className="text-sm text-nature-600 dark:text-nature-400 mb-3 text-center">
                                                 How was <strong className="text-nature-900 dark:text-text-primary">{targetName}</strong> as a <strong className="text-nature-900 dark:text-text-primary">{targetRole}</strong>?
                                             </p>
                                             <div className="flex justify-center gap-2 mb-3">
@@ -2156,7 +2156,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         </div>
                                         <div className="flex flex-col">
                                             <span className="text-[14px] font-bold text-nature-900 dark:text-white group-hover:text-terra-600 dark:group-hover:text-terra-400 transition-colors">Recurring Need / Offer</span>
-                                            <span className="text-[11px] text-nature-500 font-medium">Post remains active after completion for repeat business.</span>
+                                            <span className="text-[11px] text-nature-500 dark:text-nature-400 font-medium">Post remains active after completion for repeat business.</span>
                                         </div>
                                     </label>
                                 </div>
@@ -3148,7 +3148,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         aria-label={`Rate ${star} star${star === 1 ? '' : 's'}`}
                                         className="text-4xl hover:scale-110 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-lg"
                                     >
-                                        <span className={star <= reviewStars ? "text-amber-400" : "text-nature-200 dark:text-nature-700"}>★</span>
+                                        <span className={star <= reviewStars ? "text-amber-400" : "text-nature-200 dark:text-nature-500"}>★</span>
                                     </button>
                                 ))}
                             </div>

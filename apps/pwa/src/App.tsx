@@ -717,7 +717,7 @@ export function App() {
                             aria-label="Settings"
                             aria-pressed={showSettings}
                             className={`p-2 rounded-lg transition-colors cursor-pointer ${
-                                showSettings ? 'bg-nature-200 dark:bg-nature-800 text-nature-900 dark:text-white' : 'text-nature-600 dark:text-nature-400 hover:bg-nature-200/60 dark:hover:bg-nature-800/60'
+                                showSettings ? 'bg-nature-200 dark:bg-nature-800 text-nature-900 dark:text-white' : 'text-nature-600 dark:text-nature-300 hover:bg-nature-200/60 dark:hover:bg-nature-800/60'
                             }`}
                             title="Settings"
                         >

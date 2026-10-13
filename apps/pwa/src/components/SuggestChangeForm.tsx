@@ -104,7 +104,7 @@ export function SuggestChangeForm({ appVersion, onDone, submit = submitFeedback 
                 placeholder="What would make BeanPool better for your community? Any language is fine."
                 className="w-full p-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-base resize-y focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
             />
-            <div className={`text-xs text-right mt-1 mb-5 ${over ? 'text-red-600 font-bold' : 'text-nature-500 dark:text-nature-400'}`}>
+            <div className={`text-xs text-right mt-1 mb-5 ${over ? 'text-red-600 dark:text-red-300 font-bold' : 'text-nature-500 dark:text-nature-400'}`}>
                 {count} / {FEEDBACK_TEXT_MAX}
             </div>
 

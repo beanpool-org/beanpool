@@ -244,7 +244,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                             >
                                                 {f.callsign}
                                             </button>
-                                            <div className="text-[11px] text-nature-400 dark:text-nature-400 font-medium mt-0.5">
+                                            <div className="text-[11px] text-nature-400 dark:text-nature-300 font-medium mt-0.5">
                                                 Added {relativeDate(f.addedAt)}
                                             </div>
                                         </div>
@@ -265,7 +265,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                             type="button"
                                             onClick={() => handleRemoveFriend(f.publicKey)}
                                             aria-label={`Remove ${f.callsign} from friends`}
-                                            className="bg-transparent border-none text-red-500 text-xs font-semibold cursor-pointer px-2.5 py-1 rounded-lg hover:bg-red-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                                            className="bg-transparent border-none text-red-500 dark:text-red-300 text-xs font-semibold cursor-pointer px-2.5 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                                         >
                                             Remove
                                         </button>
@@ -326,7 +326,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                                 >
                                                     {m.callsign}
                                                 </button>
-                                                <div className="text-[11px] text-nature-400 dark:text-nature-400 font-medium mt-0.5">
+                                                <div className="text-[11px] text-nature-400 dark:text-nature-300 font-medium mt-0.5">
                                                     Joined {relativeDate(m.joinedAt)}
                                                 </div>
                                             </div>

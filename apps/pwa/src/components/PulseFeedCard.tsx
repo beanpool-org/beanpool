@@ -120,7 +120,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                         {avatarResolved ? (
                             <img src={avatarResolved} alt="" className="w-full h-full object-cover" />
                         ) : (
-                            <span className="text-sm font-black text-nature-500 dark:text-nature-400">
+                            <span className="text-sm font-black text-nature-500 dark:text-nature-300">
                                 {authorName.charAt(0).toUpperCase()}
                             </span>
                         )}
@@ -189,7 +189,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                                 <button
                                     type="button"
                                     onClick={handleDeleteClick}
-                                    className="min-h-[44px] px-3 py-2 text-xs font-semibold rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-900/40 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                                    className="min-h-[44px] px-3 py-2 text-xs font-semibold rounded-lg bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 hover:bg-red-100 dark:hover:bg-red-900/50 border border-red-200 dark:border-red-900/40 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                                     aria-label="Delete this post"
                                 >
                                     Delete

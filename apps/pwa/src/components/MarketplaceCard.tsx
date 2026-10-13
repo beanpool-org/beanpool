@@ -90,7 +90,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             {post.title}
                         </h3>
                         <span className="text-[10px] text-nature-500 truncate flex items-center gap-1 flex-wrap">
-                            by {post.authorCallsign || 'Anonymous'} {elderCard && '⛰️'} {isOwnPost && <span className="text-blue-600 font-bold">👤 (You)</span>}
+                            by {post.authorCallsign || 'Anonymous'} {elderCard && '⛰️'} {isOwnPost && <span className="text-blue-600 dark:text-blue-400 font-bold">👤 (You)</span>}
                             {distanceTag}
                             {post.authorFoundingNeeded && (
                                 <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300/30 shrink-0">
@@ -230,7 +230,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                 <span className="font-bold text-base text-nature-950 dark:text-white" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
                                     {post.credits !== undefined ? post.credits : '?'}
                                     <img src="/assets/bean.png" className="mx-0.5" style={{ width: '14px', height: '14px', flexShrink: 0 }} alt="B" />
-                                    <span className="text-[10px] text-nature-500 ml-0.5">
+                                    <span className="text-[10px] text-nature-500 dark:text-nature-400 ml-0.5">
                                         {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
                                     </span>
                                 </span>
@@ -367,7 +367,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
                     {/* Recurring Overlay */}
                     {post.repeatable && (
-                        <div className={`absolute left-2 bg-terra-500/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
+                        <div className={`absolute left-2 bg-terra-500/90 dark:bg-terra-600/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
                             ↻ RECURRING
                         </div>
                     )}
@@ -409,7 +409,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
                     {/* Recurring Overlay */}
                     {post.repeatable && (
-                        <div className={`absolute left-2 bg-terra-500/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
+                        <div className={`absolute left-2 bg-terra-500/90 dark:bg-terra-600/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
                             ↻ RECURRING
                         </div>
                     )}

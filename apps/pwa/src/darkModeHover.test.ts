@@ -18,6 +18,10 @@
  * class string itself makes the words large (text-2xl and up, or text-xl bold).
  *
  * The few that may stay as they are go in ALLOWED, each with why.
+ *
+ * This reads the class strings alone, from the palette. e2e/dark-class-check.mjs is the full measure (test-all's
+ * pwa_dark_classes): every class string drawn in Chromium with the built CSS, inside its JSX parents, at rest, under
+ * the pointer and with focus.
  */
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
@@ -43,7 +47,7 @@ const ALLOWED_REST_CONTRAST: Array<[string, string, string]> = [
     ['pages/LedgerPage.tsx', 'dark:bg-nature-800 text-nature-500 cursor-not-allowed', 'Send and Confirm while disabled'],
     ['components/ProfileSetup.tsx', 'dark:bg-nature-700 text-white/70 cursor-not-allowed', 'Continue while the name or photo is not ready (disabled)'],
     ['pages/MapPage.tsx', 'dark:bg-nature-800 dark:text-nature-400 cursor-not-allowed', 'Post while the form is incomplete (disabled)'],
-    ['*', 'dark:bg-terra-600', 'white on terra-600 is 4.42:1 in light too: the brand fill, not a dark fault'],
+    ['*', 'text-white on dark:bg-terra-600', 'white on terra-600 is 4.42:1 in light too: the brand fill, not a dark fault'],
 ];
 
 const LIGHT_HOVER = /^bg-(?:white|[a-z]+-(?:50|100|200))(?:\/\d+)?$/;
@@ -316,7 +320,7 @@ describe('dark mode hover', () => {
         const palette = await darkPalette();
         const allowed = ALLOWED_REST_CONTRAST.filter(([f]) => f !== '*');
         const anywhere = ALLOWED_REST_CONTRAST.filter(([f]) => f === '*').map(([, piece]) => piece);
-        const found = darkContrastFailures(palette, all, false, allowed).filter((entry) => !anywhere.some((piece) => entry.includes(` on ${piece} `)));
+        const found = darkContrastFailures(palette, all, false, allowed).filter((entry) => !anywhere.some((piece) => entry.includes(`${piece} `)));
         expect(found).toEqual([]);
     });
 

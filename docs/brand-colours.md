@@ -16,11 +16,17 @@ There are two sets, light and dark. The phone's old "Light Color Scheme" choice 
 
 Buttons keep the same deep fill in both themes; only inks and chips change with the theme.
 
-**The accent is sage green** (Marty, 14 Oct 2026): the web's nature-600, `#647664`, as the fill under white words in
-light. In dark the accent is a light sage (nature-300, `#c0ccc0`) as both words and fill, with charcoal words on the
-fill, as gold has; pressing lightens it. As words in light it is a half step deeper, `#5b6b5b` (between nature-600 and
-700), because `#647664` reaches only 4.23:1 on the phone's sunken rows and 4.43 on the web's page. On the phone, words
-and icons on `accent.fill` use `text.onAccent`, never `text.inverse` or white.
+**The accent is sage green.** Who decided what:
+
+- Marty, 14 Oct 2026: the accent is sage, the web's nature-600, `#647664`, as the fill under white words in light.
+- Built by #1904, then kept by Marty on 14 Oct 2026 after he saw it: in dark the accent is a light sage (nature-300,
+  `#c0ccc0`) as both words and fill, with charcoal words on the fill, as gold has; pressing lightens it.
+- #1904's own calls, which Marty has not been asked about: as words in light the accent is a half step deeper, `#5b6b5b`
+  (between nature-600 and 700), because `#647664` reaches only 4.23:1 on the phone's sunken rows and 4.43 on the web's
+  page; and the accent's border is `chip.accent.border` (nature-200 in light, nature-800 in dark).
+
+On the phone, words and icons on `accent.fill` use `text.onAccent`, never `text.inverse` or white
+(`accent-fill-words.test.ts` fails on any other).
 
 ## The bar
 
@@ -66,6 +72,7 @@ matches the file.
 | `chip.danger.ink` | `#b91c1c` | `#fca5a5` |
 | `chip.accent.tint` | `#eef1ee` | `#384038` |
 | `chip.accent.ink` | `#5b6b5b` | `#c0ccc0` |
+| `chip.accent.border` | `#dce3dc` | `#434e43` |
 | `ink.brand` | `#047857` | `#34d399` |
 | `ink.success` | `#047857` | `#34d399` |
 | `ink.danger` | `#b91c1c` | `#fca5a5` |
@@ -95,7 +102,9 @@ What each is for, and its ratios (the same in both themes for fills; lowest page
 The logo (an image), the phone's `GlobalHeader.tsx`, `Map.web.tsx` and `UnifiedMapPin.tsx`, the map style, pins and
 markers in `map.tsx`, and the web map's pin colours in `MapPage.tsx`. Do not point them at these roles. (Marty pointed
 five colour lines of `map.tsx` at the roles on 14 Oct: the Reach chooser and category chip take `brand.fill` and
-`action.fab`, the required `*` and a missing field's border `feedback.danger.fg`.)
+`action.fab`, the required `*` and a missing field's border `feedback.danger.fg`. The same day he pointed one line of
+`GlobalHeader.tsx` at gold: the Settings icon, while Settings is open, is `feedback.warning.solid`, the library's
+`gold.fill`, 9.78:1 on the header's black scrim in both themes.)
 
 ## How each app uses it
 

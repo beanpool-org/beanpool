@@ -148,10 +148,6 @@ export const palette = {
     purple700: '#7e22ce',
     purple800: '#6b21a8',
 
-    // Sage (the web's nature scale) — the accent's borders; its fill, ink and tint come from core
-    nature200: '#dce3dc',
-    nature800: '#434e43',
-
     // Indigo — category picker + circulation / forecast accents
     indigo50: '#eef2ff',
     indigo100: '#e0e7ff',
@@ -222,7 +218,7 @@ export const lightColors = {
         primary: brandLight.ink.accent,     // sage words and icons
         fill: brandLight.accent.fill,       // a sage fill under text.onAccent (white)
         tint: brandLight.chip.accent.tint,  // pale sage ground; accent.primary reads on it
-        border: palette.nature200,
+        border: brandLight.chip.accent.border, // a sage chip's outline; no words on it
     },
 
     // Marketplace listing type — the one loud signal per card (core chip.ok / chip.need)
@@ -352,7 +348,7 @@ export const darkColors = {
         primary: brandDark.ink.accent,      // light sage words and icons
         fill: brandDark.accent.fill,        // the same light sage as a fill, under text.onAccent (charcoal)
         tint: brandDark.chip.accent.tint,   // deep sage ground; accent.primary reads on it
-        border: palette.nature800,
+        border: brandDark.chip.accent.border,
     },
 
     // Marketplace listing type

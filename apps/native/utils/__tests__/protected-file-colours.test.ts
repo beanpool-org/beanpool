@@ -78,8 +78,15 @@ const PAIRS: Pair[] = [
     { at: 'GlobalHeader.tsx:412 the status dot, online, in its white ring', ink: 'feedback.success.solid', ground: '#ffffff' },
     { at: 'GlobalHeader.tsx:426-430 the no-community pill', ink: 'feedback.danger.fg', ground: 'feedback.danger.bg' },
     { at: 'GlobalHeader.tsx:427-430 the guest pill', ink: 'feedback.warning.fg', ground: 'feedback.warning.bg' },
-    // Over the header photo under a 50 % black scrim (:393); judged on the scrim's black.
-    { at: 'GlobalHeader.tsx:482 the Settings icon while on Settings', ink: 'accent.primary', ground: '#000000' },
+    // Over the header photo under a 50 % black scrim (:393); judged on the scrim's black. Marty's edit of 14 Oct (#1904):
+    // the selected Settings icon is the library's gold (gold.fill, amber-500 in both themes), not the sage accent, so
+    // "you are here" stands out from the white icons beside it. 9.8:1 on the black; 8.0 on the photo's median pixel.
+    {
+        at: 'GlobalHeader.tsx:482 the Settings icon while on Settings, gold',
+        ink: 'feedback.warning.solid',
+        ground: '#000000',
+        wasOnMain: ['accent.primary', '#000000'],
+    },
 ];
 
 /** Tokens a protected file reads that carry no words of their own: lines, and grounds already judged in a pair above. */

@@ -17,10 +17,10 @@
  *      ink on a deep tint in dark.
  * Buttons keep the same deep fill in both themes; only the inks and the chips change with the theme.
  *
- * The accent is sage green (Marty, 14 Oct 2026), the web's nature-600: white words on #647664 in light. In dark it is
- * a light sage (nature-300) with charcoal words, as gold is, so it reads on the near-black pages as words and as a
- * fill. As words in light it is a half step deeper (#5b6b5b), because #647664 is only 4.23:1 on the phone's sunken
- * row and the web's oat page.
+ * The accent is sage green. Marty, 14 Oct 2026: the web's nature-600, white words on #647664 in light. Built by #1904
+ * and kept by Marty the same day: in dark a light sage (nature-300) with charcoal words, as gold is, so it reads on
+ * the near-black pages as words and as a fill. #1904's own calls: as words in light a half step deeper (#5b6b5b),
+ * because #647664 is only 4.23:1 on the phone's sunken row and the web's oat page; the border, chip.accent.border.
  *
  * Every words-on-fill pair, and every ink on every page or card it can sit on in either app, is at least 4.5:1 (WCAG
  * 2.x AA for normal text; the audience reads at 320 dp with 130 % text, where a button label is still "small").
@@ -79,6 +79,7 @@ const NATURE_300 = '#c0ccc0';
 const NATURE_600 = '#647664';
 const SAGE_650 = '#5b6b5b';
 const NATURE_700 = '#526052';
+const NATURE_800 = '#434e43';
 const NATURE_900 = '#384038';
 
 /** A filled control: words (`on`) on a `fill`, and the darker `hover` (web) / pressed (phone) fill. */
@@ -88,10 +89,11 @@ export interface FillRole {
     readonly on: Themed;
 }
 
-/** A small badge or chip: `ink` on a pale (light) or deep (dark) `tint`. */
+/** A small badge or chip: `ink` on a pale (light) or deep (dark) `tint`, and an outline where it has one. */
 export interface ChipRole {
     readonly tint: Themed;
     readonly ink: Themed;
+    readonly border?: Themed;
 }
 
 /**
@@ -120,7 +122,7 @@ export const BRAND_COLOURS = {
         need: { tint: themed(ORANGE_100, ORANGE_900), ink: themed(ORANGE_800, ORANGE_300) },
         warn: { tint: themed(AMBER_100, AMBER_950), ink: themed(AMBER_800, AMBER_300) },
         danger: { tint: themed(RED_100, RED_950), ink: themed(RED_700, RED_300) },
-        accent: { tint: themed(NATURE_100, NATURE_900), ink: themed(SAGE_650, NATURE_300) },
+        accent: { tint: themed(NATURE_100, NATURE_900), ink: themed(SAGE_650, NATURE_300), border: themed(NATURE_200, NATURE_800) },
     },
     /** Words and icons drawn straight on a page or card (never on one of the fills above). */
     ink: {
@@ -166,7 +168,7 @@ export const INK_GROUNDS: { readonly [T in BrandTheme]: readonly string[] } = {
         '#141a1a', // phone pattern ground
         '#1d231d', // web --bg-primary (nature-950)
         '#2a322a', // web --bg-card
-        '#384038', // web --bg-secondary (nature-800): message rows, consent cards, the radius picker
+        '#384038', // web --bg-secondary (nature-900): message rows, consent cards, the radius picker
     ],
 };
 

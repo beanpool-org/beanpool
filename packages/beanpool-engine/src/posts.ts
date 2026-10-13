@@ -4,6 +4,8 @@
 
 import type Database from 'better-sqlite3';
 import {
+    elidedWord,
+    foldApostrophes,
     parseReachPeers,
     type PostReach,
     type AudienceScope
@@ -1093,11 +1095,31 @@ const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
  */
 export const SEARCH_TERMS_MAX = 256;
 
-/** The words a search asks posts_fts for, each once, at most SEARCH_TERMS_MAX. */
+/** An apostrophe at either end of a word (U+02BC included), which is no part of it: 'eggs', james'. */
+const APOSTROPHES_AROUND = /^['\u2019\u02bc]+|['\u2019\u02bc]+$/g;
+
+/**
+ * The words a search asks posts_fts for, each once, at most SEARCH_TERMS_MAX.
+ *
+ * An apostrophe inside a word stays, as a hyphen does (#1828 check, finding 1): FTS5 reads "don't"* as the phrase don t*,
+ * which is how posts_fts's unicode61 parted "Don't" and "Don’t" in the listing, so it finds them and not every word
+ * starting "don". Taken out, "dont"* found neither. An elided word is also asked on its own ("l'eau" asks "eau" too, core's
+ * elidedWord), so "Eau de cologne" is found as when the word was parted. unicode61 reads U+02BC as a letter, not as
+ * punctuation, so a listing typed with it holds "пʼять" as one token: a word typed with it is also asked as typed.
+ */
 export function searchTermsOfQuery(query: string | undefined): string[] {
     // Control characters part words, as core's searchTermsFor reads them, here too: a raw `q` (the route's, from any
-    // client) carrying a NUL threw and answered 500 (#1781); it now finds what the words without it find.
-    const words = (query ?? '').replace(CONTROL_CHARACTERS, ' ').trim().replace(/["']/g, '').split(/\s+/).filter(w => w.length > 0);
+    // client) carrying a NUL threw and answered 500 (#1781); it now finds what the words without it find. A quote mark
+    // would end the FTS5 string, so it goes.
+    const words: string[] = [];
+    for (const typed of (query ?? '').replace(CONTROL_CHARACTERS, ' ').replace(/"/g, '').split(/\s+/)) {
+        const word = foldApostrophes(typed).replace(APOSTROPHES_AROUND, '');
+        if (!word) continue;
+        words.push(word);
+        if (typed.includes('\u02bc')) words.push(typed.replace(APOSTROPHES_AROUND, ''));
+        const elided = elidedWord(word);
+        if (elided) words.push(elided);
+    }
     return [...new Set(words)].slice(0, SEARCH_TERMS_MAX);
 }
 
@@ -1175,8 +1197,10 @@ export interface NearbySet {
  *   at most `measureAtMost` of the matching posts in the box are measured. It reads no author's row: the enterprise
  *   half of the board's rule is tested on the author's key (ENTERPRISE_ON_BOARD_BY_KEY_SQL), as the holiday half
  *   already is. A post with no place is never in it. With no area: the newest `newestWithoutArea` listings under the
- *   same rules, wherever they are. Neither holds a listing by an author the member blocked (member_blocks, their own
- *   rows only): their phone hides those, so they would only take the slots of listings it shows.
+ *   same rules, wherever they are. Neither holds a listing by an author the member blocked on the web (member_blocks,
+ *   their own rows only): they asked not to see those. The phone keeps its own list on the device (apps/native
+ *   utils/blocklist.ts never calls /api/blocks) and hides those itself, so for a phone-only member member_blocks is empty
+ *   and this leaves out nothing (#1808 review, finding 6).
  * - own(M): every listing the member wrote here, whatever its place or state.
  * - ties(M): the listings they have an open deal on (asked for, or taken and not yet done) or a conversation about,
  *   the node's side of the phone's keep rule (apps/native utils/db.ts localPostTies).
@@ -1501,9 +1525,10 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         if (filter?.type !== 'poll') {
             where += " AND p.type != 'poll'";
         }
-        // A search leaves out the listings of the authors the reader blocked, as their nearby set does (#1781): the phone
-        // hides those, so they would only take the places of listings it shows, and the web and Home show them otherwise.
-        // A read for nobody in particular has no list.
+        // A search leaves out the listings of the authors the reader blocked on the web (member_blocks), as their nearby
+        // set does (#1781): the web and Home would show them otherwise. The phone keeps its own list on the device and
+        // hides those itself; it never writes member_blocks, so for a phone-only member this leaves out nothing (#1808
+        // review, finding 6). A read for nobody in particular has no list.
         const blocked = viewer && !filter?.includeAllScopes ? authorsBlockedBy(db, viewer) : [];
         if (blocked.length > 0) {
             where += ' AND p.author_pubkey NOT IN (SELECT value FROM json_each(?))';

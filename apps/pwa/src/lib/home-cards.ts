@@ -113,7 +113,8 @@ export interface HomeCards {
     find?: HomeFind;
     steps?: { joinedAt: string | null; firstOffer: boolean; firstPost: boolean; photo: boolean; interests: boolean; invited: boolean | null; area: boolean; knocked: null };
     deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null };
-    enterprise?: { id: string; name: string; requests: number; others: number };
+    /** `lifecycle` 'bounded': the one kept is a project (§3.1); absent from an older node. */
+    enterprise?: { id: string; name: string; requests: number; others: number; lifecycle?: 'ongoing' | 'bounded' };
     events?: { items: HomeEventItem[]; radiusKm: number | null };
     market?: { items: HomeMarketItem[]; total14d: number; more: boolean; examples?: true };
     decide?: { open: number; soonestClosesAt: string | null; polls: number; pollsMore: boolean };
@@ -310,8 +311,10 @@ export const CARD_TITLES: Record<HomeCardId, string> = {
  * A card's title on this node: the Market card is "Near you" where listings come nearest first (global, §3.1); a
  * visitor's are the lobby's words (§9 (c)): "Near you" for the communities, "What people post" for the listings.
  */
-export function cardTitle(id: HomeCardId, answer: Pick<HomeAnswer, 'profile'> & Partial<Pick<HomeAnswer, 'welcome' | 'me'>>): string {
+export function cardTitle(id: HomeCardId, answer: Pick<HomeAnswer, 'profile'> & Partial<Pick<HomeAnswer, 'welcome' | 'me' | 'cards'>>): string {
     const visitor = !!answer.welcome || answer.me === null;
+    // The one you keep is a project: "Your project" (group decisions §3.1). A node too old to say: "Your enterprise".
+    if (id === 'enterprise' && answer.cards?.enterprise?.lifecycle === 'bounded') return 'Your project';
     if (visitor && id === 'find') return 'Near you';
     if (visitor && id === 'market') return 'What people post';
     // "Coming up" says how near only when the node measured from a point (the card adds "· within 50 km").

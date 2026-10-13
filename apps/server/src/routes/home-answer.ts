@@ -192,7 +192,8 @@ export interface HomeCards {
     find?: LandingCard;
     steps?: { joinedAt: string | null; firstOffer: boolean; firstPost: boolean; photo: boolean; interests: boolean; invited: boolean | null; area: boolean; knocked: null };
     deals?: { open: number; waiting: number; waitingOnMe: { txId: string; postId: string; title: string } | null };
-    enterprise?: { id: string; name: string; requests: number; others: number };
+    /** `lifecycle` 'bounded': the first one kept is a project, and the card says "Your project" (group decisions §3.1). */
+    enterprise?: { id: string; name: string; requests: number; others: number; lifecycle: 'ongoing' | 'bounded' };
     events?: { items: EventItem[]; radiusKm: number | null };
     market?: { items: MarketItem[]; total14d: number; more: boolean; examples?: true };
     decide?: { open: number; soonestClosesAt: string | null; polls: number; pollsMore: boolean };
@@ -576,7 +577,8 @@ function enterpriseCard(c: Ctx): HomeCards['enterprise'] | undefined {
     const id = kept[0];
     // Requests made to the enterprise that wait on its keepers: a trade asked of it, not yet accepted.
     const requests = (db.prepare("SELECT COUNT(*) AS c FROM marketplace_transactions WHERE seller_pubkey = ? AND status = 'requested'").get(id) as { c: number }).c;
-    return { id, name: clip(getMember(id)?.callsign ?? '', NAME_CHARS), requests, others: kept.length - 1 };
+    const lifecycle = (db.prepare('SELECT lifecycle FROM members WHERE public_key = ?').get(id) as { lifecycle: string | null } | undefined)?.lifecycle === 'bounded' ? 'bounded' : 'ongoing';
+    return { id, name: clip(getMember(id)?.callsign ?? '', NAME_CHARS), requests, others: kept.length - 1, lifecycle };
 }
 
 /** The listings' read for this reader: a member's own visibility, or the visitors' view (nobody in it, rough areas). */

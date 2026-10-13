@@ -702,6 +702,21 @@ describe('RekeyMemberWizard: this dashboard\'s own cancel, a code replaced elsew
         expect(bind).not.toHaveBeenCalled();
     });
 
+    it('a code made after Issue New Code starts clean: no guessing warning of the code before it (#1783 check, finding 2)', async () => {
+        const read = vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue({ ...live(), codeUnderAttack: { wrongTries: 6, refusing: false } } as any);
+        vi.spyOn(nodeClient, 'issueRekeyCodeApi').mockResolvedValue({ success: true, code: 'RK-0E01-0001', oldPubkey: member.publicKey, callsign: 'alice', expiresAt: new Date(Date.now() + 86400000).toISOString(), operator: 'b'.repeat(64) } as any);
+        render(<RekeyMemberWizard member={member} nodeUrl="https://mullum.example.org" onClose={() => {}} />);
+        expect((await screen.findByTestId('rekey-under-attack')).textContent).toMatch(/tried 6 wrong codes/);
+        fireEvent.click(screen.getByRole('button', { name: /Issue New Code/ }));
+        // The node's read of the new code never answers here: only making the code may clear the old code's warning.
+        read.mockImplementation(() => new Promise(() => {}));
+        screen.getAllByRole('checkbox').forEach((cb) => fireEvent.click(cb));
+        fireEvent.click(screen.getByRole('button', { name: /Make a re-key code/ }));
+        await screen.findByText('RK-0E01-0001');
+        expect(screen.getByTestId('rekey-code-qr')).toBeTruthy();
+        expect(screen.queryByTestId('rekey-under-attack')).toBeNull();
+    });
+
     it('a code that ran out while the page was open: says it expired, not that it was stopped or cancelled', async () => {
         vi.useFakeTimers({ shouldAdvanceTime: true });
         const read = vi.spyOn(nodeClient, 'fetchRekeyStatusApi').mockResolvedValue(live('RK-AB12-CD34', phone, 2000) as any);

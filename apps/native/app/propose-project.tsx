@@ -108,7 +108,7 @@ export default function ProposeProjectModal() {
             Alert.alert(
                 "Initiative Started 🌱",
                 lifecycle === 'bounded' 
-                    ? "Your bounded project has been created and is now open for community backing."
+                    ? "Your project has been created and is now open for community backing."
                     : "Your community enterprise has been established in the Commons.",
                 [{ text: "OK", onPress: () => router.back() }]
             );
@@ -143,7 +143,7 @@ export default function ProposeProjectModal() {
                     <View style={styles.infoBox}>
                         <MaterialCommunityIcons name="information" size={20} color={colors.brand.primary} style={{ marginRight: 8 }} />
                         <Text style={styles.infoText}>
-                            Community enterprises trade, produce, and steward shared initiatives. Bounded initiatives raise beans toward specific community goals.
+                            An enterprise keeps going and trades; its keepers run it together. A project has a leader, a goal in Beans and usually an end date.
                         </Text>
                     </View>
 
@@ -153,23 +153,23 @@ export default function ProposeProjectModal() {
                         <View style={styles.typeSelectorRow}>
                             <Pressable
                                 accessibilityRole="button"
-                                accessibilityLabel="Bounded Project: Has funding goal and deadline"
+                                accessibilityLabel="Project: a leader, a goal, an end date"
                                 accessibilityState={{ selected: lifecycle === 'bounded' }}
                                 style={[styles.typeBtn, lifecycle === 'bounded' && styles.typeBtnActive]}
                                 onPress={() => setLifecycle('bounded')}
                             >
-                                <Text style={styles.typeBtnTitle}>🌱 Bounded Project</Text>
-                                <Text style={styles.typeBtnDesc}>Has funding goal and optional deadline</Text>
+                                <Text style={styles.typeBtnTitle}>🌱 Project</Text>
+                                <Text style={styles.typeBtnDesc}>A leader, a goal, an end date</Text>
                             </Pressable>
                             <Pressable
                                 accessibilityRole="button"
-                                accessibilityLabel="Ongoing Enterprise: Permanent co-op or facility"
+                                accessibilityLabel="Enterprise: keepers, it keeps going"
                                 accessibilityState={{ selected: lifecycle === 'ongoing' }}
                                 style={[styles.typeBtn, lifecycle === 'ongoing' && styles.typeBtnActive]}
                                 onPress={() => setLifecycle('ongoing')}
                             >
-                                <Text style={styles.typeBtnTitle}>🏛️ Ongoing</Text>
-                                <Text style={styles.typeBtnDesc}>Permanent co-op or community facility</Text>
+                                <Text style={styles.typeBtnTitle}>🏛️ Enterprise</Text>
+                                <Text style={styles.typeBtnDesc}>Keepers; it keeps going</Text>
                             </Pressable>
                         </View>
                     </View>

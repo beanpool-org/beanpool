@@ -5,11 +5,12 @@ interface Props {
     isOpen: boolean;
     onClose: () => void;
     onCreated: (group: Group) => void;
+    /** With Beans involved, the form hands over to the project or enterprise form (group decisions §3.1). */
+    onStartWithBeans?: (lifecycle: 'bounded' | 'ongoing') => void;
 }
 
 const CATEGORIES: Array<{ key: GroupCategory; label: string; icon: string; desc: string }> = [
     { key: 'working_group', label: 'Working Group', icon: '🤝', desc: 'Practical focus group coordinating tasks' },
-    { key: 'project', label: 'Project Team', icon: '🛠️', desc: 'Collaborating on an initiative or venture' },
     { key: 'guild', label: 'Guild', icon: '🛡️', desc: 'Skill sharing and craft practitioners' },
     { key: 'social', label: 'Social Circle', icon: '☕', desc: 'Community chats and shared interests' },
     { key: 'general', label: 'General', icon: '💬', desc: 'Open discussion space' },
@@ -21,7 +22,7 @@ const JOIN_POLICIES: Array<{ key: JoinPolicy; label: string; icon: string; desc:
     { key: 'invite_only', label: 'Invite Only', icon: '🔒', desc: 'Convenor must invite new members' },
 ];
 
-export function CreateGroupModal({ isOpen, onClose, onCreated }: Props) {
+export function CreateGroupModal({ isOpen, onClose, onCreated, onStartWithBeans }: Props) {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
     const [category, setCategory] = useState<GroupCategory>('working_group');
@@ -165,6 +166,15 @@ export function CreateGroupModal({ isOpen, onClose, onCreated }: Props) {
                                 );
                             })}
                         </div>
+                        {onStartWithBeans && (
+                            <div className="mt-3 space-y-2" data-testid="create-group-with-beans">
+                                <p className="text-xs text-nature-600 dark:text-nature-400">With Beans involved?</p>
+                                <div className="flex flex-wrap gap-2">
+                                    <button type="button" onClick={() => onStartWithBeans('bounded')} className="min-h-[44px] px-3 py-2 rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white hover:border-emerald-500">🌱 Start a project</button>
+                                    <button type="button" onClick={() => onStartWithBeans('ongoing')} className="min-h-[44px] px-3 py-2 rounded-xl border border-nature-300 dark:border-nature-700 text-sm font-bold text-nature-900 dark:text-white hover:border-emerald-500">🏛️ Start an enterprise</button>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div>

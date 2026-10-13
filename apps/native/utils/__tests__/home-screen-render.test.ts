@@ -911,7 +911,7 @@ describe('every line on Home opens a screen this node shows, with what the line 
         // The check is not passing on nothing: the link this card had before is wrong on both kinds of node.
         const before: Link = { card: 'decide', control: 'home-decide-line', href: { pathname: '/(tabs)/projects', params: { section: 'decide' } } };
         expect(wrongOn(GLOBAL_FEATURES, before)).toBe('the projects tab, which this node hides');
-        expect(wrongOn({ ...LOCAL_FEATURES, beans: true, decisions: false }, before)).toBe('Commons → decide, which this node shows as enterprises');
+        expect(wrongOn({ ...LOCAL_FEATURES, beans: true, decisions: false }, before)).toBe('Commons → decide, which this node shows as groups');
         expect(wrongOn(LOCAL_FEATURES, { ...before, href: { pathname: '/(tabs)/market', params: { filter: 'nope' } } })).toBe("the Market's nope, which it doesn't take");
         expect(wrongOn(LOCAL_FEATURES, { ...before, href: { pathname: '/(tabs)/people', params: { mode: 'x' } } })).toBe('mode, which its screen never reads');
         // The Market opens on its Polls pill from that link (app/(tabs)/market.tsx), as it does on Events for "All events".

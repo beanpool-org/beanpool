@@ -32,25 +32,51 @@ function own(map: Record<string, string[]>, w: string): string[] | undefined {
 // eslint-disable-next-line no-control-regex -- removing control characters is the point
 const PUNCTUATION = /[\u0000-\u001f\u007f-\u009f!-/:-@[-`{-~\u00a0-\u00bf\u0e4f\u0e5a\u0e5b\u104a\u104b\u17d4-\u17d6\u2000-\u200b\u200e-\u206f\u3000-\u3004\u3008-\u3020\u3030\u3036\u3037\u303d-\u303f\u30a0\u30fb\uff00-\uff0f\uff1a-\uff20\uff3b-\uff40\uff5b-\uff65]/g;
 
-// A Latin word joined by hyphens (wi-fi, co-op, t-shirt), or digits joined by . , / (1,000, 3.5, 24/7), is one word: parted,
-// "wi-fi" asked for every word starting "wi" or "fi", most of the board (#1808 review, finding 1). Kept whole it finds what
-// holds it: FTS5 reads the engine's "wi-fi"* as the phrase wi fi*, and the web's substring finds it as typed. ASCII marks
-// around it come off first ("(t-shirt),"), so they never keep it from being whole.
-const COMPOUND = /^(?:[a-z0-9\u00c0-\u024f]+(?:[-\u2010\u2011][a-z0-9\u00c0-\u024f]+)+|[0-9]+(?:[.,/][0-9]+)+)$/;
-const COMPOUND_JOINS = /[-\u2010\u2011.,/]/g;
+// A Latin word joined by hyphens (wi-fi, co-op, t-shirt) or apostrophes (don't, it's, o'clock), or digits joined by . , /
+// (1,000, 3.5, 24/7), is one word: parted, "wi-fi" asked for every word starting "wi" or "fi", most of the board, and "don't"
+// for every word starting "don" (#1808 review, finding 1). Kept whole it finds what holds it: FTS5 reads the engine's
+// "wi-fi"* as the phrase wi fi*, and "don't"* as don t*, and the web's substring finds it as typed. ASCII marks around it
+// come off first ("(t-shirt),", "'eggs'", "james'"), so they never keep it from being whole. The typographic apostrophes
+// read as the plain one (foldApostrophes).
+const COMPOUND = /^(?:[a-z0-9\u00c0-\u024f]+(?:[-\u2010\u2011'\u2019\u02bc][a-z0-9\u00c0-\u024f]+)+|[0-9]+(?:[.,/][0-9]+)+)$/;
+const COMPOUND_JOINS = /[-\u2010\u2011'\u2019\u02bc.,/]/g;
+// The apostrophes keyboards type besides the plain one: U+2019 (what iOS types) and U+02BC (the modifier letter some
+// layouts type).
+const APOSTROPHES = /[\u2019\u02bc]/g;
+// An article or preposition French and Italian elide into the word after it: l'eau, d'olive, dell'arte, qu'il, c'est.
+// The word after it must be two letters or more, as any word asked on its own.
+const ELISION = /^(?:c|d|j|l|m|n|s|t|qu|jusqu|lorsqu|puisqu|all|coll|dall|dell|nell|pell|sull|quell|quest|un)'(?=[a-z\u00c0-\u024f]{2})/i;
+
+/** Text with every apostrophe as the plain one, so "Don’t" (iOS) and "don't" are the same word to a search. */
+export function foldApostrophes(text: string): string {
+    return text.replace(APOSTROPHES, "'");
+}
+
+/**
+ * The word an elision is written onto ("eau" of "l'eau", "arte" of "dell'arte"), or null for a word that is not one
+ * ("don't", "o'clock"). A search asks it on its own too, so "l'eau" finds "Eau de cologne" and "olive" of "d'olive" brings
+ * its synonyms, as when the word was parted (#1828 check, finding 1). The word comes with its apostrophes folded.
+ */
+export function elidedWord(word: string): string | null {
+    const elision = ELISION.exec(word);
+    return elision ? word.slice(elision[0].length) : null;
+}
 const ASCII_MARKS_AROUND = /^[!-/:-@[-`{-~]+|[!-/:-@[-`{-~]+$/g;
 // Control characters and the spaces \s leaves out part chunks before a chunk is read as a compound.
 // eslint-disable-next-line no-control-regex -- removing control characters is the point
 const NOT_WORD_SPACE = /[\u0000-\u001f\u007f-\u009f\u00a0\u3000]/g;
 
 /** The words of a query: a compound whole and joined (wi-fi, wifi: the joined form is what the synonyms are looked up on),
- *  every other chunk parted at its punctuation. */
+ *  and an elided word on its own too (l'eau, leau, eau); every other chunk parted at its punctuation. */
 function queryWords(query: string): string[] {
     const words: string[] = [];
     for (const chunk of query.toLowerCase().replace(NOT_WORD_SPACE, ' ').split(/\s+/)) {
         const bare = chunk.replace(ASCII_MARKS_AROUND, '');
         if (COMPOUND.test(bare)) {
-            words.push(bare.replace(/[\u2010\u2011]/g, '-'), bare.replace(COMPOUND_JOINS, ''));
+            const whole = foldApostrophes(bare.replace(/[\u2010\u2011]/g, '-'));
+            words.push(whole, bare.replace(COMPOUND_JOINS, ''));
+            const elided = elidedWord(whole);
+            if (elided) words.push(elided);
             continue;
         }
         // A one-character word outside ASCII (鱼, 알) is a word; a lone a-z letter or digit is not.
@@ -70,7 +96,9 @@ export function expandSearchTerms(query: string): string[] {
         // Reverse: word → all words that have it as synonym (e.g. "fruit" → ["lemon", "lime"])
         const rev = own(reverseSynonyms, w);
         if (rev) for (const s of rev) expanded.add(s);
-        // Also try stemmed forms
+        // Also try stemmed forms. Not of a word with an apostrophe: "it's" would stem to "it'", which the engine asks as the
+        // prefix "it"; its joined form ("its", "childrens") is stemmed instead.
+        if (w.includes("'")) continue;
         let stem = w;
         if (w.endsWith('ies')) stem = w.slice(0, -3) + 'y';
         else if (w.endsWith('es')) stem = w.slice(0, -2);

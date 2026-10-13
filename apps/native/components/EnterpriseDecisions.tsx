@@ -12,10 +12,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, Pressable, TextInput, Modal, ScrollView, ActivityIndicator, Alert, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-    GROUP_DECISIONS_NOTE, groupChoiceLabel, groupChoicePeople, groupChoicesFor, groupChoiceWhoWords, groupProposal, joinPolicyChoices,
+    GROUP_DECISIONS_NOTE, GROUP_SOMEONE, groupChoiceLabel, groupChoicePeople, groupChoicesFor, groupChoiceWhoWords, groupProposal, joinPolicyChoices,
     joinPolicyLabel, type GroupChoice, type GroupJoinPolicy, type GroupPerson,
     beansHeld, checkPayOutAmount, payOutFeeWords, rollChoices, scopedClosesWords, scopedEffectLabel, scopedEffectsFor, scopedEffectWords,
-    scopedOutcomeWords, scopedTallyWords, SMALL_ROLL_BALLOT_NOTE, wageNoteWords,
+    scopedOutcomeWords, scopedTallyWords, SMALL_ROLL_BALLOT_NOTE, votesOnlyWords, wageNoteWords,
     type RollPerson, type ScopedDecisionCard, type ScopedDecisionList, type ScopedEffect,
 } from '@beanpool/core';
 import {
@@ -68,16 +68,20 @@ export interface GroupDecisionsProps {
     refreshKey?: number;
     /** A vote was cast or opened: the group may have changed (a new lead, a role, closed), so its info reads again. */
     onChanged?: () => void;
+    /** The node refused this phone the chat (not in the group now): say so over the votes, and "can still vote" only when one does (#1794). */
+    votesOnly?: boolean;
 }
 
 /** A chat group's votes (slice S3), on its info: the same block, its own form (no recipient, no amount). */
-export function GroupDecisions({ groupId, myPubkey, people, joinPolicy, refreshKey, onChanged }: GroupDecisionsProps) {
-    const nameOf = useCallback((pk: string) => people.find(p => p.pubkey === pk)?.name || 'a former member', [people]);
+export function GroupDecisions({ groupId, myPubkey, people, joinPolicy, refreshKey, onChanged, votesOnly }: GroupDecisionsProps) {
+    // Someone removed lands here with no roster (people is []): the card's own names, then plain words (#1794 N7).
+    const nameOf = useCallback((pk: string, names?: Record<string, string>) => people.find(p => p.pubkey === pk)?.name || names?.[pk] || GROUP_SOMEONE, [people]);
     const read = useCallback(() => getGroupDecisions(groupId), [groupId]);
     const cast = useCallback((id: string, support: boolean) => voteGroupDecision(groupId, id, support), [groupId]);
     return (
         <ScopedDecisions
             read={read} cast={cast} nameOf={nameOf} refreshKey={refreshKey} note={GROUP_DECISIONS_NOTE} onChanged={onChanged}
+            lead={votesOnly ? l => votesOnlyWords(l.decisions.some(d => d.canVote === true)) : undefined}
             propose={myPubkey ? (close, done, list) => (
                 // Only the people the node takes in a vote (no suspended member, #1784 review N2).
                 <ProposeGroupDecision groupId={groupId} me={myPubkey}
@@ -89,15 +93,17 @@ export function GroupDecisions({ groupId, myPubkey, people, joinPolicy, refreshK
 }
 
 /** The block both scopes draw: the cards, Yes / No, and the propose button that opens the scope's own form. */
-function ScopedDecisions({ read, cast, nameOf, note, lifecycle, refreshKey, propose, onChanged }: {
+function ScopedDecisions({ read, cast, nameOf, note, lifecycle, refreshKey, propose, onChanged, lead }: {
     read: () => Promise<ScopedDecisionList | null>;
     cast: (id: string, support: boolean) => Promise<unknown>;
-    nameOf: (pubkey: string) => string;
+    nameOf: (pubkey: string, names?: Record<string, string>) => string;
     note: string;
     lifecycle?: string | null;
     refreshKey?: number;
     propose: ((close: () => void, done: () => void, list: ScopedDecisionList) => React.ReactNode) | null;
     onChanged?: () => void;
+    /** A line over the votes, from what the node answered (the votes-only landing's). */
+    lead?: (list: ScopedDecisionList) => string;
 }) {
     const { colors } = useTheme();
     const [list, setList] = useState<ScopedDecisionList | null>(null);
@@ -134,6 +140,7 @@ function ScopedDecisions({ read, cast, nameOf, note, lifecycle, refreshKey, prop
     return (
         <View style={s.card} accessibilityLabel="Decisions">
             <Text style={s.label} accessibilityRole="header">DECISIONS</Text>
+            {lead && list.decisions.length > 0 && <Text style={s.lead}>{lead(list)}</Text>}
             <Text style={s.note}>{note}</Text>
             {list.watching === true && !list.closedAt && <Text style={s.note}>You watch this group, so you see its votes but don't vote.</Text>}
             {[...open, ...closed.slice(0, 5)].map(d => {
@@ -142,9 +149,9 @@ function ScopedDecisions({ read, cast, nameOf, note, lifecycle, refreshKey, prop
                 return (
                     <View key={d.id} style={s.decision}>
                         <Text style={s.title}>{d.title}</Text>
-                        <Text style={s.effect}>{scopedEffectWords(d, nameOf, lifecycle)}</Text>
+                        <Text style={s.effect}>{scopedEffectWords(d, pk => nameOf(pk, d.names), lifecycle)}</Text>
                         {!!d.description && <Text style={s.why}>{d.description}</Text>}
-                        <Text style={s.meta}>Proposed by {nameOf(d.authorPubkey)} · {isOpen ? scopedClosesWords(d.closesAt, now) : scopedOutcomeWords(d)}</Text>
+                        <Text style={s.meta}>Proposed by {nameOf(d.authorPubkey, d.names)} · {isOpen ? scopedClosesWords(d.closesAt, now) : scopedOutcomeWords(d)}</Text>
                         <Text style={s.tally}>{scopedTallyWords(d)}</Text>
                         {mine && <Text style={s.meta}>You voted {mine}.</Text>}
                         {/* The vote's own roll, frozen when it opened, says who votes: never who is in the group now. */}
@@ -406,6 +413,7 @@ const styles = (colors: any) => StyleSheet.create({
     card: { backgroundColor: colors.surface.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, padding: 14, marginTop: 12 },
     label: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5, color: colors.text.secondary, marginBottom: 4 },
     note: { fontSize: 13, color: colors.text.secondary, lineHeight: 18, marginBottom: 6 },
+    lead: { fontSize: 14, fontWeight: '600', color: colors.text.body, lineHeight: 20, marginBottom: 6 },
     // The one line about ballot secrecy: the notes' colour, never the faintest (4.5:1 or better in both themes).
     small: { fontSize: 12, color: colors.text.secondary, lineHeight: 16, marginTop: 4 },
     decision: { borderTopWidth: 1, borderTopColor: colors.border.default, paddingTop: 10, marginTop: 8 },

@@ -62,6 +62,26 @@ describe("a chat group's Decisions block (DESIGN-group-decisions S3)", () => {
         expect(within(block).queryByRole('button', { name: 'Propose a vote' })).toBeNull();
     });
 
+    it('someone on no open vote who is not an observer is not told they watch (#1794 N9, MP3)', async () => {
+        // e.g. removed, every vote they were on now closed: onRoll false, watching false. "You watch" follows watching only.
+        vi.mocked(api.getGroupDecisions).mockResolvedValue({ decisions: [card({ canVote: false, status: 'unresolved' })] as never, canPropose: false, rollSize: 4, onRoll: false, watching: false, closedAt: null });
+        render(<GroupDecisions groupId="grp" myPubkey="zed" people={people} />);
+        const block = await screen.findByTestId('group-decisions');
+        expect(within(block).getByText('Cyd leads')).toBeInTheDocument();
+        expect(within(block).queryByText(/You watch this group/)).toBeNull();
+    });
+
+    it('the pickers offer only the people the node takes in a vote: no suspended member (#1794 N9, MP5)', async () => {
+        // Bo is suspended: the node leaves them out of nameable, so the form never names them.
+        vi.mocked(api.getGroupDecisions).mockResolvedValue({ decisions: [], canPropose: true, rollSize: 4, onRoll: true, closedAt: null, nameable: ['lou', 'cyd', 'ada', 'obi'] });
+        render(<GroupDecisions groupId="grp" myPubkey={ME} people={people} joinPolicy="open" />);
+        fireEvent.click(await screen.findByRole('button', { name: 'Propose a vote' }));
+        const form = screen.getByTestId('propose-group-decision');
+        fireEvent.click(within(form).getByRole('radio', { name: 'Make someone a convenor' }));
+        expect(within(form).getByRole('radio', { name: 'Ada (you)' })).toBeInTheDocument();
+        expect(within(form).queryByRole('radio', { name: 'Bo' })).toBeNull();
+    });
+
     it('a closed group: its votes to read, nothing to propose', async () => {
         vi.mocked(api.getGroupDecisions).mockResolvedValue({
             decisions: [card({ status: 'executed', effect: 'close_group', subject: null, tally: { voted: 4, roll: 4, quorumRequired: 3, thresholdRequired: 0.6, yes: 4, no: 0 } })] as never,

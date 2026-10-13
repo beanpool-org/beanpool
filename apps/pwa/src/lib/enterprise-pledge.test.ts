@@ -19,4 +19,11 @@ describe('pledgeClosedLine: the node takes a pledge only while an enterprise is 
             expect(pledgeClosedLine(s)).toBe('This enterprise has closed, so it isn’t taking pledges.');
         }
     });
+
+    it('says "project" for a project (group decisions pick 8)', () => {
+        expect(pledgeClosedLine('funded', 'bounded')).toBe('This project has reached its goal, so it isn’t taking more pledges.');
+        expect(pledgeClosedLine('winding_up', 'bounded')).toBe('This project is winding up, so it isn’t taking pledges.');
+        expect(pledgeClosedLine('completed', 'bounded')).toBe('This project has closed, so it isn’t taking pledges.');
+        expect(pledgeClosedLine('completed', 'ongoing')).toBe('This enterprise has closed, so it isn’t taking pledges.');
+    });
 });

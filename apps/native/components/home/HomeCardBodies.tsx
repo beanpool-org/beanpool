@@ -137,7 +137,7 @@ export function EnterpriseBody({ card, colors }: { card: NonNullable<HomeCards['
             text={card.name}
             sub={line}
             strong
-            a11y={`${card.name}: ${sentence(line)} Opens the enterprise.`}
+            a11y={`${card.name}: ${sentence(line)} Opens the ${card.lifecycle === 'bounded' ? 'project' : 'enterprise'}.`}
             onPress={() => router.push({ pathname: '/treasury-detail', params: { publicKey: card.id, name: card.name } })}
             testID="home-enterprise-line"
         />

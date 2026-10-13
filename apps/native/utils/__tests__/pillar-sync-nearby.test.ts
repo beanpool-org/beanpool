@@ -13,7 +13,7 @@
  * host but this machine.
  */
 
-import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll, onTestFinished } from 'vitest';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -427,6 +427,96 @@ describe('the phone syncs the listings near its member (a real global node)', ()
         const held = Object.fromEntries((sql.prepare('SELECT k, v FROM nearby_held').all() as { k: string; v: string }[]).map(r => [r.k, r.v]));
         expect(sorted(JSON.parse(held.set))).toEqual(sorted(after));
         expect(held.hash).toBe(nearbySetHash([...after], JSON.parse(held.tied)));
+    }, START_MS);
+
+    it('a diff of more than one page that doesn\'t check out (its last page\'s setAdd flipped): nearby_held forgotten, the cursor kept; the next read is named the set whole', async () => {
+        // The review of #1810, finding 1 (its probe R2): the test above reads a diff that fits on one page, so it pins only
+        // the one-page forget. Here 250 listings of the set change (a delta of two pages) and one is taken off (the set moves).
+        const cursorKey = [...mem.async.keys()].find(k => k.startsWith('pillar_sync_') && k.endsWith('_last-sync'))!;
+        const cursor = mem.async.get(cursorKey);
+        const before = expectedSet(BYRON, near, ['mine-ldn']);
+        const inSet = near.filter(p => before.has(p.id));
+        const touched = inSet.slice(0, 250).map(p => p.id);
+        const stamp = new Date().toISOString();
+        for (let i = 0; i < touched.length; i += 100) {
+            const batch = touched.slice(i, i + 100);
+            await control('sql', { sql: `UPDATE posts SET updated_at = ? WHERE id IN (${batch.map(() => '?').join(',')})`, params: [stamp, ...batch] });
+        }
+        // The 250 back to a day ago when this test ends (passed or not), so a delta of the tests after it (from the cursor
+        // less 5 minutes) fits on a page.
+        onTestFinished(async () => {
+            tamper = null;
+            const dayAgo = new Date(Date.now() - 86_400_000).toISOString();
+            for (let i = 0; i < touched.length; i += 100) {
+                const batch = touched.slice(i, i + 100);
+                await control('sql', { sql: `UPDATE posts SET updated_at = ? WHERE id IN (${batch.map(() => '?').join(',')})`, params: [dayAgo, ...batch] });
+            }
+            await control('limiters');
+        });
+        const gone = inSet[60];
+        await control('edit', { post: gone.id, status: 'cancelled' });
+        const left = near.filter(p => p.id !== gone.id);
+        const after = expectedSet(BYRON, left, ['mine-ldn']);
+        // The node's world moved whatever this test finds: the tests after it start from it.
+        near = left;
+        let flipped = 0;
+        tamper = (path, body) => {
+            if (!path.includes('nearby=1') || !path.includes('pageAfter=')) return null;
+            const b = JSON.parse(body);
+            if (!Array.isArray(b.setAdd) || b.setAdd.length === 0) return null;
+            flipped++;
+            return JSON.stringify({ ...b, setAdd: [`${b.setAdd[0]}-flipped`, ...b.setAdd.slice(1)] });
+        };
+        await control('limiters');
+        await syncAllowingFailure();
+        tamper = null;
+        const reads = postsReads();
+        expect(reads.length).toBeGreaterThanOrEqual(2);
+        expect(reads[reads.length - 1].keys).toEqual(['posts', 'setAdd', 'setDrop', 'setHash']);
+        expect(flipped).toBe(1);
+        // Set, hash, `tied` and tag all gone, and the cursor where it was: the phone never sends the hash it can't stand behind.
+        expect(sql.prepare('SELECT k FROM nearby_held').all()).toEqual([]);
+        expect(mem.async.get(cursorKey)).toBe(cursor);
+        await control('limiters');
+        await sync();
+        const next = postsReads();
+        expect(next.every(r => !r.url.includes('setHash=') && !r.url.includes('setDiff='))).toBe(true);
+        expect(next[next.length - 1].keys).toEqual(['posts', 'set', 'setHash', 'tied']);
+        expect(sorted([...heldIds()].filter(id => id !== 'tied-perth'))).toEqual(sorted(after));
+        const held = Object.fromEntries((sql.prepare('SELECT k, v FROM nearby_held').all() as { k: string; v: string }[]).map(r => [r.k, r.v]));
+        expect(sorted(JSON.parse(held.set))).toEqual(sorted(after));
+        expect(JSON.parse(held.tied)).toEqual(['mine-ldn']);
+        expect(held.hash).toBe(nearbySetHash([...after], ['mine-ldn']));
+    }, START_MS);
+
+    it('a phone upgraded from #1805 (its set and hash held, no `tied`): the next changed read sends no hash and is named the set whole; the one after is a diff', async () => {
+        // The review of #1810, its probe R8: a held set without its `tied` can't be checked against a diff, so it is never
+        // offered for one.
+        await control('limiters');
+        await sync();
+        sql.prepare("DELETE FROM nearby_held WHERE k = 'tied'").run();
+        const held = () => Object.fromEntries((sql.prepare('SELECT k, v FROM nearby_held').all() as { k: string; v: string }[]).map(r => [r.k, r.v]));
+        const takeOneOff = async (i: number) => {
+            const inSet = near.filter(p => expectedSet(BYRON, near, ['mine-ldn']).has(p.id));
+            await control('edit', { post: inSet[i].id, status: 'cancelled' });
+            near = near.filter(p => p.id !== inSet[i].id);
+            return expectedSet(BYRON, near, ['mine-ldn']);
+        };
+        for (const [step, want] of [['upgraded', ['posts', 'set', 'setHash', 'tied']], ['next', ['posts', 'setAdd', 'setDrop', 'setHash']]] as const) {
+            const after = await takeOneOff(step === 'upgraded' ? 170 : 175);
+            await control('limiters');
+            await sync();
+            const reads = postsReads();
+            if (step === 'upgraded') expect(reads.every(r => !r.url.includes('setHash=') && !r.url.includes('setDiff='))).toBe(true);
+            else expect(reads[reads.length - 1].url).toMatch(/setHash=[0-9a-f]{24}&setDiff=1/);
+            expect(reads[reads.length - 1].keys, step).toEqual(want);
+            expect(sorted([...heldIds()].filter(id => id !== 'tied-perth')), step).toEqual(sorted(after));
+            const h = held();
+            expect(sorted(JSON.parse(h.set)), step).toEqual(sorted(after));
+            expect(JSON.parse(h.tied), step).toEqual(['mine-ldn']);
+            expect(h.hash, step).toBe(nearbySetHash([...after], ['mine-ldn']));
+        }
+        await control('limiters');
     }, START_MS);
 
     it('a push beyond the nearest 500 is pruned; a nearer one stays and the farthest goes', async () => {

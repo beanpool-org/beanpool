@@ -99,7 +99,7 @@ export default function TreasuryPostScreen() {
         submittingRef.current = true;
         setSubmitting(true);
         if (!treasuryKey) {
-            Alert.alert('Error', 'Missing treasury public key');
+            Alert.alert('Not posted', "This screen didn't say which project or enterprise it posts for. Go back and open it again.");
             submittingRef.current = false;
             setSubmitting(false);
             return;

@@ -54,7 +54,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { writeFileAtomic } from '../write-file-atomic.js';
-import { logger } from '../logger.js';
+import { logger, onSecurityLogLine, type LogCategory } from '../logger.js';
 import { errorMessage } from '../error-message.js';
 import { getNodeRole } from '../config/node-role.js';
 import { getLocalConfig } from '../config/local-config.js';
@@ -68,7 +68,8 @@ import { standbyIncidentOpen } from './standby-health.js';
 import { snapshotFailuresInARow } from './snapshot-scheduler.js';
 import { tlsFellBackToSelfSigned } from './tls.js';
 import { getReplacedInfo } from './identity-epoch.js';
-import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, type SecurityNote } from './security-signal.js';
+import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, NAME_ALERT_WORDS, type SecurityNote } from './security-signal.js';
+import { registrarNames } from '../engine/registrar-names.js';
 
 function dataDir(): string {
     return process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -117,7 +118,8 @@ export type AlertKey =
     | 'freeze.recovered' | 'freeze.nowatchdog'
     | 'standby.incident'
     | 'tls.fallback'
-    | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name' | 'sec.more' | 'sec.seen';
+    | 'sec.role' | 'sec.password-burst' | 'sec.claim' | 'sec.claim-guess' | 'sec.keys' | 'sec.replaced' | 'sec.name' | 'sec.more' | 'sec.seen'
+    | 'sec.log';
 
 interface Row {
     title: string;
@@ -156,6 +158,8 @@ const ROWS: Record<AlertKey, Row> = {
     'sec.more': { title: 'more security changes', priority: 4, webhook: true, pushEveryMs: EACH, banner: true },
     /** The record of an acknowledgement, kept in the history only: who saw them, as a role, and when. */
     'sec.seen': { title: 'security alerts marked as seen', priority: 2, webhook: false, pushEveryMs: 0, banner: false },
+    /** A logger.security() line was written (design §3.2): kept in the history only, one line per category, counted. */
+    'sec.log': { title: 'security log lines', priority: 1, webhook: false, pushEveryMs: 0, banner: false },
 };
 
 /** Told once each, counted in the banner for a day or until an owner acknowledges them. */
@@ -196,6 +200,12 @@ export interface AlertEvent {
     high?: boolean;
     /** The same line told this many times while it waited (or, for a security event, in the card). */
     count?: number;
+    /**
+     * In the card only: told while this server was a standby, about its own sign-in (the review's N7 b). A take-over
+     * replaces the roles, password and codes it was about, so once this is the main server it leaves the card and the
+     * banner; the history keeps it.
+     */
+    standby?: true;
 }
 
 /** One actor's hour (raiseSecurity): what went out at once, and what folds into the hour's one line. */
@@ -656,8 +666,9 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
         const security = SECURITY_ONE_SHOTS.has(e.key);
         keepIn(s.history, e, MAX_HISTORY, security);
         if (security) {
-            s.recent = s.recent.filter((x) => t - x.at < SECURITY_BANNER_MS && x.at > (s.acked.oneShotsAt ?? 0));
-            keepIn(s.recent, { ...e }, MAX_RECENT, true);
+            const standby = getNodeRole() === 'backup';
+            s.recent = s.recent.filter((x) => t - x.at < SECURITY_BANNER_MS && x.at > (s.acked.oneShotsAt ?? 0) && (standby || !x.standby));
+            keepIn(s.recent, standby ? { ...e, standby: true } : { ...e }, MAX_RECENT, true);
         }
         if (ROWS[e.key].webhook) s.dropped += keepIn(s.waiting, { ...e }, MAX_WAITING, true);
     };
@@ -813,27 +824,57 @@ function foldedConditions(s: BookState, t: number, only?: string): Condition[] {
     return out;
 }
 
+/** The security log's lines by category, in words: what Settings → Logs holds them under, never what a line says. */
+const LOG_KINDS: Record<LogCategory, string> = {
+    AUTH: 'sign-in, keys and codes', ADMIN: 'admin actions', P2P: 'backups, the standby and other servers', SYS: 'the server itself',
+    TLS: 'certificates', LEDGER: 'the ledger', DB: 'the database',
+};
+
+/**
+ * Every logger.security() line is in the history (design §3.2), so an owner sees there that one was written, even one
+ * never pushed: one line per category, counted, in the server's own words. Never the line itself, which may name a
+ * member; Diagnostics & Logs shows it to whoever may read the logs. Not sent, not pushed, not in the banner.
+ *
+ * Counted in memory only: the book is not written here. A request with no credentials at all writes such a line, and a
+ * synchronous, fsync'd rewrite of the book for each one let a flood of them hold the event loop (the deciding review of
+ * #1807, finding 1: 10.6 ms a line). The tick writes the book every minute and every other event writes it too, so a
+ * crash loses at most a minute of these counts; the lines themselves are in the log.
+ */
+onSecurityLogLine((category) => {
+    const s = readState();
+    const t = now();
+    keepIn(s.history, {
+        key: 'sec.log', kind: 'raised', at: t, since: t, priority: 1,
+        detail: `A line was written to the server's security log (${LOG_KINDS[category] ?? 'the server itself'}). Open Appliance & Data → Diagnostics & Logs to read it.`,
+    }, MAX_HISTORY, true);
+});
+
 setSecurityAlertHandler((note) => {
     raiseSecurity(note).catch((e) => logger.warn('SYS', `[Alerts] A security alert could not be told: ${errorMessage(e)}`));
 });
 
-/** Ends a source told (the address its own again), carried through the hold by the tick: words as the end is told. */
-const SECURITY_ENDS: Partial<Record<AlertKey, string>> = { 'sec.name': "This community's address is its own again." };
-
-/**
- * Wrong passwords or claim proofs: over once an hour went by without another (then held 15 minutes, as every end is).
- * And an end a source told (sec.name), held and then told here: the source tells it once, the tick sees it through.
- */
+/** Wrong passwords or claim proofs: over once an hour went by without another (then held 15 minutes, as every end is). */
 function securityQuietConditions(s: BookState, t: number): Condition[] {
     const out: Condition[] = [];
-    for (const [key, detail] of Object.entries(SECURITY_ENDS) as Array<[AlertKey, string]>) {
-        if (s.raised[key]?.endedAt !== undefined) out.push({ key, active: false, detail });
-    }
     for (const key of SECURITY_SEEN) {
         if (!s.raised[key] || t - (s.seenAt[key] ?? 0) < SECURITY_QUIET_MS) continue;
         out.push({ key, active: false, detail: key === 'sec.claim-guess' ? 'No wrong claim proof for an hour.' : 'No wrong admin password for an hour.' });
     }
     return out;
+}
+
+/**
+ * This community's address not its own (sec.name): on while any recorded name is marked lost, read from the record at
+ * every tick, so the book never disagrees with it. A database restored from a backup made before a loss ends it, and one
+ * made during a loss raises it, though no round tells a change (the deciding review of #1807, finding 2). The name watch
+ * still tells a change at once; this sees it through. The main server only: a standby runs no rounds.
+ */
+function nameConditions(): Condition[] {
+    if (getNodeRole() === 'backup') return [];
+    let lost: Array<{ why: string }>;
+    try { lost = registrarNames().flatMap((e) => (e.lost ? [e.lost] : [])); } catch { return []; }
+    if (!lost.length) return [{ key: 'sec.name', active: false, detail: NAME_ALERT_WORDS.back }];
+    return [{ key: 'sec.name', active: true, detail: NAME_ALERT_WORDS[lost.some((l) => l.why === 'another-key') ? 'another-key' : 'released'] }];
 }
 
 /** This server replaced by another with the same keys: urgent, told daily, until an owner acknowledges it. */
@@ -1032,6 +1073,7 @@ export async function checkServerAlerts(): Promise<AlertEvent[]> {
             tlsCondition(),
             ...replacedCondition(s),
             ...securityQuietConditions(s, t),
+            ...nameConditions(),
             ...foldedConditions(s, t),
         ];
         return await updateAlerts(conditions);
@@ -1070,9 +1112,10 @@ export function serverAlertCount(): number {
     }
 }
 
-/** The one-shot security events of the last day that no owner has acknowledged yet, newest first. */
+/** The one-shot security events of the last day that no owner has acknowledged yet, newest first; a standby's own only on it. */
 function recentSecurityEvents(s: BookState, t: number): AlertEvent[] {
-    return s.recent.filter((e) => t - e.at < SECURITY_BANNER_MS && e.at > (s.acked.oneShotsAt ?? 0)).reverse();
+    const standby = getNodeRole() === 'backup';
+    return s.recent.filter((e) => t - e.at < SECURITY_BANNER_MS && e.at > (s.acked.oneShotsAt ?? 0) && (standby || !e.standby)).reverse();
 }
 
 export interface AlertsStatus {

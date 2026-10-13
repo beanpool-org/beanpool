@@ -60,7 +60,7 @@ The **ⓘ** buttons and the guide pages on these screens are the real ones: they
 
 A button that would send Beans, make a deal, vote, pledge or invite opens **Why this lives in a local community** instead. It sends nothing and changes nothing.
 
-The box at the top of an example screen has a **✕**. Tap it and the box shrinks to one line, "🏘️ An example from a local community · Why? ›". Your phone or browser remembers that, for this community. On the phone, tap the line to open the box again. In the web app, tap the line to see why, or **▾** to open the box again.
+The box at the top of an example screen has a **✕**. Tap it and the box shrinks to one line, "🏘️ An example · Why? ›". Your phone or browser remembers that, for this community. On the phone, tap the line to open the box again. In the web app, tap the line to see why, or **▾** to open the box again.
 
 In a web browser you can see the example Ledger before you join: it is a tab beside Home, Market and Map.
 

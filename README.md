@@ -353,7 +353,6 @@ All endpoints are served on port 8443 (HTTPS):
 | `/api/friends/:publicKey` | GET | List a member's friends |
 | `/api/friends/add` | POST | Add a friend |
 | `/api/friends/remove` | POST | Remove a friend |
-| `/api/friends/guardian` | POST | Set/unset a friend as recovery guardian |
 | `/api/recovery/request` | POST | Submit a new social recovery migration request |
 | `/api/recovery/approve` | POST | Approve a recovery request as a guardian |
 | `/api/recovery/reject` | POST | Reject a recovery request as a guardian |

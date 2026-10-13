@@ -2096,7 +2096,7 @@ export function assessTradeRisk(s: {
     tier: TierInfo;
     tradeCount: number;
     completionRate: number | null;
-    mutualCount: number;
+    mutualCount: number; // connections in common by the four-way rule (getTrustProfileForViewer); one-way rows never count
     priorTradesWithViewer: number;
     wardsCount: number;
     ageDays: number;
@@ -2179,8 +2179,9 @@ export interface ViewerTrustProfile {
     completedTrades: number;
     cancelledTrades: number;
     wardsCount: number; // how many people trust them as a recovery guardian
+    // Friends both ways with the viewer and friends both ways with the target (four rows), at most 12, callsign order.
     mutualConnections: { publicKey: string; callsign: string; avatarUrl: string | null }[];
-    mutualCount: number;
+    mutualCount: number; // mutualConnections.length: the same four-way rule, never a one-way count
     priorTradesWithViewer: number;
     vouchedInBy: {
         kind: 'member' | 'admin' | 'founder';
@@ -2202,7 +2203,8 @@ export interface ViewerTrustProfile {
 /**
  * Assembles the viewer-aware Trust Profile for `targetPubkey` as seen by
  * `viewerPubkey`. Aggregate signals are public; identities are graduated —
- * only mutual connections (people the viewer already knows) are named.
+ * only connections in common are named: members who are friends both ways with
+ * the viewer AND friends both ways with the target (all four friend rows).
  * See docs/trust-profile-and-trade-safety.md §2.
  */
 /**
@@ -2261,19 +2263,25 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
 
     const wardsCount = 0;
 
-    // Mutual connections: viewer's friends ∩ target's friends. Only ever
-    // surfaces people the viewer already knows — never the target's wider graph.
+    // Connections in common: F counts only when V↔F and F↔T are both friendships both ways (V→F, F→V, F→T, T→F).
+    // A friend row is one-way and needs nobody's consent, so trusting one row on either side made this a probe and a
+    // forgery: a viewer who added everyone read the target's list by name, and a target who added everyone looked
+    // "in your circle" to every viewer. With all four rows, the viewer's only probes are people who chose the viewer,
+    // nothing the target adds alone counts, and every edge shown was chosen by both its ends. mutualCount and the
+    // risk band read this same list. See docs/trust-profile-and-trade-safety.md §2.
     const mutualConnections = (viewerPubkey && viewerPubkey !== targetPubkey)
         ? (db.prepare(`
             SELECT m.public_key as publicKey, m.callsign, m.avatar_ref as avatarRef
-            FROM friends fv
-            JOIN friends ft ON fv.friend_pubkey = ft.friend_pubkey
-            JOIN members m ON m.public_key = fv.friend_pubkey
-            WHERE fv.owner_pubkey = ? AND ft.owner_pubkey = ?
-              AND fv.friend_pubkey != ? AND fv.friend_pubkey != ?
+            FROM friends vf
+            JOIN friends fv ON fv.owner_pubkey = vf.friend_pubkey AND fv.friend_pubkey = vf.owner_pubkey
+            JOIN friends ft ON ft.owner_pubkey = vf.friend_pubkey AND ft.friend_pubkey = ?
+            JOIN friends tf ON tf.owner_pubkey = ? AND tf.friend_pubkey = vf.friend_pubkey
+            JOIN members m ON m.public_key = vf.friend_pubkey
+            WHERE vf.owner_pubkey = ?
+              AND vf.friend_pubkey != ? AND vf.friend_pubkey != ?
             ORDER BY m.callsign COLLATE NOCASE
             LIMIT 12
-        `).all(viewerPubkey, targetPubkey, viewerPubkey, targetPubkey) as any[]).map(r => ({
+        `).all(targetPubkey, targetPubkey, viewerPubkey, viewerPubkey, targetPubkey) as any[]).map(r => ({
             publicKey: r.publicKey,
             callsign: r.callsign,
             avatarUrl: avatarUrlOf(r.publicKey, r.avatarRef)

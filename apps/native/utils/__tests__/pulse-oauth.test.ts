@@ -170,125 +170,138 @@ describe('pulse-oauth utility (native)', () => {
         });
     });
 
-    describe('connectTikTokChannel', () => {
+    // The node asks the platform who a token belongs to (#1830): the phone names the channel and
+    // never says who it is, makes no identity call of its own, and shows words for each refusal.
+    describe('connect through the node (#1830)', () => {
         const mockIdentity: any = { publicKeyHex: 'alice_pubkey', secretKeyHex: 'alice_sec' };
         const mockChannel = { id: 'chan_123', handle: '@alice_pottery', url: 'https://www.tiktok.com/@alice_pottery' };
+        const igChannel = { id: 'chan_ig', handle: '@alice_ig', url: 'https://www.instagram.com/alice_ig/' };
         const mockState = 'CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJ';
 
-        it('includes user.info.profile in authorize URL and fetches username in user info', async () => {
+        const nodeAnswers = (status: number, body: unknown) => async (_nodeUrl: string, path: string) => {
+            if (path === '/api/member/pulse/oauth-exchange') {
+                return { ok: status < 400, status, text: async () => JSON.stringify(body), json: async () => body } as any;
+            }
+            return { ok: true, status: 200, json: async () => ({ items: [] }), text: async () => '{}' } as any;
+        };
+
+        const signIn = async (platform: 'tiktok' | 'instagram') => {
+            const { openAuthSessionAsync } = await import('expo-web-browser');
+            vi.mocked(openAuthSessionAsync).mockResolvedValueOnce({
+                type: 'success',
+                url: `beanpool://auth/${platform}?code=test_auth_code&state=${mockState}`,
+            } as any);
+        };
+
+        it('sends channelId with the exchange, no username, and calls no platform itself', async () => {
             const { connectTikTokChannel } = await import('../pulse-oauth');
             const { openAuthSessionAsync } = await import('expo-web-browser');
             const { signedPost } = await import('../node-post');
-
-            vi.mocked(openAuthSessionAsync).mockResolvedValueOnce({
-                type: 'success',
-                url: `beanpool://auth/tiktok?code=test_auth_code&state=${mockState}`,
-            } as any);
-
-            vi.mocked(signedPost).mockImplementation(async (_nodeUrl: string, path: string) => {
-                if (path === '/api/member/pulse/oauth-exchange') {
-                    return {
-                        ok: true,
-                        text: async () => JSON.stringify({ access_token: 'test_token', open_id: 'test_open_id' }),
-                    } as any;
-                }
-                if (path === '/api/member/channels/chan_123/verify-oauth') {
-                    return {
-                        ok: true,
-                        json: async () => ({ channel: { id: 'chan_123', oauthVerifiedAt: new Date().toISOString() } }),
-                    } as any;
-                }
-                return { ok: true, json: async () => ({}) } as any;
-            });
-
-            const mockFetch = vi.fn().mockImplementation(async (url: string) => {
-                if (url.includes('/v2/user/info/')) {
-                    return {
-                        ok: true,
-                        json: async () => ({
-                            data: {
-                                user: {
-                                    open_id: 'test_open_id',
-                                    display_name: 'Alice Display Name',
-                                    username: 'alice_pottery',
-                                },
-                            },
-                        }),
-                    };
-                }
-                return { ok: true, json: async () => ({}) };
-            });
+            await signIn('tiktok');
+            vi.mocked(signedPost).mockImplementation(nodeAnswers(200, {
+                data: { access_token: 'test_token', refresh_token: 'test_refresh', open_id: 'test_open_id', expires_in: 86400 },
+                channel: { id: 'chan_123', oauthVerifiedAt: new Date().toISOString(), verifiedHandle: 'alice_pottery' },
+                identity: { handle: 'alice_pottery' },
+            }));
+            const mockFetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: { videos: [] } }) });
             global.fetch = mockFetch;
+            const logged = vi.spyOn(console, 'log');
 
             const res = await connectTikTokChannel(mockChannel, mockIdentity, 'https://test.beanpool.org', 'test_client_key');
 
-            // 1. Authorize URL verification
             expect(openAuthSessionAsync).toHaveBeenCalledWith(
                 expect.stringContaining('scope=user.info.basic,user.info.profile,video.list'),
                 'beanpool://auth/tiktok'
             );
-
             // Without disable_auto_auth=1 TikTok reuses an existing grant and returns a code
             // with no authorization page, so the creator never sees what they are granting.
-            expect(openAuthSessionAsync).toHaveBeenCalledWith(
-                expect.stringContaining('disable_auto_auth=1'),
-                'beanpool://auth/tiktok'
-            );
+            expect(openAuthSessionAsync).toHaveBeenCalledWith(expect.stringContaining('disable_auto_auth=1'), 'beanpool://auth/tiktok');
 
-            // 2. User info endpoint called with username in fields
-            expect(mockFetch).toHaveBeenCalledWith(
-                'https://open.tiktokapis.com/v2/user/info/?fields=open_id,union_id,avatar_url,display_name,username',
-                expect.objectContaining({
-                    headers: { Authorization: 'Bearer test_token' },
-                })
-            );
+            const exchange = vi.mocked(signedPost).mock.calls.find(c => c[1] === '/api/member/pulse/oauth-exchange')!;
+            expect(exchange[2]).toMatchObject({ platform: 'tiktok', grantType: 'authorization_code', code: 'test_auth_code', channelId: 'chan_123' });
+            expect(exchange[2]).not.toHaveProperty('platformUsername');
+            expect(exchange[2]).not.toHaveProperty('username');
+            expect(vi.mocked(signedPost).mock.calls.some(c => String(c[1]).includes('verify-oauth'))).toBe(false);
+            expect(mockFetch.mock.calls.some(c => String(c[0]).includes('/v2/user/info/'))).toBe(false);
+            expect(logged.mock.calls.some(c => c.join(' ').includes('alice_pottery'))).toBe(false);
 
-            // 3. Server verification called with real username
-            expect(signedPost).toHaveBeenCalledWith(
-                'https://test.beanpool.org',
-                '/api/member/channels/chan_123/verify-oauth',
-                {
-                    platform: 'tiktok',
-                    platformUsername: 'alice_pottery',
-                },
-                mockIdentity
+            expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
+                'pulse_oauth_token_chan_123',
+                expect.stringContaining('"platformUsername":"alice_pottery"'),
+                { keychainAccessible: 6 }
             );
-
             expect(res.channel.id).toBe('chan_123');
         });
 
-        it('refuses to verify and throws provider error when username is missing from profile response', async () => {
+        it.each([
+            [400, { error: 'account_mismatch', message: 'node words' }, 'account-mismatch', 'The TikTok account you signed in to is not @alice_pottery. Sign in to that account and connect again.'],
+            [400, { error: 'not_verifiable', message: 'node words' }, 'not-verifiable', 'BeanPool can only verify a TikTok channel added as @handle. Remove this one and add it again as @handle.'],
+            [502, { error: 'identity_unavailable', message: 'TikTok did not say which account this is. Connect again and allow BeanPool to read your profile.' }, 'provider', 'TikTok did not say which account this is. Connect again and allow BeanPool to read your profile.'],
+            [400, { error: 'update_required', message: 'node words' }, 'provider', 'Update BeanPool to connect this channel.'],
+            [429, { error: 'rate_limited', message: 'node words' }, 'provider', 'Too many connection attempts. Try again in an hour.'],
+        ])('a %s %o refusal reads as %s with its own words, and no token is saved', async (status, body, reason, copy) => {
             const { connectTikTokChannel } = await import('../pulse-oauth');
-            const { openAuthSessionAsync } = await import('expo-web-browser');
             const { signedPost } = await import('../node-post');
+            await signIn('tiktok');
+            vi.mocked(signedPost).mockImplementation(nodeAnswers(status, body));
+            global.fetch = vi.fn();
 
-            vi.mocked(openAuthSessionAsync).mockResolvedValueOnce({
-                type: 'success',
-                url: `beanpool://auth/tiktok?code=test_auth_code&state=${mockState}`,
-            } as any);
+            const err = await connectTikTokChannel(mockChannel, mockIdentity, 'https://test.beanpool.org', 'test_client_key').catch(e => e);
+            expect(err).toBeInstanceOf(PulseOAuthError);
+            expect(err.reason).toBe(reason);
+            expect(err.message).toBe(copy);
+            expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
+        });
 
+        it('Instagram sends channelId, calls no /me itself, and has no display-name fallback', async () => {
+            const { connectInstagramChannel } = await import('../pulse-oauth');
+            const { signedPost } = await import('../node-post');
+            await signIn('instagram');
+            const hint = 'Instagram did not say which account this is. While the BeanPool Pulse app is in review, only accounts added as Instagram Testers can connect.';
+            vi.mocked(signedPost).mockImplementation(nodeAnswers(502, { error: 'identity_unavailable', message: hint }));
+            const mockFetch = vi.fn();
+            global.fetch = mockFetch;
+
+            const err = await connectInstagramChannel(igChannel, mockIdentity, 'https://test.beanpool.org', 'ig_app').catch(e => e);
+            expect(err.message).toBe(hint);
+            const exchange = vi.mocked(signedPost).mock.calls.find(c => c[1] === '/api/member/pulse/oauth-exchange')!;
+            expect(exchange[2]).toMatchObject({ platform: 'instagram', channelId: 'chan_ig' });
+            expect(exchange[2]).not.toHaveProperty('platformUsername');
+            expect(mockFetch).not.toHaveBeenCalled();
+            expect(SecureStore.setItemAsync).not.toHaveBeenCalled();
+        });
+
+        it('a relay refresh names the channel, so an unbadged one re-verifies silently', async () => {
+            const { signedPost } = await import('../node-post');
             vi.mocked(signedPost).mockResolvedValueOnce({
-                ok: true,
-                text: async () => JSON.stringify({ access_token: 'test_token' }),
+                ok: true, status: 200,
+                json: async () => ({ data: { access_token: 'relayed', refresh_token: 'r2', expires_in: 86400 } }),
             } as any);
+            const updated = await refreshTokenIfNeeded(mockToken, 'key', 'https://test.beanpool.org', mockIdentity);
+            expect(updated.accessToken).toBe('relayed');
+            expect(vi.mocked(signedPost).mock.calls[0][2]).toMatchObject({ grantType: 'refresh_token', refreshToken: 'valid_refresh_token', channelId: 'chan_123' });
+        });
 
-            // Profile response returns display_name but NO username
-            global.fetch = vi.fn().mockResolvedValue({
-                ok: true,
-                json: async () => ({
-                    data: {
-                        user: {
-                            open_id: 'test_open_id',
-                            display_name: 'Alice Display Name',
-                            // username is missing
-                        },
-                    },
-                }),
-            });
+        it('restoreVerifiedBadge re-verifies a TikTok channel from the stored token, and drops a token for another account', async () => {
+            const { restoreVerifiedBadge } = await import('../pulse-oauth');
+            const { signedPost } = await import('../node-post');
+            vi.mocked(SecureStore.getItemAsync).mockResolvedValue(JSON.stringify(mockToken));
+            vi.mocked(signedPost).mockImplementation(nodeAnswers(200, {
+                data: { access_token: 'fresh', refresh_token: 'fresh_r', expires_in: 86400 },
+                channel: { id: 'chan_123', oauthVerifiedAt: new Date().toISOString() },
+                identity: { handle: 'alice_pottery' },
+            }));
+            const channel = await restoreVerifiedBadge({ id: 'chan_123', platform: 'tiktok', handle: '@alice_pottery' }, mockIdentity, 'https://test.beanpool.org');
+            expect(channel.oauthVerifiedAt).toBeTruthy();
+            expect(vi.mocked(signedPost).mock.calls[0][2]).toMatchObject({ grantType: 'refresh_token', channelId: 'chan_123' });
+            expect(SecureStore.setItemAsync).toHaveBeenCalledWith('pulse_oauth_token_chan_123', expect.stringContaining('"accessToken":"fresh"'), { keychainAccessible: 6 });
 
-            await expect(
-                connectTikTokChannel(mockChannel, mockIdentity, 'https://test.beanpool.org', 'test_client_key')
-            ).rejects.toThrow('TikTok did not return a username (user.info.profile scope required). Please reconnect.');
+            vi.mocked(signedPost).mockImplementation(nodeAnswers(400, { error: 'account_mismatch' }));
+            const err = await restoreVerifiedBadge({ id: 'chan_123', platform: 'tiktok', handle: '@alice_pottery' }, mockIdentity, 'https://test.beanpool.org').catch(e => e);
+            expect(err.reason).toBe('account-mismatch');
+            expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('pulse_oauth_token_chan_123');
+
+            expect(await restoreVerifiedBadge({ id: 'chan_ig', platform: 'instagram', handle: '@x' }, mockIdentity, 'https://test.beanpool.org')).toBeNull();
         });
     });
 });

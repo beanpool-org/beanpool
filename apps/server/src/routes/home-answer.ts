@@ -59,8 +59,9 @@ import {
     getMember, getPosts, getBalance, getMarketplaceTransactions, getConversationsByMember, getListedUnreadCounts,
     listYourChats, keeperOf, isVisitorKey, readsAsMember, passesReadGate, getPublicCommunityInfo,
 } from '../state-engine.js';
-import { getNodeProfile, getNodeFeatures, getProfileSwitches, type NodeFeatures, type NodeProfile, type ProfileSwitches } from '../config/node-profile.js';
-import { getDoor, type Door } from '../config/door.js';
+import { featuresFor } from '../config/features-for.js';
+import { getNodeProfile, getProfileSwitches, type NodeFeatures, type NodeProfile, type ProfileSwitches } from '../config/node-profile.js';
+import { type Door } from '../config/door.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { getAdminQueue, type AdminQueueItem, type AdminSettingsSection } from '../engine/admin-queue.js';
@@ -851,7 +852,8 @@ export function buildHome(reader: HomeReader): HomeAnswer {
     // The point the request gave, else the member's own coarse area (G4), which only they read back.
     const area = own ? readMemberArea(me!) : null;
     const point = reader.point ?? (member && area ? { lat: area.lat, lng: area.lng } : null);
-    const features = getNodeFeatures();
+    // The reader's own effective set (config/features-for.ts), as GET /api/community/me says.
+    const { door, ...features } = featuresFor(me);
     const c: Ctx = {
         me, own, member, guestView: !member && switches.guestListingsOnly, point, askedPoint: reader.point, now, switches, features, interests,
         lands: reader.lands ?? new Set(),
@@ -892,7 +894,7 @@ export function buildHome(reader: HomeReader): HomeAnswer {
     return {
         generatedAt: iso(now),
         profile: getNodeProfile(),
-        features: { ...features, door: getDoor() },
+        features: { ...features, door },
         // The visitors' Join card: for a reader with no account here only, never a suspended member (`me.standing`).
         ...(c.guestView && !own ? { welcome: true as const } : {}),
         me: meBlock,

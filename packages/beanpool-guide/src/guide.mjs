@@ -234,13 +234,14 @@ function inline(text) {
     return esc(text).split('**').map((part, idx) => (idx % 2 === 1 ? `<strong>${part}</strong>` : part)).join('');
 }
 
-function blockHtml(b) {
+/** One block as HTML; an image links its page only when `linkable(slug)` (that page is on the website too). */
+function blockHtml(b, linkable = () => true) {
     if (b.type === 'h2') return `<h2>${inline(b.text)}</h2>`;
     if (b.type === 'h3') return `<h3>${inline(b.text)}</h3>`;
     if (b.type === 'p') return `<p>${inline(b.text)}</p>`;
     if (b.type === 'img') {
         const img = `<img src="${esc(b.src)}" alt="${esc(b.alt)}" loading="lazy">`;
-        return `<figure>${b.href ? `<a href="${esc(b.href)}.html">${img}</a>` : img}<figcaption>${inline(b.alt)}</figcaption></figure>`;
+        return `<figure>${b.href && linkable(b.href) ? `<a href="${esc(b.href)}.html">${img}</a>` : img}<figcaption>${inline(b.alt)}</figcaption></figure>`;
     }
     return `<ul>\n${b.items.map(it => `            <li>${inline(it)}</li>`).join('\n')}\n        </ul>`;
 }
@@ -255,9 +256,7 @@ function page({ title, description, body, root = '../', nav = `<a href="index.ht
     <title>${esc(title)}</title>
     <meta name="description" content="${esc(description)}">
     <link rel="icon" type="image/png" href="${root}favicon.png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="${root}fonts/fonts.css">
     <link rel="stylesheet" href="${root}style.css?v=2.5">
     <style>
         /* Width only: .legal-content's top margin is what clears the fixed navbar. */
@@ -376,19 +375,32 @@ export function renderWebsite(guide, { operatorManualOnWeb = false } = {}) {
 // ─── The operator manual ───────────────────────────────────────────────────────
 // For the owners and admins who run a community's server. The same block model and the same checks as the members'
 // guide, in a separate collection (operators/) with its own version: the node's Settings bundles operators.json. The
-// website copy under /guide/operators/ is rendered here but not written: scripts/build.mjs has it switched off
-// (PUBLISH_OPERATORS_WEBSITE, Marty's decision 2026-09-19). It is not in the members' guide.json, so the member apps
-// neither carry it nor find it in their search.
+// website copy under /guide/operators/ holds only the pages scripts/build.mjs lists (OPERATOR_PAGES_ON_WEBSITE); the
+// rest waits until the security weak spots it describes are fixed (Marty, 2026-09-19; first-time setup published
+// 2026-10-13). It is not in the members' guide.json, so the member apps neither carry it nor find it in their search.
 
-/** Every file of the website's copy (apps/website/guide/operators/, when published), keyed by file name. */
-export function renderOperatorsWebsite(manual) {
+/**
+ * Every file of the website's copy (apps/website/guide/operators/), keyed by file name: the whole manual, or with
+ * `only` (page slugs) just those pages. Then there is no index and no operators.json, and a page names an unpublished
+ * page without linking it. The pictures are not here: scripts/build.mjs copies the ones these pages show.
+ */
+export function renderOperatorsWebsite(manual, { only = null } = {}) {
     const root = '../../';
-    const nav = `<a href="index.html">Operator manual</a>
+    const published = slug => !only || only.includes(slug);
+    const nav = only
+        ? `<a href="../index.html">Members' guide</a>`
+        : `<a href="index.html">Operator manual</a>
                 <a href="../index.html">Members' guide</a>`;
-    const foot = `        <p class="guide-foot">The same manual is on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title. Manual version ${manual.version}.</p>`;
+    const where = `on your community's server, matching the version it runs: sign in to Settings (your server's address followed by /settings) and press Manual, or the ? beside a screen's title`;
+    const foot = only
+        ? `        <p class="guide-foot">The whole manual is ${where}. Only this part of it is on the website. Manual version ${manual.version}.</p>`
+        : `        <p class="guide-foot">The same manual is ${where}. Manual version ${manual.version}.</p>`;
     const bySlug = new Map(manual.guides.map(g => [g.slug, g]));
+    for (const slug of only ?? []) if (!bySlug.has(slug)) throw new Error(`the operator manual has no page "${slug}" to publish`);
+    const unlinkedItem = g => `            <li><strong>${inline(g.title)}</strong> (in Settings, under Manual)</li>`;
+    const relatedItem = g => (published(g.slug) ? linkItem(g) : unlinkedItem(g));
     const files = {};
-    files['index.html'] = page({
+    if (!only) files['index.html'] = page({
         root, nav,
         title: 'Operator manual — BeanPool',
         description: "How to run a BeanPool community's server: setting up, signing in, roles, members, moderation, disputes, backups, updates and troubleshooting. For owners and admins.",
@@ -412,25 +424,28 @@ export function renderOperatorsWebsite(manual) {
             foot,
         ].join('\n'),
     });
-    for (const g of manual.guides) {
+    for (const g of manual.guides.filter(p => published(p.slug))) {
         const section = manual.sections.find(s => s.id === g.section);
+        const kicker = only
+            ? `Operator manual · ${inline(section.title)}`
+            : `<a href="index.html">Operator manual</a> · <a href="index.html#${section.id}">${inline(section.title)}</a>`;
         files[`${g.slug}.html`] = page({
             root, nav,
             title: `${g.title} — BeanPool operator manual`,
             description: g.summary,
             body: [
-                `        <p class="kicker"><a href="index.html">Operator manual</a> · <a href="index.html#${section.id}">${inline(section.title)}</a></p>`,
+                `        <p class="kicker">${kicker}</p>`,
                 `        <h1>${inline(g.title)}</h1>`,
                 `        <p class="lede">${inline(g.summary)}</p>`,
-                ...g.blocks.map(b => `        ${blockHtml(b)}`),
+                ...g.blocks.map(b => `        ${blockHtml(b, published)}`),
                 `        <h2 class="guide-related">Related</h2>`,
                 `        <ul class="guide-list">`,
-                ...g.related.map(slug => linkItem(bySlug.get(slug))),
+                ...g.related.map(slug => relatedItem(bySlug.get(slug))),
                 `        </ul>`,
                 foot,
             ].join('\n'),
         });
     }
-    files['operators.json'] = serializeGuide(manual);
+    if (!only) files['operators.json'] = serializeGuide(manual);
     return files;
 }

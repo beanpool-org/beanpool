@@ -16,7 +16,7 @@ related: mute, messages, my-deals, events, holiday-mode, the-top-bar
 
 Changes save by themselves. They are kept by your community's server, so they follow your account.
 
-Alerts about someone trying to recover your account always come through. You cannot turn those off.
+Two alerts about your account always come through, and the app has no switch for them: that your account was just restored on another device, and that an admin started moving your account to a new phone. If you run your community's server, its alerts about the server always come through too.
 
 ## What an alert says
 

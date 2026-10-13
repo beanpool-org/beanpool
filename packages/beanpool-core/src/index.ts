@@ -52,6 +52,8 @@ export * from './poll-vote-origins.js';
 export * from './recovery-kit.js';
 export * from './home-tips.js';
 export * from './home-frame.js';
+export * from './sample-community.js';
+export * from './features.js';
 export * from './sky.js';
 export * from './scoped-decision.js';
 export * from './group-words.js';

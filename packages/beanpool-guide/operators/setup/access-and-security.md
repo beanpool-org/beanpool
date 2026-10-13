@@ -21,7 +21,7 @@ On a server whose password is retired (below) there is nothing to change: this c
 
 The admin password is one shared secret that makes whoever knows it an owner, from anywhere on the internet. Once every owner signs in with their phone, you can remove it for good. Only an owner signed in with their phone (Manage, or **Sign in with your phone** on a computer) can do it, under Access & Security, **Retire the admin password**. Signed in with the password itself, or with an automation token, you can't.
 
-- **First, make your break-glass code** (below) and keep it safe. Settings asks for it before it lets you retire the password: once the password is gone, it is how you get back in if your phone is lost.
+- **First, make your break-glass code** (below) and keep it safe. Settings will not let you retire the password until you have made one: once the password is gone, it is how you get back in if your phone is lost.
 - **Keep two owners.** With only one, Settings asks you to tick **I accept one owner**, and the server's log records that you did.
 - **Move your scripts first.** Anything that sends the password (the fleet manager, backup scripts) stops working. Give each one an automation token (below). They then say "This node's password is retired: use a token".
 - Type **RETIRE** and press **Retire the admin password**.
@@ -38,7 +38,7 @@ Two-factor sign-in asks for a 6-digit code from an authenticator app as well as 
 
 **Tools that send the password with every request need two-factor sign-in too.** While it is off, the server refuses the password sent with a request instead of a sign-in (scripts, the harvester, the fleet manager's profiles), whatever it asks for, with "Turn on two-factor sign-in in Settings, or use an automation token made from your phone". Give such a tool an automation token instead (below): it needs no code. With two-factor sign-in on, a tool that sends the password with a current code still works, as before.
 
-**The legacy Settings page needs two-factor sign-in on.** The older page (**Switch to Legacy Settings Page**) sends the password with every request, so while two-factor sign-in is off it stays on its sign-in screen and says "Turn on two-factor sign-in in Settings (the new page), then come back". Turn it on in Settings, then sign in there with the password and a code.
+**The legacy Settings page needs two-factor sign-in on.** The older page (**Switch to Legacy Settings Page**) sends the password with every request, so while two-factor sign-in is off it stays on its sign-in screen and says "Turn on two-factor sign-in in Settings, or use an automation token made from your phone. Open Settings (the new page) to turn it on, then come back." Turn it on in Settings, then sign in there with the password and a code.
 
 Two things still take the password alone while two-factor sign-in is off:
 
@@ -83,7 +83,7 @@ Keep it offline, like a spare key. Anyone who has it can add an admin key of the
 Lost a phone, or signed in to Settings on a computer that isn't yours? **Sign out everywhere** ends every Settings sign-in of yours at once, on every computer and phone.
 
 - In Settings, signed in with your key: **People & Safety**, then **Owners & admins**, at the bottom. It asks first, then shows the sign-in screen, since this computer is signed out too.
-- In the app: **Settings**, under Community admin, **Sign out everywhere**. Owners, admins and moderators all have it. It asks first, then says what happened.
+- In the app: **Settings**, under Community admin (Community moderation for a moderator), **Sign out everywhere**. Owners, admins and moderators all have it. It asks first, then says what happened.
 - An owner's break-glass code stops working too. Make a new one afterwards.
 - Your key stays on your phone: press **Manage** in the app to sign in again.
 - It ends only your own sign-ins. Settings opened with the admin password has no sign-ins of anyone's to end, so it doesn't show the button, and the server refuses an automation token here.

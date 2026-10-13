@@ -8,11 +8,11 @@ related: home, posting, a-deal-step-by-step, near-you, trust-badges
 
 ## The Market tab
 
-Tap **Market** in the row of tabs. You see what people in your community are offering and looking for, newest first, grouped by the day they were posted. Events come first.
+Tap **Market** in the row of tabs. You see what people in your community are offering and looking for, newest first, grouped by the day they were posted. Events come first. If you have already let the app use your location, the list and compact views show listings nearest first instead, under **Nearest first**, with polls under **Polls**. **For You** keeps its own order.
 
 Pull the list down to refresh it.
 
-On the global community, the web app shows the listings near you first: the nearest within your **Distance**, or within 250 km of your area (the rough place you give the community when you join, or in **Settings**), each with how far it is. A line above the list says which. Near your area it has **Show everywhere** for the newest from everywhere; with a **Distance**, open **Distance** and tap **Reset** for that. See "Finding things near you".
+On the global community, the web app shows the listings near you first: the nearest within your **Distance**, or within 250 km of your area (the rough place you give the community when you join, or in **Settings**), each with how far it is. A line above the list says which. Near your area it has **Show everywhere** for the newest from everywhere; with a **Distance**, open **Distance** and tap **Reset** for that. On the phone, the global community keeps the listings nearest your area, so those are what the Market shows. See "Finding things near you".
 
 On the global community, while there are only a few listings, the Market also shows a few cards marked **Example**. They are made up, to show what people post, and can't be opened or answered. They go once there are enough real listings.
 
@@ -20,7 +20,7 @@ The search and filters slide away as you scroll down, so you see more posts. Scr
 
 ## Search
 
-Type in **Search marketplace...** at the top. On a small phone it may just say **Search**. The search also finds related words: "fruit" finds "lemon". Without a connection, it searches what is already on your phone.
+Type in **Search marketplace...** at the top. On a small phone it may just say **Search**. The search also finds related words: "fruit" finds "lemon". It finds words in Chinese, Japanese and Thai too, and leaves out posts by people you have blocked. Without a connection, it searches what is already on your phone.
 
 ## Filters
 

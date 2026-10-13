@@ -527,8 +527,7 @@ async function main(): Promise<void> {
         const afterHonest = maxId();
         const honest = () => countWhere("category = 'AGENT' AND message = 'Assistant read' AND id > ? AND id <= ?", beforeHonest, afterHonest);
         const honest0 = honest();
-        // The token's minute used up, then 5,000 POSTs with no token and 300 with it, 25 at a time.
-        while (admitAgentCall(tAgent.body.record.id).ok) { /* the rest of this minute's calls */ }
+        // 5,000 POSTs with no token, then 300 with it once its minute is used up, 25 at a time.
         endRefusalMinute();
         const floodFrom = maxId();
         const tally = new Map<number, number>();
@@ -538,6 +537,9 @@ async function main(): Promise<void> {
         };
         const t0 = Date.now();
         for (let i = 0; i < 5000; i += 25) await Promise.all(Array.from({ length: 25 }, () => send(MCP_HEADERS)));
+        // Used up here, not before the 5,000: on a slow machine those can take past a minute, and a new minute admits 60.
+        resetAgentLimits();
+        while (admitAgentCall(tAgent.body.record.id).ok) { /* this minute's 60 */ }
         for (let i = 0; i < 300; i += 25) await Promise.all(Array.from({ length: 25 }, () => send({ ...MCP_HEADERS, ...bearer(AGENT) })));
         const elapsed = Date.now() - t0;
         endRefusalMinute();

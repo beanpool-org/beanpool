@@ -69,21 +69,41 @@ describe('dark mode: themed screens draw with the theme', () => {
     });
 
     // The static `colors` export is the light palette. A themed screen that also draws with it puts light pieces,
-    // or dark text, into the dark theme. These four still mix the two and are left for a successor; the list may only
-    // shrink.
-    const MIXED_STILL = [
-        'app/new-message.tsx',
-        'app/post/[id].tsx',
-        'app/public-profile.tsx',
-        'components/ArchetypeQuizModal.tsx',
-    ];
-    it('no themed screen draws with the static light colours (beyond the known four)', () => {
+    // or dark text, into the dark theme.
+    it('no themed screen draws with the static light colours', () => {
         const mixed = ALL
             .filter(s => themed(s.src))
             .filter(s => /import \{[^}]*\bcolors\b(?!\s+as)[^}]*\} from '(\.\.\/)+constants\/colors'/.test(s.src))
             .map(s => s.file)
             .sort();
-        expect(mixed.filter(f => !MIXED_STILL.includes(f))).toEqual([]);
+        expect(mixed).toEqual([]);
+    });
+
+    // A dark palette step as text, with no dark branch on its line, is dark text on the dark card: gray600 is about
+    // 2.3:1 on neutral900, gray700 about 1.5:1 on neutral800. These files keep such text only on pale pills and boxes
+    // that stay pale in both schemes (red100, amber100, emerald100 …), where it reads.
+    const DARK_TEXT_ON_PALE_OK = new Set([
+        'components/DecideSection.tsx',        // debt warning on red100; status pills on green/red/amber/indigo 100
+        'components/MyDealsSheet.tsx',         // "completed" on its emerald100 pill
+        'components/ProposeDecisionModal.tsx', // removal warning on red100
+    ]);
+    it('no themed screen sets dark palette text without a dark branch', () => {
+        const darkStep = /\bcolor: palette\.(gray[5-9]00|slate[5-9]00|neutral[6-9]00|neutral950|red[7-9]00|orange[7-9]00|amber[8-9]00|emerald[8-9]00|green[8-9]00|indigo[7-9]00|blue[7-9]00|violet700|purple[7-8]00|black)\b/;
+        const offenders = ALL
+            .filter(s => themed(s.src) && !DARK_TEXT_ON_PALE_OK.has(s.file))
+            .flatMap(s => s.src.split('\n')
+                .map((line, i) => ({ line, at: `${s.file}:${i + 1}` }))
+                .filter(({ line }) => darkStep.test(line) && !/theme === 'dark'|isDark/.test(line))
+                .map(({ at }) => at));
+        expect(offenders).toEqual([]);
+    });
+
+    // The avatar sheet is shared with welcome and profile setup, which stay light; Settings hands it the dark colours.
+    it('the avatar sheet follows the dark theme from Settings and keeps its own light look', () => {
+        const sheet = ALL.find(s => s.file === 'components/AvatarPickerSheet.tsx')!.src;
+        expect(sheet).toMatch(/colors \? makeStyles\(tonesFor\(colors\)\) : LIGHT_STYLES/);
+        const settings = ALL.find(s => s.file === 'app/(tabs)/settings.tsx')!.src;
+        expect(settings).toMatch(/<AvatarPickerSheet[^>]*colors=\{theme === 'dark' \? colors : undefined\}/);
     });
 
     it('the Settings protection cards follow the theme', () => {

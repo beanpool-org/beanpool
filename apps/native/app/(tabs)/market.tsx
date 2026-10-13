@@ -1700,7 +1700,7 @@ export default function MarketScreen() {
                             style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, marginBottom: 12 }}
                             onPress={() => { setFilter('all'); dispatchCategoryPanel({ kind: 'pick', category: 'all' }); setEventWindow('all'); setRadiusKm(null); setLocationCenter(null); setTrustFilter('all'); setBeansOnly(false); setGroupFilter('all'); }}
                         >
-                            <Text style={{ fontWeight: '700', color: palette.gray600, fontSize: 14 }}>Clear All Filters</Text>
+                            <Text style={{ fontWeight: '700', color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 14 }}>Clear All Filters</Text>
                         </Pressable>
                         <Pressable
                             accessibilityRole="button"

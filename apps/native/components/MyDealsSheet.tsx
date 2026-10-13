@@ -24,7 +24,7 @@ interface MyDealsSheetProps {
 
 export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending', showsBeans = true }: MyDealsSheetProps) {
     const { colors, theme } = useTheme();
-    const styles = useStyles(({ colors }) => StyleSheet.create({
+    const styles = useStyles(({ colors, theme }) => StyleSheet.create({
         overlay: {
             flex: 1,
             backgroundColor: 'rgba(0,0,0,0.4)',
@@ -137,7 +137,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
         historyChipText: {
             fontSize: 12,
             fontWeight: '700',
-            color: palette.gray600,
+            color: theme === 'dark' ? colors.text.secondary : palette.gray600,
         },
         historyChipTextActive: {
             color: colors.text.inverse,
@@ -203,7 +203,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
         statusText: {
             fontSize: 10,
             fontWeight: '800',
-            color: palette.gray600,
+            color: theme === 'dark' ? colors.text.secondary : palette.gray600,
             textTransform: 'uppercase',
         },
         statusTextCompleted: {
@@ -457,7 +457,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                                         style={[styles.reviewBtn, { backgroundColor: colors.surface.subtle, borderColor: colors.border.strong, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }]}
                                         onPress={() => setPromptReview({ txId: item.id, targetPubkey: partnerPubkey, targetCallsign: partnerCallsign })}
                                     >
-                                        <Text style={[styles.reviewBtnText, { color: palette.gray600, fontSize: 11 }]}>Edit</Text>
+                                        <Text style={[styles.reviewBtnText, { color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 11 }]}>Edit</Text>
                                     </Pressable>
                                 )
                             )}

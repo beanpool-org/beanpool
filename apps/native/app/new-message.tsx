@@ -12,7 +12,6 @@ export { ErrorBoundary };
 import { useIdentity } from './IdentityContext';
 import { getDb, createConversationApi, getRecentChatMembers, getFriendsLocal } from '../utils/db';
 import { MemberAvatar } from '../components/MemberAvatar';
-import { colors, palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
 
 // ── Fixed Row Height for getItemLayout ──────────────────────────────────────

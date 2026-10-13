@@ -17,7 +17,7 @@ import { ChannelChips } from '../components/ChannelChips';
 import { fetchPublicChannels } from '../utils/channels';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { buildSignedHeaders } from '../utils/crypto';
-import { colors, palette } from '../constants/colors';
+import { palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
 import { HIDDEN_AUTHOR, isHiddenAuthor } from '../utils/posts-view';
 import { useNodeProfile } from '../utils/use-node-profile';

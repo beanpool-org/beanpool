@@ -509,7 +509,10 @@ function validateRedirectUri(uri: string | undefined, platform: 'tiktok' | 'inst
             if (status >= 400 || !tokenFields.access_token) {
                 // A platform error passes through as it always has; it carries no token.
                 ctx.status = status >= 400 ? status : 400;
-                ctx.body = { ...json, data: { ...(json.data || {}), access_token: undefined, refresh_token: undefined } };
+                ctx.body = {
+                    ...json, access_token: undefined, refresh_token: undefined,
+                    data: { ...(json.data || {}), access_token: undefined, refresh_token: undefined },
+                };
                 return;
             }
 

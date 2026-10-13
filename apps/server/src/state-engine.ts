@@ -647,7 +647,8 @@ export function initStateEngine(): void {
     bumpMembersVersion();
     initSchema();
     // A verified-account badge no platform was asked about proves nothing (#1830): cleared once, re-verified on connect.
-    clearUnprovenOauthBadges();
+    // Never blocks a boot: it is idempotent, so a failure here is retried at the next one.
+    try { clearUnprovenOauthBadges(); } catch (e) { console.error('[Boot] Could not clear unproven channel badges:', e); }
     clearEnterpriseFloorCache();
     migrateLegacyState();
     // NODE_PROFILE decides what the node runs as; node_config.nodeProfile records it, and a main server recorded as

@@ -394,7 +394,9 @@ let nearbyLimits: { radiusKm: number; max: number } | null = null;
 /**
  * The radius and the cap of a member's set: NEARBY_LISTINGS_RADIUS_KM and NEARBY_LISTINGS_MAX on a self-hosted node
  * (design §9 Q6), else 250 km and 500. Read once, at the first ask (boot), so the node and `features` agree for the
- * life of the process; a value out of range is the default, never a set of every listing.
+ * life of the process; a value out of range is the default, never a set of every listing. Beside them,
+ * NEARBY_SET_MEMORY_MB (default 32, 0 off) bounds the memory of the sets this node named, by which a changed set is sent
+ * as a diff (engine/nearby-set-memory.ts nearbySetMemoryLimits).
  */
 export function nearbyListingsLimits(): { radiusKm: number; max: number } {
     return nearbyLimits ??= {

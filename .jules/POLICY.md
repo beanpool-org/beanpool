@@ -782,3 +782,25 @@ still WANTED: re-file `test-probation.ts` and its `scripts/server-suites.mjs` li
 - **Category:** DELIBERATE BEHAVIOUR
 - **Why not to re-file:** a claim link that repeats node/code/id is ambiguous and is refused on purpose (an array gives no value).
   Taking the first of two differing server addresses in a claim link is the wrong answer.
+
+### 2026-10-13 — Palette: tabIndex, key handler and focus ring on AddressSearch's matches (#1818) — CLOSED
+- **Category:** CLAIM FALSE
+- **Claim:** the address matches in `apps/pwa/src/components/AddressSearch.tsx` can't be chosen from the keyboard, so each `role="option"` needs `tabIndex={0}`, an Enter/Space `onKeyDown` and a focus-visible ring.
+- **Why not to re-file:** the search box is an ARIA combobox: focus stays in the input, ArrowUp/ArrowDown move `aria-activedescendant` and `aria-selected`, Enter picks the highlighted match and Escape closes the list. Measured in vitest on main: Enter searches, ArrowDown twice then Enter picks the second match, and focus never leaves the box. The PR made every match a Tab stop (2 extra stops for 2 matches), and while a match held focus the arrow keys did nothing. Palette: the options of a combobox or listbox are never Tab stops; look for `aria-activedescendant` before filing.
+
+### 2026-10-13 — Flow: loading indicators in DoorSettingPanel and KnownFloorPanel (#1820) — CLOSED
+- **Category:** CLAIM FALSE
+- **Claim:** `apps/manager/src/components/modules/DoorSettingPanel.tsx` and `KnownFloorPanel.tsx` need a spinner while their first read is in flight.
+- **Why not to re-file:** a re-file of #1670 (the same DoorSettingPanel spinner, closed 2026-10-07) and #1686 (a spinner in PeopleSafetySection, the section both panels sit in, closed 2026-10-08). Each panel makes one read of the node the operator is signed in to and renders nothing on a node older than its setting, so a spinner there flashes and vanishes (#1725). Flow: show a stall an operator can see before filing a loading indicator, and search this register for the component's name first.
+
+### 2026-10-13 — Vault: credentials: 'same-origin' on the bulk post delete (#1821) — CLOSED
+- **Category:** CLAIM FALSE
+- **Claim:** `sendBulkDeleteBatch` in `apps/manager/src/lib/bulk-delete-posts.ts` omits `credentials: 'same-origin'`, so cookie sessions get 401.
+- **Why not to re-file:** the fifth filing of this exact change (#1626, #1658, #1671, #1821; #1294 and #1368 on other helpers). `same-origin` is fetch's default (`new Request(url, { method: 'POST' }).credentials` is `'same-origin'`), and the call authenticates with the admin headers it is given. The PR's test asserts the literal option, not a behaviour. Where an older `.jules/vault.md` journal entry says "Always include `credentials: 'same-origin'`", this register wins. Vault: grep this register for `same-origin` before filing anything about `credentials`.
+
+### 2026-10-13 — Expo: export ErrorBoundary in rekey-code.tsx (#1823) — CLOSED
+- **Category:** CLAIM FALSE
+- **Claim:** `apps/native/app/rekey-code.tsx` has no `ErrorBoundary` export, so a render error on that screen isn't caught.
+- **Why not to re-file:** `apps/native/app/_layout.tsx` exports `ErrorBoundary`, which covers every child route, this one included (#1704, 2026-10-09; #1724). #801 was one screen's case, not a pattern to repeat. Expo: do not file per-screen `ErrorBoundary` exports; the journal's "check screens for missing ErrorBoundary exports" pattern is retired.
+
+Note (#1819, Scout): closed because its exemption checks were vacuous: with the blank-memo, system-account and enterprise exemptions all removed from `apps/server/src/engine/withheld-notes.ts`, `test-withheld-notes.ts` still passed 22/22, since every such check ran where no block existed. The coverage is still WANTED: re-file it once, with each exemption asserted under a `member_blocks` row that would otherwise withhold the note (blank memos after the block; the enterprise as the blocker and as the blocked), and show the suite failing with the exemption removed.

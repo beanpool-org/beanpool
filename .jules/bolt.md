@@ -256,3 +256,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-13 - O(1) Signature Usage Lookups in Server App Addresses Report
 **Learning:** In `apps/server/src/routes/app-addresses.ts`, `appAddressesReport` called `count(kind, address)` which executed `usage.find(...)` array scans across configured addresses and lost addresses, causing repetitive linear array scans.
 **Action:** Pre-indexed `usage` array into a `usageMap` Map indexed by `${u.kind}:${u.address}` for constant-time $O(1)$ lookups.
+
+## 2026-10-14 - Pre-compute Treasury Accounts Set in Marketplace Feed Handler
+**Learning:** In `apps/server/src/routes/marketplace.ts`, mapping marketplace feed responses evaluated `tradeSide(p)` for each post, which executed `isTreasury(...)` — triggering per-post SQLite queries (`SELECT is_treasury FROM members WHERE public_key=?`). For feeds containing $P$ posts, this caused up to $2P$ database queries per feed request.
+**Action:** Pre-computed `treasuryKeys` Set via a single `SELECT public_key FROM members WHERE is_treasury = 1` query prior to mapping `posts`, converting per-post treasury checks into constant-time $O(1)$ Set lookups.

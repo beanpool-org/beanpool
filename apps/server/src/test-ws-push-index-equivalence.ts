@@ -14,10 +14,12 @@
  *      After every change and every push, the index's rules (WsClients.inspect): every open socket with a key is filed
  *      under exactly that key and nothing else is; with the cells built, they hold exactly the keys with an open socket
  *      and an area, each in its own cell. Then every socket closes, and the index is empty
+ *      Members near a listing block its author and unblock them, between pushes too (#1812): both oracles skip a
+ *      member who blocked the author and is no party of it, and every push is checked for that on its own
  *   2b. no code writes a socket's key but the connect (before the socket is in the set) and wsClients.setKey: a key
  *      written any other way would leave the socket filed under the old one (#1809 review, NB-1)
- *   3. the cost at 3,500 and 10,000 sockets: a push near a dense spot and one in an empty ocean, the full loop against
- *      the index, interleaved, with the host's load (`uptime`) printed with each
+ *   3. the cost at 3,500 and 10,000 sockets: a push near a dense spot (its author blocked by 300 members) and one
+ *      in an empty ocean, the full loop against the index, interleaved, with the host's load (`uptime`) printed with each
  *
  * Run with a radius (NEARBY_LISTINGS_RADIUS_KM) other than the default by its variants in scripts/server-suites.mjs.
  * Seed: PUSH_INDEX_SEED (printed). Run: SERVER_SUITES_ONLY=test-ws-push-index-equivalence node scripts/run-server-suites.mjs
@@ -34,6 +36,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { haversineKm } from '@beanpool/engine';
 
 // PUSH_INDEX_REPORT: a file each line below is also appended to (the runner keeps no log of a passing run).
 const REPORT = process.env.PUSH_INDEX_REPORT;
@@ -87,6 +90,7 @@ async function main(): Promise<void> {
     const area = await import('./engine/member-area.js');
     const { getProfileSwitches, nearbyListingsLimits } = await import('./config/node-profile.js');
     const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
+    const { addBlocks, removeBlock } = await import('./engine/member-blocks.js');
     initSchema();
     se.initStateEngine();
     assert(getProfileSwitches().nearbyListings === true, 'setup: listings sync by area');
@@ -117,6 +121,24 @@ async function main(): Promise<void> {
         }
     })();
     area.loadMemberAreas();
+    // Members near a listing who blocked its author (member_blocks, as routes/blocks.ts writes them): a fifth of the
+    // listings with a place, up to 4 near members each.
+    const placeOf = (id: string) => db.prepare('SELECT author_pubkey, lat, lng FROM posts WHERE id = ?').get(id) as { author_pubkey: string; lat: number | null; lng: number | null };
+    const nearMembers = (id: string): string[] => {
+        const p = placeOf(id);
+        if (p.lat == null || p.lng == null) return [];
+        return members.filter(pk => { const a = area.memberAreaFor(pk); return !!a && pk !== p.author_pubkey && haversineKm(a.lat, a.lng, p.lat!, p.lng!) <= radiusKm; });
+    };
+    const blockNear = (id: string, n: number): number => {
+        const author = placeOf(id).author_pubkey;
+        const near = nearMembers(id);
+        let made = 0;
+        for (let k = 0; k < n && near.length > 0; k++) made += addBlocks(near.splice(Math.floor(rand() * near.length), 1)[0], [author]).length;
+        return made;
+    };
+    let seededBlocks = 0;
+    for (const id of posts) if (rand() < 0.2) seededBlocks += blockNear(id, 4);
+    assert(seededBlocks > 0, `setup: ${seededBlocks} blocks by members near a listing of its author`);
 
     // Every frame any fake socket got, as `<socket>|<frame>`.
     let frames: string[] = [];
@@ -198,7 +220,7 @@ async function main(): Promise<void> {
             members.splice(members.indexOf(pk), 1);
             did('member removed');
         }
-        else if (r < 0.84) {
+        else if (r < 0.8) {
             const pk = pendingKeys.pop();
             if (!pk) return;
             const p = rand() < 0.2 ? null : randomPoint();
@@ -208,7 +230,7 @@ async function main(): Promise<void> {
             se.broadcast({ type: 'member_joined', member: { publicKey: pk } });
             did('mid-join socket joins');
         }
-        else if (r < 0.88) {
+        else if (r < 0.84) {
             // Rows written behind the map (as a database is before a boot), then the map loaded again whole, as at boot.
             for (let k = 0; k < 20; k++) {
                 const p = rand() < 0.3 ? null : randomPoint();
@@ -216,6 +238,14 @@ async function main(): Promise<void> {
             }
             area.loadMemberAreas();
             did('map loaded again whole');
+        }
+        else if (r < 0.92) {
+            if (blockNear(pick(posts), 1) > 0) did('a member near a listing blocks its author');
+        }
+        else if (r < 0.97) {
+            const row = db.prepare('SELECT owner_pubkey, blocked_pubkey FROM member_blocks ORDER BY owner_pubkey, blocked_pubkey LIMIT 1 OFFSET ?')
+                .get(Math.floor(rand() * (db.prepare('SELECT COUNT(*) AS n FROM member_blocks').get() as { n: number }).n)) as { owner_pubkey: string; blocked_pubkey: string } | undefined;
+            if (row && removeBlock(row.owner_pubkey, row.blocked_pubkey)) did('an unblock');
         }
         else { did('nothing'); }
     };
@@ -236,6 +266,30 @@ async function main(): Promise<void> {
         return { sent, frames: [...frames].sort() };
     };
 
+    // On its own, beside the two oracles: no frame of a push reaches a socket whose member blocked the listing's author,
+    // is near it, and is none of its parties (its author, the member who took it, an open deal's sides, a removal's).
+    let blockedNear = 0, blockedReached = 0;
+    const blockedExamples: string[] = [];
+    const checkBlocks = (p: { event: any; opts?: any }, sentTo: Set<number>) => {
+        const id = p.event.post?.id ?? p.event.id;
+        const row = db.prepare('SELECT author_pubkey, accepted_by, lat, lng FROM posts WHERE id = ?').get(id) as { author_pubkey: string; accepted_by: string | null; lat: number | null; lng: number | null };
+        if (row.lat == null || row.lng == null) return;
+        const deals = db.prepare("SELECT buyer_pubkey, seller_pubkey FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending')").all(id) as { buyer_pubkey: string; seller_pubkey: string }[];
+        const parties = new Set([row.author_pubkey, row.accepted_by, ...deals.flatMap(d => [d.buyer_pubkey, d.seller_pubkey]), ...(p.opts?.listingParties ?? [])]);
+        const blockers = new Set((db.prepare('SELECT owner_pubkey FROM member_blocks WHERE blocked_pubkey = ?').all(row.author_pubkey) as { owner_pubkey: string }[]).map(b => b.owner_pubkey));
+        for (const ws of live()) {
+            const pk = ws._memberPubkey;
+            if (!pk || !blockers.has(pk) || parties.has(pk)) continue;
+            const a = area.memberAreaFor(pk);
+            if (!a || haversineKm(a.lat, a.lng, row.lat, row.lng) > radiusKm) continue;
+            blockedNear++;
+            if (sentTo.has(ws.id)) {
+                blockedReached++;
+                if (blockedExamples.length < 3) blockedExamples.push(`${p.event.type} ${id}: socket ${ws.id} of a member who blocked its author`);
+            }
+        }
+    };
+
     const PUSHES = Number(process.env.PUSH_INDEX_PUSHES) || 1200;
     let differ = 0, reached = 0, emptyPushes = 0;
     const firstDiffs: string[] = [];
@@ -247,6 +301,7 @@ async function main(): Promise<void> {
         inspect(`a ${p.event.type} push`);
         reached += full.frames.length;
         if (full.frames.length === 0) emptyPushes++;
+        checkBlocks(p, new Set(indexed.frames.map(f => Number(f.slice(0, f.indexOf('|'))))));
         if (full.sent !== indexed.sent || full.frames.join('\n') !== indexed.frames.join('\n')) {
             differ++;
             if (firstDiffs.length < 3) {
@@ -260,11 +315,15 @@ async function main(): Promise<void> {
     say(`   changes between pushes: ${JSON.stringify(changes)}`);
     for (const d of firstDiffs) say(`   ${d}`, true);
     for (const what of ['connect', 'disconnect', 'dies on a send', 'area set or moved', 'area cleared', 'area imported',
-        're-key, the new phone connects', 'member removed', 'mid-join socket joins', 'map loaded again whole']) {
+        're-key, the new phone connects', 'member removed', 'mid-join socket joins', 'map loaded again whole',
+        'a member near a listing blocks its author', 'an unblock']) {
         assert((changes[what] ?? 0) > 0, `the run made the change "${what}" (${changes[what] ?? 0} times)`);
     }
     assert(reached > PUSHES, `the pushes reached sockets: ${reached} frames over ${PUSHES} pushes (${emptyPushes} reached none)`);
     assert(differ === 0, `${PUSHES} pushes: the index and the full loop send the same frames to the same sockets (${differ} differ; seed ${SEED})`);
+    for (const e of blockedExamples) say(`   ${e}`, true);
+    assert(blockedNear > 0 && blockedReached === 0,
+        `no push reached a member near its listing who blocked its author and is none of its parties: ${blockedReached} of ${blockedNear} such sockets (seed ${SEED})`);
     for (const e of brokenExamples) say(`   ${e}`, true);
     assert(Object.keys(broken).length === 0,
         `the index kept its rules after each of ${inspections} changes and pushes (broken after: ${JSON.stringify(broken)}; seed ${SEED})`);
@@ -332,6 +391,17 @@ async function main(): Promise<void> {
         const hubPost = crypto.randomUUID(), oceanPost = crypto.randomUUID();
         insertPost.run(hubPost, 'At a dense spot', pick(members), null, HUBS[0].lat, HUBS[0].lng);
         insertPost.run(oceanPost, 'In the South Pacific', pick(members), null, -48.9, -123.4);
+        // The dense spot's author blocked by 300 members anywhere, some near it: the read of their blockers is in every
+        // push's cost, and the push still reaches the members near it who did not block them.
+        const hubAuthor = placeOf(hubPost).author_pubkey;
+        const hubNear = new Set(nearMembers(hubPost));
+        let hubBlocks = 0, hubBlocksNear = 0;
+        for (const pk of members.slice(0, 301)) {
+            if (pk === hubAuthor || hubBlocks >= 300 || addBlocks(pk, [hubAuthor]).length === 0) continue;
+            hubBlocks++;
+            if (hubNear.has(pk)) hubBlocksNear++;
+        }
+        say(`   the dense spot's author is blocked by ${hubBlocks} members, ${hubBlocksNear} of the ${hubNear.size} near it`);
         const costAt = (n: number) => {
             while (live().length < n) connect(pick(members));
             while (live().length > n) close(live()[live().length - 1]);

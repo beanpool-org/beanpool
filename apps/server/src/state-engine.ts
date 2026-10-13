@@ -1540,11 +1540,15 @@ function keepersOf(treasuries: string[]): Set<string> {
  * (member-area.ts memberAreaFor) is within the set's radius of the listing's place (as getNearbySet measures it), and the
  * listing's parties always: its author, the member who took it, both sides of each open deal on it (asked for, or taken
  * and not yet done: a member's set ties them to it, getNearbySet) or of one a removal just closed (`extraParties`,
- * BroadcastOptions.listingParties), and an enterprise's keepers for any of them. Every other socket gets nothing, not
+ * BroadcastOptions.listingParties), and an enterprise's keepers for any of them. A member near it who blocked its author
+ * is not reached, as their set holds none of that author's listings (getNearbySet: the member's own list, never the
+ * author's); a party is, blocked or not, as their set keeps the listings they are tied to. The block list is read at
+ * each event, so a block or an unblock holds from the next one (#1812). Every other socket gets nothing, not
  * even a doorbell (a doorbell sends an app back for every listing): one with no area, or with no member's key, among
  * them. Their apps have the newest listings and the poll. A listing with no place reaches
  * its parties alone. The place and the parties are the stored row's, so an event carrying only an id is measured as one
- * carrying the post. Everything is read once for the event; each socket is then a lookup and a distance, no read.
+ * carrying the post. Everything is read once for the event (the author's blockers too, one read on
+ * idx_member_blocks_blocked, not one per socket); each socket is then a lookup and a distance, no read.
  *
  * Null for an event that names no listing, or one not on this node: it goes as before. That is a bare doorbell for many
  * listings at once (a burst's hide, engine/burst-cleanup.ts), rare and about no one place.
@@ -1569,10 +1573,11 @@ function listingReach(event: any, extraParties: string[] = []): ListingReach | n
     const sides = [...new Set([row.author_pubkey, row.accepted_by, ...deals.flatMap(d => [d.buyer_pubkey, d.seller_pubkey]), ...extraParties])]
         .filter((k): k is string => !!k);
     const keepers = keepersOf(sides.filter(isTreasuryKey));
+    const blockers = placed ? blockersOf(row.author_pubkey) : null;
     const reaches = (pubkey: string | null | undefined) => {
         if (!pubkey) return false;
         if (sides.includes(pubkey) || keepers.has(pubkey)) return true;
-        if (!placed) return false;
+        if (!placed || blockers!.has(pubkey)) return false;
         const area = memberAreaFor(pubkey);
         return !!area && engine.haversineKm(area.lat, area.lng, row.lat!, row.lng!) <= radiusKm;
     };

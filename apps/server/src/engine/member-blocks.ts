@@ -139,13 +139,15 @@ export const KEPT_BLOCKERS_MAX = 100_000;
 
 const COUNTED_OPS = ['INSERT', 'UPDATE', 'DELETE'] as const;
 const COUNTED_TRIGGERS = COUNTED_OPS.map(op => `member_blocks_${op.toLowerCase()}_counted`);
+type Pluck = { get(...params: unknown[]): unknown };
 /**
- * One step at every kept read (~2 µs, #1867): the connection's data_version, and how many of the counting triggers are
- * still there. SQLite drops TEMP triggers without a word: a `PRAGMA temp_store` set at run time, the table dropped and
- * made again, or the transaction that made them rolled back. Prepared at the first kept read, on this connection.
+ * Read at every kept read (~2 µs together, #1867): how many of the counting triggers are still there, and the
+ * connection's data_version. SQLite drops TEMP triggers without a word: a `PRAGMA temp_store` set at run time, the table
+ * dropped and made again, or the transaction that made them rolled back. Prepared at the first kept read.
  */
-let watchState: { get(...params: unknown[]): unknown } | null = null;
-const readWatchState = () => watchState!.get() as { data: number; triggers: number };
+let countingTriggers: Pluck | null = null;
+let dataVersion: Pluck | null = null;
+const triggersLeft = () => countingTriggers!.get() as number;
 
 /** The block lists' version (blocksVersion above). */
 export function blockListsVersion(): number {
@@ -163,9 +165,9 @@ function watchBlockWrites(): boolean {
     if (db.inTransaction) return false;
     if (!watching) {
         db.function('member_blocks_written', { deterministic: false }, () => { blocksVersion++; return null; });
-        watchState = db.prepare(`SELECT (SELECT data_version FROM pragma_data_version) AS data,
-            (SELECT COUNT(*) FROM temp.sqlite_master WHERE type = 'trigger' AND tbl_name = 'member_blocks'
-             AND name IN (${COUNTED_TRIGGERS.map(n => `'${n}'`).join(', ')})) AS triggers`);
+        countingTriggers = db.prepare(`SELECT COUNT(*) FROM temp.sqlite_master WHERE type = 'trigger' AND tbl_name = 'member_blocks'
+            AND name IN (${COUNTED_TRIGGERS.map(n => `'${n}'`).join(', ')})`).pluck();
+        dataVersion = db.prepare('PRAGMA data_version').pluck();
         watching = true;
     }
     try {
@@ -175,7 +177,7 @@ function watchBlockWrites(): boolean {
         console.error('[member-blocks] could not make the triggers counting block-list writes; reading the table at every push:', e);
         return false;
     }
-    return readWatchState().triggers === COUNTED_TRIGGERS.length;
+    return triggersLeft() === COUNTED_TRIGGERS.length;
 }
 
 /**
@@ -192,20 +194,21 @@ function watchBlockWrites(): boolean {
  */
 export function blockersOfKept(key: string): ReadonlySet<string> {
     if (db.inTransaction) return blockersOf(key);
-    let state = watching ? readWatchState() : null;
-    if (state?.triggers !== COUNTED_TRIGGERS.length) {
-        if (watching) console.warn(`[member-blocks] only ${state?.triggers ?? 0} of the ${COUNTED_TRIGGERS.length} triggers counting block-list writes were left; kept lists emptied, triggers made again`);
+    const left = watching ? triggersLeft() : 0;
+    if (left !== COUNTED_TRIGGERS.length) {
+        if (watching) console.warn(`[member-blocks] only ${left} of the ${COUNTED_TRIGGERS.length} triggers counting block-list writes were left; kept lists emptied, triggers made again`);
         kept.clear();
         keptKeys = 0;
         keptAt = -1;
         if (!watchBlockWrites()) return blockersOf(key);
-        state = readWatchState();
     }
-    if (keptAt !== blocksVersion || keptAtData !== state.data) {
+    // Read before the table, so another connection's commit after it moves it past what is kept.
+    const data = dataVersion!.get() as number;
+    if (keptAt !== blocksVersion || keptAtData !== data) {
         kept.clear();
         keptKeys = 0;
         keptAt = blocksVersion;
-        keptAtData = state.data;
+        keptAtData = data;
     }
     const known = kept.get(key);
     if (known) return known;

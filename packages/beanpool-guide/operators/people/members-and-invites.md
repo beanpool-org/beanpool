@@ -96,7 +96,7 @@ Open **People & Safety**, then **Members**, and open a person.
 
 Owners and admins can:
 
-- **Suspend**: stops them using the community now. You write a reason of at least 10 characters, which members can see. Members then vote for 7 days on keeping the suspension. If the vote does not pass, it lifts by itself. See Decisions and emergencies.
+- **Suspend**: stops them using the community now. You write a reason of at least 10 characters, which members can see. Where the community votes, members then vote for 7 days on keeping the suspension, and if the vote does not pass it lifts by itself. On the global community there is no vote: the suspension lasts 7 days and lifts by itself, or sooner if you lift it. See Decisions and emergencies.
 - **Lift suspension**: ends a suspension early and closes its vote.
 - **Freeze** and **Unfreeze**: takes their credit line to zero, and stops them voting or proposing. It happens at once, with no confirmation. Their Ledger tells them the admins froze their credit line: they can't spend into debit while it lasts, but can still sell, receive and spend what they hold above zero (a member in debit is also told how far down they are), and to ask an admin. Their level stays the one their line gives them unfrozen, on their profile and their listings alike.
 - **Promote** and **Demote**: whether they can vouch for others.
@@ -154,7 +154,7 @@ If they already moved to a new key, the window opens on **Already moved to** tha
 
 - A member can delete their own account in the app. That erases more than Prune Account: their profile, and the words, photos and places of all their posts, done or not, except their polls. A poll stays, closed, with its question and votes. The deals made on their posts still show, as "Deleted post".
 - A Re-Key code that runs out unused leaves the person suspended in a way neither the Lift button nor Cancel this code undoes. Make a new Re-Key code, then cancel it if they don't need it: they are back to what they were before the first code.
-- The trust score shown on a member's page is not calculated yet. Do not act on it.
+- The "Trust Rating" shown on a member's page is not calculated yet. It is a placeholder. Do not act on it.
 - Suspended members can still make invites from their app, where any member invites.
 - While suspended, a member sees what someone who has not joined sees: no one's contact details, not who voted in a Poll, not the activity feed, not how far away people are. They still get their own messages and deals. All of it comes back when the suspension lifts.
 - Someone a member messages or sends beans to who has not joined is a visitor. They get those messages and beans, and see only what someone who has not joined sees. In those conversations they can reply, edit or delete what they wrote, and react. They keep the beans, and can pass them on once they join. They can take down a listing of their own, from before visitors were stopped from posting. They can't do anything else: they can't post, trade, join a group, go to an event, report, vote, invite anyone or answer a request to join. If they join with an invite from their own app, they become a member and keep their messages and beans.

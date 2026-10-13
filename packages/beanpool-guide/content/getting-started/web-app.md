@@ -93,6 +93,7 @@ If you joined the global community with 12 words, they are your only way back. A
 - **Appearance:** the choice is called **Same as device** instead of "Same as phone".
 - **Blocking:** Settings says **Manage Blocked Members**. Your community keeps your blocks with your account, so they come back when you sign in on any browser, and signing out leaves nothing about them on the computer. The people who run your community's server can see whom you blocked. Blocking and unblocking need a connection: without one, the web app says so and nothing changes. Blocks made in the phone app stay on the phone and do not show here.
 - **Chats:** the web chat has **Report** and **Block** buttons at the top.
+- **Your area:** on the global community the web app's Settings has **Your area** too, and its Market and Map start from it. See "Your area".
 
 ## What the web app does not have
 

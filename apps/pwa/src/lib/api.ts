@@ -175,6 +175,26 @@ export async function request<T>(method: string, path: string, body?: any, signa
     return res.json();
 }
 
+/**
+ * A signed request as `request` makes it, with the node's answer handed back as it came, refusals included: for a caller
+ * that reads a refusal's own fields (a 409's `current` and `roster`), the group chat keyring (lib/group-chat-keys.ts).
+ */
+export async function signedFetch(method: string, path: string, body?: unknown): Promise<Response> {
+    const bodyString = body === undefined ? '' : JSON.stringify(body);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const identity = await loadIdentity();
+    if (identity && identity.privateKey) {
+        Object.assign(headers, await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey));
+    }
+    return fetch(`${getNodeApiUrl()}${path}`, { method, cache: 'no-cache', headers, ...(body === undefined ? {} : { body: bodyString }) });
+}
+
+/** How the group chat keyring reaches this node: signed as this browser's member. */
+export const groupKeysNet = {
+    get: (path: string) => signedFetch('GET', path),
+    post: (path: string, body: unknown) => signedFetch('POST', path, body),
+};
+
 /** What `request` throws for an answer that isn't ok. */
 async function refusalError(res: Response): Promise<Error> {
     let unsaid = false;
@@ -882,6 +902,26 @@ export async function markConversationReadApi(pubkey: string, conversationId: st
 
 export async function getMessageAttachmentApi(messageId: string): Promise<MessageAttachment> {
     return request('GET', `/api/messages/${encodeURIComponent(messageId)}/attachment`);
+}
+
+/**
+ * A Commons group's chat as one member sees it (GET /api/groups/:id/chat): its lines (from this member's first epoch on),
+ * whether they may post, and, on a node that locks group chats, `encryption` (the current epoch, whether it is stale,
+ * this member's first epoch). A node from before locked chats answers without `encryption`.
+ */
+export interface GroupChatAnswer {
+    conversation: Conversation;
+    messages: (ApiMessage & { authorCallsign?: string | null })[];
+    role?: GroupRole;
+    canPost?: boolean;
+    readOnly?: boolean;
+    closedAt?: string | null;
+    isConvenor?: boolean;
+    encryption?: { current: number | null; stale: boolean; fromEpoch: number | null };
+}
+
+export async function getGroupChat(groupId: string, limit = 50): Promise<GroupChatAnswer> {
+    return request('GET', `/api/groups/${encodeURIComponent(groupId)}/chat?limit=${limit}`);
 }
 
 export async function getConversationMessages(conversationId: string, limit = 50): Promise<{

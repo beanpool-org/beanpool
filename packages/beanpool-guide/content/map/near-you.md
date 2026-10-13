@@ -35,6 +35,10 @@ The global community has listings from everywhere, so the web app's **Market** a
 
 The web app's search looks only through the listings on screen. **Show everywhere** shows the newest listings from everywhere, not every one, so a listing that is far away and not new won't come up in the search. In every other community the Market and the Map show everything, as before.
 
+## On the global community, on the phone
+
+The phone keeps the listings nearest your area: up to 500, within 250 km. It also keeps your own listings, and any you have a deal, a chat or an answer on. The Market and the Map show what the phone keeps. With no area set, it keeps the newest listings instead, and a line above the Market says so. See "Your area".
+
 ## Events near you
 
 Event cards show how far away they are once you have let the app use your location.

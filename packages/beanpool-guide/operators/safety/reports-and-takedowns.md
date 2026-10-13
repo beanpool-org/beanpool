@@ -33,7 +33,7 @@ Owners and admins: **People & Safety**, then **Triage & Moderation**. Moderators
 
 ## If you are a moderator
 
-You open Settings from the app's **🛡️ Moderate** button, or on a computer by scanning the code with the app. Settings shows **Moderator** at the top and one screen, **Reports**. Every link from the app lands there.
+You open Settings from the app's **🛡️ Moderate** button (it reads "Moderate" and your community's name), or on a computer by scanning the code with the app ("Moderate this community from a computer"). Settings shows **Moderator** at the top and one screen, **Reports**. Every link from the app lands there.
 
 - **Open**, **Handled**, **Dismissed** and **All** choose which reports you see. The count beside Open is how many are waiting.
 - Each report shows what was reported: a post (its title, what it says and who wrote it), a Pulse item, or a member; then the reporter's words, who reported it and when.
@@ -77,6 +77,8 @@ So established members from three circles can hide a newcomer's spam, but not th
 A post by someone who joined with **12 words** and is still on the new-account limits needs only **one circle**: one report from an established member hides it. Their account cost nothing to make, so what protects the community is how cheaply a real member can hide its spam. Once its author is past the limits, or adds a sign-in, it needs three circles like anyone's.
 
 A hidden post's reports stay open, marked as on a hidden post. Its author still sees it, and so do you. **Dismiss (keep the post)** on its reports brings it back once too few circles count to hide it; **Remove the post** takes it down as above.
+
+On the global community, a member whose posts moderators have removed 3 times in 30 days is muted. They can still read, but cannot post, edit a post or send messages until a moderator lifts it, and they are told. Pruning stale posts never counts towards this. Settings has no button to lift a mute yet.
 
 ## On the global community: accounts that joined together
 

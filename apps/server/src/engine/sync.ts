@@ -2388,9 +2388,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 // and a replica can never resurrect a link the member removed.
                 const importChannel = db.prepare(`INSERT INTO creator_channels
                                     (id, owner_pubkey, platform, url, handle, category, is_primary_video,
-                                     supports_autolist, oauth_verified_at, post_count_seen, autopublish,
-                                     syndicate_to_node, created_at, updated_at, deleted_at)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                     supports_autolist, oauth_verified_at, platform_account_id, verified_handle,
+                                     post_count_seen, autopublish, syndicate_to_node, created_at, updated_at, deleted_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                                 ON CONFLICT(id) DO UPDATE SET
                                     -- Included because executeRecovery repoints channels at the
                                     -- member's NEW key. Without it a promoted backup keeps them
@@ -2408,6 +2408,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                                     is_primary_video  = excluded.is_primary_video,
                                     supports_autolist = excluded.supports_autolist,
                                     oauth_verified_at = excluded.oauth_verified_at,
+                                    platform_account_id = excluded.platform_account_id,
+                                    verified_handle   = excluded.verified_handle,
                                     post_count_seen   = excluded.post_count_seen,
                                     autopublish       = excluded.autopublish,
                                     syndicate_to_node = excluded.syndicate_to_node,
@@ -2425,6 +2427,8 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         cc.isPrimaryVideo ? 1 : 0,
                         cc.supportsAutolist ? 1 : 0,
                         cc.oauthVerifiedAt ?? null,
+                        cc.platformAccountId ?? null,
+                        cc.verifiedHandle ?? null,
                         cc.postCountSeen ?? null,
                         cc.autopublish ? 1 : 0,
                         cc.syndicateToNode ? 1 : 0,

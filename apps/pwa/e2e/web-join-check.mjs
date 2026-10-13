@@ -111,8 +111,6 @@ async function openScenario(browser, origin, view, { join, nonce: nonceAnswer } 
         seen.unexpectedHosts.add(new URL(route.request().url()).hostname);
         return route.abort();
     });
-    await context.route('https://fonts.googleapis.com/**', (route) => route.fulfill({ status: 200, contentType: 'text/css', body: '' }));
-    await context.route('https://fonts.gstatic.com/**', (route) => route.fulfill({ status: 404, body: '' }));
 
     // The providers. Each answers as the real one does on success: straight back to the return URL.
     await context.route('https://accounts.google.com/**', (route) => {

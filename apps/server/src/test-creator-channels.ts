@@ -466,6 +466,14 @@ async function main(): Promise<void> {
         'the tombstone carries nothing about what was deleted, not even the platform');
 
     // ── 7. Sync export carries the tombstone ────────────────────────────────────────────────
+    // And the verified account (#1830): a promoted standby must keep the badge's stable id, or the
+    // boot-time clearUnprovenOauthBadges strips every badge the member proved.
+    const badged = listChannels(kayla)[0];
+    db.prepare(
+        `UPDATE creator_channels
+            SET oauth_verified_at = ?, platform_account_id = 'acct-1830', verified_handle = 'proven_handle', updated_at = ?
+          WHERE id = ?`
+    ).run(new Date().toISOString(), new Date().toISOString(), badged.id);
     const liveBeforeExport = listChannels(kayla).length;
     const payload = await exportSyncState(nodeId);
     assert(!!payload.signature && !!payload.publicKey, 'the exported payload is signed');
@@ -474,6 +482,9 @@ async function main(): Promise<void> {
     const exportedTomb = exported.find(c => c.id === ig.id);
     assert(!!exportedTomb?.deletedAt, 'the deletion is exported, so a backup learns about it');
     assert(exportedTomb?.url === null, 'the exported tombstone carries no URL');
+    const exportedBadge = exported.find(c => c.id === badged.id);
+    assert(exportedBadge?.platformAccountId === 'acct-1830' && exportedBadge?.verifiedHandle === 'proven_handle',
+        'the verified account id and handle are exported with the badge');
 
     // ── 8. Import converges, and never resurrects a deleted link ────────────────────────────
     // Deliberately NOT wiped first for the tombstone: a replica that already holds the LIVE row and
@@ -489,8 +500,15 @@ async function main(): Promise<void> {
     assert(preConflict.platform === 'instagram' && preConflict.url !== null,
         'the live row is staged so the import takes the conflict path, not the insert path');
 
+    db.prepare(
+        `UPDATE creator_channels SET platform_account_id = NULL, verified_handle = NULL, updated_at = '2000-01-01T00:00:00.000Z' WHERE id = ?`
+    ).run(badged.id);
+
     setNodeRole('backup');
     await importRemoteState(payload as any);
+    const reimportedBadge = db.prepare(`SELECT * FROM creator_channels WHERE id = ?`).get(badged.id) as any;
+    assert(reimportedBadge?.platform_account_id === 'acct-1830' && reimportedBadge?.verified_handle === 'proven_handle',
+        'the import carries the verified account id and handle over an existing row (ON CONFLICT path)');
 
     const reimported = listChannels(kayla);
     assert(reimported.length === liveBeforeExport, 'the live channels are restored by the import');

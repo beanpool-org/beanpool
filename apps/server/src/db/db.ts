@@ -947,6 +947,35 @@ export function rebuildHealthAccessLogCheck(d: Database.Database): boolean {
 }
 
 /**
+ * Rebuilds system_logs when its CHECK lacks the 'AGENT' category (an AI assistant's calls, agent/mcp-route.ts), keeping
+ * every row and its id; true when it rebuilt. Idempotent. The table is bounded (logger.ts LOG_KEEP_ROWS), so the copy is small.
+ */
+export function rebuildSystemLogsCheck(d: Database.Database): boolean {
+    const row = d.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='system_logs'").get() as { sql?: string } | undefined;
+    if (!row?.sql || row.sql.includes("'AGENT'")) return false;
+    d.transaction(() => {
+        d.exec(`
+            DROP TABLE IF EXISTS system_logs_migration;
+            CREATE TABLE system_logs_migration (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                level TEXT NOT NULL CHECK (level IN ('INFO', 'WARN', 'ERROR', 'SECURITY', 'SYNC')),
+                category TEXT NOT NULL CHECK (category IN ('P2P', 'LEDGER', 'TLS', 'ADMIN', 'AUTH', 'DB', 'SYS', 'AGENT')),
+                message TEXT NOT NULL,
+                metadata TEXT
+            );
+            INSERT INTO system_logs_migration (id, timestamp, level, category, message, metadata)
+                SELECT id, timestamp, level, category, message, metadata FROM system_logs;
+            DROP TABLE system_logs;
+            ALTER TABLE system_logs_migration RENAME TO system_logs;
+            CREATE INDEX IF NOT EXISTS idx_system_logs_timestamp ON system_logs(timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_system_logs_level ON system_logs(level);
+        `);
+    })();
+    return true;
+}
+
+/**
  * Adds health_access_log's `token_id` and `token_name` (the automation token behind a look, #1613's actor survey) to a
  * table from before them: ALTER TABLE ADD COLUMN, so every row is kept as it was, NULL in both (a person's look, or one
  * from before the token was recorded). Nothing on a table that has them, or none; true when it added. Idempotent.
@@ -1552,6 +1581,13 @@ export function initSchema() {
         if (rebuildHealthAccessLogCheck(db)) console.log('[DB] ✅ Migrated health_access_log for the looks at disputes, stranded escrows and alerts');
     } catch (err: any) {
         console.error('[DB] ❌ Failed to migrate health_access_log for the looks at disputes and alerts:', err?.message || err);
+    }
+    // system_logs: its CHECK allows the AI assistants' category (a table from before has the old CHECK, so their lines
+    // would fail to write). Before schema.sql, as the access logs above.
+    try {
+        if (rebuildSystemLogsCheck(db)) console.log("[DB] ✅ Migrated system_logs CHECK constraint to allow the AI assistants' AGENT category");
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate system_logs for the AGENT category:', err?.message || err);
     }
     try {
         if (addHealthAccessLogToken(db)) console.log('[DB] ✅ Migrated health_access_log to name the automation token behind a look');

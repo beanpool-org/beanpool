@@ -695,6 +695,7 @@ async function main(): Promise<void> {
         const isRefusal = (r: { status: number; body: any }) => r.status === 403 && r.body?.code === 'key_invalidated' && r.body?.error === REPLACED;
         assert(swept.length > 150 && writes.length - swept.length > 100,
             `the sweep takes every registered write the middleware sees: ${swept.length} of ${writes.length} (the rest are the admin surface and invite redemption)`);
+        assert(swept.includes('POST /mcp') && swept.includes('DELETE /mcp'), 'the AI assistant endpoint among them (POST and DELETE /mcp): a key\'s signature is no way in');
         const keys: Array<[string, Id]> = [['the old key of a member being re-keyed', rekeyee], ['the old key of a completed re-key', phoneless]];
         for (const [who, key] of keys) {
             const { answered, changed, pushed } = await sweepAs(key, isRefusal);

@@ -2,7 +2,7 @@
 slug: messages
 title: Messages
 summary: Start a chat, send photos, reply, react, edit, delete, mute, and what is private.
-related: people, blocking, event-chat, groups, mute, the-top-bar
+related: people, blocking, event-chat, groups, mute, the-top-bar, key-changed
 ---
 
 ## Your chats

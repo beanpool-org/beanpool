@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { memoryIndexedDB } from './memory-indexeddb';
 import { indexedDbGroupLockStore, resetGroupChatLockStoreForTest } from './group-chat-lock-store';
 import { rememberDmConversations, isKnownDmConversation } from './dm-guard';
-import { holdConversation, sendRouteOf } from './group-hold';
+import { holdConversation, sendRouteOf, startedDm } from './group-hold';
 
 const ME = 'a'.repeat(64);
 const G = '5c1d2c3b-4a59-4e68-9d7c-8b9a0f1e2d3c';
@@ -60,5 +60,25 @@ describe('sendRouteOf', () => {
         expect(await sendRouteOf(ME, 'dm-1')).toBe('as-typed');
         expect(await sendRouteOf(ME, 'event-1')).toBe('refuse');
         expect(await sendRouteOf(ME, G)).toBe('refuse');
+    });
+});
+
+describe('startedDm (confirmation review of #1816, finding 1)', () => {
+    const answer = (id: string) => ({ id, type: 'group_thread', participants: [ME, 'b'.repeat(64)] });
+
+    it("the node answers \"start a DM\" with a group held locked here: nothing opens, nothing is remembered", () => {
+        expect(startedDm(answer(G), new Set([G]))).toBeNull();
+        expect(startedDm(answer(G.toUpperCase()), new Set([G]))).toBeNull();
+        expect(isKnownDmConversation(G)).toBe(false);
+    });
+
+    it('the lock store unreadable: shown as a DM, never remembered as one', () => {
+        expect(startedDm(answer('dm-2'), null)?.type).toBe('dm');
+        expect(isKnownDmConversation('dm-2')).toBe(false);
+    });
+
+    it('otherwise a DM, remembered as one, whatever type the answer names', () => {
+        expect(startedDm(answer('dm-3'), new Set([G]))?.type).toBe('dm');
+        expect(isKnownDmConversation('dm-3')).toBe(true);
     });
 });

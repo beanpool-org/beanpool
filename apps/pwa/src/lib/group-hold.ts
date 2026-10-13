@@ -24,6 +24,21 @@ export const GROUP_HOLD_UNREAD_TEXT = "This browser couldn't check its record of
 export const GROUP_HOLD_UNREAD_OPEN_TEXT = "This browser couldn't check its record of locked group chats just now, so this chat didn't open. Try again in a moment.";
 /** Said in an event's chat when its id is a group this browser holds locked: that chat sends readable, so nothing goes. */
 export const GROUP_HOLD_EVENT_TEXT = "This is a locked group chat, and this screen can't lock messages. Nothing was sent; open it from Messages.";
+/** Said when the node answers "start a DM" with the id of a group held locked here: nothing opens. */
+export const GROUP_HOLD_STARTED_DM_TEXT = "This node answered with a locked group's chat, not a direct message, so nothing opened.";
+
+/**
+ * A DM this member started, from the node's answer: never a group held locked here (null: nothing opens), and with the
+ * lock store unreadable shown as a DM but not remembered as one (a store error remembers nothing; confirmation review
+ * of #1816, finding 1: the answer to "start a DM" could otherwise teach the DM guard a held group's id).
+ */
+export function startedDm<T extends { id: string; type: string }>(conv: T, lockedGroups: ReadonlySet<string> | null): T | null {
+    if (!conv?.id) return conv;
+    if (lockedGroups === null) return { ...conv, type: 'dm' as T['type'] };
+    if (lockedGroups.has(groupIdKey(conv.id))) return null;
+    return heldConversation({ ...conv, type: 'dm' as T['type'] });
+}
+
 /** Said when a chat the node calls a group's turns out to be a DM (the DM guard): nothing left; it reopens as the DM. */
 export const GROUP_CHAT_IS_DM_TEXT = "This chat holds private messages, so it stays a direct message. Nothing was sent; send it again here.";
 

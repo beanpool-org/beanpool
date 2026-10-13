@@ -19,8 +19,7 @@ import {
     dmThreadInShownOrder, dmQuoteFrom, dmQuoteLabel, newDmMessageId, isEncryptedNonce, DM_LINE_NOT_VERIFIED_TEXT, type DMKeyContext,
 } from '../lib/e2e-crypto';
 import { dmKeyContext, lockForDm, payloadForChat, isDmNotLocked, dmNotLockedLine, isNodeReadableChat, type DmLineSeal } from '../lib/dm-lock';
-import { heldConversation } from '../lib/dm-guard';
-import { holdConversation, lockedGroupsOrNull, sendRouteOf, groupIdKey, GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_CHAT_IS_DM_TEXT } from '../lib/group-hold';
+import { holdConversation, lockedGroupsOrNull, sendRouteOf, groupIdKey, startedDm, GROUP_HOLD_STARTED_DM_TEXT, GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_CHAT_IS_DM_TEXT } from '../lib/group-hold';
 import { encodePlaintext } from '../lib/e2e-crypto';
 import { GROUP_CHAT_NO_PHOTOS_TEXT } from '../lib/group-chat-lines';
 import { groupKeyring, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_WAITING_TEXT } from '../lib/group-chat-keys';
@@ -507,7 +506,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                     try {
                         const created = await createConversationApi('dm', [identity.publicKey, openConversationId], identity.publicKey);
                         // Asked for a DM: it is one, whatever type the answer names.
-                        conv = created.conversation && heldConversation({ ...created.conversation, type: 'dm' as const });
+                        conv = created.conversation ? (startedDm(created.conversation, await lockedGroupsOrNull(identity.publicKey)) ?? undefined) : undefined;
+                        if (created.conversation && !conv) setChatRefusal(GROUP_HOLD_STARTED_DM_TEXT);
                         await loadConversations();
                     } catch (e) {
                         // Offline stays quiet; the node refusing to open it (a new account's limit) says why.
@@ -752,7 +752,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 identity.publicKey,
             );
             // Asked for a DM: it is one, whatever type the answer names.
-            setActiveConv(heldConversation({ ...result.conversation, type: 'dm' as const }));
+            const started = startedDm(result.conversation, await lockedGroupsOrNull(identity.publicKey));
+            if (!started) { setChatRefusal(GROUP_HOLD_STARTED_DM_TEXT); return; }
+            setActiveConv(started);
             setShowNewDm(false);
             setChatRefusal(null);
             await loadConversations();

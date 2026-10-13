@@ -9,13 +9,14 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { sendMessageApi, editMessageApi, postEventChatMessage, toggleMessageReactionApi, getEventChat } from '../lib/api';
+import { sendMessageApi, editMessageApi, postEventChatMessage, toggleMessageReactionApi, getEventChat, createConversationApi } from '../lib/api';
+import { openDmLine } from '../lib/e2e-crypto';
 import { memoryIndexedDB, type MemoryIndexedDB } from '../lib/memory-indexeddb';
 import { resetGroupChatLockStoreForTest, lockedGroupsOf } from '../lib/group-chat-lock-store';
 import { forgetGroupKeys, groupKeyring, memoryGroupLockStore } from '../lib/group-chat-keys';
 import { sealLine } from '../lib/group-chat-crypto';
 import { isKnownDmConversation } from '../lib/dm-guard';
-import { GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT } from '../lib/group-hold';
+import { GROUP_HOLD_UNREAD_TEXT, GROUP_HOLD_UNREAD_OPEN_TEXT, GROUP_HOLD_STARTED_DM_TEXT } from '../lib/group-hold';
 import { GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_CHAT_UNREAD_TEXT } from '../lib/group-chat-lines';
 import { fakeGroupNode, person, type FakeGroupNode } from '../lib/group-chat-fake-node.test-support';
 
@@ -35,6 +36,9 @@ const GCAPS = G.toUpperCase();
 const ana = person(true);
 const ben = person();
 const eve = person();
+const mal = person(true);
+/** The node's answer to "start a DM" (createConversationApi); null: it refuses. */
+let createAnswer: any = null;
 let node: FakeGroupNode;
 let chatLocked = true;
 let chatError: unknown = null;
@@ -44,6 +48,8 @@ let listMode: 'normal' | 'omit' | 'caps' = 'normal';
 let participants: string[] = [];
 let eventChatView: any = null;
 let servedOrder: 'stored' | 'reversed' = 'stored';
+/** Conversations the node lists besides the group (a real DM). */
+let extraConvs: any[] = [];
 
 const served = () => {
     const rows = node.lines.map((l, i) => ({
@@ -59,13 +65,13 @@ function conv(id = G) {
 
 vi.mock('../lib/api', () => ({
     getConversations: vi.fn(async () => ({
-        conversations: listMode === 'omit' ? [] : [conv(listMode === 'caps' ? GCAPS : G)], totalUnread: 0,
+        conversations: [...(listMode === 'omit' ? [] : [conv(listMode === 'caps' ? GCAPS : G)]), ...extraConvs], totalUnread: 0,
     })),
-    getConversationMessages: vi.fn(async (id: string) => ({ conversation: conv(id), messages: [] })),
-    getMembers: vi.fn(async () => [{ publicKey: ben.publicKey, callsign: 'Ben' }, { publicKey: eve.publicKey, callsign: 'Eve' }]),
+    getConversationMessages: vi.fn(async (id: string) => ({ conversation: extraConvs.find((c) => c.id === id) ?? conv(id), messages: [] })),
+    getMembers: vi.fn(async () => [{ publicKey: ben.publicKey, callsign: 'Ben' }, { publicKey: eve.publicKey, callsign: 'Eve' }, { publicKey: mal.publicKey, callsign: 'Mal' }]),
     getMyMarketplaceTransactions: vi.fn(async () => []),
     markConversationReadApi: vi.fn(async () => ({ success: true })),
-    createConversationApi: vi.fn(),
+    createConversationApi: vi.fn(async () => { if (!createAnswer) throw new Error('no'); return createAnswer; }),
     getEventChat: vi.fn(async () => { if (!eventChatView) throw new Error('Not found'); return eventChatView; }),
     postEventChatMessage: vi.fn(async () => ({ success: true, message: {} })),
     removeEventChatMessage: vi.fn(),
@@ -135,13 +141,23 @@ beforeEach(async () => {
     forgetGroupKeys();
     node = fakeGroupNode(G, [ana.publicKey, ben.publicKey]);
     chatLocked = true; chatError = null; nodeType = 'group_thread'; listMode = 'normal'; participants = []; eventChatView = null; servedOrder = 'stored';
+    createAnswer = null; extraConvs = [];
     const { epoch, key } = await groupKeyring(node.as(ben.publicKey), ben, G, memoryGroupLockStore()).prepareToSeal();
     const id = crypto.randomUUID();
     const sealed = sealLine('Working bee Saturday 9am', { myEdPrivHex: ben.privateKey, groupKey: key, groupId: G, epoch, messageId: id });
     node.lines.push({ id, author: ben.publicKey, ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata: { epoch, sender: ben.publicKey } });
     forgetGroupKeys();
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+const canvasGetContext = HTMLCanvasElement.prototype.getContext;
+const canvasToDataURL = HTMLCanvasElement.prototype.toDataURL;
+afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    HTMLCanvasElement.prototype.getContext = canvasGetContext;
+    HTMLCanvasElement.prototype.toDataURL = canvasToDataURL;
+    (window as any).Image = WindowImage;
+});
+const WindowImage = (window as any).Image;
 
 /** A page load: the group chat opened (by `openConversationId`, as Home's "Your groups" opens it). */
 async function openChat(id = G) {
@@ -164,6 +180,44 @@ async function send(composer: HTMLElement, text: string) {
 
 function readableIn(b64: string, words: string): boolean {
     try { return Buffer.from(String(b64), 'base64').toString('utf8').includes(words); } catch { return false; }
+}
+
+/** jsdom can't decode a picture: an Image that loads at once and a canvas that hands back a small JPEG (put back after each test). */
+function photoStubs() {
+    class FakeImage { width = 40; height = 30; onload: (() => void) | null = null; onerror: (() => void) | null = null; set src(_v: string) { setTimeout(() => this.onload?.(), 0); } }
+    vi.stubGlobal('Image', FakeImage);
+    (window as any).Image = FakeImage;
+    if (!(URL as any).createObjectURL) (URL as any).createObjectURL = () => 'blob:x';
+    if (!(URL as any).revokeObjectURL) (URL as any).revokeObjectURL = () => {};
+    HTMLCanvasElement.prototype.getContext = (() => ({ drawImage() {} })) as any;
+    HTMLCanvasElement.prototype.toDataURL = (() => 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ==') as any;
+}
+
+/** A photo picked by 📎 in the open chat. */
+async function attachPhoto() {
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input).toBeTruthy();
+    const file = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], 'gate.jpg', { type: 'image/jpeg' });
+    await act(async () => { fireEvent.change(input, { target: { files: [file] } }); });
+    await act(async () => { await new Promise((r) => setTimeout(r, 300)); });
+}
+
+/** Ana taps "Message" on Eve's profile; no DM with Eve is listed; the node answers the create with the held group's id, Mal its peer. */
+async function plantByDeepLink() {
+    listMode = 'omit';
+    createAnswer = { conversation: { id: G, type: 'dm', name: null, participants: [ana.publicKey, mal.publicKey], createdBy: ana.publicKey, peerCallsign: 'Eve', createdAt: '2026-10-01T00:00:00Z' } };
+    render(<MessagesPage identity={me} openConversationId={eve.publicKey} />);
+    await waitFor(() => expect(createConversationApi).toHaveBeenCalled(), { timeout: 5000 });
+    await act(async () => { await new Promise((r) => setTimeout(r, 100)); });
+}
+
+/** What Mal's key makes of a DM-sealed send (its body, or its photo), or null when it doesn't open. */
+function malOpens(call: any[], part: 'body' | 'attachment' = 'body'): string | null {
+    const [convId, author, ciphertext, nonce, , attachment, metadata, messageId] = call;
+    const box = part === 'body' ? { ciphertext, nonce } : { ciphertext: attachment?.data, nonce: attachment?.nonce };
+    try {
+        return openDmLine(box, { myEdPrivHex: mal.privateKey, peerEdPubHex: ana.publicKey }, { conversationId: convId, senderPubHex: author, messageId, part, metadata }).text;
+    } catch { return null; }
 }
 
 const LOCKED_NOTICE = "End-to-end encrypted: only this group's members can read it. The node sees who wrote, when, and who was mentioned.";
@@ -397,5 +451,122 @@ describe('a held group\'s id by every door (review of #1816)', () => {
         expect(editCall.body.nonce.startsWith('group-xc20p-v1:')).toBe(true);
         expect(sendMessageApi).not.toHaveBeenCalled();
         expect(editMessageApi).not.toHaveBeenCalled();
+    });
+});
+
+describe('the node\'s answer to "start a DM" never makes a held group a DM (confirmation review of #1816, finding 1)', () => {
+    /** The store unreadable on the next load, and the node now lists the held group as a DM with Mal. */
+    async function reopenAsMalsDmDuringOutage() {
+        reload();
+        vi.clearAllMocks();
+        vi.stubGlobal('indexedDB', lockStoreUnreadable(mem));
+        listMode = 'normal'; nodeType = 'dm'; participants = [ana.publicKey, mal.publicKey];
+        render(<MessagesPage identity={me} openConversationId={G} />);
+        const composer = await screen.findByPlaceholderText('Message...', {}, { timeout: 5000 });
+        await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+        return composer;
+    }
+
+    it('C0: held, the store reads; "Message" on Eve, and the node answers with the held group\'s id: nothing opens, it says why, nothing is remembered', async () => {
+        await openChat();
+        reload();
+        await plantByDeepLink();
+        expect(await screen.findByText(GROUP_HOLD_STARTED_DM_TEXT)).toBeTruthy();
+        expect(screen.queryByPlaceholderText('Message...')).toBeNull();
+        expect(isKnownDmConversation(G)).toBe(false);
+        expect(sendMessageApi).not.toHaveBeenCalled();
+    });
+
+    it('C0b: the same through "✉️ New DM" → Eve: nothing opens, it says why, nothing is remembered', async () => {
+        await openChat();
+        reload();
+        listMode = 'omit';
+        createAnswer = { conversation: { id: G, type: 'dm', name: null, participants: [ana.publicKey, mal.publicKey], createdBy: ana.publicKey, peerCallsign: 'Eve', createdAt: '2026-10-01T00:00:00Z' } };
+        render(<MessagesPage identity={me} />);
+        fireEvent.click(await screen.findByText('✉️ New DM', {}, { timeout: 5000 }));
+        fireEvent.click(await screen.findByText('Eve', {}, { timeout: 5000 }));
+        await waitFor(() => expect(createConversationApi).toHaveBeenCalled(), { timeout: 5000 });
+        expect(await screen.findByText(GROUP_HOLD_STARTED_DM_TEXT)).toBeTruthy();
+        expect(isKnownDmConversation(G)).toBe(false);
+    });
+
+    it('C1: after that answer, the lock store unreadable and the group listed as a DM with Mal: a line is refused, nothing reaches Mal', async () => {
+        await openChat();
+        reload();
+        await plantByDeepLink();
+        const composer = await reopenAsMalsDmDuringOutage();
+        await send(composer, 'C1 the gate code is 4321');
+        await act(async () => { await new Promise((r) => setTimeout(r, 300)); });
+        const call = vi.mocked(sendMessageApi).mock.calls[0];
+        expect(call ? malOpens(call) : null).toBeNull();
+        expect(call).toBeUndefined();
+        expect(screen.getByText(GROUP_HOLD_UNREAD_TEXT)).toBeTruthy();
+        expect(node.lines).toHaveLength(1);
+    });
+
+    it('C2: the same with a photo by 📎: refused, nothing reaches Mal', async () => {
+        await openChat();
+        reload();
+        await plantByDeepLink();
+        await reopenAsMalsDmDuringOutage();
+        photoStubs();
+        await attachPhoto();
+        const call = vi.mocked(sendMessageApi).mock.calls[0];
+        expect(call ? malOpens(call, 'attachment') : null).toBeNull();
+        expect(call).toBeUndefined();
+        expect(screen.getByText(GROUP_HOLD_UNREAD_TEXT)).toBeTruthy();
+    });
+
+    it('C3 (no answer to start a DM): the lock store unreadable and the held group listed as a DM with Mal: a photo is refused, and it says why', async () => {
+        await openChat();
+        await reopenAsMalsDmDuringOutage();
+        photoStubs();
+        await attachPhoto();
+        expect(sendMessageApi).not.toHaveBeenCalled();
+        expect(screen.getByText(GROUP_HOLD_UNREAD_TEXT)).toBeTruthy();
+    });
+
+    it('C4 (control): a real DM this browser knows, the lock store unreadable: its photo goes, sealed to the DM\'s peer', async () => {
+        const D = 'd0d0d0d0-1111-4222-8333-444455556666';
+        localStorage.setItem('beanpool_dm_conversations_seen', JSON.stringify([D]));
+        vi.stubGlobal('indexedDB', lockStoreUnreadable(mem));
+        photoStubs();
+        listMode = 'omit';
+        extraConvs = [{ id: D, type: 'dm', name: null, participants: [ana.publicKey, mal.publicKey], createdBy: ana.publicKey, createdAt: '2026-10-01T00:00:00Z', unreadCount: 0, peerCallsign: 'Mal' }];
+        render(<MessagesPage identity={me} openConversationId={D} />);
+        await screen.findByPlaceholderText('Message...', {}, { timeout: 5000 });
+        await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+        await attachPhoto();
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalled(), { timeout: 3000 });
+        const call = vi.mocked(sendMessageApi).mock.calls[0];
+        expect(call[4]).toBe('image');
+        expect(malOpens(call, 'attachment')).toMatch(/^data:image\/jpeg;base64,/);
+    });
+
+    it('C5 (the director\'s call): a DM started while the lock store can\'t be read shows, but isn\'t remembered, so nothing goes until the store reads; then it is a DM', async () => {
+        const D = 'e1e1e1e1-1111-4222-8333-444455556666';
+        const dmWithEve = { id: D, type: 'dm', name: null, participants: [ana.publicKey, eve.publicKey], createdBy: ana.publicKey, createdAt: '2026-10-01T00:00:00Z', unreadCount: 0, peerCallsign: 'Eve' };
+        vi.stubGlobal('indexedDB', lockStoreUnreadable(mem));
+        listMode = 'omit';
+        createAnswer = { conversation: dmWithEve };
+        render(<MessagesPage identity={me} />);
+        fireEvent.click(await screen.findByText('✉️ New DM', {}, { timeout: 5000 }));
+        fireEvent.click(await screen.findByText('Eve', {}, { timeout: 5000 }));
+        const composer = await screen.findByPlaceholderText('Message...', {}, { timeout: 5000 });
+        expect(isKnownDmConversation(D)).toBe(false);
+        await send(composer, 'C5 hello Eve');
+        expect(await screen.findByText(GROUP_HOLD_UNREAD_TEXT)).toBeTruthy();
+        expect(sendMessageApi).not.toHaveBeenCalled();
+
+        reload();
+        vi.stubGlobal('indexedDB', mem);
+        extraConvs = [dmWithEve];
+        render(<MessagesPage identity={me} openConversationId={D} />);
+        const again = await screen.findByPlaceholderText('Message...', {}, { timeout: 5000 });
+        await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+        expect(isKnownDmConversation(D)).toBe(true);
+        await send(again, 'C5 hello Eve');
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalled(), { timeout: 3000 });
+        expect(String(vi.mocked(sendMessageApi).mock.calls[0][3]).startsWith('x25519-xc20p-v2:')).toBe(true);
     });
 });

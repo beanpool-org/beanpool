@@ -1836,14 +1836,16 @@ footer {
 .hero-door p { font-size: 0.86rem; color: var(--text-secondary); line-height: 1.45; margin: 0; overflow-wrap: anywhere; }
 
 /* 44px to tap at 320px with 130% text, with the page looking as it did */
-/* privacy and data deletion keep their own nav: on a phone its logo shrinks as the menu pages' does, so Get Started isn't cut off */
+/* privacy and data deletion keep their own nav. Get Started was cut off at the right edge; on a phone the word beside the
+   bean goes, as on the guide pages (the bean still goes home), and Get Started stays on one line. */
 @media (max-width: 480px) {
-    #navbar:not(.guide-nav) .nav-inner:not(.has-menu) { padding: 0.6rem 1rem; gap: 0.5rem; }
-    #navbar:not(.guide-nav) .nav-inner:not(.has-menu) .logo img { width: 40px !important; height: 40px !important; }
-    #navbar:not(.guide-nav) .nav-inner:not(.has-menu) .logo { font-size: 1.2rem; gap: 0.35rem; min-width: 0; }
+    #navbar:not(.guide-nav) .nav-inner:not(.has-menu) { gap: 0.5rem; }
+    #navbar:not(.guide-nav) .nav-inner:not(.has-menu) .logo span { display: none; }
+    #navbar:not(.guide-nav) .nav-inner:not(.has-menu) .nav-cta { white-space: nowrap; }
 }
 /* Guide pages (their other styles are in each page, from packages/beanpool-guide) */
-@media (max-width: 768px) { .guide-nav .nav-links a { min-width: 44px; justify-content: center; } }
+/* the nav links: 12px wider to tap (Help was 42px), the negative margin keeps every word where it was */
+@media (max-width: 768px) { .guide-nav .nav-links a { padding-left: 6px; padding-right: 6px; margin-left: -6px; margin-right: -6px; } }
 .guide .guide-toc a { min-width: 44px; }
 /* the breadcrumb links over each guide page: 44px tall to tap, while the line keeps its height */
 .guide .kicker a { display: inline-block; padding: 12px 0; margin: -12px 0; }

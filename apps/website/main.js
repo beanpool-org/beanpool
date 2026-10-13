@@ -116,7 +116,7 @@ function element(tag, style, content) {
 function contact(value, href) {
     if (!href) return document.createTextNode(value);
     // 44px to tap, a box of its own: no margin pulls a neighbour's box over it. A long address breaks anywhere so it fits.
-    const a = element('a', 'color:#10b981; text-decoration:none; display:inline-block; box-sizing:border-box; min-height:44px; padding:13px 0; line-height:18px; min-width:44px; overflow-wrap:anywhere;', value);
+    const a = element('a', 'color:#10b981; text-decoration:none; display:inline-block; position:relative; box-sizing:border-box; min-height:44px; padding:13px 0; line-height:18px; min-width:44px; overflow-wrap:anywhere;', value);
     a.setAttribute('href', href);
     return a;
 }
@@ -139,7 +139,7 @@ function directoryPopup(row) {
     }
     if (row.url) {
         box.appendChild(element('br'));
-        const visit = element('a', 'color:#10b981; text-decoration:none; font-size:0.85em; display:inline-block; box-sizing:border-box; min-height:44px; padding:13px 0; line-height:18px; font-weight:600;', `Visit ${new URL(row.url).host} →`);
+        const visit = element('a', 'color:#10b981; text-decoration:none; font-size:0.85em; display:inline-block; position:relative; box-sizing:border-box; min-height:44px; padding:13px 0; line-height:18px; font-weight:600;', `Visit ${new URL(row.url).host} →`);
         visit.setAttribute('href', row.url);
         visit.setAttribute('target', '_blank');
         visit.setAttribute('rel', 'noopener');
@@ -150,10 +150,11 @@ function directoryPopup(row) {
 
 /** A popup fits inside the map and opens below the zoom buttons (they sit over popups), so every link in it can be tapped. */
 function popupOptions() {
-    const zoom = nodesMap.zoomControl.getContainer();
+    const map = document.getElementById('nodes-map');
+    const zoom = map.querySelector('.leaflet-control-zoom');
     return {
-        maxWidth: Math.max(120, Math.min(300, nodesMap.getSize().x - 64)),
-        autoPanPaddingTopLeft: L.point(5, zoom.offsetTop + zoom.offsetHeight + 5),
+        maxWidth: Math.max(120, Math.min(300, map.clientWidth - 64)),
+        autoPanPaddingTopLeft: [5, zoom ? zoom.offsetTop + zoom.offsetHeight + 5 : 5],
     };
 }
 

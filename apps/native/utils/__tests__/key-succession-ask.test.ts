@@ -5,9 +5,10 @@
  *   is asking it to sign for keys the member never saw (it would then serve whichever chain it liked), so it signs none
  *   and each is asked about at sign-in;
  * - the sign-in prompt waits for a re-key this run just completed, so a member is never asked about the one they just did;
- * - "Yes, that was me" signs the one date the prompt showed;
+ * - "Yes, that was me" signs the one row the prompt showed, never one the node swaps in before the tap;
  * - one statement per key per node, ever, remembered on the phone; no prompt when the node lists more than one re-key,
- *   attested or not; "Not me" is remembered, so the prompt doesn't come back (review of #1826, NB5);
+ *   attested or not; "Not me" is remembered for the key on that node, so the prompt doesn't come back with another date
+ *   or another old key (review of #1826, NB5 and its remainder);
  * - "Not me" offers only a well-formed contact the owner published.
  *
  * The node is a stand-in here (signedGet/signedPost mocked); the statements are core's real ones, checked as the node
@@ -128,6 +129,39 @@ describe('when the phone signs for an old key', () => {
         await declineRekey(URL_BASE, me as any, ask!);
         expect(await rekeyToAsk(URL_BASE, me as any)).toBeNull();
         expect(node.posts).toHaveLength(0);
+    });
+
+    it('review of #1826 NB5\'s remainder: after "Not me", a node that changes the date or names another old key gets no prompt', async () => {
+        const me = person();
+        const r = { pubkey: person().publicKey, at: '2026-10-03T04:00:00.000Z', attested: false };
+        node.rows = [r];
+        await declineRekey(URL_BASE, me as any, (await rekeyToAsk(URL_BASE, me as any))!);
+        node.rows = [{ ...r, at: '2026-10-05T04:00:00.000Z' }];
+        expect(await rekeyToAsk(URL_BASE, me as any)).toBeNull();
+        node.rows = [{ pubkey: person().publicKey, at: '2026-10-03T04:00:00.000Z', attested: false }];
+        expect(await rekeyToAsk(URL_BASE, me as any)).toBeNull();
+        expect(node.posts).toHaveLength(0);
+        // Another key on this phone (or this key on another node) is its own memory: it is still asked.
+        expect((await rekeyToAsk(URL_BASE, person() as any))?.pubkey).toBe(node.rows[0].pubkey);
+        expect((await rekeyToAsk('https://other.test', me as any))?.pubkey).toBe(node.rows[0].pubkey);
+    });
+
+    it('review of #1826 NB5\'s remainder: "Yes" signs only the row the prompt showed; a node that swaps it before the tap gets nothing', async () => {
+        const me = person();
+        const shown = { pubkey: person().publicKey, at: '2026-10-03T04:00:00.000Z', attested: false };
+        node.rows = [shown];
+        const ask = await rekeyToAsk(URL_BASE, me as any);
+        expect(ask?.pubkey).toBe(shown.pubkey);
+        // Between the prompt and the tap, the node lists another old key, then the same key with another date.
+        node.rows = [{ pubkey: person().publicKey, at: shown.at, attested: false }];
+        expect(await attestOwnRekeys(URL_BASE, me as any, [ask!])).toBe(0);
+        node.rows = [{ ...shown, at: '2026-10-04T04:00:00.000Z' }];
+        expect(await attestOwnRekeys(URL_BASE, me as any, [ask!])).toBe(0);
+        expect(node.posts).toHaveLength(0);
+        // The row the prompt showed, unchanged: signed.
+        node.rows = [{ ...shown }];
+        expect(await attestOwnRekeys(URL_BASE, me as any, [ask!])).toBe(1);
+        expect(node.posts.map((p) => [p.oldPubkey, p.at])).toEqual([[shown.pubkey, shown.at]]);
     });
 
     it('"Not me" offers only a contact that is a plain address or number', async () => {

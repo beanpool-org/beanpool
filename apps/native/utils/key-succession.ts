@@ -13,8 +13,9 @@
  *     the member never saw, and each is left to the prompt;
  *   - a later sign-in, when GET /api/community/me lists exactly one re-key to this key, with `attested: false` (an
  *     admin-path re-key, or one an older app completed): only after §6's prompt, and "Not me" signs nothing and is
- *     remembered, so the prompt doesn't come back to wear the member down. The prompt waits for a re-key this run just
- *     completed, so a member is never asked about the one they just did.
+ *     remembered for this key on this node, whatever old key or date the node names next, so the prompt doesn't come
+ *     back to wear the member down. The prompt waits for a re-key this run just completed, so a member is never asked
+ *     about the one they just did.
  *
  * One statement per key per node, ever, remembered on this phone (review of #1826, NB5): an honest node lists exactly
  * one re-key to a key (completeRekey refuses a new key that is a member's or was invalidated), so a node listing more,
@@ -81,14 +82,13 @@ export async function rekeysToMe(nodeUrl: string, identity: BeanPoolIdentity): P
     }
 }
 
-/** What this phone remembers of one key on one node: the old key it signed for, and the re-keys the member said "Not me" to. */
+/** What this phone remembers of one key on one node: the old key it signed for, or the one the member said "Not me" to. */
 interface SuccessionMemory {
     signed?: string;
-    declined?: string[];
+    declined?: string;
 }
 const memoryKey = (nodeUrl: string, identity: Pick<BeanPoolIdentity, 'publicKey'>) =>
     `beanpool_key_succession:${nodeUrl.replace(/\/+$/, '')}|${identity.publicKey}`;
-const rowId = (r: Pick<RekeyedFrom, 'pubkey' | 'at'>) => `${r.pubkey}|${r.at}`;
 
 async function readMemory(nodeUrl: string, identity: Pick<BeanPoolIdentity, 'publicKey'>): Promise<SuccessionMemory | null> {
     try {
@@ -105,22 +105,25 @@ async function writeMemory(nodeUrl: string, identity: Pick<BeanPoolIdentity, 'pu
     await AsyncStorage.setItem(memoryKey(nodeUrl, identity), JSON.stringify({ ...m, ...patch })).catch(() => { });
 }
 
-/** "Not me" (§6): this re-key is never asked about again on this phone. */
+/**
+ * "Not me" (§6): this key is not asked again on this node, by this phone. Not per (old key, date): an honest node lists
+ * one re-key to a key, ever, so a node that changes the date or names another old key gets no new prompt (review of
+ * #1826, NB5's remainder).
+ */
 export async function declineRekey(nodeUrl: string, identity: BeanPoolIdentity, r: RekeyedFrom): Promise<void> {
-    const m = (await readMemory(nodeUrl, identity)) ?? {};
-    await writeMemory(nodeUrl, identity, { declined: [...new Set([...(m.declined ?? []), rowId(r)])] });
+    await writeMemory(nodeUrl, identity, { declined: r.pubkey });
 }
 
 /**
  * The one re-key this key may still sign for on this node, or null: the node lists exactly one, unconfirmed; this phone
- * has signed none here; and (for the prompt) the member hasn't said "Not me" to it. Null when the memory can't be read.
+ * has signed none here; and (for the prompt) the member hasn't said "Not me" here. Null when the memory can't be read.
  */
 async function theOneToSign(nodeUrl: string, identity: BeanPoolIdentity, opts: { declinedCounts: boolean }): Promise<RekeyedFrom | null> {
     const listed = await rekeysToMe(nodeUrl, identity);
     if (listed.length !== 1 || listed[0].attested) return null;
     const m = await readMemory(nodeUrl, identity);
     if (!m || m.signed) return null;
-    if (opts.declinedCounts && (m.declined ?? []).includes(rowId(listed[0]))) return null;
+    if (opts.declinedCounts && m.declined) return null;
     return listed[0];
 }
 

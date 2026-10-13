@@ -46,7 +46,7 @@ import { isNameableAccount } from './engine/member-key.js';
 import { db, writeTombstone } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
-import { isNodeOwner } from './engine/node-roles.js';
+import { isNodeOwner, noteNodeRoleBack, type NodeRole, type RoleChangeBy } from './engine/node-roles.js';
 import { unmutedRecipients } from './engine/chat-mutes.js';
 import { suspendedOnlyByRekeyCode } from './engine/member-wizards.js';
 import { assertPlainTablesWritable } from './config/node-role.js';
@@ -1255,7 +1255,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
     if (decision.effect === 'keep_suspension' && (!decisionsOn() || madeWithoutVote(decision))
         && (decision.status === 'open' || decision.status === 'passed')) {
         const why = decisionsOn() ? NO_VOTE_SUSPENSION_MADE_ENDED : NO_VOTE_SUSPENSION_ENDED;
-        closeUnkeptSuspension(decision, 'unresolved', why, now);
+        closeUnkeptSuspension(decision, 'unresolved', why, now, { actor: 'SYSTEM', how: 'the suspension ended' });
         return { success: false, status: 'unresolved', error: why };
     }
 
@@ -1336,7 +1336,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     FROM node_roles WHERE member_pubkey = ?
                 `).run(decisionId, decision.subject!);
                 // Immediately suspend and freeze member
-                setUserStatusRow(decision.subject!, 'disabled');
+                setUserStatusRow(decision.subject!, 'disabled', { actor: COMMUNITY_DECISION_ACTOR, how: 'suspended for removal' });
                 db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(decision.subject!);
                 db.prepare(`
                     UPDATE decisions SET
@@ -1384,7 +1384,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
 
             switch (decision.effect) {
                 case 'suspend_member': {
-                    setUserStatusRow(decision.subject!, 'disabled');
+                    setUserStatusRow(decision.subject!, 'disabled', { actor: COMMUNITY_DECISION_ACTOR, how: 'suspended' });
                     break;
                 }
                 case 'unsuspend_member':
@@ -1407,7 +1407,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     for (const cd of cancelledDecisions) {
                         cancelledDecisionIds.push(cd.id);
                         // The community reinstated them: the role the removal held aside comes back too.
-                        restoreSuspendedNodeRole(cd.id);
+                        restoreSuspendedNodeRole(cd.id, { actor: COMMUNITY_DECISION_ACTOR, how: 'reinstated' });
                     }
                     break;
                 }
@@ -1711,12 +1711,12 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
             && getMember(decision.subject)?.status === 'disabled') {
             setUserStatusRow(decision.subject, 'active');
             db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(decision.subject);
-            restoreSuspendedNodeRole(decision.id);
+            restoreSuspendedNodeRole(decision.id, { actor: adminPubkey, how: 'a removal halted' });
         }
         // Halting the ratifying vote takes away the only thing that could keep an emergency suspension,
         // so it lifts — an admin can't park a suspension forever by stopping its vote.
         if (decision.effect === 'keep_suspension') {
-            liftEmergencySuspensionRow(decision);
+            liftEmergencySuspensionRow(decision, { actor: adminPubkey, how: "the suspension's vote halted" });
         }
     })();
 
@@ -1865,20 +1865,21 @@ function dropSuspendedNodeRole(decisionId: string): void {
 /**
  * Give back the node role a suspension (emergency, or a removal's grace window) held aside — the same role, grant record and break-glass
  * hash. The session epoch moves on by one, so admin sessions opened before the suspension stay dead and the
- * member signs in again. Call inside a transaction, after the member is active again.
+ * member signs in again. Call inside a transaction, after the member is active again. The owners are told, as by `by`.
  */
-function restoreSuspendedNodeRole(decisionId: string): void {
+function restoreSuspendedNodeRole(decisionId: string, by: RoleChangeBy): void {
     const held = db.prepare('SELECT * FROM suspended_node_roles WHERE decision_id = ?').get(decisionId) as {
         member_pubkey: string; role: string; granted_at: string | null; granted_by: string | null;
         session_epoch: number; break_glass_hash: string | null;
     } | undefined;
     dropSuspendedNodeRole(decisionId);
     if (!held) return;
-    db.prepare(`
+    const back = db.prepare(`
         INSERT INTO node_roles (member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
         VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(member_pubkey) DO NOTHING
     `).run(held.member_pubkey, held.role, held.granted_at, held.granted_by, held.session_epoch + 1, held.break_glass_hash);
+    if (back.changes > 0) noteNodeRoleBack(held.member_pubkey, held.role as NodeRole, by);
     noteTakeoverInputsChanged(`${held.role} role given back`);
 }
 
@@ -1889,7 +1890,7 @@ function restoreSuspendedNodeRole(decisionId: string): void {
  * role they held. Held by a pending removal, the role moves to that removal, so halting it gives the role
  * back; held by a passed suspension, the community has acted and the role stays gone.
  */
-function liftEmergencySuspensionRow(decision: Decision): boolean {
+function liftEmergencySuspensionRow(decision: Decision, by: RoleChangeBy): boolean {
     if (!decision.subject) return false;
     const row = db.prepare('SELECT status FROM members WHERE public_key = ?').get(decision.subject) as { status: string } | undefined;
     const heldElsewhere = row?.status === 'disabled' && db.prepare(`
@@ -1919,17 +1920,17 @@ function liftEmergencySuspensionRow(decision: Decision): boolean {
         return false;
     }
     setUserStatusRow(decision.subject, 'active');
-    restoreSuspendedNodeRole(decision.id);
+    restoreSuspendedNodeRole(decision.id, by);
     return true;
 }
 
 /**
  * Close a "Keep this suspension?" Decision that did not pass and lift the suspension, atomically.
  */
-function closeUnkeptSuspension(decision: Decision, status: 'failed' | 'unresolved', why: string, nowIso: string): void {
+function closeUnkeptSuspension(decision: Decision, status: 'failed' | 'unresolved', why: string, nowIso: string, by: RoleChangeBy): void {
     let lifted = false;
     db.transaction(() => {
-        lifted = liftEmergencySuspensionRow(decision);
+        lifted = liftEmergencySuspensionRow(decision, by);
         db.prepare(`
             UPDATE decisions SET status = ?, execution_reason = ?, updated_at = ? WHERE id = ?
         `).run(status, `${why}. ${lifted ? 'The suspension has been lifted.' : 'The member was already restored or is held by another Decision.'}`, nowIso, decision.id);
@@ -2007,7 +2008,7 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
             SELECT ?, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash
             FROM node_roles WHERE member_pubkey = ?
         `).run(id, subjectPubkey);
-        setUserStatusRow(subjectPubkey, 'disabled');
+        setUserStatusRow(subjectPubkey, 'disabled', { actor: adminActor, how: 'suspended' });
         db.prepare(`
             INSERT INTO decisions (
                 id, author_pubkey, title, description, touches, effect, subject, params,
@@ -2080,7 +2081,7 @@ export function adminLiftSuspension(subjectPubkey: string, adminActor: string): 
     db.transaction(() => {
         setUserStatusRow(subjectPubkey, 'active');
         for (const k of openKeeps) {
-            restoreSuspendedNodeRole(k.id);
+            restoreSuspendedNodeRole(k.id, { actor: adminActor, how: 'the suspension lifted' });
             db.prepare(`
                 UPDATE decisions SET status = 'admin_halted', admin_halted_at = ?, admin_halted_by = ?,
                     admin_halt_reason = 'An admin lifted the suspension before the vote closed', updated_at = ?
@@ -2148,7 +2149,8 @@ export function tickDecisions(asOfTime?: number): {
                 const why = !tally.quorumMet
                     ? `Quorum not met (${tally.totalVoters}/${tally.quorumRequired})`
                     : `Threshold not met (${(tally.supportRatio * 100).toFixed(1)}% < ${(tally.thresholdRequired * 100).toFixed(1)}%)`;
-                closeUnkeptSuspension(getDecision(r.id)!, tally.quorumMet ? 'failed' : 'unresolved', why, now);
+                closeUnkeptSuspension(getDecision(r.id)!, tally.quorumMet ? 'failed' : 'unresolved', why, now,
+                    { actor: COMMUNITY_DECISION_ACTOR, how: 'the suspension not kept' });
                 continue;
             }
 

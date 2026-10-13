@@ -201,11 +201,11 @@ export function RekeyMemberWizard({
                 } else if (!pending || (pending.code && pending.code !== issuedCode)) {
                     // This code is gone from the node: replaced by a new code on another screen (#1783 review D3), run out
                     // (D4: the node marks it before this page's clock does), or stopped or cancelled there (C3). The
-                    // phones and counts the node reads now are another code's, so none of them show under this one.
+                    // phones and counts the node reads now are another code's, so none of them are taken up. The cards
+                    // and the guessing warning show only beside a live code, and the next code made here starts clean
+                    // (forgetCodeState), so nothing needs clearing here (#1783 check, finding 2).
                     const ranOut = !pending && !!expiresAt && new Date(expiresAt).getTime() - Date.now() < 60000;
                     setCodeStopped((was) => was || (pending ? 'replaced' : ranOut ? 'expired' : 'elsewhere'));
-                    setProposals([]);
-                    setUnderAttack(null);
                 } else {
                     setProposals(status.proposals ?? []);
                     setWrongNumbers(status.wrongNumbers ?? 0);

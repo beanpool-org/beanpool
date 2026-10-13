@@ -2525,7 +2525,7 @@ export const COMMUNITY_ADMIN = 'a community admin';
 export function formatResolverName(signer?: string | null): string {
     if (!signer || typeof signer !== 'string') return COMMUNITY_ADMIN;
     const s = signer.trim();
-    if (s === 'owner:password' || s === 'admin' || /^[0-9a-f]{64}$/i.test(s)) {
+    if (!s || s === 'owner:password' || s === 'admin' || /^[0-9a-f]{64}$/i.test(s)) {
         return COMMUNITY_ADMIN;
     }
     return s;

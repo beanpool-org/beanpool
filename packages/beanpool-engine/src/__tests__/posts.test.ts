@@ -26,6 +26,67 @@ describe('the words a search asks posts_fts for (#1808 review, finding 5)', () =
     });
 });
 
+describe('a word with an apostrophe on the node (#1828 check, finding 1)', () => {
+    /** The #1828 check's listings, in posts_fts as schema.sql defines it (unicode61 parts "Don't" into don, t). */
+    function apostropheBoard(): Database.Database {
+        const db = new Database(':memory:');
+        registerGeoFunctions(db);
+        db.exec(`${POSTS_FIXTURE_DDL}
+            CREATE VIRTUAL TABLE posts_fts USING fts5(title, description, search_keywords, content='posts', content_rowid='rowid');
+            INSERT INTO members (public_key, callsign) VALUES ('author1', 'Alice');`);
+        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at)
+                                VALUES (?, 'offer', 'other', ?, ?, 0, 'author1', datetime('now'))`);
+        for (const row of [
+            ['1', "L'eau de source", "Bouteilles d'eau de source, livraison locale"],
+            ['2', "Bureau d'angle", 'Grand bureau en bois'],
+            ['3', "Don't miss: garden tools", 'Spades and forks'],
+            ['4', 'Donuts and dolls', 'Handmade'],
+            ['5', "Dell'arte pottery class", 'Corso di ceramica'],
+            ['6', 'Pastel de nata', 'dont ask'],
+            ['7', "Olio d'oliva", "L'olio dell'azienda"],
+            ['8', 'Eau de cologne', 'Parfum'],
+            ['9', 'Café: l’eau minérale', 'typographic apostrophe'],
+            ['10', 'It’s a lovely bike', 'Barely ridden'],
+            ['11', 'Its own stand', 'Bike stand'],
+            ['12', "Can't stop: tomatoes", 'Too many'],
+        ]) ins.run(...row);
+        db.exec(`INSERT INTO posts_fts(posts_fts) VALUES ('rebuild');`);
+        return db;
+    }
+    /** What the phone's Market finds on the node: core's terms for the words, sent as one `q`. */
+    const found = (db: Database.Database, typed: string) =>
+        getPosts(db, { query: searchTermsFor(typed).join(' ') }).map(p => p.id).sort((a, b) => Number(a) - Number(b));
+
+    it('finds the listings that hold the word, whatever its apostrophe, and not every word that starts like it', () => {
+        const db = apostropheBoard();
+        // "dont"* alone found only 6; parted, "don"* also found Donuts (4).
+        assert.deepStrictEqual(found(db, "don't"), ['3', '6']);
+        assert.deepStrictEqual(found(db, 'Don’t'), ['3', '6']);
+        assert.deepStrictEqual(found(db, 'Donʼt'), ['3', '6']);
+        assert.deepStrictEqual(found(db, "it's"), ['10', '11']);
+        assert.deepStrictEqual(found(db, "can't"), ['12']);
+    });
+    it('asks an elided word on its own too: "l\'eau" finds "Eau de cologne", as when the word was parted', () => {
+        const db = apostropheBoard();
+        assert.deepStrictEqual(found(db, "l'eau"), ['1', '8', '9']);
+        assert.deepStrictEqual(found(db, 'l’eau'), ['1', '8', '9']);
+        assert.deepStrictEqual(found(db, "dell'arte"), ['5']);
+        assert.deepStrictEqual(found(db, "l'olio"), ['7']);
+        // A raw q (a client that sends the words as typed) is read the same way.
+        assert.deepStrictEqual(getPosts(db, { query: "L'eau" }).map(p => p.id).sort(), ['1', '8', '9']);
+    });
+    it('keeps an apostrophe inside a word, takes the ones around it off, and asks a U+02BC word as typed too', () => {
+        assert.deepStrictEqual(searchTermsOfQuery("don't"), ["don't"]);
+        assert.deepStrictEqual(searchTermsOfQuery('don’t'), ["don't"]);
+        assert.deepStrictEqual(searchTermsOfQuery("'eggs' james' ' ''"), ['eggs', 'james']);
+        assert.deepStrictEqual(searchTermsOfQuery("l'eau d'olive"), ["l'eau", 'eau', "d'olive", 'olive']);
+        assert.deepStrictEqual(searchTermsOfQuery("o'clock it's"), ["o'clock", "it's"]);
+        // unicode61 reads U+02BC as a letter: a listing typed "пʼять" holds one token.
+        assert.deepStrictEqual(searchTermsOfQuery('пʼять'), ["п'ять", 'пʼять']);
+        assert.deepStrictEqual(searchTermsOfQuery('say "eggs"'), ['say', 'eggs']);
+    });
+});
+
 describe('Posts Search Keyword Expansion', () => {
     const synonymMap: Record<string, string[]> = {
         'lemon': ['citrus', 'fruit'],

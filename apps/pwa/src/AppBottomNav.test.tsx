@@ -23,6 +23,12 @@ if (typeof window !== 'undefined') {
     }));
 }
 
+// The real store, with Take the tour again's hand-off watched (review of #1857, NB1).
+vi.mock('./lib/tour-store', async (importOriginal) => {
+    const real = await importOriginal<typeof import('./lib/tour-store')>();
+    return { ...real, askTourAgain: vi.fn(real.askTourAgain) };
+});
+
 vi.mock('./components/InstallPrompt', () => ({
     InstallPrompt: () => null,
 }));
@@ -430,5 +436,16 @@ describe('the "?" opens the guide\'s words for the tab you are on (review of #18
         fireEvent.click(screen.getByTestId('help-close'));
         await waitFor(() => expect(screen.queryByTestId('help-dialog')).toBeNull());
         expect((await openWith('sidebar-help')).getByTestId('help-title')).toHaveTextContent(commons.title!);
+    });
+
+    it('Take the tour again in the ? closes it, goes Home and asks Home to open the tour (review of #1857, NB1)', async () => {
+        const { askTourAgain } = await import('./lib/tour-store');
+        vi.mocked(askTourAgain).mockClear();
+        render(<App />);
+        await openMarket();
+        fireEvent.click((await openWith('header-help')).getByTestId('help-tour'));
+        await waitFor(() => expect(screen.queryByTestId('help-dialog')).toBeNull());
+        expect(askTourAgain).toHaveBeenCalledWith('my-user-pubkey');
+        expect(screen.queryByTestId('marketplace-page')).toBeNull();
     });
 });

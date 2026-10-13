@@ -31,8 +31,9 @@ L.control.attribution({ position: 'bottomright', prefix: false })
 const nodeIcon = L.divIcon({
     html: '<div class="map-pulse-marker"><div class="map-pulse-core"></div><div class="map-pulse-glow"></div></div>',
     className: '',
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
+    // 44px to tap; .map-pulse-marker keeps the pin where it was in a 24px box
+    iconSize: [44, 44],
+    iconAnchor: [22, 22],
 });
 
 let totalMembers = 0;
@@ -114,7 +115,8 @@ function element(tag, style, content) {
 /** A contact: a link when the value passes its check, else the value as plain text. */
 function contact(value, href) {
     if (!href) return document.createTextNode(value);
-    const a = element('a', 'color:#10b981; text-decoration:none;', value);
+    // 44px tall to tap; the negative margin keeps the line where it was
+    const a = element('a', 'color:#10b981; text-decoration:none; display:inline-block; padding:14px 0; margin:-14px 0;', value);
     a.setAttribute('href', href);
     return a;
 }
@@ -137,7 +139,7 @@ function directoryPopup(row) {
     }
     if (row.url) {
         box.appendChild(element('br'));
-        const visit = element('a', 'color:#10b981; text-decoration:none; font-size:0.85em; display:inline-block; margin-top:4px; font-weight:600;', `Visit ${new URL(row.url).host} →`);
+        const visit = element('a', 'color:#10b981; text-decoration:none; font-size:0.85em; display:inline-block; padding:14px 0; margin:-10px 0 -14px; font-weight:600;', `Visit ${new URL(row.url).host} →`);
         visit.setAttribute('href', row.url);
         visit.setAttribute('target', '_blank');
         visit.setAttribute('rel', 'noopener');

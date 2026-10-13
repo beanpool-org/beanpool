@@ -8,7 +8,7 @@
     
     --text-primary: #f8fafc;
     --text-secondary: #cbd5e1;
-    --text-muted: #64748b;
+    --text-muted: #8190a6;   /* 4.5:1 or better wherever it sits at 320px, 130% text (was #64748b: 3.5:1 on the doodle ground) */
     
     --accent: #f59e0b;      /* Ambient Amber */
     --accent-glow: rgba(245, 158, 11, 0.15);
@@ -931,6 +931,9 @@ a.logo { min-height: 44px; }
     align-items: center;
     justify-content: center;
     position: relative;
+    /* main.js gives each pin a 44px box to tap; this keeps the pin where it was in the old 24px box */
+    width: 24px;
+    margin: 10px;
 }
 .map-pulse-core {
     width: 12px;
@@ -976,6 +979,10 @@ a.logo { min-height: 44px; }
     background: rgba(11, 15, 25, 0.92) !important;
     border: 1px solid var(--border) !important;
 }
+/* 44px to tap. On a touch screen the zoom buttons grow (they touch each other, so nothing can grow unseen);
+   the popup's × keeps its place, centred in a bigger box. */
+.leaflet-touch .leaflet-bar a { width: 44px; height: 44px; line-height: 44px; }
+.leaflet-container a.leaflet-popup-close-button { top: -10px; right: -10px; width: 44px; height: 44px; font: 16px/44px Tahoma, Verdana, sans-serif; }
 
 .map-stats {
     display: flex;
@@ -1827,3 +1834,16 @@ footer {
 .hero-door .btn { width: 100%; max-width: none; min-height: 48px; height: auto; padding: 0.6rem 0.85rem; font-size: 0.95rem; font-weight: 700; white-space: normal; text-align: center; line-height: 1.3; }
 .hero-door .btn-ghost { color: var(--text-primary); }
 .hero-door p { font-size: 0.86rem; color: var(--text-secondary); line-height: 1.45; margin: 0; overflow-wrap: anywhere; }
+
+/* 44px to tap at 320px with 130% text, with the page looking as it did */
+/* privacy and data deletion keep their own nav: on a phone its logo shrinks as the menu pages' does, so Get Started isn't cut off */
+@media (max-width: 480px) {
+    #navbar:not(.guide-nav) .nav-inner:not(.has-menu) { padding: 0.6rem 1rem; gap: 0.5rem; }
+    #navbar:not(.guide-nav) .nav-inner:not(.has-menu) .logo img { width: 40px !important; height: 40px !important; }
+    #navbar:not(.guide-nav) .nav-inner:not(.has-menu) .logo { font-size: 1.2rem; gap: 0.35rem; min-width: 0; }
+}
+/* Guide pages (their other styles are in each page, from packages/beanpool-guide) */
+@media (max-width: 768px) { .guide-nav .nav-links a { min-width: 44px; justify-content: center; } }
+.guide .guide-toc a { min-width: 44px; }
+/* the breadcrumb links over each guide page: 44px tall to tap, while the line keeps its height */
+.guide .kicker a { display: inline-block; padding: 12px 0; margin: -12px 0; }

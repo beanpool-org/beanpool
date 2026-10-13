@@ -1837,9 +1837,10 @@ footer {
 .hero-door p { font-size: 0.86rem; color: var(--text-secondary); line-height: 1.45; margin: 0; overflow-wrap: anywhere; }
 
 /* 44px to tap at 320px with 130% text, with the page looking as it did */
-/* privacy and data deletion keep their own nav. Get Started was cut off at the right edge; below 341px the word beside the
-   bean goes (it would sit under Get Started; from 341px it fits), as on the guide pages (the bean still goes home), and Get Started stays on one line. */
-@media (max-width: 340px) {
+/* privacy and data deletion keep their own nav. Get Started was cut off at the right edge below 346px (at 130% text);
+   there the word beside the bean goes, as on the guide pages (the bean still goes home), and Get Started stays on one
+   line. From 346px both fit, so the word stays. */
+@media (max-width: 345px) {
     #navbar:not(.guide-nav) .nav-inner:not(.has-menu) { gap: 0.5rem; }
     #navbar:not(.guide-nav) .nav-inner:not(.has-menu) .logo span { display: none; }
     #navbar:not(.guide-nav) .nav-inner:not(.has-menu) .nav-cta { white-space: nowrap; }

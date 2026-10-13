@@ -16,7 +16,8 @@
     "web-join-check": "node e2e/web-join-check.mjs",
     "global-door-check": "node e2e/global-door-check.mjs",
     "lobby-shots": "node e2e/lobby-shots.mjs",
-    "home-check": "node e2e/home-check.mjs"
+    "home-check": "node e2e/home-check.mjs",
+    "showcase-check": "node e2e/showcase-check.mjs"
   },
   "dependencies": {
     "@beanpool/core": "workspace:*",

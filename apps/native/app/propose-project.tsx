@@ -122,7 +122,7 @@ export default function ProposeProjectModal() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar style="dark" />
+            <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             <View style={styles.header}>
                 <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Close">
                     <MaterialCommunityIcons name="close" size={28} color={colors.text.inverse} />

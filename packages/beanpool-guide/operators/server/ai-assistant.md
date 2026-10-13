@@ -1,7 +1,7 @@
 ---
 slug: ai-assistant
 title: AI assistants
-summary: Connecting your own AI assistant (Claude, ChatGPT, Cursor) to your server, what it sees and never sees, its limits, and disconnecting it.
+summary: Connecting your own AI assistant (Claude, ChatGPT, Cursor) to your server, what it sees and never sees, the suggestions you approve, its limits, and disconnecting it.
 related: access-and-security, reports-and-takedowns, backups-and-replicas, roles, what-the-server-sees
 ---
 
@@ -21,7 +21,7 @@ Under Appliance & Data, then Access & Security, **Connected assistants**:
 
 Connecting one is a new key to your server, so from the phone's Manage it is asked as an owner's other changes are: if you unlocked the phone more than 5 minutes ago, Settings says **Confirm it's you first** and you press Manage in the app again. Each member can have at most 5 assistants connected; one whose days are up doesn't count. A server on your own network with its own certificate needs the desktop app told to trust it (for Claude Desktop and Claude Code, the NODE_EXTRA_CA_CERTS setting).
 
-The other owners get a message when anyone connects or disconnects an assistant, and the alerts card shows each day's count: "AI assistants today: N calls · M connected". Connected counts the ones that can still call: not expired, and their member still an owner or admin.
+The other owners get a message when anyone connects or disconnects an assistant, and the alerts card shows each day's counts: calls, assistants connected, suggestions made and suggestions approved. Connected counts the ones that can still call: not expired, and their member still an owner or admin.
 
 ## What it can read
 
@@ -36,9 +36,23 @@ The other owners get a message when anyone connects or disconnects an assistant,
 
 An owner's assistant can also **take a backup**: a snapshot on the server, or a run to the off-box destinations. At most 2 a day, never while one is running. An admin's assistant can't.
 
+## Suggestions: you approve, it never acts
+
+An assistant can **suggest** what to do about a report: dismiss it and keep the post, remove what was reported, or restore a post hidden by reports. A suggestion changes nothing. It waits for you, the member the assistant acts for, under Triage & Moderation in Settings, which Manage in the app opens; the app's "needs you" count includes it, as a number only.
+
+Each card says which assistant suggested it and for whom, and shows **the report itself** (what the reporter and the author wrote) beside the assistant's words, so you judge the original, not the assistant's summary. The assistant's words are shown as plain text: whatever it wrote, it can't change how the card looks or add a button.
+
+- **Approve** does exactly what Settings' own button does, as you: dismissing, removing or restoring through the same step, with the same rules (a moderator's limits, the confirmations that step asks for). The log line says it came from a suggestion by that assistant. Members are told as when you act yourself.
+- **Decline** deletes it; nothing changes. An owner can decline any assistant's suggestion; only its own member can approve one.
+- Each assistant can have at most 10 suggestions waiting and make 30 a day, one per report. Once you decline one, that assistant can't suggest anything about the same report for 48 hours. A suggestion goes away after 48 hours, when its assistant is disconnected, and stops counting when its member is no longer an owner or admin.
+- If the report was dismissed or acted on since the assistant suggested dismissing it or removing what was reported, there is nothing left to approve: the card keeps only Decline.
+- While an owner has AI assistants turned off, their waiting suggestions are hidden and can't be approved. Turned back on within the 48 hours, they wait again.
+
+An assistant can't approve a suggestion, its own or anyone's, and can't reach the moderation steps itself. It can't suggest lifting a mute, answering a join request or sending an announcement yet: those stay with you.
+
 ## What it never sees
 
-Messages and chats, balances, keys, addresses, photos, the names list, logs, who made a report, a Pulse link, where backups go or any password or token. It can't change a setting, a role, a key or anyone's Beans, can't remove, suspend or mute a member, can't act on a report or a join request, can't send an announcement and can't reach another server. Those stay with you, in Settings.
+Messages and chats, balances, keys, addresses, photos, the names list, logs, who made a report, a Pulse link, where backups go or any password or token. It can't change a setting, a role, a key or anyone's Beans, can't remove, suspend or mute a member, can't act on a report itself (it can only suggest), can't answer a join request, can't send an announcement and can't reach another server. Those stay with you, in Settings.
 
 ## Member-written text is data
 

@@ -21,7 +21,7 @@ import {
     type QuizQuestion,
     type QuizResult,
 } from '@beanpool/core';
-import { colors, palette } from '../constants/colors';
+import { palette } from '../constants/colors';
 import { useTheme } from '../app/ThemeContext';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
 
@@ -201,7 +201,7 @@ export function ArchetypeQuizModal({
                         contentContainerStyle={styles.introContent}
                         showsVerticalScrollIndicator={false}
                     >
-                        <View style={styles.introEmojiWrap}>
+                        <View style={[styles.introEmojiWrap, theme === 'dark' && { backgroundColor: colors.brand.tint }]}>
                             <Text style={styles.introBigEmoji}>🌱</Text>
                         </View>
 
@@ -234,7 +234,7 @@ export function ArchetypeQuizModal({
                             }}
                         >
                             <View style={styles.modeCardHeader}>
-                                <View style={styles.modeIconWrap}>
+                                <View style={[styles.modeIconWrap, theme === 'dark' && { backgroundColor: colors.surface.subtle }]}>
                                     <Text style={{ fontSize: 22 }}>⚡</Text>
                                 </View>
                                 <View style={{ flex: 1, marginLeft: 12 }}>
@@ -395,7 +395,7 @@ export function ArchetypeQuizModal({
                                 text: `Question ${currentIndex + 1} of ${totalQuestions}`,
                             }}
                         >
-                            <View style={styles.progressTrack}>
+                            <View style={[styles.progressTrack, theme === 'dark' && { backgroundColor: colors.border.strong }]}>
                                 <View
                                     style={[
                                         styles.progressFill,

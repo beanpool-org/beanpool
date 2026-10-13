@@ -8,7 +8,8 @@
  * links are Settings paths the assistant joins to the address in its welcome), a host, a log line, or a destination's name.
  * Member-written text comes back only fenced (agent/fence.ts) and, in lists, only when `include_text` is asked for.
  *
- * Slice S1: reads, and `take_backup` for owner grants. `suggest_action` is slice S4.
+ * Slice S1: reads, and `take_backup` for owner grants. Slice S4: `suggest_action`, which changes nothing: it files a card the
+ * member approves on their phone (agent/suggestions.ts).
  */
 import os from 'node:os';
 import { db } from '../db/db.js';
@@ -38,6 +39,10 @@ import {
     admitAgentBackup, agentBackupsToday, agentCallsToday, returnAgentBackup,
     AGENT_BACKUPS_PER_DAY, AGENT_CALLS_PER_DAY, AGENT_CALLS_PER_MINUTE, AGENT_LIST_MAX,
 } from './limits.js';
+import {
+    fileSuggestion, SUGGESTION_KINDS, SUGGESTION_REASON_MAX_BYTES, SUGGESTION_WORDS, SUGGESTIONS_OPEN_MAX, SUGGESTIONS_PER_DAY,
+    type SuggestionKind,
+} from './suggestions.js';
 
 /** Who an assistant acts for: one agent token (S1) or OAuth grant (S2), read afresh on every call. */
 export interface AgentGrant {
@@ -207,7 +212,8 @@ export const AGENT_CANNOT = [
     'change settings, roles, keys or money',
     'remove or suspend a member',
     'read messages, balances, keys, addresses, photos or logs',
-    'act on a report or a join request, or send an announcement (Settings, by the admin)',
+    'approve a suggestion, or act on a report itself (the admin approves on their phone or in Settings)',
+    'answer a join request or send an announcement',
     'reach another server',
 ];
 
@@ -554,6 +560,54 @@ export const AGENT_TOOLS: AgentTool[] = [
         },
     },
 ];
+
+AGENT_TOOLS.push({
+    name: 'suggest_action',
+    title: 'Suggest a moderation action',
+    reads: 'nothing: it files a suggestion about one report (dismiss it and keep the post, remove what was reported, or restore '
+        + 'a post hidden by reports) that the member this assistant acts for approves or declines on their phone, with the report '
+        + `beside it; at most ${SUGGESTIONS_OPEN_MAX} waiting, ${SUGGESTIONS_PER_DAY} a day and one per report (none again for 48 hours about one declined), each gone after 48 hours`,
+    never: 'a change of any kind: nothing happens until a person approves it, and the assistant cannot approve',
+    write: true,
+    inputSchema: {
+        type: 'object',
+        properties: {
+            kind: { type: 'string', enum: [...SUGGESTION_KINDS], description: 'dismiss_report, remove_reported or restore_post' },
+            report_id: { type: 'string', description: 'the id from reports_list' },
+            reason: { type: 'string', maxLength: SUGGESTION_REASON_MAX_BYTES, description: 'why, in a few plain sentences the admin reads beside the report' },
+        },
+        required: ['kind', 'report_id', 'reason'],
+        additionalProperties: false,
+    },
+    outputSchema: OBJ({ id: STR, kind: STR, reportId: STR, asks: STR, expiresAt: STR, waitingFor: STR, changed: BOOL }),
+    run: (grant, args) => {
+        const kind = typeof args.kind === 'string' && (SUGGESTION_KINDS as readonly string[]).includes(args.kind) ? args.kind as SuggestionKind : null;
+        if (!kind) return { ok: false, error: `kind must be one of ${SUGGESTION_KINDS.join(', ')}.` };
+        const id = typeof args.report_id === 'string' ? args.report_id.trim().slice(0, 100) : '';
+        const r = id ? findReport(id) : null;
+        if (!r) return { ok: false, error: 'No report has that id: list them with reports_list.' };
+        const kindOf = targetKind(r);
+        if (kind === 'remove_reported' && kindOf === 'member') return { ok: false, error: 'That report is about a member, not a post: there is nothing to remove.' };
+        if (kind !== 'restore_post' && (r.status === 'reviewed' || r.status === 'actioned')) {
+            return { ok: false, error: 'That report is already closed: there is nothing to suggest about it.' };
+        }
+        if (kind === 'restore_post' && (kindOf !== 'post' || r.postHiddenByReports !== true)) {
+            return { ok: false, error: 'That report is not about a post hidden by reports: there is nothing to restore.' };
+        }
+        const filed = fileSuggestion(grant.id, kind, r.id, args.reason);
+        if (!filed.ok) return { ok: false, error: filed.error };
+        const callsign = cleanMemberText(getMember(grant.member)?.callsign ?? '', 60) || `the ${grant.role}`;
+        return {
+            ok: true, rows: 1,
+            result: {
+                id: filed.suggestion.id, kind, reportId: r.id, asks: SUGGESTION_WORDS[kind],
+                expiresAt: new Date(filed.suggestion.expiresAt).toISOString(),
+                waitingFor: `Waiting for ${callsign} to approve on their phone. Nothing has changed: say you suggested it, never that it is done.`,
+                changed: false,
+            },
+        };
+    },
+});
 
 /** The tools this grant has: an admin's grant has no owner-only tool. */
 export function toolsFor(grant: AgentGrant): AgentTool[] {

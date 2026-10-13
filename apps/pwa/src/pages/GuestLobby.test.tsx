@@ -263,6 +263,21 @@ describe('a visitor with no key on the global node', () => {
         expect(await ask()).toHaveTextContent(home.title!);
     });
 
+    it("on a node that previews Beans, the lobby's Ledger tab: its ? opens the Ledger's guide words, not Home's", async () => {
+        stubNode({ ...GLOBAL, features: { ...GLOBAL.features, showcase: true } });
+        await openLobby();
+        const { helpSheetFor, webHelpKey } = await import('@beanpool/core');
+        const { getBundledGuide } = await import('../lib/guide');
+        const words = (tab: string) => helpSheetFor(getBundledGuide() as never, webHelpKey({ tab, lobby: true }));
+        const ledger = words('ledger'), home = words('home');
+        expect(ledger.slug).toBe('your-balance');
+        expect(ledger.title).not.toBe(home.title);
+        fireEvent.click(within(screen.getByTestId('lobby-bottom-nav')).getByRole('button', { name: /Ledger/ }));
+        expect(within(screen.getByTestId('lobby-header')).getByTestId('lobby-title')).toHaveTextContent('Ledger');
+        fireEvent.click(within(screen.getByTestId('lobby-header')).getByTestId('lobby-help'));
+        expect(within(await screen.findByTestId('help-dialog')).getByTestId('help-title')).toHaveTextContent(ledger.title!);
+    });
+
     it('shows each listing without the person: no author, face or tier, the terms with no Beans, and the one line once, under the first card', async () => {
         stubNode(GLOBAL);
         await openLobby();

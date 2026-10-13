@@ -39,6 +39,8 @@ export const HELP_MAP: Readonly<Record<string, HelpTarget>> = {
     'lobby/home': { slug: 'home' },
     'lobby/market': { slug: 'browsing-the-market' },
     'lobby/map': { slug: 'map-pins' },
+    // The lobby's Ledger tab, where a node previews Beans (global showcase W2): the member's Ledger page, not Home's.
+    'lobby/ledger': { slug: 'your-balance' },
     'lobby/join': { slug: 'joining' },
 };
 

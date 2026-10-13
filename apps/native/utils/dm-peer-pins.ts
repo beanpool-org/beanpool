@@ -226,23 +226,34 @@ export interface DmPinBook {
     /**
      * Run `change` on this account's pins after every change queued before it; written through when it returns true.
      * `fresh`: storage held nothing for this account when the copy was read and nothing has been written since, so this is
-     * the first change a build with pins makes for it (the sync's seed from the phone's own rows, design §3.4 amendment).
+     * the first change a build with pins makes for it (design §3.4 amendment, the update case). The book's own seed
+     * (`seedWhenNew`) has already run on the pins then.
      */
     update(myPubkey: string, change: (pins: DmPeerPins, state: { fresh: boolean }) => boolean): Promise<boolean>;
     /** Drop every copy: the next ask reads storage again (a fresh app session). */
     forget(): void;
 }
 
-export function createDmPinBook(storage: PinStorage): DmPinBook {
+/**
+ * `seedWhenNew`: called once per account per app run, the first time the book finds storage holding nothing for it, and
+ * awaited before that read returns; what it returns is run on the pins at the account's first change, whoever makes it.
+ * So it sees the rows this phone held before this run asked for the pins, and a caller that reads the pins before it
+ * writes rows from the node (the sync pass, a push's refresh, a key resolve) never has those rows seeded (#1872 round 4).
+ * Kept when a write is refused and the copy dropped: rows written since are not the phone's own from before.
+ */
+export function createDmPinBook(storage: PinStorage, seedWhenNew?: (myPubkey: string) => Promise<(pins: DmPeerPins) => boolean>): DmPinBook {
     const copies = new Map<string, Promise<DmPeerPins>>();
     const queues = new Map<string, Promise<unknown>>();
     const absent = new Set<string>();
+    const seeds = new Map<string, Promise<(pins: DmPeerPins) => boolean>>();
     function read(myPubkey: string): Promise<DmPeerPins> {
         const key = dmPeerPinsStoreKey(myPubkey);
         const held = copies.get(key);
         if (held) return held;
-        const loading = readStoredPins(storage, myPubkey).then((r) => {
+        const loading = readStoredPins(storage, myPubkey).then(async (r) => {
             if (r.absent) absent.add(key); else absent.delete(key);
+            if (r.absent && seedWhenNew && !seeds.has(key)) seeds.set(key, seedWhenNew(myPubkey).catch(() => () => false));
+            await seeds.get(key);
             return r.pins;
         });
         copies.set(key, loading);
@@ -254,7 +265,11 @@ export function createDmPinBook(storage: PinStorage): DmPinBook {
         const turn = (queues.get(key) ?? Promise.resolve()).catch(() => {}).then(async () => {
             const copy = read(myPubkey);
             const pins = await copy;
-            if (!change(pins, { fresh: absent.has(key) })) return false;
+            const fresh = absent.has(key);
+            // The account's first change on a build with pins, whoever makes it: the phone's own rows first (the update).
+            const seed = fresh ? seeds.get(key) : undefined;
+            if (seed) (await seed)(pins);
+            if (!change(pins, { fresh }) && !seed) return false;
             try {
                 await writeDmPeerPins(storage, myPubkey, pins);
                 absent.delete(key);
@@ -267,7 +282,7 @@ export function createDmPinBook(storage: PinStorage): DmPinBook {
         queues.set(key, turn);
         return turn;
     }
-    return { read, update, forget: () => { copies.clear(); queues.clear(); absent.clear(); } };
+    return { read, update, forget: () => { copies.clear(); queues.clear(); absent.clear(); seeds.clear(); } };
 }
 
 /** The entry kept under this id: own entries only, so an id the node chose ("__proto__", "constructor") is never a pin. */
@@ -417,20 +432,26 @@ function sameHeard(a: DmHeard | undefined, b: DmHeard | undefined): boolean {
     return (a?.rekeyedAt ?? '') === (b?.rekeyedAt ?? '') && (a?.tryKeys ?? []).join() === (b?.tryKeys ?? []).join();
 }
 
+/**
+ * A first-sight pause (history placed the pin and the listing disagreed, rules 3-4) is the member's to end (design §3.4
+ * amendment 2, option H): no listing lifts it, not one naming the pinned key, and not one offering a third key in between
+ * (`firstSight` belongs to the pause, so PUPPET → Q → PUPPET keeps it). An existing phone's offer (no `firstSight`) clears
+ * when every listing names the pin again: the pin never moved, so that is harmless.
+ */
 function applyDmListingsTo(pin: DmPeerPin, named: string[][], now: string, heard?: DmHeard): boolean {
     const without = named.find((o) => o.length > 0 && !o.includes(pin.peer));
     if (!without) {
-        if (!pin.offered || named.some((o) => !o.includes(pin.peer))) return false;
+        if (!pin.offered || pin.offered.firstSight || named.some((o) => !o.includes(pin.peer))) return false;
         delete pin.offered;
         return true;
     }
     const peer = without.length === 1 ? without[0] : null;
     const rekeyedAt = peer && named.length === 1 ? heard?.rekeyedAt : undefined;
     if (pin.offered && pin.offered.peer === peer && pin.offered.nodeSays?.rekeyedAt === rekeyedAt) return false;
-    const same = pin.offered?.peer === peer ? pin.offered : undefined;
-    pin.offered = { peer, at: same ? same.at : now };
+    const pause = pin.offered;
+    pin.offered = { peer, at: pause?.peer === peer ? pause.at : now };
     if (rekeyedAt) pin.offered.nodeSays = { rekeyedAt };
-    if (same?.firstSight) pin.offered.firstSight = true;
+    if (pause?.firstSight) pin.offered.firstSight = true;
     return true;
 }
 

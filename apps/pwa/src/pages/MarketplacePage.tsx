@@ -2003,7 +2003,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <option value={CHILD_SAFETY_REASON}>{CHILD_SAFETY_REASON}</option>
                                     <option value="Other">Other</option>
                                 </select>
-                                <p className="text-xs text-nature-600 mb-2">
+                                <p className="text-xs text-nature-800 mb-2">
                                     <span className="font-bold">{CHILD_SAFETY_REASON}:</span> {CHILD_SAFETY_HINT}
                                 </p>
                                 <button

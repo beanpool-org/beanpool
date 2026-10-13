@@ -43,6 +43,7 @@ import {
 } from '../../utils/market-filters';
 import { localDaysAgo } from '../../utils/feed-sections';
 import { useNodeProfile } from '../../utils/use-node-profile';
+import { useShowcaseMode } from '../../utils/use-reader-features';
 import { marketShowsBeans, marketExtras, marketSearchDistanceParams, marketFeedSections } from '../../utils/market-global';
 import { readPhoneInterests, saveInterests } from '../../utils/home-store';
 import { anchorUrl } from '../../utils/node-post';
@@ -90,6 +91,8 @@ export default function MarketScreen() {
     // for a member's first 30 days). Local communities are unchanged: a node that says nothing trades in Beans.
     const nodeProfile = useNodeProfile();
     const showsBeans = marketShowsBeans(nodeProfile?.features);
+    // Where the node previews Decisions, a poll says what a local community's Decision does (design §1 row 7).
+    const decisionsPreview = useShowcaseMode('decisions') === 'preview';
     // Deals are escrow: off where escrow is off.
     const showsDeals = nodeProfile?.features.escrow !== false;
 
@@ -1346,6 +1349,7 @@ export default function MarketScreen() {
                     currentPubkey={identity?.publicKey}
                     onVoteSuccess={() => loadPosts()}
                     informal={pollsInformal(nodeProfile)}
+                    decisionsPreview={decisionsPreview}
                 />
             );
         }

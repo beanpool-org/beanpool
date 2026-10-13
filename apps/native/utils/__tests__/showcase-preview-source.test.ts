@@ -57,6 +57,19 @@ describe('the preview sources', () => {
         expect(ledger).toMatch(/\{!preview && <RepaymentCard \/>\}/);
     });
 
+    it('the lines and the deal action sit where design §1 rows 2, 4, 7, 8 and 9 put them, each only in preview', () => {
+        const post = read('app/post/[id].tsx');
+        expect(post).toMatch(/\{beansPreview && <View style=\{\{ paddingHorizontal: 16 \}\}><LocalCommunityMark variant="line" feature="beans" text=\{LOCAL_COMMUNITY_LINES\.price\} \/><\/View>\}/);
+        expect(post).toMatch(/\{beansPreview && <LocalCommunityMark variant="line" feature="beans" text=\{LOCAL_COMMUNITY_LINES\.price\} \/>\}/);
+        expect(post).toMatch(/escrowPreview && \(\s*<View style=\{styles\.otherPostActions\}>\s*<LocalCommunityMark variant="action" feature="escrow" label=\{LOCAL_COMMUNITY_LINES\.dealAction/);
+        expect(read('components/PollCard.tsx')).toMatch(/\{informal && decisionsPreview && <LocalCommunityMark variant="line" feature="decisions" text=\{LOCAL_COMMUNITY_LINES\.poll\} \/>\}/);
+        expect(read('app/(tabs)/market.tsx')).toMatch(/decisionsPreview=\{decisionsPreview\}/);
+        const people = read('app/(tabs)/people.tsx');
+        expect(people).toMatch(/with 12 words or a sign-in in the BeanPool app/);
+        expect(people).toMatch(/\{invitesPreview && <LocalCommunityMark variant="line" feature="invites" text=\{LOCAL_COMMUNITY_LINES\.invites\} \/>\}/);
+        expect(read('app/public-profile.tsx')).toMatch(/\{!showsBeans && beansPreview && \(\s*<View style=\{\{ marginHorizontal: 16 \}\}>\s*<LocalCommunityMark variant="line" feature="beans" text=\{LOCAL_COMMUNITY_LINES\.profile\} \/>/);
+    });
+
     it('the sample is read only by the preview components', () => {
         const hits: string[] = [];
         const walk = (dir: string) => {

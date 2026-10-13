@@ -21,6 +21,9 @@ import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/talk-views';
 import { useNodeProfile } from '../../utils/use-node-profile';
+import { useShowcaseMode } from '../../utils/use-reader-features';
+import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import { invitesOn } from '../../utils/node-profile';
 import {
     GUEST_DOOR_BUTTON, GUEST_DOOR_TEXT, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, onlyAdminsInvite, mayInviteHere,
@@ -198,6 +201,8 @@ export default function PeopleScreen() {
     // Where the node takes no invites (the worldwide community: anyone joins with a sign-in), nothing here makes one: no
     // code, QR or offline ticket, only the community's own link to share. Unknown (not heard yet, or an older node): as before.
     const makesInvites = invitesOn(nodeProfile?.features);
+    // Where the node previews invites (the showcase), how a local community grows, as the marker's line (design §1 row 8).
+    const invitesPreview = useShowcaseMode('invites') === 'preview';
     // A guest on a node that takes no invites has no code to enter: say so rather than offer a form every code fails.
     const guestNoInvites = isGuest && !makesInvites;
     // A guest of the global community joins it through its door, as the account on this phone (utils/global-join-existing.ts),
@@ -991,7 +996,8 @@ export default function PeopleScreen() {
                                 // No invites here: anyone joins with a sign-in, so the community's link is all there is to share.
                                 <>
                                     <Text style={styles.sectionHeader}>📤 Bring someone here</Text>
-                                    <Text style={styles.sectionDesc}>This community doesn’t use invites. Anyone can join it with a sign-in in the BeanPool app, so just share its link.</Text>
+                                    <Text style={styles.sectionDesc}>This community doesn’t use invites. Anyone can join it with 12 words or a sign-in in the BeanPool app, so just share its link.</Text>
+                                    {invitesPreview && <LocalCommunityMark variant="line" feature="invites" text={LOCAL_COMMUNITY_LINES.invites} />}
                                     <Pressable
                                         accessibilityRole="button"
                                         accessibilityLabel="Share this community's link"

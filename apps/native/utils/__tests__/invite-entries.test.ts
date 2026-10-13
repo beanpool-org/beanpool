@@ -65,7 +65,7 @@ describe('what the screen shares and says', () => {
     });
 
     it("a generate the node refuses because it takes no invites gives the node's words, so no offline ticket is made", () => {
-        const words = 'This community doesn’t use invites: anyone joins it with a sign-in in the BeanPool app. To bring someone here, share its link.';
+        const words = 'This community doesn’t use invites: anyone joins it with 12 words or a sign-in in the BeanPool app. To bring someone here, share its link.';
         expect(invitesOffRefusal(404, { error: words, code: 'feature_off', feature: 'invites' })).toBe(words);
         expect(invitesOffRefusal(404, { code: 'feature_off' })).toBe(INVITES_OFF_FALLBACK);
         expect(invitesOffRefusal(404, { code: 'feature_off', error: '  ' })).toBe(INVITES_OFF_FALLBACK);

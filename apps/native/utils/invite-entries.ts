@@ -16,7 +16,7 @@ export function communityLinkMessage(nodeUrl: string): string {
 }
 
 /** Said where the node's own words are missing. */
-export const INVITES_OFF_FALLBACK = 'This community doesn’t use invites: anyone joins it with a sign-in in the BeanPool app. To bring someone here, share its link.';
+export const INVITES_OFF_FALLBACK = 'This community doesn’t use invites: anyone joins it with 12 words or a sign-in in the BeanPool app. To bring someone here, share its link.';
 
 /**
  * The node's answer to a generate when it takes no invites (404 `feature_off`), in its own words, or null for any

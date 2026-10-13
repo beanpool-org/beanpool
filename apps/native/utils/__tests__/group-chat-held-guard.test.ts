@@ -91,7 +91,8 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { insertMessage, postGroupChatMessage, editMessage, editThreadMessage, clearDB, groupKeyringFor, isHeldGroupChat, sendImageMessage, joinGroupApi, approveGroupMemberApi, getConversationKind } from '../db';
+import { insertMessage, postGroupChatMessage, editMessage, editThreadMessage, clearDB, groupKeyringFor, isHeldGroupChat, sendImageMessage, joinGroupApi, approveGroupMemberApi, getConversationKind, isKnownDmConversation, leaveGroupApi } from '../db';
+import { chatRouteView } from '../chat-route';
 import { GROUP_CHAT_LOCK_LOST_TEXT, groupChatNotice, GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from '../group-chat-lines';
 import { makeGroupEpochRecord } from '@beanpool/core';
 import { forgetGroupKeys, GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
@@ -335,6 +336,34 @@ describe('group chats: a key store that can\'t be read never counts as "never he
         expect(during).toBe(`refused: ${GROUP_KEY_STORE_UNREAD_TEXT}`);
         expect(after).toBe(true);
     });
+
+    it('the store fails while the node types the held group dm and there is no row: refused with the store sentence, never remembered as a DM; once it reads, held, drawn as the group, refused (#1815 review F4)', async () => {
+        forgetGroupKeys(); chatAnswer = 'unlocked';
+        const g = groups[29];
+        held(g);
+        store.nodeType.set(g, 'dm');
+        store.failGroupReads = true;
+        const from = received.length;
+        let a: string; let b: string;
+        try {
+            a = await tryIt(() => sendImageMessage(g, 'data:image/jpeg;base64,/9j/AAAA', 'a caption while the read fails'));
+            b = await tryIt(() => insertMessage(g, who.me.publicKey, 'words while the read fails'));
+            await getConversationKind(g, { askNode: true });
+        } finally {
+            store.failGroupReads = false;
+        }
+        const remembered = (JSON.parse(store.asyncStore.get('beanpool_dm_conversations_seen') ?? '[]') as string[]).includes(g);
+        const knownDm = await isKnownDmConversation(g);
+        const heldAfter = await isHeldGroupChat(g);
+        const route = chatRouteView({ held: heldAfter, knownDm, isEventChat: false, threadKind: null });
+        const after = await tryIt(() => insertMessage(g, who.me.publicKey, 'words once it reads'));
+        await waitFor(() => writes(from).length > 0, 300);
+        console.log(`store failing, node says dm: photo ${a}; send ${b}; remembered as a DM ${remembered}; held after ${heldAfter}; route ${route}; then ${after}; writes ${JSON.stringify(writes(from))}`);
+        expect([a, b]).toEqual([`refused: ${GROUP_KEY_STORE_UNREAD_TEXT}`, `refused: ${GROUP_KEY_STORE_UNREAD_TEXT}`]);
+        expect(remembered).toBe(false);
+        expect({ heldAfter, route, after }).toEqual({ heldAfter: true, route: 'group', after: `refused: ${GROUP_CHAT_LOCK_LOST_TEXT}` });
+        expect(writes(from)).toEqual([]);
+    });
 });
 
 describe('group chats: a held group is never a DM, and a known DM never becomes held (confirmation 2 of #1788, finding 2)', () => {
@@ -372,7 +401,19 @@ describe('group chats: a held group is never a DM, and a known DM never becomes 
         expect(writes(from)).toEqual([]);
     });
 
-    it('a known DM never becomes held: a group post, edit, join or approval under its id is refused before any key is asked; its own line goes DM-sealed', async () => {
+    it('the node types a held group dm when the route asks what it is (getConversationKind, askNode): the kind and the row are group_thread, the DM list untouched (#1815 review E2)', async () => {
+        forgetGroupKeys(); chatAnswer = 'unlocked';
+        const g = groups[30];
+        held(g);
+        store.nodeType.set(g, 'dm');
+        const kind = await getConversationKind(g, { askNode: true });
+        const row = store.conversations.get(g)?.type ?? null;
+        const remembered = (JSON.parse(store.asyncStore.get('beanpool_dm_conversations_seen') ?? '[]') as string[]).includes(g);
+        console.log(`node says dm of a held group, asked by the route: kind ${kind}; row ${row}; remembered as a DM ${remembered}`);
+        expect({ kind, row, remembered }).toEqual({ kind: 'group_thread', row: 'group_thread', remembered: false });
+    });
+
+    it('a known DM never becomes held: a group post, edit, join, approval or a convenor\'s removal under its id is refused before any key is asked; its own line goes DM-sealed', async () => {
         forgetGroupKeys(); chatAnswer = 'unlocked';
         const d = randomUUID();
         store.conversations.set(d, { id: d, type: 'dm', created_by: null });
@@ -384,6 +425,7 @@ describe('group chats: a held group is never a DM, and a known DM never becomes 
         r.threadEdit = await tryIt(() => editThreadMessage(randomUUID(), 'as a group edit', { groupId: d, metadata: { epoch: 1 }, locked: true }));
         r.join = await tryIt(() => joinGroupApi(d, { joinPolicy: 'open' }));
         r.approve = await tryIt(() => approveGroupMemberApi(d, OTHER));
+        r.remove = await tryIt(() => leaveGroupApi(d, OTHER)); // a convenor's removal (#1815 review E3)
         const dm = await tryIt(() => insertMessage(d, who.me.publicKey, 'a DM line'));
         await waitFor(() => writes(from).length > 0, 1000);
         const groupRoutes = received.slice(from).filter((x) => x.path.includes(`/api/groups/${d}`)).map((x) => `${x.method} ${x.path}`);

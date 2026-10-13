@@ -120,7 +120,7 @@ describe('MarketplacePage on global with previews AND members on demand (where #
         expect(faces()).not.toContain(DIRECTORY_FACE);
         expect(api.getMembers).not.toHaveBeenCalled();
         // Every call the page made, to the node's api or to fetch: none names a sample id, and nothing was written.
-        const calls = [...Object.values(api).filter(vi.isMockFunction).flatMap(f => f.mock.calls), ...fetchSpy.mock.calls];
+        const calls = [...(Object.values(api) as unknown[]).filter(vi.isMockFunction).flatMap(f => f.mock.calls), ...fetchSpy.mock.calls];
         expect(calls.length).toBeGreaterThan(0);
         expect(calls.map(c => JSON.stringify(c)).filter(s => /\bsample-[a-z0-9]/.test(s))).toEqual([]);
         expect(fetchSpy.mock.calls.filter(([, init]) => ((init as RequestInit | undefined)?.method ?? 'GET') !== 'GET')).toEqual([]);

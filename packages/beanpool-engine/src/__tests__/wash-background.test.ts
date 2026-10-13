@@ -201,7 +201,22 @@ describe('wash analysis: paged pair totals (S1)', () => {
         fs.renameSync(file, `${file}.away`); // the node's handle keeps the file open; a new handle on the path can't
         await expect(runWashAnalysisInSlices(db)).rejects.toThrow(/snapshot did not open/);
         fs.renameSync(`${file}.away`, file);
-        expect(json((await runWashAnalysisInSlices(db)).analysis)).toBe(json(runWashTradingAnalysis(db)));
+        // The next opens one: a wash pair completed between its slices is not in what it lands, which only a snapshot gives
+        // (read through the node's own handle, the later pages of buyers would see it).
+        const atStart = json(runWashTradingAnalysis(db));
+        let wrote = false;
+        const retry = await runWashAnalysisInSlices(db, {
+            sliceMs: 0,
+            onYield: () => {
+                if (wrote) return;
+                wrote = true;
+                trade(db, 'late-a', 'late-b', 400);
+                trade(db, 'late-b', 'late-a', 390);
+            },
+        });
+        expect(wrote).toBe(true);
+        expect(json(retry.analysis)).toBe(atStart);
+        expect(runWashTradingAnalysis(db).flaggedPairs.has('late-a|late-b')).toBe(true);
         closeWashSnapshotHandle(db);
         db.close();
     });
@@ -435,6 +450,120 @@ describe('wash analysis: what floors read (S2)', () => {
                 closeWashSnapshotHandle(db);
                 db.close();
             }
+        } finally {
+            Date.now = realNow;
+            performance.now = realPerf;
+        }
+    });
+
+    it('after a quiet spell, the bound on a refresh that landed is 10 s + its step time c, not its wall time D: one go 50 ms past it, none 50 ms short', async () => {
+        for (const past of [-50, 50]) {
+            const db = fileDb();
+            const ring = seedRaceWorld(db);
+            clock = fakeClocks();
+            clock.perStep = 60;
+            const first = getWashTradingEnforcement(db);
+            // The refresh's c on these rows: every step reads the clock twice, 60 ms apart.
+            const { stepMs: c } = await runWashAnalysisInSlices(db);
+            clock.wall += WASH_KEEP_MS;
+            getWashTradingEnforcement(db); // due: refresh R starts
+            const snapshotAt = clock.wall;
+            await turn(); // R has taken its snapshot
+            completeRaceTrades(db, ring); // a ring completes after it
+            // Each turn R gives costs it 1 s of wall time: its D − c is seconds.
+            let turns = 0;
+            while (washRefreshRunning(db)) { await turn(); clock.perf += 1000; turns++; }
+            expect(turns).toBeGreaterThanOrEqual(2);
+            const landed = getWashTradingEnforcement(db);
+            expect(landed).not.toBe(first);
+            for (const k of ring) expect(qualifiedTradeValue(db, k)).toBeGreaterThan(0); // R read the rows before the ring
+            // A quiet spell: no read until 10 s + c after R's snapshot, ± 50 ms.
+            clock.wall = snapshotAt + WASH_KEEP_MS + c + past;
+            const n = washAnalysisCount(db);
+            const q = ring.map((k) => qualifiedTradeValue(db, k));
+            if (past > 0) {
+                expect(washAnalysisCount(db) - n).toBe(1); // one go at the read, as today
+                expect(q.every((v) => v === 0)).toBe(true);
+            } else {
+                expect(washAnalysisCount(db)).toBe(n); // short of the bound: the read gets R's and starts the next (due)
+                expect(getWashTradingEnforcement(db)).toBe(landed);
+                expect(washRefreshRunning(db)).not.toBeNull();
+            }
+            await washRefreshRunning(db);
+            clock.restore();
+            clock = null;
+            closeWashSnapshotHandle(db);
+            db.close();
+        }
+    });
+
+    it('race: a refresh that can no longer land holds off no one-go read (a take-over at boot, then Step 6.1: `again` chains a second)', async () => {
+        // An in-process promotion at boot (takeover.ts resumeTakeoverAtBoot): the take-over hook clears the analysis and
+        // starts refresh R_t; Step 6.1 asks for one while R_t runs, so R_2 starts when R_t ends. The first floor read finds no
+        // analysis and works one out in one go: R_t's older snapshot can no longer land. A ring forms; each refresh stalls
+        // (the clock moves, the loop does not turn) 15 s, past 10 s + c. Today's rule beside the head, as in the race above.
+        const realNow = Date.now;
+        const realPerf = performance.now;
+        const t = { jump: 0, perf: 0 };
+        const base = realNow();
+        performance.now = () => (t.perf += 60);
+        Date.now = () => base + t.jump + Math.floor(t.perf);
+        try {
+            const db = fileDb();
+            const ring = seedRaceWorld(db);
+            const members = [...ring, 'pa', 'pb', 'o1'];
+            clearWashTradingCache(db); // the take-over hook...
+            void refreshWashTradingInBackground(db); // ...and its refresh R_t
+            const rT = washRefreshRunning(db);
+            void refreshWashTradingInBackground(db); // Step 6.1 while R_t runs: again
+            await turn(); // R_t has taken its snapshot
+            const w0 = Date.now();
+            const oneGo = getWashTradingEnforcement(db); // the first floor read: none yet, one go
+            const oneGoMs = Date.now() - w0;
+            expect(oneGoMs).toBeGreaterThanOrEqual(WASH_BACKGROUND_STEP_MS);
+            expect(washRefreshRunning(db)).toBe(rT);
+            let today: { analysis: WashAnalysis; finishedAt: number } | null = null;
+            const todays = () => {
+                if (!today || Date.now() - today.finishedAt >= WASH_KEEP_MS) {
+                    const analysis = runWashTradingAnalysis(db);
+                    t.perf += oneGoMs;
+                    today = { analysis, finishedAt: Date.now() };
+                }
+                return today.analysis;
+            };
+            const read = (label: string) => {
+                const head = members.map((k) => qualifiedTradeValue(db, k));
+                const oracle = todays();
+                members.forEach((k, i) => {
+                    const allowed = qualifiedTradeValue(db, k, oracle);
+                    if (head[i] > allowed) throw new Error(`${label}: ${k} qualifies ${head[i]}, today's rule ${allowed}`);
+                });
+                return head.slice(0, ring.length);
+            };
+            read('the one go');
+            t.jump += 1_000;
+            completeRaceTrades(db, ring); // a ring of new members completes its trades
+            const n = washAnalysisCount(db);
+            for (let i = 0; i < 300; i++) { t.jump += 50; read(`R_t stalled, read ${i}`); }
+            expect(washRefreshRunning(db)).toBe(rT);
+            expect(washAnalysisCount(db) - n).toBeGreaterThanOrEqual(1); // past 10 s + c: one go at the read
+            expect(getWashTradingEnforcement(db)).not.toBe(oneGo);
+            expect(read('R_t stalled, last').every((q) => q === 0)).toBe(true);
+            // R_t ends, landing nothing; R_2 starts.
+            for (let i = 0; washRefreshRunning(db) === rT && i < 1000; i++) { await turn(); read(`R_t running, turn ${i}`); }
+            const r2 = washRefreshRunning(db);
+            expect(r2).not.toBeNull();
+            expect(r2).not.toBe(rT);
+            await turn(); // R_2 has taken its snapshot, after the last one go: it can land
+            for (let i = 0; i < 300; i++) { t.jump += 50; read(`R_2 stalled, read ${i}`); }
+            const m = washAnalysisCount(db);
+            await r2;
+            expect(washAnalysisCount(db) - m).toBe(1); // R_2's own
+            read('R_2 landed');
+            const now = runWashTradingAnalysis(db);
+            for (const k of members) expect(qualifiedTradeValue(db, k)).toBe(qualifiedTradeValue(db, k, now));
+            closeWashSnapshotHandle(db);
+            db.close();
         } finally {
             Date.now = realNow;
             performance.now = realPerf;

@@ -343,6 +343,8 @@ interface WashState {
     refreshing: Promise<void> | null;
     /** Another refresh asked for while one ran (refreshWashTradingInBackground): it starts when that one ends. */
     again: boolean;
+    /** The refresh running can no longer land: an analysis worked out in one go since it started read later rows. */
+    stale: boolean;
     /** When the hard cap was last logged (once a minute). */
     capSaidAt: number;
 }
@@ -351,7 +353,7 @@ const washState = new WeakMap<Db, WashState>();
 
 function stateOf(db: Db): WashState {
     let s = washState.get(db);
-    if (!s) washState.set(db, s = { analyses: 0, current: null, generation: 0, refreshing: null, again: false, capSaidAt: 0 });
+    if (!s) washState.set(db, s = { analyses: 0, current: null, generation: 0, refreshing: null, again: false, stale: false, capSaidAt: 0 });
     return s;
 }
 
@@ -446,8 +448,9 @@ export const WASH_HARD_CAP_MS = 60_000;
  *   background (runWashAnalysisInSlices: slices, one snapshot) that lands for the reads after. Due WASH_KEEP_MS after the
  *   last one's snapshot, less the time its turns took (its `D` less its `c`), never sooner than WASH_MIN_DUE_MS: so the
  *   next lands about WASH_KEEP_MS after the last one's rows were read, and what a read sees is at most WASH_KEEP_MS + `c`
- *   old, as when it was worked out in one go. A read that finds it older than that with no refresh running (after a quiet
- *   spell, when no read started one) works the next out in one go, as before. A snapshot WASH_HARD_CAP_MS old (refreshes
+ *   old, as when it was worked out in one go. A read that finds it older than that with no refresh running that can land
+ *   (after a quiet spell, when no read started one; or one that read its rows before an analysis worked out in one go
+ *   since) works the next out in one go, as before. A snapshot WASH_HARD_CAP_MS old (refreshes
  *   failing to land) is worked out in one go at the read, as before, and said once a minute.
  *
  * Wash pairs are also caught live, per member, whatever the analysis's age (qualifiedTradeValue); clusters are the
@@ -468,9 +471,10 @@ export function getWashTradingEnforcement(db: Db): WashAnalysis {
         }
         return analyseNow(db, s);
     }
-    // Past today's bound with no refresh coming (a quiet spell: refreshes start only at reads): one go at the read, as
-    // before, so no read gets rows older than today's rules ever served.
-    if (!s.refreshing && now - current.snapshotAt >= WASH_KEEP_MS + current.stepMs) return analyseNow(db, s);
+    // Past today's bound with no refresh coming that can land (a quiet spell: refreshes start only at reads; or the one
+    // running read its rows before an analysis worked out in one go since, so `again`'s next waits behind it): one go at
+    // the read, as before, so no read gets rows older than today's rules ever served.
+    if ((!s.refreshing || s.stale) && now - current.snapshotAt >= WASH_KEEP_MS + current.stepMs) return analyseNow(db, s);
     if (!s.refreshing && now - current.snapshotAt >= washRefreshDueMs(current)) startRefresh(db, s);
     return current.analysis;
 }
@@ -486,7 +490,8 @@ function analyseNow(db: Db, s: WashState): WashAnalysis {
     const wallStart = performance.now();
     const snapshotAt = Date.now();
     const analysis = drainSteps(timedSteps(analysisSteps(db, false, db), time));
-    land(s, { analysis, snapshotAt, finishedAt: Date.now(), stepMs: time.ms, wallMs: performance.now() - wallStart });
+    if (s.refreshing) s.stale = true;
+    land(s,{ analysis, snapshotAt, finishedAt: Date.now(), stepMs: time.ms, wallMs: performance.now() - wallStart });
     return analysis;
 }
 
@@ -512,6 +517,7 @@ function startRefresh(db: Db, s: WashState): void {
             }
         });
     s.refreshing = run;
+    s.stale = false;
 }
 
 /**

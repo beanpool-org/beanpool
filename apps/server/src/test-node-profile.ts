@@ -237,7 +237,7 @@ async function main() {
     assert((await getInfo()).body.startCommunityUrl === 'https://beanpool.org/#run-a-node', 'Start a community leads to beanpool.org/#run-a-node by default');
     assert(start.setStartCommunityUrl('https://start.example.org/how').ok && (await getInfo()).body.startCommunityUrl === 'https://start.example.org/how',
         'a self-hoster names their own page, and /api/community/info says it');
-    for (const bad of ['javascript:alert(1)', 'ftp://start.example.org', 'https://user:pw@start.example.org', 'not a url', 'https://start.example.org/a b', `https://start.example.org/${'a'.repeat(300)}`, 42, {}]) {
+    for (const bad of ['javascript:alert(1)', 'ftp://start.example.org', 'http://start.example.org/how', 'https://user:pw@start.example.org', 'not a url', 'https://start.example.org/a b', `https://start.example.org/${'a'.repeat(300)}`, 42, {}]) {
         assert(!start.setStartCommunityUrl(bad).ok && (await getInfo()).body.startCommunityUrl === 'https://start.example.org/how',
             `${JSON.stringify(bad).slice(0, 40)} is refused, and the page named stays`);
     }

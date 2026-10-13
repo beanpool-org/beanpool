@@ -109,6 +109,13 @@ describe('feature modes (design §4): live, preview, read-only, hidden', () => {
             expect(featureModeFor(f, local, { ...local, [f]: false }), f).toBe('read-only');
             // A local node whose operator turned one off: hidden.
             expect(featureModeFor(f, { ...local, [f]: false }), f).toBe('hidden');
+            // Off for the node, on for this reader (§4's BeanID row, pick 6: a verified member's Beans flip on): the
+            // reader's set decides, so live, with or without the showcase.
+            expect(featureModeFor(f, { ...global, showcase: true }, { ...global, [f]: true }), f).toBe('live');
+            expect(featureModeFor(f, global, { ...global, [f]: true }), f).toBe('live');
+            // Signed out, the node's set stands in for the reader's.
+            expect(featureModeFor(f, { ...global, showcase: true }, undefined), f).toBe('preview');
+            expect(featureModeFor(f, { ...global, showcase: true }, null), f).toBe('preview');
         }
         // An old server's features without decisions or invites: on, as the apps read them.
         expect(featureModeFor('decisions', { beans: true })).toBe('live');

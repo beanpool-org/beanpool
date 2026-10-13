@@ -28,6 +28,7 @@
  *                               phone's group chat e2e (utils/__tests__/group-chat-e2e.test.ts)
  *   groupRows {groupId, keys}   active group_members rows written straight in, with no epoch: members a node let in
  *                               without a rotation (a big group for the rotation timing; an old app's join)
+ *   rekey {oldKey, newKey}      the admin's re-key, completed (issueRekeyCode + completeRekey), as the admin screen does it
  *   sql {sql, params, all}      one statement on the node's database, for that e2e's assertions and its dishonest-node
  *                               cases (a moved author column, a rolled-back epoch, a junk wrap); `all` answers the rows
  * For apps/native/utils/__tests__/pillar-sync-nearby.test.ts (the phone's sync by area, DESIGN-global-sync-by-area §2.4):
@@ -84,6 +85,7 @@ async function main(): Promise<void> {
     const { getLocalConfig, updateLocalConfig } = await import('./config/local-config.js');
     const { forgetSyncEpochHeaderValue } = await import('./services/identity-epoch.js');
     const { NODE_PROFILE_KEY } = await import('./config/node-profile.js');
+    const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
 
     await initTls();
     initStateEngine();
@@ -176,6 +178,12 @@ async function main(): Promise<void> {
             // As a join does: GET …/members serves a snapshot keyed by the groups version (roster-snapshots.ts).
             bumpGroupsVersion();
             return (keys ?? []).length;
+        },
+        // The admin's re-key, whole (engine/member-wizards.ts issueRekeyCode + completeRekey, as the admin screen runs them):
+        // the member's rows move to the new key, and the old key's invalidated_keys row names it, unattested.
+        rekey: ({ oldKey, newKey }: { oldKey?: string; newKey?: string }) => {
+            const done = completeRekey(String(oldKey), String(newKey), issueRekeyCode(String(oldKey), '').code, '');
+            return { oldPubkey: done.oldPubkey, newPubkey: done.newPubkey };
         },
         sql: ({ sql, params, all }: { sql?: string; params?: unknown[]; all?: boolean }) => {
             const st = db.prepare(String(sql));

@@ -11,14 +11,14 @@ import { START_COMMUNITY_URL_DEFAULT } from '@beanpool/core';
 export const START_COMMUNITY_URL_KEY = 'startCommunityUrl';
 export const START_COMMUNITY_URL_MAX = 300;
 
-/** A web address an app may open: http or https, a host, no user name or password, at most 300 characters. Else null. */
+/** A web address an app may open for a stranger: https, a host, no user name or password, at most 300 characters. Else null. */
 export function cleanStartCommunityUrl(v: unknown): string | null {
     if (typeof v !== 'string') return null;
     const s = v.trim();
     if (!s || s.length > START_COMMUNITY_URL_MAX || /\s/.test(s)) return null;
     let u: URL;
     try { u = new URL(s); } catch { return null; }
-    if ((u.protocol !== 'https:' && u.protocol !== 'http:') || !u.hostname || u.username || u.password) return null;
+    if (u.protocol !== 'https:' || !u.hostname || u.username || u.password) return null;
     return s;
 }
 

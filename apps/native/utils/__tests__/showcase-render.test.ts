@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 /**
  * The showcase on the phone rendered for real (scratch/global-node/DESIGN-global-showcase-fable.md §2, §6 W3): the marker
- * (strip expanded and collapsed, pill, action, line), its sheet, the Commons and My Deals previews and Home's Your Beans
+ * (strip expanded and collapsed, pill, action, line), its sheet, the Commons preview, the member's own My Deals sheet fed
+ * Example Valley, and Home's Your Beans
  * card, in the real light and dark palettes, at 320 dp and 1.3× text. React Native's host components are plain tags
  * carrying their accessibility props and flattened style (as enterprise-decisions-render.test.ts).
  *
@@ -9,11 +10,14 @@
  * is pressed; nothing may be asked of a node, let alone written.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, createElement } from 'react';
+import Module from 'node:module';
+import { act, createElement, Fragment } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { LOCAL_COMMUNITY_SHEET, LOCAL_COMMUNITY_STRIP, LOCAL_COMMUNITY_LINES, SAMPLE_COMMUNITY } from '@beanpool/core';
 import { darkColors, lightColors, type AppColors } from '../../constants/colors';
 
+// MyDealsSheet draws the bean with require('…/bean.png'), which Metro resolves; here a number stands in, as on the phone.
+(Module as any)._extensions['.png'] = (m: { exports: unknown }) => { m.exports = 1; };
 (globalThis as any).__DEV__ = false;
 (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -32,6 +36,11 @@ vi.mock('react-native', () => {
     };
     return {
         Platform: { OS: 'android' },
+        Image: el('img'),
+        Dimensions: { get: () => ({ width: 320, height: 569, scale: 1.5, fontScale: 1.3 }) },
+        FlatList: ({ data, renderItem, keyExtractor, ListEmptyComponent }: Record<string, any>) => (data.length
+            ? createElement('div', null, data.map((item: unknown, index: number) => createElement(Fragment, { key: keyExtractor(item) }, renderItem({ item, index }))))
+            : ListEmptyComponent),
         View: el('div'), Text: el('span'), Pressable: el('button'), ScrollView: el('div'), TextInput: el('input'),
         Modal: ({ visible, children }: { visible: boolean; children?: unknown }) => (visible ? createElement('div', { 'data-modal': 'true' }, children as any) : null),
         StyleSheet: { create: (s: unknown) => s, hairlineWidth: 1, absoluteFill: {} },
@@ -52,6 +61,11 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('@expo/vector-icons', () => ({ MaterialCommunityIcons: () => createElement('span', { 'data-icon': 'true' }) }));
+vi.mock('expo-image', () => ({ Image: () => createElement('img') }));
+vi.mock('../../components/MemberAvatar', () => ({ MemberAvatar: () => createElement('span', { 'data-avatar': 'true' }) }));
+// The review form writes; in preview it must never open.
+const review = vi.hoisted(() => ({ opened: 0 }));
+vi.mock('../../components/ReviewModal', () => ({ ReviewModal: () => { review.opened++; return createElement('div', { 'data-testid': 'review-modal' }); } }));
 const theme = vi.hoisted(() => ({ dark: false }));
 vi.mock('../../app/ThemeContext', async () => {
     const { lightColors: light, darkColors: dark } = await import('../../constants/colors');
@@ -65,12 +79,16 @@ vi.mock('../../app/ThemeContext', async () => {
 vi.mock('../../components/CommonsInfoModal', () => ({
     CommonsInfoModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? createElement('div', { 'data-testid': 'commons-info' }, 'About the Commons') : null),
 }));
-// The net spy's third arm: any use of the node client is recorded.
+// The net spy's third arm: every call into the node client is recorded (My Deals imports it; its preview must call
+// nothing). `then` stays undefined, or the mocked module would read as a promise that never settles and the import hang.
 const net = vi.hoisted(() => ({ calls: [] as string[] }));
-vi.mock('../db', () => new Proxy({}, { get: (_t, k) => { if (typeof k === 'string' && k !== 'then') net.calls.push(`db.${k}`); return vi.fn(); } }));
+vi.mock('../db', () => new Proxy({}, {
+    get: (_t, k) => (k === 'then' || typeof k !== 'string' ? undefined : vi.fn(() => { net.calls.push(`db.${k}`); })),
+}));
 
 import { LocalCommunityMark, LocalCommunitySheet, markTone } from '../../components/showcase/LocalCommunityMark';
-import { CommonsPreview, DealsPreview } from '../../components/showcase/Previews';
+import { CommonsPreview } from '../../components/showcase/Previews';
+import { MyDealsSheet } from '../../components/MyDealsSheet';
 import { YourBeansPreviewCard } from '../../components/showcase/YourBeansPreviewCard';
 
 let host: HTMLDivElement;
@@ -180,12 +198,32 @@ for (const scheme of ['light', 'dark'] as const) {
             expect(host.querySelector('[data-testid="commons-info"]')).not.toBeNull();
         });
 
-        it('My Deals in preview: one deal waiting on you, one done; approving opens the sheet', async () => {
-            await render(createElement(DealsPreview));
-            for (const d of SAMPLE_COMMUNITY.deals) expect(text()).toContain(d.what);
-            expect(text()).toContain('40 Beans held safely');
-            await press(host.querySelector('[data-testid="local-community-action"]')!);
-            expect(host.querySelector('[data-testid="local-community-sheet"]')?.textContent).toContain(LOCAL_COMMUNITY_SHEET.features.escrow);
+        it("My Deals in preview is the member's own sheet fed Example Valley: the deal held safely, the one done; every press opens the sheet", async () => {
+            review.opened = 0;
+            await render(createElement(MyDealsSheet, { visible: true, identity: { publicKey: 'a-real-member' }, onClose: () => {}, preview: true }));
+            const sheetText = () => host.querySelector('[data-testid="local-community-sheet"]')?.textContent ?? '';
+            expect(host.querySelector('[data-testid="local-community-strip"]')).not.toBeNull();
+            expect(text()).toContain('Example Valley · an example member');
+            const waiting = SAMPLE_COMMUNITY.deals.find(d => d.status === 'waiting-on-you')!;
+            const done = SAMPLE_COMMUNITY.deals.find(d => d.status === 'done')!;
+            // In Progress: the deal waiting on you, its Beans held safely, the amount drawn.
+            expect(text()).toContain(waiting.what);
+            expect(text()).toContain('Held in Trust');
+            expect(text()).toContain(String(waiting.amount));
+            expect(text()).not.toMatch(/Ʀ|🔒/);
+            const card = Array.from(host.querySelectorAll('button')).filter(b => b.textContent?.includes(waiting.what)).pop()!;
+            await press(card);
+            expect(sheetText()).toContain(LOCAL_COMMUNITY_SHEET.features.escrow);
+            expect(routes.pushed).toEqual([]);
+            // History: the one done, from "an example member" to a neighbour; Review opens the sheet, never the review form.
+            await press(Array.from(host.querySelectorAll('button')).find(b => b.textContent === 'History')!);
+            expect(text()).toContain(done.what);
+            expect(text()).toContain(`- ${done.amount}`);
+            await press(Array.from(host.querySelectorAll('button')).find(b => b.textContent === 'Review')!);
+            expect(sheetText()).toContain(LOCAL_COMMUNITY_SHEET.features.escrow);
+            expect(review.opened).toBe(0);
+            expect(routes.pushed).toEqual([]);
+            expect(net.calls).toEqual([]);
         });
 
         it("Home's Your Beans card: the pill, the sentence, and the link to the example ledger", async () => {
@@ -218,7 +256,8 @@ for (const scheme of ['light', 'dark'] as const) {
         it('the net spy: every press on every preview asks nothing of a node and writes nothing', async () => {
             await render(createElement('div', null,
                 createElement(LocalCommunityMark, { variant: 'strip', feature: 'beans' }),
-                createElement(CommonsPreview), createElement(DealsPreview), createElement(YourBeansPreviewCard, { colors })));
+                createElement(CommonsPreview), createElement(YourBeansPreviewCard, { colors }),
+                createElement(MyDealsSheet, { visible: true, identity: null, onClose: () => {}, preview: true })));
             // Every button, asked afresh after each press (a sheet's own buttons appear only once a marker opens it), and
             // the strip's ✕ last, since it folds the strip's buttons away.
             const pressed = new Set<Element>();

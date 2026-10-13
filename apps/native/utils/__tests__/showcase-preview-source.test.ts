@@ -57,6 +57,21 @@ describe('the preview sources', () => {
         expect(ledger).toMatch(/\{!preview && <RepaymentCard \/>\}/);
     });
 
+    it("My Deals in preview is the member's own sheet: the sample loads before any node call, and no press reaches a review or a listing", () => {
+        const deals = read('components/MyDealsSheet.tsx');
+        expect(deals).not.toMatch(/DealsPreview|SAMPLE_COMMUNITY/);
+        const load = deals.slice(deals.indexOf('const loadData = async () => {'));
+        expect(load).toMatch(/^const loadData = async \(\) => \{\s*if \(preview\) \{\s*const sample = sampleDeals\(\);\s*setPosts\(sample\.posts\);\s*setTransactions\(sample\.transactions\);\s*return;\s*\}/);
+        // Every press that would open the review form or a listing opens the marker's sheet in preview.
+        const leads = deals.split('\n').filter(l => /setPromptReview\(\{|pathname: '\/post\/\[id\]'|router\.push\(`\/post\//.test(l) && /onPress=/.test(l));
+        expect(leads.length).toBe(4);
+        for (const l of leads) expect(l, l).toMatch(/onPress=\{preview \? openMark : /);
+        expect(deals).toMatch(/\{promptReview && !preview && \(/);
+        expect(deals).toMatch(/const identity = preview \? SAMPLE_DEALS_ME : ownIdentity;/);
+        expect(read('app/(tabs)/market.tsx')).toMatch(/preview=\{dealsPreview\}/);
+        expect(read('components/showcase/Previews.tsx')).not.toMatch(/DealsPreview/);
+    });
+
     it('the lines and the deal action sit where design §1 rows 2, 4, 7, 8 and 9 put them, each only in preview', () => {
         const post = read('app/post/[id].tsx');
         expect(post).toMatch(/\{beansPreview && <View style=\{\{ paddingHorizontal: 16 \}\}><LocalCommunityMark variant="line" feature="beans" text=\{LOCAL_COMMUNITY_LINES\.price\} \/><\/View>\}/);

@@ -93,8 +93,11 @@ export default function MarketScreen() {
     const showsBeans = marketShowsBeans(nodeProfile?.features);
     // Where the node previews Decisions, a poll says what a local community's Decision does (design §1 row 7).
     const decisionsPreview = useShowcaseMode('decisions') === 'preview';
-    // Deals are escrow: off where escrow is off.
-    const showsDeals = nodeProfile?.features.escrow !== false;
+    // Deals are escrow: off where escrow is off, unless the node previews them; then My Deals is the member's own sheet
+    // fed Example Valley (design §1 row 3, §4).
+    const escrowMode = useShowcaseMode('escrow');
+    const dealsPreview = escrowMode === 'preview';
+    const showsDeals = escrowMode !== 'hidden';
 
     // Contributions-First quest card: shown until the member has listed their
     // first Offer (the gate that unlocks posting Needs / accepting Offers), so
@@ -1771,7 +1774,8 @@ export default function MarketScreen() {
                 identity={identity}
                 onClose={() => setShowDealsSheet(false)}
                 initialTab={dealsInitialTab}
-                showsBeans={showsBeans}
+                showsBeans={showsBeans || dealsPreview}
+                preview={dealsPreview}
             />
 
             {/* The one way to post: the same chooser the map's + opens (components/NewPostTypeSheet). */}

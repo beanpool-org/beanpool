@@ -8,6 +8,8 @@ import { MemberAvatar } from './MemberAvatar';
 import { palette } from '../constants/colors';
 import { useTheme, useStyles } from '../app/ThemeContext';
 import { listPhotoUrl } from '@beanpool/core';
+import { ExampleHeader, LocalCommunityMark, LocalCommunitySheet } from './showcase/LocalCommunityMark';
+import { SAMPLE_DEALS_ME, sampleDeals } from './showcase/sample-screens';
 
 const { height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -20,9 +22,16 @@ interface MyDealsSheetProps {
     /** False on a community with Beans off (the Market's `showsBeans`): the cards draw no Beans amount. The sheet
      *  still opens there from a link (`dealsTab`), and My Posts lists the member's posts. */
     showsBeans?: boolean;
+    /** Where the node previews deals (its `showcase` on, escrow off: scratch/global-node/DESIGN-global-showcase-fable.md
+     *  §1 row 3, §4 "one component"): this same sheet fed Example Valley (sample-screens.ts sampleDeals), for "an
+     *  example member". Nothing is asked of a node; Review, Edit and every deal open the 🏘️ Local community sheet. */
+    preview?: boolean;
 }
 
-export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending', showsBeans = true }: MyDealsSheetProps) {
+export function MyDealsSheet({ visible, identity: ownIdentity, onClose, preview = false, initialTab = 'pending', showsBeans = true }: MyDealsSheetProps) {
+    const identity = preview ? SAMPLE_DEALS_ME : ownIdentity;
+    const [markOpen, setMarkOpen] = useState(false);
+    const openMark = () => setMarkOpen(true);
     const { colors, theme } = useTheme();
     const styles = useStyles(({ colors }) => StyleSheet.create({
         overlay: {
@@ -313,13 +322,19 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
         if (visible && identity) {
             loadData();
         }
-    }, [visible, identity]);
+    }, [visible, identity, preview]);
 
     useEffect(() => {
         if (initialTab) setDealsTab(initialTab);
     }, [initialTab]);
 
     const loadData = async () => {
+        if (preview) {
+            const sample = sampleDeals();
+            setPosts(sample.posts);
+            setTransactions(sample.transactions);
+            return;
+        }
         if (!identity) return;
         try {
             // Every audience: a deal on a group listing is still my deal.
@@ -447,7 +462,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                                     <Pressable
                                         accessibilityRole="button"
                                         style={[styles.reviewBtn, { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 }]}
-                                        onPress={() => setPromptReview({ txId: item.id, targetPubkey: partnerPubkey, targetCallsign: partnerCallsign })}
+                                        onPress={preview ? openMark : () => setPromptReview({ txId: item.id, targetPubkey: partnerPubkey, targetCallsign: partnerCallsign })}
                                     >
                                         <Text style={[styles.reviewBtnText, { fontSize: 11 }]}>Review</Text>
                                     </Pressable>
@@ -455,7 +470,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                                     <Pressable
                                         accessibilityRole="button"
                                         style={[styles.reviewBtn, { backgroundColor: colors.surface.subtle, borderColor: colors.border.strong, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 }]}
-                                        onPress={() => setPromptReview({ txId: item.id, targetPubkey: partnerPubkey, targetCallsign: partnerCallsign })}
+                                        onPress={preview ? openMark : () => setPromptReview({ txId: item.id, targetPubkey: partnerPubkey, targetCallsign: partnerCallsign })}
                                     >
                                         <Text style={[styles.reviewBtnText, { color: palette.gray600, fontSize: 11 }]}>Edit</Text>
                                     </Pressable>
@@ -468,7 +483,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
 
             if (isPending) {
                 return (
-                    <Pressable accessibilityRole="button" onPress={() => { onClose(); router.push({ pathname: '/post/[id]', params: { id: item.postId, txId: item.id } }); }}>
+                    <Pressable accessibilityRole="button" onPress={preview ? openMark : () => { onClose(); router.push({ pathname: '/post/[id]', params: { id: item.postId, txId: item.id } }); }}>
                         {card}
                     </Pressable>
                 );
@@ -503,7 +518,7 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
         }
 
         return (
-            <Pressable accessibilityRole="button" onPress={() => { onClose(); router.push(`/post/${item.id}`); }}>
+            <Pressable accessibilityRole="button" onPress={preview ? openMark : () => { onClose(); router.push(`/post/${item.id}`); }}>
                 <View style={[styles.dealCard, highlightStyle, item.status === 'paused' && styles.dealCardPaused]}>
                     {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
                         <ExpoImage source={{ uri: listPhotoUrl(coverImage) }} style={styles.dealThumb} contentFit="cover" cachePolicy="memory-disk" transition={150} />
@@ -553,6 +568,13 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                             <Text style={styles.closeBtn}>✕</Text>
                         </Pressable>
                     </View>
+
+                    {preview && (
+                        <View testID="deals-preview-head">
+                            <LocalCommunityMark variant="strip" feature="escrow" />
+                            <ExampleHeader />
+                        </View>
+                    )}
 
                     {/* Tab bar */}
                     <View style={styles.tabBar}>
@@ -636,8 +658,10 @@ export function MyDealsSheet({ visible, identity, onClose, initialTab = 'pending
                 </Pressable>
             </Pressable>
 
+            <LocalCommunitySheet feature="escrow" visible={markOpen} onClose={() => setMarkOpen(false)} />
+
             {/* Review Modal */}
-            {promptReview && (
+            {promptReview && !preview && (
                 <ReviewModal
                     visible={!!promptReview}
                     txId={promptReview.txId}

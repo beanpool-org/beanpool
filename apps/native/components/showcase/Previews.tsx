@@ -1,6 +1,6 @@
 /**
- * Commons and My Deals in preview (scratch/global-node/DESIGN-global-showcase-fable.md §1 rows 5, 6, W3; the Ledger is the
- * member's own screen fed the sample, app/(tabs)/ledger.tsx + sample-screens.ts): the
+ * Commons in preview (scratch/global-node/DESIGN-global-showcase-fable.md §1 rows 5, 6, W3; the Ledger and My Deals are the
+ * member's own screens fed the sample, app/(tabs)/ledger.tsx, components/MyDealsSheet.tsx + sample-screens.ts): the
  * strip, the Example header, and Example Valley's frozen numbers (@beanpool/core SAMPLE_COMMUNITY). The explainers are
  * the member's own (the same info modals); every action that would move Beans, vote or pledge is the marker's `action`,
  * which opens the sheet and nothing else.
@@ -22,28 +22,6 @@ export function beansText(amount: number, signed = false): string {
     const n = Number.isInteger(abs) ? String(abs) : abs.toFixed(1);
     const sign = signed ? (amount < 0 ? '−' : '+') : amount < 0 ? '−' : '';
     return `${sign}${n} ${abs === 1 ? 'Bean' : 'Beans'}`;
-}
-
-const daysAgo = (d: number) => (d === 1 ? 'yesterday' : `${d} days ago`);
-
-export function DealsPreview() {
-    const { colors } = useTheme();
-    const s = previewStyles(colors);
-    return (
-        <View testID="deals-preview">
-            <LocalCommunityMark variant="strip" feature="escrow" />
-            <ExampleHeader />
-            {SAMPLE_COMMUNITY.deals.map(d => (
-                <View key={d.id} style={s.card}>
-                    <Text style={s.body}>{d.what}</Text>
-                    <Text style={s.muted}>{d.who} · {beansText(d.amount)} held safely · {daysAgo(d.daysAgo)}</Text>
-                    {d.status === 'waiting-on-you'
-                        ? <LocalCommunityMark variant="action" feature="escrow" label="Approve the finished work" />
-                        : <Text style={s.muted}>Done: the Beans went to {d.who}.</Text>}
-                </View>
-            ))}
-        </View>
-    );
 }
 
 export function CommonsPreview() {

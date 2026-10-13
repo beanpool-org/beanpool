@@ -2610,12 +2610,13 @@ export async function isKnownDmConversation(conversationId: string): Promise<boo
 /**
  * True if this identity has held keys of a group with this id, read straight from its key memory (the rows GroupKeyring
  * keeps, without opening one), so a sync can ask it of every conversation it writes. Throws when they can't be read.
+ * Asked of the id lower-cased, as groupKeyring() keeps the rows: any spelling of a held group's id is held.
  */
 async function heldInKeyMemory(conversationId: string, myPub?: string | null): Promise<boolean> {
     const pub = myPub ?? (await loadIdentity())?.publicKey;
     if (!pub || !conversationId) return false;
     const database = await getDb();
-    const key = `${pub}/${conversationId}`;
+    const key = `${pub}/${conversationId.toLowerCase()}`;
     const st = await database.getFirstAsync<any>('SELECT highest FROM group_chat_key_state WHERE group_id = ?', [key]);
     if (Number(st?.highest ?? 0) > 0) return true;
     return !!(await database.getFirstAsync<any>('SELECT 1 AS y FROM group_chat_epochs WHERE group_id = ? AND wrap IS NOT NULL LIMIT 1', [key]));
@@ -4360,16 +4361,13 @@ async function lockForConversation(conversationId: string, text: string, line: D
  * every path that can post into it seals or refuses (director's decision b). With no node or no identity nothing can be
  * sent at all, so that answers false. When the phone can't read its key memory (a SQLite error, a community switched
  * under it) this throws GROUP_KEY_STORE_UNREAD_TEXT: every send and edit that asks refuses, never "not held" (confirmation
- * 2 of #1788, finding 1). Asked of the id as given and lower-cased: a link or a push can carry a group's id in capitals
- * (push routes match ids case-insensitively), and the group is held whichever way its id is spelled.
+ * 2 of #1788, finding 1). A link or a push can carry a group's id in capitals (push routes match ids case-insensitively):
+ * groupKeyring() lower-cases it, so every spelling asks the group's one keyring.
  */
 export async function isHeldGroupChat(conversationId: string): Promise<boolean> {
-    for (const id of new Set([conversationId, conversationId.toLowerCase()])) {
-        let ring: GroupKeyring;
-        try { ring = await groupKeyringFor(id); } catch { return false; }
-        if (await ring.seenLocked()) return true;
-    }
-    return false;
+    let ring: GroupKeyring;
+    try { ring = await groupKeyringFor(conversationId); } catch { return false; }
+    return ring.seenLocked();
 }
 
 /**

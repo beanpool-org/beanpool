@@ -91,7 +91,7 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { insertMessage, postGroupChatMessage, editMessage, editThreadMessage, clearDB, groupKeyringFor, isHeldGroupChat, sendImageMessage, joinGroupApi, approveGroupMemberApi } from '../db';
+import { insertMessage, postGroupChatMessage, editMessage, editThreadMessage, clearDB, groupKeyringFor, isHeldGroupChat, sendImageMessage, joinGroupApi, approveGroupMemberApi, getConversationKind } from '../db';
 import { GROUP_CHAT_LOCK_LOST_TEXT, groupChatNotice, GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from '../group-chat-lines';
 import { makeGroupEpochRecord } from '@beanpool/core';
 import { forgetGroupKeys, GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
@@ -107,7 +107,7 @@ const seed = ed25519.utils.randomSecretKey();
 who.me = { publicKey: bytesToHex(ed25519.getPublicKey(seed)), privateKey: bytesToHex(seed) };
 const OTHER = bytesToHex(ed25519.getPublicKey(ed25519.utils.randomSecretKey()));
 /** Every group in this file is one this phone may have held keys of; the fake node answers each the same way. */
-const groups = Array.from({ length: 28 }, () => randomUUID());
+const groups = Array.from({ length: 34 }, () => randomUUID());
 let chatAnswer: 'unlocked' | 'refused' | 'locked' = 'unlocked';
 const received: { method: string; path: string; body: any }[] = [];
 function reply(status: number, body: any) { return { ok: status >= 200 && status < 300, status, json: async () => body, text: async () => JSON.stringify(body), clone() { return this; } }; }
@@ -125,7 +125,8 @@ function reply(status: number, body: any) { return { ok: status >= 200 && status
         if (chatAnswer === 'locked') return reply(200, { messages: [], canPost: true, encryption: { current: 1, stale: false, fromEpoch: 1 } });
         return chatAnswer === 'unlocked' ? reply(200, { messages: [], canPost: true }) : reply(404, { error: 'Not found' });
     }
-    if (g && method === 'GET' && lp.startsWith(`/api/messages/${g}`)) return reply(200, { conversation: { id: g, type: store.nodeType.get(g) ?? 'group_thread', name: 'The group', participants: [who.me.publicKey, OTHER] }, messages: [] });
+    // The conversation's id answered as the path spelled it (an echoing node), so a row can be written under capitals.
+    if (g && method === 'GET' && lp.startsWith(`/api/messages/${g}`)) return reply(200, { conversation: { id: path.slice('/api/messages/'.length, '/api/messages/'.length + g.length), type: store.nodeType.get(g) ?? 'group_thread', name: 'The group', participants: [who.me.publicKey, OTHER] }, messages: [] });
     if (method === 'POST' && path.endsWith('/chat/message')) return reply(201, { success: true, message: { id: body?.clientId } });
     if (method === 'POST' && path === '/api/messages/send') return reply(201, { success: true, message: { id: body?.id, timestamp: new Date().toISOString() } });
     if (method === 'POST' && path === '/api/messages/edit' && store.gone.has(body?.messageId)) return reply(404, { error: 'Message not found' });
@@ -513,5 +514,22 @@ describe('group chats: the photo guard and an edit with the key on the phone (co
         expect(heldUpper).toBe(true);
         expect([a, b]).toEqual([`refused: ${GROUP_CHAT_LOCK_LOST_TEXT}`, `refused: ${GROUP_CHAT_LOCK_LOST_TEXT}`]);
         expect(readable(from)).toEqual([]);
+    });
+
+    it('a held group\'s id in capitals shares the group\'s one keyring, its highest epoch and its key memory: a node typing it dm is ignored (#1815 review, finding 1)', async () => {
+        forgetGroupKeys(); chatAnswer = 'unlocked';
+        const g = groups[28];
+        held(g);
+        store.nodeType.set(g, 'dm');
+        const G = g.toUpperCase();
+        const lower = await groupKeyringFor(g);
+        const upper = await groupKeyringFor(G);
+        const highestUpper = await upper.highestEpoch();
+        const kind = await getConversationKind(G, { askNode: true });
+        const remembered = (JSON.parse(store.asyncStore.get('beanpool_dm_conversations_seen') ?? '[]') as string[]).some((x) => x.toLowerCase() === g);
+        console.log(`capitals: one keyring ${upper === lower}; highest under G ${highestUpper}; kind ${kind}; row ${store.conversations.get(G)?.type}; remembered as a DM ${remembered}`);
+        expect(upper).toBe(lower);
+        expect(highestUpper).toBe(2);
+        expect({ kind, row: store.conversations.get(G)?.type, remembered }).toEqual({ kind: 'group_thread', row: 'group_thread', remembered: false });
     });
 });

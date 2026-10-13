@@ -661,11 +661,16 @@ function sameRecord(a: Omit<GroupEpochRecord, 'wraps'>, b: Omit<GroupEpochRecord
 
 const keyrings = new Map<string, GroupKeyring>();
 
-/** The keyring for one group on one node for this identity, shared for the app's session (the opened keys with it). */
+/**
+ * The keyring for one group on one node for this identity, shared for the app's session (the opened keys with it). The
+ * group's id is lower-cased (the node makes ids lower-case): a link or a push can carry it in capitals, and every spelling
+ * gets this one keyring, its rows, its highest epoch and its rollback check (#1815 review, finding 1).
+ */
 export function groupKeyring(nodeUrl: string, identity: Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>, groupId: string, store: GroupKeyStore): GroupKeyring {
-    const id = `${nodeUrl.replace(/\/+$/, '')}|${identity.publicKey}|${groupId}`;
+    const gid = groupId.toLowerCase();
+    const id = `${nodeUrl.replace(/\/+$/, '')}|${identity.publicKey}|${gid}`;
     let k = keyrings.get(id);
-    if (!k) { k = new GroupKeyring(groupId, nodeUrl.replace(/\/+$/, ''), identity, store); keyrings.set(id, k); }
+    if (!k) { k = new GroupKeyring(gid, nodeUrl.replace(/\/+$/, ''), identity, store); keyrings.set(id, k); }
     return k;
 }
 

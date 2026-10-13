@@ -54,7 +54,7 @@ A group's chat on the phone is end-to-end encrypted: only the group's members ca
 - When someone is removed, or leaves, the group makes a new key. In a group of 10 or more the chat says **Securing the chat for N people…** while your phone makes it.
 - A message that cannot be locked is not sent. It shows **! not delivered**, and a line above the message box can say why. Tap it to **Resend** or **Discard** it.
 - A message that does not check out as written by a member shows as **Unverified**, as nobody's, with **This message couldn't be verified.** A message whose key has not reached your phone yet reads **Waiting for the key to this message.**
-- If your community's server is older and cannot lock group chats yet, the chat says the server can read it, and that it will be locked once the server is updated.
+- If your community's server is older and cannot lock group chats yet, the chat says the server can read it, and that it will be locked once the server is updated. When it is updated, the group's earlier messages, which the server could read, are removed, and a line in the chat says so.
 
 The web app cannot yet read or write in a group's chat; use the phone. An enterprise's chat is not encrypted: see "Messages".
 

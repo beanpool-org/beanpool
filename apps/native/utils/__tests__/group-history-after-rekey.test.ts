@@ -13,13 +13,17 @@
  *   memory and chain ≠ memory are refused; the human limit measured once (an impostor's code Ben confirms in person).
  *   No automatic path: a puppet claiming her old key, listed in missing, is handed 0 by every phone. The #1826
  *   reviewer's R1, R2, J, V and A3w stay 0-cases in group-chat-key-succession.test.ts, unchanged.
+ *   Review of #1844: MP (a misled new phone, one relabelled roster in a side group, then a roster leaving Zed out: refused
+ *   each time, the §4 amendment), S1 (a name added to an epoch's wraps list: the digest refuses it), a chain dropped while
+ *   the memory knows the old key (refused); H1/H2 (each end screen says what landed); the old phone's note cleared by the
+ *   next signed success and kept for a key really replaced.
  *
  * Nothing else is contacted: the phones' fetch is held to this node's address.
  */
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -62,12 +66,14 @@ import { groupKeyring, memoryGroupKeyStore, forgetGroupKeys, joinGroupWithEpoch,
 import {
     unlockWithOldWords, oldKeyFromWords, newPhoneQrPayload, parseNewPhoneQr, checkNewPhone, confirmNewPhone, newPhoneConfirmText, NEW_PHONE_QR_TAG,
     handOversHeld, noteConfirmations, confirmedNotes, newPhoneProgressText,
+    newPhoneEnd, newPhoneDoneText, newPhoneRefusedRestText, oldWordsEnd, oldWordsNothingText, OLD_WORDS_DONE, OLD_WORDS_NOTHING_LISTED,
+    lockedHistoryCounts, noteLockedHistoryCount,
 } from '../group-history-unlock';
 import { rememberRosterNames } from '../name-key-memory';
 import { sendSealedGroupLine, openGroupThread, chatIsLocked } from '../group-chat-lines';
 import { type DisplayRosterRow } from '../group-line-display';
 import { attestJustCompletedRekey, oldKeySignedHere } from '../key-succession';
-import { isKeyReplacedAnswer, keyReplacedHere, watchForReplacedKey } from '../key-replaced';
+import { isKeyReplacedAnswer, keyReplacedHere, watchForReplacedKey, onKeyReplaced, KEY_MOVED_OWN_ONLY, KEY_MOVED_SHOW } from '../key-replaced';
 import { makeKeySuccession } from '../group-chat-crypto';
 import type { BeanPoolIdentity } from '../identity';
 
@@ -529,5 +535,321 @@ describe('path B: a member confirms the new phone in person (design §4, S3)', (
         expect(handed).toBe(0);
         expect(await topUps(pk(ben), pk(pup))).toEqual([]);
         expect(await topUps(pk(dov), pk(pup))).toEqual([]);
+    });
+});
+
+// ─── Review of #1844 (finding 1, the §4 amendment; finding 3, the tests; finding 4, the end screens; finding 5, the card) ──
+describe('review of #1844: path B against a node that rewrites names, wraps lists and chains; honest end screens; the old phone\'s card', () => {
+    const benSees = async (ben: Phone, gs: readonly { id: string }[]) => { for (const g of gs) await rememberRosterNames(URL_BASE, await roster(ben, g.id)); };
+    const memoryOf = (name: string) => JSON.parse(mem.async.get(`beanpool_name_keys:${URL_BASE}`) ?? '{}')[name.toLowerCase()];
+
+    it('MP: a misled Cat₂ never collects Zed\'s history through Ben\'s honest scan — refused at once, after one relabelled roster in a side group, and after a roster that leaves Zed out', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const ben = phone('Benp');
+        const zed = phone('Zedp');
+        const cat = phone('Catp');
+        await control('members', { members: [ben, zed, cat].map((p) => ({ key: pk(p), callsign: p.name })) });
+        // G: Ben starts (epoch 1), Zed joins (2) and writes a line Cat never saw, Cat joins (3) and writes, Ben writes.
+        const g = await newGroup(ben, 'Poison G');
+        await say(ben, g, 'Ben alone');
+        await join_(zed, g);
+        await writes(zed, g, 'Zed before Cat');
+        await join_(cat, g);
+        await writes(cat, g, 'Cat here');
+        await writes(ben, g, 'Ben with both');
+        // H: Ben and Zed only. The relabel comes through this group's roster: the shared group's is never touched.
+        const h = await newGroup(ben, 'Side H');
+        await join_(zed, h);
+        await writes(zed, h, 'side line');
+        await benSees(ben, [{ id: g }, { id: h }]);
+        expect(memoryOf('Catp')).toEqual({ key: pk(cat) });
+        expect(memoryOf('Zedp')).toEqual({ key: pk(zed) });
+
+        // Cat loses her phone; the admin re-keys her. The node misleads her new phone once: the one re-key it lists for her
+        // is over Zed's key, so her phone signs that (NB5: exactly one listed). Served as her chain from here on, and her new
+        // key is let hold keys from epoch 1 (as the puppet set-ups above do).
+        const cat2 = await rekeyed(cat, 'Catp');
+        const misled = claim(cat2, pk(zed));
+        const chainHook: Hook = async (r) => {
+            if (r.method !== 'GET' || !/\/members$/.test(r.path)) return undefined;
+            const rows = await (await realFetch(r.input, r.init)).json();
+            return jsonResponse(200, rows.map((m: any) => (m.memberPubkey === pk(cat2) ? { ...m, formerKeys: [misled] } : m)));
+        };
+        hooks.push(chainHook);
+        await control('sql', { sql: 'UPDATE group_members SET from_epoch = 1 WHERE group_id = ? AND member_pubkey = ?', params: [g, pk(cat2)] });
+        await benSees(ben, [{ id: g }]);
+        // Her honest code names the key her phone signed for: Zed's.
+        const code = JSON.stringify([NEW_PHONE_QR_TAG, pk(cat2), pk(zed), 'Catp']);
+        const ctx = { nodeUrl: URL_BASE, identity: ben.identity, groups: [{ id: g, name: 'Poison G' }, { id: h, name: 'Side H' }] };
+
+        // CONTROL: her chain names Zed (the node's word); Ben's phone saw "Catp" only on Cat₁. The anchor alone refuses.
+        expect(memoryOf('Catp')).toEqual({ key: pk(cat2), changedFrom: pk(cat) });
+        expect(await checkNewPhone({ ...ctx, scanned: code })).toMatchObject({ ok: false, reason: 'mismatch' });
+
+        // ATTACK: one roster of H served to Ben's phone with Zed's row labelled "Catp". Ben opens H once. The name moved to
+        // Zed's key with no statement: a taint, so Zed's key never counts as one "Catp" had.
+        const relabel: Hook = async (r) => {
+            if (r.method !== 'GET' || r.path !== `/api/groups/${h}/members`) return undefined;
+            const rows = await (await realFetch(r.input, r.init)).json();
+            return jsonResponse(200, rows.map((m: any) => (m.memberPubkey === pk(zed) ? { ...m, callsign: 'Catp' } : m)));
+        };
+        hooks.unshift(relabel);
+        await benSees(ben, [{ id: h }]);
+        hooks.splice(hooks.indexOf(relabel), 1);
+        expect(memoryOf('Catp')).toEqual({ key: pk(zed), changedFrom: pk(cat) });
+        const attacked = await checkNewPhone({ ...ctx, scanned: code });
+        expect(attacked).toMatchObject({ ok: false, reason: 'mismatch' });
+
+        // THE MARK: one more roster of G, Zed left out, Cat₂ with her misled chain (it reaches Zed's key only). It confirms
+        // nothing: the "(key changed)" mark stays, changedFrom stays Cat₁, Zed's key never enters `was`, and the check refuses.
+        const clear: Hook = async (r) => {
+            if (r.method !== 'GET' || r.path !== `/api/groups/${g}/members`) return undefined;
+            const rows = await (await realFetch(r.input, r.init)).json();
+            return jsonResponse(200, rows.filter((m: any) => m.memberPubkey !== pk(zed)).map((m: any) => (m.memberPubkey === pk(cat2) ? { ...m, formerKeys: [misled] } : m)));
+        };
+        hooks.unshift(clear);
+        const marked = await rememberRosterNames(URL_BASE, await roster(ben, g));
+        hooks.splice(hooks.indexOf(clear), 1);
+        expect([...marked]).toContain(pk(cat2));
+        expect(memoryOf('Catp')).toEqual({ key: pk(cat2), changedFrom: pk(cat) });
+        expect(await checkNewPhone({ ...ctx, scanned: code })).toMatchObject({ ok: false, reason: 'mismatch' });
+        hooks.splice(hooks.indexOf(chainHook), 1);
+
+        // Nothing went to her new key, and she reads nothing of Zed's era.
+        expect(await topUps(pk(ben), pk(cat2))).toEqual([]);
+        forgetGroupKeys();
+        const read = await reads(cat2, g);
+        expect(read).not.toContain('Zedp: Zed before Cat');
+        console.log(`MEASURED MP: control, attack and mark all refused (mismatch); Ben's top-ups to Cat₂ 0; Cat₂ reads ${JSON.stringify(read)}`);
+        expect(elsewhere).toEqual([]);
+    });
+
+    it('S1: a name the node adds to an epoch\'s wraps list is refused by the signed digest: Ben hands nothing for that epoch (pins signedRecipientsWith)', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const ben = phone('Bens');
+        const cat = phone('Cats');
+        const dov = phone('Dovs');
+        await control('members', { members: [ben, cat, dov].map((p) => ({ key: pk(p), callsign: p.name })) });
+        const g = await newGroup(ben, 'Digest G');
+        await say(ben, g, 'Ben alone first');
+        await join_(cat, g);
+        await writes(cat, g, 'Cat here');
+        await join_(dov, g);
+        await writes(dov, g, 'Dov here');
+        await benSees(ben, [{ id: g }]);
+        const cat2 = await rekeyed(cat, 'Cats');
+        expect(await attestJustCompletedRekey(URL_BASE, cat2.identity)).toBe(1);
+        await control('sql', { sql: 'UPDATE group_members SET from_epoch = 1 WHERE group_id = ? AND member_pubkey = ?', params: [g, pk(cat2)] });
+        await benSees(ben, [{ id: g }]);
+        const check = await checkNewPhone({ nodeUrl: URL_BASE, identity: ben.identity, groups: [{ id: g, name: 'Digest G' }], scanned: newPhoneQrPayload(cat2.identity, pk(cat)) });
+        expect(check.ok).toBe(true);
+        if (!check.ok) return;
+        // The node adds Cat₁ to epoch 1's own wraps (a row shaped like the maker's), where the signed record names Ben alone.
+        const addName: Hook = async (r) => {
+            if (r.method !== 'GET' || r.path !== `/api/groups/${g}/keys/1/wraps`) return undefined;
+            const a = await (await realFetch(r.input, r.init)).json();
+            const own = a.wraps.find((w: any) => w.sig === null);
+            return jsonResponse(200, { ...a, wraps: [...a.wraps, { ...own, recipient: pk(cat) }] });
+        };
+        hooks.push(addName);
+        const done = await confirmNewPhone({ nodeUrl: URL_BASE, identity: ben.identity, store: ben.store, check });
+        hooks.splice(hooks.indexOf(addName), 1);
+        const handed = await topUps(pk(ben), pk(cat2));
+        console.log(`MEASURED S1: handed ${done.total}: ${JSON.stringify(handed.map((x) => x.split('#')[1]))}; epoch 1 handed: ${handed.includes(`${g}#1`)}`);
+        expect(handed.includes(`${g}#1`)).toBe(false);
+        expect(handed).toEqual([`${g}#2`, `${g}#3`]);
+    });
+
+    it('chain dropped: Ben\'s phone knew Cat on her old key, but the node serves her row without its chain — refused, nothing handed (pins the chain check)', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const ben = phone('Benx');
+        const cat = phone('Catx');
+        const dov = phone('Dovx');
+        await control('members', { members: [ben, cat, dov].map((p) => ({ key: pk(p), callsign: p.name })) });
+        const g = await newGroup(ben, 'Chain G');
+        await say(ben, g, 'Ben first');
+        await join_(cat, g);
+        await writes(cat, g, 'Cat line');
+        await join_(dov, g);
+        await writes(dov, g, 'Dov line');
+        await benSees(ben, [{ id: g }]);
+        const cat2 = await rekeyed(cat, 'Catx');
+        expect(await attestJustCompletedRekey(URL_BASE, cat2.identity)).toBe(1);
+        await benSees(ben, [{ id: g }]);
+        expect(memoryOf('Catx')).toEqual({ key: pk(cat2), was: [pk(cat)] });
+        const code = newPhoneQrPayload(cat2.identity, pk(cat));
+        const ctx = { nodeUrl: URL_BASE, identity: ben.identity, groups: [{ id: g, name: 'Chain G' }] };
+        // Control: with her chain served, the same code passes.
+        expect((await checkNewPhone({ ...ctx, scanned: code })).ok).toBe(true);
+        const drop: Hook = async (r) => {
+            if (r.method !== 'GET' || r.path !== `/api/groups/${g}/members`) return undefined;
+            const rows = await (await realFetch(r.input, r.init)).json();
+            return jsonResponse(200, rows.map((m: any) => (m.memberPubkey === pk(cat2) ? { ...m, formerKeys: [] } : m)));
+        };
+        hooks.unshift(drop);
+        const dropped = await checkNewPhone({ ...ctx, scanned: code });
+        hooks.splice(hooks.indexOf(drop), 1);
+        expect(dropped).toMatchObject({ ok: false, reason: 'mismatch' });
+        expect(await topUps(pk(ben), pk(cat2))).toEqual([]);
+    });
+
+    it('H1 (finding 4): the confirming phone says what landed — "Handed 0 of N" when the node refuses every wrap, "Done" once they land, "Nothing to unlock" on a second scan', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const ben = phone('Benh');
+        const cat = phone('Cath');
+        await control('members', { members: [ben, cat].map((p) => ({ key: pk(p), callsign: p.name })) });
+        const g = await newGroup(ben, 'Refuse G');
+        await say(ben, g, 'one');
+        await join_(cat, g);
+        await writes(cat, g, 'two');
+        await benSees(ben, [{ id: g }]);
+        const cat2 = await rekeyed(cat, 'Cath');
+        expect(await attestJustCompletedRekey(URL_BASE, cat2.identity)).toBe(1);
+        await benSees(ben, [{ id: g }]);
+        const check = await checkNewPhone({ nodeUrl: URL_BASE, identity: ben.identity, groups: [{ id: g, name: 'Refuse G' }], scanned: newPhoneQrPayload(cat2.identity, pk(cat)) });
+        expect(check.ok).toBe(true);
+        if (!check.ok) return;
+        const refuse: Hook = (r) => (r.method === 'POST' && /\/keys\/wrap$/.test(r.path) ? jsonResponse(403, { error: 'no', code: 'wrap_refused' }) : undefined);
+        hooks.push(refuse);
+        const refused = await confirmNewPhone({ nodeUrl: URL_BASE, identity: ben.identity, store: ben.store, check });
+        hooks.splice(hooks.indexOf(refuse), 1);
+        expect(refused.planned).toBeGreaterThan(0);
+        expect(refused).toMatchObject({ total: 0, already: 0, stopped: false });
+        const end = newPhoneEnd(check.name, refused);
+        expect(end).toEqual({ text: `Handed 0 of ${refused.planned}. The community refused the rest: try again, or tell an owner.`, ok: false });
+        // The node takes them: "Done".
+        const honest = await confirmNewPhone({ nodeUrl: URL_BASE, identity: ben.identity, store: ben.store, check });
+        expect(honest.total).toBe(honest.planned);
+        expect(honest.planned).toBe(refused.planned);
+        expect(newPhoneEnd(check.name, honest)).toEqual({ text: newPhoneDoneText('Cath'), ok: true });
+        // Scanned again: her new phone holds every one of them, so nothing is planned and nothing is posted.
+        const mark = bodies.length;
+        const again = await confirmNewPhone({ nodeUrl: URL_BASE, identity: ben.identity, store: ben.store, check });
+        expect(again).toMatchObject({ planned: 0, total: 0, already: 0, stopped: false });
+        expect(posts(mark, /\/keys\/wrap$/)).toEqual([]);
+        expect(newPhoneEnd(check.name, again)).toEqual({ text: "Nothing to unlock: this phone holds no earlier key of Cath's that the new phone lacks.", ok: true });
+        // Some handed here, some another member got in first (409 wrap_exists): all of them are on her phone.
+        expect(newPhoneEnd('Cath', { total: 1, already: 1, planned: 2, stopped: false }).text).toBe(newPhoneDoneText('Cath'));
+        expect(newPhoneEnd('Cath', { total: 1, already: 0, planned: 2, stopped: false })).toEqual({ text: newPhoneRefusedRestText(1, 2), ok: false });
+        expect(newPhoneEnd('Cath', { total: 1, planned: 3, stopped: true }).text).toBe('Unlocking 1 of 3… The community asked this phone to slow down: scan again in a minute to carry on.');
+        console.log(`MEASURED H1: refused ${JSON.stringify(refused)} → "${end.text}"; honest ${honest.total}/${honest.planned} → Done; again planned ${again.planned} → nothing to unlock`);
+    });
+
+    it('H2 (finding 4): the old-words screen never says "Done" when nothing landed — an empty answer for a group the chat shows locked is named withheld, junk is withheld too, "Done" once keys land', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const cat = wordsPhone('Catw');
+        const ben = phone('Benw');
+        await control('members', { members: [cat, ben].map((p) => ({ key: pk(p), callsign: p.name })) });
+        const g = await newGroup(ben, 'Empty G');
+        await say(ben, g, 'one');
+        await join_(cat, g);
+        await writes(cat, g, 'two');
+        const cat2 = await rekeyed(cat, 'Catw');
+        expect(await attestJustCompletedRekey(URL_BASE, cat2.identity)).toBe(1);
+        await writes(ben, g, 'after');
+        forgetGroupKeys();
+        const waiting = (await shown(cat2, g)).visible.filter((l) => l.waitingKey).length;
+        expect(waiting).toBeGreaterThanOrEqual(1);
+        // The chat kept its row's count (GroupChatView → noteLockedHistoryRow), under the id lower-cased whatever its spelling;
+        // the old-words screen passes it as `locked`.
+        await noteLockedHistoryCount(URL_BASE, pk(cat2), g.toUpperCase(), waiting);
+        const counts = await lockedHistoryCounts(URL_BASE, pk(cat2));
+        expect(counts).toEqual({ [g.toLowerCase()]: waiting });
+        const groups = [{ id: g, name: 'Empty G', locked: counts[g.toLowerCase()] ?? 0 }];
+        const words = { nodeUrl: URL_BASE, identity: cat2.identity, store: cat2.store, typed: cat.words, signedHere: pk(cat) };
+
+        const empty: Hook = (r) => (r.method === 'GET' && /\/keys\/former$/.test(r.path) ? jsonResponse(200, { formerKeys: [pk(cat)], epochs: [], wraps: [], more: false }) : undefined);
+        hooks.unshift(empty);
+        const r = await unlockWithOldWords({ ...words, groups });
+        hooks.splice(hooks.indexOf(empty), 1);
+        expect(r).toMatchObject({ outcome: 'done', unlocked: {}, refused: 0 });
+        expect(r.withheld.map((x) => x.id)).toEqual([g]);
+        expect(oldWordsEnd(r)).toEqual({ text: 'Nothing was handed over for Empty G. Try again later, or tell an owner.', lines: [], ok: false });
+        // With no count at all (a group whose chat wasn't opened since the change): still never "Done".
+        hooks.unshift(empty);
+        const r0 = await unlockWithOldWords({ ...words, groups: [{ id: g, name: 'Empty G' }] });
+        hooks.splice(hooks.indexOf(empty), 1);
+        expect(r0).toMatchObject({ outcome: 'done', unlocked: {}, withheld: [] });
+        expect(oldWordsEnd(r0)).toEqual({ text: OLD_WORDS_NOTHING_LISTED, lines: [], ok: true });
+        expect(oldWordsEnd(r0).text).not.toBe(OLD_WORDS_DONE);
+        // Junk: her old key's wraps served with their bytes spoiled. Nothing opens; withheld even with no count.
+        const junk: Hook = async (r) => {
+            if (r.method !== 'GET' || !/\/keys\/former$/.test(r.path)) return undefined;
+            const a = await (await realFetch(r.input, r.init)).json();
+            return jsonResponse(200, { ...a, wraps: a.wraps.map((w: any) => ({ ...w, wrapped: `${w.wrapped.slice(0, -8)}${w.wrapped.slice(-8) === 'AAAAAAAA' ? 'BBBBBBBB' : 'AAAAAAAA'}` })) });
+        };
+        hooks.unshift(junk);
+        const rj = await unlockWithOldWords({ ...words, groups: [{ id: g, name: 'Empty G' }] });
+        hooks.splice(hooks.indexOf(junk), 1);
+        expect(rj.refused).toBeGreaterThan(0);
+        expect(rj.withheld.map((x) => x.id)).toEqual([g]);
+        expect(oldWordsEnd(rj).text).toBe(oldWordsNothingText(['Empty G']));
+        // Honest: the keys land, "Done".
+        const ok = await unlockWithOldWords({ ...words, groups });
+        expect(Object.keys(ok.unlocked)).toEqual([g]);
+        expect(ok.withheld).toEqual([]);
+        expect(oldWordsEnd(ok)).toEqual({ text: OLD_WORDS_DONE, lines: [], ok: true });
+        // A forgotten count is gone from the list the screen reads.
+        await noteLockedHistoryCount(URL_BASE, pk(cat2), g, 0);
+        expect(await lockedHistoryCounts(URL_BASE, pk(cat2))).toEqual({});
+        console.log(`MEASURED H2: empty+count → withheld ${JSON.stringify(r.withheld.map((x) => x.name))}; empty, no count → "${oldWordsEnd(r0).text}"; junk refused ${rj.refused} → withheld; honest unlocked ${ok.unlocked[g]}`);
+    });
+
+    it('finding 5: the old phone\'s note lasts only while the node refuses its key — one lie is cleared by the next signed success, a replaced key stays noted, an unsigned answer clears nothing; the card says whose words they are', async () => {
+        await control('limiters');
+        forgetGroupKeys();
+        const ben = phone('Benk');
+        const dov = phone('Dovk');
+        const cat = phone('Catk');
+        await control('members', { members: [ben, dov, cat].map((p) => ({ key: pk(p), callsign: p.name })) });
+        const g = await newGroup(ben, 'Moved G');
+        await join_(dov, g);
+        await join_(cat, g);
+        let told = 0;
+        const off = onKeyReplaced(() => { told++; });
+        // The node answers one signed read from Dov's phone, whose key is current, with the replaced-key code.
+        const lie: Hook = (r) => (r.method === 'GET' && r.path === `/api/groups/${g}/members` ? jsonResponse(403, { error: 'replaced', code: 'key_invalidated' }) : undefined);
+        hooks.unshift(lie);
+        const lied = await signedGet(URL_BASE, `/api/groups/${g}/members`, dov.identity);
+        hooks.splice(hooks.indexOf(lie), 1);
+        watchForReplacedKey(URL_BASE, pk(dov), lied);
+        await vi.waitFor(async () => expect(await keyReplacedHere(URL_BASE, pk(dov))).toBe(true));
+        expect(told).toBe(1);
+        // A success to a request that went out unsigned says nothing about the key: the note stays.
+        watchForReplacedKey(URL_BASE, pk(dov), jsonResponse(200, {}), false);
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        expect(await keyReplacedHere(URL_BASE, pk(dov))).toBe(true);
+        // The next signed read the node answers: the key is current here, so the note goes, and the card hears it.
+        const next = await signedGet(URL_BASE, `/api/groups/${g}/members`, dov.identity);
+        expect(next.ok).toBe(true);
+        watchForReplacedKey(URL_BASE, pk(dov), next);
+        await vi.waitFor(async () => expect(await keyReplacedHere(URL_BASE, pk(dov))).toBe(false));
+        expect(told).toBe(2);
+        // A key a re-key really replaced: every signed request is refused, so nothing clears its note.
+        await rekeyed(cat, 'Catk');
+        for (let i = 0; i < 2; i++) {
+            const res = await signedGet(URL_BASE, `/api/groups/${g}/members`, cat.identity);
+            expect(res.status).toBe(403);
+            watchForReplacedKey(URL_BASE, pk(cat), res);
+        }
+        await vi.waitFor(async () => expect(await keyReplacedHere(URL_BASE, pk(cat))).toBe(true));
+        off();
+        // The card shows only while the note is kept, and says the words are this account's and belong in no other phone.
+        const card = readFileSync(fileURLToPath(new URL('../../components/KeyMovedCard.tsx', import.meta.url)), 'utf8');
+        expect(card).toContain('{KEY_MOVED_OWN_ONLY}');
+        expect(card).toMatch(/const yes = await keyReplacedHere\(url, identity\.publicKey\);/);
+        expect(card).toMatch(/if \(!moved\) return null;/);
+        expect(KEY_MOVED_OWN_ONLY).toBe("These are this account's own words. Type them only into your own new phone, never into a phone someone else holds out.");
+        expect(KEY_MOVED_SHOW).toBe('Show my old 12 words, so my new phone can unlock earlier messages');
+        // db.ts: every signed GET tells the watch whether it was signed; a signed write the node took clears the note.
+        const db = readFileSync(fileURLToPath(new URL('../db.ts', import.meta.url)), 'utf8');
+        expect(db).toMatch(/watchForReplacedKey\(anchorUrl, identity\.publicKey, res, signed\);/);
+        expect(db).toMatch(/headers = \{ \.\.\.headers, \.\.\.signedHeaders \};\n\s+signed = true;/);
+        expect(db).toMatch(/void noteKeyAnswered\(anchorUrl, identity\.publicKey\);\n\s+return await res\.json\(\);/);
     });
 });

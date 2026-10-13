@@ -77,7 +77,7 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { getDb, getMessages, syncMessages, syncSingleConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending } from '../db';
+import { getDb, getMessages, syncMessages, syncSingleConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId, groupScreenKeyringFor, isDmKeyChangePending, _resetDmPeerPinsForTests } from '../db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { refusedSendNotice } from '../dm-lock';
 import { DM_PIN_STORE_UNREAD_TEXT } from '../dm-peer-pins';
@@ -199,6 +199,13 @@ async function phoneOf(who: Person, opts: { keepPhotos?: boolean } = {}): Promis
     h.me = { publicKey: who.publicKey, privateKey: who.privateKey };
     await syncMessages(who.publicKey);
 }
+
+/**
+ * The app started again (an update, or a phone restored from the 12 words): the DM pins are read from storage afresh.
+ * The phone holds one copy of them in memory for its run (#1872 review, finding 6), so a test that changes the stored pins
+ * behind the app's back models them being met at the next start.
+ */
+const restarted = () => _resetDmPeerPinsForTests();
 
 /** Send a line from the phone in hand, through the real send path, and wait for the node to have it. */
 async function says(who: Person, conv: Conv, text: string): Promise<Line> {
@@ -909,6 +916,7 @@ describe('a twin the node writes of a DM\'s id, in other capitals, with someone 
         node.convs = [twin, dm];
         h.store.delete(DM_SEEN);   // restored from the 12 words: the DM list starts from this sync, in the node's order
         h.store.delete(dmPeerPinsStoreKey(ana.publicKey));   // and so do its DM pins (a phone that kept them: the pin tests below)
+        restarted();
         await phoneOf(ana);
         expect(held(dm.id)).toEqual({ rows: [`${twin.id}:dm`, `${dm.id}:dm`], seen: [twin.id, dm.id] });
         await expectBens(dm.id, 'Ben, did you get my message?', await tapAndSend(dm.id, 'Ben, did you get my message?'));
@@ -921,6 +929,7 @@ describe('a twin the node writes of a DM\'s id, in other capitals, with someone 
         node.convs = [twin, dm];
         h.store.delete(DM_SEEN);
         h.store.delete(dmPeerPinsStoreKey(ana.publicKey));
+        restarted();
         await phoneOf(ana);
         expect(held(dm.id)).toEqual({ rows: [`${dm.id}:dm`, `${twin.id}:dm`], seen: [twin.id, dm.id] });
         await expectBens(dm.id, 'Still want the order?', await tapAndSend(dm.id, 'Still want the order?'));
@@ -932,6 +941,7 @@ describe('a twin the node writes of a DM\'s id, in other capitals, with someone 
         node.convs = [twin, dm];
         h.store.delete(DM_SEEN);
         h.store.delete(dmPeerPinsStoreKey(ana.publicKey));
+        restarted();
         await phoneOf(ana);
         expect(held(dm.id)).toEqual({ rows: [`${twin.id}:dm`, `${dm.id}:dm`], seen: [twin.id, dm.id] });
         h.store.set(DM_SEEN, '{unreadable');
@@ -1125,6 +1135,7 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
         dm.participants = [ana.publicKey, puppet.publicKey];
         h.store.delete(PINS(ana));
         h.store.delete('beanpool_dm_conversations_seen');
+        restarted();
         await phoneOf(ana);
         expect(pinOf(ana, dm.id)).toMatchObject({ peer: puppet.publicKey, by: 'first-seen' });
         expect((await shows(dm)).map((l) => l.text)).toEqual([NOT_VERIFIED, NOT_VERIFIED]);
@@ -1137,6 +1148,7 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
     it('P5: a restored phone, honest node: Ben is pinned at first sight, every line opens, nothing pauses, and the send goes to Ben', async () => {
         await aQuestionAndAnAnswer();
         h.store.delete(PINS(ana));
+        restarted();
         await phoneOf(ana);
         expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, by: 'first-seen' });
         expect((await shows(dm)).map((l) => l.text)).toEqual(['Shall I cancel the order?', 'No']);
@@ -1194,6 +1206,7 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
         const getItem = vi.mocked(AsyncStorage.getItem);
         const real = getItem.getMockImplementation()!;
         getItem.mockImplementation(async (k: string) => { if (k === PINS(ana)) throw new Error('storage unavailable'); return real(k); });
+        restarted();   // the app's next run can't read them
         try {
             const r = await trySend(dm.id, 'Can you read this?');
             expect(refusedSendNotice(r.err, 'Ben')).toBe(DM_PIN_STORE_UNREAD_TEXT);
@@ -1230,6 +1243,7 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
         const pins = JSON.parse(h.store.get(PINS(ana))!);
         pins[dm.id.toLowerCase()] = { peer: benNew.publicKey, since: new Date().toISOString(), by: 'member', former: [ben.publicKey] };
         h.store.set(PINS(ana), JSON.stringify(pins));
+        restarted();
         for (const t of ['messages', 'conversation_participants', 'conversations']) sql.exec(`DELETE FROM ${t}`);
         expect((await shows(dm)).map((l) => l.text)).toEqual(['Shall I cancel the order?', 'No']);
         const r = await trySend(dm.id, 'Welcome back');
@@ -1245,7 +1259,7 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
         expect(h.store.get(PINS(ana))).toBe(anas);
     });
 
-    it('P9: a sync pass over 1,000 conversations (30% not DMs) reads the pins once and writes them at most once', async () => {
+    it('P9: a sync pass over 1,000 conversations (30% not DMs): the pins are read once for the app\'s run and written at most once a pass', async () => {
         await phoneOf(ana);
         const many: Conv[] = [];
         for (let i = 0; i < 1000; i++) {
@@ -1256,13 +1270,14 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
         const getItem = vi.mocked(AsyncStorage.getItem);
         const setItem = vi.mocked(AsyncStorage.setItem);
         const counts = () => ({ gets: getItem.mock.calls.filter((c) => c[0] === PINS(ana)).length, sets: setItem.mock.calls.filter((c) => c[0] === PINS(ana)).length });
+        restarted();
         getItem.mockClear(); setItem.mockClear();
         await syncMessages(ana.publicKey);
         expect(counts()).toEqual({ gets: 1, sets: 1 });   // 700 DMs pinned at first sight, in one write
         expect(Object.keys(JSON.parse(h.store.get(PINS(ana))!)).length).toBe(701);   // and Ana and Ben's DM from beforeEach
         getItem.mockClear(); setItem.mockClear();
         await syncMessages(ana.publicKey);
-        expect(counts()).toEqual({ gets: 1, sets: 0 });   // nothing changed: read once, not written
+        expect(counts()).toEqual({ gets: 0, sets: 0 });   // nothing changed: held in memory, not read again, not written
     }, 60_000);
 });
 
@@ -1315,6 +1330,7 @@ describe('the pin under a node that chooses its moment (#1872 review)', () => {
             await phoneOf(ana);
             await sendTo(dm.id, 'A line sealed to Ben before the update');
             h.store.delete(PINS(ana));   // the phone as a build without pins left it: rows, lines, no pin store
+            restarted();
             if (how.startsWith('dropped')) {
                 node.convs = [];
                 await syncMessages(ana.publicKey);
@@ -1330,31 +1346,84 @@ describe('the pin under a node that chooses its moment (#1872 review)', () => {
         });
     }
 
-    it('a pin lost to a write made from an older copy of the store is taken again from the phone\'s rows, not the next listing', async () => {
-        await aQuestionAndAnAnswer();
-        const dan = person('Dan');
-        const dm2: Conv = { id: randomUUID(), type: 'dm', participants: [ana.publicKey, dan.publicKey] };
-        node.convs = [dm, dm2];
-        await phoneOf(ana);
-        h.store.delete(PINS(ana));
+    /**
+     * The storage answering slowly for a write of Ana's pins that holds only `id` (a screen's or a send's first sight there):
+     * held until another write of them lands, or 300 ms. With a copy of the store per writer, the older copy is then
+     * written last and Ben's pin is gone; with one copy behind one queue, every write holds every pin.
+     */
+    function slowFirstSightWrite(id: string): () => void {
         const setItem = vi.mocked(AsyncStorage.setItem);
         const real = setItem.getMockImplementation()!;
-        let syncWrote!: () => void;
-        const syncWrite = new Promise<void>((r) => { syncWrote = r; });
+        let otherWrote!: () => void;
+        const otherWrite = new Promise<void>((r) => { otherWrote = r; });
         setItem.mockImplementation(async (k: string, v: string) => {
             if (k === PINS(ana)) {
                 const ids = Object.keys(JSON.parse(v));
-                if (ids.length === 1 && ids[0] === dm2.id) await syncWrite;   // the screen's write, from the copy it read first
-                else { await real(k, v); syncWrote(); return; }
+                if (ids.length === 1 && ids[0] === id.toLowerCase()) await Promise.race([otherWrite, new Promise((r) => setTimeout(r, 300))]);
+                else { await real(k, v); otherWrote(); return; }
             }
             return real(k, v);
         });
-        try { await Promise.all([getMessages(dm2.id), syncMessages(ana.publicKey)]); } finally { setItem.mockImplementation(real); }
+        return () => setItem.mockImplementation(real);
+    }
+
+    const firstSights: Array<[string, (id: string) => Promise<unknown>]> = [
+        ['the DM screen opens a DM it has no pin for', (id) => getMessages(id)],
+        ['Ana sends the first line in a DM it has no pin for', (id) => insertMessage(id, ana.publicKey, 'Hello Dan')],
+    ];
+    for (const [what, firstSight] of firstSights) {
+        it(`${what} while the first sync pass after the update runs: no pin is lost (one copy, one queue), and the next listing with PUPPET is refused`, async () => {
+            await aQuestionAndAnAnswer();
+            const dan = person('Dan');
+            const dm2: Conv = { id: randomUUID(), type: 'dm', participants: [ana.publicKey, dan.publicKey] };
+            node.convs = [dm, dm2];
+            await phoneOf(ana);
+            h.store.delete(PINS(ana));
+            restarted();
+            const restore = slowFirstSightWrite(dm2.id);
+            try { await Promise.all([firstSight(dm2.id), syncMessages(ana.publicKey)]); } finally { restore(); }
+            // Straight after, before a later pass could take a lost pin again from the phone's rows:
+            expect({ ben: pinOf(ana, dm.id)?.peer, dan: pinOf(ana, dm2.id)?.peer }).toEqual({ ben: ben.publicKey, dan: dan.publicKey });
+            dm.participants = [ana.publicKey, puppet.publicKey];
+            puppetSays(dm, 'New phone. What is the code?');
+            await syncMessages(ana.publicKey);
+            expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, offered: { peer: puppet.publicKey } });
+            expect(await sendTo(dm.id, 'The code is 4821')).toEqual({ err: 'DmKeyChangedError', puppetRead: false });
+        });
+    }
+
+    it('a pin lost from storage while the app runs (a write from an older copy) is taken again from the phone\'s rows at the next start, not from the listing', async () => {
+        await aQuestionAndAnAnswer();
+        await phoneOf(ana);
+        const pins = JSON.parse(h.store.get(PINS(ana))!);
+        delete pins[dm.id.toLowerCase()];
+        h.store.set(PINS(ana), JSON.stringify(pins));
+        restarted();
         dm.participants = [ana.publicKey, puppet.publicKey];
         puppetSays(dm, 'New phone. What is the code?');
         await syncMessages(ana.publicKey);
-        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey });
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, offered: { peer: puppet.publicKey } });
         expect(await sendTo(dm.id, 'The code is 4821')).toEqual({ err: 'DmKeyChangedError', puppetRead: false });
+    });
+
+    it('reading a thread or a photo neither reads the pin store again nor runs the first-sight check; the screen\'s check and a send each run it once', async () => {
+        const { question } = await aQuestionAndAnAnswer();
+        await phoneOf(ana);
+        const db = await getDb();
+        const getItem = vi.mocked(AsyncStorage.getItem);
+        const getAll = vi.mocked(db.getAllAsync);
+        const counts = () => ({
+            pinReads: getItem.mock.calls.filter((c) => c[0] === PINS(ana)).length,
+            firstSightChecks: getAll.mock.calls.filter((c) => String(c[0]).startsWith('SELECT id, author_pubkey, ciphertext, nonce, type, metadata FROM messages WHERE conversation_id = ? AND nonce LIKE ?')).length,
+        });
+        getItem.mockClear(); getAll.mockClear();
+        expect((await getMessages(dm.id)).map((m: any) => m.text)).toEqual(['Shall I cancel the order?', 'No']);
+        await getDecryptedAttachment(dm.id, question.id);
+        expect(counts()).toEqual({ pinReads: 0, firstSightChecks: 0 });
+        expect(await isDmKeyChangePending(dm.id)).toBe(false);
+        expect(counts()).toEqual({ pinReads: 0, firstSightChecks: 1 });
+        expect(await sendTo(dm.id, 'Still on for Saturday?')).toEqual({ err: null, puppetRead: false });
+        expect(counts()).toEqual({ pinReads: 0, firstSightChecks: 2 });
     });
 
     it('the send is the first key resolve for an unpinned DM (the post screen\'s decline message): a first sight none of the thread opens under is refused', async () => {
@@ -1363,6 +1432,7 @@ describe('the pin under a node that chooses its moment (#1872 review)', () => {
         dm.participants = [ana.publicKey, puppet.publicKey];
         h.store.delete(PINS(ana));
         h.store.delete('beanpool_dm_conversations_seen');
+        restarted();
         await phoneOf(ana);
         expect(pinOf(ana, dm.id)).toBeNull();
         expect(await sendTo(dm.id, 'Sorry, I have to decline')).toEqual({ err: 'DmKeyChangedError', puppetRead: false });

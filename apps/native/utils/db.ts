@@ -2598,23 +2598,60 @@ async function rememberDmConversations(ids: string[]): Promise<void> {
  * reaches a group's keys on a known DM's own id, and makes it a held group whose lines go to the roster the node shows
  * (#1841 review, finding 1). The two SQLite lookups ask the id as given, lower- and upper-case, so both keep their index:
  * a COLLATE NOCASE compare scanned the whole table for every row holdDmTypes asks about (#1841 confirmation 1, finding
- * 2). A DM the node lists in a mixed-case spelling is in the DM list, which folds any spelling.
+ * 2); refuseGroupKeysForDm keeps the complete check (isKnownDmInAnySpelling). `seenByFold` is the DM list folded once,
+ * for a pass over many rows (dmConversationsByFold).
  */
-export async function knownDmConversationId(conversationId: string): Promise<string | null> {
+export async function knownDmConversationId(conversationId: string, seenByFold?: Map<string, string[]>): Promise<string | null> {
     if (!conversationId) return null;
     const folded = conversationId.toLowerCase();
-    for (const seen of await dmConversationsSeen()) if (seen.toLowerCase() === folded) return seen;
+    const listed = seenByFold ? (seenByFold.get(folded) ?? []) : [...await dmConversationsSeen()].filter((s) => s.toLowerCase() === folded);
+    // The spelling asked for wins wherever this phone knows a DM under it, so a link to a conversation the phone holds
+    // opens that conversation, never a twin under another spelling: a node can list one first, and SQLite visits an IN
+    // list in BINARY order, upper case first (#1863 review). Another spelling answers only when this one is known nowhere.
+    if (listed.includes(conversationId)) return conversationId;
+    let row: string | null = null;
+    let line: string | null = null;
     try {
         const database = await getDb();
         const ids = [...new Set([conversationId, folded, conversationId.toUpperCase()])];
         const marks = ids.map(() => '?').join(', ');
-        const conv = await database.getFirstAsync<any>(`SELECT id FROM conversations WHERE id IN (${marks}) AND type = 'dm' LIMIT 1`, ids);
-        if (typeof conv?.id === 'string') return conv.id;
-        const row = await database.getFirstAsync<any>(
-            `SELECT conversation_id FROM messages WHERE conversation_id IN (${marks}) AND nonce LIKE ? LIMIT 1`, [...ids, `${V2_NONCE_PREFIX}%`]);
-        return typeof row?.conversation_id === 'string' ? row.conversation_id : null;
+        const conv = await database.getFirstAsync<any>(`SELECT id FROM conversations WHERE id IN (${marks}) AND type = 'dm' ORDER BY id = ? DESC LIMIT 1`, [...ids, conversationId]);
+        row = typeof conv?.id === 'string' ? conv.id : null;
+        if (row === conversationId) return row;
+        const msg = await database.getFirstAsync<any>(
+            `SELECT conversation_id FROM messages WHERE conversation_id IN (${marks}) AND nonce LIKE ? ORDER BY conversation_id = ? DESC LIMIT 1`, [...ids, `${V2_NONCE_PREFIX}%`, conversationId]);
+        line = typeof msg?.conversation_id === 'string' ? msg.conversation_id : null;
+        if (line === conversationId) return line;
+    } catch {}
+    return listed[0] ?? row ?? line;
+}
+
+/** The DM list folded once (each id lower-cased, to its spellings in the order seen), for a pass over many rows. */
+async function dmConversationsByFold(): Promise<Map<string, string[]>> {
+    const byFold = new Map<string, string[]>();
+    for (const s of await dmConversationsSeen()) { const f = s.toLowerCase(); const a = byFold.get(f); if (a) a.push(s); else byFold.set(f, [s]); }
+    return byFold;
+}
+
+/**
+ * A known DM in ANY spelling, the slow way (two COLLATE NOCASE scans): the key-making guard's own check, which runs when a
+ * group's keys are about to be synced or made, never per row of a sync. A dm row or a sealed line kept under a mixed-case
+ * spelling the DM list never got (written while the key memory couldn't be read) is caught here (#1863 review).
+ */
+async function isKnownDmInAnySpelling(conversationId: string): Promise<boolean> {
+    if (await isKnownDmConversation(conversationId)) return true;
+    try {
+        const database = await getDb();
+        const dm = await database.getFirstAsync<any>("SELECT 1 AS y FROM conversations WHERE id = ? COLLATE NOCASE AND type = 'dm' LIMIT 1", [conversationId]);
+        if (dm) return true;
+        const spelt = await database.getAllAsync<any>('SELECT id FROM conversations WHERE id = ? COLLATE NOCASE', [conversationId]);
+        const ids = (spelt ?? []).map((r: any) => r?.id).filter((s: unknown): s is string => typeof s === 'string');
+        if (!ids.length) return false;
+        const line = await database.getFirstAsync<any>(
+            `SELECT 1 AS y FROM messages WHERE conversation_id IN (${ids.map(() => '?').join(', ')}) AND nonce LIKE ? LIMIT 1`, [...ids, `${V2_NONCE_PREFIX}%`]);
+        return !!line;
     } catch {
-        return null;
+        return false;
     }
 }
 
@@ -2669,8 +2706,9 @@ async function holdDmTypes(): Promise<void> {
     try {
         const database = await getDb();
         const rows = await database.getAllAsync<any>("SELECT id, type FROM conversations WHERE IFNULL(type, 'dm') != 'dm'");
+        const byFold = await dmConversationsByFold();
         for (const r of rows || []) {
-            if (r?.id && await isKnownDmConversation(r.id)) {
+            if (r?.id && (await knownDmConversationId(r.id, byFold)) !== null) {
                 console.warn(`[DM guard] DM ${String(r.id).slice(0, 8)} was held as a ${r.type}: back to a DM`);
                 await database.runAsync("UPDATE conversations SET type = 'dm' WHERE id = ?", [r.id]);
                 await rememberDmConversations([r.id]);
@@ -6672,7 +6710,7 @@ export function groupKeyStore(nodeUrl: string): GroupKeyStore {
  */
 async function refuseGroupKeysForDm(ring: GroupKeyring): Promise<void> {
     if (await ring.seenLocked()) return;
-    if (await isKnownDmConversation(ring.groupId)) throw new GroupChatKeyError(GROUP_KEYS_FOR_DM_TEXT, 'refused');
+    if (await isKnownDmInAnySpelling(ring.groupId)) throw new GroupChatKeyError(GROUP_KEYS_FOR_DM_TEXT, 'refused');
 }
 
 async function groupKeyContext(): Promise<{ nodeUrl: string; identity: BeanPoolIdentity }> {

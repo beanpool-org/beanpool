@@ -35,8 +35,9 @@ const mockDb = {
         if (/SELECT id FROM conversations WHERE id IN \(/.test(sql)) return params.map((p) => store.conversations.get(p)).find((c) => c?.type === 'dm') ?? null;
         if (/FROM conversations WHERE id = \?/.test(sql)) return store.conversations.get(params[0]) ?? null;
         if (/SELECT conversation_id FROM messages WHERE conversation_id IN \(/.test(sql)) {
-            const ids = params.slice(0, -1);
-            const prefix = String(params[params.length - 1]).replace(/%$/, '');
+            const ps = /ORDER BY conversation_id = \? DESC/.test(sql) ? params.slice(0, -1) : params;
+            const ids = ps.slice(0, -1);
+            const prefix = String(ps[ps.length - 1]).replace(/%$/, '');
             const m = [...store.messages.values()].find((x) => ids.includes(x.conversation_id) && String(x.nonce).startsWith(prefix));
             return m ? { conversation_id: m.conversation_id } : null;
         }

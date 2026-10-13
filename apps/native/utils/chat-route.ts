@@ -98,7 +98,7 @@ export interface ChatRoute {
  */
 export async function routeChat(asks: ChatRouteAsks, id: string, link: ChatRouteLink): Promise<ChatRoute> {
     const canonical = screenIdOf(id);
-    const [held, knownDm] = await Promise.all([askHeldGroup(asks, canonical), askKnownDm(asks, canonical)]);
+    const [held, knownDm] = await Promise.all([askHeldGroup(asks, canonical), askKnownDm(asks, id)]);
     const kind = link.event || link.thread ? null : await askRouteKind(asks, knownDm ?? canonical).catch(() => null);
     const view = chatRouteView({
         held, knownDm: knownDm !== null, isEventChat: !!link.event || kind === 'event',

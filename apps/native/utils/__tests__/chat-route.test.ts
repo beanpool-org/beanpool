@@ -95,17 +95,17 @@ describe('routeChat', () => {
         isHeldGroupChat: vi.fn(async () => false), knownDmConversationId: vi.fn(async () => null), getConversationKind: vi.fn(async () => null), ...o,
     });
 
-    it('asks the held check, the DM guard and the kind of the id lower-cased, however the link spelled it', async () => {
+    it('asks the held check and the kind of the id lower-cased, and the DM guard (which folds case itself) of the link\'s own spelling', async () => {
         const a = asks({});
         await routeChat(a, G, {});
         expect(a.isHeldGroupChat).toHaveBeenCalledWith(g);
-        expect(a.knownDmConversationId).toHaveBeenCalledWith(g);
+        expect(a.knownDmConversationId).toHaveBeenCalledWith(G);
         expect(a.getConversationKind).toHaveBeenCalledWith(g, { askNode: true });
-        for (const f of [a.isHeldGroupChat, a.knownDmConversationId, a.getConversationKind] as any[]) expect(f.mock.calls.every((c: any[]) => c[0] === g)).toBe(true);
+        for (const f of [a.isHeldGroupChat, a.getConversationKind] as any[]) expect(f.mock.calls.every((c: any[]) => c[0] === g)).toBe(true);
     });
 
     it('a DM known under another spelling: a push for its id in capitals with group=1 draws the DM screen, on the phone\'s spelling', async () => {
-        const a = asks({ knownDmConversationId: vi.fn(async (id: string) => (id === g ? g : null)) });
+        const a = asks({ knownDmConversationId: vi.fn(async (id: string) => (id.toLowerCase() === g ? g : null)) });
         expect(await routeChat(a, G, { thread: 'group' })).toEqual({ view: 'dm', screenId: g });
     });
 

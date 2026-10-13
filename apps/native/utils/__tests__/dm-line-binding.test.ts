@@ -77,7 +77,8 @@ vi.mock('../crypto', async (orig) => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({ 'X-Signed': `${method} ${url}` })),
 }));
 
-import { getDb, getMessages, syncMessages, syncSingleConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind } from '../db';
+import { getDb, getMessages, syncMessages, syncSingleConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, getConversations, getConversationKind, getConversation, isHeldGroupChat, knownDmConversationId } from '../db';
+import { routeChat } from '../chat-route';
 import { dmQuoteFor } from '../chat-actions';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { encryptDmFormat2 } from '../e2e-crypto';
@@ -852,5 +853,81 @@ describe('a line of mine the node hasn\'t had', () => {
             { id: expect.any(String), text: 'Yes', note: null, sendState: 'failed' },
             { id: bens.id, text: 'Are you coming?', note: null, sendState: undefined },
         ]);
+    });
+});
+
+describe('a twin the node writes of a DM\'s id, in other capitals, with someone else in it (#1863 review, finding 1)', () => {
+    // Beside Ana and Ben's DM the node lists a "DM" under the same id in other capitals, with Ana and a puppet of its own,
+    // and lists it first. Ana's phone holds both. Tapping Ben's row (or any link to that very id) opens Ben's thread, and
+    // the line Ana sends from it opens for Ben, never for the puppet. ChatRoute's asks are app/chat/[id].tsx's.
+    const ROUTE_ASKS = { isHeldGroupChat, knownDmConversationId, getConversationKind };
+    const DM_SEEN = 'beanpool_dm_conversations_seen';
+    let puppet: Person;
+    beforeEach(() => { puppet = person('Puppet'); });
+
+    /** The text `reader` opens `line` to with their own key, or null when it doesn't open for them. */
+    function opensFor(reader: Person, line: Line): string | null {
+        try {
+            return phoneCrypto.openDmLine({ ciphertext: line.ciphertext, nonce: line.nonce }, { myEdPrivHex: reader.privateKey, peerEdPubHex: line.authorPubkey },
+                { conversationId: line.conversationId, senderPubHex: line.authorPubkey, messageId: line.id, part: 'body', metadata: line.metadata }).text;
+        } catch { return null; }
+    }
+    /** Ana taps the Inbox row `id`: the route, the screen it draws (whom its header names, its lines), and the line she sends there. */
+    async function tapAndSend(id: string, text: string) {
+        const route = await routeChat(ROUTE_ASKS, id, {});
+        const header = ((await getConversation(route.screenId, ana.publicKey)) as any)?.otherPubkey;
+        const lines = (await getMessages(route.screenId)).map((m: any) => m.text);
+        const before = node.lines.length;
+        await insertMessage(route.screenId, ana.publicKey, text);
+        await vi.waitFor(() => expect(node.lines.length).toBe(before + 1));
+        return { route, header, lines, sent: node.lines[node.lines.length - 1] };
+    }
+    /** The phone's own rows under any spelling of `id`, and its DM list's spellings of it in the order remembered. */
+    const held = (id: string) => ({
+        rows: (sql.prepare('SELECT id, type FROM conversations').all() as any[]).filter((r) => String(r.id).toLowerCase() === id.toLowerCase()).map((r) => `${r.id}:${r.type}`).sort(),
+        seen: (JSON.parse(h.store.get(DM_SEEN) ?? '[]') as string[]).filter((s) => s.toLowerCase() === id.toLowerCase()),
+    });
+    /** Ben's thread, as the tap must show it and send to it. */
+    async function expectBens(id: string, text: string, r: Awaited<ReturnType<typeof tapAndSend>>) {
+        expect(r.route).toEqual({ view: 'dm', screenId: id });
+        expect(r.header).toBe(ben.publicKey);
+        expect(r.lines).toEqual(['Shall I cancel the order?', 'No']);
+        expect(r.sent.conversationId).toBe(id);
+        expect(r.sent.nonce.split(':')[0]).toBe('x25519-xc20p-v2');
+        expect(opensFor(ben, r.sent)).toBe(text);
+        expect(opensFor(puppet, r.sent)).toBeNull();
+    }
+
+    it('a restored phone, the twin in capitals listed first: Ben\'s row opens Ben\'s thread, and only Ben reads the line', async () => {
+        await aQuestionAndAnAnswer();
+        const twin: Conv = { id: dm.id.toUpperCase(), type: 'dm', participants: [ana.publicKey, puppet.publicKey] };
+        node.convs = [twin, dm];
+        h.store.delete(DM_SEEN);   // restored from the 12 words: the DM list starts from this sync, in the node's order
+        await phoneOf(ana);
+        expect(held(dm.id)).toEqual({ rows: [`${twin.id}:dm`, `${dm.id}:dm`], seen: [twin.id, dm.id] });
+        await expectBens(dm.id, 'Ben, did you get my message?', await tapAndSend(dm.id, 'Ben, did you get my message?'));
+    });
+
+    it('a DM minted in capitals, its lower-case twin listed first: Ben\'s row opens Ben\'s thread, and only Ben reads the line', async () => {
+        dm.id = dm.id.toUpperCase();
+        await aQuestionAndAnAnswer();
+        const twin: Conv = { id: dm.id.toLowerCase(), type: 'dm', participants: [ana.publicKey, puppet.publicKey] };
+        node.convs = [twin, dm];
+        h.store.delete(DM_SEEN);
+        await phoneOf(ana);
+        expect(held(dm.id)).toEqual({ rows: [`${dm.id}:dm`, `${twin.id}:dm`], seen: [twin.id, dm.id] });
+        await expectBens(dm.id, 'Still want the order?', await tapAndSend(dm.id, 'Still want the order?'));
+    });
+
+    it('the DM list unreadable, so only the rows and lines answer (SQLite visits upper case first): Ben\'s row still opens Ben\'s thread', async () => {
+        await aQuestionAndAnAnswer();
+        const twin: Conv = { id: dm.id.toUpperCase(), type: 'dm', participants: [ana.publicKey, puppet.publicKey] };
+        node.convs = [twin, dm];
+        h.store.delete(DM_SEEN);
+        await phoneOf(ana);
+        expect(held(dm.id)).toEqual({ rows: [`${twin.id}:dm`, `${dm.id}:dm`], seen: [twin.id, dm.id] });
+        h.store.set(DM_SEEN, '{unreadable');
+        expect(await knownDmConversationId(dm.id)).toBe(dm.id);
+        await expectBens(dm.id, 'Are you there?', await tapAndSend(dm.id, 'Are you there?'));
     });
 });

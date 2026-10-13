@@ -45,6 +45,16 @@ export function dmPeerPinsStoreKey(publicKey: string): string {
 }
 
 /**
+ * The encrypted lines one account's phone held, at the update, of each DM its rows didn't pin (utils/db.ts, the update's
+ * seed): an object, conversation id lower-cased → those lines. Written the first time a build with pins meets the account
+ * and never overwritten, so a DM judged in a later run is judged on what the phone held then, not on what the node wrote
+ * since. Kept with {@link dmPeerPinsStoreKey} when the account leaves the phone, and never read for another account.
+ */
+export function dmLinesAtUpdateStoreKey(publicKey: string): string {
+    return `beanpool_dm_lines_at_update:${publicKey.toLowerCase()}`;
+}
+
+/**
  * The communities this phone has been to, for the community switcher (utils/nodes.ts). Sign Out and "Replace this
  * phone's account" remove it with the account (utils/account-leaves-phone.ts).
  */

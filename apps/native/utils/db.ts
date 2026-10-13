@@ -15,6 +15,7 @@ import {
     createDmPinBook, dmPinFor, dmSightFor, dmPinId, pinKeyOf, pinAtFirstSight, applyDmListings, applySightVerdict, judgeFirstSight,
     settleFirstSight, isUnplacedSight, isDmPinStoreError, type DmPeerPins, type DmPinEntry, type DmHeard, type SightVerdict,
 } from './dm-peer-pins';
+import { dmLinesAtUpdateStoreKey } from './storage-keys';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCachedNodeProfile } from './node-profile';
 import { communityCachesRenamed } from './cache-file-migration';
@@ -4362,18 +4363,69 @@ export async function getConversation(id: string, myPubkey?: string) {
 
 /**
  * The lines the update's seed held for each DM it couldn't pin from its rows, per account (lower-cased), by the DM's
- * folded id: first sight judges those DMs on these for the rest of the run, whatever the node rewrites meanwhile.
+ * folded id: first sight judges those DMs on these, whatever the node rewrites, tombstones or prunes meanwhile. Kept in
+ * storage too (dmLinesAtUpdateStoreKey), so a DM the update's run didn't judge (listed with several keys, or not listed)
+ * is judged on them in a later run (#1872/#1873 confirmation 2, finding 1). This is the run's copy.
  */
 const dmLinesHeldAtUpdate = new Map<string, Map<string, any[]>>();
+
+/** The stored held lines, or null when they aren't an object of arrays (judged as if none were kept). */
+function parseLinesHeldAtUpdate(raw: string): Map<string, any[]> | null {
+    try {
+        const v = JSON.parse(raw);
+        if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+        return new Map(Object.entries(v as Record<string, unknown>).filter((e): e is [string, any[]] => Array.isArray(e[1])));
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * The update's held lines for this account: the run's copy, or the stored one, read once a run. Unreadable storage: none
+ * this time (first sight reads the database, as a phone with nothing kept does), and tried again on the next call.
+ */
+async function linesHeldAtUpdate(me: string): Promise<Map<string, any[]>> {
+    const key = me.toLowerCase();
+    const copy = dmLinesHeldAtUpdate.get(key);
+    if (copy) return copy;
+    let raw: string | null;
+    try { raw = await AsyncStorage.getItem(dmLinesAtUpdateStoreKey(me)); } catch { return new Map(); }
+    const held = (raw == null ? null : parseLinesHeldAtUpdate(raw)) ?? new Map<string, any[]>();
+    dmLinesHeldAtUpdate.set(key, held);
+    return held;
+}
+
+/**
+ * The seed's held lines, kept for every later run: written only when none are stored, so a later run that finds the pins
+ * absent again (a pin write that failed) can't replace the update's memory with what the node has written since. Storage
+ * that can't be read is never written over: this run judges on what it holds now.
+ */
+async function keepLinesHeldAtUpdate(me: string, lines: Map<string, any[]>): Promise<void> {
+    const key = me.toLowerCase();
+    let stored: string | null;
+    try {
+        stored = await AsyncStorage.getItem(dmLinesAtUpdateStoreKey(me));
+    } catch {
+        dmLinesHeldAtUpdate.set(key, lines);
+        return;
+    }
+    if (stored == null) {
+        dmLinesHeldAtUpdate.set(key, lines);
+        await AsyncStorage.setItem(dmLinesAtUpdateStoreKey(me), JSON.stringify(Object.fromEntries(lines))).catch(() => {});
+        return;
+    }
+    dmLinesHeldAtUpdate.set(key, parseLinesHeldAtUpdate(stored) ?? lines);
+}
 
 /**
  * This phone's DM pins, one copy per account in memory, changed through one queue (utils/dm-peer-pins.ts). The rows a
  * build with pins first meets an account with are read when the pins are first found absent, before any row or line
  * from the node is written in this run (every writer of a DM's participant rows or lines reads the pins first): the
  * update's seed. A DM its rows pin is pinned from them; one whose rows name more than one other key keeps the encrypted
- * lines first sight reads (judgeThread), as held now, and the first sync pass judges it on them before it writes a line
- * (§3.4 amendment 3, companion a). The pin's memory starts at the update (§3.7): a rewrite or a tombstone the node
- * serves after it moves nothing; one written before it is the phone's history as it stands.
+ * lines first sight reads (judgeThread), as held now and kept for every later run, and the first sync pass judges it
+ * on them before it writes a line (§3.4 amendment 3, companion a). The pin's memory starts at the update (§3.7): a
+ * rewrite, a tombstone or a prune the node serves after it moves nothing; one before it is the phone's history as it
+ * stands.
  */
 const dmPins = createDmPinBook(AsyncStorage, async (me) => {
     const held = await dmPeersHeld();
@@ -4382,7 +4434,7 @@ const dmPins = createDmPinBook(AsyncStorage, async (me) => {
         const window = await sightWindow(id);
         if (window.length) lines.set(id, window);
     }
-    dmLinesHeldAtUpdate.set(me.toLowerCase(), lines);
+    await keepLinesHeldAtUpdate(me, lines);
     return (pins) => seedPinsFromRows(pins, me, held, true);
 });
 
@@ -4441,7 +4493,7 @@ async function sightWindow(conversationId: string): Promise<any[]> {
  * only lines not yet placed are tried again.
  */
 async function judgeThread(conversationId: string, myPrivHex: string, me: string, listed: string | null, heard: DmHeard | undefined): Promise<SightVerdict> {
-    const rows = dmLinesHeldAtUpdate.get(me.toLowerCase())?.get(dmPinId(conversationId)) ?? await sightWindow(conversationId);
+    const rows = (await linesHeldAtUpdate(me)).get(dmPinId(conversationId)) ?? await sightWindow(conversationId);
     if (!rows.length) return judgeFirstSight([], listed);
     const mine = me.toLowerCase();
     const tries = [listed, ...(heard?.tryKeys ?? []), ...rows.map(r => pinKeyOf(r.author_pubkey))];
@@ -4613,11 +4665,11 @@ function dmsTheRowsDontPin(rows: ReadonlyArray<any>, myPubkey: string): string[]
  * that `conversations` lists cleanly with one other key, judged on the lines held at the update with that key as the
  * listed one. Run by a sync pass or a push's refresh before it writes a row or line from the node, and applied in the
  * same change of the pins as the listing ({@link applyHeldSights}). A DM listed otherwise (several keys, or not at all)
- * waits for the send or the screen's check, which judge it on the same held lines.
+ * waits for the send or the screen's check, in this run or a later one, which judge it on the same held lines.
  */
 async function judgeHeldAtUpdate(me: string, myPrivHex: string, pins: DmPeerPins, conversations: ReadonlyArray<any>): Promise<HeldSight[]> {
-    const held = dmLinesHeldAtUpdate.get(me.toLowerCase());
-    if (!held?.size) return [];
+    const held = await linesHeldAtUpdate(me);
+    if (!held.size) return [];
     const mine = me.toLowerCase();
     const listings = new Map<string, any[]>();
     for (const c of conversations) {

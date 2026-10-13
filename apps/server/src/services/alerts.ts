@@ -72,7 +72,7 @@ import { logger, onSecurityLogLine, type LogCategory } from '../logger.js';
 import { errorMessage } from '../error-message.js';
 import { getNodeRole } from '../config/node-role.js';
 import { getLocalConfig } from '../config/local-config.js';
-import { NODE_ROLE_ACTS } from '../engine/node-roles.js';
+import { NODE_ROLE_ACTS, nodeRoleOf } from '../engine/node-roles.js';
 import { getDiskHealth } from '../engine/storage-health.js';
 import { getShutdownStatus } from '../engine/shutdown-recovery.js';
 import { dispatchPushNotification, readWatchdogStatus, resolvePublicNodeUrl } from '../state-engine.js';
@@ -84,6 +84,8 @@ import { tlsFellBackToSelfSigned } from './tls.js';
 import { getReplacedInfo } from './identity-epoch.js';
 import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, NAME_ALERT_WORDS, type SecurityNote } from './security-signal.js';
 import { registrarNames } from '../engine/registrar-names.js';
+import { listAutomationTokens } from '../automation-tokens.js';
+import { agentCallsTodayAll } from '../agent/limits.js';
 
 function dataDir(): string {
     return process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -1450,6 +1452,17 @@ export interface AlertsStatus {
     recent: Array<AlertEvent & { title: string }>;
     /** Whether an owner has something to acknowledge: those, or this server replaced. */
     acknowledge: boolean;
+    /** AI assistants today (admin MCP design §8), counts only: calls let in since midnight UTC, and how many are connected. */
+    assistants: { calls: number; connected: number };
+}
+
+/** Assistants that can call /mcp now: not expired, and their maker still an owner or admin (as /mcp reads them). */
+function connectedAssistants(t: number): number {
+    return listAutomationTokens().filter((k) => {
+        if (k.scope !== 'agent' || (k.expiresAt !== null && k.expiresAt <= t)) return false;
+        const role = typeof k.createdBy === 'string' ? nodeRoleOf(k.createdBy) : null;
+        return role === 'owner' || role === 'admin';
+    }).length;
 }
 
 export function getAlertsStatus(): AlertsStatus {
@@ -1467,5 +1480,6 @@ export function getAlertsStatus(): AlertsStatus {
         history: s.history.slice().reverse().map((e) => ({ ...e, title: ROWS[e.key].title })),
         recent: recentSecurityEvents(s, t).map((e) => ({ ...e, title: ROWS[e.key].title })),
         acknowledge: recentSecurityEvents(s, t).length > 0 || (!!s.raised['sec.replaced'] && s.raised['sec.replaced'].endedAt === undefined),
+        assistants: { calls: agentCallsTodayAll(t), connected: connectedAssistants(t) },
     };
 }

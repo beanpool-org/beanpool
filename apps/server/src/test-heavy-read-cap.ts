@@ -17,7 +17,8 @@
  *        (members-snapshot.ts), byte for byte, the heap under 75% of its 256 MB.
  *      How many are told "busy" depends on how fast the machine builds and sends (here, 24 to 40 of the 64).
  *  1b. Readers of the shared directory who stop reading (24 and 48 plain, 48 gzip), from a process of their own, each on
- *      a fresh server: its RSS, not only its heap, grows by no more than the 48 MB budget, and each reader is served or
+ *      a fresh server: its RSS, not only its heap, grows by no more than the 48 MB budget over what as many connections
+ *      with nothing to send cost a server made ready the same way in this run (#1874), and each reader is served or
  *      told "busy". Before the snapshot was sent a window at a time: +183, +445 and +107 MB.
  *  1c. The same, with the version moved before each reader (24 and 48, plain and gzip), on the shared directory and on a
  *      20,000-member roster: each reader holds a snapshot no longer current, which the cap counts once at its full size
@@ -573,11 +574,11 @@ async function stalledReaders(dir: string, readers: Key[], BURST: number, HEAP_M
         // +266 MB of RSS, 48 +532 MB. Now the server's whole memory stays within the cap's budget, and any reader past
         // what the budget allows is told "busy".
         const BUDGET_MB = 48;
-        // What `n` connections with nothing to send cost the server, measured in this run, on a fresh server made ready and
-        // measured as the readers' is: each asks /api/version and keeps its connection, as a reader told "busy" does. The readers' growth is
-        // bounded by the budget over that, not by the budget alone: on CI 384 such connections are much of the growth (+34
-        // MB with 47.9 MB counted in flight) and a busier runner's +51 failed an unrelated PR (#1874). Readers held in
-        // full, as before the cap, grow it by their bodies: 24 plain +266 MB, 48 +532 MB.
+        // What `n` connections with nothing to send cost the server, measured in this run, on a fresh server made ready
+        // and measured as the readers' is: each asks /api/version and keeps its connection, as a reader told "busy" does.
+        // The readers' growth is bounded by the budget over that, not by the budget alone: on CI 384 such connections are
+        // much of the growth (+34 MB with 47.9 MB counted in flight) and a busier runner's +51 failed an unrelated PR
+        // (#1874). Readers held in full, as before the cap, grow it by their bodies: 24 plain +266 MB, 48 +532 MB.
         const connections = new Map<number, number>();
         const connectionsCost = async (n: number): Promise<number> => {
             if (connections.has(n)) return connections.get(n)!;

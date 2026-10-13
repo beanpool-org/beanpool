@@ -2,6 +2,7 @@
 slug: my-deals
 title: My Deals
 summary: One place for every trade you are in, every post you have up, and your past trades.
+help: Every trade you are in and every post you have up. A deal waiting on you is at the top.
 related: a-deal-step-by-step, posting, your-balance, when-a-deal-goes-wrong, the-top-bar
 ---
 

@@ -5,7 +5,7 @@
  */
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { defaultCards, defaultHomeLayout } from '@beanpool/core';
+import { defaultHomeLayout, starterCards } from '@beanpool/core';
 import { AddCardDialog, CardSettingsDialog, PICKER_FULL_NOTE } from './AddCardDialog';
 import { pickerGroups } from '../lib/home-layout';
 
@@ -13,7 +13,7 @@ const LOCAL = { profile: 'local', features: { beans: true, escrow: true, enterpr
 const GLOBAL = { profile: 'global', features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false } };
 const TWO_SEARCHES = {
     ...defaultHomeLayout(),
-    cards: [...defaultCards(), { id: 'search-aaaa', type: 'search', settings: { q: 'eggs' } }, { id: 'search-bbbb', type: 'search', settings: { q: 'jam' } }],
+    cards: [...starterCards(), { id: 'search-aaaa', type: 'search', settings: { q: 'eggs' } }, { id: 'search-bbbb', type: 'search', settings: { q: 'jam' } }],
 };
 
 describe('AddCardDialog', () => {

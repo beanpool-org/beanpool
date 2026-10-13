@@ -9,7 +9,8 @@
  *   GET  /api/local/admin/auth/pairing/:id          phone: the short code, "Firefox on Windows", how long ago it asked and
  *                                                   the time left; signed by a member who holds a role here, also the
  *                                                   computer's address and "same network"
- *   POST /api/local/admin/auth/pairing/:id/approve  phone: { memberPubkey, signature, confirm? }
+ *   POST /api/local/admin/auth/pairing/:id/approve  phone: { memberPubkey, signature, confirm?, agentShown? } (agentShown: the
+ *                                                   phone showed an AI assistant's name and where it sends, agent/oauth-route.ts)
  *   POST /api/local/admin/auth/pairing/:id/decline  phone: { memberPubkey, signature }
  *
  * The phone's calls go through the auth limiter (15 a minute per client). The browser's creation has its own
@@ -164,7 +165,7 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
 
     router.post('/api/local/admin/auth/pairing/:id/approve', async (ctx) => {
         if (!deps.rateLimit(ctx as any)) return;
-        const { memberPubkey, signature, signedFor, confirm } = bodyOf(ctx);
+        const { memberPubkey, signature, signedFor, confirm, agentShown } = bodyOf(ctx);
         if (typeof memberPubkey !== 'string' || typeof signature !== 'string' || !memberPubkey || !signature) {
             ctx.status = 400;
             ctx.body = { error: 'memberPubkey and signature are required' };
@@ -176,6 +177,7 @@ export function createSettingsSigninRoutes(deps: RouteDeps): Router {
             signature,
             signedFor,
             confirm: confirm === true,
+            agentShown: agentShown === true,
         });
         if (!res.ok) {
             ctx.status = res.status;

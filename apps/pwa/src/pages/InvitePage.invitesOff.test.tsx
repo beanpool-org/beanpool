@@ -30,6 +30,7 @@ import { InvitePage } from './InvitePage';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { buildOfflineInviteCode, generateInvite } from '../lib/api';
 import { communityLinkText, invitesOn, invitesOffRefusal, INVITES_OFF_FALLBACK } from '../lib/node-invites';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_SHEET } from '@beanpool/core';
 
 const IDENTITY = { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(96), callsign: 'Ana', createdAt: '2026-10-01T00:00:00.000Z' };
 const info = (features: Record<string, boolean>, profile: 'local' | 'global' = 'global') =>
@@ -39,6 +40,7 @@ const WORDS = 'This community doesn’t use invites: anyone joins it with a sign
 
 beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(communityInfoOnce).mockImplementation(async () => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: {} }) as never);
     localStorage.clear();
 });
 
@@ -67,6 +69,31 @@ describe('node-invites', () => {
 });
 
 describe('the Invites page where the node takes no invites (the global node)', () => {
+    it('the global node that previews (showcase): the plain words say 12 words or a sign-in, and the 🏘️ line opens the sheet', async () => {
+        vi.mocked(communityInfoOnce).mockResolvedValue({ ...GLOBAL, features: { ...GLOBAL.features, showcase: true } });
+        render(<InvitePage identity={IDENTITY} onNavigate={() => {}} />);
+        await waitFor(() => expect(screen.getByText(/Bring someone here/)).toBeInTheDocument());
+        expect(screen.getByText(/Anyone can join it with 12 words or a sign-in/)).toBeInTheDocument();
+        const line = await screen.findByTestId('local-community-line');
+        expect(line.textContent).toBe(LOCAL_COMMUNITY_LINES.invites);
+        fireEvent.click(line);
+        expect(screen.getByTestId('local-community-sheet').textContent).toContain(LOCAL_COMMUNITY_SHEET.features.invites);
+    });
+
+    it('a node whose 12-words door is shut (wordsDoor false): the plain words say a sign-in only', async () => {
+        vi.mocked(communityInfoOnce).mockResolvedValue({ ...GLOBAL, features: { ...GLOBAL.features, wordsDoor: false } });
+        render(<InvitePage identity={IDENTITY} />);
+        await waitFor(() => expect(screen.getByText(/Anyone can join it with a sign-in/)).toBeInTheDocument());
+        expect(screen.queryByText(/12 words/)).toBeNull();
+    });
+
+    it('the global node without showcase (a server from before it): no line, as today', async () => {
+        vi.mocked(communityInfoOnce).mockResolvedValue(GLOBAL);
+        render(<InvitePage identity={IDENTITY} />);
+        await waitFor(() => expect(screen.getByText(/Bring someone here/)).toBeInTheDocument());
+        expect(screen.queryByTestId('local-community-line')).toBeNull();
+    });
+
     it("makes nothing: no generate, no code, no QR, no pending list, no tree; the community's link to copy and share", async () => {
         vi.mocked(communityInfoOnce).mockResolvedValueOnce(GLOBAL);
         const share = vi.fn(async () => {});

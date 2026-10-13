@@ -27,8 +27,8 @@
     {
       "id": "server",
       "title": "Running the server",
-      "summary": "Backups, updates and health, the app's floor, your address and peers, rate limits, and showing what a local community does.",
-      "pages": ["backups-and-replicas", "updates-and-health", "app-floor", "address-and-peers", "rate-limits", "private-preview", "showcase"]
+      "summary": "Backups, updates and health, the app's floor, your address and peers, rate limits, showing what a local community does, and AI assistants.",
+      "pages": ["backups-and-replicas", "updates-and-health", "app-floor", "address-and-peers", "rate-limits", "private-preview", "showcase", "ai-assistant"]
     },
     {
       "id": "privacy",

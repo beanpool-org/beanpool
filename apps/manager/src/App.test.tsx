@@ -83,6 +83,16 @@ describe('App Component', () => {
             }
         });
 
+        it("the retired copilot's stored settings are removed, and its saved tab opens the Overview instead of nothing", async () => {
+            localStorage.setItem('bp_fleet_ai_config', JSON.stringify({ provider: 'openrouter', apiKey: 'sk-or-v1-stale' }));
+            localStorage.setItem('bp_fleet_active_tab', 'ai');
+            await act(async () => {
+                render(<App isFleetMode={true} />);
+            });
+            expect(localStorage.getItem('bp_fleet_ai_config')).toBeNull();
+            expect(localStorage.getItem('bp_fleet_active_tab')).toBe('overview');
+        });
+
         it('switches tabs when tab navigation buttons are clicked', async () => {
             await act(async () => {
                 render(<App isFleetMode={true} />);

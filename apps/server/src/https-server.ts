@@ -107,6 +107,9 @@ import { createOffboxBackupRoutes } from './routes/offbox-backups.js';
 import { createAlertsRoutes } from './routes/alerts.js';
 import { createAutomationTokenRoutes } from './routes/automation-tokens.js';
 import { createMcpRoutes } from './agent/mcp-route.js';
+import { createAgentGrantRoutes } from './agent/grants-route.js';
+import { createOAuthRoutes, oauthDoorOff } from './agent/oauth-route.js';
+import { createAgentSuggestionRoutes } from './agent/suggestions-route.js';
 import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
 import { identityReadOnlyGuard } from './services/identity-epoch.js';
 import { createOwnerWordsCheckRoutes } from './routes/owner-words-check.js';
@@ -797,6 +800,9 @@ export function isAdminSurfacePath(requestPath: string): boolean {
         p === '/api/local/admin' ||
         p.startsWith('/api/local/admin/') ||
         p === '/mcp' ||
+        p === '/oauth' ||
+        p.startsWith('/oauth/') ||
+        p.startsWith('/.well-known/oauth-') ||
         p === '/api/admin' ||
         p.startsWith('/api/admin/') ||
         p === '/api/local/verify-password' ||
@@ -1249,6 +1255,10 @@ export async function startHttpsServer(port: number): Promise<number> {
         }
         await next();
     });
+
+    // The AI assistant's OAuth door with the owners' switch off: 404 for every verb, before the CORS layer below answers
+    // OPTIONS 204 or a router answers 405 (agent/oauth-route.ts).
+    app.use(oauthDoorOff());
 
     // Gateway Configuration Middlewares (CORS Allowed Origins, Admin IP Allowlist, Feature Toggles, Rate Limiting)
 
@@ -1816,6 +1826,9 @@ export async function startHttpsServer(port: number): Promise<number> {
         createAlertsRoutes(deps),
         createAutomationTokenRoutes(deps),
         createMcpRoutes(deps),
+        createAgentGrantRoutes(deps),
+        createOAuthRoutes(deps),
+        createAgentSuggestionRoutes(deps),
         createTakeoverEnvelopeRoutes(deps),
         createOwnerWordsCheckRoutes(deps),
         createOwnerUnlockRoutes(deps),

@@ -5,7 +5,8 @@ import { ProjectsPage } from './ProjectsPage';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { Treasury, BalanceInfo } from '../lib/api';
-import { getTreasuries, getBalance, getDecisions, createEnterprise } from '../lib/api';
+import { getTreasuries, getBalance, getDecisions, createEnterprise, getAllMembers } from '../lib/api';
+import * as apiModule from '../lib/api';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -631,10 +632,91 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         expect(sectionTabs()[0]).toContain('Decide');
     });
 
+    it('a node that shows previews with Decisions on and enterprises off: the real Decide tab, the sample enterprise, no sample Decision', async () => {
+        const info = { ...globalInfo, features: { ...globalInfo.features, decisions: true, enterprises: false, showcase: true } };
+        vi.mocked(communityInfoOnce).mockResolvedValueOnce(info);
+        render(<ProjectsPage identity={backerIdentity} />);
+        expect(await screen.findByTestId('sample-enterprise')).toBeInTheDocument();
+        expect(screen.queryByTestId('sample-decision')).toBeNull();
+        expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(true);
+    });
+
+    it('and with Decisions off and enterprises on: the sample Decision alone, no Decide tab, the real Commons pool', async () => {
+        const info = { ...globalInfo, features: { ...globalInfo.features, decisions: false, enterprises: true, showcase: true } };
+        vi.mocked(communityInfoOnce).mockResolvedValueOnce(info);
+        render(<ProjectsPage identity={backerIdentity} />);
+        expect(await screen.findByTestId('sample-decision')).toBeInTheDocument();
+        expect(screen.queryByTestId('sample-enterprise')).toBeNull();
+        expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(false);
+        expect(screen.getByText('Commons Pool')).toBeInTheDocument();
+    });
+
     it('an unanswered read keeps Decide: the node refuses a vote itself where it has none', async () => {
         vi.mocked(communityInfoOnce).mockRejectedValueOnce(new Error('offline'));
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
         await waitFor(() => expect(screen.getByText(/Propose Community Action/)).toBeInTheDocument());
         expect(sectionTabs()).toHaveLength(2);
+    });
+});
+
+describe('Commons with members on demand (review of #1861, N1)', () => {
+    const localInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local' as const, features: {} };
+    beforeEach(() => { vi.clearAllMocks(); });
+    afterEach(() => { vi.mocked(communityInfoOnce).mockImplementation(async () => localInfo as never); });
+
+    it('global: the whole directory is never read, at open or after', async () => {
+        const globalInfo = { ...localInfo, profile: 'global' as const, features: { beans: false, decisions: false, membersOnDemand: true } };
+        vi.mocked(communityInfoOnce).mockImplementation(async () => globalInfo as never);
+        render(<ProjectsPage identity={backerIdentity} />);
+        await waitFor(() => expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument());
+        await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
+        await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+        expect(getTreasuries).toHaveBeenCalled();
+        expect(getAllMembers).not.toHaveBeenCalled();
+    });
+
+    it('local: the directory is read once at open, as before', async () => {
+        render(<ProjectsPage identity={backerIdentity} />);
+        await waitFor(() => expect(getAllMembers).toHaveBeenCalledTimes(1));
+        await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+        expect(getAllMembers).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('Commons on global with previews AND members on demand (where #1853 meets #1861)', () => {
+    const localInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local' as const, features: {} };
+    // The worldwide community as it answers: every showcase feature off, previews on, people asked for, not read whole.
+    const globalInfo = {
+        ...localInfo, profile: 'global' as const,
+        features: { beans: false, escrow: false, enterprises: false, decisions: false, invites: false, showcase: true, membersOnDemand: true },
+    };
+    const fetchSpy = vi.fn(async (..._args: unknown[]): Promise<Response> => { throw new TypeError('offline'); });
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(communityInfoOnce).mockImplementation(async () => globalInfo as never);
+        vi.stubGlobal('fetch', fetchSpy);
+    });
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        vi.mocked(communityInfoOnce).mockImplementation(async () => localInfo as never);
+    });
+
+    it('the sample enterprise and Decision draw, the whole directory is never read, and no press sends a sample id', async () => {
+        render(<ProjectsPage identity={backerIdentity} />);
+        expect(await screen.findByTestId('sample-enterprise')).toBeInTheDocument();
+        expect(screen.getByTestId('sample-decision')).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument());
+        for (const name of ['Pledge', 'Pause', 'Vote']) {
+            fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}`) }));
+            const sheet = await screen.findByTestId('local-community-sheet');
+            fireEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
+        }
+        await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+        expect(getAllMembers).not.toHaveBeenCalled();
+        // Every call the page made, to the node's api or to fetch: none names a sample id, and nothing was written.
+        const calls = [...(Object.values(apiModule) as unknown[]).filter(vi.isMockFunction).flatMap(f => f.mock.calls), ...fetchSpy.mock.calls];
+        expect(calls.length).toBeGreaterThan(0);
+        expect(calls.map(c => JSON.stringify(c)).filter(s => /\bsample-[a-z0-9]/.test(s))).toEqual([]);
+        expect(fetchSpy.mock.calls.filter(([, init]) => ((init as RequestInit | undefined)?.method ?? 'GET') !== 'GET')).toEqual([]);
     });
 });

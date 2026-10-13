@@ -210,3 +210,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `formatResolverName`, `reportSubject`, and `isManagerApi` utility functions in `apps/manager/src/lib/node-client.ts` lacked direct unit test coverage.
 **Learning:** Testing `formatResolverName` confirmed that empty string or null returns `COMMUNITY_ADMIN` ('a community admin'), while whitespace-only string returns `''` after `trim()`. `reportSubject` verifies post author extraction, pulse item target fallback, and snake_case pubkey aliasing.
 **Action:** Continue identifying utility functions with missing direct assertions across `apps/manager/src/lib/`.
+
+## 2026-10-13 - [manager tests] confirmPhoneDigits and wrongDigitsMessage unit tests
+**Gap:** `confirmPhoneDigits` and `wrongDigitsMessage` in `apps/manager/src/lib/phone-signin.ts` lacked unit test coverage in `apps/manager/src/lib/phone-signin.test.ts`.
+**Learning:** Testing `confirmPhoneDigits` required mocking `globalThis.fetch` to cover network exception retry responses (`kind: 'retry'`), HTTP 500/429 status code handling, `status: 'wrong'` response mapping with `triesLeft`, and successful pairing confirmation delegation to `pollAnswer`.
+**Action:** Continue expanding unit test coverage for untested helper functions across `apps/manager/src/lib/`.

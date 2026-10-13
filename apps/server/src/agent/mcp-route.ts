@@ -8,8 +8,9 @@
  *   2. `Origin` absent or this node's own public address, else 403 (a web page cannot drive it from a browser);
  *   3. POST only: GET (no server push in v1) and DELETE (no session to end) → 405; no other method is a route here, so the
  *      router answers PUT and PATCH 405 itself and the CORS layer answers OPTIONS 204, switch on or off, before any of this;
- *   4. a bearer that is an automation token of the `agent` scope, and nothing else (no session, cookie, password or other
- *      scope), whose maker is an owner or an admin NOW (lose the role, lose the assistant) → else 401 (403 for another scope);
+ *   4. a bearer that is an automation token of the `agent` scope or an OAuth access token this node issued (agent/oauth.ts,
+ *      slice S2), and nothing else (no session, cookie, password or other scope), whose member is an owner or an admin NOW
+ *      (lose the role, lose the assistant) → else 401 (403 for another scope), the 401 naming where to sign in (RFC 9728);
  *   5. 60 calls a minute and 2,000 a day per token → 429 in words;
  *   6. then the tools (agent/tools.ts), each answer redacted at its source, every tool call written to the AGENT log.
  * An `agent` token reaches nothing but this (admin-auth.ts checkAutomationToken refuses it everywhere else).
@@ -23,6 +24,7 @@ import {
 import type { RouteDeps } from '../routes/types.js';
 import { requireAdminRole } from '../admin-auth.js';
 import { looksLikeAutomationToken, noteAutomationTokenUse, verifyAutomationToken } from '../automation-tokens.js';
+import { looksLikeOAuthAccessToken, noteOAuthGrantUse, verifyAccessToken } from './oauth.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { nodeRoleOf } from '../engine/node-roles.js';
 import { directoryName, getMember, resolvePublicNodeUrl } from '../state-engine.js';
@@ -30,7 +32,7 @@ import { getVersion } from '../version.js';
 import { logger } from '../logger.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
 import { logAddressTag } from '../log-address.js';
-import { clientLimiterKey } from '../client-ip.js';
+import { clientLimiterKey, isTrustedProxy } from '../client-ip.js';
 import { cleanMemberText, newBoundary } from './fence.js';
 import { admitAgentCall } from './limits.js';
 import { offersSuggestions, toolDescription, toolsFor, type AgentGrant } from './tools.js';
@@ -44,7 +46,7 @@ export function aiAssistantsAllowed(): boolean {
     return getLocalConfig().aiAssistantsAllowed !== false;
 }
 
-const UNAUTHORISED = "Send an AI assistant's token as `Authorization: Bearer bp_…`: an owner makes one in Settings";
+const UNAUTHORISED = "Connect this assistant by adding this address as a connector in Claude or ChatGPT and approving on your phone, or send an owner's assistant token as `Authorization: Bearer bp_…` (an owner makes one in Settings → Connected assistants)";
 
 function jsonRpcError(ctx: any, status: number, message: string, code = -32000): void {
     ctx.status = status;
@@ -59,11 +61,19 @@ function ownOrigin(): string | null {
     try { return new URL(url).origin; } catch { return null; }
 }
 
-/** The address the welcome names: the public one, else the host the assistant reached (a LAN node). */
-function nodeUrlFor(ctx: any): string {
+/**
+ * The address the welcome names, and the OAuth issuer: the public one, else the host the assistant reached (a LAN or
+ * bare-IP node can name itself no other way). X-Forwarded-Host is believed only from our own proxy (client-ip.ts
+ * isTrustedProxy: loopback, this machine's private subnets, TRUSTED_PROXIES), as X-Forwarded-For is; Koa's ctx.host
+ * under app.proxy would take it from anyone (#1881 review, finding 6).
+ */
+export function nodeUrlFor(ctx: any): string {
     const pub = resolvePublicNodeUrl();
     if (pub) return pub.replace(/\/+$/, '');
-    const host = String(ctx.host || '');
+    const socket = ctx.req?.socket;
+    const host = socket && !isTrustedProxy(socket.remoteAddress)
+        ? String(ctx.req.headers?.[':authority'] || ctx.req.headers?.host || '').split(',')[0].trim()
+        : String(ctx.host || '');
     return /^[a-z0-9.\-:[\]]{1,255}$/i.test(host) ? `https://${host}` : 'this server';
 }
 
@@ -73,23 +83,38 @@ function nodeUrlFor(ctx: any): string {
 // rest counted into one "…and M more" line when the minute is over (claim-code.ts claimLogAdmit's pattern). logger.ts
 // pruneSystemLogs keeps those lines apart (AGENT_REFUSED_LOG_KEEP_ROWS), so no number of refusals, from anyone, takes
 // the line of a call that was let in (review of #1855: 5,000 tokenless POSTs emptied the assistant's own record).
+// The "…and M more" line counts them by status and by grant, so 20 tokenless requests opening a minute cannot hide which
+// grant was refused after them, a demoted maker's included (#1855 confirmation 2, finding 1). A grant id there is one a
+// token check found (at most TOKEN_LIMIT of them), never what a request sent.
 
 export const AGENT_REFUSAL_LOG_BUDGET = 20;
 const REFUSAL_LOG_WINDOW_MS = 60_000;
 let refusalWindowStart = 0, refusalWritten = 0, refusalUnwritten = 0;
 let refusalSummaryTimer: ReturnType<typeof setTimeout> | null = null;
+/** Why a request was refused, as the summary line counts it: the HTTP status, or what the status alone does not say. */
+export type RefusalKind = '401' | '403' | '415' | '429' | 'batch' | 'demoted';
+const refusalByKind = new Map<RefusalKind, number>();
+const refusalByGrant = new Map<string, number>();
 
 function writeRefusalSummary(): void {
     if (refusalSummaryTimer) clearTimeout(refusalSummaryTimer);
     refusalSummaryTimer = null;
     if (refusalUnwritten > 0) {
-        logger.warn('AGENT', `Assistant refused ${refusalUnwritten} more requests in that minute, past the ${AGENT_REFUSAL_LOG_BUDGET} logged one by one`);
+        logger.warn('AGENT', `Assistant refused ${refusalUnwritten} more requests in that minute, past the ${AGENT_REFUSAL_LOG_BUDGET} logged one by one`, {
+            byStatus: Object.fromEntries(refusalByKind), grants: Object.fromEntries(refusalByGrant),
+        });
     }
     refusalUnwritten = 0;
+    refusalByKind.clear();
+    refusalByGrant.clear();
 }
 
-/** Write a refused request's line (`message` starts "Assistant refused") within the minute's budget, else count it. */
-function logRefusal(message: string, metadata: Record<string, unknown>, now = Date.now()): void {
+/**
+ * Write a refused request's line (`message` starts "Assistant refused") within the minute's budget, else count it, by
+ * `kind` and by the grant a token check found (`metadata.grant`). The OAuth door's registrations refused for volume
+ * (agent/oauth-route.ts) share it: the same budget and ring.
+ */
+export function logRefusal(message: string, metadata: Record<string, unknown>, kind: RefusalKind, now = Date.now()): void {
     if (now - refusalWindowStart >= REFUSAL_LOG_WINDOW_MS) {
         writeRefusalSummary();
         refusalWindowStart = now;
@@ -101,6 +126,8 @@ function logRefusal(message: string, metadata: Record<string, unknown>, now = Da
         return;
     }
     refusalUnwritten++;
+    refusalByKind.set(kind, (refusalByKind.get(kind) ?? 0) + 1);
+    if (typeof metadata.grant === 'string') refusalByGrant.set(metadata.grant, (refusalByGrant.get(metadata.grant) ?? 0) + 1);
     if (!refusalSummaryTimer) {
         refusalSummaryTimer = setTimeout(writeRefusalSummary, Math.max(0, refusalWindowStart + REFUSAL_LOG_WINDOW_MS - now));
         refusalSummaryTimer.unref?.();
@@ -120,11 +147,21 @@ type GrantCheck = { ok: true; grant: AgentGrant } | { ok: false; status: number;
 export function agentGrantFrom(ctx: any): GrantCheck {
     const header = String(ctx.get?.('authorization') || '');
     const m = /^Bearer\s+(\S+)$/i.exec(header.trim());
+    if (m && looksLikeOAuthAccessToken(m[1])) {
+        const g = verifyAccessToken(m[1]);
+        if (!g) return { ok: false, status: 401, error: 'Invalid, revoked or expired token' };
+        const r = nodeRoleOf(g.member);
+        if (r !== 'owner' && r !== 'admin') return { ok: false, status: 401, error: 'Invalid, revoked or expired token', grantId: g.id };
+        return {
+            ok: true,
+            grant: { id: g.id, name: g.clientName || 'AI assistant', member: g.member, role: r, via: 'oauth', createdAt: g.createdAt, expiresAt: null },
+        };
+    }
     if (!m || !looksLikeAutomationToken(m[1])) return { ok: false, status: 401, error: UNAUTHORISED };
     const record = verifyAutomationToken(m[1]);
     if (!record) return { ok: false, status: 401, error: 'Invalid, revoked or expired token' };
     if (record.scope !== 'agent') {
-        return { ok: false, status: 403, error: "Only an AI assistant's token (the agent scope) reaches /mcp: this token's scope is another" };
+        return { ok: false, status: 403, error: "Only an AI assistant's token (the agent scope) reaches /mcp: this token's scope is another", grantId: record.id };
     }
     const role = typeof record.createdBy === 'string' ? nodeRoleOf(record.createdBy) : null;
     if (role !== 'owner' && role !== 'admin') {
@@ -168,7 +205,7 @@ export function buildAgentServer(grant: AgentGrant, facts: WelcomeFacts): Server
             inputSchema: t.inputSchema as any,
             outputSchema: t.outputSchema as any,
             annotations: t.write
-                ? { title: t.title, readOnlyHint: false, idempotentHint: true, destructiveHint: false, openWorldHint: false }
+                ? { title: t.title, readOnlyHint: false, idempotentHint: t.name === 'take_backup', destructiveHint: false, openWorldHint: false }
                 : { title: t.title, readOnlyHint: true, openWorldHint: false },
         })),
     }));
@@ -242,10 +279,14 @@ export function createMcpRoutes(deps: RouteDeps): Router {
         // 4. An agent token, its member an owner or admin now.
         const check = agentGrantFrom(ctx);
         if (!check.ok) {
-            if (check.status === 401) ctx.set('WWW-Authenticate', 'Bearer realm="beanpool", error="invalid_token"');
+            if (check.status === 401) {
+                // Where an OAuth client learns to sign in (RFC 9728 §5.1); a token client reads only the error.
+                const metadata = `${nodeUrlFor(ctx)}/.well-known/oauth-protected-resource${MCP_PATH}`;
+                ctx.set('WWW-Authenticate', `Bearer realm="beanpool", error="invalid_token", resource_metadata="${metadata}", scope="agent"`);
+            }
             const from = logAddressTag(clientLimiterKey(ctx));
-            if (check.grantId) logRefusal('Assistant refused: its member is no longer an owner or admin', { grant: check.grantId, from });
-            else logRefusal('Assistant refused a request', { status: check.status, from });
+            if (check.status === 401 && check.grantId) logRefusal('Assistant refused: its member is no longer an owner or admin', { grant: check.grantId, from }, 'demoted');
+            else logRefusal('Assistant refused a request', { status: check.status, from, ...(check.grantId ? { grant: check.grantId } : {}) }, check.status === 403 ? '403' : '401');
             jsonRpcError(ctx, check.status, check.error);
             return;
         }
@@ -254,18 +295,19 @@ export function createMcpRoutes(deps: RouteDeps): Router {
         const admitted = admitAgentCall(grant.id);
         if (!admitted.ok) {
             ctx.set('Retry-After', String(admitted.retryAfterSeconds));
-            logRefusal('Assistant refused: over its limit', { grant: grant.id });
+            logRefusal('Assistant refused: over its limit', { grant: grant.id }, '429');
             jsonRpcError(ctx, 429, admitted.error);
             return;
         }
-        noteAutomationTokenUse(grant.id, `POST ${MCP_PATH}`);
+        if (grant.via === 'oauth') noteOAuthGrantUse(grant.id);
+        else noteAutomationTokenUse(grant.id, `POST ${MCP_PATH}`);
 
         // The body: read, capped and parsed already for a JSON request (https-server.ts); one that does not parse is a
         // parse error. Only a body that parser read goes on: one it did not take as JSON (a Content-Type spelled in
         // capitals, or none) would be read by the SDK itself, past the 64 KiB cap and the one-message rule below.
         const rawBody: unknown = (ctx as any).rawBody;
         if (typeof rawBody !== 'string') {
-            logRefusal('Assistant refused: a body the server did not read', { grant: grant.id });
+            logRefusal('Assistant refused: a body the server did not read', { grant: grant.id }, '415');
             jsonRpcError(ctx, 415, 'Send the MCP message with Content-Type: application/json', -32600);
             return;
         }
@@ -277,7 +319,7 @@ export function createMcpRoutes(deps: RouteDeps): Router {
         // One message per request: a JSON-RPC batch would carry hundreds of calls past the per-call limits (MCP dropped
         // batching in 2025-06-18; the SDK's client never sends one).
         if (Array.isArray(parsed)) {
-            logRefusal('Assistant refused: a batch', { grant: grant.id, messages: parsed.length });
+            logRefusal('Assistant refused: a batch', { grant: grant.id, messages: parsed.length }, 'batch');
             jsonRpcError(ctx, 400, 'Send one MCP message per request: batches are not accepted', -32600);
             return;
         }

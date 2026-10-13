@@ -2,6 +2,7 @@
 slug: browsing-the-market
 title: Browsing the market
 summary: Find Offers and Needs with search, filters and distance.
+help: Offers and Needs from people near you. Search, filter by category or distance, or tap + ADD POST to put up your own.
 related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 ---
 

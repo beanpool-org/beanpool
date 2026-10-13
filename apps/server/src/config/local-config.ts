@@ -97,6 +97,8 @@ export interface LocalConfig {
     // "Allow AI assistants" (agent/mcp-route.ts, admin MCP design §2): the owner switch for /mcp. Left out or true: the
     // endpoint answers (inert until an owner makes an agent token); false: /mcp answers 404 to everyone. This server's own.
     aiAssistantsAllowed?: boolean;
+    /** AI assistants connected through OAuth with the phone's approval (agent/oauth.ts): this server's own, never in a backup. */
+    agentOAuthGrants?: AgentOAuthGrantRecord[];
     // Backup side: the plaintext token this backup presents to its primary.
     backupReplicationToken?: string | null;
     // --- Backup pull cadence (operator-tunable, e.g. from the fleet manager) ---
@@ -198,6 +200,27 @@ const DEFAULT_CONFIG: LocalConfig = {
     currencyType: 'image',
     currencyValue: 'bean',
 };
+
+/** One AI assistant connected through OAuth (agent/oauth.ts): its client, its member, and its refresh token's hashes. */
+export interface AgentOAuthGrantRecord {
+    /** oa + 10 hex: never the shape of an automation token's id. */
+    id: string;
+    clientId: string;
+    /** What the client called itself at registration (cleaned): never shown without redirectUri's host. */
+    clientName: string;
+    redirectUri: string;
+    /** The resource it was approved for (this node's /mcp). */
+    resource: string;
+    /** The owner or admin who approved it on their phone: the assistant acts for them, at their role read per call. */
+    member: string;
+    createdAt: number;
+    lastUsedAt: number | null;
+    refreshIssuedAt: number;
+    /** SHA-256 (hex) of the live refresh token. */
+    refreshHash: string;
+    /** SHA-256 (hex) of the last spent refresh tokens: one presented again revokes the grant. */
+    spentRefresh: string[];
+}
 
 /** One owner automation token as local-config.json keeps it (automation-tokens.ts). */
 export interface AutomationTokenRecord {
@@ -721,7 +744,7 @@ export function clearReplicationToken(): void {
  */
 const LEFT_OUT_OF_BACKUPS = [
     'adminHash', 'salt', 'totpSecret', 'totpBackupCodesHashes', 'totpPendingSecret', 'totpPendingBackupCodesHashes',
-    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'automationTokens', 'claim', 'addressRequest', 'endedAddressRequest', 'turnedAwayNames',
+    'replicationTokenHash', 'replicationTokenSalt', 'backupReplicationToken', 'backupAdminPassword', 'automationTokens', 'agentOAuthGrants', 'claim', 'addressRequest', 'endedAddressRequest', 'turnedAwayNames',
 ] as const;
 
 /** A copy of the local config that is safe to put in a backup file (LEFT_OUT_OF_BACKUPS). */

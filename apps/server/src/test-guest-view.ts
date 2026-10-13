@@ -1164,6 +1164,8 @@ async function main(): Promise<void> {
             // An assistant's call for the reports, which name members, and the owner switch turned off.
             'POST /mcp': { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'reports_list', arguments: {} } },
             'POST /api/local/admin/agent/switch': { allowed: false },
+            'POST /api/local/admin/agent/grants': { name: 'Sentinel assistant', days: 7 },
+            'POST /api/local/admin/agent/preview': { tool: 'reports_list', args: { include_text: true } },
             // A succession statement naming Alice's key as the caller's old one (line-display design §5).
             'POST /api/community/me/key-succession': { oldPubkey: alice.pk, at: '2026-10-03T04:00:00.000Z', sig: 'A'.repeat(86) + '==' },
             'POST /api/friends/add': { friendPubkey: alice.pk },
@@ -1277,7 +1279,7 @@ async function main(): Promise<void> {
             'DELETE /api/global/watches/:id',
             'GET /api/groups', 'POST /api/groups', 'GET /api/groups/:id', 'PATCH /api/groups/:id', 'GET /api/groups/:id/chat',
             'POST /api/groups/:id/chat/message', 'POST /api/groups/:id/chat/remove', 'POST /api/groups/:id/join',
-            'GET /api/groups/:id/keys', 'GET /api/groups/:id/keys/:epoch/wraps', 'GET /api/groups/:id/keys/missing', 'POST /api/groups/:id/keys/epoch',
+            'GET /api/groups/:id/keys', 'GET /api/groups/:id/keys/:epoch/wraps', 'GET /api/groups/:id/keys/former', 'GET /api/groups/:id/keys/missing', 'POST /api/groups/:id/keys/epoch',
             'POST /api/groups/:id/keys/:epoch/reject', 'POST /api/groups/:id/keys/wrap', 'POST /api/groups/:id/lead',
             'GET /api/groups/:id/members', 'POST /api/groups/:id/members', 'DELETE /api/groups/:id/members/:pubkey',
             'PATCH /api/groups/:id/members/:pubkey', 'GET /api/groups/:id/picture', 'DELETE /api/groups/:id/posts/:postId', 'GET /api/groups/:id/succession',
@@ -1435,6 +1437,15 @@ async function main(): Promise<void> {
             // The AI assistant endpoint (agent/mcp-route.ts): an agent token is the only way in (every guest refused, below),
             // and the owner switch that turns it off.
             'POST /mcp', 'GET /mcp', 'DELETE /mcp', 'GET /api/local/admin/agent/switch', 'POST /api/local/admin/agent/switch',
+            // Settings' Connected assistants (agent/grants-route.ts): a person's own session only, never a token or a guest.
+            'GET /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants/:id/revoke',
+            'POST /api/local/admin/agent/preview',
+            // An assistant's suggestions (agent/suggestions-route.ts): a person's own session only; approve is the existing route.
+            'GET /api/local/admin/agent/suggestions', 'POST /api/local/admin/agent/suggestions/:id/decline',
+            // The OAuth door (agent/oauth-route.ts): metadata, registration, the consent page and its two calls, token, revoke.
+            'GET /.well-known/oauth-protected-resource', 'GET /.well-known/oauth-protected-resource/mcp', 'GET /.well-known/oauth-authorization-server',
+            'POST /oauth/register', 'GET /oauth/authorize', 'POST /oauth/authorize/:id/wait', 'POST /oauth/authorize/:id/confirm',
+            'POST /oauth/token', 'POST /oauth/revoke',
         ]);
         const ID_BY_PREFIX: Array<[RegExp, string]> = [
             [/^\/api\/groups\//, prunedClub.id], [/^\/api\/marketplace\/posts\/:id\/chat/, clubEvent.id], [/^\/api\/marketplace\/posts\//, offer.id], [/^\/api\/commons\/decisions\//, 'dec-sentinel'],

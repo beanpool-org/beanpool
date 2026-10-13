@@ -2,6 +2,7 @@
 slug: joining
 title: Joining BeanPool
 summary: Two ways in: a community, with an invite from a member, or the global community when it is open, with 12 secret words or one sign-in. Asking a community to let you in, and how to invite someone else.
+help: Join a community with an invite from a member, or the global community with 12 secret words or one sign-in.
 related: home, finding-a-community, your-12-words, your-profile, communities, how-it-works, web-app
 ---
 

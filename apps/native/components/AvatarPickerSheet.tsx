@@ -1,19 +1,22 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, Pressable, Modal, Image, ScrollView, ActivityIndicator, Alert, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { processProfileImage } from '../utils/image-processing';
 import { BUNDLED_AVATARS } from '../utils/bundled-avatars';
-import { colors, palette } from '../constants/colors';
+import { colors as lightColors, palette, type AppColors } from '../constants/colors';
 import { bottomSheetLayout } from '../utils/bottom-sheet-layout';
 
 interface AvatarPickerSheetProps {
     visible: boolean;
     onClose: () => void;
     onSelectImage: (uri: string) => void;
+    /** The dark theme's colours. Settings, welcome and profile setup pass them in dark; light passes none. */
+    colors?: AppColors;
 }
 
-export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPickerSheetProps) {
+export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors }: AvatarPickerSheetProps) {
+    const styles = useMemo(() => (colors ? makeStyles(tonesFor(colors)) : LIGHT_STYLES), [colors]);
     const [loading, setLoading] = useState(false);
     const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
     // The body scrolls and "Use Selected Avatar" sits in a footer outside it, above the system bars: at 320 dp and 130%
@@ -229,14 +232,49 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPic
     );
 }
 
-const styles = StyleSheet.create({
+/** The sheet's own light look (slate), or the theme's tokens when a theme passes its colours. */
+function tonesFor(colors?: AppColors) {
+    return colors ? {
+        sheet: colors.surface.card,
+        line: colors.border.default,
+        title: colors.text.heading,
+        closeBg: colors.surface.subtle,
+        closeText: colors.text.secondary,
+        sourceBg: colors.surface.subtle,
+        sourceBorder: colors.border.strong,
+        sourceLabel: colors.text.body,
+        section: colors.text.secondary,
+        chevronBg: colors.surface.subtle,
+        chevronText: colors.text.body,
+        itemBg: colors.surface.subtle,
+        selectedBg: colors.accent.tint,
+        loading: colors.text.secondary,
+    } : {
+        sheet: lightColors.surface.card,
+        line: palette.slate100,
+        title: palette.slate900,
+        closeBg: palette.slate100,
+        closeText: palette.slate500,
+        sourceBg: palette.slate50,
+        sourceBorder: palette.slate200,
+        sourceLabel: palette.slate700,
+        section: palette.slate600,
+        chevronBg: 'rgba(255,255,255,0.92)',
+        chevronText: palette.slate700,
+        itemBg: palette.slate50,
+        selectedBg: palette.blue50,
+        loading: palette.slate500,
+    };
+}
+
+const makeStyles = (t: ReturnType<typeof tonesFor>) => StyleSheet.create({
     backdrop: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'flex-end',
     },
     sheet: {
-        backgroundColor: colors.surface.card,
+        backgroundColor: t.sheet,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
     },
@@ -246,25 +284,25 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: 20,
         borderBottomWidth: 1,
-        borderBottomColor: palette.slate100,
+        borderBottomColor: t.line,
     },
     title: {
         fontSize: 18,
         fontWeight: '700',
-        color: palette.slate900,
+        color: t.title,
     },
     closeButton: {
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: palette.slate100,
+        backgroundColor: t.closeBg,
         alignItems: 'center',
         justifyContent: 'center',
     },
     closeText: {
         fontSize: 16,
         fontWeight: '700',
-        color: palette.slate500,
+        color: t.closeText,
     },
     // Shrinks to fit the sheet's cap and scrolls; never grows past its content.
     body: {
@@ -278,7 +316,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 20,
         paddingTop: 12,
         borderTopWidth: 1,
-        borderTopColor: palette.slate100,
+        borderTopColor: t.line,
     },
     sourceButtonsRow: {
         flexDirection: 'row',
@@ -287,9 +325,9 @@ const styles = StyleSheet.create({
     },
     sourceButton: {
         flex: 1,
-        backgroundColor: palette.slate50,
+        backgroundColor: t.sourceBg,
         borderWidth: 2,
-        borderColor: palette.slate200,
+        borderColor: t.sourceBorder,
         borderRadius: 16,
         padding: 20,
         alignItems: 'center',
@@ -301,12 +339,12 @@ const styles = StyleSheet.create({
     sourceLabel: {
         fontSize: 16,
         fontWeight: '600',
-        color: palette.slate700,
+        color: t.sourceLabel,
     },
     sectionTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: palette.slate600,
+        color: t.section,
         marginBottom: 16,
     },
     avatarScrollWrap: {
@@ -339,7 +377,7 @@ const styles = StyleSheet.create({
         width: 34,
         height: 34,
         borderRadius: 17,
-        backgroundColor: 'rgba(255,255,255,0.92)',
+        backgroundColor: t.chevronBg,
         justifyContent: 'center',
         alignItems: 'center',
         // subtle lift so the cue reads as a control floating over the strip
@@ -352,7 +390,7 @@ const styles = StyleSheet.create({
     avatarChevronText: {
         fontSize: 24,
         fontWeight: '800',
-        color: palette.slate700,
+        color: t.chevronText,
         textAlign: 'center',
         includeFontPadding: false,
     },
@@ -364,11 +402,11 @@ const styles = StyleSheet.create({
         borderColor: 'transparent',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: palette.slate50,
+        backgroundColor: t.itemBg,
     },
     avatarItemSelected: {
         borderColor: palette.blue500,
-        backgroundColor: palette.blue50,
+        backgroundColor: t.selectedBg,
         transform: [{ scale: 1.1 }],
     },
     avatarImage: {
@@ -390,7 +428,7 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     confirmButtonText: {
-        color: colors.text.inverse,
+        color: lightColors.text.inverse,
         fontSize: 16,
         fontWeight: '700',
     },
@@ -400,7 +438,9 @@ const styles = StyleSheet.create({
     },
     loadingText: {
         marginTop: 16,
-        color: palette.slate500,
+        color: t.loading,
         fontWeight: '600',
     },
 });
+
+const LIGHT_STYLES = makeStyles(tonesFor());

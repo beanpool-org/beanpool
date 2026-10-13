@@ -2,7 +2,7 @@
 slug: access-and-security
 title: Access and security
 summary: Changing or retiring the admin password, two-factor sign-in, break-glass codes, signing out everywhere, and the factory reset. Under Appliance & Data, then Access & Security.
-related: signing-in, roles, first-time-setup, rate-limits
+related: signing-in, roles, first-time-setup, rate-limits, ai-assistant
 ---
 
 ## Change the admin password
@@ -128,6 +128,10 @@ The fleet manager signs in to a node with an automation token instead of the adm
 - If a node refuses the token all the same (a Read token asked to change something, or a change that is owner-only only sometimes, such as making someone an owner or changing the backup schedule), the fleet manager says the same words. Reading who can take over, the owners' words checks, the backup schedule and the copy timing works with an Admin token.
 - If a node no longer takes the token (it was revoked, has expired, or was copied wrong), the fleet manager shows what the node said and "Make a new token from your phone (Settings → Automation tokens)", with **Fix token** to paste the new one. It never asks for the password instead.
 - A token, or a password, goes only to its own node: never to the server the fleet manager's page comes from.
+
+## Connected assistants
+
+An owner or an admin can connect their own AI assistant (Claude, ChatGPT, Cursor) to the server under **Connected assistants**, see exactly what it would read before and after, and disconnect it. From Claude or ChatGPT they add the server's address as a connector and approve on their phone; an owner can also make a token for a desktop agent. That token is not an automation token and is not listed under Automation tokens. Owners see every connected assistant and can turn AI assistants off. See AI assistants for what an assistant can and can't see.
 
 ## Factory reset
 

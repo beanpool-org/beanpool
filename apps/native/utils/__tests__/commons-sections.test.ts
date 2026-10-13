@@ -86,6 +86,16 @@ describe('the Commons screen shows the sections a node has', () => {
         }
     });
 
+    it("on the worldwide community that shows its switched-off features: the Commons heading over Example Valley, the real groups under it (review of #1852, finding 5)", () => {
+        const showcase = { ...GLOBAL, showcase: true };
+        expect(commonsSections(showcase)).toEqual(['groups']);
+        expect(commonsHeading(showcase).title).toBe('Commons');
+        expect(commonsHeading(showcase).description).toMatch(/from an example/);
+        expect(commonsHeading(showcase).description).toMatch(/groups to join here/);
+        // A node that hides them (showcase off) is the groups list it was.
+        expect(commonsHeading({ ...GLOBAL, showcase: false }).title).toBe('Groups');
+    });
+
     it('one switch at a time: no Decide where Decisions are off, no projects or enterprises where enterprises are', () => {
         expect(commonsSections({ ...LOCAL, decisions: false })).toEqual(['groups']);
         expect(commonsSectionFor('decide', { ...LOCAL, decisions: false })).toBe('groups');
@@ -185,9 +195,9 @@ describe('the screens go through the helpers (source check)', () => {
 
     it('Commons: the section drawn is commonsSectionFor, and Decide, its pill and the propose form only where shown', () => {
         const src = read('app/(tabs)/projects.tsx');
-        expect(src).toContain('const sections = commonsSections(nodeProfile?.features);');
+        expect(src).toContain('const sections = commonsSections(reader.effective);');
         expect(src).toContain("const showsDecide = sections.includes('decide');");
-        expect(src).toContain('const activeSection = commonsSectionFor(pickedSection, nodeProfile?.features);');
+        expect(src).toContain('const activeSection = commonsSectionFor(pickedSection, reader.effective);');
         expect(src).not.toMatch(/const \[activeSection,/);
         expect(src.split('<DecideSection').length - 1).toBe(1);
         expect(src.slice(src.lastIndexOf('\n', src.indexOf('<DecideSection')) - 60, src.indexOf('<DecideSection'))).toContain("{activeSection === 'decide' ? (");
@@ -199,10 +209,10 @@ describe('the screens go through the helpers (source check)', () => {
         // commonsGroupRows.
         expect(src).not.toContain('Enterprises Section');
         expect(block(src, '{sections.length > 1 && (')).toContain('accessibilityLabel="Groups Section"');
-        expect(src).toContain('const kindChips = groupKindChips(nodeProfile?.features);');
-        expect(src).toContain('return commonsGroupRows(groupKind, groups, sorted, yourGroups, nodeProfile?.features);');
+        expect(src).toContain('const kindChips = groupKindChips(reader.effective);');
+        expect(src).toContain('return commonsGroupRows(groupKind, groups, sorted, yourGroups, reader.effective);');
         expect(src).toContain("data={activeSection === 'decide' ? [] : groupRows}");
-        expect(src).toContain('const heading = commonsHeading(nodeProfile?.features);');
+        expect(src).toContain('const heading = commonsHeading(reader.effective);');
         expect(src).toContain('<PageTitle title={heading.title}');
     });
 

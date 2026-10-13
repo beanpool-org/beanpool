@@ -11,8 +11,10 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 export { ErrorBoundary };
 import { useIdentity } from './IdentityContext';
 import { getDb, createConversationApi, getRecentChatMembers, getFriendsLocal } from '../utils/db';
+import { useNodeProfile } from '../utils/use-node-profile';
+import { keepCards, lookUpMembers, searchPath } from '../utils/members-lookup';
+import { pickerEmpty, pickerHeading } from '../utils/community-list-note';
 import { MemberAvatar } from '../components/MemberAvatar';
-import { colors, palette } from '../constants/colors';
 import { useTheme, useStyles } from './ThemeContext';
 
 // ── Fixed Row Height for getItemLayout ──────────────────────────────────────
@@ -158,9 +160,16 @@ export default function NewMessageScreen() {
         emptyContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: 60 },
         emptyTitle: { marginTop: 12, fontSize: 15, color: colors.text.secondary, fontWeight: '700' },
         emptySubtitle: { marginTop: 4, fontSize: 13, color: colors.text.muted, fontWeight: '500', textAlign: 'center', paddingHorizontal: 32 },
+        // On a community that says `membersOnDemand` the line is the way on (search, or connect): read at 4.5:1.
+        emptySubtitleOnDemand: { color: colors.text.secondary },
     }));
 
     const [searchQuery, setSearchQuery] = useState('');
+    // On a community that says `membersOnDemand` the phone holds only the people this member has dealt with: recents and
+    // friends come from those, and a search of 2 letters or more also asks the node (DESIGN-global-members-by-area §2.3).
+    const membersOnDemand = useNodeProfile()?.features.membersOnDemand === true;
+    const [nodeResults, setNodeResults] = useState<any[]>([]);
+    const [nodeSearch, setNodeSearch] = useState<'none' | 'answered' | 'unreachable'>('none');
     const searchRef = useRef<TextInput>(null);
 
     // ── Data state ──────────────────────────────────────────────────────────
@@ -209,6 +218,25 @@ export default function NewMessageScreen() {
         load();
     }, [identity?.publicKey]);
 
+    useEffect(() => {
+        if (!membersOnDemand) return;
+        const path = searchPath(searchQuery);
+        if (!path) {
+            setNodeResults([]);
+            setNodeSearch('none');
+            return;
+        }
+        let cancelled = false;
+        const timeout = setTimeout(async () => {
+            const rows = await lookUpMembers(path);
+            // Offline the held cards are the results, filtered as always.
+            if (cancelled) return;
+            setNodeResults(rows ?? []);
+            setNodeSearch(rows === null ? 'unreachable' : 'answered');
+        }, 400);
+        return () => { cancelled = true; clearTimeout(timeout); };
+    }, [searchQuery, membersOnDemand]);
+
     // ── Search / sort (memo) ────────────────────────────────────────────────
     const filteredMembers = useMemo(() => {
         let list = allMembers;
@@ -221,6 +249,11 @@ export default function NewMessageScreen() {
             );
         }
 
+        if (nodeResults.length > 0) {
+            const shown = new Set(list.map(m => m.public_key));
+            list = [...list, ...nodeResults.filter(m => !shown.has(m.public_key) && m.public_key !== identity?.publicKey)];
+        }
+
         // Friends-first sort, then alphabetical
         return [...list].sort((a, b) => {
             const aF = friendPubkeys.has(a.public_key) ? 0 : 1;
@@ -228,20 +261,22 @@ export default function NewMessageScreen() {
             if (aF !== bF) return aF - bF;
             return (a.callsign || '').localeCompare(b.callsign || '');
         });
-    }, [allMembers, searchQuery, friendPubkeys]);
+    }, [allMembers, searchQuery, friendPubkeys, nodeResults, identity?.publicKey]);
 
     // ── Handlers ────────────────────────────────────────────────────────────
     const handleSelectMember = useCallback(async (pubkey: string) => {
         if (!identity?.publicKey || creating) return;
         setCreating(pubkey);
         try {
+            const fromNode = nodeResults.find(m => m.public_key === pubkey);
+            if (fromNode) await keepCards([fromNode]);
             const apiConv = await createConversationApi('dm', [identity.publicKey, pubkey], identity.publicKey);
             router.replace(`/chat/${apiConv.id}`);
         } catch (e: any) {
             console.error('[NewMessage] Create conversation error:', e);
             setCreating(null);
         }
-    }, [identity?.publicKey, creating]);
+    }, [identity?.publicKey, creating, nodeResults]);
 
 
 
@@ -335,14 +370,14 @@ export default function NewMessageScreen() {
             {/* Directory Header */}
             <View style={styles.directoryHeader}>
                 <Text style={styles.sectionTitle}>
-                    {searchQuery ? '🔍 Results' : '🏘️ Community Directory'}
+                    {membersOnDemand ? pickerHeading(searchQuery) : searchQuery ? '🔍 Results' : '🏘️ Community Directory'}
                 </Text>
                 <Text style={styles.memberCount}>
                     {filteredMembers.length} {filteredMembers.length === 1 ? 'member' : 'members'}
                 </Text>
             </View>
         </>
-    ), [showRecents, recents, searchQuery, filteredMembers.length, renderRecentCard]);
+    ), [showRecents, recents, searchQuery, filteredMembers.length, renderRecentCard, membersOnDemand]);
 
     // ── Main Return ─────────────────────────────────────────────────────────
     return (
@@ -407,10 +442,12 @@ export default function NewMessageScreen() {
                             <View style={styles.emptyContainer}>
                                 <MaterialCommunityIcons name="account-search-outline" size={48} color={colors.border.strong} />
                                 <Text style={styles.emptyTitle}>
-                                    {searchQuery ? 'No members match your search' : 'No community members found'}
+                                    {membersOnDemand ? pickerEmpty(searchQuery, nodeSearch).title : searchQuery ? 'No members match your search' : 'No community members found'}
                                 </Text>
-                                <Text style={styles.emptySubtitle}>
-                                    {searchQuery
+                                <Text style={[styles.emptySubtitle, membersOnDemand && styles.emptySubtitleOnDemand]}>
+                                    {membersOnDemand
+                                        ? pickerEmpty(searchQuery, nodeSearch).subtitle
+                                        : searchQuery
                                         ? 'Try a different callsign or public key.'
                                         : 'Sync with a node to populate your directory.'}
                                 </Text>

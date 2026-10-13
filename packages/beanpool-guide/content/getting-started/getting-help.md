@@ -7,6 +7,7 @@ related: the-bean, reporting, faq, blocking, the-top-bar
 
 ## Look it up
 
+- **The ? at the top:** on every tab, tap **?** for a short note on the screen you are on. From there, **Read the guide page** opens the page about it, **Search the guide** opens this guide's search, and **Take the tour again** shows you round the tabs once more.
 - **This guide:** search it for a word, like "gift" or "photo".
 - **The ⓘ buttons:** many screens have a small ⓘ. Tap it for a short explanation of that screen. The Ledger has several.
 - **The pricing guide:** in **Settings**, under **Community Pricing Guide**, tap **Browse 500+ Item Estimates** to see what things usually cost in beans.

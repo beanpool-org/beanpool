@@ -26,16 +26,26 @@ import { HomePage } from './HomePage';
 import { WelcomePage } from './WelcomePage';
 import { keyProblemSentence, joinTakes } from '../components/WebJoin';
 import { FormerAddressBanner } from '../components/FormerAddressBanner';
+import { LedgerPreview } from '../components/ShowcasePreviews';
+import { modeFor } from '../lib/features';
 
 const MapPage = lazy(() => import('./MapPage').then(m => ({ default: m.MapPage })));
 
-type LobbyTab = 'home' | 'marketplace' | 'map';
+import { helpSheetFor, webHelpKey } from '@beanpool/core';
+import { HelpDialog } from '../components/HelpDialog';
+import { LobbyHeader, LobbyHelpButton, LobbyJoin } from '../components/LobbyHeader';
+import { MemberGuide } from '../components/MemberGuide';
+import { getBundledGuide } from '../lib/guide';
+
+type LobbyTab = 'home' | 'marketplace' | 'map' | 'ledger';
 
 const TABS: { id: LobbyTab; label: string; emoji: string }[] = [
     { id: 'home', label: 'Home', emoji: '🏠' },
     { id: 'marketplace', label: 'Market', emoji: '🤝' },
     { id: 'map', label: 'Map', emoji: '🗺️' },
 ];
+/** The Ledger, when the node previews Beans: a visitor sees mutual exchange before any door (design §5, pick 4). */
+const LEDGER_TAB: { id: LobbyTab; label: string; emoji: string } = { id: 'ledger', label: 'Ledger', emoji: '📊' };
 
 interface Props {
     /** `/api/community/info`, as App read it to choose the lobby. */
@@ -49,6 +59,12 @@ interface Props {
 
 export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPostTaken }: Props) {
     const [tab, setTab] = useState<LobbyTab>('home');
+    const tabs = modeFor('beans', info) === 'preview' ? [...TABS, LEDGER_TAB] : TABS;
+    // The "?" (DESIGN-getting-started-fable.md §4–§5): help for the lobby's tab; its guide opens over the lobby.
+    const [helpOpen, setHelpOpen] = useState(false);
+    const [guideAt, setGuideAt] = useState<string | null | undefined>(undefined);
+    const helpWords = helpSheetFor(getBundledGuide(), webHelpKey({ tab, lobby: true }));
+    const helpButton = (className: string) => <LobbyHelpButton onClick={() => setHelpOpen(true)} className={className} />;
     const [marketClickCount, setMarketClickCount] = useState(0);
     const [openPostId, setOpenPostId] = useState<string | null>(null);
     // The browser join over the lobby: where it opens ('guard' from Join, 'restore' from "Already have BeanPool?";
@@ -100,8 +116,15 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
             if (contextId) setOpenPostId(contextId);
         } else if (to === 'map') {
             setTab('map');
+        } else if (to === 'ledger' && tabs.includes(LEDGER_TAB)) {
+            setTab('ledger');
+        } else if (to === 'home') {
+            setTab('home');
+        } else if (to === 'guide' && contextId) {
+            // How it works, from a 🏘️ sheet: the guide page, over the lobby until Back (the "?"'s own overlay).
+            setGuideAt(contextId);
         }
-        // Nothing else is open to a visitor.
+        // Nothing else is open to a visitor. Home and a guide page are where a 🏘️ sheet's ways lead.
     }
 
     function selectTab(id: LobbyTab) {
@@ -133,15 +156,10 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
         </section>
     );
 
-    const headerJoin = (className: string) => (
-        <button type="button" data-testid="header-join" onClick={() => openJoin('guard')} disabled={canHoldKey === null}
-            className={`border-0 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-bold cursor-pointer ${className}`}>
-            Join
-        </button>
-    );
+    const headerJoin = (className: string) => <LobbyJoin onClick={() => openJoin('guard')} disabled={canHoldKey === null} className={className} />;
 
     // The tab's own name: at 320 px with 1.3x text "Marketplace" runs under the Join button.
-    const title = tab === 'home' ? 'Home' : tab === 'marketplace' ? 'Market' : 'Map';
+    const title = tab === 'home' ? 'Home' : tab === 'marketplace' ? 'Market' : tab === 'ledger' ? 'Ledger' : 'Map';
 
     return (
         <div className="flex h-screen overflow-hidden text-text-primary" data-testid="guest-lobby">
@@ -152,7 +170,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                     <span className="font-extrabold text-xl tracking-tight text-rainbow">BeanPool</span>
                 </div>
                 <nav className="flex-1 p-3 space-y-1.5 overflow-y-auto">
-                    {TABS.map((t) => (
+                    {tabs.map((t) => (
                         <button key={t.id} type="button" onClick={() => selectTab(t.id)} aria-current={tab === t.id ? 'page' : undefined}
                             className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 cursor-pointer ${
                                 tab === t.id
@@ -164,7 +182,8 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                         </button>
                     ))}
                 </nav>
-                <div className="p-3 border-t border-nature-200 dark:border-nature-800 bg-nature-100/50 dark:bg-nature-900/50">
+                <div className="p-3 border-t border-nature-200 dark:border-nature-800 bg-nature-100/50 dark:bg-nature-900/50 flex items-center gap-2">
+                    {helpButton('shrink-0 min-w-[44px] min-h-[44px] rounded-xl text-nature-700 dark:text-nature-300 hover:bg-nature-200/60 dark:hover:bg-nature-800/60')}
                     {headerJoin('w-full min-h-[44px] rounded-xl text-sm')}
                 </div>
             </aside>
@@ -173,30 +192,23 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                 {/* Opened at a name this community had before: where it lives now (lost-name L4). */}
                 <FormerAddressBanner />
                 {/* The mobile header, as a member's: the page's name in the middle, Join where Settings sits. */}
-                <header className="relative shadow-md md:hidden" style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '0.3rem 0.75rem',
-                    minHeight: '46px',
-                    borderBottom: tab === 'map' ? 'none' : '1px solid rgba(255,255,255,0.1)',
-                    position: tab === 'map' ? 'absolute' : 'sticky',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    zIndex: 100,
-                    backgroundImage: "url('/assets/neon-vines-banner.png')",
-                    backgroundSize: '150% auto',
-                    backgroundPosition: 'center',
-                }}>
-                    <div className="absolute inset-0 bg-black/10 dark:bg-black/50 pointer-events-none" />
-                    <img src="/bean.png" alt="" aria-hidden="true" className="relative z-10 w-8 h-8 object-contain drop-shadow-sm" />
-                    <h1 className="absolute left-1/2 -translate-x-1/2 z-10 m-0 font-extrabold text-[1.4rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] whitespace-nowrap overflow-hidden text-ellipsis"
-                        style={{ maxWidth: 'calc(100% - 190px)' }}>
-                        {title}
-                    </h1>
-                    {headerJoin('relative z-10 min-h-[36px] px-4 rounded-full text-sm shadow-md')}
-                </header>
+                <LobbyHeader tab={tab} title={title} onHelp={() => setHelpOpen(true)} onJoin={() => openJoin('guard')} joinDisabled={canHoldKey === null} />
+                {helpOpen && (
+                    <HelpDialog
+                        sheet={helpWords}
+                        tourOpen={false}
+                        canTour={false}
+                        onClose={() => setHelpOpen(false)}
+                        onReadPage={() => { setHelpOpen(false); setGuideAt(helpWords.slug); }}
+                        onSearch={() => { setHelpOpen(false); setGuideAt(null); }}
+                        onTour={() => setHelpOpen(false)}
+                    />
+                )}
+                {guideAt !== undefined && (
+                    <div className="fixed inset-0 overflow-y-auto bg-white dark:bg-nature-950" style={{ zIndex: 1100 }} data-testid="lobby-guide">
+                        <MemberGuide onBack={() => setGuideAt(undefined)} initialPage={guideAt ?? undefined} feedbackLive={false} />
+                    </div>
+                )}
 
                 <main style={{
                     flex: 1,
@@ -218,6 +230,9 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                             onPostOpened={() => setOpenPostId(null)}
                             onNavigate={navigate}
                         />
+                    )}
+                    {tab === 'ledger' && (
+                        <LedgerPreview onNearYou={() => selectTab('home')} onGuide={(slug) => navigate('guide', slug)} />
                     )}
                     {tab === 'map' && (
                         <Suspense fallback={<div className="flex-1 flex items-center justify-center">Loading map...</div>}>
@@ -241,7 +256,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                 }}>
                     <div className="absolute inset-0 bg-black/30 pointer-events-none" />
                     <div className="relative z-10 w-full flex gap-1">
-                        {TABS.map((t) => {
+                        {tabs.map((t) => {
                             const isActive = tab === t.id;
                             return (
                                 <button key={t.id} type="button" onClick={() => selectTab(t.id)} aria-current={isActive ? 'page' : undefined}

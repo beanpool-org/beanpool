@@ -2,6 +2,7 @@
 slug: polls
 title: Polls
 summary: Ask the community a quick question. Polls show opinion; they change nothing by themselves.
+help: A poll asks the community a quick question. It shows what people think; it changes nothing by itself.
 related: decisions, proposing-a-decision, events, rules, beans-and-the-global-community
 ---
 

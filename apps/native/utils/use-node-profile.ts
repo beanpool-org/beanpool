@@ -12,18 +12,31 @@ import { UNKNOWN_NODE_PROFILE, anchorRead, profileArrived, type AnchoredNodeProf
  * known, and an answer from the one before is dropped (node-profile-anchor.ts).
  */
 export function useNodeProfile(): NodeProfile | null {
+    return useNodeProfileState().profile;
+}
+
+/**
+ * useNodeProfile, and whether this phone's own copy has been read yet for the community it is on (`copyRead`). Before
+ * then the profile is null only because the read hasn't finished, a moment with no network: a screen that would ask
+ * the node for a feature's data waits it out, so a feature in preview never asks (the showcase's Ledger). After it the
+ * profile is what the phone knows, null included. Storage that can't be read counts as read: nothing more will be known.
+ */
+export function useNodeProfileState(): { profile: NodeProfile | null; copyRead: boolean } {
     const [state, setState] = useState<AnchoredNodeProfile>(UNKNOWN_NODE_PROFILE);
+    // The community whose copy was read: `undefined` before the first read finishes.
+    const [copyReadFor, setCopyReadFor] = useState<string | null | undefined>(undefined);
     useFocusEffect(
         React.useCallback(() => {
             let cancelled = false;
             (async () => {
                 // Storage that can't be read says nothing about which community this is: keep what the screen has.
                 const url = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => undefined);
-                if (url === undefined || cancelled) return;
+                if (cancelled) return;
+                if (url === undefined) { setCopyReadFor(r => (r === undefined ? null : r)); return; }
                 setState(s => anchorRead(s, url));
-                if (!url) return;
+                if (!url) { setCopyReadFor(url); return; }
                 const cached = await getCachedNodeProfile(url);
-                if (!cancelled) setState(s => profileArrived(s, url, cached));
+                if (!cancelled) { setState(s => profileArrived(s, url, cached)); setCopyReadFor(url); }
                 if (nodeProfileIsFresh(cached)) return;
                 const fresh = await fetchNodeProfile(url);
                 if (!cancelled) setState(s => profileArrived(s, url, fresh));
@@ -31,5 +44,5 @@ export function useNodeProfile(): NodeProfile | null {
             return () => { cancelled = true; };
         }, []),
     );
-    return state.profile;
+    return { profile: state.profile, copyRead: copyReadFor !== undefined && copyReadFor === state.url };
 }

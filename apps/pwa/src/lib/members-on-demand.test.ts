@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import {
     memberKeysPaths, memberSearchPath, membersNearPath, membersOnDemandOn, useMembersOnDemand, useMemberSearch,
-    MEMBERS_ON_DEMAND_SEEN_PREFIX, MEMBERS_SEARCH_DEBOUNCE_MS,
+    MEMBERS_ON_DEMAND_SEEN_PREFIX, MEMBERS_SEARCH_DEBOUNCE_MS, MEMBERS_REQUEST_TIMEOUT_MS, membersNear, searchMembers,
 } from './members-on-demand';
 import * as api from './api';
 
@@ -139,5 +139,42 @@ describe('members on demand: the search box (review of #1861, N3)', () => {
         expect(result.current).toEqual({ found: [card('e', 'Alma')], state: 'idle' });
         await act(async () => { answerOld([card('f', 'Alder')]); await Promise.resolve(); });
         expect(result.current).toEqual({ found: [card('e', 'Alma')], state: 'idle' });
+    });
+});
+
+describe('members on demand: a node that never answers (review of #1861, N4)', () => {
+    afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+    const neverAnswers = () => {
+        const signals: AbortSignal[] = [];
+        vi.spyOn(api, 'getMemberCards').mockImplementation((_path: string, signal?: AbortSignal) => {
+            if (signal) signals.push(signal);
+            return new Promise(() => {});
+        });
+        return signals;
+    };
+
+    it('the near read and the search give up after 30 s, not before, and stop their requests', async () => {
+        expect(MEMBERS_REQUEST_TIMEOUT_MS).toBe(30_000);
+        vi.useFakeTimers();
+        const signals = neverAnswers();
+        const outcomes: string[] = [];
+        membersNear({ lat: -28.6, lng: 153.6 }).then(() => outcomes.push('near answered'), () => outcomes.push('near gave up'));
+        searchMembers('al').then(() => outcomes.push('search answered'), () => outcomes.push('search gave up'));
+        await vi.advanceTimersByTimeAsync(MEMBERS_REQUEST_TIMEOUT_MS - 1);
+        expect(outcomes).toEqual([]);
+        expect(signals.map(s => s.aborted)).toEqual([false, false]);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(outcomes.sort()).toEqual(['near gave up', 'search gave up']);
+        expect(signals.map(s => s.aborted)).toEqual([true, true]);
+    });
+
+    it('a search box whose search never answers says it failed once the limit passes', async () => {
+        vi.useFakeTimers();
+        neverAnswers();
+        const { result } = renderHook(() => useMemberSearch('al', true));
+        await act(async () => { await vi.advanceTimersByTimeAsync(MEMBERS_SEARCH_DEBOUNCE_MS + MEMBERS_REQUEST_TIMEOUT_MS - 1); });
+        expect(result.current.state).toBe('searching');
+        await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+        expect(result.current).toEqual({ found: null, state: 'failed' });
     });
 });

@@ -73,3 +73,34 @@ export async function askRouteKind(asks: ChatRouteAsks, id: string): Promise<'ev
 export function screenIdOf(id: string): string {
     return id.toLowerCase();
 }
+
+/** What the link said on the way in: `event=1`, or `group=1` / `enterprise=1`. */
+export interface ChatRouteLink {
+    event?: boolean;
+    thread?: 'group' | 'enterprise' | null;
+}
+
+export interface ChatRoute {
+    view: Exclude<ChatRouteView, 'wait'>;
+    /** The id the drawn screen gets: the DM screen keeps the link's spelling (its rows); the others get screenIdOf. */
+    screenId: string;
+}
+
+/**
+ * Which screen `/chat/:id` draws and the id it gets, from one canonical id (screenIdOf): the held check, the DM guard and
+ * the kind are all asked of it, and a group's screen gets it, so no spelling of an id can be a DM to one check and a
+ * group to the next (#1841 review, findings 1 and 4). Resolves once every fact is in; never rejects.
+ */
+export async function routeChat(asks: ChatRouteAsks, id: string, link: ChatRouteLink): Promise<ChatRoute> {
+    const canonical = screenIdOf(id);
+    const [held, knownDm, kind] = await Promise.all([
+        askHeldGroup(asks, canonical),
+        askKnownDm(asks, canonical),
+        link.event || link.thread ? Promise.resolve(null) : askRouteKind(asks, canonical).catch(() => null),
+    ]);
+    const view = chatRouteView({
+        held, knownDm, isEventChat: !!link.event || kind === 'event',
+        threadKind: link.thread ?? (kind === 'group' || kind === 'enterprise' ? kind : null),
+    }) as ChatRoute['view'];
+    return { view, screenId: view === 'dm' ? id : canonical };
+}

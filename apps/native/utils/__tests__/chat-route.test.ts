@@ -4,7 +4,9 @@
  * 1, 2 and 4).
  */
 import { describe, it, expect, vi } from 'vitest';
-import { chatRouteView, askHeldGroup, askKnownDm, askRouteKind, screenIdOf, type ChatRouteFacts, type ChatRouteAsks } from '../chat-route';
+import fs from 'node:fs';
+import path from 'node:path';
+import { chatRouteView, askHeldGroup, askKnownDm, askRouteKind, screenIdOf, routeChat, type ChatRouteFacts, type ChatRouteAsks } from '../chat-route';
 
 const facts = (f: Partial<ChatRouteFacts>): ChatRouteFacts => ({ held: false, knownDm: false, isEventChat: false, threadKind: null, ...f });
 
@@ -81,5 +83,83 @@ describe('ChatRoute asks', () => {
     it('the node-readable screens get the id lower-cased (a link or a push may carry it in capitals)', () => {
         const g = '3F2B9C1E-7A4D-4E8B-9C0D-1A2B3C4D5E6F';
         expect(screenIdOf(g)).toBe(g.toLowerCase());
+    });
+});
+
+/** One route function asks every fact of one id and hands the screen that id (#1841 review, findings 1 and 4). */
+describe('routeChat', () => {
+    const G = '3F2B9C1E-7A4D-4E8B-9C0D-1A2B3C4D5E6F';
+    const g = G.toLowerCase();
+    const asks = (o: Partial<ChatRouteAsks>): ChatRouteAsks => ({
+        isHeldGroupChat: vi.fn(async () => false), isKnownDmConversation: vi.fn(async () => false), getConversationKind: vi.fn(async () => null), ...o,
+    });
+
+    it('asks the held check, the DM guard and the kind of the id lower-cased, however the link spelled it', async () => {
+        const a = asks({});
+        await routeChat(a, G, {});
+        expect(a.isHeldGroupChat).toHaveBeenCalledWith(g);
+        expect(a.isKnownDmConversation).toHaveBeenCalledWith(g);
+        expect(a.getConversationKind).toHaveBeenCalledWith(g, { askNode: true });
+        for (const f of [a.isHeldGroupChat, a.isKnownDmConversation, a.getConversationKind] as any[]) expect(f.mock.calls.every((c: any[]) => c[0] === g)).toBe(true);
+    });
+
+    it('a DM known under another spelling: a push for its id in capitals with group=1 draws the DM screen', async () => {
+        const a = asks({ isKnownDmConversation: vi.fn(async (id: string) => id === g) });
+        expect(await routeChat(a, G, { thread: 'group' })).toEqual({ view: 'dm', screenId: G });
+    });
+
+    it('a group\'s, an event\'s or an enterprise\'s screen gets the id lower-cased; the DM screen keeps the link\'s spelling', async () => {
+        expect(await routeChat(asks({ isHeldGroupChat: vi.fn(async () => true) }), G, {})).toEqual({ view: 'group', screenId: g });
+        expect(await routeChat(asks({}), G, { thread: 'group' })).toEqual({ view: 'group_thread', screenId: g });
+        expect(await routeChat(asks({}), G, { event: true })).toEqual({ view: 'event', screenId: g });
+        expect(await routeChat(asks({}), G, { thread: 'enterprise' })).toEqual({ view: 'enterprise_thread', screenId: g });
+        expect(await routeChat(asks({ getConversationKind: vi.fn(async () => 'group_thread') }), G, {})).toEqual({ view: 'group_thread', screenId: g });
+        expect(await routeChat(asks({}), G, {})).toEqual({ view: 'dm', screenId: G });
+    });
+
+    it('a link that says the kind is not second-guessed by the conversation\'s type; a held check that throws is "error" (the DM screen, never an event chat)', async () => {
+        const a = asks({});
+        await routeChat(a, G, { event: true });
+        await routeChat(a, G, { thread: 'group' });
+        expect(a.getConversationKind).not.toHaveBeenCalled();
+        const failing = asks({ isHeldGroupChat: vi.fn(async () => { throw new Error('unread'); }) });
+        expect((await routeChat(failing, G, { event: true })).view).toBe('dm');
+        expect((await routeChat(failing, G, { thread: 'group' })).view).toBe('group_thread');
+    });
+
+    it('never rejects: a kind lookup that throws counts as no kind', async () => {
+        const a = asks({ getConversationKind: vi.fn(async () => { throw new Error('x'); }) });
+        expect(await routeChat(a, G, {})).toEqual({ view: 'dm', screenId: G });
+    });
+});
+
+/** The screens only render what routeChat answers, and open keys through the DM guard (#1841 review, findings 1 and 4). */
+describe('the screens\' wiring', () => {
+    const read = (p: string) => fs.readFileSync(path.join(__dirname, '..', '..', p), 'utf-8');
+    const route = read('app/chat/[id].tsx');
+    const chatRoute = route.slice(route.indexOf('export default function ChatRoute()'), route.indexOf('function ChatScreen()'));
+
+    it('ChatRoute asks routeChat once, with the link\'s kind, and asks no fact itself', () => {
+        expect(chatRoute).toMatch(/routeChat\(ROUTE_ASKS, String\(id\), \{ event: event === '1', thread: group === '1' \? 'group' : enterprise === '1' \? 'enterprise' : null \}\)/);
+        expect(route).toMatch(/const ROUTE_ASKS: ChatRouteAsks = \{ isHeldGroupChat, isKnownDmConversation, getConversationKind \};/);
+        expect(chatRoute).not.toMatch(/isHeldGroupChat\(|isKnownDmConversation\(|getConversationKind\(|askHeldGroup|askKnownDm|askRouteKind/);
+    });
+
+    it('every node-readable screen gets routeChat\'s id, and only an answer for this id draws', () => {
+        expect(chatRoute).toMatch(/if \(!id \|\| !route \|\| route\.for !== String\(id\)\) return null;/);
+        expect(chatRoute.match(/<GroupChatView kind="group" id=\{screenId\}/g)?.length).toBe(1);
+        expect(chatRoute).toMatch(/<EventChatView eventId=\{screenId\} \/>/);
+        expect(chatRoute).toMatch(/<GroupChatView kind="enterprise" id=\{screenId\}/);
+        expect(chatRoute).not.toMatch(/id=\{(?!screenId\})|eventId=\{(?!screenId\})/);
+    });
+
+    it('the DM screen\'s send keeps the typed words when the line is refused (the store unread, or not locked)', () => {
+        expect(route).toMatch(/const refused = refusedSendNotice\(err, peerPubkey \? peerName : null\);\s*if \(refused\) \{[\s\S]{0,400}?composerRef\.current\?\.setText\(restoredDraft\(currentDraft,/);
+    });
+
+    it('the group screen opens its keyring through the DM guard (groupScreenKeyringFor), never groupKeyringFor', () => {
+        const view = read('components/GroupChatView.tsx');
+        expect(view).toMatch(/groupScreenKeyringFor\(id\)\s*\.then\(async ring =>/);
+        expect(view).not.toMatch(/groupKeyringFor\b/);
     });
 });

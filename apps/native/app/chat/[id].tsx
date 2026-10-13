@@ -14,7 +14,7 @@ import { useIdentity } from '../IdentityContext';
 import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, isKnownDmConversation, isHeldGroupChat } from '../../utils/db';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
-import { chatRouteView, askHeldGroup, askKnownDm, askRouteKind, screenIdOf, type ChatRouteAsks } from '../../utils/chat-route';
+import { routeChat, type ChatRoute as ChatRouteAnswer, type ChatRouteAsks } from '../../utils/chat-route';
 import { isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { ReviewModal } from '../../components/ReviewModal';
@@ -80,6 +80,9 @@ function ChatImage({ conversationId, messageId, onOpen }: { conversationId: stri
     );
 }
 
+/** What the route asks the phone (utils/chat-route.ts tests these wirings). */
+const ROUTE_ASKS: ChatRouteAsks = { isHeldGroupChat, isKnownDmConversation, getConversationKind };
+
 /**
  * `/chat/:id` serves several kinds of conversation, and utils/chat-route.ts decides which screen, in this order: a group
  * whose keys this phone has held (its group chat, sealed or refused), a known DM (the DM screen), an event chat, a group's
@@ -87,67 +90,33 @@ function ChatImage({ conversationId, messageId, onOpen }: { conversationId: stri
  * `plaintext-v1`, members that follow the RSVPs, a host who can remove a message, read-only once the event ends — none of
  * which the DM pipeline below (E2E, edits, reactions, deals) knows about, and all of which it would quietly get wrong.
  *
- * Nothing draws until the phone has asked its own key memory and its DM list (a SecureStore read and a few small SQLite
- * reads): every screen here can post, and which one may is what is being decided. The Inbox row, the event detail and
- * "Your groups" say the kind on the way in (`event=1`, `group=1`, `enterprise=1`); the conversation's type is the
+ * Nothing draws until the phone has asked its own key memory, its DM list and the conversation's kind (a SecureStore read
+ * and a few small SQLite reads; the node only when there is no row yet): every screen here can post, and which one may is
+ * what is being decided. Every fact is asked of one id, lower-cased, and a group's screen gets that id, so no spelling is
+ * a DM to one check and a group to the next (routeChat; #1841 review, findings 1 and 4). The Inbox row, the event detail
+ * and "Your groups" say the kind on the way in (`event=1`, `group=1`, `enterprise=1`); the conversation's type is the
  * fallback for an older link or a push.
  */
-/** What the route asks the phone (utils/chat-route.ts tests these wirings). */
-const ROUTE_ASKS: ChatRouteAsks = { isHeldGroupChat, isKnownDmConversation, getConversationKind };
-
 export default function ChatRoute() {
     const { id, event, group, enterprise, created, name, info } = useLocalSearchParams<{
         id?: string; event?: string; group?: string; enterprise?: string; created?: string; name?: string; info?: string;
     }>();
-    const [isEventChat, setIsEventChat] = useState(event === '1');
-    // A group's chat and an enterprise's public discussion thread are node-readable threads like the event chat, on
-    // their own screen with the one owner header (groups decision 9). "Your groups" says which on the way in.
-    const [threadKind, setThreadKind] = useState<'group' | 'enterprise' | null>(
-        group === '1' ? 'group' : enterprise === '1' ? 'enterprise' : null,
-    );
-
-    // A DM stays a DM (utils/db.ts, the DM guard): a conversation this phone has seen as a DM, or that holds an encrypted
-    // line, opens only in the DM screen below, whatever type the node now gives it or a link says, unless this phone has
-    // held a group's keys under its id (asked first, below). Asked before any node-readable view opens; null while asking.
-    const [knownDm, setKnownDm] = useState<boolean | null>(null);
+    // The answer for the id it was asked of: a new id draws nothing until its own answer is in.
+    const [route, setRoute] = useState<{ for: string; answer: ChatRouteAnswer } | null>(null);
     useEffect(() => {
         if (!id) return;
         let alive = true;
-        askKnownDm(ROUTE_ASKS, String(id)).then(k => { if (alive) setKnownDm(k); });
+        setRoute(null);
+        routeChat(ROUTE_ASKS, String(id), { event: event === '1', thread: group === '1' ? 'group' : enterprise === '1' ? 'enterprise' : null })
+            .then(answer => { if (alive) setRoute({ for: String(id), answer }); });
         return () => { alive = false; };
-    }, [id]);
+    }, [id, event, group, enterprise]);
 
-    // A group whose keys this phone has held opens only in its group chat (sealed or refused), whatever type the local
-    // row says, with no row (a sync pruned it, a push tap landed first), whatever a link says, or once something called
-    // it a DM: never the DM screen or the event chat (confirmation of #1788, finding 1; confirmation 2, finding 2). Null
-    // while asking; 'error' when the key memory couldn't be read, which never counts as "not held" (finding 1).
-    const [heldGroup, setHeldGroup] = useState<boolean | null | 'error'>(null);
-    useEffect(() => {
-        if (!id) return;
-        let alive = true;
-        askHeldGroup(ROUTE_ASKS, String(id)).then(h => { if (alive) setHeldGroup(h); });
-        return () => { alive = false; };
-    }, [id]);
-
-    useEffect(() => {
-        if (isEventChat || threadKind || !id) return;
-        let alive = true;
-        // No row yet (a push tap before the sync): the node is asked, so a group's chat opens in its own screen.
-        askRouteKind(ROUTE_ASKS, String(id)).then(kind => {
-            if (!alive) return;
-            if (kind === 'event') setIsEventChat(true);
-            else if (kind) setThreadKind(kind);
-        });
-        return () => { alive = false; };
-    }, [id, isEventChat, threadKind]);
-
-    const view = chatRouteView({ held: heldGroup, knownDm, isEventChat, threadKind });
-    if (view === 'wait' || !id) return null;
-    // The node-readable screens get the node's spelling (lower-case), the one this phone's group key memory is kept under.
-    const nodeId = screenIdOf(String(id));
-    if (view === 'group' || view === 'group_thread') return <GroupChatView kind="group" id={nodeId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
-    if (view === 'event') return <EventChatView eventId={nodeId} />;
-    if (view === 'enterprise_thread') return <GroupChatView kind="enterprise" id={nodeId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
+    if (!id || !route || route.for !== String(id)) return null;
+    const { view, screenId } = route.answer;
+    if (view === 'group' || view === 'group_thread') return <GroupChatView kind="group" id={screenId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
+    if (view === 'event') return <EventChatView eventId={screenId} />;
+    if (view === 'enterprise_thread') return <GroupChatView kind="enterprise" id={screenId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
     return <ChatScreen />;
 }
 

@@ -298,6 +298,7 @@ export const SUITES = [
     'test-group-rosters-photo-urls',
     'test-group-pictures-crowdfund-urls',
     'test-contact-trade-partners',
+    'test-ratings-privacy',
     'test-sync-signature',
     'test-trust-value-curve',
     'test-trust-tiers-one-source',
@@ -548,6 +549,9 @@ export const VARIANTS = [
     { name: 'test-invite-bound-name', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
     // A member's friends list is read by its owner alone under the opt-out too: unsigned 401, anyone else's key 403.
     { name: 'test-friends-routes', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // A member's reviews are read by members of this node only, and a review names its writer and its deal only to the
+    // two people in it, under the opt-out too: unsigned 401, a non-member 403, anyone else's given list 403 own_only.
+    { name: 'test-ratings-privacy', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
 
     // Consolidated/legacy conversation-id resolution: a send to a legacy id remaps to the active DM, preserves
     // metadata.originalConversationId (the E2EE AAD fallback), and survives a malformed-metadata row. Always run

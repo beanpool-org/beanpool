@@ -5,7 +5,8 @@ import Slider from '@react-native-community/slider';
 import * as Location from 'expo-location';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, palette } from '../constants/colors';
+import { palette } from '../constants/colors';
+import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { HAS_MAPS_KEY } from '../utils/maps';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
 
@@ -28,6 +29,8 @@ interface RadiusPickerModalProps {
 }
 
 export function RadiusPickerModal({ visible, initialRadius, initialLat, initialLng, onApply, onCancel, onReset }: RadiusPickerModalProps) {
+    const { colors, theme } = useTheme();
+    const styles = useStyles(makeStyles);
     const defaultRadius = 20;
     // Android draws this pageSheet full-screen under the status bar; see utils/modal-safe-area.
     const topInset = pageSheetTopInset(Platform.OS, useSafeAreaInsets().top);
@@ -157,7 +160,7 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
                         accessibilityLabel="Center on my location"
                         onPress={handleLocateUser}
                     >
-                        <MaterialCommunityIcons name="crosshairs-gps" size={22} color={palette.gray700} />
+                        <MaterialCommunityIcons name="crosshairs-gps" size={22} color={theme === 'dark' ? colors.text.body : palette.gray700} />
                     </Pressable>
                 </View>
 
@@ -205,7 +208,8 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
     );
 }
 
-const styles = StyleSheet.create({
+// Themed: Market's distance picker was a light sheet over the dark app. Light keeps its grays.
+const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: colors.surface.app,
@@ -268,12 +272,12 @@ const styles = StyleSheet.create({
         marginBottom: 16,
     },
     radiusLabel: {
-        color: palette.gray600,
+        color: theme === 'dark' ? colors.text.secondary : palette.gray600,
         fontSize: 16,
         fontWeight: '600',
     },
     radiusValue: {
-        color: palette.amber600,
+        color: theme === 'dark' ? palette.amber400 : palette.amber600,
         fontSize: 20,
         fontWeight: '900',
     },

@@ -3,7 +3,8 @@ import { View, Text, TextInput, Pressable, Modal, ActivityIndicator, Alert, Styl
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { submitRating, getDb } from '../utils/db';
 import { useIdentity } from '../app/IdentityContext';
-import { colors, palette } from '../constants/colors';
+import { palette } from '../constants/colors';
+import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 
 interface ReviewModalProps {
     visible: boolean;
@@ -15,6 +16,8 @@ interface ReviewModalProps {
 }
 
 export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClose, onSuccess }: ReviewModalProps) {
+    const { colors } = useTheme();
+    const styles = useStyles(makeStyles);
     const { identity } = useIdentity();
     const [stars, setStars] = useState(5);
     const [comment, setComment] = useState('');
@@ -143,13 +146,14 @@ export function ReviewModal({ visible, txId, targetPubkey, targetCallsign, onClo
     );
 }
 
-const styles = StyleSheet.create({
+// Themed: the review card was a white sheet in dark chats and posts. Light keeps its grays.
+const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
     overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' },
     scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
     card: { backgroundColor: colors.surface.card, borderRadius: 24, padding: 24, width: '100%', alignItems: 'center', shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10 },
     emoji: { fontSize: 40, marginBottom: 16 },
     title: { fontSize: 20, fontWeight: '900', color: colors.text.body, marginBottom: 8 },
-    subtitle: { fontSize: 14, color: palette.gray600, textAlign: 'center', marginBottom: 24 },
+    subtitle: { fontSize: 14, color: theme === 'dark' ? colors.text.secondary : palette.gray600, textAlign: 'center', marginBottom: 24 },
     bold: { fontWeight: '800', color: colors.text.heading },
     starsRow: { flexDirection: 'row', gap: 8, marginBottom: 24 },
     star: { fontSize: 40 },
@@ -158,7 +162,7 @@ const styles = StyleSheet.create({
     input: { width: '100%', backgroundColor: colors.surface.app, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 16, fontSize: 14, minHeight: 80, marginBottom: 24, color: colors.text.body },
     buttonRow: { flexDirection: 'row', gap: 12, width: '100%' },
     skipBtn: { flex: 1, backgroundColor: colors.surface.subtle, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
-    skipText: { fontWeight: '700', color: palette.gray600, fontSize: 14 },
+    skipText: { fontWeight: '700', color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 14 },
     submitBtn: { flex: 1.5, backgroundColor: palette.amber500, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
     submitText: { fontWeight: '700', color: colors.text.inverse, fontSize: 14 },
     btnDisabled: { opacity: 0.7 },

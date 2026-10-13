@@ -1815,3 +1815,129 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
         expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey } });
     });
 });
+// #1873 review, finding 5 (its port-cases.part): "Continue" against a sync pass, and photos under every attribution. The
+// race cases failed on 300cb036 (each writer read and wrote the whole store) and pass with the pin book's one queue; the
+// photo matrix kills M8 (a former key tried for a row in anyone's name). Under the pin book the store is read from storage
+// once an app run, so each race starts a fresh run (restarted()) and holds that one read: the pass and the tap both wait
+// on it, then take their turns in the queue.
+describe('#1873 review: "Continue" and the sync pass, and photos under every attribution', () => {
+    let puppet: Person;
+    beforeEach(() => { puppet = person('Puppet'); });
+    const PINS = (who: Person) => dmPeerPinsStoreKey(who.publicKey);
+    const pinOf = (who: Person, id: string) => (JSON.parse(h.store.get(PINS(who)) ?? '{}') as Record<string, any>)[id.toLowerCase()] ?? null;
+    function reads(reader: Person, line: Line): string | null {
+        try {
+            return phoneCrypto.openDmLine({ ciphertext: line.ciphertext, nonce: line.nonce }, { myEdPrivHex: reader.privateKey, peerEdPubHex: line.authorPubkey },
+                { conversationId: line.conversationId, senderPubHex: line.authorPubkey, messageId: line.id, part: 'body', metadata: line.metadata }).text;
+        } catch { return null; }
+    }
+    async function send(text: string): Promise<Line | string> {
+        const before = node.lines.length;
+        try { await insertMessage(dm.id, ana.publicKey, text); } catch (e: any) { return e?.name; }
+        await vi.waitFor(() => expect(node.lines.length).toBe(before + 1));
+        return node.lines[node.lines.length - 1];
+    }
+    /** A fresh app run, then hold the nth read of the pins from storage: answered with what the store held when asked, once released. */
+    function holdPinsRead(who: Person, nth = 1) {
+        restarted();
+        const getItem = vi.mocked(AsyncStorage.getItem);
+        const real = getItem.getMockImplementation()!;
+        let n = 0; let captured!: () => void; const wasRead = new Promise<void>((r) => { captured = r; });
+        let release!: () => void; const released = new Promise<void>((r) => { release = r; });
+        getItem.mockImplementation(async (k: string) => {
+            if (k !== PINS(who) || ++n < nth) return real(k);
+            getItem.mockImplementation(real);
+            const snap = h.store.get(k) ?? null; captured(); await released; return snap;
+        });
+        return { wasRead, release };
+    }
+    const settle = () => new Promise((r) => setTimeout(r, 30));
+    async function honestRekeyBanner() {
+        await aQuestionAndAnAnswer();
+        await phoneOf(ana);
+        const k2 = person('Ben (new phone)');
+        dm.participants = [ana.publicKey, k2.publicKey];
+        for (const l of node.lines) if (l.authorPubkey === ben.publicKey) l.authorPubkey = k2.publicKey;
+        await syncMessages(ana.publicKey);
+        expect(await getDmKeyChange(dm.id)).toEqual({ offeredPeer: k2.publicKey, firstSight: false, name: null });
+        return k2;
+    }
+
+    it('a sync pass that read the pins before "Continue" and writes after it doesn\'t undo it: the member\'s key holds, and the next line goes to it', async () => {
+        const k2 = await honestRekeyBanner();
+        node.convs.push({ id: randomUUID(), type: 'dm', participants: [ana.publicKey, person('Cat').publicKey] });   // so the pass writes
+        const gate = holdPinsRead(ana);
+        const sync = syncMessages(ana.publicKey);
+        await gate.wasRead;
+        const tap = acceptOfferedPeer(dm.id, k2.publicKey);
+        await settle();
+        gate.release();
+        await sync;
+        expect(await tap).toBe(true);
+        expect(pinOf(ana, dm.id)).toMatchObject({ peer: k2.publicKey, by: 'member', former: [ben.publicKey] });
+        const l = await send('After the pass');
+        expect(typeof l === 'string' ? l : { k2: reads(k2, l), ben: reads(ben, l), puppet: reads(puppet, l) }).toEqual({ k2: 'After the pass', ben: null, puppet: null });
+    });
+
+    it('a pass that lists the old key again while "Continue" lands: Continue says nothing changed, never "moved" over a pin that isn\'t the member\'s', async () => {
+        const k2 = await honestRekeyBanner();
+        dm.participants = [ana.publicKey, ben.publicKey];
+        const gate = holdPinsRead(ana);
+        const sync = syncMessages(ana.publicKey);
+        await gate.wasRead;
+        const tap = acceptOfferedPeer(dm.id, k2.publicKey);
+        await settle();
+        gate.release();
+        await sync;
+        const moved = await tap;
+        const pin = pinOf(ana, dm.id);
+        // Either the tap landed (and the pin is the member's) or it said so: never "moved" with the pin back on the old key.
+        expect({ moved, peer: pin.peer === k2.publicKey ? 'K2' : pin.peer === ben.publicKey ? 'Ben' : '?', by: pin.by })
+            .toEqual(moved ? { moved: true, peer: 'K2', by: 'member' } : { moved: false, peer: 'Ben', by: 'first-seen' });
+    });
+
+    it('"Continue" that read the pins before a pass offered a third key keeps that offer: the next line is refused, not sealed', async () => {
+        const k2 = await honestRekeyBanner();
+        const k3 = person('K3');
+        const gate = holdPinsRead(ana);
+        const tap = acceptOfferedPeer(dm.id, k2.publicKey);
+        await gate.wasRead;
+        dm.participants = [ana.publicKey, k3.publicKey];
+        const sync = syncMessages(ana.publicKey);
+        await settle();
+        gate.release();
+        const moved = await tap;
+        await sync;
+        // Whichever turn came first, K3's offer is kept: on the member's K2 (the tap first) or on Ben (the pass first, and
+        // the tap then refused, the key it checked no longer on offer). Never K3 pinned, never the offer lost.
+        expect(pinOf(ana, dm.id)).toMatchObject(moved
+            ? { peer: k2.publicKey, by: 'member', former: [ben.publicKey], offered: { peer: k3.publicKey } }
+            : { peer: ben.publicKey, offered: { peer: k3.publicKey } });
+        expect(await send('Between passes')).toBe('DmKeyChangedError');
+        expect(node.lines.filter((l) => l.authorPubkey === ana.publicKey && (reads(k3, l) ?? reads(puppet, l)) !== null)).toEqual([]);
+    });
+
+    it('photos after "Continue": the former key opens Ben\'s and Ana\'s old photos, and nothing opens one the node put in anyone else\'s name', async () => {
+        await phoneOf(ana);
+        await says(ana, dm, 'Shall I cancel the order?');
+        await sendImageMessage(dm.id, 'data:image/jpeg;base64,QU5BUw==', '');
+        const anaPhoto = node.lines[node.lines.length - 1];
+        await phoneOf(ben);
+        await says(ben, dm, 'No');
+        await sendImageMessage(dm.id, 'data:image/jpeg;base64,QkVOUw==', '');
+        const benPhoto = node.lines[node.lines.length - 1];
+        const k2 = person('Ben (new phone)');
+        dm.participants = [ana.publicKey, k2.publicKey];
+        for (const l of node.lines) if (l.authorPubkey === ben.publicKey) l.authorPubkey = k2.publicKey;
+        await phoneOf(ana);
+        expect(await acceptOfferedPeer(dm.id, k2.publicKey)).toBe(true);
+        const open = async (line: Line, author?: string) => {
+            if (author) sql.prepare('UPDATE messages SET author_pubkey = ? WHERE id = ?').run(author, line.id);
+            fs.rmSync(`${h.cacheDir}/chat-images`, { recursive: true, force: true });
+            return (await getDecryptedAttachment(dm.id, line.id)) ? fs.readFileSync(`${h.cacheDir}/chat-images/${line.id}.jpg`, 'utf8') : null;
+        };
+        expect({ ben: await open(benPhoto), ana: await open(anaPhoto), benAsOld: await open(benPhoto, ben.publicKey) }).toEqual({ ben: 'QkVOUw==', ana: 'QU5BUw==', benAsOld: 'QkVOUw==' });
+        expect([await open(benPhoto, puppet.publicKey), await open(benPhoto, ana.publicKey), await open(anaPhoto, k2.publicKey), await open(anaPhoto, ben.publicKey)])
+            .toEqual([null, null, null, null]);
+    });
+});

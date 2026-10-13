@@ -45,7 +45,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useNodeProfile } from '../use-node-profile';
+import { useNodeProfile, useNodeProfileState } from '../use-node-profile';
 import type { NodeProfile } from '../node-profile';
 
 const A = 'https://global.beanpool.org';
@@ -324,5 +324,66 @@ describe('the phone stays on the same community (as before)', () => {
         answer(B, { status: 200, body: { profile: 'global', features: GLOBAL_FEATURES } });
         await settle();
         expect(profile()).toBeNull();
+    });
+});
+
+/** The screen renders and reads whether the phone's own copy has been read (the showcase's Ledger waits on it). */
+function state() {
+    harness.at = 0;
+    return useNodeProfileState();
+}
+
+describe("copyRead: the phone's own copy has been read, for the community it is on", () => {
+    it('is false until the copy is read, then true with what it said, before and whatever the node answers', async () => {
+        onAnchor(A);
+        cache(A, { profile: 'global', features: GLOBAL_FEATURES });
+        expect(state()).toEqual({ profile: null, copyRead: false });
+        harness.at = 0;
+        focus();
+        expect(state().copyRead).toBe(false);
+        await settle();
+        expect(state().copyRead).toBe(true);
+        expect(state().profile?.profile).toBe('global');
+        expect(asked(A)).toBe(0);
+    });
+
+    it('is true with no profile when the phone has no copy, while the node is still being asked', async () => {
+        onAnchor(B);
+        focus();
+        await settle();
+        expect(state()).toEqual({ profile: null, copyRead: true });
+        expect(asked(B)).toBe(1);
+        answer(B, { status: 200, body: { profile: 'global', features: GLOBAL_FEATURES } });
+        await settle();
+        expect(state().profile?.profile).toBe('global');
+    });
+
+    it('goes back to false when the phone changes community, until the new one\'s copy is read', async () => {
+        onAnchor(A);
+        cache(A, { profile: 'global', features: GLOBAL_FEATURES });
+        const leave = focus();
+        await settle();
+        expect(state().copyRead).toBe(true);
+        leave();
+        onAnchor(B);
+        cache(B, { profile: 'local', features: LOCAL_FEATURES });
+        // The new community's read is under way: its anchor is known, its copy not yet.
+        let release!: () => void;
+        vi.mocked(AsyncStorage.getItem).mockImplementationOnce(async (key: string) => store.get(key) ?? null)
+            .mockImplementationOnce((key: string) => new Promise(resolve => { release = () => resolve(store.get(key) ?? null); }));
+        focus();
+        await settle();
+        expect(state().copyRead).toBe(false);
+        release();
+        await settle();
+        expect(state().copyRead).toBe(true);
+        expect(state().profile?.profile).toBe('local');
+    });
+
+    it('counts storage that cannot be read as read, so no screen waits on it for ever', async () => {
+        vi.mocked(AsyncStorage.getItem).mockRejectedValueOnce(new Error('storage unavailable'));
+        focus();
+        await settle();
+        expect(state()).toEqual({ profile: null, copyRead: true });
     });
 });

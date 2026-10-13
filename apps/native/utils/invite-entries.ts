@@ -8,25 +8,43 @@
  * admin there makes none either, and is told so in plain words. Their role is the node's answer, never a tier.
  */
 
-import { invitesOn, type NodeFeatures } from './node-profile';
+import { invitesOn, wordsDoorOn, type NodeFeatures } from './node-profile';
 
 /** What the share sheet sends: the community's plain address, which opens its front door. */
 export function communityLinkMessage(nodeUrl: string): string {
     return `Join me on BeanPool: ${nodeUrl.trim().replace(/\/+$/, '')}`;
 }
 
+/**
+ * How anyone joins a node that takes no invites: with 12 words or a sign-in where its door offers both (`wordsDoor`, as
+ * the server's own words say, config/node-profile.ts), else a sign-in. A node whose join needs a sign-in, a private
+ * preview, or one from before the 12-words door says nothing of 12 words (review of #1852, finding 7).
+ */
+export function joinWays(features: NodeFeatures | null | undefined): string {
+    return wordsDoorOn(features) ? '12 words or a sign-in' : 'a sign-in';
+}
+
 /** Said where the node's own words are missing. */
-export const INVITES_OFF_FALLBACK = 'This community doesn’t use invites: anyone joins it with a sign-in in the BeanPool app. To bring someone here, share its link.';
+export function invitesOffFallback(features: NodeFeatures | null | undefined): string {
+    return `This community doesn’t use invites: anyone joins it with ${joinWays(features)} in the BeanPool app. To bring someone here, share its link.`;
+}
+/** The same, for a node that hasn't said its door offers 12 words. */
+export const INVITES_OFF_FALLBACK = invitesOffFallback(null);
+
+/** People → Invites on a node that takes no invites, over its Share the link button. */
+export function bringSomeoneHereText(features: NodeFeatures | null | undefined): string {
+    return `This community doesn’t use invites. Anyone can join it with ${joinWays(features)} in the BeanPool app, so just share its link.`;
+}
 
 /**
  * The node's answer to a generate when it takes no invites (404 `feature_off`), in its own words, or null for any
  * other answer. A phone that hadn't heard the switch yet (an old copy of the node's profile) asks anyway; this stops
  * the screen falling back to an offline ticket, which the node would refuse just the same.
  */
-export function invitesOffRefusal(status: number, body: unknown): string | null {
+export function invitesOffRefusal(status: number, body: unknown, features?: NodeFeatures | null): string | null {
     const b = body as { code?: unknown; error?: unknown } | null | undefined;
     if (status !== 404 || !b || typeof b !== 'object' || b.code !== 'feature_off') return null;
-    return typeof b.error === 'string' && b.error.trim() ? b.error : INVITES_OFF_FALLBACK;
+    return typeof b.error === 'string' && b.error.trim() ? b.error : invitesOffFallback(features);
 }
 
 /**

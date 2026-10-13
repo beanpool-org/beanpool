@@ -262,8 +262,9 @@ const changedTables = (a: Map<string, string>, b: Map<string, string>) =>
 const hasRow = (pk: string) => !!db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(pk);
 const isVisitorRow = (pk: string) => (db.prepare('SELECT is_visitor FROM members WHERE public_key = ?').get(pk) as any)?.is_visitor === 1;
 const balanceOf = (pk: string) => getBalance(pk).balance;
-/** The same refusal: status, code and words. */
-const same = (a: Res, b: Res) => a.status === b.status && a.body?.code === b.body?.code && a.body?.error === b.body?.error;
+/** The same refusal: status, code and words (a JSON-RPC refusal's `error` is an object, its code and message: compared by value). */
+const same = (a: Res, b: Res) => a.status === b.status && a.body?.code === b.body?.code
+    && JSON.stringify(a.body?.error) === JSON.stringify(b.body?.error);
 const show = (r: Res) => `${r.status} ${JSON.stringify(r.body ?? null).slice(0, 140)}`;
 
 /** Make what a visitor's row could make before this rule: its row is a member's for the length of `make`. */
@@ -706,6 +707,7 @@ async function main(): Promise<void> {
             if (!same(v, n)) differ.push(`${route}\n      visitor ${show(v)}\n      no row  ${show(n)}`);
         }
         assert(swept.length > 150, `the sweep takes every registered write the middleware sees: ${swept.length}`);
+        assert(swept.includes('POST /mcp') && swept.includes('DELETE /mcp'), 'the AI assistant endpoint among them (POST and DELETE /mcp): a visitor\'s signature is no way in');
         assert(differ.length === 0, `every one is answered to the visitor as to a key with no row${differ.length ? `; ${differ.length} were not:\n    ${differ.join('\n    ')}` : ''}`);
         // Again for every enterprise route, on the crowdfund: an enterprise with a goal takes another path through some of them
         // (a pledge goes to the crowdfund), and the enterprise above has none.

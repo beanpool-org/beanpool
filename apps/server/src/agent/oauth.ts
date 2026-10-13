@@ -259,7 +259,8 @@ export function revokeOAuthGrant(grantId: unknown): OAuthGrantView | null {
 
 /** Why a token request failed, as RFC 6749 §5.2 names it; `revoked` when the attempt itself revoked a grant (reuse). */
 export type TokenFailure = { ok: false; status: 400 | 401; error: string; description: string; revoked?: OAuthGrantView };
-export type TokenResult = { ok: true; pair: TokenPair; grant: OAuthGrantView; created: boolean } | TokenFailure;
+/** `replaced`: the same client's earlier grants for the same member, revoked by this new one (one connection per assistant). */
+export type TokenResult = { ok: true; pair: TokenPair; grant: OAuthGrantView; created: boolean; replaced?: string[] } | TokenFailure;
 
 const fail = (error: string, description: string, status: 400 | 401 = 400): TokenFailure => ({ ok: false, status, error, description });
 
@@ -296,7 +297,11 @@ export function exchangeCode(p: { code: unknown; clientId: unknown; redirectUri:
     if (!pkceMatches(p.verifier, rec.codeChallenge)) return fail('invalid_grant', 'code_verifier does not match the code challenge');
     const role = roleNow(rec.member);
     if (!role) return fail('invalid_grant', 'The member who approved is no longer an owner or admin here');
-    const list = grantRecords().filter((g) => !idleExpired(g, now));
+    // Approving the same assistant again (its old pass lost or kept) replaces its earlier connection for this member.
+    const all = grantRecords().filter((g) => !idleExpired(g, now));
+    const replaced = all.filter((g) => g.clientId === rec.clientId && g.member === rec.member).map((g) => g.id);
+    for (const id of replaced) dropAccessOf(id);
+    const list = all.filter((g) => !replaced.includes(g.id));
     if (list.length >= OAUTH_GRANTS_MAX) return fail('invalid_grant', `This server has ${OAUTH_GRANTS_MAX} assistants connected: disconnect one in Settings first`);
     if (list.filter((g) => g.member === rec.member).length >= OAUTH_GRANTS_PER_MEMBER) {
         return fail('invalid_grant', `You have ${OAUTH_GRANTS_PER_MEMBER} assistants connected: disconnect one in Settings first`);
@@ -312,7 +317,7 @@ export function exchangeCode(p: { code: unknown; clientId: unknown; redirectUri:
     pending.delete(rec.clientId);
     rec.spentFor = id;
     rec.spentAt = now;
-    return { ok: true, pair, grant: viewOf(record), created: true };
+    return { ok: true, pair, grant: viewOf(record), created: true, ...(replaced.length ? { replaced } : {}) };
 }
 
 /** grant_type=refresh_token: rotates. A spent refresh token presented again revokes the grant (`revoked`). */

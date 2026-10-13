@@ -129,6 +129,7 @@ function tokenAnswer(ctx: any, res: TokenResult, from: string): void {
         oauthError(ctx, res.status, res.error, res.description);
         return;
     }
+    for (const id of res.replaced ?? []) forgetGrant(id);
     if (res.created) {
         logger.security('AGENT', 'Assistant connected through OAuth', { grant: res.grant.id, member: res.grant.member.slice(0, 16), sendsTo: redirectHost(res.grant.redirectUri) });
         tellOwners('connected', res.grant, null);

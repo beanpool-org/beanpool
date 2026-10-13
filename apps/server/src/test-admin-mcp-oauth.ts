@@ -375,6 +375,15 @@ async function main(): Promise<void> {
         assert(r2.status === 400, '…and the newest refresh token is dead');
         assert(notes.some(n => n.key === 'sec.agent' && n.high === true && /Refresh Check/.test(n.detail)), 'the owners are told, high');
 
+        // Approving the same assistant again replaces its earlier connection (no second grant for one client and member).
+        resetLimits();
+        const oldAccess = tokens!.access_token;
+        claude.saveTokens(undefined);
+        const again = await sdkConnect(claude, admin);
+        const relisted = ((await call('GET', '/api/local/admin/agent/grants', { headers: { 'X-Admin-Session': adminSession ?? '' } })).body?.grants ?? []).filter((x: any) => x.name === 'Claude');
+        assert(!!again.client && relisted.length === 1 && relisted[0].id !== g?.id && (await mcpStatus(oldAccess)) === 401,
+            `the same assistant approved again replaces its earlier connection: one row, the old pass dead (${relisted.length})`);
+
         // ── 5. Revoke, Disconnect, demotion ──
         resetLimits();
         const m3 = await manualConnect(admin, 'Revoke Check');

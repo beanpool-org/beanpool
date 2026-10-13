@@ -6,7 +6,9 @@
  * - finding 1: a key that is this phone's own, a shown member's current key, or one two shown rows claim is nobody's
  *   former key here;
  * - NB7: an honest re-key's completion of an epoch's wraps is found whatever the roster's order, however many other shown
- *   members hold verified former keys (smallest completions first; the 256-set cap is never reached for one re-key).
+ *   members hold verified former keys (smallest completions first; the 256-set cap is never reached for one re-key);
+ * - NB5 (confirmation 1): the walk caches, the keyring's and the display's, are keyed by a chain's walkable entries only
+ *   and capped, so junk a node serves can't grow them, and a chain that differs in any field is walked again.
  *
  * The node is a stand-in here (signedGet mocked); the statements are core's real ones.
  */
@@ -37,6 +39,7 @@ vi.mock('../node-post', () => ({
 import { groupMembersDigest, walkKeySuccession as coreWalk, makeKeySuccession, type FormerKey } from '@beanpool/core';
 import { groupKeyring, memoryGroupKeyStore } from '../group-chat-keys';
 import { verifiedFormerKeys } from '../group-chat-crypto';
+import { nameSigner } from '../group-line-display';
 
 const person = () => { const s = randomBytes(32); return { priv: bytesToHex(s), pub: bytesToHex(ed25519.getPublicKey(s)) }; };
 const AT = '2026-10-03T04:00:00.000Z';
@@ -122,6 +125,62 @@ describe('the former keys a phone accepts from the members list', () => {
                 const found = ring.completedBySuccession(record, wraps);
                 expect(found ? [...found].sort() : `none with ${others} others, Cat₂ ${catFirst ? 'first' : 'last'}`).toEqual([ana, ben, cat1].sort());
             }
+        }
+    });
+
+    it('NB5 (confirmation 1): junk chains a node serves don\'t grow the phone\'s memory, in the keyring or the display', async () => {
+        // The reviewer's measurement: 60 reads of 20 rows, each row a 9-entry chain padded to 64 KB (1,200 entries and
+        // 80 M characters kept at 5df68ba0), then the same with 8-entry chains whose entries carry junk fields and dates.
+        const ring = ringFor(person());
+        const display = new Map<string, boolean>();
+        const pad = (n: number) => 'J'.repeat(n);
+        const entry = () => ({ pubkey: person().pub, at: AT, sig: `${'A'.repeat(86)}==`, pad: pad(7 * 1024) });
+        let maxKey = 0;
+        let walksSeen = 0;
+        for (let i = 0; i < 60; i++) {
+            const signer = person().pub; // every row's chain names it, so the display walks every row
+            served.rows = Array.from({ length: 20 }, (_, j) => ({
+                memberPubkey: person().pub, status: 'active', callsign: 'J',
+                formerKeys: (j % 2 ? Array.from({ length: 9 }, entry) : Array.from({ length: 8 }, (_, k) => (k === 7 ? { ...entry(), at: pad(64 * 1024) } : entry())))
+                    .map((f, k) => (k === 0 ? { ...f, pubkey: signer } : f)),
+            }));
+            await ring.readShownRoster();
+            const before = counts.walk;
+            nameSigner(signer, { authorPubkey: null, authorCallsign: null } as any, { roster: served.rows as any, successions: display });
+            walksSeen += counts.walk - before;
+            maxKey = Math.max(maxKey, ...[...ring.chainWalks.keys(), ...display.keys()].map((k: string) => k.length));
+        }
+        const held = (m: Map<string, unknown>) => [...m.keys()].reduce((n, k) => n + k.length, 0);
+        expect(walksSeen).toBe(60 * 10); // the 8-entry rows were walked by the display (the 9-entry ones can't verify)
+        expect(display.size).toBe(60 * 10);
+        expect(ring.chainWalks.size).toBeLessThanOrEqual(4096);
+        expect(display.size).toBeLessThanOrEqual(4096);
+        expect(maxKey).toBeLessThan(2 * 64 + 7 * (64 + 40 + 88 + 12) + 8); // two keys and at most 7 walkable entries' fields
+        expect(held(ring.chainWalks) + held(display)).toBeLessThan(5_000_000);
+    });
+
+    it('NB5 (confirmation 1): a cached walk is never the answer for a chain with another key, date or signature', async () => {
+        const me = person();
+        const { keys, row } = rekeyedMember(1);
+        const ring = ringFor(me);
+        served.rows = [row];
+        await ring.readShownRoster();
+        expect(ring.formerOf.get(row.memberPubkey)).toEqual([keys[0].pub]);
+        // The same statements with junk fields: the same walk, nothing verified again.
+        counts.verify = 0;
+        served.rows = [{ ...row, formerKeys: row.formerKeys.map((f) => ({ ...f, pad: 'J'.repeat(4096) })) }];
+        await ring.readShownRoster();
+        expect(counts.verify).toBe(0);
+        expect(ring.formerOf.get(row.memberPubkey)).toEqual([keys[0].pub]);
+        // Another signature (well-formed, wrong), another date, another key: each walked, and none verifies.
+        const f = row.formerKeys[0];
+        const other = makeKeySuccession({ newEdPrivHex: person().priv, oldPubHex: keys[0].pub, at: AT });
+        for (const changed of [{ ...f, sig: other.sig }, { ...f, at: '2026-10-04T04:00:00.000Z' }, { ...f, pubkey: person().pub }]) {
+            counts.verify = 0;
+            served.rows = [{ ...row, formerKeys: [changed] }];
+            await ring.readShownRoster();
+            expect(counts.verify).toBe(1);
+            expect(ring.formerOf.has(row.memberPubkey)).toBe(false);
         }
     });
 

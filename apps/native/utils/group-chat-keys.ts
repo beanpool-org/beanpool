@@ -21,8 +21,8 @@
 import type { BeanPoolIdentity } from './identity';
 import { signedGet, signedPost } from './node-post';
 import {
-    makeEpochRecord, openMyKey, verifyGroupEpochRecord, groupEpochCoversExactly, makeTopUp, GroupKeyNotVerifiedError, verifiedFormerKeys,
-    type FormerKey, type GroupEpochProgress, type GroupEpochReason, type GroupEpochRecord, type GroupLineVerifyMemo, type GroupServedWrap,
+    makeEpochRecord, openMyKey, verifyGroupEpochRecord, groupEpochCoversExactly, makeTopUp, GroupKeyNotVerifiedError, verifiedFormerKeys, servedChain,
+    type GroupEpochProgress, type GroupEpochReason, type GroupEpochRecord, type GroupLineVerifyMemo, type GroupServedWrap,
 } from './group-chat-crypto';
 
 /** Exact words the chat shows (provenance §7 rule 2; epochs-over-time §1, §5). */
@@ -363,7 +363,7 @@ export class GroupKeyring {
             const claimed = new Map<string, string[]>();
             const claims = new Map<string, number>();
             for (const m of active) {
-                const verified = this.walkedChain(m.memberPubkey, Array.isArray(m.formerKeys) ? m.formerKeys : []);
+                const verified = this.walkedChain(m.memberPubkey, m.formerKeys);
                 if (verified.length === 0) continue;
                 claimed.set(m.memberPubkey, verified);
                 for (const k of verified) claims.set(k, (claims.get(k) ?? 0) + 1);
@@ -379,9 +379,14 @@ export class GroupKeyring {
         }
     }
 
-    /** A row's verified former keys (verifiedFormerKeys), walked once per (member, chain) while this keyring lives. */
-    private walkedChain(member: string, chain: FormerKey[]): string[] {
-        const id = `${member}|${JSON.stringify(chain)}`;
+    /**
+     * A row's verified former keys (verifiedFormerKeys over servedChain), walked once per (member, chain) while this
+     * keyring lives. Keyed by the chain's walkable entries only, so a node serving junk can't grow this (NB5).
+     */
+    private walkedChain(member: string, formerKeys: unknown): string[] {
+        const { chain, id: chainId } = servedChain(formerKeys);
+        if (member.length !== 64 || chain.length === 0) return [];
+        const id = `${member}|${chainId}`;
         let verified = this.chainWalks.get(id);
         if (!verified) {
             if (this.chainWalks.size >= 4096) this.chainWalks.clear();

@@ -79,6 +79,26 @@ export function verifiedFormerKeys(row: { memberPubkey: string; formerKeys?: rea
     return out;
 }
 
+/**
+ * The part of a served chain a phone walks, and the id it is remembered under (review of #1826, NB5): its entries up to
+ * the first that isn't the shape a node stores (a 64-character key, a date of at most 40 characters, an 88-character
+ * signature: POST …/me/key-succession refuses any other, and a walk stops there), none when the chain is longer than
+ * KEY_SUCCESSION_MAX. The id is those entries' own three fields, so whatever a node serves, a chain costs the phone's
+ * memory a few hundred characters an entry, and two different walkable chains never share an id.
+ */
+export function servedChain(formerKeys: unknown): { chain: FormerKey[]; id: string } {
+    const all: unknown[] = Array.isArray(formerKeys) ? formerKeys : [];
+    const chain: FormerKey[] = [];
+    if (all.length <= KEY_SUCCESSION_MAX) {
+        for (const f of all as Partial<FormerKey>[]) {
+            if (!f || typeof f.pubkey !== 'string' || f.pubkey.length !== 64 || typeof f.at !== 'string' || f.at.length > 40
+                || typeof f.sig !== 'string' || f.sig.length !== 88) break;
+            chain.push({ pubkey: f.pubkey, at: f.at, sig: f.sig });
+        }
+    }
+    return { chain, id: JSON.stringify(chain.map((f) => [f.pubkey, f.at, f.sig])) };
+}
+
 /** A new epoch: a fresh key wrapped to every recipient, signed. Yields to the UI every 10 wraps (the progress line). */
 export function makeEpochRecord(input: MakeGroupEpochInput, progress?: GroupEpochProgress): Promise<{ record: GroupEpochRecord; groupKey: Uint8Array }> {
     return makeGroupEpochRecordAsync(input, progress);

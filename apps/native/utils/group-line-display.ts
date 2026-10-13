@@ -14,7 +14,7 @@
  * one whose epoch key isn't on this phone yet says so. Pure: the caller hands in the opened keys and the opener.
  */
 import type { FormerKey, GroupLineBinding, GroupLinePart, GroupLinePayload, GroupLineVerifyMemo, OpenedGroupLine } from './group-chat-crypto';
-import { isGroupEncryptedNonce, walkKeySuccession } from './group-chat-crypto';
+import { isGroupEncryptedNonce, servedChain, walkKeySuccession } from './group-chat-crypto';
 
 /** Exact words (line-display design §6; core's own sentence for a line that doesn't verify). */
 export const GROUP_LINE_UNVERIFIED_NAME = 'Unverified';
@@ -134,13 +134,23 @@ export function nameSigner(signer: string, line: Pick<ServedGroupLine, 'authorPu
     return { name: GROUP_LINE_FORMER_MEMBER, nameHint: null, details: null };
 }
 
-/** walkKeySuccession, once per (row, its former keys, signer) for as long as `ctx.successions` lives. */
+/**
+ * walkKeySuccession over the row's walkable chain (servedChain), once per (row, that chain, signer) for as long as
+ * `ctx.successions` lives: keyed by the chain's walkable entries only and at most 4096 kept, so a node serving junk
+ * can't grow it (review of #1826, NB5).
+ */
 function walked(row: DisplayRosterRow, signer: string, ctx: Pick<GroupLineDisplayContext, 'successions' | 'walk'>): boolean {
     const walk = ctx.walk ?? walkKeySuccession;
-    if (!ctx.successions) return walk({ memberPubkey: row.memberPubkey, formerKeys: row.formerKeys }, signer);
-    const id = `${row.memberPubkey}|${signer}|${JSON.stringify(row.formerKeys ?? [])}`;
+    const { chain, id: chainId } = servedChain(row.formerKeys);
+    if (typeof row.memberPubkey !== 'string' || row.memberPubkey.length !== 64 || signer.length !== 64 || chain.length === 0) return false;
+    if (!ctx.successions) return walk({ memberPubkey: row.memberPubkey, formerKeys: chain }, signer);
+    const id = `${row.memberPubkey}|${signer}|${chainId}`;
     let v = ctx.successions.get(id);
-    if (v === undefined) { v = walk({ memberPubkey: row.memberPubkey, formerKeys: row.formerKeys }, signer); ctx.successions.set(id, v); }
+    if (v === undefined) {
+        if (ctx.successions.size >= 4096) ctx.successions.clear();
+        v = walk({ memberPubkey: row.memberPubkey, formerKeys: chain }, signer);
+        ctx.successions.set(id, v);
+    }
     return v;
 }
 

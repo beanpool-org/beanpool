@@ -86,6 +86,7 @@ import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, NAME_ALERT_WORDS, ty
 import { registrarNames } from '../engine/registrar-names.js';
 import { listAutomationTokens } from '../automation-tokens.js';
 import { agentCallsTodayAll } from '../agent/limits.js';
+import { listOAuthGrants } from '../agent/oauth.js';
 import { suggestionCountsToday } from '../agent/suggestions.js';
 
 function dataDir(): string {
@@ -1460,13 +1461,17 @@ export interface AlertsStatus {
     assistants: { calls: number; connected: number; suggestions: number; approved: number };
 }
 
-/** Assistants that can call /mcp now: not expired, and their maker still an owner or admin (as /mcp reads them). */
+/**
+ * Assistants that can call /mcp now: agent tokens not expired and OAuth grants not idle 30 days (S2), their member still an
+ * owner or admin (as /mcp reads them).
+ */
 function connectedAssistants(t: number): number {
-    return listAutomationTokens().filter((k) => {
-        if (k.scope !== 'agent' || (k.expiresAt !== null && k.expiresAt <= t)) return false;
-        const role = typeof k.createdBy === 'string' ? nodeRoleOf(k.createdBy) : null;
+    const live = (member: unknown) => {
+        const role = typeof member === 'string' ? nodeRoleOf(member) : null;
         return role === 'owner' || role === 'admin';
-    }).length;
+    };
+    return listAutomationTokens().filter((k) => k.scope === 'agent' && (k.expiresAt === null || k.expiresAt > t) && live(k.createdBy)).length
+        + listOAuthGrants(t).filter((g) => live(g.member)).length;
 }
 
 export function getAlertsStatus(): AlertsStatus {

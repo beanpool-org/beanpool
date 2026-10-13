@@ -94,6 +94,9 @@ vi.mock('../../components/PageTitle', () => ({
     useTabRetapScrollTop: () => {},
 }));
 const safety = vi.hoisted(() => ({ props: null as any }));
+// A found old phone's card (key-replaced.ts): drawn only once the node said this key was replaced; its own tests are
+// group-history-after-rekey.test.ts and e2e/locked-history-320.mjs.
+vi.mock('../../components/KeyMovedCard', () => ({ KeyMovedCard: () => null }));
 vi.mock('../../components/OneWayBackCard', () => ({
     OneWayBackCard: (props: any) => { safety.props = props; useEffect(() => { props.onUp?.(false); }, []); return null; },
 }));

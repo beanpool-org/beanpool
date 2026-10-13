@@ -7,7 +7,7 @@
  */
 import { describe, it, expect, vi, afterAll } from 'vitest';
 import Module from 'node:module';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes as randomBytesFor } from 'node:crypto';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 
@@ -107,7 +107,12 @@ vi.mock('../crypto', async (orig) => ({
 }));
 
 import { insertMessage, postGroupChatMessage, editMessage, editThreadMessage, clearDB, groupKeyringFor, isHeldGroupChat, sendImageMessage, joinGroupApi, approveGroupMemberApi, getConversationKind, isKnownDmConversation, leaveGroupApi } from '../db';
+import {
+    unlockGroupHistoryWithWords, checkScannedNewPhone, confirmScannedNewPhone, newPhoneHandOvers, newPhoneConfirmedNotes,
+} from '../db';
 import { chatRouteView } from '../chat-route';
+import { unpackRecoveryWords } from '@beanpool/core';
+import { oldKeyFromWords } from '../group-history-unlock';
 import { GROUP_CHAT_LOCK_LOST_TEXT, groupChatNotice, GROUP_CHAT_OLD_NODE_NOTICE, GROUP_KEYS_FOR_DM_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from '../group-chat-lines';
 import { makeGroupEpochRecord } from '@beanpool/core';
 import { forgetGroupKeys, GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
@@ -449,6 +454,31 @@ describe('group chats: a held group is never a DM, and a known DM never becomes 
         for (const k of Object.keys(r)) expect(r[k]).toBe(`refused: ${GROUP_KEYS_FOR_DM_TEXT}`);
         expect(groupRoutes).toEqual([]);
         expect(sent).toEqual(['/api/messages/send x25519-xc20p-v2']);
+        expect(await isHeldGroupChat(d)).toBe(false);
+    });
+
+    it('nor by the history paths (DESIGN-group-history-after-rekey): the old words, a new-phone check, its confirmation and the code screen\'s watch skip its id; no group route is asked', async () => {
+        forgetGroupKeys(); chatAnswer = 'unlocked';
+        const d = randomUUID();
+        store.conversations.set(d, { id: d, type: 'dm', created_by: null });
+        partsOf(d).add(who.me.publicKey); partsOf(d).add(OTHER);
+        const groups = [{ id: d, name: 'Not a group', locked: 3 }];
+        let words: string[] = [];
+        do {
+            const packed = new Uint8Array(randomBytesFor(17));
+            packed[16] &= 0xf0;
+            words = unpackRecoveryWords(packed);
+        } while (!oldKeyFromWords(words));
+        const from = received.length;
+        const unlocked = await unlockGroupHistoryWithWords(words, groups);
+        const checked = await checkScannedNewPhone(JSON.stringify(['beanpool-new-phone/1', OTHER, 'c'.repeat(64), 'Ann']), groups);
+        const confirmed = await confirmScannedNewPhone({ ok: true, name: 'Ann', oldKey: 'c'.repeat(64), newKey: OTHER, groups });
+        await newPhoneConfirmedNotes(await newPhoneHandOvers(groups), groups);
+        const groupRoutes = received.slice(from).filter((x) => x.path.includes(`/api/groups/${d}`)).map((x) => `${x.method} ${x.path}`);
+        expect(unlocked).toMatchObject({ outcome: 'done', unlocked: {}, withheld: [] });
+        expect(checked).toMatchObject({ ok: false, reason: 'not_listed' });
+        expect(confirmed).toMatchObject({ total: 0, planned: 0, stopped: false });
+        expect(groupRoutes).toEqual([]);
         expect(await isHeldGroupChat(d)).toBe(false);
     });
 });

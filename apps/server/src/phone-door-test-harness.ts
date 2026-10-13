@@ -13,7 +13,7 @@
  * It prints `PHONE-DOOR-NODE-PORT <port>` once it listens (and, with PHONE_DOOR_HTTP_PORT set, for an emulator,
  * `PHONE-DOOR-NODE-HTTP-PORT <port>` for plain HTTP on that port). Then one JSON command a line on stdin, each answered
  * on stdout as `PHONE-DOOR-NODE-REPLY {"id":…,"result":…}`:
- *   limiters                    clear the gateway's and the door's limiters (every request here comes from one address)
+ *   limiters                    clear the gateway's, the chat's and the door's limiters (every request here comes from one address)
  *   member {key}                the member's row and its open_joins row (door, network hash, how long the hash is kept)
  *   probation {key}             the member's new-account limits, as /api/community/me reports them
  *   prune {key}                 a moderator removes the member (adminPruneUser), as the moderation screen does
@@ -78,6 +78,7 @@ async function main(): Promise<void> {
     const { _resetJwksCacheForTests } = await import('./sso.js');
     const { pruneAuthAttempts } = await import('./auth-rate-limit.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
+    const { resetChatRateLimit } = await import('./chat-rate-limit.js');
     const { probationState } = await import('./engine/probation.js');
     const { transfer, getBalance, setHolidayMode, bumpGroupsVersion } = await import('./state-engine.js');
     const { setMemberArea } = await import('./engine/member-area.js');
@@ -105,6 +106,7 @@ async function main(): Promise<void> {
     const commands: Record<string, (args: any) => unknown> = {
         limiters: () => {
             resetGatewayRateLimit();
+            resetChatRateLimit();
             pruneAuthAttempts(Date.now() + 120_000);
             return true;
         },

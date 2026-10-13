@@ -35,6 +35,12 @@ import { mergeIncomingMessage, isRemovedPayload, accountDeletedAuthor, accountDe
 import { DELETED_BY_AUTHOR_TEXT } from './chat-actions';
 import type { BeanPoolIdentity } from './identity';
 import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, forgetGroupKeys, GroupChatKeyError, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
+import {
+    unlockWithOldWords, newPhoneQrPayload, checkNewPhone, confirmNewPhone, handOversHeld, noteConfirmations, confirmedNotes,
+    lockedHistoryCounts, noteLockedHistoryCount, type ConfirmedNote, type HistoryGroup, type NewPhoneCheck, type OldWordsResult,
+} from './group-history-unlock';
+import { oldKeySignedHere, rekeysToMe } from './key-succession';
+import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplacedKey } from './key-replaced';
 import { sqliteGroupKeyStore } from './group-chat-store';
 import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from './group-chat-lines';
 import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
@@ -5874,6 +5880,8 @@ async function _signedRequest(endpoint: string, payload: any) {
         let nodeMessage: string | undefined;
         try {
             const errJson = await res.json();
+            // This key was replaced by a re-key: the old phone's offer of its old words (utils/key-replaced.ts).
+            if (isKeyReplacedAnswer(res.status, errJson)) void noteKeyReplaced(anchorUrl, identity.publicKey);
             if (errJson.error) { errorMsg = errJson.error; nodeAnswered = true; }
             if (typeof errJson.message === 'string' && errJson.message.trim()) nodeMessage = errJson.message.trim();
         } catch {
@@ -5910,6 +5918,8 @@ async function _signedRequest(endpoint: string, payload: any) {
         throw err;
     }
 
+    // The node took a write this key signed: the key is current here, so a replaced-key note goes (finding 5 of #1844).
+    void noteKeyAnswered(anchorUrl, identity.publicKey);
     return await res.json();
 }
 
@@ -5931,21 +5941,25 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
 
     let headers: Record<string, string> = { 'Accept': 'application/json', ...(options?.customHeaders || {}) };
     const identity = await loadIdentity();
+    let signed = false;
     if (identity?.privateKey && identity?.publicKey) {
         try {
             // The URL fetched below: its host is what is signed for, its path (no query) what the node checks.
             const signedHeaders = await buildSignedHeaders('GET', `${anchorUrl}${path}`, '', identity.privateKey, identity.publicKey);
             headers = { ...headers, ...signedHeaders };
+            signed = true;
         } catch (e) {
             console.warn('[signedGet] Could not sign GET request:', e);
         }
     }
 
-    return fetch(`${anchorUrl}${path}`, {
+    const res = await fetch(`${anchorUrl}${path}`, {
         method: 'GET',
         headers,
         signal: options?.signal,
     });
+    if (identity?.publicKey) watchForReplacedKey(anchorUrl, identity.publicKey, res, signed);
+    return res;
 }
 
 /**
@@ -7177,6 +7191,84 @@ export async function postGroupChatMessage(
         }
     }
     return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/message`, { text, clientId, replyToId: replyToId || undefined });
+}
+
+/**
+ * The groups a history path may touch (sync, post a self-wrap or a top-up): never a conversation this phone knows as a DM
+ * and never held a group's keys for (refuseGroupKeysForDm, confirmation 2 of #1788, finding 2). Each comes back under
+ * ring.groupId, the group's id lower-cased, so the routes, records and top-ups agree with its one keyring (#1841).
+ */
+async function historyGroups(nodeUrl: string, identity: BeanPoolIdentity, groups: readonly HistoryGroup[]): Promise<HistoryGroup[]> {
+    const out: HistoryGroup[] = [];
+    for (const g of groups) {
+        try {
+            const ring = groupKeyring(nodeUrl, identity, g.id, groupKeyStore(nodeUrl));
+            await refuseGroupKeysForDm(ring);
+            out.push({ ...g, id: ring.groupId });
+        } catch { /* a known DM: no group keys under its id */ }
+    }
+    return out;
+}
+
+/**
+ * A group history from before this member changed phones (utils/group-history-unlock.ts; DESIGN-group-history-after-
+ * rekey-fable.md §3, §4): the old 12 words, typed here, over every group of this account.
+ */
+export async function unlockGroupHistoryWithWords(typed: string | readonly string[], groups: HistoryGroup[], onProgress?: (done: number, total: number) => void): Promise<OldWordsResult> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    const r = await unlockWithOldWords({ nodeUrl, identity, store: groupKeyStore(nodeUrl), groups: await historyGroups(nodeUrl, identity, groups), typed, signedHere: await oldKeySignedHere(nodeUrl, identity), onProgress });
+    // A group whose keys landed and wasn't withheld shows no locked row once its chat reloads; forget its count now, so a
+    // later run doesn't name it as withheld.
+    for (const id of Object.keys(r.unlocked)) if (!r.withheld.some((g) => g.id === id)) await noteLockedHistoryCount(nodeUrl, identity.publicKey, id, 0);
+    return r;
+}
+
+/** Per group (id lower-cased), the lines its chat last showed in the "from before you changed phones" row (§7). */
+export async function lockedHistoryRows(): Promise<Record<string, number>> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return lockedHistoryCounts(nodeUrl, identity.publicKey);
+}
+
+/** The chat view's row count for one group as it shows it now (0 when there is no row). */
+export async function noteLockedHistoryRow(groupId: string, n: number): Promise<void> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    await noteLockedHistoryCount(nodeUrl, identity.publicKey, groupId, n);
+}
+
+/** The code this new phone shows a member to confirm it (§4), or null when this phone knows no old key of its own. */
+export async function newPhoneCode(): Promise<string | null> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    let old = await oldKeySignedHere(nodeUrl, identity);
+    if (!old) {
+        const listed = (await rekeysToMe(nodeUrl, identity)).filter((r) => r.attested);
+        old = listed.length === 1 ? listed[0].pubkey : null;
+    }
+    return old ? newPhoneQrPayload(identity, old) : null;
+}
+
+/** A member's phone checks a scanned new-phone code (§4), over every group of this account. */
+export async function checkScannedNewPhone(scanned: string, groups: HistoryGroup[]): Promise<NewPhoneCheck> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return checkNewPhone({ nodeUrl, identity, groups: await historyGroups(nodeUrl, identity, groups), scanned });
+}
+
+/** "Confirm" (§4): hand the confirmed phone the epochs whose record names the old key this phone remembers. */
+export async function confirmScannedNewPhone(check: Extract<NewPhoneCheck, { ok: true }>, onProgress?: (handed: number, planned: number) => void) {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return confirmNewPhone({ nodeUrl, identity, store: groupKeyStore(nodeUrl), check: { ...check, groups: await historyGroups(nodeUrl, identity, check.groups) }, onProgress });
+}
+
+/** While this new phone's code is on screen (§4): the keys other members had already handed it, to compare with later. */
+export async function newPhoneHandOvers(groups: HistoryGroup[]): Promise<Set<string>> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return handOversHeld(nodeUrl, identity, groupKeyStore(nodeUrl), await historyGroups(nodeUrl, identity, groups));
+}
+
+/** The members who confirmed this phone since `before`, kept as local notes; every note, newest first. */
+export async function newPhoneConfirmedNotes(before: Set<string> | null, groups: HistoryGroup[]): Promise<ConfirmedNote[]> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    if (!before) return confirmedNotes(nodeUrl, identity.publicKey);
+    return noteConfirmations({ nodeUrl, identity, store: groupKeyStore(nodeUrl), groups: await historyGroups(nodeUrl, identity, groups), before });
 }
 
 const _groupKeyStores = new Map<string, GroupKeyStore>();

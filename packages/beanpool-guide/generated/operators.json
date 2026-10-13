@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 119,
-  "hash": "33381b76f3719ce616fc50f418d51af1092d117067e8d6da009eba4c7337c65d",
+  "version": 120,
+  "hash": "378bcdf17f618f5d90674296c967c8a59f684d7a1cf9ab3efc44b0b55c38dfd0",
   "sections": [
     {
       "id": "setup",
@@ -918,7 +918,7 @@
         },
         {
           "type": "p",
-          "text": "An owner can connect their own AI assistant (Claude, ChatGPT, Cursor) to the server under **Connected assistants**, see exactly what it would read before and after, and disconnect it. Admins will connect theirs there, approved on their phone, in a coming update; until then they see their own and what theirs would read. Its token is not an automation token and is not listed under Automation tokens. Owners see every connected assistant and can turn AI assistants off. See AI assistants for what an assistant can and can't see."
+          "text": "An owner or an admin can connect their own AI assistant (Claude, ChatGPT, Cursor) to the server under **Connected assistants**, see exactly what it would read before and after, and disconnect it. From Claude or ChatGPT they add the server's address as a connector and approve on their phone; an owner can also make a token for a desktop agent. That token is not an automation token and is not listed under Automation tokens. Owners see every connected assistant and can turn AI assistants off. See AI assistants for what an assistant can and can't see."
         },
         {
           "type": "h2",
@@ -3904,15 +3904,44 @@
       "blocks": [
         {
           "type": "p",
-          "text": "An owner can connect their own AI assistant to the server, and ask it things like \"what needs me?\", \"summarise the open reports\" or \"are the backups all right?\". The assistant is yours: you bring it, and the company that runs it (Anthropic, OpenAI and so on) receives what it reads. Nothing of BeanPool's talks to an AI, and the server keeps no AI key. For now only owners connect one; admins will connect theirs from the same card, approved on their phone, in a coming update. Until then an admin's card says so, and **What would my assistant see?** shows them what theirs will read."
+          "text": "An owner or an admin can connect their own AI assistant to the server, and ask it things like \"what needs me?\", \"summarise the open reports\" or \"are the backups all right?\". The assistant is yours: you bring it, and the company that runs it (Anthropic, OpenAI and so on) receives what it reads. Nothing of BeanPool's talks to an AI, and the server keeps no AI key."
         },
         {
           "type": "p",
-          "text": "The server decides what an assistant can read, not the assistant. It answers an assistant only at one address, **/mcp**, with its own redacted answers. An assistant that tries any other part of Settings with its token is refused."
+          "text": "The server decides what an assistant can read, not the assistant. It answers an assistant only at one address, **/mcp**, with its own redacted answers. An assistant that tries any other part of Settings with what it was given is refused."
         },
         {
           "type": "h2",
-          "text": "Connecting one"
+          "text": "Connecting from Claude or ChatGPT (owners and admins)"
+        },
+        {
+          "type": "p",
+          "text": "Under Appliance & Data, then Access & Security, **Connected assistants** shows four steps:"
+        },
+        {
+          "type": "ul",
+          "items": [
+            "Copy the address: your server's address with /mcp at the end.",
+            "In Claude or ChatGPT: Settings, Connectors, **Add custom connector**, and paste it.",
+            "Your assistant opens a page on your server. It says which assistant is asking **and the address its answers go to** (for Claude, claude.ai), and what it will read. Scan the code on that page with the BeanPool app (Manage, then **Manage this community from a computer**). The phone asks \"Did you just add this community to an AI assistant?\" and shows the same address. Press **Connect**, pass the phone's unlock, and type the phone's two digits on the page.",
+            "Ask it: \"what needs me?\""
+          ]
+        },
+        {
+          "type": "p",
+          "text": "No key or token is shown, and none is stored anywhere you can lose it. The assistant gets a pass that lasts an hour and renews itself; if it isn't used for 30 days, approve it again. It acts as you, with your role: if you stop being an owner or admin, it stops too. Each member can have at most 5 connected this way. Only an owner or an admin can approve one; a moderator's or a member's phone is refused. The phone must be a BeanPool app that can show which assistant is asking: an older one is told to update."
+        },
+        {
+          "type": "h2",
+          "text": "A page asking you to approve an assistant you didn't add"
+        },
+        {
+          "type": "p",
+          "text": "Anyone can make an assistant and give it any name, including \"Claude\". So the page and the phone never show the name alone: they show the address its answers go to beside it. If someone sends you a link or a code and asks you to approve \"your assistant\", or the address isn't the assistant you just added (claude.ai, chatgpt.com), press **No** on the phone and close the page. Whoever you approve reads what your assistant would read. If you approved one by mistake, disconnect it (below)."
+        },
+        {
+          "type": "h2",
+          "text": "A token for a desktop agent (owners)"
         },
         {
           "type": "p",
@@ -3930,7 +3959,7 @@
         },
         {
           "type": "p",
-          "text": "Connecting one is a new key to your server, so from the phone's Manage it is asked as an owner's other changes are: if you unlocked the phone more than 5 minutes ago, Settings says **Confirm it's you first** and you press Manage in the app again. Each member can have at most 5 assistants connected; one whose days are up doesn't count. A server on your own network with its own certificate needs the desktop app told to trust it (for Claude Desktop and Claude Code, the NODE_EXTRA_CA_CERTS setting)."
+          "text": "Admins connect theirs from their assistant, as above: only an owner makes a token. Connecting one is a new key to your server, so from the phone's Manage it is asked as an owner's other changes are: if you unlocked the phone more than 5 minutes ago, Settings says **Confirm it's you first** and you press Manage in the app again. Each member can have at most 5 assistants connected; one whose days are up doesn't count. A server on your own network with its own certificate needs the desktop app told to trust it (for Claude Desktop and Claude Code, the NODE_EXTRA_CA_CERTS setting)."
         },
         {
           "type": "p",
@@ -3975,7 +4004,7 @@
             "**Approve** does exactly what Settings' own button does, as you: dismissing, removing or restoring through the same step, with the same rules (a moderator's limits, the confirmations that step asks for). The log line says it came from a suggestion by that assistant. Members are told as when you act yourself.",
             "**Decline** deletes it; nothing changes. An owner can decline any assistant's suggestion; only its own member can approve one.",
             "Each assistant can have at most 10 suggestions waiting and make 30 a day, one per report. Once you decline one, that assistant can't suggest anything about the same report for 48 hours. A suggestion goes away after 48 hours, when its assistant is disconnected, and stops counting when its member is no longer an owner or admin.",
-            "If the report was dismissed or acted on since the assistant suggested dismissing it or removing what was reported, there is nothing left to approve: the card keeps only Decline.",
+            "If the report was dismissed or acted on since the assistant suggested dismissing it or removing what was reported, or the post it suggested restoring was removed since, there is nothing left to approve: the card keeps only Decline.",
             "While an owner has AI assistants turned off, their waiting suggestions are hidden and can't be approved. Turned back on within the 48 hours, they wait again."
           ]
         },
@@ -4021,7 +4050,15 @@
         },
         {
           "type": "p",
-          "text": "**Disconnect** beside an assistant stops it at once: its next call is refused. An owner sees every assistant on the server, with the member it acts for, their role, when it was last used and its calls today, and can disconnect any of them. An admin sees and disconnects their own."
+          "text": "**Disconnect** beside an assistant stops it at once: its next call is refused. An owner sees every assistant on the server, with the member it acts for, their role, how it was connected (by token, or approved on the phone, with the address its answers go to), when it was last used and its calls today, and can disconnect any of them. An admin sees and disconnects their own. Removing the connector in Claude or ChatGPT disconnects it too."
+        },
+        {
+          "type": "p",
+          "text": "If the server sees a used pass presented a second time, someone else may hold a copy: it disconnects that assistant at once and tells the owners as an urgent alert. Its member can connect it again from their phone. The rule is strict on purpose: Claude and ChatGPT renew their pass from their own servers, one renewal at a time, so they never trip it. An assistant that sent two renewals at once, or sent one again after its answer was lost, is disconnected the same way, and the alert can then be a false one: connect it again from the phone."
+        },
+        {
+          "type": "p",
+          "text": "Assistants connected from the phone belong to this server alone: they are never in a backup or a standby's copy, so after a standby takes over, connect them again."
         },
         {
           "type": "p",
@@ -4033,7 +4070,7 @@
         },
         {
           "type": "p",
-          "text": "AI assistants are allowed unless an owner turns them off: the card's **Turn AI assistants off**. While they are off, no assistant can connect, /mcp answers nobody, and an admin's **What it sees** shows no answers. Turning them on again lets the assistants still connected back in. Only owners can turn them on or off, and the other owners are told."
+          "text": "AI assistants are allowed unless an owner turns them off: the card's **Turn AI assistants off**. While they are off, no assistant can connect, /mcp and the connecting pages answer nobody (as if they were not there), and an admin's **What it sees** says they are turned off instead of showing answers. Turning them on again lets the assistants still connected back in. Only owners can turn them on or off, and the other owners are told."
         },
         {
           "type": "h2",

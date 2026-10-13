@@ -133,6 +133,8 @@ export interface HomeCards {
 export interface HomeFeatures {
     beans?: boolean; escrow?: boolean; enterprises?: boolean; openJoin?: boolean; knocks?: boolean; guestListingsOnly?: boolean;
     exampleListings?: boolean; decisions?: boolean; invites?: boolean; wordsDoor?: boolean; probation?: boolean;
+    /** Present, and true, only where the node previews what it switched off (the global showcase). */
+    showcase?: boolean;
     [k: string]: unknown;
 }
 

@@ -2766,4 +2766,36 @@ describe('Getting started: a newcomer\'s Home is the card alone, the tour is the
         expect(prefsPosts(from).map(r => JSON.parse(r.body).preferences).some(p => p.tour?.state === 'skipped')).toBe(true);
         expect(await tourStore.pendingTourRecord(who.identity.publicKey)).toBeNull();
     });
+
+    /** A member whose Home is saved (on the phone too) and whose tour ended. */
+    const settled = (state: 'done' | 'skipped') => {
+        const saved = localMember();
+        node.answer = { ...saved, me: { ...saved.me!, tour: { v: 1, state, at: iso(Date.now() - H) } } };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(node.answer.layout));
+    };
+
+    for (const state of ['done', 'skipped'] as const) {
+        it(`tour ${state}, Home saved: Getting started from Add a card is drawn, as the picker says (review B2)`, async () => {
+            settled(state);
+            await render();
+            expect(cards()).not.toContain('start');
+            await act(async () => { (document.querySelector('[data-testid="home-add-card"]') as HTMLElement).click(); });
+            await act(async () => { byLabel('Add Getting started to Home')!.click(); });
+            await settle(2);
+            expect(cards()).toContain('start');
+            expect(cards()).toEqual(expect.arrayContaining(['market', 'pulse']));
+        });
+    }
+
+    it('Take the tour again (the "?"): writes "open" to the account, puts the card back on top, starts at step 1 (review B4)', async () => {
+        settled('done');
+        await render();
+        expect(cards()).not.toContain('start');
+        const from = node.requests.length;
+        await act(async () => { tourStore.tourHome()!.restart!(); });
+        await settle(4);
+        expect(prefsPosts(from).map(r => JSON.parse(r.body).preferences).some(p => p.tour?.state === 'open')).toBe(true);
+        expect(cards()[0]).toBe('start');
+        expect(tourStore.currentTour()).toMatchObject({ publicKey: who.identity.publicKey, step: 0 });
+    });
 });

@@ -2027,4 +2027,53 @@ describe('Getting started in the web app: a newcomer\'s Home is the card alone, 
         await waitFor(() => expect(tourWrites()).toEqual([expect.objectContaining({ state: 'skipped' })]));
         expect(tourStore.pendingTourRecord(ME.publicKey)).toBeNull();
     });
+
+    it('a Skip a node from before the tour refuses (400) is dropped, never sent again at every Home open (review N3)', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(newcomer()));
+        vi.mocked(api.saveHomePreferences).mockImplementation(async (_pk, prefs) => {
+            if ('tour' in prefs) throw Object.assign(new Error('Only your notification settings and your Home can be saved here'), { status: 400 });
+            return { success: true, ...prefs } as never;
+        });
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('home-start-skip'));
+        await waitFor(() => expect(tourWrites()).toEqual([expect.objectContaining({ state: 'skipped' })]));
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        expect(tourStore.pendingTourRecord(ME.publicKey)).toBeNull();
+        // The layout write still ended the card here.
+        expect(layoutWrites().at(-1)).not.toContain('start');
+    });
+
+    /** A member whose Home is saved and whose tour ended (Done), on another device or long ago. */
+    const settled = (state: 'done' | 'skipped') => {
+        const a = answer({ layout: { ...EVERY_CARD, cards: EVERY_CARD.cards.filter(c => ['market', 'events'].includes(c.type)), updatedAt: '2026-10-01T00:00:00.000Z' } as never });
+        return { ...a, me: { ...a.me!, tour: { v: 1, state, at: NOW } } } as HomeAnswer;
+    };
+
+    for (const state of ['done', 'skipped'] as const) {
+        it(`tour ${state}, Home saved: Getting started from Add a card is drawn, as the picker says (review B2)`, async () => {
+            vi.mocked(api.getHome).mockResolvedValue(fresh(settled(state)));
+            render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+            await screen.findByTestId('home-card-market');
+            expect(cardIds()).not.toContain('start');
+            fireEvent.click(screen.getByTestId('home-add-open'));
+            fireEvent.click(screen.getByTestId('home-add-start'));
+            expect(await screen.findByTestId('home-card-start')).toBeInTheDocument();
+            await waitFor(() => expect(layoutWrites().at(-1)).toContain('start'));
+            // The rest of the saved Home stays drawn beside it.
+            expect(cardIds()).toEqual(expect.arrayContaining(['start', 'market']));
+        });
+    }
+
+    it('Take the tour again (the "?"): writes "open" to the account, puts the card back on top, starts at step 1 (review B4)', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(settled('done')));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} />);
+        await screen.findByTestId('home-card-market');
+        expect(cardIds()).not.toContain('start');
+        act(() => { tourStore.askTourAgain(ME.publicKey); });
+        await waitFor(() => expect(tourWrites()).toEqual([expect.objectContaining({ state: 'open' })]));
+        expect(await screen.findByTestId('home-card-start')).toBeInTheDocument();
+        expect(cardIds()[0]).toBe('start');
+        expect(layoutWrites().at(-1)![0]).toBe('start');
+        expect(tourStore.currentTour()).toMatchObject({ publicKey: ME.publicKey, step: 0 });
+    });
 });

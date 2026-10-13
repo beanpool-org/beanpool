@@ -860,8 +860,10 @@ export function cardsToDraw(answer: HomeAnswer, layout: HomeLayout | null, ctx: 
             case 'find': return isFindCard(c.find);
             case 'steps': return firstSteps(answer, ctx).show;
             case 'interests': return !!answer.me && (ctx.interests.length === 0 || ctx.tuneOpen);
-            // A member's only, never a visitor's, and only until the tour ends (Done or Skip, on any device).
-            case 'start': return !!answer.me && !tourOverFor(answer, ctx);
+            // A member's only, never a visitor's. On a saved list it is drawn whenever it is there: Done or Skip takes it
+            // off (endTourLayout), and a member who puts it back from Add a card gets it (the picker offers it to
+            // whoever wants it, design §1). A Home never saved shows it until the tour ends (shownLayout).
+            case 'start': return !!answer.me;
             // A member's only, never a visitor's; a suspended member still learns the app.
             case 'tips': return !!answer.me && !!ctx.tipsUp;
             case 'invite': return !global && canInvite && !!answer.me?.firstOffer;

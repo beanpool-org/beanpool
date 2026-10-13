@@ -206,9 +206,11 @@ export function shownFrame(answer: HomeAnswer, layout: HomeLayoutV2 | null, opts
                 return !!answer.cards.steps && stepsSaySomething(answer, opts.interests ?? me.interests, now);
             case 'tips':
                 return !!opts.tipsUp;
-            // A member's only, and only until the tour ends (Done or Skip, on any device).
+            // A member's only. On a saved list it is drawn whenever it is there: Done or Skip takes it off
+            // (endTourLayout), and a member who puts it back from Add a card gets it (the picker offers it to whoever
+            // wants it, design §1). A Home never saved shows it until the tour ends (shownLayout).
             case 'start':
-                return me.standing === 'member' && !tourOverFor(answer, opts);
+                return me.standing === 'member';
             case 'search':
                 return true;
             // Worked out in this browser; drawn only where a place is known (CARD-FRAME §4).

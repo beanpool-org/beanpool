@@ -646,9 +646,11 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
         try {
             await saveHomePreferences(pk, { tour: record });
             keepPendingTourRecord(pk, null);
-        } catch {
-            // Offline or refused: kept in this browser and sent on the next Home open.
-            keepPendingTourRecord(pk, record);
+        } catch (err) {
+            // Offline or a node that is down: kept in this browser and sent on the next Home open. A node that refuses it
+            // outright (4xx: a node from before the tour) drops it, as the phone does: the layout write ends the card here.
+            const status = (err as { status?: number } | null)?.status;
+            keepPendingTourRecord(pk, typeof status === 'number' && status >= 400 && status < 500 ? null : record);
         }
     }
     function applyTourEnd(kind: 'done' | 'skipped') {

@@ -541,6 +541,16 @@ async function main(): Promise<void> {
     const pileMax = (): number => (db.prepare(`SELECT MAX(n) AS m FROM (SELECT COUNT(*) AS n FROM recovery_collections
         WHERE owner_pubkey IN (SELECT pk FROM pile_owners) GROUP BY owner_pubkey)`).get() as { m: number | null }).m ?? 0;
 
+    // A yardstick timed in this run, on this machine: one statement that reads every row of the pile, as a sweep statement
+    // that examined the pile rather than its batch would. Read from a copy of the pile, so the sweep's deletes don't shrink
+    // it, the median of three before the sweep and of three after: a slow or busy runner slows it as it slows the sweep
+    // (#1874: on CI the absolute bounds below were p95 289 and 348 ms, a bystander's p99 1124 ms).
+    db.exec('CREATE TEMP TABLE yardstick AS SELECT * FROM recovery_collections');
+    const yardRows = (db.prepare('SELECT COUNT(*) AS n FROM yardstick').get() as { n: number }).n;
+    const readAll = db.prepare('SELECT SUM(length(id) + length(requester_ephemeral_pubkey)) AS n FROM yardstick WHERE status != ?');
+    const yard = () => [0, 1, 2].map(() => { const t = performance.now(); readAll.get('none'); return performance.now() - t; }).sort((x, y) => x - y)[1];
+    const yardBefore = yard();
+
     const times: number[] = [];
     let swept = 0;
     // A bystander asks the node something the whole time; how long it waits is how long the sweep holds the loop.
@@ -559,26 +569,33 @@ async function main(): Promise<void> {
     const sweepMs = performance.now() - t7;
     sweepDone = true;
     await bystander;
+    const yardAfter = yard();
+    const scanMs = Math.max(yardBefore, yardAfter);
+    db.exec('DROP TABLE yardstick');
     const pct = (xs: number[], p: number) => [...xs].sort((x, y) => x - y)[Math.min(xs.length - 1, Math.floor(xs.length * p))] ?? 0;
     const longest = Math.max(0, ...times);
     const longestWait = Math.max(0, ...waits);
     console.log(`  (swept ${swept} rows in ${times.length} statements, ${Math.round(sweepMs)} ms; statement median ${pct(times, 0.5).toFixed(1)} ms, `
         + `p95 ${pct(times, 0.95).toFixed(1)} ms, longest ${longest.toFixed(1)} ms; a bystander's wait median ${pct(waits, 0.5).toFixed(1)} ms, `
-        + `longest ${longestWait.toFixed(1)} ms over ${waits.length} requests)`);
+        + `longest ${longestWait.toFixed(1)} ms over ${waits.length} requests; one read of all ${yardRows} rows ${yardBefore.toFixed(1)} ms before, ${yardAfter.toFixed(1)} after)`);
     assert(rowsFor(gus, EMPTY) <= 10 && pileLeft() === OWNERS * 10 && pileMax() === 10,
         `the sweep retires the piles: Gus's to ${rowsFor(gus, EMPTY)}, 2,000 members' 250,000 to their caps (${pileLeft()} left, at most ${pileMax()} each)`);
-    // Batched by construction, then by time. The time bounds are statistical, with room for a loaded CI machine. Four
-    // copies of this suite at once here gave p95 55-105 ms, and a few single statements of 0.5-3 s, 53-row ones among
-    // them: the disk's fsyncs under four writers, not the statement's work, so no bound is put on the single longest.
-    // An unbatched sweep fails all three at once: one statement over these piles takes seconds (an aged 125,000 took
-    // 963 ms in one at 8f4e8b64), so few statements, far more rows in one, and a p95 of seconds.
+    // Batched by construction, then by time, against the yardstick: each statement is to examine its batch, not the pile,
+    // so a statement that reads every row costs it at least about one yardstick. The time bounds are statistical, and
+    // relative, so a loaded CI machine slows both sides. Four copies of this suite at once here gave p95 55-105 ms, and a
+    // few single statements of 0.5-3 s, 53-row ones among them: the disk's fsyncs under four writers, not the statement's
+    // work, so no bound is put on the single longest. An unbatched sweep fails all three at once: one statement over these
+    // piles takes seconds (an aged 125,000 took 963 ms in one at 8f4e8b64), so few statements, far more rows in one, and a
+    // p95 of seconds; a batched one whose statements each scan the pile, a p95 of about a yardstick.
+    // The bounds in reads of the pile: on this Mac (a read 75-80 ms) they are the 250, 100 and 1,000 ms they were.
+    const SHORT = 3, WAIT_MEDIAN = 1.25, WAIT_P99 = 12;
     const batch = rr.SWEEP_BATCH as number;
     assert(times.length >= 300 && batches.every(([, rows]) => rows <= batch),
         `...in hundreds of statements of at most ${batch} rows each (${times.length}; most rows in one: ${Math.max(0, ...batches.map(([, r]) => r))})`);
-    assert(pct(times, 0.95) < 250,
-        `...that are short: p95 ${pct(times, 0.95).toFixed(1)} ms (median ${pct(times, 0.5).toFixed(1)}, longest ${longest.toFixed(1)})`);
-    assert(waits.length >= 20 && pct(waits, 0.5) < 100 && pct(waits, 0.99) < 1000,
-        `...so requests made meanwhile are answered throughout (${waits.length}; median ${pct(waits, 0.5).toFixed(1)} ms, p99 ${pct(waits, 0.99).toFixed(1)} ms, longest ${longestWait.toFixed(1)} ms)`);
+    assert(pct(times, 0.95) < SHORT * scanMs,
+        `...that are short: p95 ${pct(times, 0.95).toFixed(1)} ms, under ${SHORT} of one read of the whole pile (${scanMs.toFixed(1)} ms) (median ${pct(times, 0.5).toFixed(1)}, longest ${longest.toFixed(1)})`);
+    assert(waits.length >= 20 && pct(waits, 0.5) < WAIT_MEDIAN * scanMs && pct(waits, 0.99) < WAIT_P99 * scanMs,
+        `...so requests made meanwhile are answered throughout (${waits.length}; median ${pct(waits, 0.5).toFixed(1)} ms, p99 ${pct(waits, 0.99).toFixed(1)} ms, longest ${longestWait.toFixed(1)} ms; under ${WAIT_MEDIAN} and ${WAIT_P99} reads of the pile)`);
 
     assert(blocked.length === 0, `nothing was reached off this machine (${blocked.join(', ') || 'none'})`);
     console.log(`\n${passed}/${run} checks passed.`);

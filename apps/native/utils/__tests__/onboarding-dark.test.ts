@@ -41,6 +41,15 @@ describe('onboarding screens follow dark mode', () => {
         expect(src).toContain("<StatusBar style={dark ? 'light' : 'dark'} />");
     });
 
+    it('welcome hands its light or dark tokens to the shared parts that take a colours prop (they default to light)', () => {
+        const src = read('app/welcome.tsx');
+        for (const tag of ['WordsBackupNote', 'DoorWorkProgress', 'DoorChoices', 'LinkSignInSheet', 'RecoveryKitButtons']) {
+            const uses = src.match(new RegExp(`<${tag}\\b[\\s\\S]*?/>`, 'g')) ?? [];
+            expect(uses.length, tag).toBeGreaterThan(0);
+            for (const use of uses) expect(use, tag).toContain('colors={colors}');
+        }
+    });
+
     it('light draws exactly the classic light tokens, as before', () => {
         expect(onboardingColors('light')).toEqual({ colors: lightColors, dark: false });
     });

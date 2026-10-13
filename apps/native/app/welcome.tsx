@@ -1988,7 +1988,7 @@ export default function WelcomeScreen() {
                         {/* In by 12 words (two-doors design §2.5): what the words are, first; a sign-in is offered below the
                             tickbox, as a second way back. Once one is added, the panel every sign-in member sees. */}
                         {wordsMember ? (
-                            <WordsBackupNote />
+                            <WordsBackupNote colors={colors} />
                         ) : (
                         <KeeperProtectionPanel
                             protection={protection}
@@ -2162,6 +2162,7 @@ export default function WelcomeScreen() {
                             </Pressable>
                         )}
                         <LinkSignInSheet
+                            colors={colors}
                             visible={showLinkSheet}
                             identity={pendingIdentity}
                             url={GLOBAL_NODE_URL}
@@ -2643,6 +2644,7 @@ export default function WelcomeScreen() {
                                         busy={doorWork.busy}
                                         wordsProblem={wordsState?.phase === 'failed' ? DOOR_WORK_MESSAGES.solverUnavailable : null}
                                         signInNote={signInNote}
+                                        colors={colors}
                                     />
                                 </>
                             )}
@@ -2731,7 +2733,7 @@ export default function WelcomeScreen() {
                                         <Text style={[styles.fieldHint, { marginTop: 12 }]} accessibilityLiveRegion="polite">{doorWork.busy}</Text>
                                     )}
                                     {/* Join tapped before the work was done: it finishes here, and Back still works. */}
-                                    {wordsWay && workWaiting && <DoorWorkProgress state={wordsState} />}
+                                    {wordsWay && workWaiting && <DoorWorkProgress state={wordsState} colors={colors} />}
 
                                     <Pressable
                                         style={[styles.primaryBtn, { marginTop: 16 }]}

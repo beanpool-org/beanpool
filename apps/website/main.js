@@ -115,8 +115,8 @@ function element(tag, style, content) {
 /** A contact: a link when the value passes its check, else the value as plain text. */
 function contact(value, href) {
     if (!href) return document.createTextNode(value);
-    // 44px to tap: the line it is on is 44px tall (see directoryPopup), so no two links' boxes overlap
-    const a = element('a', 'color:#10b981; text-decoration:none; display:inline-block; min-width:44px; line-height:44px;', value);
+    // 44px to tap, a box of its own: no margin pulls a neighbour's box over it. A long address breaks anywhere so it fits.
+    const a = element('a', 'color:#10b981; text-decoration:none; display:inline-block; box-sizing:border-box; min-height:44px; padding:13px 0; line-height:18px; min-width:44px; overflow-wrap:anywhere;', value);
     a.setAttribute('href', href);
     return a;
 }
@@ -131,7 +131,7 @@ function directoryPopup(row) {
     box.appendChild(element('span', 'color:#94a3b8;font-size:0.85em;', facts.join(' · ')));
     if (row.email || row.phone) {
         box.appendChild(element('br'));
-        const line = element('span', 'font-size:0.85em; color:#cbd5e1; display:inline-block; line-height:44px;');
+        const line = element('span', 'font-size:0.85em; color:#cbd5e1; display:inline-block;');
         if (row.email) line.appendChild(contact(row.email, mailtoHref(row.email)));
         if (row.email && row.phone) line.appendChild(document.createTextNode(' · '));
         if (row.phone) line.appendChild(contact(row.phone, telHref(row.phone)));
@@ -139,13 +139,22 @@ function directoryPopup(row) {
     }
     if (row.url) {
         box.appendChild(element('br'));
-        const visit = element('a', 'color:#10b981; text-decoration:none; font-size:0.85em; display:inline-block; line-height:44px; font-weight:600;', `Visit ${new URL(row.url).host} →`);
+        const visit = element('a', 'color:#10b981; text-decoration:none; font-size:0.85em; display:inline-block; box-sizing:border-box; min-height:44px; padding:13px 0; line-height:18px; font-weight:600;', `Visit ${new URL(row.url).host} →`);
         visit.setAttribute('href', row.url);
         visit.setAttribute('target', '_blank');
         visit.setAttribute('rel', 'noopener');
         box.appendChild(visit);
     }
     return box;
+}
+
+/** A popup fits inside the map and opens below the zoom buttons (they sit over popups), so every link in it can be tapped. */
+function popupOptions() {
+    const zoom = nodesMap.zoomControl.getContainer();
+    return {
+        maxWidth: Math.max(120, Math.min(300, nodesMap.getSize().x - 64)),
+        autoPanPaddingTopLeft: L.point(5, zoom.offsetTop + zoom.offsetHeight + 5),
+    };
 }
 
 async function pollNodes() {
@@ -168,7 +177,7 @@ async function pollNodes() {
             if (row.lat === null || row.lng === null) return;
 
             L.marker([row.lat, row.lng], { icon: nodeIcon })
-                .bindPopup(directoryPopup(row))
+                .bindPopup(directoryPopup(row), popupOptions())
                 .addTo(markersLayer);
 
             if (row.radiusKm !== null) {

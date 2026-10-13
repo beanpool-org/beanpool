@@ -6,8 +6,8 @@
  * card, in the real light and dark palettes, at 320 dp and 1.3× text. React Native's host components are plain tags
  * carrying their accessibility props and flattened style (as enterprise-decisions-render.test.ts).
  *
- * The net spy: fetch, XMLHttpRequest, WebSocket and every export of utils/db are spied; every button on every preview
- * is pressed; nothing may be asked of a node, let alone written.
+ * The net spy: fetch, XMLHttpRequest, WebSocket and every export of utils/db are spied (net-spy-db.ts); every button on
+ * every preview is pressed; nothing may be asked of a node, let alone written.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Module from 'node:module';
@@ -80,16 +80,15 @@ vi.mock('../../components/CommonsInfoModal', () => ({
     CommonsInfoModal: ({ isOpen }: { isOpen: boolean }) => (isOpen ? createElement('div', { 'data-testid': 'commons-info' }, 'About the Commons') : null),
 }));
 // The net spy's third arm: every call into the node client is recorded (My Deals imports it; its preview must call
-// nothing). `then` stays undefined, or the mocked module would read as a promise that never settles and the import hang.
+// nothing). Every export by name, each a function that records its call (net-spy-db.ts).
 const net = vi.hoisted(() => ({ calls: [] as string[] }));
-vi.mock('../db', () => new Proxy({}, {
-    get: (_t, k) => (k === 'then' || typeof k !== 'string' ? undefined : vi.fn(() => { net.calls.push(`db.${k}`); })),
-}));
+vi.mock('../db', async () => (await import('./net-spy-db')).dbStandIn(net.calls));
 
 import { LocalCommunityMark, LocalCommunitySheet, markTone } from '../../components/showcase/LocalCommunityMark';
 import { CommonsPreview } from '../../components/showcase/Previews';
 import { MyDealsSheet } from '../../components/MyDealsSheet';
 import { YourBeansPreviewCard } from '../../components/showcase/YourBeansPreviewCard';
+import * as db from '../db';
 
 let host: HTMLDivElement;
 let root: Root;
@@ -122,6 +121,17 @@ function contrast(a: string, b: string): number {
     const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
     return (x + 0.05) / (y + 0.05);
 }
+
+describe('the net spy\'s utils/db arm', () => {
+    it('records a call through a named import, as the screens import it, and never reads as a promise', async () => {
+        const { getMarketplaceTransactions, getPosts, getBalance, sendTransfer } = db;
+        void getMarketplaceTransactions('k'); void getPosts(); void getBalance('k'); void sendTransfer('k', 'j', 1, '');
+        expect(net.calls).toEqual(['db.getMarketplaceTransactions', 'db.getPosts', 'db.getBalance', 'db.sendTransfer']);
+        expect('then' in db).toBe(false);
+        expect(new db.RouteMissingError('/api/x')).toBeInstanceOf(Error);
+        expect(db.REDEEM_NO_ANSWER).toMatch(/No answer/);
+    });
+});
 
 for (const scheme of ['light', 'dark'] as const) {
     const colors: AppColors = scheme === 'dark' ? (darkColors as unknown as AppColors) : lightColors;

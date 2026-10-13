@@ -351,6 +351,12 @@ export function GroupDetailModal({
             fontWeight: '600',
         },
         // "lead convenor" beside the LEAD badge. flexShrink so it gives way before the badge does at 320dp.
+        memberKeyChanged: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.text.muted,
+            marginTop: 2,
+        },
         leadNote: {
             fontSize: 11,
             color: colors.text.muted,
@@ -849,8 +855,13 @@ export function GroupDetailModal({
                                         <MemberAvatar avatarUrl={m.avatarUrl} pubkey={m.memberPubkey} callsign={m.callsign || '?'} size={36} />
                                         <View style={styles.memberInfo}>
                                             <Text style={styles.memberCallsign} numberOfLines={1}>
-                                                {m.callsign || m.memberPubkey.slice(0, 10)}{row.isYou ? ' (You)' : ''}{keyChanged?.has(m.memberPubkey) ? ` ${KEY_CHANGED_HINT}` : ''}
+                                                {m.callsign || m.memberPubkey.slice(0, 10)}{row.isYou ? ' (You)' : ''}
                                             </Text>
+                                            {/* Under the name, free to wrap: beside it, the one line cut it for every
+                                                name on a convenor's roster at 320dp (review of #1826, NB9). */}
+                                            {keyChanged?.has(m.memberPubkey) && (
+                                                <Text style={styles.memberKeyChanged}>{KEY_CHANGED_HINT}</Text>
+                                            )}
                                             {/* The badge says LEAD on the one row it belongs to. It wraps rather than
                                                 squeezing the callsign at 320dp with 1.3× text. */}
                                             <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>

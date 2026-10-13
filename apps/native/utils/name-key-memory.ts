@@ -89,14 +89,15 @@ export async function rememberRosterNames(nodeUrl: string, roster: readonly Memo
 export const KEY_CHANGED_DETAILS = "This phone knew this name on another key, and the new key hasn't confirmed it was theirs.";
 
 /**
- * A chat's shown lines with the mark: a line whose signer is a marked key gets "(key changed)" beside its name and the
+ * A chat's shown lines with the mark: a line whose signer is a marked key gets "(key changed)" on its own line under its
+ * name (`authorHint`: the name's line is cut at 320dp with 1.3× text, the mark must not be; review of #1826, NB9) and the
  * details line. A line with no name of its own (unverified, still opening) is left as it is.
  */
-export function markKeyChanged<T extends { senderId?: string; unattributed?: boolean; authorName?: string | null; integrityNote?: string | null }>(
+export function markKeyChanged<T extends { senderId?: string; unattributed?: boolean; authorName?: string | null; authorHint?: string | null; integrityNote?: string | null }>(
     lines: readonly T[], changed: ReadonlySet<string>,
 ): T[] {
     if (changed.size === 0) return [...lines];
     return lines.map((m) => (!m.unattributed && m.senderId && m.authorName && changed.has(m.senderId)
-        ? { ...m, authorName: `${m.authorName} ${KEY_CHANGED_HINT}`, integrityNote: m.integrityNote ? `${m.integrityNote} ${KEY_CHANGED_DETAILS}` : KEY_CHANGED_DETAILS }
+        ? { ...m, authorHint: KEY_CHANGED_HINT, integrityNote: m.integrityNote ? `${m.integrityNote} ${KEY_CHANGED_DETAILS}` : KEY_CHANGED_DETAILS }
         : m));
 }

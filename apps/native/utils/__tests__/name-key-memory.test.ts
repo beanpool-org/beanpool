@@ -64,7 +64,7 @@ describe('name ↔ key memory', () => {
             { id: '4', senderId: mal.pub, authorName: 'Ana', integrityNote: 'Sent from an earlier key of Ana\'s, replaced 3 Oct 2026.', unattributed: false },
         ];
         const shown = markKeyChanged(lines, changed);
-        expect(shown[0]).toMatchObject({ authorName: 'Ana (key changed)', integrityNote: KEY_CHANGED_DETAILS });
+        expect(shown[0]).toMatchObject({ authorName: 'Ana', authorHint: KEY_CHANGED_HINT, integrityNote: KEY_CHANGED_DETAILS });
         expect(shown[1]).toBe(lines[1]);
         expect(shown[2]).toBe(lines[2]);
         expect(shown[3].integrityNote).toBe(`Sent from an earlier key of Ana's, replaced 3 Oct 2026. ${KEY_CHANGED_DETAILS}`);

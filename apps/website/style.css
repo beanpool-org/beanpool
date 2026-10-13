@@ -1850,11 +1850,13 @@ footer {
 .guide .guide-toc a { min-width: 44px; }
 /* the breadcrumb links over each guide page: 44x44 to tap, and the line wraps word for word as it did. Padding on an
    inline link grows its tap box without moving a word (the margin cancels the sides). The first link's box grows up (it
-   is always on the first line) and the section's grows down, so a breadcrumb on two lines has no two boxes overlapping. */
-.guide .kicker a { padding: 0 6px; margin: 0 -6px; }
-.guide .kicker a:first-child { padding-top: 24px; }
-.guide .kicker a:last-child { padding-bottom: 24px; }
-/* rows of separate links (the index's fine print, getting-started's "Guide:" lines): 44px to tap, with the lines 46px
-   apart so a link's box never reaches into the next line's */
-.card-links, .guide-links { line-height: 46px; }
-.card-links a, .guide-links a { padding: 13px 4px; margin: 0 -4px; }
+   is always on the first line) and the section's grows down, so a breadcrumb on two lines has no two boxes overlapping.
+   Relative, so the box is above the heading under it and the text beside it, which would otherwise take the tap. */
+.guide .kicker a { position: relative; padding: 0 6px; margin: 0 -6px; }
+.guide .kicker a:first-child { padding-top: 28px; }
+.guide .kicker a:last-child { padding-bottom: 28px; }
+/* rows of separate links (the index's fine print, getting-started's "Guide:" lines): 44px to tap at 100% text and up,
+   with the lines 52px apart so a link's box never reaches into the next line's (50px tall at 130%); relative, so the
+   " · " beside a link doesn't take the tap from its edge */
+.feature-card p.card-links, .rules-content p.guide-links { line-height: 52px; }
+.card-links a, .guide-links a { position: relative; padding: 13px 4px; margin: 0 -4px; }

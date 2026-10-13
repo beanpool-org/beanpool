@@ -1836,9 +1836,9 @@ footer {
 .hero-door p { font-size: 0.86rem; color: var(--text-secondary); line-height: 1.45; margin: 0; overflow-wrap: anywhere; }
 
 /* 44px to tap at 320px with 130% text, with the page looking as it did */
-/* privacy and data deletion keep their own nav. Get Started was cut off at the right edge; on a phone the word beside the
-   bean goes, as on the guide pages (the bean still goes home), and Get Started stays on one line. */
-@media (max-width: 480px) {
+/* privacy and data deletion keep their own nav. Get Started was cut off at the right edge; below 341px the word beside the
+   bean goes (it would sit under Get Started; from 341px it fits), as on the guide pages (the bean still goes home), and Get Started stays on one line. */
+@media (max-width: 340px) {
     #navbar:not(.guide-nav) .nav-inner:not(.has-menu) { gap: 0.5rem; }
     #navbar:not(.guide-nav) .nav-inner:not(.has-menu) .logo span { display: none; }
     #navbar:not(.guide-nav) .nav-inner:not(.has-menu) .nav-cta { white-space: nowrap; }
@@ -1847,5 +1847,13 @@ footer {
 /* the nav links: 12px wider to tap (Help was 42px), the negative margin keeps every word where it was */
 @media (max-width: 768px) { .guide-nav .nav-links a { padding-left: 6px; padding-right: 6px; margin-left: -6px; margin-right: -6px; } }
 .guide .guide-toc a { min-width: 44px; }
-/* the breadcrumb links over each guide page: 44px tall to tap, while the line keeps its height */
-.guide .kicker a { display: inline-block; padding: 12px 0; margin: -12px 0; }
+/* the breadcrumb links over each guide page: 44x44 to tap, and the line wraps word for word as it did. Padding on an
+   inline link grows its tap box without moving a word (the margin cancels the sides). The first link's box grows up (it
+   is always on the first line) and the section's grows down, so a breadcrumb on two lines has no two boxes overlapping. */
+.guide .kicker a { padding: 0 6px; margin: 0 -6px; }
+.guide .kicker a:first-child { padding-top: 24px; }
+.guide .kicker a:last-child { padding-bottom: 24px; }
+/* rows of separate links (the index's fine print, getting-started's "Guide:" lines): 44px to tap, with the lines 46px
+   apart so a link's box never reaches into the next line's */
+.card-links, .guide-links { line-height: 46px; }
+.card-links a, .guide-links a { padding: 13px 4px; margin: 0 -4px; }

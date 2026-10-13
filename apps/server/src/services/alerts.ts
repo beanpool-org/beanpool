@@ -26,7 +26,8 @@
  * the server. Past either, it is counted into one urgent line told within about 10 minutes, never dropped. Owners and
  * admins are pushed (admins act on reports; they are pushed the report lines alone); the line says how many and what
  * kind, never who reported whom or what they wrote. Report lines are members' doing: urgent to deliver, but never kept
- * over another line, so no flood of them pushes a security line out of the history or the channel's queue.
+ * over another line, so no flood of them pushes a security line out of the history or the channel's queue, or past it in
+ * a held message.
  *
  * A condition that starts is told once (raised), again every 24 hours while it lasts (still), and once when it has been
  * over for 15 minutes (resolved). Back within those 15 minutes, nothing is told: the condition just goes on. One that
@@ -42,7 +43,7 @@
  * 2. Optionally, one channel the operator chooses: an ntfy topic, or any URL that takes a JSON POST. Nothing goes through
  *    BeanPool's servers: with none set, the push and the banner still work and nothing leaves the server. A channel
  *    that fails keeps what it missed (up to 50 events) and is tried again every 5 minutes, with all of it in one message
- *    of at most 4096 bytes (ntfy's limit): the high and urgent lines first, the rest as a count.
+ *    of at most 4096 bytes (ntfy's limit): the high and urgent lines first, report lines last, the rest as a count.
  *    At most 20 messages an hour; high and urgent ones are never held by that, only by a hard ceiling of 60. A redirect
  *    is a failed send, never followed: the address the owner gave is the only one the alerts go to.
  *
@@ -515,8 +516,9 @@ const shownPriority = (e: AlertEvent) => (e.kind === 'cleared' ? 2 : e.priority)
 
 /**
  * One message for `events`: the community's name, each condition, since when, what to do. Nothing about any member. At
- * most ALERT_MESSAGE_MAX_BYTES: a held queue too long for that (a channel down for hours) says the high and urgent lines
- * first, then as many others as fit, and the rest as a count; `events` is what it shows.
+ * most ALERT_MESSAGE_MAX_BYTES of text: a held queue too long for that (a channel down for hours) says the high lines
+ * first, then the other lines before report lines (members' doing), most urgent first, as many as fit, and the rest as a
+ * count; `events` is what it shows.
  */
 export function composeAlert(community: string, events: AlertEvent[], click: string | null = settingsLink()): AlertMessage {
     const first = events[0];
@@ -540,7 +542,8 @@ export function composeAlert(community: string, events: AlertEvent[], click: str
     let shown = events;
     if (Buffer.byteLength(compose(events)) > ALERT_MESSAGE_MAX_BYTES) {
         const ranked = events.map((e, i) => ({ e, i }))
-            .sort((a, b) => Number(isHigh(b.e)) - Number(isHigh(a.e)) || shownPriority(b.e) - shownPriority(a.e) || a.i - b.i);
+            .sort((a, b) => Number(isHigh(b.e)) - Number(isHigh(a.e)) || Number(REPORT_KEYS.has(a.e.key)) - Number(REPORT_KEYS.has(b.e.key))
+                || shownPriority(b.e) - shownPriority(a.e) || a.i - b.i);
         const keep = new Set<AlertEvent>();
         for (const { e } of ranked) {
             if (Buffer.byteLength(compose(events.filter((x) => keep.has(x) || x === e))) <= ALERT_MESSAGE_MAX_BYTES) keep.add(e);
@@ -792,16 +795,17 @@ export async function updateAlerts(conditions: readonly Condition[]): Promise<Al
 }
 
 /**
- * A report line, however urgent, is not: members can file 10 an hour each, and their lines must never push an owner made
- * or a break-glass code out of the history or the channel's queue (the deciding review of #1850, finding 1).
+ * A report line, however urgent, is not: members can file 10 an hour each, and their lines must never push a security
+ * line out of the history or the channel's queue (the deciding reviews of #1850, finding 1): keepIn drops report lines
+ * first, and composeAlert shows them after every other line.
  */
 const isHigh = (e: AlertEvent) => !REPORT_KEYS.has(e.key) && (!!e.high || e.priority >= 5);
 
 /**
  * Adds `e` to a bounded list: the same line already there (same row, kind and words, and not on its way to the channel)
- * is counted (×n) and moved last instead, when `coalesce`. Past `max`, the oldest line that is not high makes room; a
- * high one never does (four times `max` is the last stop for a list of nothing but high lines, which the coalescing
- * keeps to a handful). Returns how many lines were dropped.
+ * is counted (×n) and moved last instead, when `coalesce`. Past `max`, the oldest report line makes room first, then the
+ * oldest line that is not high; a high one never does (four times `max` is the last stop for a list of nothing but high
+ * lines, which the coalescing keeps to a handful). Returns how many lines were dropped.
  */
 function keepIn(list: AlertEvent[], e: AlertEvent, max: number, coalesce: boolean): number {
     const same = coalesce ? list.findIndex((x) => x.key === e.key && x.kind === e.kind && x.detail === e.detail && !inFlight.includes(x)) : -1;
@@ -813,7 +817,8 @@ function keepIn(list: AlertEvent[], e: AlertEvent, max: number, coalesce: boolea
     list.push(e);
     let dropped = 0;
     while (list.length > max) {
-        const i = list.findIndex((x) => !isHigh(x) && !inFlight.includes(x));
+        let i = list.findIndex((x) => REPORT_KEYS.has(x.key) && !inFlight.includes(x));
+        if (i < 0) i = list.findIndex((x) => !isHigh(x) && !inFlight.includes(x));
         if (i < 0 && list.length <= 4 * max) break;
         list.splice(Math.max(i, 0), 1);
         dropped++;

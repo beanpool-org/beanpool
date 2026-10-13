@@ -19,8 +19,10 @@
  *     the other 86 in one urgent line 10 minutes on. The channel is not filled: an owner made by the admin password
  *     just after reaches it at once (it went at +61 minutes before). The history counts the lines told at once as one.
  *  7. 250 urgent report lines, each its own (as the unbounded flood told them), with the channel down: the owner made
- *     before them stays in the history (finding 1: it was pushed out), and when the channel is back the held queue
- *     goes as one message of at most 4096 bytes (26 KB before), the owners made first, the rest as a count.
+ *     before them stays in the history (finding 1: it was pushed out), and so does someone made an admin, a security
+ *     line that is not high (the confirmation review's finding 1: report lines pushed it out of the history and the
+ *     queue, and past it in a held message). When the channel is back the held queue goes as one message of at most
+ *     4096 bytes (26 KB before): the owners made first, then the admin made, the report lines after, the rest as a count.
  *  8. A report window closing on the tick that raises disk 95 %: the owner is pushed both, the admin the reports alone
  *     (finding 3: the admin was pushed the owner-only disk alert).
  *  9. Nothing in any alert line names a member or quotes what they wrote: no callsign, no key (nor its first 12
@@ -172,6 +174,7 @@ async function main(): Promise<void> {
     const childReporters = Array.from({ length: 16 }, (_, i) => join(`ChildRepCara${i}R`));
     const mixReporter = join('MixReporterMaxR');
     const newOwners = Array.from({ length: 3 }, (_, i) => join(`NewOwnerNia${i}R`));
+    const newAdmin = join('NewAdminAdaR');
     for (const [id, token] of [[owner, 'ExponentPushToken[olive-owner]'], [admin, 'ExponentPushToken[adam-admin]'],
         [moderator, 'ExponentPushToken[mo-moderator]'], [reporters[0], 'ExponentPushToken[ruth-reporter]'], [targets[0], 'ExponentPushToken[tom-target]']] as const) {
         putPushTokenRow(id.pk, token, 'android');
@@ -381,7 +384,10 @@ async function main(): Promise<void> {
     await settle();
     ntfy.setDown(true);
     grantNodeRole(newOwners[1].pk, 'owner', 'owner:password');
+    grantNodeRole(newAdmin.pk, 'admin', owner.pk);
     await settle(1000);
+    const adminLine = (b: string) => /Someone was made an admin, by an owner\./.test(b);
+    assert(alerts.getAlertsStatus().history.some((e) => e.key === 'sec.role' && adminLine(e.detail) && !e.high), '7. someone made an admin: a security line, not high');
     const h7 = topicHits().length;
     for (let i = 0; i < 250; i++) {
         await alerts.updateAlerts([{
@@ -392,9 +398,15 @@ async function main(): Promise<void> {
     const hist7 = alerts.getAlertsStatus().history;
     assert(hist7.some((e) => e.key === 'sec.role' && ownerLine(e.detail)),
         `7. 250 urgent report lines, each its own: the owner made before them is still in the history (${hist7.length} lines)`);
+    assert(hist7.some((e) => e.key === 'sec.role' && adminLine(e.detail)),
+        `7. and so is the admin made, though not high (${hist7.filter((e) => e.key.startsWith('reports.')).length} report lines)`);
     grantNodeRole(newOwners[2].pk, 'owner', 'owner:password');
     await settle(1000);
     assert(alerts.getAlertsStatus().waiting === 50, `7. the channel down: 50 lines wait (${alerts.getAlertsStatus().waiting})`);
+    const book7 = JSON.parse(fs.readFileSync(path.join(dataDir!, alerts.ALERTS_STATE_FILE), 'utf8')) as { waiting: Array<{ key: string; detail: string; count?: number }> };
+    const roles7 = book7.waiting.filter((e) => e.key === 'sec.role');
+    assert(roles7.some((e) => adminLine(e.detail)) && roles7.some((e) => ownerLine(e.detail) && e.count === 2),
+        `7. the admin made still waits, and both owners made (one line, ×2): the lines dropped were report lines (${roles7.length} security lines)`);
     ntfy.setDown(false);
     advance(5 * MIN + 1000);
     await tick();
@@ -403,7 +415,8 @@ async function main(): Promise<void> {
     assert(held.length === 1, `7. the channel back: what waited goes as one message (${held.length})`);
     const bytes7 = Buffer.byteLength(held[0]?.body ?? '');
     assert(bytes7 > 3000 && bytes7 <= alerts.ALERT_MESSAGE_MAX_BYTES, `7. of at most ${alerts.ALERT_MESSAGE_MAX_BYTES} bytes (${bytes7})`);
-    assert(ownerLine(held[0].body), '7. the owners made are in it, though they waited behind 49 report lines');
+    assert(ownerLine(held[0].body), '7. the owners made are in it, though they waited behind 47 report lines');
+    assert(adminLine(held[0].body), '7. and the admin made, shown before the report lines');
     assert(/- And \d+ more, too many for one message: Settings → Alerts lists them\./.test(held[0].body) && alerts.getAlertsStatus().waiting === 0,
         `7. the rest as a count, nothing left waiting (${held[0].body.split('\n').filter((l) => l.startsWith('- And')).join('')})`);
     const largest = Math.max(...topicHits().map((h) => Buffer.byteLength(h.body)));

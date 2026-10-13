@@ -242,6 +242,27 @@ describe('a visitor with no key on the global node', () => {
         expect(sync.connectToAnchor).toHaveBeenCalled();
     });
 
+    it('the header\'s ? opens the lobby\'s own guide words for the tab on screen: the Market\'s, then Home\'s (review of #1857, B4)', async () => {
+        stubNode(GLOBAL);
+        await openLobby();
+        const { helpSheetFor, webHelpKey } = await import('@beanpool/core');
+        const { getBundledGuide } = await import('../lib/guide');
+        const words = (tab: string) => helpSheetFor(getBundledGuide() as never, webHelpKey({ tab, lobby: true }));
+        expect(webHelpKey({ tab: 'marketplace', lobby: true })).toMatch(/^lobby\//);
+        const market = words('marketplace'), home = words('home');
+        expect(market.title).toBeTruthy();
+        expect(market.title).not.toBe(home.title);
+        const ask = async () => {
+            fireEvent.click(within(screen.getByTestId('lobby-header')).getByTestId('lobby-help'));
+            return within(await screen.findByTestId('help-dialog')).getByTestId('help-title');
+        };
+        expect(await ask()).toHaveTextContent(market.title!);
+        fireEvent.click(screen.getByTestId('help-close'));
+        await waitFor(() => expect(screen.queryByTestId('help-dialog')).toBeNull());
+        fireEvent.click(within(screen.getByTestId('lobby-bottom-nav')).getByRole('button', { name: /Home/ }));
+        expect(await ask()).toHaveTextContent(home.title!);
+    });
+
     it('shows each listing without the person: no author, face or tier, the terms with no Beans, and the one line once, under the first card', async () => {
         stubNode(GLOBAL);
         await openLobby();

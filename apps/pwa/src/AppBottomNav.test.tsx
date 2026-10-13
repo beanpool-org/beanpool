@@ -401,3 +401,34 @@ describe('Full-page views clear the desktop sidebar', () => {
         expect(css).toMatch(/:root\.dark-theme\.plain-background\s*\{\s*--page-ground:\s*#1d231d/);
     });
 });
+
+describe('the "?" opens the guide\'s words for the tab you are on (review of #1857, B4)', () => {
+    const sheetFor = async (tab: string) => {
+        const { helpSheetFor, webHelpKey } = await import('@beanpool/core');
+        const { getBundledGuide } = await import('./lib/guide');
+        return helpSheetFor(getBundledGuide() as never, webHelpKey({ tab, settings: false }));
+    };
+    const openWith = async (id: 'header-help' | 'sidebar-help') => {
+        fireEvent.click(screen.getByTestId(id));
+        return within(await screen.findByTestId('help-dialog'));
+    };
+
+    it('the pill\'s ? on the Market opens the Market\'s page, and on Commons the Commons\'; the sidebar\'s ? the same', async () => {
+        render(<App />);
+        await openMarket();
+        const market = await sheetFor('marketplace');
+        const commons = await sheetFor('projects');
+        expect(market.title).toBeTruthy();
+        expect(commons.title).toBeTruthy();
+        expect(market.title).not.toBe(commons.title);
+        expect((await openWith('header-help')).getByTestId('help-title')).toHaveTextContent(market.title!);
+        fireEvent.click(screen.getByTestId('help-close'));
+        await waitFor(() => expect(screen.queryByTestId('help-dialog')).toBeNull());
+        fireEvent.click(within(screen.getByTestId('mobile-bottom-nav')).getByText(/Commons/i));
+        await screen.findByTestId('projects-page');
+        expect((await openWith('header-help')).getByTestId('help-title')).toHaveTextContent(commons.title!);
+        fireEvent.click(screen.getByTestId('help-close'));
+        await waitFor(() => expect(screen.queryByTestId('help-dialog')).toBeNull());
+        expect((await openWith('sidebar-help')).getByTestId('help-title')).toHaveTextContent(commons.title!);
+    });
+});

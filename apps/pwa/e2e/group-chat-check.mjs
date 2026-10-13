@@ -516,9 +516,9 @@ async function main() {
         // The other tab lets go of the store when Sign Out deletes it (versionchange; review of #1816, finding 8).
         check(signedOut && afterWithTab && afterWithTab.fresh === true, `R5: after Sign Out with a second tab open, the signed-out tab opens a fresh lock store, never a hung one (${JSON.stringify(afterWithTab)})`);
 
-        // The shipped index.html links Google Fonts (aborted here, as every other host is); anything else fails.
-        const elsewhere = [...a.otherHosts, ...b.otherHosts].filter((h) => h !== 'fonts.googleapis.com' && h !== 'fonts.gstatic.com');
-        check(elsewhere.length === 0, `no request left this machine but the app's font link (${elsewhere.join(', ') || 'none'})`);
+        // The app's font is the node's own file, so nothing at all may leave (every other host is aborted here).
+        const elsewhere = [...a.otherHosts, ...b.otherHosts];
+        check(elsewhere.length === 0, `no request left this machine, not even for the font (${elsewhere.join(', ') || 'none'})`);
         const SECRETS = ['Working bee Saturday at nine', 'I will bring the gloves', 'Compost after lunch', 'Gate code is 4321', 'Who has the shed key'];
         const strings = (v, out = []) => { if (typeof v === 'string') out.push(v); else if (v && typeof v === 'object') for (const x of Object.values(v)) strings(x, out); return out; };
         const decoded = (sv) => { const outs = [sv]; if (/^[A-Za-z0-9+/=_-]{8,}$/.test(sv)) { try { outs.push(Buffer.from(sv, 'base64').toString('utf8')); } catch { /* not base64 */ } } return outs; };

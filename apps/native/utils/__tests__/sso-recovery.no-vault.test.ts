@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
     splitHubAndWhole,
     sealShareToSso,
@@ -42,10 +42,17 @@ import { recoverAccountWithSso } from '../sso-recovery';
 import { seedToKeypair } from '../crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import { stubCommunityLookup } from './community-lookup';
 
 describe('SSO Recovery Service', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        // No node is contacted: the community's lookup lists only the account a test names (community-lookup.ts).
+        stubCommunityLookup('https://test.beanpool.org', []);
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
     });
 
     it('rejects an empty callsign', async () => {
@@ -167,6 +174,7 @@ describe('SSO Recovery Service', () => {
         });
 
         const progressSteps: string[] = [];
+        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: originalKeypair.publicKeyHex, callsign: memberCallsign }]);
         const result = await recoverAccountWithSso({
             callsign: memberCallsign,
             anchorUrl: 'https://test.beanpool.org',
@@ -270,6 +278,7 @@ describe('SSO Recovery Service', () => {
         });
 
         const progressSteps: string[] = [];
+        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: originalKeypair.publicKeyHex, callsign: memberCallsign }]);
         const result = await recoverAccountWithSso({
             callsign: memberCallsign,
             anchorUrl: 'https://test.beanpool.org',
@@ -354,6 +363,7 @@ describe('SSO Recovery Service', () => {
             throw new Error(`Unexpected path: ${path}`);
         });
 
+        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: originalKeypair.publicKeyHex, callsign: memberCallsign }]);
         const result = await recoverAccountWithSso({
             callsign: memberCallsign,
             anchorUrl: 'https://test.beanpool.org',
@@ -444,6 +454,7 @@ describe('SSO Recovery Service', () => {
             throw new Error(`Unexpected path: ${path}`);
         });
 
+        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: originalKeypair.publicKeyHex, callsign: memberCallsign }]);
         const result = await recoverAccountWithSso({
             callsign: memberCallsign,
             anchorUrl: 'https://test.beanpool.org',

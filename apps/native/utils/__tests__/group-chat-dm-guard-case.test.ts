@@ -113,6 +113,7 @@ import {
     insertMessage, postGroupChatMessage, editThreadMessage, groupKeyringFor, groupScreenKeyringFor, isHeldGroupChat,
     isKnownDmConversation, knownDmConversationId, getConversationKind, joinGroupApi, approveGroupMemberApi, leaveGroupApi,
 } from '../db';
+import { dmConversationsSeenStoreKey } from '../storage-keys';
 import { GROUP_KEYS_FOR_DM_TEXT } from '../group-chat-lines';
 import { forgetGroupKeys } from '../group-chat-keys';
 import { openMyKey, openLine } from '../group-chat-crypto';
@@ -134,7 +135,8 @@ who.me = ME;
 const OTHER = bytesToHex(ed25519.getPublicKey(ed25519.utils.randomSecretKey()));
 /** A key of the node's own, shown as a member of the "group" it serves under a DM's id. */
 const PUPPET = mkId();
-const DM_SEEN = 'beanpool_dm_conversations_seen';
+/** The DM guard's list for this account in the one community file these cases open (§3.4 amendment 7 §3: one per file). */
+const DM_SEEN = dmConversationsSeenStoreKey(ME.publicKey, 'beanpool_test.db');
 /** ChatRoute's asks, wired to the real utils/db.ts as app/chat/[id].tsx wires them. */
 const ASKS: ChatRouteAsks = { isHeldGroupChat, knownDmConversationId, getConversationKind };
 

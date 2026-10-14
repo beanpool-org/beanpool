@@ -59,6 +59,16 @@ export function dmPeerPinsSetAsideStoreKey(publicKey: string, file: string): str
 }
 
 /**
+ * The conversations one account's phone has seen as DMs in one community file (utils/dm-guard-list.ts, the DM guard: §3.4
+ * amendment 7 §3): a JSON array of ids as the node spelt them. One value per (account, file), beside the pins, so one
+ * community's node can neither grow another's list nor make it forget a DM; seeded once from that file's own `dm` rows.
+ * `file`: the name db.ts opens the community under.
+ */
+export function dmConversationsSeenStoreKey(publicKey: string, file: string): string {
+    return `beanpool_dm_conversations_seen:${publicKey.toLowerCase()}:${file}`;
+}
+
+/**
  * The encrypted lines one account's phone held, at the update, in one community file, of each DM its rows there didn't pin
  * (utils/db.ts, the update's seed of that file, §3.4 amendment 5): an object, conversation id lower-cased → those lines.
  * Written the first time a build with pins reads that file for the account and never overwritten (only shrunk), so a DM

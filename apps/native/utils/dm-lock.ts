@@ -13,6 +13,7 @@
  */
 
 import { isDmPinStoreError, isDmPinsFullError } from './dm-peer-pins';
+import { isDmGuardUnreadError } from './dm-guard-list';
 
 /** Chats the node has to read. Every other conversation is a direct message. */
 const NODE_READABLE_CHATS: ReadonlySet<string> = new Set(['group_thread', 'event_thread', 'enterprise_thread']);
@@ -78,13 +79,13 @@ export function isKeyStoreUnread(e: unknown): boolean {
 /**
  * The line the DM screen shows for a send that threw, when the words go back in the box: a line that couldn't be locked,
  * a key memory that couldn't be read (every send asks it first, a DM's too: #1815 review), a key change waiting for the
- * member, DM pins that couldn't be read, or a new chat in a community whose pins are full (utils/dm-peer-pins.ts, §3.4
- * amendment 6). Null: anything else, an alert as before.
+ * member, DM pins that couldn't be read, a new chat in a community whose pins are full (utils/dm-peer-pins.ts, §3.4
+ * amendment 6), or a DM list that couldn't be read (utils/dm-guard-list.ts, amendment 7). Null: anything else, an alert as before.
  */
 export function refusedSendNotice(e: unknown, peerName?: string | null): string | null {
     if (isDmNotLocked(e)) return dmNotLockedLine(peerName);
     if (isDmKeyChanged(e)) return dmKeyChangedLine(peerName);
-    if (isDmPinStoreError(e) || isDmPinsFullError(e)) return (e as Error).message;
+    if (isDmPinStoreError(e) || isDmPinsFullError(e) || isDmGuardUnreadError(e)) return (e as Error).message;
     if (isKeyStoreUnread(e)) return (e as Error).message;
     return null;
 }

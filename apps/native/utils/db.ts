@@ -17,6 +17,7 @@ import {
     noRoomForFirstSight, rekeyDateOf, DM_PINS_UNREAD_LINE, type DmPeerPins, type DmPinEntry, type DmHeard, type SightVerdict, type DmPinsReset,
 } from './dm-peer-pins';
 import { dmLinesAtUpdateStoreKey } from './storage-keys';
+import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError } from './dm-guard-list';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCachedNodeProfile } from './node-profile';
 import { communityCachesRenamed } from './cache-file-migration';
@@ -2614,25 +2615,71 @@ export async function removeEventChatMessage(postId: string, messageId: string):
 // chat ever does: the node refuses one), stays a DM here whatever the node says: it opens only in the DM view, with
 // the DM checks, and is locked when sent to. A type change from the node is ignored, and logged. The ids seen as DMs
 // are kept in AsyncStorage, so a database wipe-and-fetch, or the node dropping the chat for a while, forgets none.
+//
+// The pins are asked first (§3.4 amendment 7 §3 iv): a conversation this community file's pins keep anything for (a pin,
+// a rule-5 record, a heldLost mark) is a DM whatever the node now says, and is added to the list. The list is the second
+// memory, one per (account, community file) and bounded (utils/dm-guard-list.ts). When it can't be read it is UNREADABLE,
+// never empty: nothing is written over it, the sync writes no type of the node's where it would decide, and no line goes
+// readable into a conversation whose group keys this phone never held (DmGuardUnreadError, its own sentence).
 
-const DM_SEEN_KEY = 'beanpool_dm_conversations_seen';
+const dmSeen = createDmSeenList(AsyncStorage);
 
-async function dmConversationsSeen(): Promise<Set<string>> {
+/** This account and the community file `database` reads, for the DM guard's list; null with no identity (nothing is sent). */
+async function dmGuardOf(database?: SQLite.SQLiteDatabase): Promise<{ me: string; file: string; database: SQLite.SQLiteDatabase } | null> {
+    const me = (await loadIdentity())?.publicKey;
+    if (!me) return null;
+    const db = database ?? await getDb();
+    const file = dbFileOf.get(db);
+    if (!file) throw new DmGuardUnreadError();
+    return { me, file, database: db };
+}
+
+/** A file's own `dm` rows, held longest first: its guard list's seed, through the handle named. */
+function dmRowsOf(database: SQLite.SQLiteDatabase): () => Promise<string[]> {
+    return async () => (await database.getAllAsync<any>("SELECT id FROM conversations WHERE type = 'dm' ORDER BY rowid"))
+        .map((r: any) => r?.id).filter((id: unknown): id is string => typeof id === 'string' && !!id);
+}
+
+/** The ids seen as DMs in this community. Throws (DmGuardUnreadError) when the list can't be read: never an empty set. */
+async function dmConversationsSeen(database?: SQLite.SQLiteDatabase): Promise<Set<string>> {
+    let here: Awaited<ReturnType<typeof dmGuardOf>>;
     try {
-        const raw = JSON.parse((await AsyncStorage.getItem(DM_SEEN_KEY)) || '[]');
-        return new Set(Array.isArray(raw) ? raw.filter((x: unknown) => typeof x === 'string') : []);
+        here = await dmGuardOf(database);
     } catch {
-        return new Set();
+        throw new DmGuardUnreadError();
+    }
+    if (!here) return new Set();
+    return new Set(await dmSeen.read(here.me, here.file, dmRowsOf(here.database)));
+}
+
+/**
+ * Remember conversations seen as DMs in this community (never forgotten; at the list's cap a new one is refused and logged).
+ * Nothing is written when the list can't be read (§3.4 amendment 7 §3 iii).
+ */
+async function rememberDmConversations(ids: string[], database?: SQLite.SQLiteDatabase): Promise<void> {
+    if (!ids.length) return;
+    try {
+        const here = await dmGuardOf(database);
+        if (here) await dmSeen.remember(here.me, here.file, ids, dmRowsOf(here.database));
+    } catch (e) {
+        console.warn('[DM guard] Could not read which chats here are DMs, so none was remembered this time', e);
     }
 }
 
-/** Remember conversations seen as DMs (never forgotten; ids are UUIDs, so one list serves every community). */
-async function rememberDmConversations(ids: string[]): Promise<void> {
-    if (!ids.length) return;
-    const seen = await dmConversationsSeen();
-    const before = seen.size;
-    for (const id of ids) if (typeof id === 'string' && id) seen.add(id);
-    if (seen.size !== before) await AsyncStorage.setItem(DM_SEEN_KEY, JSON.stringify([...seen])).catch(() => {});
+/**
+ * True when this community file's DM pins keep anything for the id (a pin, a rule-5 record, a heldLost mark): it is a DM
+ * whatever the node now says (§3.4 amendment 7 §3 iv). False when they keep nothing, or can't be read (the list decides),
+ * and for a group whose keys this phone has held (or whose key memory can't be read): the held guard is asked before
+ * anything, so a node listing a held group as a DM, which the pins hear at first sight, never makes it one here.
+ */
+async function keptInDmPins(conversationId: string, database: SQLite.SQLiteDatabase): Promise<boolean> {
+    try {
+        const me = (await loadIdentity())?.publicKey;
+        if (!me || !isPinnableId(conversationId) || !dmSightFor(await dmPins.read(me, database), conversationId)) return false;
+        return !(await heldInKeyMemory(conversationId, me));
+    } catch {
+        return false;
+    }
 }
 
 /**
@@ -2643,16 +2690,23 @@ async function rememberDmConversations(ids: string[]): Promise<void> {
  * (#1841 review, finding 1). The two SQLite lookups ask the id as given, lower- and upper-case, so both keep their index:
  * a COLLATE NOCASE compare scanned the whole table for every row holdDmTypes asks about (#1841 confirmation 1, finding
  * 2); refuseGroupKeysForDm keeps the complete check (isKnownDmInAnySpelling). `seenByFold` is the DM list folded once,
- * for a pass over many rows (dmConversationsByFold).
+ * for a pass over many rows (dmConversationsByFold); null when it couldn't be read.
+ *
+ * The pins are asked first (§3.4 amendment 7 §3 iv): an id this file's pins keep anything for is a known DM (under the
+ * spelling asked for, unless the list, a row or a line knows it under another). With the list unreadable and nothing else
+ * knowing the id this throws DmGuardUnreadError: "not a DM" is never answered from a list it couldn't read.
  */
-export async function knownDmConversationId(conversationId: string, seenByFold?: Map<string, string[]>): Promise<string | null> {
+export async function knownDmConversationId(conversationId: string, seenByFold?: Map<string, string[]> | null): Promise<string | null> {
     if (!conversationId) return null;
     const folded = conversationId.toLowerCase();
-    const listed = seenByFold ? (seenByFold.get(folded) ?? []) : [...await dmConversationsSeen()].filter((s) => s.toLowerCase() === folded);
+    const pinned = await getDb().then((database) => keptInDmPins(conversationId, database), () => false);
+    let listed: string[] | null;
+    if (seenByFold !== undefined) listed = seenByFold ? (seenByFold.get(folded) ?? []) : null;
+    else listed = await dmConversationsSeen().then((seen) => [...seen].filter((s) => s.toLowerCase() === folded), () => null);
     // The spelling asked for wins wherever this phone knows a DM under it, so a link to a conversation the phone holds
     // opens that conversation, never a twin under another spelling: a node can list one first, and SQLite visits an IN
     // list in BINARY order, upper case first (#1863 review). Another spelling answers only when this one is known nowhere.
-    if (listed.includes(conversationId)) return conversationId;
+    if (listed?.includes(conversationId)) return conversationId;
     let row: string | null = null;
     let line: string | null = null;
     try {
@@ -2667,36 +2721,46 @@ export async function knownDmConversationId(conversationId: string, seenByFold?:
         line = typeof msg?.conversation_id === 'string' ? msg.conversation_id : null;
         if (line === conversationId) return line;
     } catch {}
-    return listed[0] ?? row ?? line;
+    const known = listed?.[0] ?? row ?? line ?? (pinned ? conversationId : null);
+    if (known === null && listed === null) throw new DmGuardUnreadError();
+    return known;
 }
 
 /** The DM list folded once (each id lower-cased, to its spellings in the order seen), for a pass over many rows. */
-async function dmConversationsByFold(): Promise<Map<string, string[]>> {
+async function dmConversationsByFold(database?: SQLite.SQLiteDatabase): Promise<Map<string, string[]>> {
     const byFold = new Map<string, string[]>();
-    for (const s of await dmConversationsSeen()) { const f = s.toLowerCase(); const a = byFold.get(f); if (a) a.push(s); else byFold.set(f, [s]); }
+    for (const s of await dmConversationsSeen(database)) { const f = s.toLowerCase(); const a = byFold.get(f); if (a) a.push(s); else byFold.set(f, [s]); }
     return byFold;
 }
 
 /**
  * A known DM in ANY spelling, the slow way (two COLLATE NOCASE scans): the key-making guard's own check, which runs when a
  * group's keys are about to be synced or made, never per row of a sync. A dm row or a sealed line kept under a mixed-case
- * spelling the DM list never got (written while the key memory couldn't be read) is caught here (#1863 review).
+ * spelling the DM list never got (written while the key memory couldn't be read) is caught here (#1863 review). With the
+ * list unreadable and no spelling known anywhere else, DmGuardUnreadError: no group key is asked on a list it couldn't read.
  */
 async function isKnownDmInAnySpelling(conversationId: string): Promise<boolean> {
-    if (await isKnownDmConversation(conversationId)) return true;
+    let listUnread = false;
+    try {
+        if (await isKnownDmConversation(conversationId)) return true;
+    } catch (e) {
+        if (!isDmGuardUnreadError(e)) throw e;
+        listUnread = true;
+    }
+    let found = false;
     try {
         const database = await getDb();
         const dm = await database.getFirstAsync<any>("SELECT 1 AS y FROM conversations WHERE id = ? COLLATE NOCASE AND type = 'dm' LIMIT 1", [conversationId]);
-        if (dm) return true;
-        const spelt = await database.getAllAsync<any>('SELECT id FROM conversations WHERE id = ? COLLATE NOCASE', [conversationId]);
+        const spelt = dm ? [] : await database.getAllAsync<any>('SELECT id FROM conversations WHERE id = ? COLLATE NOCASE', [conversationId]);
         const ids = (spelt ?? []).map((r: any) => r?.id).filter((s: unknown): s is string => typeof s === 'string');
-        if (!ids.length) return false;
-        const line = await database.getFirstAsync<any>(
-            `SELECT 1 AS y FROM messages WHERE conversation_id IN (${ids.map(() => '?').join(', ')}) AND nonce LIKE ? LIMIT 1`, [...ids, `${V2_NONCE_PREFIX}%`]);
-        return !!line;
+        const line = !dm && ids.length ? await database.getFirstAsync<any>(
+            `SELECT 1 AS y FROM messages WHERE conversation_id IN (${ids.map(() => '?').join(', ')}) AND nonce LIKE ? LIMIT 1`, [...ids, `${V2_NONCE_PREFIX}%`]) : null;
+        found = !!dm || !!line;
     } catch {
-        return false;
+        found = false;
     }
+    if (!found && listUnread) throw new DmGuardUnreadError();
+    return found;
 }
 
 /** True for a conversation this phone has seen as a DM, or that holds an encrypted line, in any spelling of its id. */
@@ -2723,7 +2787,9 @@ async function heldInKeyMemory(conversationId: string, myPub?: string | null): P
  * The type this phone keeps for a conversation the node calls `nodeType`. A group whose keys this phone has held stays
  * its group and is never remembered as a DM, whatever the node calls it: one answer typing it `dm` would otherwise move
  * it to the DM screen for good, every line DM-sealed to whoever the node lists (confirmation 2 of #1788, finding 2). A
- * known DM stays one. When the key memory can't be read, this answer remembers nothing as a DM; the next sync asks again.
+ * known DM stays one (its pins asked first: §3.4 amendment 7 §3 iv). When the key memory can't be read, this answer
+ * remembers nothing as a DM; the next sync asks again. DmGuardUnreadError when the node types it otherwise, nothing else
+ * knows it as a DM and the DM list can't be read: the caller writes no row from the node's type (§3.4 amendment 7 §3 iii).
  */
 async function heldConversationType(conversationId: string, nodeType: string | null | undefined, myPub?: string | null): Promise<string> {
     const t = nodeType || 'dm';
@@ -2756,17 +2822,21 @@ async function isDmHere(database: SQLite.SQLiteDatabase, conversationId: string,
     return await isKnownDmConversation(conversationId).catch(() => true);
 }
 
-/** Any conversation this phone holds under another type that is a known DM goes back to being one (logged). */
-async function holdDmTypes(): Promise<void> {
+/**
+ * Any conversation this phone holds under another type that is a known DM goes back to being one (logged). With the DM
+ * list unreadable the pins, the rows and the lines still decide; the list is never read as empty, and nothing is written to it.
+ */
+async function holdDmTypes(database?: SQLite.SQLiteDatabase): Promise<void> {
     try {
-        const database = await getDb();
-        const rows = await database.getAllAsync<any>("SELECT id, type FROM conversations WHERE IFNULL(type, 'dm') != 'dm'");
-        const byFold = await dmConversationsByFold();
-        for (const r of rows || []) {
-            if (r?.id && (await knownDmConversationId(r.id, byFold)) !== null) {
+        const db = database ?? await getDb();
+        const rows = await db.getAllAsync<any>("SELECT id, type FROM conversations WHERE IFNULL(type, 'dm') != 'dm'");
+        if (!rows?.length) return;
+        const byFold = await dmConversationsByFold(db).catch(() => null);
+        for (const r of rows) {
+            if (r?.id && (await knownDmConversationId(r.id, byFold).catch(() => null)) !== null) {
                 console.warn(`[DM guard] DM ${String(r.id).slice(0, 8)} was held as a ${r.type}: back to a DM`);
-                await database.runAsync("UPDATE conversations SET type = 'dm' WHERE id = ?", [r.id]);
-                await rememberDmConversations([r.id]);
+                await db.runAsync("UPDATE conversations SET type = 'dm' WHERE id = ?", [r.id]);
+                await rememberDmConversations([r.id], db);
             }
         }
     } catch {}
@@ -4102,8 +4172,15 @@ export async function syncMessages(publicKey: string) {
                 needsConvWrite = true; // on any doubt, fall through to the write path
             }
 
-            // The type this phone keeps (a known DM stays one: the DM guard); an existing row's type is never rewritten.
-            const heldType = needsConvWrite ? await heldConversationType(conv.id, conv.type, myIdentity?.publicKey) : (conv.type || 'dm');
+            // The type this phone keeps (a known DM stays one: the DM guard); an existing row's type is never rewritten. A type
+            // the guard can't decide (its list unreadable: §3.4 amendment 7 §3 iii) writes nothing of this conversation's this pass.
+            let heldType: string;
+            try {
+                heldType = needsConvWrite ? await heldConversationType(conv.id, conv.type, myIdentity?.publicKey) : (conv.type || 'dm');
+            } catch (e) {
+                console.warn(`[DM guard] Could not tell whether ${String(conv.id).slice(0, 8)} is a DM: it waits for the next pass`, e);
+                continue;
+            }
             if (needsConvWrite) {
             await acquireSyncLock();
             try {
@@ -4242,8 +4319,8 @@ export async function syncMessages(publicKey: string) {
 
         // The DM guard: every conversation the node lists as a DM is remembered as one, and any held under another type
         // that is a known DM (seen as one, or holding an encrypted line) goes back to being one.
-        await rememberDmConversations(convData.conversations.filter((c: any) => c?.id && (c.type || 'dm') === 'dm').map((c: any) => c.id));
-        await holdDmTypes();
+        await rememberDmConversations(convData.conversations.filter((c: any) => c?.id && (c.type || 'dm') === 'dm').map((c: any) => c.id), database);
+        await holdDmTypes(database);
 
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('sync_data_updated');
@@ -4377,8 +4454,8 @@ export async function syncSingleConversation(conversationId: string) {
             releaseSyncLock();
         }
         // The DM guard: a chat whose lines are encrypted is a DM here, whatever type the node gives it.
-        if (msgData?.conversation?.type === 'dm') await rememberDmConversations([conversationId]);
-        await holdDmTypes();
+        if (msgData?.conversation?.type === 'dm') await rememberDmConversations([conversationId], database);
+        await holdDmTypes(database);
 
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('sync_data_updated');
@@ -5244,6 +5321,12 @@ async function isNodeReadableConversation(conversationId: string): Promise<boole
  * person's key can't be resolved even after asking the node, or the encryption throws. Never a readable fallback.
  */
 async function lockForConversation(conversationId: string, text: string, line: DmLineToSeal): Promise<{ ciphertext: string; nonce: string; metadata?: Record<string, unknown> }> {
+    // A DM's key context decides before any group sealing (§3.4 amendment 7 §3 iv): a conversation whose group keys this
+    // phone never held and that it knows as a DM (its pins first) is sealed to its pin or refused, whatever its row or the
+    // node now call it. With the group path asked first, a pinned DM the node relisted as an unlocked group went out readable.
+    if (!(await isHeldGroupChat(conversationId)) && await isKnownDmConversation(conversationId)) {
+        return lockWith(await requireDmKeyContext(conversationId), text, line);
+    }
     // A group's chat is locked since group chats step 2 (slice 3 here): sealed under the group's key, with its epoch in the
     // metadata the node checks. Only a node from before locked chats, which this phone never saw locked, still reads it.
     const groupLine = await sealForGroupConversation(conversationId, text, line);
@@ -5322,11 +5405,11 @@ async function sealForGroupConversation(conversationId: string, text: string, li
     // A group this phone has held keys of is its group whatever the row says, with no row (a sync pruned it, a push landed
     // before it), or once something called it a DM: the phone's own key memory decides, never the node's or the row's
     // type (confirmation of #1788, 1), and it is asked FIRST (confirmation 2, finding 2). Only a group never held can be
-    // a known DM, and that returns before prepareToSeal: no group key is ever synced for a known DM, so it never becomes
-    // held (the key-making paths below refuse it too, refuseGroupKeysForDm).
+    // a known DM, and lockForConversation, the one caller, hands that to its pin before this runs (§3.4 amendment 7 §3 iv):
+    // no group key is ever synced for a known DM, so it never becomes held (the key-making paths below refuse it too,
+    // refuseGroupKeysForDm).
     const held = await isHeldGroupChat(conversationId);
     if (!held) {
-        if (await isKnownDmConversation(conversationId)) return null;
         if (!row) {
             // Not on this phone yet (a push tap or a link before the sync wrote it): ask the node what it is first, so a
             // group's first line goes through the keys and the node's own chat answer, never out readable on a missing row

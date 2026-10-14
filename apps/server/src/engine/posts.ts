@@ -1230,8 +1230,9 @@ export function rsvpEvent(
             if (status === 'going' && row.event_host_lets_in === 1) {
                 const friendOf = hostFriendOf(row, memberPublicKey);
                 if (friendOf) {
-                    db.prepare('UPDATE event_rsvps SET let_in_at = ?, let_in_by = ? WHERE post_id = ? AND member_pubkey = ? AND let_in_at IS NULL')
-                        .run(writeAt, friendOf, postId, memberPublicKey);
+                    // The same stamp the RSVP above was just written with: one write, as a replica sees it.
+                    db.prepare('UPDATE event_rsvps SET let_in_at = ?, let_in_by = ?, updated_at = ? WHERE post_id = ? AND member_pubkey = ? AND let_in_at IS NULL')
+                        .run(writeAt, friendOf, writeAt, postId, memberPublicKey);
                 }
             }
         }

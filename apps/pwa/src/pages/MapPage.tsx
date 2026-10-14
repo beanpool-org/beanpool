@@ -10,7 +10,7 @@
  */
 
 import { offerNeedSubmit } from '../lib/offer-need-submit';
-import { placelessListingNote } from '@beanpool/core';
+import { placelessListingNote, looksLikeStreetAddress, PLACE_NAME_ADDRESS_NUDGE, PLACE_NAME_HELPER, t } from '@beanpool/core';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -2229,6 +2229,13 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 onChange={e => { setEventPlaceName(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('event_place'); return n; }); }}
                                 className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all ${validationErrors.has('event_place') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
                             />
+                            {/* Where anyone can join, the place name is the one place everyone who can see the event reads
+                                (DESIGN-global-member-privacy-fable.md §4); a typed street address gets a gentle nudge. */}
+                            {openMembership && (
+                                <p data-testid="event-place-helper" className="m-0 mt-1 text-xs text-nature-500 dark:text-nature-400 break-words">
+                                    {looksLikeStreetAddress(eventPlaceName) ? t(PLACE_NAME_ADDRESS_NUDGE) : t(PLACE_NAME_HELPER)}
+                                </p>
+                            )}
                         </div>
 
                         <div>

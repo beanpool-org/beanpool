@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
+import { t, placeShownRoughly, ROUGH_PLACE_LINE } from '@beanpool/core';
 import { fetchEventDetail, rsvpEvent, deletePost, reportAbuse, letInToEvent } from '../utils/db';
 import { hapticTick } from '../utils/haptics';
 import { PhotoCarousel } from './PhotoCarousel';
@@ -38,6 +39,8 @@ import {
 
 interface EventDetailProps {
     post: any;
+    /** The node says `openMembership` (anyone can join in a minute): the spot is the host's to give (ROUGH_PLACE_LINE). */
+    openMembership?: boolean;
 }
 
 function countsOf(p: any): RsvpCounts {
@@ -48,7 +51,7 @@ function countsOf(p: any): RsvpCounts {
     };
 }
 
-export function EventDetail({ post }: EventDetailProps) {
+export function EventDetail({ post, openMembership = false }: EventDetailProps) {
     const insets = useSafeAreaInsets();
     const { colors } = useTheme();
     const styles = useStyles(makeStyles);
@@ -111,12 +114,12 @@ export function EventDetail({ post }: EventDetailProps) {
             const res = await letInToEvent(post.id, who, on);
             if (res?.post) setView(res.post);
         } catch (err: any) {
-            Alert.alert('Not saved', err?.message || 'Could not reach the node. Try again when you have signal.');
+            Alert.alert(t('Not saved'), err?.message || t('Could not reach the node. Try again when you have signal.'));
         } finally {
             setLetting(null);
         }
     };
-    const letEveryoneIn = () => Alert.alert('Let everyone in', letEveryoneInQuestion(waiting), [
+    const letEveryoneIn = () => Alert.alert(t('Let everyone in'), letEveryoneInQuestion(waiting), [
         { text: 'Not now', style: 'cancel' },
         { text: 'Let them in', onPress: () => { saveLetIn('everyone', { everyone: true }, true); } },
     ]);
@@ -310,6 +313,10 @@ export function EventDetail({ post }: EventDetailProps) {
                         )}
                     </View>
                 )}
+                {placeShownRoughly({ authorPublicKey: p.authorPublicKey ?? p.author_pubkey, type: 'event', lat: p.lat, lng: p.lng,
+                    eventRsvps: p.eventRsvps, myRsvp: p.myRsvp, myLetIn: p.myLetIn }, identity?.publicKey, openMembership) && (
+                    <Text style={styles.roughPlace} testID="rough-place-line">{t(ROUGH_PLACE_LINE, { name: hostName })}</Text>
+                )}
 
                 {note ? (
                     <View style={styles.noteBox}>
@@ -341,8 +348,8 @@ export function EventDetail({ post }: EventDetailProps) {
                         )}
                         {hostView && showRsvps && waiting >= 2 && !closed && (
                             <Pressable onPress={letEveryoneIn} disabled={!!letting} style={styles.letAllBtn} accessibilityRole="button"
-                                accessibilityLabel="Let everyone in" testID="event-let-everyone-in">
-                                <Text style={styles.letAllText} numberOfLines={1}>Let everyone in</Text>
+                                accessibilityLabel={t('Let everyone in')} testID="event-let-everyone-in">
+                                <Text style={styles.letAllText} numberOfLines={1}>{t('Let everyone in')}</Text>
                             </Pressable>
                         )}
                         {hostView && showRsvps && (rsvps!.length === 0
@@ -491,6 +498,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         letInTextOn: { color: colors.text.inverse },
         placeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
         place: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text.body },
+        roughPlace: { fontSize: 13, lineHeight: 18, color: colors.text.secondary, marginTop: -6, marginBottom: 12 },
         linkBtn: { minHeight: 48, justifyContent: 'center', flexShrink: 0 },
         link: { fontSize: 14, fontWeight: '700', color: colors.text.link },
         noteBox: {

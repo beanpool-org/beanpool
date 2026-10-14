@@ -131,8 +131,9 @@ export function* thirtyDayTradePages(db: Db, pageRows = WASH_30_DAY_PAGE_ROWS): 
           AND completed_at >= ? AND (completed_at > ? OR rowid > ?)
         ORDER BY completed_at, rowid LIMIT ?
     `);
+    // At least one page, empty or not: the read is a step, as the one query was.
     let rows = firstPage.all(since, pageRows) as (ThirtyDayTrade & { rid: number; at: unknown })[];
-    while (rows.length > 0) {
+    for (;;) {
         yield rows;
         if (rows.length < pageRows) return;
         const last = rows[rows.length - 1];

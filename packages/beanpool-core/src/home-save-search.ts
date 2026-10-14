@@ -74,6 +74,12 @@ export function saveSearchState(layout: Pick<HomeLayoutV2, 'cards'> | null, sett
 export const SAVE_SEARCH_BUTTON = 'Save this search to Home';
 export const saveSearchLabel = (q: string): string => `Save the search "${q.trim()}" to Home`;
 
+/**
+ * Home's line when it can't keep a search yet: the community hasn't answered (offline with nothing kept, a server older
+ * than Home), so there is no list of the member's to add it to. Nothing is lost: the Market still has the search.
+ */
+export const SAVE_SEARCH_NOT_NOW = "Home can't keep this search until your community answers. Try again from the Market in a moment.";
+
 /** Home's plain line when the search can't be added, said where the member lands. Null for `add`. */
 export function saveSearchLine(state: SaveSearchState, q: string): string | null {
     const words = `"${q.trim()}"`;

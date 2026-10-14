@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HOME_FRAME_LIMITS, addCard, type HomeLayoutV2 } from '../home-frame.js';
 import {
-    SAVE_SEARCH_BUTTON, sameSearch, saveSearchLabel, saveSearchLine, saveSearchState, searchFromMarket, searchKmFor,
+    SAVE_SEARCH_BUTTON, SAVE_SEARCH_NOT_NOW, sameSearch, saveSearchLabel, saveSearchLine, saveSearchState, searchFromMarket, searchKmFor,
 } from '../home-save-search.js';
 
 const AT = '2026-10-14T10:00:00.000Z';
@@ -83,5 +83,6 @@ describe('Save to Home: the words', () => {
         expect(saveSearchLine('type-full', 'eggs')).toBe('Home holds 5 saved searches. Remove one, then save "eggs" again.');
         expect(saveSearchLine('home-full', 'eggs')).toBe('Home holds 24 cards. Remove one, then save "eggs" again.');
         for (const s of ['on-home', 'type-full', 'home-full'] as const) expect(saveSearchLine(s, 'eggs')).not.toMatch(/lock|unlock|upgrade/i);
+        expect(SAVE_SEARCH_NOT_NOW).toMatch(/Try again from the Market/);
     });
 });

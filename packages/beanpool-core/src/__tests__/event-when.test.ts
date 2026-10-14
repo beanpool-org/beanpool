@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { eventPlaceTimeText, eventWhenParts, offsetMinutesOf, zoneLabelFor } from '../event-when.js';
+import { CURRENT_ZONE_IDS, eventPlaceTimeText, eventWhenParts, offsetMinutesOf, zoneLabelFor } from '../event-when.js';
 
 const line = (p: ReturnType<typeof eventWhenParts>) => p ? `${p.first}${p.sep}${p.second}` : null;
 
@@ -67,6 +67,15 @@ describe('zoneLabelFor', () => {
         expect(zoneLabelFor('Europe/Kyiv', 180)).toBe('Kyiv time');
         expect(zoneLabelFor('Asia/Calcutta', 330)).toBe('Kolkata time');
         expect(zoneLabelFor('Asia/Saigon', 420)).toBe('Ho Chi Minh time');
+        // Ontario's Atikokan, which CLDR spells America/Coral_Harbour (review #1937 finding 6).
+        expect(zoneLabelFor('America/Coral_Harbour', -300)).toBe('Atikokan time');
+    });
+
+    it('an old spelling and the current id it is stored as read the same', () => {
+        expect(Object.keys(CURRENT_ZONE_IDS)).toHaveLength(19);
+        for (const [old, current] of Object.entries(CURRENT_ZONE_IDS)) {
+            expect(zoneLabelFor(old, 0), old).toBe(zoneLabelFor(current, 0));
+        }
     });
 
     it('a zone that is not a place reads as its offset', () => {

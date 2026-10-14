@@ -35,6 +35,17 @@ describe('zonedToInstant — the design vectors (DESIGN-event-times §0, §7)', 
         expect(zonedToInstant('2026-10-16 20:50', 'Australia/Sydney')).toBeNull();
         expect(zonedToInstant('2026-10-16T20:50:00', 'Australia/Sydney')).toBeNull();
     });
+
+    it('a clock with the shape but no such date or time is refused, not rolled into another date (review #1937 finding 2)', () => {
+        for (const impossible of ['2027-02-30T20:50', '2027-01-15T24:00', '2027-01-15T25:00', '2027-01-15T20:60', '2027-13-01T10:00', '2027-00-10T10:00', '2027-01-00T10:00']) {
+            expect(zonedToInstant(impossible, 'Australia/Sydney'), impossible).toBeNull();
+        }
+        // The last minute of a day, 29 Feb in a leap year, and 31 Dec are real.
+        expect(zonedToInstant('2027-01-15T23:59', 'Australia/Sydney')!.local).toBe('2027-01-15T23:59');
+        expect(zonedToInstant('2028-02-29T10:00', 'Australia/Sydney')!.local).toBe('2028-02-29T10:00');
+        expect(zonedToInstant('2027-02-29T10:00', 'Australia/Sydney')).toBeNull();
+        expect(zonedToInstant('2027-12-31T23:30', 'Africa/Lagos')!.instant).toBe('2027-12-31T22:30:00.000Z');
+    });
 });
 
 describe('instantToLocal / zones', () => {
@@ -51,6 +62,21 @@ describe('instantToLocal / zones', () => {
         expect(isKnownZone('')).toBe(false);
         expect(isKnownZone(42)).toBe(false);
         expect(canonicalZone('US/Pacific')).toBe('America/Los_Angeles');
+    });
+
+    it('stores the current IANA spelling whichever one was sent, where Intl still answers the old one (review #1937 finding 6)', () => {
+        expect(canonicalZone('Europe/Kyiv')).toBe('Europe/Kyiv');
+        expect(canonicalZone('Europe/Kiev')).toBe('Europe/Kyiv');
+        expect(canonicalZone('Asia/Kolkata')).toBe('Asia/Kolkata');
+        expect(canonicalZone('Asia/Calcutta')).toBe('Asia/Kolkata');
+        expect(canonicalZone('America/Atikokan')).toBe('America/Atikokan');
+        expect(canonicalZone('America/Coral_Harbour')).toBe('America/Atikokan');
+        expect(canonicalZone('America/Argentina/Buenos_Aires')).toBe('America/Argentina/Buenos_Aires');
+        expect(canonicalZone(' Asia/Ho_Chi_Minh ')).toBe('Asia/Ho_Chi_Minh');
+        expect(canonicalZone('US/Pacific')).toBe('America/Los_Angeles');
+        // The current spelling is a zone this Intl formats in, and its label is the place's.
+        expect(instantToLocal('2027-01-15T12:00:00.000Z', canonicalZone('Europe/Kiev')!)).toBe('2027-01-15T14:00');
+        expect(zoneLabel(canonicalZone('America/Atikokan')!)).toBe('Atikokan time');
     });
 
     it('labels: places in plain words (Kiev → Kyiv, Calcutta → Kolkata), and zones that are not places by offset', () => {

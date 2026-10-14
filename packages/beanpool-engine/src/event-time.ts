@@ -9,7 +9,7 @@
  * happens twice (the autumn overlap) is the EARLIER of the two.
  */
 
-import { LOCAL_CLOCK_RE, localClockMs, zoneLabelFor } from '@beanpool/core';
+import { CURRENT_ZONE_IDS, LOCAL_CLOCK_RE, localClockMs, zoneLabelFor } from '@beanpool/core';
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
 
@@ -25,17 +25,25 @@ function formatterFor(tz: string): Intl.DateTimeFormat {
     return f;
 }
 
-/**
- * The node's own spelling of a zone (`US/Pacific` → `America/Los_Angeles`), or null when this node's Intl does not know
- * it. One zone gets one spelling in the database.
- */
-export function canonicalZone(tz: unknown): string | null {
-    if (typeof tz !== 'string' || !tz.trim() || tz.length > 64) return null;
+function intlZoneOf(tz: string): string | null {
     try {
-        return new Intl.DateTimeFormat('en', { timeZone: tz.trim() }).resolvedOptions().timeZone;
+        return new Intl.DateTimeFormat('en', { timeZone: tz }).resolvedOptions().timeZone;
     } catch {
         return null;
     }
+}
+
+/**
+ * The node's own spelling of a zone (`US/Pacific` → `America/Los_Angeles`), or null when this node's Intl does not know
+ * it. One zone gets one spelling in the database: Intl's canonical id, then the current IANA name where Intl still gives
+ * the old one (`Europe/Kiev` → `Europe/Kyiv`, @beanpool/core CURRENT_ZONE_IDS), when this Intl accepts it.
+ */
+export function canonicalZone(tz: unknown): string | null {
+    if (typeof tz !== 'string' || !tz.trim() || tz.length > 64) return null;
+    const id = intlZoneOf(tz.trim());
+    if (!id) return null;
+    const current = CURRENT_ZONE_IDS[id];
+    return current && intlZoneOf(current) ? current : id;
 }
 
 export function isKnownZone(tz: unknown): boolean {
@@ -68,14 +76,15 @@ export interface ZonedInstant {
 }
 
 /**
- * The instant a wall clock in a zone stands for. Null when the clock is not "YYYY-MM-DDTHH:MM" or the zone is unknown.
+ * The instant a wall clock in a zone stands for. Null when the clock is not a real "YYYY-MM-DDTHH:MM" (30 Feb, 24:00,
+ * minute 60 and month 13 have the shape, and would otherwise roll into another date) or the zone is unknown.
  * Every offset the zone uses within a day of the clock is tried; the matches decide plain / overlap (earlier wins), and
  * none at all is a gap, resolved with the offset in force just before it, which lands the clock forward by the gap.
  */
 export function zonedToInstant(local: string, tz: string): ZonedInstant | null {
     if (!LOCAL_CLOCK_RE.test(local) || !isKnownZone(tz)) return null;
     const asUtc = localClockMs(local);
-    if (!Number.isFinite(asUtc)) return null;
+    if (!Number.isFinite(asUtc) || new Date(asUtc).toISOString().slice(0, 16) !== local) return null;
     const DAY = 24 * 60 * 60 * 1000;
     const offsets = new Set([offsetMinutesAt(asUtc - DAY, tz), offsetMinutesAt(asUtc, tz), offsetMinutesAt(asUtc + DAY, tz)]);
     const matches = [...offsets]

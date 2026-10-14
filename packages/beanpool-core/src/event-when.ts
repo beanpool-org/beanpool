@@ -15,16 +15,43 @@ const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', '
 export const LOCAL_CLOCK_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
 
 /**
- * Old zone names some engines still answer with (Node 26.5's Intl returns `Europe/Kiev` for `Europe/Kyiv`, measured), by
- * their last segment, to the name the place uses now. Only the label reads this: the id itself is stored as the node's
- * Intl gives it.
+ * The current IANA id for each old spelling an engine's Intl still answers with: its canonical ids are CLDR's, which keep
+ * the old names (Node 22.23 and 26.5, ICU 78.3, tzdata 2026a and 2026c, measured on both: `Europe/Kyiv` resolves to
+ * `Europe/Kiev`). These are the 19 a pin's lookup can answer. The node stores the current one (@beanpool/engine
+ * canonicalZone, and the picker list), so a zone has one spelling in the database whichever spelling a client sent.
+ */
+export const CURRENT_ZONE_IDS: Readonly<Record<string, string>> = {
+    'America/Buenos_Aires': 'America/Argentina/Buenos_Aires',
+    'America/Catamarca': 'America/Argentina/Catamarca',
+    'America/Cordoba': 'America/Argentina/Cordoba',
+    'America/Jujuy': 'America/Argentina/Jujuy',
+    'America/Mendoza': 'America/Argentina/Mendoza',
+    'Pacific/Enderbury': 'Pacific/Kanton',
+    'Pacific/Truk': 'Pacific/Chuuk',
+    'Pacific/Ponape': 'Pacific/Pohnpei',
+    'Asia/Saigon': 'Asia/Ho_Chi_Minh',
+    'Asia/Rangoon': 'Asia/Yangon',
+    'Africa/Asmera': 'Africa/Asmara',
+    'Asia/Katmandu': 'Asia/Kathmandu',
+    'America/Louisville': 'America/Kentucky/Louisville',
+    'America/Indianapolis': 'America/Indiana/Indianapolis',
+    'America/Godthab': 'America/Nuuk',
+    'Atlantic/Faeroe': 'Atlantic/Faroe',
+    'America/Coral_Harbour': 'America/Atikokan',
+    'Europe/Kiev': 'Europe/Kyiv',
+    'Asia/Calcutta': 'Asia/Kolkata',
+};
+
+/**
+ * Old zone names, by their last segment, to the name the place uses now. The node stores current ids (CURRENT_ZONE_IDS), so
+ * this is for the label of an id spelled the old way anywhere else (a node from before that, another device's Intl).
  */
 const PLACE_NAME_ALIASES: Readonly<Record<string, string>> = {
     Kiev: 'Kyiv', Uzhgorod: 'Kyiv', Zaporozhye: 'Kyiv',
     Calcutta: 'Kolkata', Saigon: 'Ho Chi Minh', Katmandu: 'Kathmandu', Rangoon: 'Yangon', Dacca: 'Dhaka',
     Thimbu: 'Thimphu', Ulan_Bator: 'Ulaanbaatar', Chungking: 'Chongqing', Ujung_Pandang: 'Makassar', Macao: 'Macau',
     Ashkhabad: 'Ashgabat', Tel_Aviv: 'Jerusalem', Asmera: 'Asmara', Godthab: 'Nuuk', Faeroe: 'Faroe',
-    Truk: 'Chuuk', Yap: 'Chuuk', Ponape: 'Pohnpei', Enderbury: 'Kanton',
+    Truk: 'Chuuk', Yap: 'Chuuk', Ponape: 'Pohnpei', Enderbury: 'Kanton', Coral_Harbour: 'Atikokan',
 };
 
 /** Last segments of real zone ids that are not the name of a place a stranger would know (a county, a mine, a code). */

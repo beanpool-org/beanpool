@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NodeIdentityPanel } from './NodeIdentityPanel';
+import { NodeIdentityPanel, DIRECTORY_HELD_BACK_LINES } from './NodeIdentityPanel';
 import type { NodeProfile } from '../../lib/profiles';
 import { setTfaSessionToken, type DiagnosticsResponse } from '../../lib/node-client';
 
@@ -1199,32 +1199,38 @@ describe('NodeIdentityPanel Component', () => {
         });
     });
 
-    describe('Directory publishing held-back hint', () => {
-        it('shows hint when community name is default or empty, and hides it when named', async () => {
+    describe('Directory publishing: why the community is not listed', () => {
+        it("says the node's own reason, with what to change, for a community with no name of its own", async () => {
             await act(async () => {
-                render(<NodeIdentityPanel activeNode={mockProfile} diag={null} onRefreshDiag={vi.fn()} />);
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={{ ...mockDiag, directoryHeldBack: 'unnamed' }} onRefreshDiag={vi.fn()} />);
             });
-            await waitFor(() => {
-                expect(screen.queryByTestId('directory-held-back-hint')).toBeNull();
-            });
+            const line = screen.getByTestId('directory-held-back-hint');
+            expect(line).toHaveTextContent(DIRECTORY_HELD_BACK_LINES.unnamed);
+            expect(line.textContent).toMatch(/no name of its own/);
+            expect(line.textContent).toMatch(/Community name, then Save/);
+            // The colour role, never a raw palette shade.
+            expect(line.className).toContain('text-bp-ink-warning');
+            expect(line.className).not.toMatch(/amber-/);
+        });
 
-            const nameInput = screen.getByLabelText(/community name/i);
+        it('says when DIRECTORY_UNLISTED holds it back, and how to undo it', async () => {
             await act(async () => {
-                fireEvent.change(nameInput, { target: { value: 'BeanPool Community' } });
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={{ ...mockDiag, directoryHeldBack: 'unlisted' }} onRefreshDiag={vi.fn()} />);
             });
-            expect(screen.getByTestId('directory-held-back-hint')).toHaveTextContent(
-                'Give your community a name to appear on the map'
-            );
+            expect(screen.getByTestId('directory-held-back-hint')).toHaveTextContent(DIRECTORY_HELD_BACK_LINES.unlisted);
+            expect(screen.getByTestId('directory-held-back-hint').textContent).toMatch(/DIRECTORY_UNLISTED.*restart/);
+        });
 
+        it('says nothing when nothing holds it back, or the node is from before, whatever the name box holds', async () => {
+            const { unmount } = render(<NodeIdentityPanel activeNode={mockProfile} diag={{ ...mockDiag, directoryHeldBack: null }} onRefreshDiag={vi.fn()} />);
+            await act(async () => {});
+            expect(screen.queryByTestId('directory-held-back-hint')).toBeNull();
+            // A community really called "BeanPool Community" by its own choice is the node's call, not the box's.
+            fireEvent.change(screen.getByLabelText(/community name/i), { target: { value: 'BeanPool Community' } });
+            expect(screen.queryByTestId('directory-held-back-hint')).toBeNull();
+            unmount();
             await act(async () => {
-                fireEvent.change(nameInput, { target: { value: '   ' } });
-            });
-            expect(screen.getByTestId('directory-held-back-hint')).toHaveTextContent(
-                'Give your community a name to appear on the map'
-            );
-
-            await act(async () => {
-                fireEvent.change(nameInput, { target: { value: 'Nimbin Commons' } });
+                render(<NodeIdentityPanel activeNode={mockProfile} diag={mockDiag} onRefreshDiag={vi.fn()} />);
             });
             expect(screen.queryByTestId('directory-held-back-hint')).toBeNull();
         });

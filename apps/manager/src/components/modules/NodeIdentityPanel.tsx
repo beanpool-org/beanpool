@@ -15,6 +15,12 @@ export interface NodeIdentityPanelProps {
     onRefreshDiag: () => void;
 }
 
+/** Why the public directory doesn't list this community, and what to change: one line each (Directory Publishing). */
+export const DIRECTORY_HELD_BACK_LINES: Record<'unnamed' | 'unlisted', string> = {
+    unnamed: 'Not on the public map yet: your community has no name of its own ("BeanPool Community" is the default). Type its name in Community name, then Save.',
+    unlisted: "Not on the public map: this server's .env sets DIRECTORY_UNLISTED, as our test and review nodes do. Remove that line and restart the node to be listed.",
+};
+
 export function NodeIdentityPanel({
     activeNode,
     diag,
@@ -702,9 +708,11 @@ export function NodeIdentityPanel({
                         </div>
                     </div>
 
-                    {(!communityName.trim() || communityName.trim() === 'BeanPool Community') && (
-                        <p data-testid="directory-held-back-hint" className="text-xs text-amber-300 font-medium m-0">
-                            Give your community a name to appear on the map
+                    {/* The node's own word on why it isn't listed (diagnostics `directoryHeldBack`), never a guess from the
+                        box: refreshed after Save, so the line goes once the saved name lists it. */}
+                    {diag?.directoryHeldBack && DIRECTORY_HELD_BACK_LINES[diag.directoryHeldBack] && (
+                        <p data-testid="directory-held-back-hint" role="status" className="text-xs text-bp-ink-warning font-medium m-0">
+                            {DIRECTORY_HELD_BACK_LINES[diag.directoryHeldBack]}
                         </p>
                     )}
 

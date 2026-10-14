@@ -1039,6 +1039,7 @@
                 await saveNodeConfig();
                 if (res.ok) showStatus('identity-status', 'Saved!', 'success');
                 else showStatus('identity-status', 'Save failed', 'error');
+                refreshDirectoryHeldBack();
             } catch (e) { showStatus('identity-status', 'Save failed', 'error'); }
         });
 
@@ -1051,6 +1052,30 @@
             document.getElementById('contact-email').disabled = !loaded;
             document.getElementById('contact-phone').disabled = !loaded;
             document.getElementById('contacts-not-loaded').style.display = failed ? 'block' : 'none';
+        }
+
+        // Why the public directory doesn't list this community, from the node itself (diagnostics `directoryHeldBack`), and
+        // what to change: the manager's Directory Publishing says the same. Hidden when nothing holds it back.
+        const DIRECTORY_HELD_BACK_LINES = {
+            unnamed: 'Not on the public map yet: your community has no name of its own ("BeanPool Community" is the default). Type its name in Community Name, then Save.',
+            unlisted: "Not on the public map: this server's .env sets DIRECTORY_UNLISTED, as our test and review nodes do. Remove that line and restart the node to be listed.",
+        };
+        function showDirectoryHeldBack(reason) {
+            const el = document.getElementById('directory-held-back');
+            if (!el) return;
+            const line = Object.prototype.hasOwnProperty.call(DIRECTORY_HELD_BACK_LINES, reason) ? DIRECTORY_HELD_BACK_LINES[reason] : null;
+            el.textContent = line || '';
+            el.style.display = line ? 'block' : 'none';
+        }
+        async function refreshDirectoryHeldBack() {
+            try {
+                const res = await fetch(`${API}/admin/diagnostics`, {
+                    method: 'POST',
+                    headers: adminHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({ password: authToken }),
+                });
+                showDirectoryHeldBack(res.ok ? (await res.json()).directoryHeldBack : null);
+            } catch { showDirectoryHeldBack(null); }
         }
 
         // Load community info after login
@@ -1070,6 +1095,7 @@
                     body: JSON.stringify({ password: authToken }),
                 });
                 const data = res.ok ? await res.json() : null;
+                showDirectoryHeldBack(data && data.directoryHeldBack);
                 // Each is text, or null for none stored; anything else is not the node's contacts.
                 const text = (v) => (typeof v === 'string' ? v : v === null ? '' : undefined);
                 if (!data || text(data.contactEmail) === undefined || text(data.contactPhone) === undefined) {

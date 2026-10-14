@@ -139,9 +139,9 @@ describe('the "Find your community" card, in each state', () => {
             .toBe('Mullumbimby is 12 km away, and 1 more nearby. Ask to join, and trade with your neighbours there.');
     });
 
-    it('no point yet: how many are listed, and a nudge to share a location', () => {
+    it('no point yet: how many are listed, and a nudge to use the location or type the town (Marty 14 Oct)', () => {
         expect(findCommunityCardCopy(home({ point: null, communityCount: 10 }), false).body)
-            .toBe('10 communities are listed. Share your location to see the nearest.');
+            .toBe('10 communities are listed. Use your location, or type your town, to see the nearest.');
     });
 
     it('nothing near: start one, or be told', () => {

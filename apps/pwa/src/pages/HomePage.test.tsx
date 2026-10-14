@@ -19,6 +19,16 @@ vi.mock('../lib/api', () => ({
     markNoticesSeen: vi.fn(async () => ({ success: true, marked: 1 })),
     getCommunityMe: vi.fn(async () => ({ probation: { rules: 'ordinary', keptPosts: 0, ageEndsAt: null } })),
 }));
+// The shared town search (components/AddressSearch.tsx over @beanpool/core createAddressLookup), stood in for by one
+// match: what is tested here is where a picked town goes, never OpenStreetMap.
+vi.mock('../components/AddressSearch', () => ({
+    AddressSearch: ({ onPick, words }: { onPick: (r: unknown) => void; words?: { label: string } }) => (
+        <button type="button" data-testid="town-search" aria-label={words?.label}
+            onClick={() => onPick({ lat: -28.8135, lng: 153.2773, displayName: 'Lismore, New South Wales, Australia', shortName: 'Lismore' })}>
+            pick Lismore
+        </button>
+    ),
+}));
 vi.mock('../lib/sync', () => ({
     onSyncActivity: vi.fn((cb: () => unknown) => { hooks.sync.push(cb); return () => { hooks.sync = hooks.sync.filter(c => c !== cb); }; }),
     onSocketOpen: vi.fn((cb: () => void) => { hooks.open.push(cb); return () => { hooks.open = hooks.open.filter(c => c !== cb); }; }),
@@ -27,7 +37,7 @@ vi.mock('../lib/sync', () => ({
 
 import * as api from '../lib/api';
 import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
-import { START_CARD_WORDS, TOUR_WORDS, localDay, skyToday, starterCards, tipsFor, tourSteps } from '@beanpool/core';
+import { FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, skyToday, starterCards, tipsFor, tourSteps } from '@beanpool/core';
 import * as tourStore from '../lib/tour-store';
 import { removedLine } from '../lib/home-layout';
 import { NOTICES_SEEN_EVENT, SKY_NO_PLACE_LINE } from '../lib/home-cards';
@@ -498,6 +508,32 @@ describe("a visitor's Home in the global lobby (§5.3)", () => {
         fireEvent.click(await screen.findByTestId('home-share-area'));
         await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
         expect(vi.mocked(api.getHome).mock.calls[1][0]).toEqual({ lat: -28.6, lng: 153.5 });
+    });
+
+    it('or type your town (Marty 14 Oct): a picked town is sent as the point, as roughly as a shared one, and shown with "change"', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(visitorAnswer()));
+        const getCurrentPosition = vi.fn();
+        vi.stubGlobal('navigator', { ...navigator, geolocation: { getCurrentPosition } });
+        render(<HomePage identity={null} visitor={{ joinCard: null, beans: false }} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('home-type-town'));
+        expect(screen.getByTestId('town-search')).toHaveAccessibleName(FIND_TOWN_SEARCH_WORDS.label);
+        fireEvent.click(screen.getByTestId('town-search'));
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
+        expect(vi.mocked(api.getHome).mock.calls[1][0]).toEqual({ lat: -28.8, lng: 153.3 });
+        expect(getCurrentPosition).not.toHaveBeenCalled();
+        expect(await screen.findByTestId('home-town-picked')).toHaveTextContent('Near Lismore');
+        fireEvent.click(within(screen.getByTestId('home-town-picked')).getByRole('button', { name: /change/i }));
+        expect(screen.getByTestId('town-search')).toBeInTheDocument();
+    });
+
+    it('a location the browser refused offers typing the town instead, and opens the box', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(visitorAnswer()));
+        const getCurrentPosition = vi.fn((_ok: PositionCallback, no?: PositionErrorCallback | null) => no?.({ code: 1 } as GeolocationPositionError));
+        vi.stubGlobal('navigator', { ...navigator, geolocation: { getCurrentPosition } });
+        render(<HomePage identity={null} visitor={{ joinCard: null, beans: false }} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('home-share-area'));
+        expect(await screen.findByRole('alert')).toHaveTextContent('Type your town instead');
+        expect(screen.getByTestId('town-search')).toBeInTheDocument();
     });
 });
 

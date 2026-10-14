@@ -28,6 +28,7 @@ import { EditHomeSheet } from '../../components/home/EditHomeSheet';
 import { AddCardSheet } from '../../components/home/AddCardSheet';
 import { CardSettingsSheet } from '../../components/home/CardSettingsSheet';
 import { FindCommunityBody } from '../../components/home/FindCommunityBody';
+import { readTypedPlace } from '../../utils/typed-place';
 import {
     BeansBody, CommunityBody, DealsBody, DecideBody, EnterpriseBody, EventsBody, GroupsBody, InterestsBody, InviteBody, JoinedBody,
     MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StartBody, StepsBody, TipsBody,
@@ -107,8 +108,13 @@ const afterModal = (fn: () => void) => (Platform.OS === 'ios' ? void setTimeout(
 /** The settings sheet's subject: a card about to be added, or one on Home being changed in place. */
 type SettingsFor = { type: string; mode: 'add' } | { type: string; mode: 'save'; id: string; settings?: Record<string, unknown> };
 
-/** The phone's last known place, only where location is already allowed: Home never asks for it. Null otherwise. */
+/**
+ * A town the member typed in "Find your community" (utils/typed-place.ts), which they chose, so it comes first; else the
+ * phone's last known place, only where location is already allowed: Home never asks for it. Null otherwise.
+ */
 async function lastKnownPlace(): Promise<HomePoint | null> {
+    const typed = await readTypedPlace();
+    if (typed) return { lat: typed.lat, lng: typed.lng };
     try {
         const { status } = await Location.getForegroundPermissionsAsync();
         if (status !== 'granted') return null;

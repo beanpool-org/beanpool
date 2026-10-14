@@ -28,9 +28,9 @@ export { ErrorBoundary };
 import { useIdentity } from './IdentityContext';
 import { useTheme, useStyles } from './ThemeContext';
 import { palette } from '../constants/colors';
-import { encryptPairingPayload } from '@beanpool/core';
+import { encryptPairingPayload, t } from '@beanpool/core';
 import { getMnemonic } from '../utils/identity';
-import { authenticateUser } from '../utils/LocalAuth';
+import { requireDeviceUnlock } from '../utils/node-admin';
 import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -47,7 +47,8 @@ export default function PairDeviceScreen() {
 
     const [scannedData, setScannedData] = useState<ParsedPairingData | null>(null);
     const [isTransferring, setIsTransferring] = useState(false);
-    const [transferSuccess, setTransferSuccess] = useState(false);
+    /** The two digits the relay gave back: the other device types them before it gets anything. */
+    const [confirmCode, setConfirmCode] = useState<string | null>(null);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const isScanningLocked = useRef(false);
     const scannedDataRef = useRef(scannedData);
@@ -338,13 +339,18 @@ export default function PairDeviceScreen() {
         if (!scannedData || !identity || isTransferring || lockBusyRef.current) return;
         const scanned = scannedData;
 
-        // The whole account goes to the computer, key and 12 words: the phone's lock first, the check Settings asks before
-        // Sign Out and the words. A check that doesn't pass reads and sends nothing, and the sheet stays as it was.
+        // The whole account goes to the other device, key and 12 words: the phone's own unlock first, failing closed as
+        // Manage and the Settings QR do (requireDeviceUnlock). A phone with no screen lock sends nothing: the account would
+        // leave with nobody asked. A check that doesn't pass reads and sends nothing, and the sheet stays as it was.
         lockBusyRef.current = true;
-        const passed = await authenticateUser('Confirm authentication to send your account to this computer.');
+        const unlock = await requireDeviceUnlock('', t('Confirm it is you to send your account to another device.'));
         lockBusyRef.current = false;
+        if (unlock === 'no-device-lock' && scannedDataRef.current === scanned) {
+            setErrorMessage(t('Your phone has no screen lock, so BeanPool will not send your account. Set a PIN, pattern or password in your phone\'s Settings, under Security, then try again.'));
+            return;
+        }
         // Not passed, or the sheet was closed (or another code scanned) while it asked: nothing is sent.
-        if (!passed || scannedDataRef.current !== scanned) return;
+        if (unlock !== 'ok' || scannedDataRef.current !== scanned) return;
 
         setIsTransferring(true);
         setErrorMessage(null);
@@ -403,12 +409,13 @@ export default function PairDeviceScreen() {
                 throw new Error(errData.error || `Transfer failed with status ${res.status}`);
             }
 
-            setTransferSuccess(true);
+            // The relay holds the account until the other device types these two digits (number matching): someone who
+            // only sent a QR never sees this screen. A relay that gives none is too old to hold it: say so.
+            const done = await res.json().catch(() => ({}));
+            const code = typeof done.confirmCode === 'string' && /^\d{2}$/.test(done.confirmCode) ? done.confirmCode : null;
+            if (!code) throw new Error(t('That device\'s community is running an older BeanPool. Ask its host to update it, then try again.'));
+            setConfirmCode(code);
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-            navTimerRef.current = setTimeout(() => {
-                router.back();
-            }, 1200);
         } catch (err: any) {
             console.error('[Pairing] Transfer error:', err);
             setErrorMessage(err.message || 'Failed to link device');
@@ -422,7 +429,7 @@ export default function PairDeviceScreen() {
         if (isTransferring) return;
         setScannedData(null);
         setErrorMessage(null);
-        setTransferSuccess(false);
+        setConfirmCode(null);
         setTimeout(() => {
             isScanningLocked.current = false;
         }, 500);
@@ -511,19 +518,30 @@ export default function PairDeviceScreen() {
             >
                 <View style={styles.modalOverlay}>
                     <View style={styles.sheet}>
-                        {transferSuccess ? (
+                        {confirmCode ? (
                             <View style={{ alignItems: 'center', paddingVertical: 20 }}>
-                                <Text style={{ fontSize: 48, marginBottom: 12 }}>✨</Text>
-                                <Text style={styles.sheetTitle}>Device Linked!</Text>
-                                <Text style={styles.sheetSubtitle}>
-                                    Your computer is now signed in as {identity?.callsign}.
+                                <Text style={styles.sheetTitle}>{t('Type these two digits on the other device')}</Text>
+                                <Text
+                                    style={[styles.sheetTitle, { fontSize: 40, letterSpacing: 8, marginVertical: 12 }]}
+                                    accessibilityLabel={t('The two digits are {digits}', { digits: confirmCode.split('').join(' ') })}
+                                >
+                                    {confirmCode}
                                 </Text>
+                                <Text style={styles.sheetSubtitle}>
+                                    {t('Your account opens there only after the right digits are typed. If you did not just ask for this on a screen in front of you, close this and nothing is sent.')}
+                                </Text>
+                                <Pressable style={styles.cancelBtn} onPress={() => router.back()} accessibilityRole="button">
+                                    <Text style={styles.cancelBtnText}>{t('Done')}</Text>
+                                </Pressable>
                             </View>
                         ) : (
                             <>
-                                <Text style={styles.sheetTitle}>Authorize Device Linking?</Text>
+                                <Text style={styles.sheetTitle}>{t('Send your whole account to another device?')}</Text>
                                 <Text style={styles.sheetSubtitle}>
-                                    This will securely copy your sovereign identity to your web browser session.
+                                    {t('The other device receives this account\'s key AND your 12 words: whoever has them is you, in every community.')}
+                                </Text>
+                                <Text style={[styles.sheetSubtitle, { fontWeight: '700' }]}>
+                                    {t('Only scan a code on a screen in front of you that you just opened yourself. Never one someone sent you or put on a sign.')}
                                 </Text>
 
                                 <View style={styles.infoBox}>

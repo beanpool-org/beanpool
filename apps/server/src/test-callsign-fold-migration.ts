@@ -7,10 +7,12 @@
  *   - every row has its fold, and the boot's re-fold stamps nothing (no members_touch_updated_at, so no delta);
  *   - a second boot changes nothing and says the same;
  *   - either member of a pair can still save their profile, but not take the other's spelling; a newcomer can't take it;
- *   - the triggers write the fold on every insert, replace, upsert and rename (a standby's import and a key move are
- *     inserts like these);
- *   - a handle without name_fold fails loudly on a write to members and still reads; SQLite's own lower() leaves "Олег"
- *     as it is (no ICU), which is why the fold is JS's;
+ *   - the TEMP triggers write the fold on every insert, replace, upsert and rename (a standby's import and a key move
+ *     are inserts like these); the stored ones an earlier build of this PR made are dropped, and no trigger in the file
+ *     calls name_fold;
+ *   - a handle without name_fold (the previous image after a rollback, the sqlite3 shell) can add a member and change a
+ *     name, and the next boot folds what it wrote; SQLite's own lower() leaves "Олег" as it is (no ICU), which is why
+ *     the fold is JS's;
  *   - the lookups are answered from idx_members_callsign_fold;
  *   - a standby is sent each member's row without callsign_fold (it makes its own; the state hash names keys only).
  *
@@ -44,7 +46,7 @@ async function main(): Promise<void> {
     initStateEngine();
 
     // A node from before the column: no triggers, no index, no column.
-    db.exec(`DROP TRIGGER IF EXISTS members_callsign_fold_insert; DROP TRIGGER IF EXISTS members_callsign_fold_rename;
+    db.exec(`DROP TRIGGER IF EXISTS temp.members_callsign_fold_on_insert; DROP TRIGGER IF EXISTS temp.members_callsign_fold_on_rename;
              DROP INDEX IF EXISTS idx_members_callsign_fold; ALTER TABLE members DROP COLUMN callsign_fold;`);
     const seed = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, updated_at) VALUES (?, ?, ?, '2026-01-01T00:00:00.000Z', '2026-01-02T00:00:00.000Z')`);
     seed.run(pk(1), 'Олег', 'active');
@@ -59,7 +61,9 @@ async function main(): Promise<void> {
     const first = boot();
     assert(first.threw === null, `boot goes on (threw: ${first.threw})`);
     assert(!!db.prepare(`SELECT 1 FROM pragma_table_info('members') WHERE name = 'callsign_fold'`).get(), 'the column is added');
-    assert(['members_callsign_fold_insert', 'members_callsign_fold_rename'].every((n) => !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'trigger' AND name = ?`).get(n)), 'both triggers are made');
+    assert(['members_callsign_fold_on_insert', 'members_callsign_fold_on_rename'].every((n) => !!db.prepare(`SELECT 1 FROM sqlite_temp_master WHERE type = 'trigger' AND name = ?`).get(n)), 'both triggers are made, TEMP, on this connection');
+    const storedCallingFold = () => (db.prepare(`SELECT name FROM sqlite_master WHERE type = 'trigger' AND sql LIKE '%name_fold%'`).all() as { name: string }[]).map((r) => r.name);
+    assert(storedCallingFold().length === 0, `no trigger in the file calls name_fold (${storedCallingFold().join(', ') || 'none'})`);
     assert(!!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = 'idx_members_callsign_fold'`).get(), 'the index is built');
     const names = [1, 2, 3, 4, 5, 6].map((n) => row(pk(n))?.callsign);
     assert(JSON.stringify(names) === JSON.stringify(['Олег', 'олег', 'ОЛЕГ', 'Émile', 'émile', 'Ana']), `nobody is renamed (${names.join(', ')})`);
@@ -70,9 +74,15 @@ async function main(): Promise<void> {
         '...naming the names, so the operator can tell the members apart');
     assert([1, 2, 4, 5, 6].every((n) => row(pk(n))?.updated_at === '2026-01-02T00:00:00.000Z'), 'filling the fold stamps no row, so no delta carries it');
 
-    console.log('\n— 2. a second boot —');
+    console.log('\n— 2. a second boot, on a file an earlier build of this PR left its stored triggers in —');
+    db.exec(`CREATE TRIGGER members_callsign_fold_insert AFTER INSERT ON members BEGIN
+                 UPDATE members SET callsign_fold = name_fold(NEW.callsign) WHERE public_key = NEW.public_key; END;
+             CREATE TRIGGER members_callsign_fold_rename AFTER UPDATE OF callsign ON members BEGIN
+                 UPDATE members SET callsign_fold = name_fold(NEW.callsign) WHERE public_key = NEW.public_key; END;`);
+    assert(storedCallingFold().length === 2, 'the stored triggers are in place before the boot');
     const second = boot();
     assert(second.threw === null && second.warned.length === 2, `a second boot goes on and says the same (${second.warned.length} lines)`);
+    assert(storedCallingFold().length === 0, `...and drops them (${storedCallingFold().join(', ') || 'none left'})`);
 
     console.log('\n— 3. the pair and a newcomer —');
     assert(!isCallsignAvailable('ОЛЕГ') && !isCallsignAvailable('Emile'.replace('E', 'É')), 'a newcomer cannot take either name in any case');
@@ -98,20 +108,27 @@ async function main(): Promise<void> {
                 ON CONFLICT(public_key) DO UPDATE SET callsign = excluded.callsign`).run(pk(7));
     assert(row(pk(7))?.callsign_fold === 'strasse', 'an upsert writes the fold');
 
-    console.log('\n— 5. a handle without name_fold —');
+    console.log('\n— 5. a handle without name_fold: the previous image after a rollback, the sqlite3 shell —');
     const other = new Database(db.name, { fileMustExist: true });
     let failed = '';
-    try { other.prepare(`INSERT INTO members (public_key, callsign, status, joined_at) VALUES (?, 'Bob', 'active', '2026-01-01T00:00:00.000Z')`).run(pk(8)); } catch (e) { failed = String((e as Error).message); }
-    assert(/no such function: name_fold/.test(failed), `a write to members from it fails loudly (${failed || 'it wrote'})`);
-    assert(Number((other.prepare('SELECT count(*) AS n FROM members').get() as { n: number }).n) >= 7, '...and it still reads');
+    try {
+        other.prepare(`INSERT INTO members (public_key, callsign, status, joined_at) VALUES (?, 'Bob', 'active', '2026-01-01T00:00:00.000Z')`).run(pk(8));
+        other.prepare(`UPDATE members SET callsign = 'ΜΑΡΙΑ' WHERE public_key = ?`).run(pk(6));
+    } catch (e) { failed = String((e as Error).message); }
+    assert(failed === '' && row(pk(8))?.callsign === 'Bob' && row(pk(6))?.callsign === 'ΜΑΡΙΑ', `it can add a member and change a name (${failed || 'both written'})`);
+    assert(row(pk(8))?.callsign_fold == null && row(pk(6))?.callsign_fold === 'ana', '...which leaves their fold NULL or stale: it has no triggers');
+    assert(Number((other.prepare('SELECT count(*) AS n FROM members').get() as { n: number }).n) >= 8, '...and it reads');
     other.close();
+    const third = boot();
+    assert(third.threw === null && row(pk(8))?.callsign_fold === 'bob' && row(pk(6))?.callsign_fold === 'μαρια',
+        `the next boot folds what it wrote (${row(pk(8))?.callsign_fold}, ${row(pk(6))?.callsign_fold})`);
 
     console.log('\n— 6. the lookups use the index —');
-    const plan = (sql: string) => (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all('олег') as { detail: string }[]).map((r) => r.detail).join(' ');
+    const plan = (sql: string) => (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...(sql.match(/\?/g) ?? []).map(() => 'олег')) as { detail: string }[]).map((r) => r.detail).join(' ');
     for (const sql of [
         `SELECT 1 FROM members WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned') AND public_key != '' LIMIT 1`,
         `SELECT public_key FROM members WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned')`,
-        `SELECT public_key FROM members WHERE callsign_fold = name_fold(?) AND status NOT IN ('migrated', 'pruned')`,
+        `SELECT public_key FROM members WHERE callsign_fold >= ? AND callsign_fold < (? || char(1114111)) AND status NOT IN ('migrated', 'pruned')`,
     ]) assert(plan(sql).includes('idx_members_callsign_fold'), `answered from the index: ${sql.slice(0, 70)}…`);
 
     console.log('\n— 7. what a standby is sent —');

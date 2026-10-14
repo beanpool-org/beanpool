@@ -26,6 +26,7 @@
 import { db } from '../db/db.js';
 import { createTreasury } from '../state-engine.js';
 import { logger } from '../logger.js';
+import { foldName } from '@beanpool/engine';
 
 export const BEANPOOL_CALLSIGN = 'BeanPool';
 export const BEANPOOL_LEARN_CHANNEL_ID = 'chan_beanpool_learn';
@@ -50,8 +51,8 @@ export const CURATED_LEARN_ITEMS: readonly CuratedItemDef[] = [
 export function ensureBeanPoolIdentity(): string {
     const existing = db.prepare(
         `SELECT public_key, is_treasury FROM members
-          WHERE callsign_fold = name_fold(?) AND status NOT IN ('migrated', 'pruned')`
-    ).get(BEANPOOL_CALLSIGN) as { public_key: string; is_treasury: number } | undefined;
+          WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned')`
+    ).get(foldName(BEANPOOL_CALLSIGN)) as { public_key: string; is_treasury: number } | undefined;
 
     if (existing?.public_key) {
         if (existing.is_treasury === 1) return existing.public_key;

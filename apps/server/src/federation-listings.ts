@@ -24,6 +24,7 @@ import { getConnectors, peerIdFromAddress, getConnectorCreditCap, ENABLE_PEER_CO
 import { getMember, registerVisitor, bumpPostsVersion, bumpMembersVersion, ringListingDoorbell } from './state-engine.js';
 import { logger } from './logger.js';
 import { isMemberKeySpelling } from './engine/member-key.js';
+import { foldName } from '@beanpool/engine';
 
 /**
  * Prefix on a cached listing's local id. Namespaced by peer so two peers cannot collide on a UUID, and so a
@@ -282,8 +283,8 @@ function safeVisitorCallsign(raw: unknown, publicKey: string): string | undefine
     const callsign = raw.trim();
     if (!callsign) return undefined;
     const holder = db.prepare(
-        `SELECT public_key FROM members WHERE callsign_fold = name_fold(?) AND status NOT IN ('migrated', 'pruned')`
-    ).get(callsign) as any;
+        `SELECT public_key FROM members WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned')`
+    ).get(foldName(callsign)) as any;
     // Free, or already this same author's — anyone else's and we fall back.
     return !holder || holder.public_key === publicKey ? callsign : undefined;
 }

@@ -7,6 +7,7 @@
 import { db } from './db/db.js';
 import { createTreasury, createPost, getPosts, getNodeRole, bumpPostsVersion, ringListingDoorbell } from './state-engine.js';
 import { getTodaysPulseEntry, type DailyPulseEntry } from './daily-pulse-entries.js';
+import { foldName } from '@beanpool/engine';
 
 export const PULSE_CALLSIGN = 'Daily Pulse';
 export const PULSE_AVATAR = 'bundled://sprout';
@@ -18,7 +19,7 @@ let _stmtGetActivePulse: any = null;
 function getStmtFindPulseMember() {
     if (!_stmtFindPulseMember) {
         _stmtFindPulseMember = db.prepare(
-            "SELECT public_key, is_treasury FROM members WHERE callsign_fold = name_fold(?) AND status NOT IN ('migrated', 'pruned')"
+            "SELECT public_key, is_treasury FROM members WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned')"
         );
     }
     return _stmtFindPulseMember;
@@ -59,7 +60,7 @@ function getStmtActiveCountAll() {
  * Does NOT generate keys or insert members into the database.
  */
 export function getPulseTreasuryPubkey(): string | null {
-    const existing = getStmtFindPulseMember().get(PULSE_CALLSIGN) as { public_key: string; is_treasury: number } | undefined;
+    const existing = getStmtFindPulseMember().get(foldName(PULSE_CALLSIGN)) as { public_key: string; is_treasury: number } | undefined;
     if (existing?.public_key && existing.is_treasury === 1) {
         return existing.public_key;
     }
@@ -72,7 +73,7 @@ export function getPulseTreasuryPubkey(): string | null {
  * and creates the official system treasury with private keys.
  */
 export function ensurePulseTreasury(): string {
-    const existing = getStmtFindPulseMember().get(PULSE_CALLSIGN) as { public_key: string; is_treasury: number } | undefined;
+    const existing = getStmtFindPulseMember().get(foldName(PULSE_CALLSIGN)) as { public_key: string; is_treasury: number } | undefined;
 
     if (existing?.public_key) {
         if (existing.is_treasury === 1) {

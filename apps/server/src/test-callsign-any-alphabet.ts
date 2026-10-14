@@ -9,7 +9,7 @@
  *   3. the name check says it is taken, in either case;
  *   4. a recovery collect by the name in small letters opens a session for that member;
  *   5. a second join with the name in another case, and with the exact name, gets a numbered name, never the same one.
- * Plus the fold's own cases (İ/ı/I, final sigma, ß, a combining accent, fullwidth letters).
+ * Plus the fold's own cases (İ/ı/I, final sigma, ß and capital ẞ, a combining accent, fullwidth letters).
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-callsign-any-alphabet.ts
  */
@@ -135,6 +135,16 @@ async function main(): Promise<void> {
         const j = await join(stored);
         const r = await available(typed);
         assert(j.res.status === 200 && r.body?.available === false, `${why}: "${stored}" is taken when "${typed}" is checked (got available=${r.body?.available})`);
+    }
+    const capital = await available('STRAẞE');
+    assert(capital.body?.available === false, `capital ẞ: "STRAẞE" is taken beside "Straße" (got available=${capital.body?.available})`);
+    const gross = await join('GROẞ');
+    db.prepare(`INSERT INTO recovery_shares (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, generation)
+                VALUES (?, 'sso', 'google', 1, 'x', 'y', 'z', 1)`).run(gross.id.pk);
+    for (const typed of ['GROẞ', 'groß', 'GROSS']) {
+        const r = await lookup(typed);
+        const keys = Array.isArray(r.body) ? r.body.map((c: any) => c.publicKey) : [];
+        assert(keys.length === 1 && keys[0] === gross.id.pk, `capital ẞ: the lookup for "${typed}" finds "GROẞ" (${keys.length} found)`);
     }
     const differs = await available('Emile');
     assert(differs.body?.available === true, 'accents are kept: "Emile" is free beside "Émile"');

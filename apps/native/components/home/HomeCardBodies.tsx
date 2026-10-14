@@ -7,11 +7,11 @@ import { POST_CATEGORIES, categoryEmoji, categoryLabel } from '../../constants/c
 import { MemberAvatar } from '../MemberAvatar';
 import { ExampleListings } from '../ExampleListings';
 import { resolvePulseThumbnailUrl } from '../../utils/pulse';
-import { formatDistance } from '../../utils/events';
+import { eventHomeWhen, formatDistance } from '../../utils/events';
 import type { NeedsYouEntry } from '../../utils/needs-you';
 import {
     SEARCH_OFFLINE_LINE, searchEmptyLine, searchFirstLine,
-    RSVP_WORDS, beansLines, communityLines, dealsLine, decideLines, enterpriseLine, eventDay, eventLine, formatBeans,
+    RSVP_WORDS, beansLines, communityLines, dealsLine, decideLines, enterpriseLine, eventLine, formatBeans,
     groupLine, joinedLine, joinedNames, needsLineA11y, pulseTitle, sentence,
     type HomeAnswer, type HomeCards, type HomeMarketItem, type HomeSearchCard, type StepLine,
 } from '../../utils/home-cards';
@@ -157,7 +157,7 @@ export function EventsBody({ card, colors }: { card: NonNullable<HomeCards['even
                         key={e.id}
                         colors={colors}
                         text={eventLine(e)}
-                        a11y={`${eventDay(e.startsAt)}: ${sentence(`${e.title}${e.place ? `, at ${e.place}` : ''}`)}${rsvp ? ` You're marked ${rsvp.toLowerCase()}.` : ''}${far ? ` ${far} away.` : ''} Opens the event.`}
+                        a11y={`${eventHomeWhen(e)}: ${sentence(`${e.title}${e.online ? ', online' : e.place ? `, at ${e.place}` : ''}`)}${rsvp ? ` You're marked ${rsvp.toLowerCase()}.` : ''}${far ? ` ${far} away.` : ''} Opens the event.`}
                         onPress={() => router.push({ pathname: '/post/[id]', params: { id: e.id } })}
                         right={trailing ? <Text style={s.trailing}>{trailing}</Text> : undefined}
                         testID={`home-event-${e.id}`}

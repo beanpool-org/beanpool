@@ -132,6 +132,8 @@ export interface ShareableEvent {
     endAt?: string | null;
     placeName?: string | null;
     description?: string | null;
+    /** The event's zone (DESIGN-event-times): Google Calendar is told it, so the entry shows the host's clock. */
+    tz?: string | null;
 }
 
 /**
@@ -251,6 +253,8 @@ export function googleCalendarUrl(event: ShareableEvent, link: string): string {
         details: [event.description || '', link].filter(Boolean).join('\n\n'),
     });
     if (event.placeName) params.set('location', event.placeName);
+    // Optional and harmless: the dates stay UTC, so this only picks the zone the entry is shown in (amendment 1, item 5).
+    if (event.tz) params.set('ctz', event.tz);
     return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 

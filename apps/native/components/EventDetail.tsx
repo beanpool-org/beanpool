@@ -30,7 +30,7 @@ import { NewEventModal } from './NewEventModal';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import { ReportReasonBox } from './ReportReasonBox';
 import {
-    formatEventWhen, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
+    formatEventWhenFor, eventWhen, isOnlineEvent, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
     canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, isOwnEvent, eventEditBlockedReason, eventEditValues,
     type EventRsvpStatus, type RsvpCounts, type EventCopy, type EventEditValues,
 } from '../utils/events';
@@ -82,7 +82,12 @@ export function EventDetail({ post }: EventDetailProps) {
     useEffect(() => { load(); }, [load]);
 
     const p = view ? { ...post, ...view } : post;
-    const when = formatEventWhen(p.eventStartAt ?? p.event_start_at, p.eventEndAt ?? p.event_end_at);
+    // The place's clock, then the reader's own when it differs; online, the reader's, and the host's clock once (§4).
+    const when = formatEventWhenFor(p);
+    const whenParts = eventWhen(p);
+    const online = isOnlineEvent(p);
+    // Served like the private note: to the host and to Going only (DESIGN-event-times §9).
+    const joinLink: string | undefined = view?.eventLink;
     const badge = eventBadge(p);
     const cancelled = eventStateOf(p) === 'cancelled';
     const ended = isEventEnded(p);
@@ -232,6 +237,8 @@ export function EventDetail({ post }: EventDetailProps) {
                     </View>
                 )}
                 <Text style={[styles.when, cancelled && styles.whenCancelled]}>{when}</Text>
+                {!!whenParts?.note && <Text style={styles.timeNote}>{whenParts.note}</Text>}
+                {!!whenParts?.hostLine && <Text style={styles.timeNote}>{whenParts.hostLine}</Text>}
                 <Text style={styles.title}>{p.title}</Text>
                 {ended && !cancelled && <Text style={styles.endedNote}>This event has ended.</Text>}
 
@@ -265,7 +272,27 @@ export function EventDetail({ post }: EventDetailProps) {
                     </Pressable>
                 )}
 
-                {!!placeName && (
+                {online && (
+                    <View style={styles.placeRow}>
+                        <Text style={styles.place} numberOfLines={2}>💻 Online</Text>
+                        {!!joinLink && !closed && (
+                            <Pressable
+                                onPress={() => Linking.openURL(joinLink).catch(() => Alert.alert('Could not open the link', joinLink))}
+                                style={styles.linkBtn}
+                                accessibilityRole="link"
+                                accessibilityLabel={`Join ${p.title || 'the event'} online`}
+                            >
+                                <Text style={styles.link} numberOfLines={1}>Join</Text>
+                            </Pressable>
+                        )}
+                    </View>
+                )}
+                {online && !!joinLink && !closed && <Text style={styles.joinLink} selectable numberOfLines={2}>{joinLink}</Text>}
+                {online && !joinLink && !isHost && !closed && (
+                    <Text style={styles.timeNote}>Tap Going to see the link to join.</Text>
+                )}
+
+                {!online && !!placeName && (
                     <View style={styles.placeRow}>
                         <Text style={styles.place} numberOfLines={2}>📍 {placeName}</Text>
                         {p.lat != null && p.lng != null && (
@@ -396,6 +423,8 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         badgeText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.5 },
         when: { fontSize: 22, fontWeight: '800', color: colors.text.heading, marginBottom: 6 },
         whenCancelled: { textDecorationLine: 'line-through', color: colors.text.secondary },
+        timeNote: { fontSize: 14, color: colors.text.secondary, marginBottom: 6 },
+        joinLink: { fontSize: 13, color: colors.text.secondary, marginTop: -8, marginBottom: 12 },
         title: { fontSize: 18, fontWeight: '700', color: colors.text.body, marginBottom: 8 },
         endedNote: { fontSize: 14, color: colors.text.secondary, marginBottom: 8 },
         counts: { fontSize: 14, color: colors.text.secondary, marginBottom: 8 },

@@ -335,7 +335,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                                             setQuizInitialMode('deep');
                                             setShowQuizModal(true);
                                         }}
-                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
+                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm truncate"
                                     >
                                         🧭 More accurate
                                     </button>
@@ -376,7 +376,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                                 setQuizInitialMode('quick');
                                 setShowQuizModal(true);
                             }}
-                            className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm"
+                            className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm"
                         >
                             ⚡ Take 60s Quiz
                         </button>
@@ -390,7 +390,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                 disabled={saving}
                 className={`w-full py-4 rounded-xl font-bold transition-all shadow-md text-[15px] cursor-pointer ${
                     saved 
-                        ? 'bg-emerald-500 text-white border-emerald-600' 
+                        ? 'bg-bp-commit-fill text-bp-commit-on border-bp-commit-fill' 
                         : saving 
                             ? 'bg-nature-300 text-white cursor-not-allowed' 
                             : 'bg-nature-900 dark:bg-white text-white dark:text-nature-900 hover:opacity-90'

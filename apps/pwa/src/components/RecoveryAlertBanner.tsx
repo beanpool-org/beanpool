@@ -166,7 +166,7 @@ export function RecoveryAlertBanner({ onStopSuccess, onActionTaken }: RecoveryAl
                                     onClick={handleStopIt}
                                     disabled={stopping}
                                     aria-busy={stopping}
-                                    className="w-full sm:w-auto px-5 py-2.5 min-h-[44px] rounded-xl bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white font-bold text-xs sm:text-sm transition-colors shadow-sm cursor-pointer flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
+                                    className="w-full sm:w-auto px-5 py-2.5 min-h-[44px] rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover disabled:opacity-50 text-bp-danger-on font-bold text-xs sm:text-sm transition-colors shadow-sm cursor-pointer flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-2"
                                 >
                                     {stopping ? (
                                         <>

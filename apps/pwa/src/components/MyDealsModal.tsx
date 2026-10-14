@@ -245,7 +245,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                             >
                                 <span>{tab.label}</span>
                                 {tab.badge && tab.badge > 0 ? (
-                                    <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
+                                    <span className="bg-bp-danger-fill text-bp-danger-on text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
                                         {tab.badge}
                                     </span>
                                 ) : null}
@@ -358,8 +358,8 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                                     <div className="flex justify-between items-start mb-1">
                                                         <div className="flex items-center gap-2">
                                                             <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                                                                isCompleted ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'
-                                                                : isPending ? 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-400'
+                                                                isCompleted ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
+                                                                : isPending ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink'
                                                                 : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-300'
                                                             }`}>
                                                                 {item.status}
@@ -455,7 +455,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                                             <div className="flex-1 min-w-0 flex flex-col justify-center">
                                                 <div className="flex justify-between items-start mb-1">
                                                     <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                                                        item.type === 'offer' ? 'bg-terra-100 text-terra-800 dark:bg-terra-900/40 dark:text-terra-400'
+                                                        item.type === 'offer' ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                         : 'bg-nature-200 text-nature-700 dark:bg-nature-800 dark:text-nature-300'
                                                     }`}>
                                                         {item.type}

@@ -308,7 +308,7 @@ export function OneWayBackCard({ identity, placement, onSeeWords, result, naviga
                         {onSeeWords && hasMnemonic(identity) && (
                             <button type="button" data-testid="one-way-back-words"
                                 onClick={() => { if (placement === 'landing') update({ ...schedule, checked: true }); onSeeWords(); }}
-                                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-bold bg-amber-700 hover:bg-amber-800 text-white border-none cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500">
+                                className="w-full min-h-[44px] px-4 py-2.5 rounded-xl text-sm font-bold bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on border-none cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500">
                                 See my 12 words
                             </button>
                         )}

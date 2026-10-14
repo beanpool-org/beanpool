@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import { tourStepCaption, type TourStep } from '@beanpool/core';
 import type { TourHome } from '../lib/tour-store';
 
-const primary = 'min-w-[96px] min-h-[44px] px-4 rounded-xl border-0 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400';
+const primary = 'min-w-[96px] min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400';
 const quiet = 'min-w-[44px] min-h-[44px] px-3 rounded-xl border-0 bg-transparent text-sm font-bold text-emerald-800 dark:text-emerald-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
 const chip = 'min-h-[44px] px-3 rounded-full border text-[0.8125rem] font-bold break-words text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
 

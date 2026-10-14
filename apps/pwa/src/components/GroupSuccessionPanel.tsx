@@ -158,7 +158,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
                                 disabled={busy}
                                 onClick={() => handleVote('yes')}
                                 aria-label={`Vote yes to make ${candidateName} the lead convenor`}
-                                className="flex-1 min-w-[7rem] py-2.5 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                                className="flex-1 min-w-[7rem] py-2.5 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                             >
                                 {busy ? 'Voting…' : 'Yes'}
                             </button>
@@ -196,7 +196,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
                         <button
                             type="submit"
                             disabled={busy || !candidate}
-                            className="py-2 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 shrink-0 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
+                            className="py-2 px-4 rounded-xl bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on font-bold text-xs shadow-sm transition-all disabled:opacity-50 shrink-0 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
                         >
                             {busy ? 'Proposing…' : 'Propose'}
                         </button>

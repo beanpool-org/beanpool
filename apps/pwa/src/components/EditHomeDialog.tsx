@@ -79,7 +79,7 @@ export function EditHomeDialog({ rows, notOnAccount, onAdd, onMove, onSettings, 
                     <p data-testid="home-edit-not-on-account" className="m-0 mb-3 text-sm text-nature-700 dark:text-nature-200">{NOT_ON_ACCOUNT_LINE}</p>
                 )}
                 <button type="button" data-testid="home-edit-add" onClick={onAdd}
-                    className="w-full mb-3 min-h-[44px] px-4 rounded-xl border-0 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
+                    className="w-full mb-3 min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
                     <span aria-hidden="true">＋ </span>Add a card
                 </button>
                 <ul className="list-none m-0 p-0" aria-label="On Home">
@@ -122,7 +122,7 @@ export function EditHomeDialog({ rows, notOnAccount, onAdd, onMove, onSettings, 
                         Reset to defaults
                     </button>
                     <button type="button" data-testid="home-edit-done" onClick={onClose}
-                        className="flex-1 min-w-[140px] min-h-[44px] px-4 rounded-xl border-0 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
+                        className="flex-1 min-w-[140px] min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
                         Done
                     </button>
                 </div>

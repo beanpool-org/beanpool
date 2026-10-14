@@ -244,7 +244,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                             onClick={handleGenerate}
                             disabled={isGenerating}
                             aria-busy={isGenerating}
-                            className="px-5 py-2.5 rounded-xl bg-terra-500 hover:bg-terra-600 font-bold text-white text-xs transition-all flex items-center gap-2 shadow-lg active:scale-95 disabled:opacity-50"
+                            className="px-5 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover font-bold text-bp-cta-on text-xs transition-all flex items-center gap-2 shadow-lg active:scale-95 disabled:opacity-50"
                         >
                             <span aria-hidden="true" className={isGenerating ? 'animate-spin' : ''}>{isGenerating ? '🔄' : '⚡'}</span>
                             <span>{isGenerating ? 'Generating...' : `Generate ${inviteCount} Pass${inviteCount > 1 ? 'es' : ''}`}</span>
@@ -284,7 +284,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                                     onClick={() => setInviteCount(num)}
                                     className={`flex-1 min-w-[40px] py-2 rounded-xl text-xs font-bold transition-all border ${
                                         inviteCount === num
-                                            ? 'bg-terra-500/20 text-terra-300 border-terra-500/50'
+                                            ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border-terra-500/50'
                                             : 'bg-nature-950 text-nature-400 border-nature-800 hover:border-nature-700'
                                     }`}
                                 >
@@ -341,7 +341,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                     <button
                         type="button"
                         onClick={handleRetry}
-                        className="min-h-[48px] px-5 rounded-xl bg-red-800 hover:bg-red-700 text-white text-xs font-bold transition-all active:scale-95"
+                        className="min-h-[48px] px-5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on text-xs font-bold transition-all active:scale-95"
                     >
                         {generateError.issued === 0
                             ? 'Try again'
@@ -384,7 +384,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                         <div className="flex items-center gap-2 flex-wrap">
                             <button
                                 onClick={handleCopyAllMessages}
-                                className="px-3 py-1.5 rounded-xl bg-terra-950 hover:bg-terra-900 text-terra-300 hover:text-white text-xs font-bold border border-terra-800 transition-all flex items-center gap-1.5 active:scale-95"
+                                className="px-3 py-1.5 rounded-xl bg-bp-chip-need-tint hover:opacity-90 text-bp-chip-need-ink text-xs font-bold border border-terra-800 transition-all flex items-center gap-1.5 active:scale-95"
                             >
                                 <span>💬</span>
                                 <span>{copiedIndex === 'all_messages' ? '✓ Messages Copied!' : 'Copy All Share Messages'}</span>
@@ -405,7 +405,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                             </button>
                             <button
                                 onClick={handlePrintCards}
-                                className="px-3 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 text-emerald-300 hover:text-white text-xs font-bold border border-emerald-800 transition-all flex items-center gap-1.5 active:scale-95"
+                                className="px-3 py-1.5 rounded-xl bg-bp-chip-ok-tint hover:opacity-90 text-bp-chip-ok-ink text-xs font-bold border border-emerald-800 transition-all flex items-center gap-1.5 active:scale-95"
                             >
                                 <span>🖨️</span>
                                 <span>Print Cards</span>
@@ -467,7 +467,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                             <div className="flex items-center gap-2">
                                 <button
                                     onClick={handlePrintCards}
-                                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-all flex items-center gap-1.5 shadow-md"
+                                    className="px-4 py-2 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs transition-all flex items-center gap-1.5 shadow-md"
                                 >
                                     <span>🖨️</span>
                                     <span>Print Sheet</span>
@@ -495,7 +495,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <span className="bg-emerald-700 text-white px-3 py-1 rounded-full text-xs font-bold">
+                                            <span className="bg-bp-commit-fill text-bp-commit-on px-3 py-1 rounded-full text-xs font-bold">
                                                 {getTierBadge(item.tier)}
                                             </span>
                                             <div className="text-[10px] text-gray-500 mt-1">Pass #{idx + 1}</div>
@@ -577,7 +577,7 @@ export function InvitesModule({ activeNode }: InvitesModuleProps) {
                         <div className="pt-2 border-t border-nature-800 flex gap-2">
                             <button
                                 onClick={() => handleCopy(getShareMessage(previewQrItem), 'modal_msg')}
-                                className="flex-1 py-2 rounded-xl bg-terra-500 hover:bg-terra-600 font-bold text-white text-xs transition-all flex items-center justify-center gap-1"
+                                className="flex-1 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover font-bold text-bp-cta-on text-xs transition-all flex items-center justify-center gap-1"
                             >
                                 <span>💬</span>
                                 <span>{copiedIndex === 'modal_msg' ? '✓ Message Copied!' : 'Copy Share Message'}</span>

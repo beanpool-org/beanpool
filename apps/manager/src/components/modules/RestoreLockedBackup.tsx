@@ -152,7 +152,7 @@ export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canU
             ) : (
                 <>
                     {canUsePhone && (
-                        <button type="button" onClick={openWithPhone} disabled={busy} className={`${BTN} w-full bg-red-900/80 hover:bg-red-800 text-white border border-red-700`}>
+                        <button type="button" onClick={openWithPhone} disabled={busy} className={`${BTN} w-full bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on border border-bp-danger-fill`}>
                             {busy ? 'Starting…' : "Open with an owner's phone"}
                         </button>
                     )}
@@ -162,7 +162,7 @@ export function RestoreLockedBackup({ activeNode, file, backup, canUseCode, canU
                             <input id="restore-recovery-code" type="text" value={code} onChange={(e) => setCode(e.target.value)} autoComplete="off"
                                 autoCapitalize="characters" spellCheck={false} placeholder="BPRC-1  XXXX-XXXX-…"
                                 className="w-full min-w-0 min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white font-mono" />
-                            <button type="submit" disabled={busy || !code.trim()} className={`${BTN} w-full bg-red-900/80 hover:bg-red-800 text-white border border-red-700`}>
+                            <button type="submit" disabled={busy || !code.trim()} className={`${BTN} w-full bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on border border-bp-danger-fill`}>
                                 {busy ? 'Opening…' : 'Open with the code and restore'}
                             </button>
                         </form>

@@ -20,7 +20,7 @@ export function OwnerPhoneBanner({ nodeUrl }: { nodeUrl: string | undefined }) {
 
     if (!shown) return null;
     return (
-        <div role="alert" data-owner-phone-banner className="bg-terra-600 text-white text-sm px-4 py-3 flex flex-wrap items-center gap-3">
+        <div role="alert" data-owner-phone-banner className="bg-bp-cta-fill text-bp-cta-on text-sm px-4 py-3 flex flex-wrap items-center gap-3">
             <p className="m-0 flex-1 min-w-0 break-words">{OWNER_PHONE_MESSAGE}</p>
             {nodeUrl && (
                 <a
@@ -35,7 +35,7 @@ export function OwnerPhoneBanner({ nodeUrl }: { nodeUrl: string | undefined }) {
             <button
                 type="button"
                 onClick={() => setShown(false)}
-                className="min-h-[44px] px-3 rounded-xl font-medium hover:bg-terra-500"
+                className="min-h-[44px] px-3 rounded-xl font-medium hover:bg-bp-cta-fill hover:text-bp-cta-on"
             >
                 Dismiss
             </button>

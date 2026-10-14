@@ -165,7 +165,7 @@ export function AgentSuggestionsPanel({ activeNode, viewer = { kind: 'password' 
                                     type="button"
                                     disabled={busy !== null}
                                     onClick={() => void answer(s, 'approve')}
-                                    className="flex-1 basis-full sm:basis-auto min-h-[48px] px-4 rounded-lg bg-terra-600 text-white font-semibold break-words disabled:opacity-50"
+                                    className="flex-1 basis-full sm:basis-auto min-h-[48px] px-4 rounded-lg bg-bp-cta-fill text-bp-cta-on font-semibold break-words disabled:opacity-50"
                                 >
                                     Approve
                                 </button>

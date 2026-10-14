@@ -76,6 +76,7 @@ import { useGlobalDoorOpen } from '../../utils/use-global-door-open';
 import { useAccountClosedAtGlobal } from '../../utils/use-account-closed';
 import { OwnerWordsCard } from '../../components/OwnerWordsCard';
 import { OneWayBackCard } from '../../components/OneWayBackCard';
+import { BlockedFriendRemove } from '../../components/BlockedFriendRemove';
 
 
 function getDatabaseFilePaths(dbFilename: string): string[] {
@@ -3129,25 +3130,30 @@ export default function SettingsScreen() {
                             <>
                                 <ScrollView style={{ maxHeight: 300, marginBottom: 16 }}>
                                     {blockedUsersList.map(item => (
-                                        <View key={item.pubkey} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
-                                            <View style={{ flex: 1, marginRight: 12 }}>
-                                                <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text.body }} numberOfLines={1}>
-                                                    {item.callsign}
-                                                </Text>
-                                                <Text style={{ fontSize: 11, color: colors.text.muted }} numberOfLines={1}>
-                                                    {item.pubkey.slice(0, 16)}...
-                                                </Text>
+                                        <View key={item.pubkey} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <View style={{ flex: 1, marginRight: 12 }}>
+                                                    <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text.body }} numberOfLines={1}>
+                                                        {item.callsign}
+                                                    </Text>
+                                                    <Text style={{ fontSize: 11, color: colors.text.muted }} numberOfLines={1}>
+                                                        {item.pubkey.slice(0, 16)}...
+                                                    </Text>
+                                                </View>
+                                                <Pressable
+                                                    accessibilityRole="button"
+                                                    style={{ backgroundColor: colors.feedback.danger.bg, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.border }}
+                                                    onPress={async () => {
+                                                        await unblockUser(item.pubkey);
+                                                        setBlockedUsersList(prev => prev.filter(u => u.pubkey !== item.pubkey));
+                                                    }}
+                                                >
+                                                    <Text style={{ color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 12 }}>Unblock</Text>
+                                                </Pressable>
                                             </View>
-                                            <Pressable
-                                                accessibilityRole="button"
-                                                style={{ backgroundColor: colors.feedback.danger.bg, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.border }}
-                                                onPress={async () => {
-                                                    await unblockUser(item.pubkey);
-                                                    setBlockedUsersList(prev => prev.filter(u => u.pubkey !== item.pubkey));
-                                                }}
-                                            >
-                                                <Text style={{ color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 12 }}>Unblock</Text>
-                                            </Pressable>
+                                            {identity?.publicKey && (
+                                                <BlockedFriendRemove myKey={identity.publicKey} pubkey={item.pubkey} callsign={item.callsign || item.pubkey.slice(0, 8)} />
+                                            )}
                                         </View>
                                     ))}
                                 </ScrollView>

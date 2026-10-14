@@ -53,11 +53,11 @@ function size(bytes: number | null): string {
 }
 
 const HEALTH_LABEL: Record<OffboxDestinationStatus['health'], { text: string; className: string }> = {
-    ok: { text: 'Working', className: 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' },
+    ok: { text: 'Working', className: 'bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-emerald-500/30' },
     waiting: { text: 'First one soon', className: 'bg-nature-800 text-nature-300' },
-    failing: { text: 'Failing', className: 'bg-red-500/20 text-red-300 border border-red-500/30' },
-    stale: { text: 'Late', className: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
-    broken: { text: "Can't be used", className: 'bg-red-500/20 text-red-300 border border-red-500/30' },
+    failing: { text: 'Failing', className: 'bg-bp-chip-danger-tint text-bp-chip-danger-ink border border-red-500/30' },
+    stale: { text: 'Late', className: 'bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-amber-500/30' },
+    broken: { text: "Can't be used", className: 'bg-bp-chip-danger-tint text-bp-chip-danger-ink border border-red-500/30' },
 };
 
 export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
@@ -202,7 +202,7 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
                         type="button"
                         onClick={sendNow}
                         disabled={status?.running}
-                        className="px-4 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50 shrink-0"
+                        className="px-4 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all disabled:opacity-50 shrink-0"
                     >
                         {status?.running ? 'Sending…' : 'Send one now'}
                     </button>
@@ -219,7 +219,7 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
             )}
 
             {status && (
-                <p className={`text-xs m-0 p-3 rounded-xl border ${warn ? 'bg-amber-500/10 border-amber-500/30 text-amber-200' : 'bg-nature-950 border-nature-800 text-nature-300'}`} data-testid="offbox-message">
+                <p className={`text-xs m-0 p-3 rounded-xl border ${warn ? 'bg-bp-chip-warn-tint border-amber-500/30 text-bp-chip-warn-ink' : 'bg-nature-950 border-nature-800 text-nature-300'}`} data-testid="offbox-message">
                     {status.message}
                 </p>
             )}
@@ -304,7 +304,7 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
                                     </button>
                                 )}
                                 {d.source === 'settings' && (
-                                    <button type="button" onClick={() => remove(d)} className="px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-red-900 text-xs text-red-200">
+                                    <button type="button" onClick={() => remove(d)} className="px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-bp-chip-danger-tint hover:text-bp-chip-danger-ink text-xs text-red-200">
                                         Remove
                                     </button>
                                 )}
@@ -357,7 +357,7 @@ export function OffboxBackupsPanel({ activeNode }: OffboxBackupsPanelProps) {
                         The key needs to read, write, list and delete in this bucket. Use a bucket for backups alone.
                     </p>
                     <div className="flex flex-wrap gap-2">
-                        <button type="submit" disabled={saving} className="px-4 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50">
+                        <button type="submit" disabled={saving} className="px-4 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on disabled:opacity-50">
                             {saving ? 'Saving…' : form.id ? 'Save' : 'Add'}
                         </button>
                         <button type="button" onClick={() => setForm(null)} className="px-4 py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs text-white">

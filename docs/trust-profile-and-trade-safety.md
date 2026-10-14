@@ -72,8 +72,9 @@ Adding a friend is visible and bounded, because a connection in common is made o
   is never counted on the profile of the member they blocked, nor for a viewer who blocked them; the friend rows stay,
   so the blocked member's own reads don't change (`getTrustProfileForViewer`; `test-trust-mutuals` T11-T14). It does
   not end the friendship: they still have you as a friend, and if your contact is set to Friends they still see it. To end
-  it too: on the phone take them off the Friends tab (it still lists them); on the web, which hides a blocked member
-  from your lists, unblock, take them off your friends, block again. They can notice a removal.
+  it too, in one step: Settings → Manage Blocked Users, "Also remove from friends" under a blocked member who is still
+  a friend (phone and web; the same `POST /api/friends/remove` as any removal, so a block kept on the phone alone ends
+  the friendship on the node too; the block stays). They can notice a removal.
 
 ### Suggested "trust at a glance" layout
 1. Tier badge · member since · last active

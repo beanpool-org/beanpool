@@ -114,7 +114,14 @@ five colour lines of `map.tsx` at the roles on 14 Oct: the Reach chooser and cat
   `accent.primary`, `feedback.*.fg` (`feedback.warning.fg` is `ink.warning`). The Offer and Need chips
   (`market.offer`, `market.need`) are `chip.ok` and `chip.need`. One token can no longer serve as both, because no single dark value reads as
   words on the page and under white words.
-- **Web app and manager** (next): generate a stylesheet from the same file and use the variables.
+- **Manager** (`apps/manager`, dark only): `tailwind.config.js` imports `brandTailwindColours()` into its colours and puts
+  `brandCssVariableMap('light')` / `('dark')` under `:root` / `:root.dark` with `addBase` (the same blocks
+  `brandCssVariables()` writes), so no stylesheet is generated or committed. Buttons with words use a fill role
+  (`bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on`); badges, chips and the tinted buttons that look like
+  them use a chip role (`bg-bp-chip-warn-tint text-bp-chip-warn-ink`; terracotta chips are `chip.need`). Status dots
+  and meters keep their Tailwind shades. `src/brand-roles-sources.test.ts` fails on a raw terracotta, emerald, red,
+  rose, amber, orange, green or yellow shade on a control, and on a fill whose words are not its own `on`.
+- **Web app** (next): generate a stylesheet from the same file and use the variables.
 
   ```js
   import { brandCssVariables, brandTailwindColours } from '@beanpool/core/brand-colours';

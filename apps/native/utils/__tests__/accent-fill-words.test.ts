@@ -264,7 +264,7 @@ function reachableStylesHaveFill(s: Source): boolean {
 }
 
 describe('words on the sage tint (accent.tint) reach 4.5 in both themes', () => {
-    const WORDS = ['text.heading', 'text.body', 'text.secondary', 'accent.primary'] as const;
+    const WORDS = ['text.heading', 'text.body', 'text.secondary', 'text.muted', 'accent.primary'] as const;
     const get = (tree: unknown, path: string) => path.split('.').reduce<unknown>((n, k) => (n as Record<string, unknown>)[k], tree) as string;
     const ratios = WORDS.map((token) => {
         const light = contrastRatio(get(lightColors, token), lightColors.accent.tint);
@@ -272,13 +272,17 @@ describe('words on the sage tint (accent.tint) reach 4.5 in both themes', () => 
         return { token, light, dark, min: Math.min(light, dark) };
     });
 
-    it.each(ratios.filter((r) => r.token !== 'text.secondary').map((r) => [r.token, r] as const))('%s on accent.tint', (_t, r) => {
+    // text.secondary (4.22) and text.muted (3.29) fall short on the dark sage tint; the ban below keeps them off it.
+    it.each(ratios.filter((r) => r.token !== 'text.secondary' && r.token !== 'text.muted').map((r) => [r.token, r] as const))('%s on accent.tint', (_t, r) => {
         expect(Number(r.min.toFixed(2)), `light ${r.light.toFixed(2)}, dark ${r.dark.toFixed(2)}`).toBeGreaterThanOrEqual(4.5);
     });
 
     it('no style or element on accent.tint uses a word token that reads below 4.5 on it (text.secondary: 4.22 in dark)', () => {
-        // text.muted on the tint is the open text.muted question for Marty (2.22 in dark), judged in its own round.
         const banned = ratios.filter((r) => r.min < 4.5).map((r) => r.token);
+        // Open for a design call, not a regression: New Message tints the tapped member's row sage while the chat is
+        // created, and the join date under the name stays text.muted, 3.29 in dark (2.22 before text.muted's change).
+        // Only this element and only text.muted; any other word token or element on the tint still fails.
+        const OPEN_ON_TINT = [/^app\/new-message\.tsx:\d+ \(memberMeta, app\/new-message\.tsx:\d+\) colors\.text\.muted$/];
         const pattern = new RegExp(`\\bcolors\\.(?:${banned.map((t) => t.replace('.', '\\.')).join('|')})\\b`);
         const hits: string[] = [];
         if (banned.length === 0) return;
@@ -290,7 +294,7 @@ describe('words on the sage tint (accent.tint) reach 4.5 in both themes', () => 
             }
             for (const { subtree, off } of elementsOn(s, styles, isAccentTint)) {
                 for (const [at, expr] of wordColours(subtree, s, styles, isAccentTint, off)) {
-                    if (pattern.test(expr)) hits.push(`${at} ${expr}`);
+                    if (pattern.test(expr) && !OPEN_ON_TINT.some((re) => re.test(`${at} ${expr}`))) hits.push(`${at} ${expr}`);
                 }
             }
         }

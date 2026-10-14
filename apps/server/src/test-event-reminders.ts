@@ -433,7 +433,7 @@ async function main(): Promise<void> {
         assert(pushIsGeneric(sent[0]?.sent) && sent[0]?.kind === 'event.reminder' && !JSON.stringify(sent[0]?.sent).includes(wired.id)
             && !JSON.stringify(sent[0]?.sent).includes('Wired up'),
             `...its lock screen shows only "An event you're going to starts soon.", with no event name or post id (${sent[0]?.sent?.body})`);
-        assert(sent[0]?.title === reminderPushTitle('Wired up') && sent[0]?.body === reminderPushBody(1440, placeTime(wired.eventStartAt!)),
+        assert(sent[0]?.title === reminderPushTitle('Wired up') && sent[0]?.body === `Starts in 1 day · ${placeTime(wired.eventStartAt!)}`,
             `...its details (what the app shows) have the reminder's words (${sent[0]?.title} / ${sent[0]?.body})`);
         assert(sent[0]?.data?.screen === 'post' && sent[0]?.data?.postId === wired.id,
             '...and the payload that opens /post/:id');

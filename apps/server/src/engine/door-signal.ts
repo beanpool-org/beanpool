@@ -34,7 +34,6 @@
 import { DOOR_WORK_MAX_LEVEL, type DoorWorkDoor } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getNodeProfile, type NodeProfile } from '../config/node-profile.js';
-import { raiseOnce } from '../services/alerts.js';
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -208,7 +207,8 @@ export function doorBusy(now = Date.now(), env: NodeJS.ProcessEnv = process.env)
         if (busy) {
             const detail = `${count} new members joined in the last 24 hours (the line is ${threshold}), so a 12-words join now asks the top work level, ${DOOR_WORK_MAX_LEVEL}. Nobody is refused; it falls back when the count does.`;
             console.log(`🚪 Sign-ups are busy: ${detail}`);
-            try { void raiseOnce('door.busy', detail).catch(() => { }); } catch { }
+            // Imported here, not at the top: services/alerts.ts reaches state-engine.ts, which reaches this file.
+            void import('../services/alerts.js').then((alerts) => alerts.raiseOnce('door.busy', detail)).catch(() => { });
         } else {
             console.log(`🚪 Sign-ups are back to usual: ${count} new members in the last 24 hours (the line is ${threshold || 'off'}), so the door's work is as before.`);
         }

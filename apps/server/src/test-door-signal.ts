@@ -49,6 +49,7 @@ import {
     DOOR_BUSY_DEFAULT, DOOR_BUSY_ENV, _resetDoorBusyForTests, doorBusyThreshold, newMembersToday,
 } from './engine/door-signal.js';
 import { solveOffLoop } from './door-work-test-solver.js';
+import { getAlertsStatus } from './services/alerts.js';
 import { getFunnel } from './engine/funnel.js';
 import { limiterKeyForIp } from './client-ip.js';
 
@@ -393,6 +394,13 @@ async function main(): Promise<void> {
         `the ${LINE}th new member of the day: a 12-words join from an address with no joins asks the top level, 5 (${JSON.stringify(at)})`);
     assert(doorLevel('sign-in', freshHash, t1).level === null, 'the sign-in door is unchanged: no work at ordinary rates');
     assert(doorCeilingReached('words', freshHash, t1) === null, 'and nobody is refused for it: no ceiling is reached');
+    let busyAlerts: { kind: string; detail: string }[] = [];
+    for (let i = 0; i < 40 && busyAlerts.length === 0; i++) {
+        await new Promise((r) => setTimeout(r, 50));
+        busyAlerts = getAlertsStatus().history.filter((e) => e.key === 'door.busy');
+    }
+    assert(busyAlerts.length === 1 && busyAlerts[0].kind === 'raised' && /^\d+ new members joined in the last 24 hours \(the line is \d+\)/.test(busyAlerts[0].detail),
+        `one alert to the owners when it rises, counts only (${JSON.stringify(busyAlerts)})`);
     const fell = doorLevel('words', freshHash, t0 + 25 * 3600_000);
     assert(fell.level === 0 && !fell.nodeBusy, `a day later the count is back under the line: level 0 again (${JSON.stringify(fell)})`);
     console.log = realLog;

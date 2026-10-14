@@ -132,7 +132,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                             </span>
                             {item.isVerified && (
                                 <span
-                                    className="w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] font-black shrink-0"
+                                    className="w-3.5 h-3.5 rounded-full bg-bp-commit-fill text-bp-commit-on flex items-center justify-center text-[9px] font-black shrink-0"
                                     title="Verified account"
                                     aria-label="Verified account"
                                 >
@@ -323,7 +323,7 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onDelete, onOpenPro
                             <button
                                 type="button"
                                 onClick={confirmDelete}
-                                className="min-h-[44px] px-4 py-2 rounded-xl text-sm font-bold bg-red-600 hover:bg-red-700 text-white transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                                className="min-h-[44px] px-4 py-2 rounded-xl text-sm font-bold bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                             >
                                 Delete permanently
                             </button>

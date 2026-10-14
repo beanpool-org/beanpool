@@ -245,7 +245,7 @@ export function MyDealsModal({ visible, identity, onClose, posts, transactions, 
                             >
                                 <span>{tab.label}</span>
                                 {tab.badge && tab.badge > 0 ? (
-                                    <span className="bg-red-500 text-white text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
+                                    <span className="bg-bp-danger-fill text-bp-danger-on text-[10px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
                                         {tab.badge}
                                     </span>
                                 ) : null}

@@ -241,7 +241,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                             <button
                                 type="button"
                                 onClick={() => { setAdding(true); setFormError(null); }}
-                                className="px-5 py-2.5 rounded-xl font-bold text-sm bg-terra-600 hover:bg-terra-500 text-white cursor-pointer shadow-sm transition-transform active:scale-95"
+                                className="px-5 py-2.5 rounded-xl font-bold text-sm bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on cursor-pointer shadow-sm transition-transform active:scale-95"
                             >
                                 + Add a channel
                             </button>
@@ -336,7 +336,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                                             onClick={() => handleChangeCategory(channel.id, cat.id)}
                                                             className={`flex items-center gap-1.5 p-2 rounded-lg text-xs font-semibold border text-left cursor-pointer transition-colors ${
                                                                 isSelected
-                                                                    ? 'bg-terra-500 dark:bg-terra-600 border-terra-500 text-white shadow-xs'
+                                                                    ? 'bg-bp-cta-fill border-bp-cta-fill text-bp-cta-on shadow-xs'
                                                                     : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-800 dark:text-nature-200 hover:bg-nature-100 dark:hover:bg-nature-700'
                                                             }`}
                                                         >
@@ -362,7 +362,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                             <button
                                                 type="button"
                                                 onClick={() => onSharePost(channel.id)}
-                                                className="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-terra-600 hover:bg-terra-500 text-white cursor-pointer shadow-sm transition-colors"
+                                                className="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on cursor-pointer shadow-sm transition-colors"
                                             >
                                                 + Share post
                                             </button>
@@ -451,7 +451,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                             onClick={() => setCategory(c.id)}
                                             className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                                                 active
-                                                    ? 'bg-terra-500 dark:bg-terra-600 border-terra-500 text-white shadow-sm'
+                                                    ? 'bg-bp-cta-fill border-bp-cta-fill text-bp-cta-on shadow-sm'
                                                     : 'bg-nature-50 dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                             }`}
                                         >
@@ -479,7 +479,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                     type="button"
                                     onClick={handleAdd}
                                     disabled={saving || !value.trim() || !category}
-                                    className="px-5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-terra-600 hover:bg-terra-500 disabled:opacity-50 text-white cursor-pointer shadow-sm"
+                                    className="px-5 py-2 rounded-xl text-xs sm:text-sm font-bold bg-bp-cta-fill hover:bg-bp-cta-hover disabled:opacity-50 text-bp-cta-on cursor-pointer shadow-sm"
                                 >
                                     {saving ? 'Adding…' : 'Add channel'}
                                 </button>
@@ -490,7 +490,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                             <button
                                 type="button"
                                 onClick={() => { setAdding(true); setFormError(null); }}
-                                className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-sm bg-terra-600 hover:bg-terra-500 text-white cursor-pointer shadow-sm transition-colors"
+                                className="w-full sm:w-auto px-5 py-2.5 rounded-xl font-bold text-sm bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on cursor-pointer shadow-sm transition-colors"
                             >
                                 + Add a channel
                             </button>
@@ -538,7 +538,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                     await handleSetPrimary(crossPostPrompt.newChannel.id);
                                     setCrossPostPrompt(null);
                                 }}
-                                className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-terra-600 hover:bg-terra-500 text-white cursor-pointer"
+                                className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on cursor-pointer"
                             >
                                 {platformMeta(crossPostPrompt.newChannel.platform).label} {crossPostPrompt.newChannel.supportsAutolist ? '(updates itself)' : ''}
                             </button>
@@ -594,7 +594,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                             <button
                                 type="button"
                                 onClick={confirmRemoveChannel}
-                                className="px-4 py-2 rounded-xl text-sm font-bold bg-red-600 hover:bg-red-700 text-white cursor-pointer"
+                                className="px-4 py-2 rounded-xl text-sm font-bold bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on cursor-pointer"
                             >
                                 Remove
                             </button>

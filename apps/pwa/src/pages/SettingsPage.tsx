@@ -736,7 +736,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                             setQuizInitialMode('deep');
                                                             setShowQuizModal(true);
                                                         }}
-                                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
+                                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm truncate"
                                                     >
                                                         🧭 More accurate
                                                     </button>
@@ -781,7 +781,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 setQuizInitialMode('quick');
                                                 setShowQuizModal(true);
                                             }}
-                                            className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm"
+                                            className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm"
                                         >
                                             ⚡ Take 60s Quiz
                                         </button>
@@ -811,7 +811,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         </p>
                                         <button
                                             onClick={() => setMode('seed')}
-                                            className="mt-1 min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-700 hover:bg-amber-800 text-white border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                                            className="mt-1 min-h-[44px] px-4 py-2.5 rounded-xl text-xs font-bold bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
                                         >
                                             View & Save Recovery Phrase
                                         </button>
@@ -1101,7 +1101,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         </p>
                                         <button
                                             onClick={openPurge}
-                                            className="mt-2 w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs border-none cursor-pointer transition-colors shadow-sm"
+                                            className="mt-2 w-full py-2.5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-xs border-none cursor-pointer transition-colors shadow-sm"
                                         >
                                             Permanently Delete Account
                                         </button>
@@ -1236,7 +1236,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                     }
                                                 }}
                                                 disabled={isPurging || !isPurgeConfirmed || !deletePlan}
-                                                className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-bold border-none transition-colors text-xs shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 hover:bg-red-700"
+                                                className="flex-1 py-2.5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold border-none transition-colors text-xs shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
                                             >
                                                 {isPurging ? 'Purging...' : '🔥 Purge Account'}
                                             </button>
@@ -1301,7 +1301,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                                 <button
                                     onClick={handleCopySeed}
-                                    className="w-full py-3 mb-2 rounded-xl font-bold bg-terra-500 dark:bg-terra-600 hover:bg-terra-600 text-white border-none cursor-pointer transition-colors text-sm shadow-sm"
+                                    className="w-full py-3 mb-2 rounded-xl font-bold bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on border-none cursor-pointer transition-colors text-sm shadow-sm"
                                 >
                                     {seedCopied ? '✅ Copied to Clipboard!' : '📋 Copy All Words'}
                                 </button>

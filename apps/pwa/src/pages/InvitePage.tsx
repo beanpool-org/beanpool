@@ -296,7 +296,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
                     </button>
                     <button
                         onClick={handleShareLink}
-                        className="py-3 px-6 rounded-xl border-none bg-emerald-600 dark:bg-emerald-700 text-white text-[14px] font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all"
+                        className="py-3 px-6 rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-[14px] font-bold cursor-pointer shadow-sm transition-all"
                         aria-label="Share this community's link"
                         title="Share this community's link"
                     >
@@ -336,7 +336,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
                     onClick={() => setActiveSection('invites')} 
                     className={`flex-1 py-3 rounded-xl border-none text-[14px] font-bold cursor-pointer transition-all shadow-sm ${
                         activeSection === 'invites' 
-                            ? 'bg-emerald-600 dark:bg-emerald-700 text-white shadow-md' 
+                            ? 'bg-bp-commit-fill text-bp-commit-on shadow-md' 
                             : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-200 hover:bg-oat-200 dark:hover:bg-nature-700'
                     }`}
                 >
@@ -346,7 +346,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
                     onClick={() => setActiveSection('tree')} 
                     className={`flex-1 py-3 rounded-xl border-none text-[14px] font-bold cursor-pointer transition-all shadow-sm ${
                         activeSection === 'tree' 
-                            ? 'bg-emerald-600 dark:bg-emerald-700 text-white shadow-md' 
+                            ? 'bg-bp-commit-fill text-bp-commit-on shadow-md' 
                             : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-200 hover:bg-oat-200 dark:hover:bg-nature-700'
                     }`}
                 >
@@ -392,7 +392,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
                         className={`w-full p-4 rounded-xl text-[15px] font-bold border-none cursor-pointer mb-6 transition-all shadow-md ${
                             generating 
                                 ? 'bg-nature-400 text-white cursor-not-allowed' 
-                                : 'bg-emerald-600 dark:bg-emerald-700 text-white hover:bg-emerald-700 hover:shadow-lg'
+                                : 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on hover:shadow-lg'
                         }`}
                     >
                         {generating ? 'Generating...' : '✨ Generate New Invite'}
@@ -425,7 +425,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
                                 </button>
                                 <button 
                                     onClick={() => handleShare(newCode)} 
-                                    className="py-3 px-6 rounded-xl border-none bg-emerald-600 dark:bg-emerald-700 text-white text-[14px] font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all"
+                                    className="py-3 px-6 rounded-xl border-none bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-[14px] font-bold cursor-pointer shadow-sm transition-all"
                                     aria-label="Share invite link"
                                     title="Share invite link"
                                 >
@@ -469,7 +469,7 @@ export function InvitePage({ identity, onNavigate }: Props) {
                                             </button>
                                             <button 
                                                 onClick={() => handleShare(inv.code)} 
-                                                className="p-2 rounded-lg bg-emerald-600 dark:bg-emerald-700 border-none text-white hover:bg-emerald-700 cursor-pointer shadow-sm transition-colors"
+                                                className="p-2 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on cursor-pointer shadow-sm transition-colors"
                                                 aria-label="Share invite link"
                                                 title="Share invite link"
                                             >
@@ -569,7 +569,7 @@ function TreeNodeView({ node, depth, identity }: { node: TreeNode; depth: number
                 {/* Avatar dot */}
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold shrink-0 shadow-sm ${
                     isMe 
-                        ? 'bg-emerald-600 dark:bg-emerald-700 text-white border-2 border-emerald-300 dark:border-emerald-800' 
+                        ? 'bg-bp-commit-fill text-bp-commit-on border-2 border-emerald-300 dark:border-emerald-800' 
                         : 'bg-oat-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300'
                 }`}>
                     {node.callsign.charAt(0).toUpperCase()}

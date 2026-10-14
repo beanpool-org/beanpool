@@ -320,7 +320,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                         type="button"
                         onClick={handleSave}
                         disabled={saving || clearing || lat == null || lng == null}
-                        className="min-h-[44px] px-3.5 py-1.5 rounded-lg bg-terra-600 hover:bg-terra-500 disabled:opacity-50 disabled:pointer-events-none text-xs font-bold text-white shadow transition-all"
+                        className="min-h-[44px] px-3.5 py-1.5 rounded-lg bg-bp-cta-fill hover:bg-bp-cta-hover disabled:opacity-50 disabled:pointer-events-none text-xs font-bold text-bp-cta-on shadow transition-all"
                     >
                         {saving ? 'Saving...' : 'Save Location'}
                     </button>

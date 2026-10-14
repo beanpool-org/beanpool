@@ -1572,7 +1572,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             <button
                                 onClick={() => setNewPostPhotos(prev => prev.filter((_, j) => j !== i))}
                                 aria-label="Remove photo"
-                                className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-red-500 border-none rounded-full text-white text-[11px] font-bold cursor-pointer flex items-center justify-center shadow-md hover:bg-red-600 transition-colors transform hover:scale-110"
+                                className="absolute -top-1.5 -right-1.5 w-6 h-6 bg-bp-danger-fill hover:bg-bp-danger-hover border-none rounded-full text-bp-danger-on text-[11px] font-bold cursor-pointer flex items-center justify-center shadow-md transition-colors transform hover:scale-110"
                             >
                                 ✕
                             </button>
@@ -1809,7 +1809,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 <button
                     onClick={tryOpenComposer}
                     aria-label="New Post"
-                    className="fixed bottom-[calc(var(--bottom-nav-offset)+1.5rem)] md:bottom-6 right-3 w-14 h-14 rounded-full bg-terra-500 dark:bg-terra-600 hover:bg-terra-600 text-white text-3xl font-light z-[101] shadow-[0_8px_30px_rgb(226,114,91,0.4)] flex items-center justify-center transition-transform transform hover:scale-105 border-2 border-white/20"
+                    className="fixed bottom-[calc(var(--bottom-nav-offset)+1.5rem)] md:bottom-6 right-3 w-14 h-14 rounded-full bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on text-3xl font-light z-[101] shadow-[0_8px_30px_rgb(226,114,91,0.4)] flex items-center justify-center transition-transform transform hover:scale-105 border-2 border-white/20"
                     style={{ bottom: 'calc(var(--bottom-nav-offset) + 1.5rem)' }}
                     title="New Post"
                 >
@@ -2017,7 +2017,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             onClick={() => { setNewPostType(t); setValidationErrors(new Set()); if (t !== 'event') setEventIsCopy(false); }}
                             className={`flex-1 py-3 rounded-xl border text-[15px] font-bold capitalize transition-all shadow-sm ${
                                 newPostType === t
-                                    ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]' : t === 'need' ? 'bg-orange-600 border-orange-600 text-white shadow-md scale-[1.02]' : t === 'event' ? 'bg-violet-700 border-violet-700 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
+                                    ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]' : t === 'need' ? 'bg-bp-action-fill border-bp-action-fill text-bp-action-on shadow-md scale-[1.02]' : t === 'event' ? 'bg-violet-700 border-violet-700 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
                                     : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                             }`}
                         >
@@ -2058,7 +2058,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 }}
                                 className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                                     audienceScope === 'group'
-                                        ? 'bg-emerald-600 dark:bg-emerald-700 border-emerald-600 text-white shadow-sm'
+                                        ? 'bg-bp-commit-fill border-bp-commit-fill text-bp-commit-on shadow-sm'
                                         : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                 }`}
                             >

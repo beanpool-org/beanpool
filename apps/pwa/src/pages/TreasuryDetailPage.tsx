@@ -833,7 +833,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         <p className="text-sm">{error}</p>
                         <button
                             onClick={load}
-                            className="mt-4 px-4 py-2 bg-red-600 text-white font-bold rounded-xl text-sm"
+                            className="mt-4 px-4 py-2 bg-bp-danger-fill text-bp-danger-on font-bold rounded-xl text-sm"
                         >
                             Retry
                         </button>
@@ -1029,7 +1029,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             <button
                                                 type="submit"
                                                 disabled={pledging || !pledgeAmount}
-                                                className="py-2 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-sm shadow-sm transition-all disabled:opacity-40 whitespace-nowrap"
+                                                className="py-2 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-sm transition-all disabled:opacity-40 whitespace-nowrap"
                                             >
                                                 {pledging ? 'Pledging…' : 'Pledge Beans 🌱'}
                                             </button>
@@ -1153,7 +1153,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             setPostRepeatable(true);
                                             setPostError(null);
                                         }}
-                                        className="py-3 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        className="py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         <span>🏷️</span> Post Offer
                                     </button>
@@ -1165,7 +1165,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             setPostRepeatable(false);
                                             setPostError(null);
                                         }}
-                                        className="py-3 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        className="py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         <span>🤝</span> Post Need
                                     </button>
@@ -1272,7 +1272,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             type="button"
                                                             disabled={actionState?.id === b.id}
                                                             onClick={() => handleApproveBid(b.id)}
-                                                            className="flex-1 min-h-[44px] py-2 px-3 rounded-lg bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
+                                                            className="flex-1 min-h-[44px] py-2 px-3 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
                                                         >
                                                             {actionState?.id === b.id && actionState?.type === 'approve' ? 'Approving…' : `Approve Bid (${b.credits} 🫘)`}
                                                         </button>
@@ -1330,7 +1330,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 type="button"
                                                                 disabled={actionState?.id === d.id}
                                                                 onClick={() => handleCompleteDeal(d.id, d.post_title, d.credits, d.price_type, d.hours)}
-                                                                className="w-full min-h-[44px] py-2.5 px-4 rounded-lg bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-extrabold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
+                                                                className="w-full min-h-[44px] py-2.5 px-4 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-extrabold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
                                                             >
                                                                 {actionState?.id === d.id && actionState?.type === 'complete' ? 'Releasing…' : `Release Payment (${d.credits} 🫘)`}
                                                             </button>
@@ -1365,7 +1365,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         type="button"
                                                         disabled={lifecycleActionLoading}
                                                         onClick={handlePause}
-                                                        className="flex-1 py-2 px-3 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                        className="flex-1 py-2 px-3 rounded-lg bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
                                                     >
                                                         {lifecycleActionLoading ? 'Pausing…' : 'Confirm Season Pause'}
                                                     </button>
@@ -1395,7 +1395,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         type="button"
                                                         disabled={lifecycleActionLoading}
                                                         onClick={handleResume}
-                                                        className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                        className="flex-1 py-2 px-3 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
                                                     >
                                                         {lifecycleActionLoading ? 'Resuming…' : 'Confirm Resume'}
                                                     </button>
@@ -1430,7 +1430,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         type="button"
                                                         disabled={lifecycleActionLoading || balance < 0}
                                                         onClick={handleInitiateWindUp}
-                                                        className="flex-1 py-2 px-3 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                        className="flex-1 py-2 px-3 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
                                                     >
                                                         {lifecycleActionLoading ? 'Starting Wind-Up…' : 'Confirm Start Wind-Up'}
                                                     </button>
@@ -1460,7 +1460,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         type="button"
                                                         disabled={lifecycleActionLoading}
                                                         onClick={handleCancelWindUp}
-                                                        className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                        className="flex-1 py-2 px-3 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
                                                     >
                                                         {lifecycleActionLoading ? 'Stopping Wind-Up…' : 'Confirm Stop Wind-Up'}
                                                     </button>
@@ -1490,7 +1490,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         type="button"
                                                         disabled={lifecycleActionLoading}
                                                         onClick={handleFinaliseWindUp}
-                                                        className="flex-1 py-2 px-3 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                        className="flex-1 py-2 px-3 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-xs shadow-sm transition-all disabled:opacity-50"
                                                     >
                                                         {lifecycleActionLoading ? 'Finalising…' : 'Finalise Wind-Up'}
                                                     </button>
@@ -1542,7 +1542,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             <button
                                                                 type="button"
                                                                 onClick={() => setConfirmingFinaliseWindUp(true)}
-                                                                className="py-2.5 px-3 rounded-xl border border-red-600 bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                                                                className="py-2.5 px-3 rounded-xl border border-bp-danger-fill bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
                                                             >
                                                                 <span>🏁</span> Finalise Wind-Up
                                                             </button>
@@ -1619,7 +1619,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     type="button"
                                                     disabled={requestProcessingId === req.id}
                                                     onClick={() => handleApproveRequest(req.id)}
-                                                    className="px-3 py-2 rounded-lg bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 min-h-[36px]"
+                                                    className="px-3 py-2 rounded-lg bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-xs font-bold shadow-xs transition-colors disabled:opacity-50 min-h-[36px]"
                                                 >
                                                     {requestProcessingId === req.id ? 'Approving…' : 'Approve'}
                                                 </button>
@@ -1710,7 +1710,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             disabled={submittingSuccession}
                                                             onClick={() => handleVoteSuccession(activeProposal.id, 'yes')}
                                                             aria-label={`Yes, make ${activeProposal.candidateCallsign} ${kw.lead}`}
-                                                            className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[48px]"
+                                                            className="flex-1 py-2.5 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[48px]"
                                                         >
                                                             {submittingSuccession ? 'Registering…' : 'Yes'}
                                                         </button>
@@ -1754,7 +1754,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             <button
                                                 type="submit"
                                                 disabled={submittingSuccession || !selectedSuccessionCandidate}
-                                                className="py-2 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 shrink-0 min-h-[44px]"
+                                                className="py-2 px-4 rounded-xl bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on font-bold text-xs shadow-sm transition-all disabled:opacity-50 shrink-0 min-h-[44px]"
                                             >
                                                 {submittingSuccession ? 'Proposing…' : `Propose ${kw.kind === 'project' ? 'Leader' : 'Lead'}`}
                                             </button>
@@ -1836,7 +1836,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         <button
                                             type="submit"
                                             disabled={submittingJoinRequest}
-                                            className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[44px]"
+                                            className="w-full py-2.5 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[44px]"
                                         >
                                             {submittingJoinRequest ? 'Submitting request…' : `Request to join as a ${kw.keeper}`}
                                         </button>
@@ -2271,7 +2271,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         <button
                                             type="submit"
                                             disabled={!threadInput.trim() || threadPosting}
-                                            className="px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
+                                            className="px-4 py-2 text-xs font-bold rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
                                         >
                                             {threadPosting ? 'Posting...' : 'Post'}
                                         </button>
@@ -2428,7 +2428,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <button
                                     type="submit"
                                     disabled={posting}
-                                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-sm disabled:opacity-50"
+                                    className="flex-1 py-2.5 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm disabled:opacity-50"
                                 >
                                     {posting ? 'Posting…' : 'Publish Listing'}
                                 </button>

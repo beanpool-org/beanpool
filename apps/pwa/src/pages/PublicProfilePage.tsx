@@ -346,7 +346,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         ) : (
                             <button 
                                 onClick={() => onMessage(pubkey)}
-                                className="mt-6 bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none rounded-xl px-6 py-2.5 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex items-center gap-2"
+                                className="mt-6 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none rounded-xl px-6 py-2.5 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex items-center gap-2"
                             >
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -365,7 +365,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         key={lvl}
                                         onClick={() => handleVouch(lvl)}
                                         disabled={vouching}
-                                        className="flex-1 bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-white border-none rounded-xl px-3 py-2 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex flex-col items-center leading-tight"
+                                        className="flex-1 bg-bp-gold-fill hover:bg-bp-gold-hover disabled:opacity-60 text-bp-gold-on border-none rounded-xl px-3 py-2 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex flex-col items-center leading-tight"
                                     >
                                         <span className="text-[13px]">{label}</span>
                                         <span className="text-[11px] opacity-90 font-mono">{amt}</span>
@@ -428,7 +428,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         setChatPrefill(message, pubkey);
                                         onMessage(pubkey);
                                     }}
-                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm mt-1"
                                 >
                                     💬 Collaborate with {profile?.callsign || 'Member'}
                                 </button>
@@ -455,7 +455,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         setQuizInitialMode('quick');
                                         setShowQuizModal(true);
                                     }}
-                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm mt-1"
                                 >
                                     ⚡ Take 60s Quiz
                                 </button>
@@ -483,7 +483,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         setChatPrefill(message, pubkey);
                                         onMessage(pubkey);
                                     }}
-                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm mt-1"
                                 >
                                     💬 Nudge {profile?.callsign || 'Member'} in Chat
                                 </button>
@@ -510,7 +510,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         setQuizInitialMode('quick');
                                         setShowQuizModal(true);
                                     }}
-                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm mt-1"
                                 >
                                     ⚡ Take 60s Quiz
                                 </button>
@@ -629,7 +629,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                 setQuizInitialMode('deep');
                                                 setShowQuizModal(true);
                                             }}
-                                            className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
+                                            className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm truncate"
                                         >
                                             🧭 More accurate
                                         </button>
@@ -670,7 +670,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     setQuizInitialMode('quick');
                                     setShowQuizModal(true);
                                 }}
-                                className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-none cursor-pointer transition-colors shadow-sm mt-1"
                             >
                                 ⚡ Take 60s Quiz
                             </button>

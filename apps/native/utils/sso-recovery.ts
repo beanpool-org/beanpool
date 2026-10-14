@@ -62,7 +62,6 @@ import {
     recoveryWordsMatchPublicKey,
     openListedFragment,
     KEEPER_ALG_RELEASE,
-    t,
 } from '@beanpool/core';
 import { signedPost } from './node-post';
 import { seedToKeypair, decodeBase64 } from './crypto';
@@ -196,19 +195,30 @@ export async function lookupRestorable(anchorUrl: string, name: string): Promise
     }
 }
 
-/** Why a restore stopped before it began: the community's lookup couldn't be had. Nothing was released or saved. */
-export function lookupUnreachable(): string {
-    return t("Can't reach the community right now. Try again in a minute.");
-}
+/**
+ * Why {@link recoverAccountWithSso} stopped, as data: a code, and the name the member typed. The screen says it in the
+ * member's language (community-restore-copy.ts `restoreRefusalText`, welcome.tsx). Never a sentence here: this module
+ * turns a sign-in copy into the key and checks its 12 words, so nothing in it reaches the words layer
+ * (packages/beanpool-core/src/__tests__/recovery-path-files.test.ts).
+ *
+ * - `lookup_unreachable`: before it began, the community's lookup couldn't be had. Nothing was released or saved.
+ * - `no_restorable_account`: before it began, the community listed no account by that name that a sign-in can bring back.
+ * - `not_that_account`: with the copy open, it made another key than the account the community lists. Nothing was saved.
+ */
+export type CommunityRestoreRefusal =
+    | { code: 'lookup_unreachable' }
+    | { code: 'no_restorable_account'; name: string }
+    | { code: 'not_that_account'; name: string };
 
-/** Why a restore stopped before it began: the community lists no account by that name that a sign-in can bring back. */
-export function noRestorableAccount(callsign: string): string {
-    return t("No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.", { name: callsign });
-}
+/** {@link recoverAccountWithSso} refused, for one of the {@link CommunityRestoreRefusal} reasons. */
+export class CommunityRestoreRefused extends Error {
+    readonly refusal: CommunityRestoreRefusal;
 
-/** Why a restore stopped with the copy open: it made another key than the account the community lists. Nothing was saved. */
-export function notThatAccount(callsign: string): string {
-    return t("The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.", { name: callsign });
+    constructor(refusal: CommunityRestoreRefusal) {
+        super(`Community restore refused: ${refusal.code}`);
+        this.name = 'CommunityRestoreRefused';
+        this.refusal = refusal;
+    }
 }
 
 /** Why {@link recoverAccountWithSso} refused in a build with a vault: never met by a member (the screen doesn't offer it). */
@@ -266,9 +276,9 @@ export async function recoverAccountWithSso(options: {
     // 0. The accounts the community has by this name, as the web's restore asks first. The key this restore rebuilds
     // must be one of them. Without the community's answer, or with no such account, nothing is released or saved.
     const listed = await lookupRestorable(finalAnchorUrl, rawCallsign);
-    if (!listed) throw new Error(lookupUnreachable());
+    if (!listed) throw new CommunityRestoreRefused({ code: 'lookup_unreachable' });
     const restorable = listed.filter(a => a.canRecoverBySso);
-    if (!restorable.length) throw new Error(noRestorableAccount(rawCallsign));
+    if (!restorable.length) throw new CommunityRestoreRefused({ code: 'no_restorable_account', name: rawCallsign });
 
     // 1. Generate throwaway ephemeral keypair to bind this recovery session
     const ephSeed = Crypto.getRandomBytes(32);
@@ -454,7 +464,7 @@ export async function recoverAccountWithSso(options: {
     const account = restorable.find(a => a.publicKey === restoredKeypair.publicKeyHex.toLowerCase());
     if (!account) {
         console.log(`[SSO-RECOVERY] ${options.provider}: the copy opened to another key than the account the community lists; nothing saved`);
-        throw new Error(notThatAccount(rawCallsign));
+        throw new CommunityRestoreRefused({ code: 'not_that_account', name: rawCallsign });
     }
 
     // The words are kept only if they make the key being saved, compared by public key. openSeedFromSso

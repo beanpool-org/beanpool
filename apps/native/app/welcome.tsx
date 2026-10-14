@@ -59,6 +59,7 @@ import {
     checkSsoRestore, finishSsoRestore, lookupRestorable, recoverAccountWithSso, startSsoRestore, stopSsoRestoreAfterWords,
     vaultKeepsNoCopyFor, waitingSsoRestore, type PendingVaultRestore, type RestorableAccount, type RestoredFromVault,
 } from '../utils/sso-recovery';
+import { restoreRefusalText } from '../utils/community-restore-copy';
 import { hasVault, holdEndsText, VAULT_MESSAGES, VaultError } from '../utils/vault';
 import { landNextOn } from '../utils/member-landing';
 import { MemberAvatar } from '../components/MemberAvatar';
@@ -1272,7 +1273,7 @@ export default function WelcomeScreen() {
             if (e.reason === 'cancelled' || e.message === 'Sign-in was cancelled.') {
                 setError(null);
             } else {
-                setError(e.message || `Recovery failed: ${String(e)}`);
+                setError(restoreRefusalText(e) || `Recovery failed: ${String(e)}`);
                 leaveReplace('ssoRecover');
             }
         } finally {

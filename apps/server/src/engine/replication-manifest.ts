@@ -166,7 +166,7 @@ export const TABLES: Record<string, TableEntry> = {
             board_standing_changed_at`),
         except: {
             last_active_at: { reason: 'travels only with another change of the row, by design: it moves on every signed request and is not in the touch trigger' },
-            callsign_fold: { reason: "each server makes its own from callsign: db.ts migrateCallsignFold's triggers write it on every insert and rename, the import's included" },
+            callsign_fold: { reason: "each server makes its own from callsign: db.ts migrateCallsignFold's triggers write it on every insert and rename, the import's included; the export leaves it out of `standing` (@beanpool/engine sync.ts memberOfRow) and the import never writes it (engine/sync.ts memberColumns)" },
         },
     },
     // Holiday, notification settings and reminder defaults, in each member's row (`preferences`, G2b): every writer stamps

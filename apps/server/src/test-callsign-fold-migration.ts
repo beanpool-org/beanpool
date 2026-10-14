@@ -11,13 +11,14 @@
  *     inserts like these);
  *   - a handle without name_fold fails loudly on a write to members and still reads; SQLite's own lower() leaves "Олег"
  *     as it is (no ICU), which is why the fold is JS's;
- *   - the lookups are answered from idx_members_callsign_fold.
+ *   - the lookups are answered from idx_members_callsign_fold;
+ *   - a standby is sent each member's row without callsign_fold (it makes its own; the state hash names keys only).
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-callsign-fold-migration.ts
  */
 import Database from 'better-sqlite3';
 import { db, migrateCallsignFold } from './db/db.js';
-import { initStateEngine, isCallsignAvailable, updateProfile } from './state-engine.js';
+import { exportSyncState, initStateEngine, isCallsignAvailable, updateProfile } from './state-engine.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -38,7 +39,7 @@ function boot(): { warned: string[]; threw: unknown } {
     return { warned: warned.filter((l) => l.includes('hold one name')), threw };
 }
 
-function main(): void {
+async function main(): Promise<void> {
     console.log('callsign_fold on a node that already holds clashing names\n');
     initStateEngine();
 
@@ -113,9 +114,15 @@ function main(): void {
         `SELECT public_key FROM members WHERE callsign_fold = name_fold(?) AND status NOT IN ('migrated', 'pruned')`,
     ]) assert(plan(sql).includes('idx_members_callsign_fold'), `answered from the index: ${sql.slice(0, 70)}…`);
 
+    console.log('\n— 7. what a standby is sent —');
+    const payload = await exportSyncState('fold-test');
+    const sent = (payload.members as any[]).find((m) => m.publicKey === pk(7));
+    assert(!!sent?.standing && sent.standing.callsign === 'Straße' && !('callsign_fold' in sent.standing),
+        `a member's whole row goes without callsign_fold: the standby makes its own (${Object.keys(sent?.standing ?? {}).includes('callsign_fold') ? 'sent' : 'not sent'})`);
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ callsign_fold migration PASSED.');
 }
 
-try { main(); process.exit(process.exitCode ?? 0); } catch (e) { console.error(e); process.exit(1); }
+main().then(() => process.exit(process.exitCode ?? 0)).catch((e) => { console.error(e); process.exit(1); });

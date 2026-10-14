@@ -62,6 +62,7 @@ import {
     recoveryWordsMatchPublicKey,
     openListedFragment,
     KEEPER_ALG_RELEASE,
+    t,
 } from '@beanpool/core';
 import { signedPost } from './node-post';
 import { seedToKeypair, decodeBase64 } from './crypto';
@@ -196,16 +197,18 @@ export async function lookupRestorable(anchorUrl: string, name: string): Promise
 }
 
 /** Why a restore stopped before it began: the community's lookup couldn't be had. Nothing was released or saved. */
-export const LOOKUP_UNREACHABLE = "Can't reach the community right now. Try again in a minute.";
+export function lookupUnreachable(): string {
+    return t("Can't reach the community right now. Try again in a minute.");
+}
 
 /** Why a restore stopped before it began: the community lists no account by that name that a sign-in can bring back. */
 export function noRestorableAccount(callsign: string): string {
-    return `No account called ${callsign} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.`;
+    return t("No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.", { name: callsign });
 }
 
 /** Why a restore stopped with the copy open: it made another key than the account the community lists. Nothing was saved. */
 export function notThatAccount(callsign: string): string {
-    return `The account that came back isn't ${callsign}, so nothing was saved on this phone. Try again, or use your 12 words.`;
+    return t("The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.", { name: callsign });
 }
 
 /** Why {@link recoverAccountWithSso} refused in a build with a vault: never met by a member (the screen doesn't offer it). */
@@ -263,7 +266,7 @@ export async function recoverAccountWithSso(options: {
     // 0. The accounts the community has by this name, as the web's restore asks first. The key this restore rebuilds
     // must be one of them. Without the community's answer, or with no such account, nothing is released or saved.
     const listed = await lookupRestorable(finalAnchorUrl, rawCallsign);
-    if (!listed) throw new Error(LOOKUP_UNREACHABLE);
+    if (!listed) throw new Error(lookupUnreachable());
     const restorable = listed.filter(a => a.canRecoverBySso);
     if (!restorable.length) throw new Error(noRestorableAccount(rawCallsign));
 

@@ -49,7 +49,7 @@ vi.mock('../node-post', () => ({ signedPost: vi.fn() }));
 import { sealSeedToSso } from '@beanpool/core';
 import { signedPost } from '../node-post';
 import { signInWithGoogle, SsoSignInError } from '../sso-signin';
-import { LOOKUP_UNREACHABLE, notThatAccount, recoverAccountWithSso } from '../sso-recovery';
+import { lookupUnreachable, notThatAccount, recoverAccountWithSso } from '../sso-recovery';
 import { seedToKeypair } from '../crypto';
 import { stubCommunityLookup } from './community-lookup';
 
@@ -149,7 +149,7 @@ describe('the restore says when the sign-in is done, so the screen knows a page 
         await node(SEED);
         stubCommunityLookup('https://elsewhere.example.org', []);
 
-        await expect(restore()).rejects.toThrow(LOOKUP_UNREACHABLE);
+        await expect(restore()).rejects.toThrow(lookupUnreachable());
 
         expect(signInWithGoogle).not.toHaveBeenCalled();
         expect(onSignedIn).not.toHaveBeenCalled();

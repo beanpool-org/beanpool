@@ -213,6 +213,11 @@ describe('CSS for the web app and the manager', () => {
     it('maps names to values per theme, and Tailwind names to the variables', () => {
         expect(brandCssVariableMap('light')['--bp-gold-on']).toBe('#1d231d');
         expect(brandCssVariableMap('dark')['--bp-chip-danger-ink']).toBe('#fca5a5');
+        // The deal tints as the web lays them: plain rgba, light exactly the old web values.
+        expect(brandCssVariableMap('light')['--bp-deal-held-wash']).toBe('rgba(209, 250, 229, 0.4)');
+        expect(brandCssVariableMap('light')['--bp-deal-released-wash']).toBe('rgba(167, 243, 208, 0.4)');
+        expect(brandCssVariableMap('light')['--bp-deal-cancelled-wash']).toBe('rgba(254, 226, 226, 0.4)');
+        expect(brandCssVariableMap('dark')['--bp-deal-held-wash']).toBe('rgba(2, 44, 34, 0.4)');
         const { bp } = brandTailwindColours();
         expect(bp['cta-fill']).toBe('var(--bp-cta-fill)');
         expect(bp['chip-warn-tint']).toBe('var(--bp-chip-warn-tint)');

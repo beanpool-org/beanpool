@@ -110,7 +110,7 @@ What each is for, and its ratios (the same in both themes for fills; lowest page
 | `accent` | chat's send and unread badge, progress, selected toggles | 4.86 / hover 6.66 | 9.65 / 12.26 (charcoal words) |
 | `chip.ok` / `need` / `warn` / `danger` | verified tick and Offer (`ok`), Need, counts | 6.78 / 6.38 / 6.37 / 5.30 | 9.94 / 5.56 / 10.39 / 8.51 |
 | `chip.accent` | a selected sage chip, the accent's pale ground | 4.99 | 6.45 |
-| `deal.held` / `released` / `cancelled` | a trade's lines in a DM (held in trust, released, cancelled): the web lays the tint at 40 % over the chat (`DEAL_TINT_ALPHA`), the phone at 70 %; light is the web as it was | 6.88 / 6.55 / 7.25 | 8.23 / 6.85 / 7.10 |
+| `deal.held` / `released` / `cancelled` | a trade's lines in a DM (held in trust, released, cancelled): the web lays the tint at 40 % over the chat (`DEAL_TINT_ALPHA`, drawn from the plain rgba variable `--bp-deal-<name>-wash`: no color-mix, which old Android WebViews drop), the phone at 70 %; light is the web as it was | 6.88 / 6.55 / 7.25 | 8.23 / 6.85 / 7.10 |
 | `ink.brand` | the brand green as words and icons | 4.77 | 5.58 |
 | `ink.success` | success messages, ticks | 4.77 | 5.58 |
 | `ink.danger` | errors, destructive links | 5.63 | 5.65 |

@@ -224,7 +224,10 @@ export const WEB_INK_GROUNDS: { readonly [T in BrandTheme]: readonly string[] } 
  */
 export const WEB_ONLY_INKS: readonly string[] = ['info'];
 
-/** How much of a deal tint the web lays over the chat (its old rgba alpha). Its words are judged on that composite. */
+/**
+ * How much of a deal tint the web lays over the chat (its old rgba alpha). Its words are judged on that composite; the
+ * web draws it from the `--bp-deal-<name>-wash` variable brandCssVariableMap() writes.
+ */
 export const DEAL_TINT_ALPHA = 0.4;
 
 /** Roles allowed 3.0 instead of 4.5 because their words are always 24 px or larger (WCAG "large text"). None today. */
@@ -350,10 +353,14 @@ export function brandCssVariableName(path: string): string {
     return `--bp-${path.split('.').join('-')}`;
 }
 
-/** One theme's custom properties: `{ '--bp-cta-fill': '#b85236', … }`. */
+/**
+ * One theme's custom properties: `{ '--bp-cta-fill': '#b85236', … }`, and each deal tint as the web lays it, a plain
+ * rgba (`--bp-deal-held-wash: rgba(209, 250, 229, 0.4)`): no color-mix(), which old Android WebViews drop.
+ */
 export function brandCssVariableMap(theme: BrandTheme): Record<string, string> {
     const out: Record<string, string> = {};
     for (const { path, colour } of brandColourLeaves()) out[brandCssVariableName(path)] = colour[theme];
+    for (const [name, line] of Object.entries(BRAND_COLOURS.deal)) out[`--bp-deal-${name}-wash`] = rgbaOf(line.tint[theme], DEAL_TINT_ALPHA);
     return out;
 }
 

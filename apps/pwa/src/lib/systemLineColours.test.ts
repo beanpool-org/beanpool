@@ -5,18 +5,25 @@
 import { describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEAL_TINT_ALPHA, WEB_INK_GROUNDS, blendOver, brandCssVariableMap, contrastRatio, rgbaOf } from '@beanpool/core/brand-colours';
+import { DEAL_TINT_ALPHA, WEB_INK_GROUNDS, brandCssVariableMap, contrastRatio } from '@beanpool/core/brand-colours';
 import { systemLineColours } from './systemLineColours';
 
 const theme = { light: brandCssVariableMap('light'), dark: brandCssVariableMap('dark') };
 const varOf = (css: string) => /var\((--[a-z0-9-]+)\)/.exec(css)?.[1] ?? '';
 const resolve = (css: string, t: 'light' | 'dark') => theme[t][varOf(css)];
-/** `color-mix(in srgb, var(--x) 40%, transparent)` → the colour and its alpha. */
-const mix = (css: string) => {
-    const m = /^color-mix\(in srgb, var\((--[a-z0-9-]+)\) (\d+)%, transparent\)$/.exec(css);
-    if (!m) throw new Error(`not a library tint: ${css}`);
-    return { name: m[1], alpha: Number(m[2]) / 100 };
+/** `rgba(2, 44, 34, 0.4)` laid over the opaque `#rrggbb` ground, as the opaque colour a reader sees. */
+const over = (rgba: string, ground: string) => {
+    const m = /^rgba\((\d+), (\d+), (\d+), ([\d.]+)\)$/.exec(rgba);
+    if (!m) throw new Error(`not a plain rgba: ${rgba}`);
+    const a = Number(m[4]);
+    return '#' + [1, 2, 3].map((i) => Math.round(Number(m[i]) * a + parseInt(ground.slice(2 * i - 1, 2 * i + 1), 16) * (1 - a)).toString(16).padStart(2, '0')).join('');
 };
+const SRC_DIR = path.resolve(__dirname, '..');
+const sources = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) return sources(p);
+    return /\.(tsx?|css)$/.test(e.name) && !/\.test\.tsx?$/.test(e.name) ? [p] : [];
+});
 
 const OLD_LIGHT = {
     ESCROW_FUNDED: { background: 'rgba(209, 250, 229, 0.4)', color: '#065f46', border: '#10b981' },
@@ -28,23 +35,35 @@ describe("a trade's lines in a DM", () => {
     for (const [type, old] of Object.entries(OLD_LIGHT)) {
         it(`${type}: library roles only, light exactly as before`, () => {
             const c = systemLineColours(type);
+            expect(c.background).toMatch(/^var\(--bp-deal-[a-z]+-wash\)$/);
             for (const v of [c.color, c.border]) expect(v).toMatch(/^var\(--bp-deal-[a-z]+-(ink|border)\)$/);
-            const { name, alpha } = mix(c.background);
-            expect(name).toMatch(/^--bp-deal-[a-z]+-tint$/);
-            expect(alpha).toBe(DEAL_TINT_ALPHA);
-            expect({ background: rgbaOf(theme.light[name], alpha), color: resolve(c.color, 'light'), border: resolve(c.border, 'light') }).toEqual(old);
+            expect({ background: resolve(c.background, 'light'), color: resolve(c.color, 'light'), border: resolve(c.border, 'light') }).toEqual(old);
         });
 
         it(`${type}: in dark, words 4.5:1+ on the pill over the chat, outline 3:1+ on the page`, () => {
             const c = systemLineColours(type);
-            const { name, alpha } = mix(c.background);
             for (const ground of WEB_INK_GROUNDS.dark) {
-                const pill = blendOver(theme.dark[name], alpha, ground);
+                const pill = over(resolve(c.background, 'dark'), ground);
                 expect(contrastRatio(resolve(c.color, 'dark'), pill), `${type} words on ${pill}`).toBeGreaterThanOrEqual(4.5);
                 expect(contrastRatio(resolve(c.border, 'dark'), ground), `${type} outline on ${ground}`).toBeGreaterThanOrEqual(3);
             }
         });
     }
+
+    it('an old WebView (no color-mix) draws exactly this: the web app has no color-mix(), and every tint is a plain rgba', () => {
+        // Chrome < 111 and old Android WebViews drop a color-mix() declaration (memory product-audience-small-screens:
+        // API 26). With none in the sources or CSS there is nothing to drop, so the numbers above are what they draw.
+        const found = sources(SRC_DIR).filter((p) => fs.readFileSync(p, 'utf8').includes('color-mix('));
+        expect(found.map((p) => path.relative(SRC_DIR, p))).toEqual([]);
+        const plainRgba = /^rgba\(\d+, \d+, \d+, ([\d.]+)\)$/;
+        for (const t of ['light', 'dark'] as const) {
+            for (const type of Object.keys(OLD_LIGHT)) {
+                const value = resolve(systemLineColours(type).background, t);
+                expect(value, `${t} ${type}`).toMatch(plainRgba);
+                expect(Number(plainRgba.exec(value)![1])).toBe(DEAL_TINT_ALPHA);
+            }
+        }
+    });
 
     it('any other system line keeps the page grey and its secondary words', () => {
         expect(systemLineColours('JOINED')).toEqual({ background: 'var(--bg-hover)', color: 'var(--text-secondary)', border: 'transparent' });

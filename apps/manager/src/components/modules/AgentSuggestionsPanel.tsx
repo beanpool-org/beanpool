@@ -112,20 +112,28 @@ export function AgentSuggestionsPanel({ activeNode, viewer = { kind: 'password' 
         }
     };
 
-    if (!drawn || !items || (items.length === 0 && !message)) return null;
+    if (!drawn) return null;
+    if (items && items.length === 0 && !message) return null;
 
     return (
         <section aria-labelledby="agent-suggestions-title" data-testid="agent-suggestions-card" className="bg-nature-900/80 border border-nature-800 rounded-2xl p-4 sm:p-6 shadow-xl space-y-4">
             <div className="border-b border-nature-800 pb-3 min-w-0">
                 <h3 id="agent-suggestions-title" className="text-base font-bold text-white m-0 break-words">
-                    Suggested by an AI assistant ({items.length})
+                    Suggested by an AI assistant{items ? ` (${items.length})` : ''}
                 </h3>
                 <p className="text-xs text-nature-400 m-0 mt-1 break-words">
                     An assistant cannot act: it suggests, and nothing changes until its member approves. Read the report itself, not only the assistant&apos;s words.
                 </p>
             </div>
             {message && <p role="status" className="text-sm text-nature-200 m-0 break-words">{message}</p>}
-            <ul className="list-none m-0 p-0 space-y-4">
+            {items === null && !message && (
+                <div className="flex items-center gap-2 text-xs text-nature-400" data-testid="agent-suggestions-loading">
+                    <span className="animate-spin text-xs">🔄</span>
+                    <span>Loading assistant suggestions…</span>
+                </div>
+            )}
+            {items && items.length > 0 && (
+                <ul className="list-none m-0 p-0 space-y-4">
                 {items.map((s) => (
                     <li key={s.id} className="border border-nature-800 rounded-xl p-3 sm:p-4 space-y-3 min-w-0" data-testid="agent-suggestion">
                         <p className="text-sm text-white m-0 font-semibold break-words">
@@ -181,7 +189,8 @@ export function AgentSuggestionsPanel({ activeNode, viewer = { kind: 'password' 
                         </div>
                     </li>
                 ))}
-            </ul>
+                </ul>
+            )}
         </section>
     );
 }

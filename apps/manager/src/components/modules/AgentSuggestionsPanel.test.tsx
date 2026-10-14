@@ -116,4 +116,17 @@ describe('AgentSuggestionsPanel', () => {
         expect(container.textContent).toBe('');
         expect(calls).toHaveLength(0);
     });
+
+    it('shows loading indicator while fetching suggestions', async () => {
+        let resolveFetch: (val: any) => void = () => {};
+        vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise((resolve) => {
+            resolveFetch = resolve;
+        }));
+
+        render(<AgentSuggestionsPanel activeNode={node} viewer={ADMIN_KEY} />);
+        expect(screen.getByTestId('agent-suggestions-loading')).toHaveTextContent('Loading assistant suggestions…');
+
+        resolveFetch(new Response(JSON.stringify({ suggestions: [card()] }), { status: 200 }));
+        await waitFor(() => expect(screen.queryByTestId('agent-suggestions-loading')).toBeNull());
+    });
 });

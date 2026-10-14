@@ -175,6 +175,9 @@ export interface EventCopy {
     enterprisePubkey: string | null;
     /** The group a group-only event belongs to; null for a whole-community event. */
     groupId: string | null;
+    /** An online event copies as online, with its link when the copier may see it (event times, §9). */
+    online: boolean;
+    link: string;
 }
 
 /**
@@ -200,6 +203,8 @@ export function buildEventCopy(post: any, viewerPubkey?: string | null): EventCo
         privateNote: post?.eventPrivateNote ?? post?.event_private_note ?? '',
         enterprisePubkey: !groupId && author && viewerPubkey && author !== viewerPubkey ? author : null,
         groupId,
+        online: isOnlineEvent(post),
+        link: post?.eventLink ?? '',
     };
 }
 
@@ -947,12 +952,13 @@ function clock12(local: string): string {
  */
 export function eventTimeAdjustedText(adjusted: { start?: EventClockAdjustment | null; end?: EventClockAdjustment | null } | null | undefined, tz: string | null | undefined): string[] {
     if (!adjusted) return [];
-    const place = zoneLabelFor(tz, NaN).replace(/ time$/, '');
+    // The zone's place, when the form knew it; the node's answer carries no zone of its own.
+    const place = tz ? ` in ${zoneLabelFor(tz, NaN).replace(/ time$/, '')}` : '';
     const lines: string[] = [];
     for (const [side, a] of [['start', adjusted.start], ['end', adjusted.end]] as const) {
         if (!a || !LOCAL_CLOCK_RE.test(a.asked)) continue;
         const d = clockDate(a.asked)!;
-        const on = `on ${d.getDate()} ${MONTH_WORDS[d.getMonth()]} in ${place}`;
+        const on = `on ${d.getDate()} ${MONTH_WORDS[d.getMonth()]}${place}`;
         const what = side === 'start' ? clock12(a.asked) : `The end, ${clock12(a.asked)},`;
         if (a.kind === 'gap') {
             const saved = LOCAL_CLOCK_RE.test(a.saved) ? ` It was saved as ${clock12(a.saved)}.` : '';

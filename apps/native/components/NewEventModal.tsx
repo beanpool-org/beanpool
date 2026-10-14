@@ -7,6 +7,12 @@
  * the public-pin warning; description; photo; the note for people who are
  * going; audience (this community or a group); and "Post as", shown only to a keeper or convenor.
  *
+ * Event times (scratch/global-node/DESIGN-event-times-fable.md §3, slice 3): "At a place / Online" heads the place section;
+ * online hides the place, address and pin and asks for a link to join. Under Starts and Ends, one muted line names the zone
+ * the clocks are in when it is not this phone's (in person: the pin's, from the node; online: always, the phone's own or a
+ * picked one), with Change opening a searchable list the node serves. The phone makes ONE Intl call (its own zone) and no
+ * zone arithmetic: the node turns the clock + zone into the instant, and says after saving if a clock fell in a DST change.
+ *
  * Reach is always local in v1 (§2.4), so there is no linked-communities option. Keyboard avoidance comes from
  * react-native-keyboard-controller's root provider; this Modal must not add its own.
  *
@@ -14,7 +20,7 @@
  * event, dates and photo included; Save sends only what changed. Audience and host are fixed once posted.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
     View, Text, StyleSheet, Modal, TextInput, Pressable, ScrollView, Alert, ActivityIndicator, Platform,
     Linking, Keyboard,
@@ -30,13 +36,14 @@ import * as Crypto from 'expo-crypto';
 import { Image } from 'expo-image';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
-import { createPost, fetchGroups, getBalance, getTreasuries, updateEvent } from '../utils/db';
+import { createPost, fetchEventZone, fetchEventZones, fetchGroups, getBalance, getTreasuries, isRouteMissing, updateEvent } from '../utils/db';
 import { HAS_MAPS_KEY } from '../utils/maps';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
 import {
     buildEventDraft, buildEventEditPatch, approximatePin, defaultEventEnd, formatPickerValue,
     EVENT_PIN_WARNING, EVENT_PIN_HINT, EVENT_PLACE_NAME_MAX, EVENT_PRIVATE_NOTE_MAX, EVENT_TITLE_MAX,
-    type EventCopy, type EventEditValues,
+    EVENT_LINK_HINT, EVENT_LINK_MAX, deviceTimeZone, eventTimeAdjustedText, eventZoneLine, filterZones, sameZone, zonePickerEntry,
+    type EventCopy, type EventEditValues, type EventZone, type EventZoneSource,
 } from '../utils/events';
 import { effectiveEventAudience } from '../utils/event-extras';
 import { EVENT_ACCENT } from './EventCard';
@@ -49,6 +56,12 @@ import type { AddressResult } from '@beanpool/core';
 const DEFAULT_REGION = { latitude: -28.5523, longitude: 153.4991, latitudeDelta: 0.02, longitudeDelta: 0.02 };
 
 type Field = 'start' | 'end';
+
+/** The zone the Starts and Ends clocks are in, and where it came from; `moved` after the pin moved it ("Times are now…"). */
+type FormZone = { tz: string | null; offsetMinutes: number | null; source: EventZoneSource | null; moved: boolean };
+const NO_ZONE: FormZone = { tz: null, offsetMinutes: null, source: null, moved: false };
+/** Rows the zone list shows at once; typing narrows the rest (445 zones on a node with event times). */
+const ZONE_ROWS = 40;
 
 const HEADER_PAD_TOP = 10;
 type HostOption = { key: string; label: string; authorPubkey: string; groupId: string | null };
@@ -107,6 +120,30 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const [copiedHost, setCopiedHost] = useState<HostOption | null>(null);
     const [isCopy, setIsCopy] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+
+    // Event times. The device's zone is read once per opening, the one Intl call (§7 item 7).
+    const deviceTz = useMemo(() => (visible ? deviceTimeZone() : null), [visible]);
+    const [online, setOnline] = useState(false);
+    const [link, setLink] = useState('');
+    const [zone, setZone] = useState<FormZone>(NO_ZONE);
+    const [zonePicker, setZonePicker] = useState<{ open: boolean; query: string; error: string | null }>({ open: false, query: '', error: null });
+    const [zoneList, setZoneList] = useState<EventZone[] | null>(null);
+    // Each pin lookup takes a ticket; an answer for an older pin (or after a pick) is dropped.
+    const zoneTicket = useRef(0);
+    const deviceZone = (): FormZone => (deviceTz
+        ? { tz: deviceTz, offsetMinutes: -new Date().getTimezoneOffset(), source: 'device', moved: false }
+        : NO_ZONE);
+    // The pin's zone, from the node. A node before event times (or no signal) answers nothing: the line stays away and
+    // the node reads the clock at the pin itself.
+    const lookupPinZone = (lat: number, lng: number) => {
+        const ticket = ++zoneTicket.current;
+        fetchEventZone(lat, lng).then(z => {
+            if (ticket !== zoneTicket.current) return;
+            setZone(prev => (z
+                ? { tz: z.tz, offsetMinutes: Number.isFinite(z.offsetMinutes) ? z.offsetMinutes : null, source: 'pin', moved: !!prev.tz && !sameZone(prev.tz, z.tz) }
+                : NO_ZONE));
+        });
+    };
 
     // Android shows the OS dialog twice (date, then time); iOS shows one inline datetime spinner.
     const [picker, setPicker] = useState<{ field: Field; mode: 'date' | 'time'; draft: Date } | null>(null);
@@ -168,6 +205,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setTitle(''); setStart(null); setEnd(null); setPlaceName(''); setPin(null); setApproximate(false);
         setDescription(''); setPhoto(null); setNote(''); setAudienceGroupId(null); setHostKey('me'); setPicker(null);
         setCopiedHost(null); setIsCopy(false);
+        setOnline(false); setLink(''); setZone(NO_ZONE); setZonePicker({ open: false, query: '', error: null });
+        zoneTicket.current++;
     };
 
     // Fill the form from the copied event, once per opening: a host who then edits a field must not have it
@@ -193,9 +232,13 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                 : null;
         setCopiedHost(copied);
         setHostKey(copied?.key ?? 'me');
-        if (prefill.lat != null && prefill.lng != null) {
+        setOnline(prefill.online);
+        setLink(prefill.link);
+        setZone(prefill.online ? deviceZone() : NO_ZONE);
+        if (!prefill.online && prefill.lat != null && prefill.lng != null) {
             setPin({ lat: prefill.lat, lng: prefill.lng });
             centreMap(prefill.lat, prefill.lng);
+            lookupPinZone(prefill.lat, prefill.lng);
         } else {
             setPin(null);
         }
@@ -218,6 +261,10 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setPhoto(v.photo);
         setPicker(null);
         setApproximate(false);
+        setOnline(v.online === true);
+        setLink(v.link ?? '');
+        // The event's own zone, as the node holds it; where it came from is not known now, so no "(where the pin is)".
+        setZone({ tz: v.tz ?? null, offsetMinutes: v.tzOffsetMinutes ?? null, source: v.online && sameZone(v.tz, deviceTz) ? 'device' : null, moved: false });
         if (v.lat != null && v.lng != null) {
             setPin({ lat: v.lat, lng: v.lng });
             centreMap(v.lat, v.lng);
@@ -235,6 +282,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         appliedInitialPin.current = true;
         setPin({ lat: initialPin.lat, lng: initialPin.lng });
         centreMap(initialPin.lat, initialPin.lng);
+        lookupPinZone(initialPin.lat, initialPin.lng);
     }, [visible, prefill, initialPin]);
 
     const openPicker = (field: Field) => {
@@ -271,7 +319,46 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const placePin = (lat: number, lng: number) => {
         setPin({ lat, lng });
         setApproximate(false);
+        // Moving the pin re-asks its zone; the clocks the host typed stay, and the line says "Times are now Accra time".
+        lookupPinZone(lat, lng);
     };
+
+    const chooseOnline = (next: boolean) => {
+        if (next === online) return;
+        Keyboard.dismiss();
+        setOnline(next);
+        zoneTicket.current++;
+        setZonePicker(p => ({ ...p, open: false }));
+        if (next) setZone(deviceZone());
+        else if (pin) { setZone(NO_ZONE); lookupPinZone(pin.lat, pin.lng); }
+        else setZone(NO_ZONE);
+    };
+
+    const openZonePicker = () => {
+        Keyboard.dismiss();
+        setZonePicker({ open: true, query: '', error: null });
+        if (zoneList) return;
+        fetchEventZones()
+            .then(zones => setZoneList(zones))
+            .catch(e => setZonePicker(p => ({
+                ...p,
+                error: isRouteMissing(e)
+                    ? "This community's node does not offer time zones yet."
+                    : 'The list of time zones could not be loaded. Try again when you have signal.',
+            })));
+    };
+
+    const pickZone = (z: EventZone) => {
+        zoneTicket.current++;
+        setZone({ tz: z.tz, offsetMinutes: z.offsetMinutes, source: 'picked', moved: false });
+        setZonePicker({ open: false, query: '', error: null });
+    };
+
+    // The zone's offset for the form's past check; the phone's own zone uses the Date itself, which knows its DST.
+    const zoneOffset = zone.source === 'device' ? null : zone.offsetMinutes;
+    // The pickers' floor is this phone's now, which is only right when the clocks are this phone's zone's.
+    const clocksAreDevice = !zone.tz || sameZone(zone.tz, deviceTz);
+    const zoneLine = eventZoneLine({ online, tz: zone.tz, source: zone.source, deviceTz, offsetMinutes: zone.offsetMinutes, moved: zone.moved });
 
     const placePinAtMyLocation = async () => {
         try {
@@ -331,6 +418,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
 
     const editValues = (): EventEditValues => ({
         title, description, start, end, placeName, lat: pin?.lat ?? null, lng: pin?.lng ?? null, privateNote: note, photo,
+        online, link, tz: zone.tz, tzOffsetMinutes: zoneOffset,
     });
     const editCheck = editOf ? buildEventEditPatch(editOf.values, editValues()) : null;
 
@@ -347,11 +435,13 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         }
         setSubmitting(true);
         try {
-            const saved = await updateEvent(editOf.id, editCheck.patch);
+            const out: { eventTimeAdjusted?: any } = {};
+            const saved = await updateEvent(editOf.id, editCheck.patch, out);
+            const dst = eventTimeAdjustedText(out.eventTimeAdjusted, zone.tz);
             reset();
-            Alert.alert('Event saved', editCheck.notifies
+            Alert.alert('Event saved', [editCheck.notifies
                 ? 'It now shows UPDATED, and everyone going has been told.'
-                : 'Your changes are saved.');
+                : 'Your changes are saved.', ...dst].join('\n\n'));
             onSaved?.(saved);
             onClose();
         } catch (err: any) {
@@ -371,6 +461,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             title, description, start, end, placeName,
             lat: pin?.lat ?? null, lng: pin?.lng ?? null,
             privateNote: note, audienceGroupId: effectiveAudience, authorPubkey: host.authorPubkey || identity.publicKey,
+            online, link, tz: zone.tz, tzOffsetMinutes: zoneOffset,
         });
         if (!built.ok) {
             Alert.alert('Almost there', built.error);
@@ -378,14 +469,15 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         }
         setSubmitting(true);
         try {
-            await createPost({
+            const answer = await createPost({
                 id: Crypto.randomUUID(),
                 ...built.draft,
                 photos: photo ? JSON.stringify([photo]) : null,
                 created_at: new Date().toISOString(),
             });
+            const dst = eventTimeAdjustedText(answer?.eventTimeAdjusted, zone.tz);
             reset();
-            Alert.alert('Event created', 'Your event is in the Market feed.');
+            Alert.alert('Event created', ['Your event is in the Market feed.', ...dst].join('\n\n'));
             onSuccess?.();
             onClose();
         } catch (err: any) {
@@ -427,7 +519,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                         value={picker.draft}
                         mode={Platform.OS === 'ios' ? 'datetime' : picker.mode}
                         display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                        minimumDate={field === 'end' && start ? start : new Date()}
+                        minimumDate={field === 'end' && start ? start : clocksAreDevice ? new Date() : undefined}
                         onChange={onPickerChange}
                     />
                     {Platform.OS === 'ios' && (
@@ -501,7 +593,93 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                         )}
                         {dateRow('start', 'STARTS *', start, 'Pick a date and time')}
                         {dateRow('end', 'ENDS (OPTIONAL)', end, start ? `2 hours after start (${formatPickerValue(defaultEventEnd(start)).split(', ')[1]})` : '2 hours after start if blank')}
+                        {zoneLine && (
+                            <View style={styles.zoneLine} accessibilityLiveRegion="polite">
+                                <Text style={styles.zoneText}>
+                                    {'prompt' in zoneLine ? zoneLine.prompt : (
+                                        <>Times are {zoneLine.moved ? 'now ' : ''}<Text style={styles.zoneStrong}>{zoneLine.zone}</Text>{zoneLine.why}</>
+                                    )}
+                                </Text>
+                                <Pressable
+                                    onPress={zonePicker.open ? () => setZonePicker(p => ({ ...p, open: false })) : openZonePicker}
+                                    style={styles.zoneChange}
+                                    accessibilityRole="button"
+                                    accessibilityState={{ expanded: zonePicker.open }}
+                                    accessibilityLabel={'prompt' in zoneLine ? 'Pick a time zone' : `Change the time zone, now ${zoneLine.zone}`}
+                                >
+                                    <Text style={styles.zoneChangeText} numberOfLines={1}>{zonePicker.open ? 'Close' : 'prompt' in zoneLine ? 'Pick' : 'Change'}</Text>
+                                </Pressable>
+                            </View>
+                        )}
+                        {zonePicker.open && (
+                            <View style={styles.zonePanel}>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="Search a city or zone"
+                                    placeholderTextColor={colors.text.muted}
+                                    value={zonePicker.query}
+                                    onChangeText={q => setZonePicker(p => ({ ...p, query: q }))}
+                                    autoCorrect={false}
+                                    autoCapitalize="none"
+                                    accessibilityLabel="Search time zones"
+                                />
+                                {zonePicker.error ? (
+                                    <Text style={styles.helper}>{zonePicker.error}</Text>
+                                ) : !zoneList ? (
+                                    <ActivityIndicator style={{ marginTop: 10 }} color={EVENT_ACCENT} />
+                                ) : (() => {
+                                    const found = filterZones(zoneList, zonePicker.query);
+                                    return (<>
+                                        {found.slice(0, ZONE_ROWS).map(z => {
+                                            const selected = sameZone(z.tz, zone.tz);
+                                            return (
+                                                <Pressable
+                                                    key={z.tz}
+                                                    onPress={() => pickZone(z)}
+                                                    style={styles.zoneRow}
+                                                    accessibilityRole="button"
+                                                    accessibilityState={{ selected }}
+                                                    accessibilityLabel={zonePickerEntry(z)}
+                                                >
+                                                    <Text style={[styles.zoneRowText, selected && styles.zoneRowSelected]} numberOfLines={1}>
+                                                        {zonePickerEntry(z)}{selected ? ' ✓' : ''}
+                                                    </Text>
+                                                </Pressable>
+                                            );
+                                        })}
+                                        {found.length === 0 && <Text style={styles.helper}>No time zone matches that.</Text>}
+                                        {found.length > ZONE_ROWS && <Text style={styles.helper}>{found.length - ZONE_ROWS} more. Type a city to narrow the list.</Text>}
+                                    </>);
+                                })()}
+                            </View>
+                        )}
 
+                        <View style={styles.field}>
+                            <Text style={styles.label}>WHERE</Text>
+                            <View style={styles.chipWrap}>
+                                {chip('place', 'At a place', !online, () => chooseOnline(false))}
+                                {chip('online', 'Online', online, () => chooseOnline(true))}
+                            </View>
+                        </View>
+
+                        {online ? (
+                            <View style={styles.field}>
+                                <Text style={styles.label}>LINK TO JOIN</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="https://"
+                                    placeholderTextColor={colors.text.muted}
+                                    value={link}
+                                    onChangeText={setLink}
+                                    autoCapitalize="none"
+                                    autoCorrect={false}
+                                    keyboardType="url"
+                                    maxLength={EVENT_LINK_MAX}
+                                    accessibilityLabel="Link to join"
+                                />
+                                <Text style={styles.helper}>{EVENT_LINK_HINT}</Text>
+                            </View>
+                        ) : (<>
                         <View style={styles.field}>
                             <Text style={styles.label}>PLACE NAME *</Text>
                             <TextInput
@@ -575,6 +753,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                 </Pressable>
                             </View>
                         </View>
+                        </>)}
 
                         <View style={styles.field}>
                             <Text style={styles.label}>DESCRIPTION</Text>
@@ -745,5 +924,17 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => {
         chipSelected: { borderColor: EVENT_ACCENT, backgroundColor: theme === 'dark' ? 'rgba(124, 58, 237, 0.2)' : '#f5f3ff' },
         chipText: { fontSize: 14, fontWeight: '600', color: colors.text.secondary },
         chipTextSelected: { fontWeight: '800', color: accentText },
+        zoneLine: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 8, marginTop: -8, marginBottom: 12 },
+        zoneText: { flexShrink: 1, fontSize: 13, color: colors.text.secondary, lineHeight: 18 },
+        zoneStrong: { fontWeight: '800', color: colors.text.body },
+        zoneChange: { minHeight: 48, minWidth: 48, justifyContent: 'center', flexShrink: 0 },
+        zoneChangeText: { fontSize: 14, fontWeight: '700', color: colors.text.link },
+        zonePanel: {
+            marginTop: -4, marginBottom: 16, padding: 10, borderRadius: 12, borderWidth: 1,
+            borderColor: colors.border.default, backgroundColor: colors.surface.subtle,
+        },
+        zoneRow: { minHeight: 44, justifyContent: 'center', borderBottomWidth: 1, borderBottomColor: colors.border.default },
+        zoneRowText: { fontSize: 15, color: colors.text.body },
+        zoneRowSelected: { fontWeight: '800', color: accentText },
     });
 };

@@ -3,7 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loadIdentity } from './identity';
 import * as Crypto from 'expo-crypto';
 import { encodeBase64, encodeUtf8, decodeBase64, decodeUtf8, buildSignedHeaders, signData, hexToBytes } from './crypto';
-import { eventCacheColumns, rsvpSignedMessage, isSignableRsvp, UNSIGNABLE_RSVP_MESSAGE, type EventEditPatch, type EventRsvpStatus } from './events';
+import { eventCacheColumns, rsvpSignedMessage, isSignableRsvp, UNSIGNABLE_RSVP_MESSAGE, type EventEditPatch, type EventRsvpStatus, type EventZone } from './events';
 import { sortMyEvents, type MyEvent } from './event-extras';
 import {
     sealDmLine, openDmLine, checkDmThread, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
@@ -1921,6 +1921,13 @@ export async function createPost(post: any) {
             eventEndAt: post.eventEndAt,
             eventPlaceName: post.eventPlaceName,
             ...(post.eventPrivateNote ? { eventPrivateNote: post.eventPrivateNote } : {}),
+            // The host's clock and its zone, and online with its link (DESIGN-event-times §2, §9). A node from before
+            // them ignores these and reads the instants above.
+            ...(post.eventStartLocal ? { eventStartLocal: post.eventStartLocal } : {}),
+            ...(post.eventEndLocal ? { eventEndLocal: post.eventEndLocal } : {}),
+            ...(post.eventTz ? { eventTz: post.eventTz } : {}),
+            ...(post.eventOnline === true ? { eventOnline: true } : {}),
+            ...(post.eventLink ? { eventLink: post.eventLink } : {}),
         } : {}),
         ...(post.audienceScope || post.audience_scope ? { audienceScope: post.audienceScope || post.audience_scope } : {}),
         ...(post.targetGroupId || post.target_group_id ? { targetGroupId: post.targetGroupId || post.target_group_id } : {}),
@@ -1942,6 +1949,8 @@ export async function createPost(post: any) {
         : '/api/marketplace/posts';
     const bodyString = JSON.stringify(enterpriseHost ? bodyWithoutAuthor : body);
     const postUrl = `${anchorUrl}${path}`;
+    // The node's answer: for an event, `eventTimeAdjusted` says when a clock fell in a DST gap or overlap.
+    let answer: any = null;
     const headers = await buildSignedHeaders('POST', postUrl, bodyString, identity.privateKey, identity.publicKey);
 
     try {
@@ -1955,6 +1964,7 @@ export async function createPost(post: any) {
         });
         clearTimeout(timeoutId);
 
+        if (res.ok) answer = await res.json().catch(() => null);
         if (!res.ok) {
             const txt = await res.text();
             let errMsg = 'Network request failed or server rejected the post.';
@@ -1977,6 +1987,7 @@ export async function createPost(post: any) {
                         body: bodyString,
                     });
                     if (retryRes.ok) {
+                        answer = await retryRes.json().catch(() => null);
                         // Fall through to local insert below
                     } else {
                         throw new Error(errMsg);
@@ -2010,6 +2021,7 @@ export async function createPost(post: any) {
          ...eventCacheColumns(post)]
     );
     refreshBalanceFromServer(post.author_pubkey).catch(() => null);
+    return { eventTimeAdjusted: answer?.eventTimeAdjusted ?? null };
 }
 
 export async function votePoll(postId: string, optionId: string) {
@@ -2172,6 +2184,37 @@ export function isRouteMissing(e: unknown): boolean {
  * without the route answers 404 and this throws RouteMissingError, which is the caller's cue to show
  * nothing at all rather than an error about a feature that community does not have.
  */
+/**
+ * GET /api/events/zone — the zone of an event's pin, with its words and offset now (DESIGN-event-times §2), for the form's
+ * zone line. Null from a node before event times, offline, or for a point the lookup cannot place: the node then reads the
+ * clock at the pin itself.
+ */
+export async function fetchEventZone(lat: number, lng: number): Promise<EventZone | null> {
+    try {
+        const res = await signedGet(`/api/events/zone?lat=${encodeURIComponent(String(lat))}&lng=${encodeURIComponent(String(lng))}`);
+        if (!res.ok) return null;
+        const z = await res.json();
+        return z && typeof z.tz === 'string' && z.tz
+            ? { tz: z.tz, label: typeof z.label === 'string' ? z.label : '', offsetMinutes: Number(z.offsetMinutes) }
+            : null;
+    } catch {
+        return null;
+    }
+}
+
+/** GET /api/events/zones — every zone the node accepts, for the form's picker (served, so the phone needs no zone list). */
+export async function fetchEventZones(): Promise<EventZone[]> {
+    const path = '/api/events/zones';
+    const res = await signedGet(path);
+    if (res.status === 404) throw new RouteMissingError(path);
+    if (!res.ok) throw new Error(`Could not read the time zones (${res.status})`);
+    const data = await res.json();
+    const zones: any[] = Array.isArray(data?.zones) ? data.zones : [];
+    return zones
+        .filter(z => z && typeof z.tz === 'string' && typeof z.label === 'string' && Number.isFinite(Number(z.offsetMinutes)))
+        .map(z => ({ tz: z.tz, label: z.label, offsetMinutes: Number(z.offsetMinutes) }));
+}
+
 export async function fetchMyEvents(): Promise<MyEvent[]> {
     const path = '/api/events/mine';
     const res = await signedGet(path);
@@ -2233,10 +2276,12 @@ export async function setEventReminder(postId: string, offsets: number[] | null)
  * The cached row is refreshed from the node's answer so the feed shows the edit at once; the private note is
  * never written to the cache.
  */
-export async function updateEvent(postId: string, patch: EventEditPatch): Promise<any> {
+export async function updateEvent(postId: string, patch: EventEditPatch, out?: { eventTimeAdjusted?: any }): Promise<any> {
     const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found.');
     const json = await _signedRequest('/api/marketplace/posts/update', { id: postId, authorPublicKey: identity.publicKey, ...patch });
+    // A clock the host set that fell in a DST gap or overlap, next to the post (never on it).
+    if (out) out.eventTimeAdjusted = json?.eventTimeAdjusted ?? null;
     const post = json?.post;
     if (post?.id) {
         try {

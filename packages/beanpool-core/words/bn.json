@@ -1,0 +1,25 @@
+{
+  "_meta": {
+    "language": "bn",
+    "name": "Bengali",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "glossary": {
+      "Beans": "শিম",
+      "BeanPool": "BeanPool"
+    }
+  },
+  "Roughly where are you?": "আপনি মোটামুটি কোথায় আছেন?",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "আমরা আপনার এলাকা মোটামুটি 10 কিমি পর্যন্তই রাখি, আপনার ঠিক জায়গা কখনও নয়। অন্য সদস্যরা দেখেন আপনি কতটা দূরে, আর আপনার তৈরি করা পোল আপনার এলাকায় দেখানো হয়।",
+  "Use my location": "আমার লোকেশন ব্যবহার করুন",
+  "Type a town or suburb": "একটি শহর বা এলাকার নাম লিখুন",
+  "Skip for now": "আপাতত বাদ দিন",
+  "You can change or clear this any time in Settings → Your area.": "আপনি যেকোনো সময় সেটিংস → আপনার এলাকা থেকে এটি বদলাতে বা মুছতে পারেন।",
+  "Your area": "আপনার এলাকা",
+  "Not set": "ঠিক করা নেই",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "বিশ্বব্যাপী কমিউনিটি আপনাকে দেখায় আপনার কাছে কী কী পাওয়া যাচ্ছে: {km} কিমির মধ্যে সবচেয়ে কাছের {max}টি তালিকা।",
+  "About 10 km around {place}": "{place}-এর চারপাশে প্রায় 10 কিমি"
+}

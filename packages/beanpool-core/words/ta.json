@@ -1,0 +1,25 @@
+{
+  "_meta": {
+    "language": "ta",
+    "name": "Tamil",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "glossary": {
+      "Beans": "பயறு",
+      "BeanPool": "BeanPool"
+    }
+  },
+  "Roughly where are you?": "நீங்கள் தோராயமாக எங்கே இருக்கிறீர்கள்?",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "உங்கள் பகுதியை சுமார் 10 கி.மீ அளவில் மட்டுமே வைத்திருப்போம், உங்கள் சரியான இடத்தை ஒருபோதும் வைக்க மாட்டோம். மற்ற உறுப்பினர்கள் நீங்கள் எவ்வளவு தூரத்தில் இருக்கிறீர்கள் என்பதைப் பார்ப்பார்கள்; நீங்கள் உருவாக்கும் கருத்துக்கணிப்பு உங்கள் பகுதியில் காட்டப்படும்.",
+  "Use my location": "என் இருப்பிடத்தைப் பயன்படுத்து",
+  "Type a town or suburb": "ஒரு ஊர் அல்லது பகுதியின் பெயரை உள்ளிடுங்கள்",
+  "Skip for now": "இப்போதைக்குத் தவிர்",
+  "You can change or clear this any time in Settings → Your area.": "இதை எப்போது வேண்டுமானாலும் அமைப்புகள் → உங்கள் பகுதி என்பதில் மாற்றலாம் அல்லது அழிக்கலாம்.",
+  "Your area": "உங்கள் பகுதி",
+  "Not set": "அமைக்கப்படவில்லை",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "உலகளாவிய சமூகம் உங்களுக்கு அருகில் என்ன கிடைக்கிறது என்பதைக் காட்டுகிறது: {km} கி.மீ-க்குள் மிக அருகிலுள்ள {max} பதிவுகள்.",
+  "About 10 km around {place}": "{place} சுற்றி சுமார் 10 கி.மீ"
+}

@@ -1,0 +1,25 @@
+{
+  "_meta": {
+    "language": "vi",
+    "name": "Vietnamese",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "glossary": {
+      "Beans": "đậu",
+      "BeanPool": "BeanPool"
+    }
+  },
+  "Roughly where are you?": "Bạn đang ở khoảng đâu?",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Chúng tôi chỉ giữ khu vực của bạn ở mức khoảng 10 km, không bao giờ lưu vị trí chính xác. Các thành viên khác thấy bạn ở cách bao xa, và cuộc bình chọn bạn tạo sẽ hiển thị tại khu vực của bạn.",
+  "Use my location": "Dùng vị trí của tôi",
+  "Type a town or suburb": "Nhập tên thị trấn hoặc khu phố",
+  "Skip for now": "Bỏ qua lúc này",
+  "You can change or clear this any time in Settings → Your area.": "Bạn có thể đổi hoặc xóa mục này bất cứ lúc nào trong Cài đặt → Khu vực của bạn.",
+  "Your area": "Khu vực của bạn",
+  "Not set": "Chưa đặt",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "Cộng đồng toàn cầu cho bạn thấy những gì đang được đưa ra gần bạn: {max} tin đăng gần nhất trong phạm vi {km} km.",
+  "About 10 km around {place}": "Khoảng 10 km quanh {place}"
+}

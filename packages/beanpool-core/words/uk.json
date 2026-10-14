@@ -1,0 +1,25 @@
+{
+  "_meta": {
+    "language": "uk",
+    "name": "Ukrainian",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "glossary": {
+      "Beans": "боби",
+      "BeanPool": "BeanPool"
+    }
+  },
+  "Roughly where are you?": "Приблизно де ви?",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Ми зберігаємо вашу місцевість з точністю до 10 км, але ніколи не точне місце. Інші учасники бачать, як далеко ви, а створене вами опитування показується у вашій місцевості.",
+  "Use my location": "Використати моє місцезнаходження",
+  "Type a town or suburb": "Введіть місто або район",
+  "Skip for now": "Пропустити",
+  "You can change or clear this any time in Settings → Your area.": "Змінити чи очистити це можна будь-коли в Налаштуваннях → Ваша місцевість.",
+  "Your area": "Ваша місцевість",
+  "Not set": "Не вказано",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "Світова спільнота показує, що пропонують поруч: найближчі {max} оголошень у межах {km} км.",
+  "About 10 km around {place}": "Близько 10 км навколо {place}"
+}

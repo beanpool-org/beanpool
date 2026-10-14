@@ -1,10 +1,25 @@
 {
   "_meta": {
     "language": "pt",
-    "name": "Portuguese (Brazil-leaning, neutral forms)",
-    "draftedBy": null,
+    "name": "Portuguese (Brazilian)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
-  }
+    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "glossary": {
+      "Beans": "feijões",
+      "BeanPool": "BeanPool"
+    }
+  },
+  "Roughly where are you?": "Mais ou menos onde você está?",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Guardamos a sua área com uma margem de cerca de 10 km, nunca o seu ponto exato. Os outros membros veem a que distância você está, e uma enquete que você criar aparece na sua área.",
+  "Use my location": "Usar minha localização",
+  "Type a town or suburb": "Digite uma cidade ou bairro",
+  "Skip for now": "Pular por enquanto",
+  "You can change or clear this any time in Settings → Your area.": "Você pode mudar ou limpar isso quando quiser em Configurações → Sua área.",
+  "Your area": "Sua área",
+  "Not set": "Não definida",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "A comunidade mundial mostra o que está sendo oferecido perto de você: os {max} anúncios mais próximos num raio de {km} km.",
+  "About 10 km around {place}": "Cerca de 10 km ao redor de {place}"
 }

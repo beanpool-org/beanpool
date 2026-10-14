@@ -1,0 +1,25 @@
+{
+  "_meta": {
+    "language": "ml",
+    "name": "Malayalam",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "glossary": {
+      "Beans": "പയർ",
+      "BeanPool": "BeanPool"
+    }
+  },
+  "Roughly where are you?": "നിങ്ങൾ ഏകദേശം എവിടെയാണ്?",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "നിങ്ങളുടെ പ്രദേശം ഏകദേശം 10 കി.മീ വരെ മാത്രമേ ഞങ്ങൾ സൂക്ഷിക്കൂ, കൃത്യമായ സ്ഥലം ഒരിക്കലുമില്ല. മറ്റ് അംഗങ്ങൾ നിങ്ങൾ എത്ര ദൂരെയാണെന്ന് കാണും, നിങ്ങൾ ഉണ്ടാക്കുന്ന വോട്ടെടുപ്പ് നിങ്ങളുടെ പ്രദേശത്ത് കാണിക്കും.",
+  "Use my location": "എന്റെ ലൊക്കേഷൻ ഉപയോഗിക്കുക",
+  "Type a town or suburb": "ഒരു പട്ടണമോ പ്രദേശമോ ടൈപ്പ് ചെയ്യൂ",
+  "Skip for now": "തൽക്കാലം ഒഴിവാക്കൂ",
+  "You can change or clear this any time in Settings → Your area.": "ക്രമീകരണങ്ങൾ → നിങ്ങളുടെ പ്രദേശം എന്നതിൽ ഇത് എപ്പോൾ വേണമെങ്കിലും മാറ്റുകയോ മായ്ക്കുകയോ ചെയ്യാം.",
+  "Your area": "നിങ്ങളുടെ പ്രദേശം",
+  "Not set": "സജ്ജമാക്കിയിട്ടില്ല",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "ലോകമെമ്പാടുമുള്ള കമ്മ്യൂണിറ്റി നിങ്ങളുടെ അടുത്ത് എന്തൊക്കെ ലഭ്യമാണെന്ന് കാണിക്കുന്നു: {km} കി.മീറ്ററിനുള്ളിലെ ഏറ്റവും അടുത്ത {max} ലിസ്റ്റിംഗുകൾ.",
+  "About 10 km around {place}": "{place} ചുറ്റുമുള്ള ഏകദേശം 10 കി.മീ"
+}

@@ -1,0 +1,25 @@
+{
+  "_meta": {
+    "language": "zh-Hans",
+    "name": "Chinese (Simplified)",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "glossary": {
+      "Beans": "豆子",
+      "BeanPool": "BeanPool"
+    }
+  },
+  "Roughly where are you?": "你大概在哪里?",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "我们只记录你所在的大致区域(约 10 公里范围),绝不记录你的确切位置。其他成员只能看到你离他们有多远,你发起的投票会显示在你的区域。",
+  "Use my location": "使用我的位置",
+  "Type a town or suburb": "输入城镇或街区",
+  "Skip for now": "暂时跳过",
+  "You can change or clear this any time in Settings → Your area.": "你随时可以在“设置 → 你的区域”中更改或清除。",
+  "Your area": "你的区域",
+  "Not set": "未设置",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "全球社区会向你展示附近有什么可以交换:{km} 公里内最近的 {max} 条信息。",
+  "About 10 km around {place}": "{place}周围约 10 公里"
+}

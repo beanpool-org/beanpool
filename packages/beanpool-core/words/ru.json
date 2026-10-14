@@ -2,9 +2,24 @@
   "_meta": {
     "language": "ru",
     "name": "Russian",
-    "draftedBy": null,
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
-  }
+    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "glossary": {
+      "Beans": "бобы",
+      "BeanPool": "BeanPool"
+    }
+  },
+  "Roughly where are you?": "Где вы примерно находитесь?",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Мы храним ваш район с точностью около 10 км, но не ваше точное местоположение. Другие участники видят, как далеко вы находитесь, а созданный вами опрос показывается в вашем районе.",
+  "Use my location": "Использовать моё местоположение",
+  "Type a town or suburb": "Введите город или район",
+  "Skip for now": "Пока пропустить",
+  "You can change or clear this any time in Settings → Your area.": "Это можно изменить или очистить в любое время в Настройках → Ваш район.",
+  "Your area": "Ваш район",
+  "Not set": "Не указан",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "Всемирное сообщество показывает, что предлагают рядом с вами: ближайшие объявления в радиусе {km} км (не больше {max}).",
+  "About 10 km around {place}": "Около 10 км вокруг: {place}"
 }

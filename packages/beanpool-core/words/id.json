@@ -1,0 +1,25 @@
+{
+  "_meta": {
+    "language": "id",
+    "name": "Indonesian",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "glossary": {
+      "Beans": "kacang",
+      "BeanPool": "BeanPool"
+    }
+  },
+  "Roughly where are you?": "Kira-kira kamu di mana?",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Kami hanya menyimpan wilayahmu dalam radius sekitar 10 km, bukan lokasi tepatmu. Anggota lain melihat seberapa jauh jaraknya darimu, dan jajak pendapat yang kamu buat ditampilkan di wilayahmu.",
+  "Use my location": "Pakai lokasiku",
+  "Type a town or suburb": "Ketik nama kota atau daerah",
+  "Skip for now": "Lewati dulu",
+  "You can change or clear this any time in Settings → Your area.": "Kamu bisa mengubah atau menghapus ini kapan saja di Pengaturan → Wilayahmu.",
+  "Your area": "Wilayahmu",
+  "Not set": "Belum diatur",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "Komunitas dunia menunjukkan apa yang ditawarkan di dekatmu: {max} tawaran terdekat dalam radius {km} km.",
+  "About 10 km around {place}": "Radius sekitar 10 km dari {place}"
+}

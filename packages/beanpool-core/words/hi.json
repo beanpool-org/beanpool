@@ -1,0 +1,25 @@
+{
+  "_meta": {
+    "language": "hi",
+    "name": "Hindi",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "glossary": {
+      "Beans": "फलियाँ",
+      "BeanPool": "BeanPool"
+    }
+  },
+  "Roughly where are you?": "आप लगभग कहाँ हैं?",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "हम आपका क्षेत्र लगभग 10 किमी तक ही रखते हैं, आपकी सटीक जगह कभी नहीं। दूसरे सदस्य देखते हैं कि आप कितनी दूर हैं, और आपका बनाया पोल आपके क्षेत्र में दिखाया जाता है।",
+  "Use my location": "मेरी लोकेशन इस्तेमाल करें",
+  "Type a town or suburb": "कोई कस्बा या मोहल्ला लिखें",
+  "Skip for now": "अभी छोड़ें",
+  "You can change or clear this any time in Settings → Your area.": "आप इसे कभी भी सेटिंग्स → आपका क्षेत्र में बदल या हटा सकते हैं।",
+  "Your area": "आपका क्षेत्र",
+  "Not set": "तय नहीं है",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "दुनिया भर का समुदाय आपको दिखाता है कि आपके पास क्या उपलब्ध है: {km} किमी के भीतर सबसे नज़दीकी {max} लिस्टिंग।",
+  "About 10 km around {place}": "{place} के आस-पास लगभग 10 किमी"
+}

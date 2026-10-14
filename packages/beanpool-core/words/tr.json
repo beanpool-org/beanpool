@@ -1,0 +1,25 @@
+{
+  "_meta": {
+    "language": "tr",
+    "name": "Turkish",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "glossary": {
+      "Beans": "fasulye",
+      "BeanPool": "BeanPool"
+    }
+  },
+  "Roughly where are you?": "Yaklaşık olarak neredesin?",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Bölgeni yaklaşık 10 km'lik bir alan olarak tutarız, tam konumunu asla. Diğer üyeler senin ne kadar uzakta olduğunu görür; oluşturduğun anket de bölgende gösterilir.",
+  "Use my location": "Konumumu kullan",
+  "Type a town or suburb": "Bir kasaba veya semt yaz",
+  "Skip for now": "Şimdilik atla",
+  "You can change or clear this any time in Settings → Your area.": "Bunu istediğin zaman Ayarlar → Bölgen bölümünden değiştirebilir veya temizleyebilirsin.",
+  "Your area": "Bölgen",
+  "Not set": "Ayarlanmadı",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "Dünya çapındaki topluluk sana yakınındaki teklifleri gösterir: {km} km içindeki en yakın {max} ilan.",
+  "About 10 km around {place}": "{place} çevresinde yaklaşık 10 km"
+}

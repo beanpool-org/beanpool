@@ -1,0 +1,25 @@
+{
+  "_meta": {
+    "language": "it",
+    "name": "Italian",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "glossary": {
+      "Beans": "fagioli",
+      "BeanPool": "BeanPool"
+    }
+  },
+  "Roughly where are you?": "Più o meno dove sei?",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Teniamo la tua zona entro circa 10 km, mai il tuo punto esatto. Gli altri membri vedono a che distanza sei, e un sondaggio che crei viene mostrato nella tua zona.",
+  "Use my location": "Usa la mia posizione",
+  "Type a town or suburb": "Scrivi una città o un quartiere",
+  "Skip for now": "Salta per ora",
+  "You can change or clear this any time in Settings → Your area.": "Puoi cambiare o cancellare questa impostazione quando vuoi in Impostazioni → La tua zona.",
+  "Your area": "La tua zona",
+  "Not set": "Non impostata",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "La comunità mondiale ti mostra cosa c'è in offerta vicino a te: i {max} annunci più vicini entro {km} km.",
+  "About 10 km around {place}": "Circa 10 km intorno a {place}"
+}

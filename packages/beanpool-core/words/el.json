@@ -1,0 +1,25 @@
+{
+  "_meta": {
+    "language": "el",
+    "name": "Greek",
+    "draftedBy": "claude-sonnet-5-5 (machine draft, slice S1)",
+    "review": "machine",
+    "reviewed": false,
+    "updated": "2026-10-15",
+    "note": "Machine draft: no native speaker has checked it yet; the app labels it in Settings. Keys are the English sentences; a key that is missing shows the English.",
+    "glossary": {
+      "Beans": "φασόλια",
+      "BeanPool": "BeanPool"
+    }
+  },
+  "Roughly where are you?": "Περίπου πού βρίσκεσαι;",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "Κρατάμε την περιοχή σου με ακρίβεια περίπου 10 χλμ., ποτέ την ακριβή θέση σου. Τα άλλα μέλη βλέπουν πόσο μακριά είσαι και μια δημοσκόπηση που φτιάχνεις εμφανίζεται στην περιοχή σου.",
+  "Use my location": "Χρήση της τοποθεσίας μου",
+  "Type a town or suburb": "Γράψε μια πόλη ή συνοικία",
+  "Skip for now": "Παράλειψη προς το παρόν",
+  "You can change or clear this any time in Settings → Your area.": "Μπορείς να το αλλάξεις ή να το διαγράψεις όποτε θέλεις από τις Ρυθμίσεις → Η περιοχή σου.",
+  "Your area": "Η περιοχή σου",
+  "Not set": "Δεν έχει οριστεί",
+  "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "Η παγκόσμια κοινότητα σου δείχνει τι προσφέρεται κοντά σου: τις {max} πιο κοντινές αγγελίες σε απόσταση έως {km} χλμ.",
+  "About 10 km around {place}": "Περίπου 10 χλμ. γύρω από {place}"
+}

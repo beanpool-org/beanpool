@@ -41,6 +41,7 @@ export type WriterLimitCode =
     | 'posts_per_day'
     | 'enterprise_work_posts_per_day'
     | 'groups_per_day'
+    | 'friend_adds_per_day'
     | 'invites_per_day'
     | 'invites_unused'
     | 'pulse_per_day';
@@ -165,6 +166,25 @@ export function assertMayStartGroupToday(member: string, now = Date.now()): void
     const times = column(db.prepare('SELECT created_at AS t FROM groups WHERE created_by = ? AND created_at > ?').all(member, since(now)));
     assertUnderDaily(times, limit, now, 'groups_per_day',
         (when) => `You can start ${limit} groups in any 24 hours. You can start another ${when}.`);
+}
+
+// ── Friends ──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Before `member` adds someone as a friend. What counts: the rows they added in the day, and the rows of theirs removed
+ * in the day (a removal's tombstone, `<owner>|<friend>`, read by its key range on the tombstones' primary key), so adding
+ * and removing again never frees a place. A removal of an older friend counts too: rare, and it errs on the side of fewer.
+ */
+export function assertMayAddFriendToday(member: string, now = Date.now()): void {
+    const limit = WRITER_LIMITS.friendAddsPerDay;
+    const times = column(db.prepare(`
+        SELECT added_at AS t FROM friends WHERE owner_pubkey = ? AND added_at > ?
+        UNION ALL
+        SELECT deleted_at AS t FROM tombstones
+         WHERE table_name = 'friends' AND row_key >= ? AND row_key < ? AND deleted_at > ?`)
+        .all(member, since(now), `${member}|`, `${member}}`, since(now)));
+    assertUnderDaily(times, limit, now, 'friend_adds_per_day',
+        (when) => `You can add ${limit} people in any 24 hours. You can add someone again ${when}.`);
 }
 
 // ── Enterprises ──────────────────────────────────────────────────────────────────────────────────────────────────

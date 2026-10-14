@@ -8,6 +8,8 @@ interface FilterChipButtonProps {
     /** Filled with `activeColor` and white text while its filter is doing something. */
     active: boolean;
     activeColor: string;
+    /** The words while active, when `activeColor` does not carry white (the sage accent in dark). */
+    activeTextColor?: string;
     onPress: () => void;
     /**
      * Floating: its own backing and shadow, for a chip that sits on the map by itself. Flat: no backing, for a
@@ -31,7 +33,7 @@ interface FilterChipButtonProps {
  * from the pill above.
  */
 export function FilterChipButton({
-    label, active, activeColor, onPress, variant = 'floating', expanded, selected, accessibilityLabel, style, onLayout,
+    label, active, activeColor, activeTextColor, onPress, variant = 'floating', expanded, selected, accessibilityLabel, style, onLayout,
 }: FilterChipButtonProps) {
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         floating: {
@@ -54,7 +56,7 @@ export function FilterChipButton({
             onPress={onPress}
             onLayout={onLayout}
         >
-            <Text style={[flat ? styles.flatText : styles.floatingText, active && styles.textActive]} numberOfLines={1}>{label}</Text>
+            <Text style={[flat ? styles.flatText : styles.floatingText, active && styles.textActive, active && activeTextColor ? { color: activeTextColor } : null]} numberOfLines={1}>{label}</Text>
         </Pressable>
     );
 }

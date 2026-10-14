@@ -52,10 +52,11 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
         previewUnread: { color: colors.text.heading, fontWeight: '700' },
         badge: {
             flexShrink: 0, minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6,
-            backgroundColor: colors.accent.primary, alignItems: 'center', justifyContent: 'center',
+            backgroundColor: colors.accent.fill, alignItems: 'center', justifyContent: 'center',
         },
         badgeMuted: { backgroundColor: colors.text.muted },
-        badgeText: { color: colors.text.inverse, fontSize: 11, fontWeight: '800' },
+        badgeText: { color: colors.text.onAccent, fontSize: 11, fontWeight: '800' },
+        badgeTextMuted: { color: colors.text.inverse },
     }));
 
     const badge = rowBadge(item, showUnread);
@@ -93,7 +94,7 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
                     <Text style={[styles.preview, unread > 0 && styles.previewUnread]} numberOfLines={1}>{preview}</Text>
                     {badge && (
                         <View style={[styles.badge, badge.muted && styles.badgeMuted]}>
-                            <Text style={styles.badgeText} maxFontSizeMultiplier={1.2}>{badge.label}</Text>
+                            <Text style={[styles.badgeText, badge.muted && styles.badgeTextMuted]} maxFontSizeMultiplier={1.2}>{badge.label}</Text>
                         </View>
                     )}
                 </View>

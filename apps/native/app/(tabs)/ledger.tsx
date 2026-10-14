@@ -170,7 +170,7 @@ export default function LedgerScreen() {
         balanceWord: { fontSize: 10, fontWeight: '800', color: colors.text.muted, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: 0 },
 
         pos: { color: colors.brand.primary },
-        neg: { color: colors.feedback.danger.solid },
+        neg: { color: colors.feedback.danger.fg },
 
         // Tab bar
         tabBar: { flexDirection: 'row', backgroundColor: colors.surface.card, borderBottomWidth: 1, borderBottomColor: colors.border.default },
@@ -261,23 +261,23 @@ export default function LedgerScreen() {
         balanceCard: { flex: 1, backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: colors.border.default },
         balCardLabel: { fontSize: 12, fontWeight: '600', color: colors.text.secondary, marginBottom: 6 },
         balCardAmount: { fontSize: 22, fontWeight: '800' },
-        commonsAmt: { fontSize: 22, fontWeight: '800', color: theme === 'dark' ? palette.amber400 : palette.amber600, flexShrink: 1 },
+        commonsAmt: { fontSize: 22, fontWeight: '800', color: theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg, flexShrink: 1 },
         balCardSub: { fontSize: 11, color: colors.text.muted, marginTop: 4 },
         // Escrow / forecast / pledge
         infoCard: { backgroundColor: colors.feedback.warning.bg, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.feedback.warning.border },
         infoCardRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
         infoCardLabel: { flex: 1, fontSize: 13, fontWeight: '700', color: colors.feedback.warning.fg },
-        infoCardValue: { fontSize: 15, fontWeight: '800', color: colors.feedback.warning.solid } as any,
+        infoCardValue: { fontSize: 15, fontWeight: '800', color: colors.feedback.warning.fg } as any,
         infoCardSub: { fontSize: 11, color: colors.text.muted, marginTop: 2 },
         forecastCard: { backgroundColor: colors.accent.tint, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: colors.border.default, gap: 6 },
         forecastDate: { fontSize: 13, fontWeight: '700', color: colors.accent.primary },
-        forecastSub: { flex: 1, fontSize: 12, color: colors.text.secondary },
+        forecastSub: { flex: 1, fontSize: 12, color: colors.text.body }, // on accent.tint: text.secondary is 4.22 there in dark
         forecastAmt: { fontSize: 15, fontWeight: '800', color: colors.accent.primary } as any,
         pledgeSection: { marginBottom: 12 },
         pledgeRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderRadius: 10, padding: 12, marginBottom: 6, borderWidth: 1, borderColor: colors.border.default },
         pledgeName: { fontSize: 13, fontWeight: '700', color: colors.text.heading },
         pledgeDate: { fontSize: 11, color: colors.text.muted, marginTop: 2 },
-        pledgeAmt: { fontSize: 13, fontWeight: '700', color: colors.feedback.danger.solid },
+        pledgeAmt: { fontSize: 13, fontWeight: '700', color: colors.feedback.danger.fg },
         // ── Wallet Hero ──
         walletHero: { borderRadius: 20, padding: 20, borderWidth: 1, marginBottom: 16 },
         walletBigBalance: { fontSize: 42, fontWeight: '900', letterSpacing: -2, marginVertical: 8 },
@@ -305,7 +305,7 @@ export default function LedgerScreen() {
         pickerBox: { backgroundColor: colors.surface.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 10, overflow: 'hidden' },
         pickerSearch: { padding: 12, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle, fontSize: 14, color: colors.text.heading },
         pickerRow: { paddingVertical: 10, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: colors.surface.app },
-        pickerRowActive: { backgroundColor: colors.brand.primary },
+        pickerRowActive: { backgroundColor: colors.brand.fill },
         pickerName: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
         pickerPk: { fontSize: 11, color: colors.text.muted, fontFamily: 'Courier', marginTop: 2 },
         sendInput: { backgroundColor: colors.surface.card, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 10, fontSize: 15, color: colors.text.heading },
@@ -317,7 +317,7 @@ export default function LedgerScreen() {
         errText: { color: colors.feedback.danger.fg, fontSize: 13, fontWeight: '700', textAlign: 'center' },
         okBox: { backgroundColor: colors.feedback.success.bg, borderWidth: 1, borderColor: colors.feedback.success.border, borderRadius: 10, padding: 10, marginBottom: 10 },
         okText: { color: colors.feedback.success.fg, fontSize: 13, fontWeight: '700', textAlign: 'center' },
-        confirmBtn: { backgroundColor: colors.brand.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
+        confirmBtn: { backgroundColor: colors.brand.fill, paddingVertical: 14, borderRadius: 12, alignItems: 'center' },
         confirmBtnOff: { backgroundColor: colors.border.default },
         confirmBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '700' },
         txnRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border.default },
@@ -546,7 +546,7 @@ export default function LedgerScreen() {
                 <View style={styles.heroProgressRow}>
                     {nextTier
                         ? <Text style={styles.heroProgressText}><Text style={{ fontWeight: '900', color: tier.color }}>{creditsToNext}</Text> more trust to {nextTier.emoji} {nextTier.name}</Text>
-                        : <Text style={[styles.heroProgressText, { color: theme === 'dark' ? palette.amber400 : palette.amber600, fontWeight: '800' }]}>✨ Highest level reached</Text>
+                        : <Text style={[styles.heroProgressText, { color: theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg, fontWeight: '800' }]}>✨ Highest level reached</Text>
                     }
                 </View>
 
@@ -558,7 +558,7 @@ export default function LedgerScreen() {
                         onPress={openSend}
                     >
                         <MaterialCommunityIcons name={canSend ? 'send' : 'lock-outline'} size={13} color={canSend ? colors.brand.primary : colors.text.muted} />
-                        <Text style={[styles.perkText, { color: canSend ? colors.brand.dark : colors.text.muted }]}>{canSend ? 'Send Credits' : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</Text>
+                        <Text style={[styles.perkText, { color: canSend ? colors.brand.primary : colors.text.muted }]}>{canSend ? 'Send Credits' : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</Text>
                     </Pressable>}
                     <View style={[styles.perkPill, {
                         borderColor: theme === 'dark' ? colors.feedback.success.border : palette.green200,
@@ -687,7 +687,7 @@ export default function LedgerScreen() {
                 {[
                     { icon: '💰', label: 'VALUE TRADED', big: `${qualifiedValue}`, foot: `+${earned} trust`, pct: Math.min(1, qualifiedValue / valueForEarned(ELDER_MIN)), color: colors.brand.primary, trackBg: theme === 'dark' ? 'rgba(34,197,94,0.15)' : palette.green50 },
                     { icon: '👥', label: 'PARTNERS', big: `${uniquePartners}`, foot: 'diverse = faster', pct: Math.min(1, uniquePartners / 20), color: palette.blue500, trackBg: theme === 'dark' ? 'rgba(59,130,246,0.15)' : palette.blue50 },
-                    { icon: '⭐', label: 'RATING', big: reviewCount > 0 ? avgRating.toFixed(1) : '—', foot: reviewCount > 0 ? `${reviewCount} review${reviewCount === 1 ? '' : 's'}` : 'no reviews yet', pct: reviewCount > 0 ? avgRating / 5 : 1, color: palette.orange500, trackBg: theme === 'dark' ? 'rgba(249,115,22,0.15)' : palette.orange50 },
+                    { icon: '⭐', label: 'RATING', big: reviewCount > 0 ? avgRating.toFixed(1) : '—', foot: reviewCount > 0 ? `${reviewCount} review${reviewCount === 1 ? '' : 's'}` : 'no reviews yet', pct: reviewCount > 0 ? avgRating / 5 : 1, color: colors.market.need.fg, trackBg: theme === 'dark' ? 'rgba(249,115,22,0.15)' : palette.orange50 },
                 ].map(a => (
                     <Pressable
                         key={a.label}
@@ -759,8 +759,8 @@ export default function LedgerScreen() {
                     {/* Key metrics strip */}
                     <View style={styles.walletMetricRow}>
                         <Pressable style={styles.walletMetric} accessibilityRole="button" onPress={() => setShowCommonsInfo(true)}>
-                            <MaterialCommunityIcons name="sprout" size={14} color={theme === 'dark' ? palette.amber400 : palette.amber600} />
-                            <CurrencyDisplay asView style={[styles.walletMetricVal, { color: theme === 'dark' ? palette.amber400 : palette.amber600 }]} amount={balanceState.commons.toFixed(1)} />
+                            <MaterialCommunityIcons name="sprout" size={14} color={theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg} />
+                            <CurrencyDisplay asView style={[styles.walletMetricVal, { color: theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg }]} amount={balanceState.commons.toFixed(1)} />
                             <Text style={styles.walletMetricLabel}>Commons ⓘ</Text>
                         </Pressable>
                         <View style={styles.walletMetricDivider} />
@@ -773,8 +773,8 @@ export default function LedgerScreen() {
                             <>
                                 <View style={styles.walletMetricDivider} />
                                 <View style={styles.walletMetric}>
-                                    <MaterialCommunityIcons name="lock-clock" size={14} color={palette.amber500} />
-                                    <Text style={[styles.walletMetricVal, { color: palette.amber500 }]}>{escrowTotal.toFixed(1)}</Text>
+                                    <MaterialCommunityIcons name="lock-clock" size={14} color={colors.feedback.warning.fg} />
+                                    <Text style={[styles.walletMetricVal, { color: colors.feedback.warning.fg }]}>{escrowTotal.toFixed(1)}</Text>
                                     <Text style={styles.walletMetricLabel}>In Escrow</Text>
                                 </View>
                             </>
@@ -799,7 +799,7 @@ export default function LedgerScreen() {
                             </Text>
                         </View>
                         {amber && (
-                            <Text style={{ color: theme === 'dark' ? palette.amber400 : palette.amber600, fontSize: 11, marginTop: 6, fontWeight: '600' }}>
+                            <Text style={{ color: theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg, fontSize: 11, marginTop: 6, fontWeight: '600' }}>
                                 ⚠️ Balance above 1000 — consider spending!
                             </Text>
                         )}
@@ -812,7 +812,7 @@ export default function LedgerScreen() {
                         <Text style={styles.sectionLabel}>PROJECT PLEDGES</Text>
                         {pledgeHistory.map((pl: any) => (
                             <View key={pl.id} style={styles.pledgeRow}>
-                                <View style={[styles.txnIcon, { backgroundColor: colors.brand.primary + '18' }]}>
+                                <View style={[styles.txnIcon, { backgroundColor: colors.brand.fill + '18' }]}>
                                     <MaterialCommunityIcons name="sprout" size={17} color={colors.brand.primary} />
                                 </View>
                                 <View style={{ flex: 1, marginLeft: 10 }}>
@@ -932,7 +932,7 @@ export default function LedgerScreen() {
         return (
             <View style={styles.txnRow}>
                 <View style={[styles.txnIcon, isCredit ? styles.txnIconCredit : styles.txnIconDebit]}>
-                    <MaterialCommunityIcons name={isCredit ? 'arrow-bottom-left' : 'arrow-top-right'} size={18} color={isCredit ? colors.brand.primary : colors.feedback.danger.solid} />
+                    <MaterialCommunityIcons name={isCredit ? 'arrow-bottom-left' : 'arrow-top-right'} size={18} color={isCredit ? colors.brand.primary : colors.feedback.danger.fg} />
                 </View>
                 <View style={{ flex: 1, marginRight: 8 }}>
                     <Text style={styles.txnPeer}>{item.peer}</Text>
@@ -1025,7 +1025,7 @@ export default function LedgerScreen() {
                     )}
                     {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}
                     {balanceState.frozen && (
-                        <Text style={{ fontSize: 11.5, color: '#d97706', lineHeight: 16, marginTop: 8 }}>
+                        <Text style={{ fontSize: 11.5, color: colors.feedback.warning.fg, lineHeight: 16, marginTop: 8 }}>
                             ⚠️  Spending paused — your balance is below what your {balanceState.liveOffers ?? 0} active offer{(balanceState.liveOffers ?? 0) === 1 ? '' : 's'} unlock (−{Math.abs(balanceState.usableFloor ?? balanceState.floor)}). Post an Offer or trade back up to lift it. You can still receive and sell.
                         </Text>
                     )}

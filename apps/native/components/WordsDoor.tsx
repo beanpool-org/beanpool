@@ -137,7 +137,7 @@ function make(colors: AppColors) {
         heading: { fontSize: 16, fontWeight: '700', color: colors.text.heading, marginBottom: 10 },
         wordsBtn: {
             minHeight: 52, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-            backgroundColor: colors.brand.primary, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12,
+            backgroundColor: colors.brand.fill, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12,
         },
         wordsIcon: { fontSize: 18, marginRight: 10 },
         wordsBtnText: { flexShrink: 1, color: colors.text.inverse, fontSize: 16, fontWeight: '700', textAlign: 'center' },
@@ -151,7 +151,7 @@ function make(colors: AppColors) {
         progressText: { fontSize: 14, color: colors.text.secondary, textAlign: 'center', marginBottom: 10 },
         bar: { flexDirection: 'row', height: 8 },
         step: { flex: 1, height: 8, borderRadius: 4, marginRight: 4, backgroundColor: colors.border.strong },
-        stepDone: { backgroundColor: colors.brand.primary },
+        stepDone: { backgroundColor: colors.brand.fill },
         backup: {
             backgroundColor: colors.feedback.warning.bg, borderColor: colors.feedback.warning.border, borderWidth: 1,
             borderRadius: 12, padding: 14, marginBottom: 16,

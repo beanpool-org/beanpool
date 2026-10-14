@@ -84,7 +84,7 @@ export function TourBar({ steps, index, home, colors, bottomInset, onHeight, onN
                 </Pressable>
                 <Pressable
                     onPress={last ? onDone : onNext}
-                    style={({ pressed }) => [tourStyles.next, { backgroundColor: colors.brand.dark }, pressed && { opacity: 0.85 }]}
+                    style={({ pressed }) => [tourStyles.next, { backgroundColor: colors.brand.fill }, pressed && { opacity: 0.85 }]}
                     accessibilityRole="button"
                     accessibilityLabel={last ? 'Done: end the tour' : `Next: step ${index + 2} of ${steps.length}`}
                     testID={last ? 'tour-done' : 'tour-next'}

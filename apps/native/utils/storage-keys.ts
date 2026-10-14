@@ -6,6 +6,9 @@
 /** The communities this key asked to join (utils/knock.ts). Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage). */
 export const KNOCKS_STORE_KEY = 'beanpool_knocks';
 
+/** A town typed in "Find your community" (utils/typed-place.ts): where the member lives, roughly. Sign Out wipes it. */
+export const TYPED_PLACE_STORE_KEY = 'beanpool_find_typed_place';
+
 /** The member's one profile copy (utils/canonical-profile.ts). Sign Out wipes it (utils/identity.ts wipeIdentityScopedStorage). */
 export const CANONICAL_PROFILE_STORE_KEY = 'beanpool_canonical_profile';
 

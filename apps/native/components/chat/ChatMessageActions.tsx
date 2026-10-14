@@ -43,7 +43,7 @@ export function ChatMessageActions({
                     style={[styles.circleActionButton, emojiPickerOpen ? styles.circleActionButtonActive : {}]}
                     onPress={onToggleEmojiPicker}
                 >
-                    <MaterialCommunityIcons name="emoticon-happy-outline" size={16} color={colors.text.inverse} />
+                    <MaterialCommunityIcons name="emoticon-happy-outline" size={16} color={emojiPickerOpen ? colors.text.onAccent : colors.text.inverse} />
                 </Pressable>
             )}
             {actions.edit && (

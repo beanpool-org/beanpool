@@ -69,9 +69,11 @@ export function recordActivity(
  * The rows that are a trade: a completed one, or a dispute's ruling (one row per party). Balances and trades are private
  * (Marty, 2026-09-28): a trade shows only its two people, so these reach only the member the row names (its actor or
  * target: the seller and buyer of a completed trade, the party a ruling was about and the admin who ruled). Everyone
- * else's feed leaves them out, with the Beans and the listing they name.
+ * else's feed leaves them out, with the Beans and the listing they name. A review names both people of a trade (its
+ * writer and the member rated), so it reaches only those two as well (Marty, 2026-10-14, decision A): the review itself
+ * stays on the rated member's profile, without its writer.
  */
-export const TRADE_ACTIVITY_TYPES: readonly ActivityEventType[] = ['trade_completed', 'dispute_resolved'];
+export const TRADE_ACTIVITY_TYPES: readonly ActivityEventType[] = ['trade_completed', 'dispute_resolved', 'rating_given'];
 
 /**
  * Retrieves recent community activity events with member callsigns joined, as `viewerPubkey` (the verified signer) may

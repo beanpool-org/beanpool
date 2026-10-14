@@ -256,7 +256,7 @@ export function GroupDetailModal({
             minHeight: 48,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             paddingHorizontal: 12,
             borderRadius: 8,
         },
@@ -276,7 +276,7 @@ export function GroupDetailModal({
             borderColor: colors.feedback.danger.solid,
         },
         declineBtnText: {
-            color: colors.feedback.danger.solid,
+            color: colors.feedback.danger.fg,
             fontSize: 12,
             fontWeight: '700',
         },
@@ -288,7 +288,7 @@ export function GroupDetailModal({
             gap: 10,
         },
         postBtn: {
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             borderRadius: 14,
             minHeight: 48,
             paddingVertical: 12,
@@ -305,7 +305,7 @@ export function GroupDetailModal({
             fontWeight: '800',
         },
         joinBtn: {
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             borderRadius: 14,
             minHeight: 48,
             paddingVertical: 12,
@@ -332,7 +332,7 @@ export function GroupDetailModal({
             borderColor: colors.border.default,
         },
         leaveBtnText: {
-            color: colors.feedback.danger.solid,
+            color: colors.feedback.danger.fg,
             fontSize: 14,
             fontWeight: '700',
         },
@@ -908,7 +908,7 @@ export function GroupDetailModal({
                                                             accessibilityLabel={`Remove ${m.callsign || 'this member'} from the group`}
                                                             onPress={() => handleRemoveMember(m.memberPubkey, m.callsign)}
                                                         >
-                                                            <MaterialCommunityIcons name="close" size={18} color={colors.feedback.danger.solid} />
+                                                            <MaterialCommunityIcons name="close" size={18} color={colors.feedback.danger.fg} />
                                                         </Pressable>
                                                     )}
                                                 </View>

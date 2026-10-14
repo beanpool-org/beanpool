@@ -16,7 +16,7 @@ import {
 } from '../../utils/delete-here';
 import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
-import { updateMemberProfile, getMemberProfile, signedRequest, resetDmChatMemory } from '../../utils/db';
+import { updateMemberProfile, getMemberProfile, signedRequest, signedGet, resetDmChatMemory } from '../../utils/db';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
     reminderOffsetLabel,
@@ -102,7 +102,7 @@ function getDatabaseFilePaths(dbFilename: string): string[] {
 }
 
 export default function SettingsScreen() {
-    const { theme, colors, themePreference, setThemePreference, lightPalette, setLightPalette, patternEnabled, setPatternEnabled } = useTheme();
+    const { theme, colors, themePreference, setThemePreference, patternEnabled, setPatternEnabled } = useTheme();
     const { identity, setIdentity } = useIdentity();
 
     const styles = useStyles(({ theme, colors, patternEnabled }) => StyleSheet.create({
@@ -178,8 +178,8 @@ export default function SettingsScreen() {
             width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: colors.accent.primary,
             alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         },
-        reminderTickOn: { backgroundColor: colors.accent.primary },
-        reminderTickMark: { color: colors.text.inverse, fontSize: 14, fontWeight: '900', lineHeight: 16 },
+        reminderTickOn: { backgroundColor: colors.accent.fill },
+        reminderTickMark: { color: colors.text.onAccent, fontSize: 14, fontWeight: '900', lineHeight: 16 },
         reminderLabel: { flex: 1, fontSize: 15, color: colors.text.body },
         reminderNote: { fontSize: 12, color: colors.text.secondary, paddingHorizontal: 14, paddingVertical: 10 },
         menuIconWrap: {
@@ -197,7 +197,7 @@ export default function SettingsScreen() {
             width: 50, height: 28, borderRadius: 14,
             backgroundColor: colors.border.default, justifyContent: 'center', paddingHorizontal: 2,
         },
-        toggleOn: { backgroundColor: colors.brand.primary },
+        toggleOn: { backgroundColor: colors.brand.fill },
         toggleThumb: {
             width: 24, height: 24, borderRadius: 12, backgroundColor: colors.surface.card,
             shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.15, shadowRadius: 2, elevation: 2,
@@ -226,55 +226,6 @@ export default function SettingsScreen() {
         },
         segmentText: { fontSize: 13, fontWeight: '500', color: colors.text.secondary, textAlign: 'center' },
         segmentTextSelected: { fontWeight: '700', color: colors.text.heading },
-
-        // ─── Light Color Schemes ───
-        colorSchemeContainer: {
-            paddingHorizontal: 16,
-            paddingBottom: 16,
-            paddingTop: 8,
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border.default,
-        },
-        colorSchemeLabel: {
-            fontSize: 11,
-            fontWeight: '700',
-            color: colors.text.secondary,
-            marginBottom: 8,
-            textTransform: 'uppercase',
-            letterSpacing: 0.5,
-        },
-        colorSchemeRow: {
-            flexDirection: 'row',
-            gap: 8,
-        },
-        schemeChip: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingVertical: 8,
-            paddingHorizontal: 12,
-            borderRadius: 20,
-            borderWidth: 1,
-            backgroundColor: colors.surface.subtle,
-            gap: 6,
-        },
-        schemeChipSelected: {
-            backgroundColor: colors.surface.card,
-            borderWidth: 1,
-        },
-        schemeDot: {
-            width: 10,
-            height: 10,
-            borderRadius: 5,
-        },
-        schemeText: {
-            fontSize: 13,
-            color: colors.text.body,
-            fontWeight: '500',
-        },
-        schemeTextActive: {
-            fontWeight: '700',
-            color: colors.text.heading,
-        },
 
         // ─── Danger Zone ───
         dangerGroup: {
@@ -308,7 +259,7 @@ export default function SettingsScreen() {
         dangerBtn: { backgroundColor: colors.feedback.danger.bg, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 16, borderWidth: 1, borderColor: colors.feedback.danger.border },
         dangerBtnText: { color: colors.feedback.danger.fg, fontSize: 14, fontWeight: 'bold' },
         infoText: { fontSize: 14, color: colors.text.secondary, marginBottom: 16, lineHeight: 20 },
-        errorText: { color: colors.feedback.danger.solid, marginBottom: 16, textAlign: 'center' },
+        errorText: { color: colors.feedback.danger.fg, marginBottom: 16, textAlign: 'center' },
         
         // Seed UI
         seedGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginTop: 16 },
@@ -961,6 +912,18 @@ export default function SettingsScreen() {
     const [appLockEnabled, setAppLockEnabledState] = useState(false);
     const onAppLockTurnedOn = React.useCallback(() => setAppLockEnabledState(true), []);
     const [showBlockedModal, setShowBlockedModal] = useState(false);
+    // "Show me as a connection in common" (server SHOW_AS_CONNECTION_PREF), on unless turned off. null until the node says:
+    // it is served to the member alone, so it is read with a signed request.
+    const [showAsConnection, setShowAsConnection] = useState<boolean | null>(null);
+    useEffect(() => {
+        if (!identity?.publicKey) return;
+        let cancelled = false;
+        signedGet(`/api/members/preferences?publicKey=${identity.publicKey}`)
+            .then(res => (res.ok ? res.json() : null))
+            .then(prefs => { if (!cancelled && prefs && typeof prefs.show_as_connection_in_common === 'string') setShowAsConnection(prefs.show_as_connection_in_common !== 'false'); })
+            .catch(e => console.warn('[Prefs] Could not read the connection-in-common setting:', e));
+        return () => { cancelled = true; };
+    }, [identity?.publicKey]);
     const [blockedUsersList, setBlockedUsersList] = useState<{ pubkey: string; callsign?: string }[]>([]);
     const [loadingBlockedList, setLoadingBlockedList] = useState(false);
 
@@ -1850,56 +1813,6 @@ export default function SettingsScreen() {
                             <View style={[styles.toggleThumb, appLockEnabled && styles.toggleThumbOn]} />
                         </Pressable>
                     </View>
-                    {/* Light Mode Color Scheme Selector */}
-                    {theme === 'light' && (
-                        <View style={styles.colorSchemeContainer}>
-                            <Text style={styles.colorSchemeLabel}>Light Color Scheme</Text>
-                            <View style={styles.colorSchemeRow}>
-                                <Pressable 
-                                    style={[
-                                        styles.schemeChip, 
-                                        lightPalette === 'classic' && styles.schemeChipSelected,
-                                        { borderColor: lightPalette === 'classic' ? colors.brand.primary : colors.border.default }
-                                    ]}
-                                    onPress={() => setLightPalette('classic')}
-                                    accessibilityRole="button"
-                                    accessibilityLabel="Classic Palette"
-                                    accessibilityState={{ selected: lightPalette === 'classic' }}
-                                >
-                                    <View style={[styles.schemeDot, { backgroundColor: '#10b981' }]} />
-                                    <Text style={[styles.schemeText, lightPalette === 'classic' && styles.schemeTextActive]}>Classic</Text>
-                                </Pressable>
-                                <Pressable 
-                                    style={[
-                                        styles.schemeChip, 
-                                        lightPalette === 'earth' && styles.schemeChipSelected,
-                                        { borderColor: lightPalette === 'earth' ? '#647664' : colors.border.default }
-                                    ]}
-                                    onPress={() => setLightPalette('earth')}
-                                    accessibilityRole="button"
-                                    accessibilityLabel="Earth Palette"
-                                    accessibilityState={{ selected: lightPalette === 'earth' }}
-                                >
-                                    <View style={[styles.schemeDot, { backgroundColor: '#647664' }]} />
-                                    <Text style={[styles.schemeText, lightPalette === 'earth' && styles.schemeTextActive]}>Earth</Text>
-                                </Pressable>
-                                <Pressable 
-                                    style={[
-                                        styles.schemeChip, 
-                                        lightPalette === 'slate' && styles.schemeChipSelected,
-                                        { borderColor: lightPalette === 'slate' ? '#2563eb' : colors.border.default }
-                                    ]}
-                                    onPress={() => setLightPalette('slate')}
-                                    accessibilityRole="button"
-                                    accessibilityLabel="Slate Palette"
-                                    accessibilityState={{ selected: lightPalette === 'slate' }}
-                                >
-                                    <View style={[styles.schemeDot, { backgroundColor: '#2563eb' }]} />
-                                    <Text style={[styles.schemeText, lightPalette === 'slate' && styles.schemeTextActive]}>Slate</Text>
-                                </Pressable>
-                            </View>
-                        </View>
-                    )}
                     <Pressable style={styles.menuBtn} onPress={async () => {
                         setMode('notifications');
                         setNotifLoading(true);
@@ -2024,6 +1937,26 @@ export default function SettingsScreen() {
                         <Text style={[styles.menuText, { flex: 1 }]}>Manage Blocked Users</Text>
                         <Text style={styles.menuChevron} aria-hidden={true} importantForAccessibility="no">›</Text>
                     </Pressable>
+                    {showAsConnection !== null && (
+                        <View style={styles.menuBtn}>
+                            <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🤝</Text></View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.menuText}>Show me as a connection in common</Text>
+                                <Text style={styles.menuSub}>When you and two people are friends both ways, each can see your name on the other's profile</Text>
+                            </View>
+                            <Pressable style={[styles.toggle, showAsConnection && styles.toggleOn]} accessibilityRole="switch" accessibilityLabel="Show me as a connection in common" accessibilityState={{ checked: showAsConnection }} onPress={async () => {
+                                const next = !showAsConnection; setShowAsConnection(next);
+                                try {
+                                    if (identity?.publicKey) await signedRequest('/api/members/preferences', { publicKey: identity.publicKey, preferences: { show_as_connection_in_common: next } });
+                                } catch (e: any) {
+                                    setShowAsConnection(!next);
+                                    Alert.alert('Not saved', e?.message || 'Your community could not save that.');
+                                }
+                            }}>
+                                <View style={[styles.toggleThumb, showAsConnection && styles.toggleThumbOn]} />
+                            </Pressable>
+                        </View>
+                    )}
                     <Pressable style={styles.menuBtn} onPress={() => Linking.openURL('https://beanpool.org/privacy.html')} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🛡️</Text></View>
                         <Text style={[styles.menuText, { flex: 1 }]}>Privacy Policy</Text>
@@ -2080,7 +2013,7 @@ export default function SettingsScreen() {
                             accessibilityHint="Choose to remove account from device or permanently delete from node"
                         >
                             <View style={[styles.menuIconWrap, { backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red50 }]}><Text style={styles.menuIcon}>⚠️</Text></View>
-                            <Text style={[styles.menuText, { flex: 1, color: theme === 'dark' ? colors.feedback.danger.fg : palette.red600 }]}>Account Deletion & Sign Out</Text>
+                            <Text style={[styles.menuText, { flex: 1, color: colors.feedback.danger.fg }]}>Account Deletion & Sign Out</Text>
                             <Text style={[styles.menuChevron, { color: palette.red300 }]}>›</Text>
                         </Pressable>
                     </View>
@@ -2108,7 +2041,7 @@ export default function SettingsScreen() {
                     {/* Only the sign-in part waits for its answer (the key vault's, up to 20 s, or the community's): the
                         12 words below never wait behind it (PR #1336 review finding 9). */}
                     {protectionLoading ? (
-                        <ActivityIndicator color={colors.brand.dark} style={{ marginVertical: 20 }} accessibilityLabel="Checking your sign-in accounts" />
+                        <ActivityIndicator color={colors.brand.primary} style={{ marginVertical: 20 }} accessibilityLabel="Checking your sign-in accounts" />
                     ) : (
                         <>
                             <RecoveryAlertBanner onStopSuccess={fetchProtectionStatus} />
@@ -2186,7 +2119,7 @@ export default function SettingsScreen() {
 
                                     <View style={{ flexDirection: 'row', gap: 10 }}>
                                         <Pressable
-                                            style={{ flex: 1, backgroundColor: colors.brand.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
+                                            style={{ flex: 1, backgroundColor: colors.brand.fill, borderRadius: 10, paddingVertical: 12, alignItems: 'center' }}
                                             onPress={handleCopyWords}
                                             accessibilityRole="button"
                                             accessibilityLabel={copiedWords ? "Recovery words copied to clipboard" : "Copy 12 recovery words to clipboard"}
@@ -2523,7 +2456,7 @@ export default function SettingsScreen() {
                                                 accessibilityLabel="Invite code"
                                             />
                                             <Pressable
-                                                style={{ backgroundColor: colors.brand.primary, paddingHorizontal: 16, borderRadius: 6, justifyContent: 'center' }}
+                                                style={{ backgroundColor: colors.brand.fill, paddingHorizontal: 16, borderRadius: 6, justifyContent: 'center' }}
                                                 onPress={handleRedeemInvite}
                                                 disabled={redeemLoading || !redeemInviteCode.trim()}
                                                 accessibilityRole="button"
@@ -2548,7 +2481,7 @@ export default function SettingsScreen() {
                         <>
                             <Text style={{ fontSize: 16, fontWeight: 'bold', color: colors.text.heading, marginBottom: 8 }}>Join the global community</Text>
                             <Text style={styles.infoText}>Meet people from everywhere and find communities near you, as the account on this phone. Sign in once: your key and your 12 words stay the same, and nothing changes in your other communities.</Text>
-                            <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.primary }]} onPress={() => router.push('/join-global')} accessibilityRole="button">
+                            <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }]} onPress={() => router.push('/join-global')} accessibilityRole="button">
                                 <Text style={styles.primaryBtnText}>🌍 Join the global community</Text>
                             </Pressable>
                             <View style={{ height: 1, backgroundColor: colors.border.default, marginVertical: 24 }} />
@@ -2582,7 +2515,7 @@ export default function SettingsScreen() {
                         accessibilityLabel="New node IP"
                     />
                     
-                    <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.primary }, advancedLoading && { opacity: 0.5 }]} onPress={handleUpdateAnchor} disabled={advancedLoading} accessibilityRole="button">
+                    <Pressable style={[styles.primaryBtn, { backgroundColor: colors.brand.fill }, advancedLoading && { opacity: 0.5 }]} onPress={handleUpdateAnchor} disabled={advancedLoading} accessibilityRole="button">
                         {advancedLoading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Add & Connect</Text>}
                     </Pressable>
 
@@ -2657,7 +2590,7 @@ export default function SettingsScreen() {
                                     <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }} numberOfLines={1}>{dbStats?.members ?? 0}</Text>
                                     <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '600' }} numberOfLines={2}>Cached Members</Text>
                                     {remoteStats && (
-                                        <Text style={{ fontSize: 10, color: dbStats?.members === remoteStats.members ? colors.brand.primary : palette.amber600, fontWeight: 'bold', marginTop: 4 }}>
+                                        <Text style={{ fontSize: 10, color: dbStats?.members === remoteStats.members ? colors.brand.primary : colors.feedback.warning.fg, fontWeight: 'bold', marginTop: 4 }}>
                                             {dbStats?.members === remoteStats.members ? '🟢 Node In Sync' : `⚠️ Node has ${remoteStats.members}`}
                                         </Text>
                                     )}
@@ -2667,7 +2600,7 @@ export default function SettingsScreen() {
                                     <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.text.heading }} numberOfLines={1}>{dbStats?.posts ?? 0}</Text>
                                     <Text style={{ fontSize: 12, color: colors.text.muted, fontWeight: '600' }} numberOfLines={2}>Active Posts</Text>
                                     {remoteStats && (
-                                        <Text style={{ fontSize: 10, color: dbStats?.posts === remoteStats.posts ? colors.brand.primary : palette.amber600, fontWeight: 'bold', marginTop: 4 }}>
+                                        <Text style={{ fontSize: 10, color: dbStats?.posts === remoteStats.posts ? colors.brand.primary : colors.feedback.warning.fg, fontWeight: 'bold', marginTop: 4 }}>
                                             {dbStats?.posts === remoteStats.posts ? '🟢 Node In Sync' : `⚠️ Node has ${remoteStats.posts}`}
                                         </Text>
                                     )}
@@ -2709,12 +2642,12 @@ export default function SettingsScreen() {
 
                             {/* Action Buttons */}
                             <Pressable
-                                style={[styles.primaryBtn, { backgroundColor: colors.accent.primary, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]}
+                                style={[styles.primaryBtn, { backgroundColor: colors.accent.fill, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8 }]}
                                 onPress={() => loadDiagnostics()}
                                 accessibilityRole="button"
                             >
                                 <Text style={{ fontSize: 16 }}>🔄</Text>
-                                <Text style={styles.primaryBtnText}>Re-Run Structural Diagnostic Check</Text>
+                                <Text style={[styles.primaryBtnText, { color: colors.text.onAccent }]}>Re-Run Structural Diagnostic Check</Text>
                             </Pressable>
 
                             {/* Re-Sync Database Button */}
@@ -2807,7 +2740,7 @@ export default function SettingsScreen() {
                                 </>
                             ) : (
                                 <>
-                                    <Text style={[styles.infoText, { color: colors.feedback.danger.solid, fontWeight: 'bold' }]}>
+                                    <Text style={[styles.infoText, { color: colors.feedback.danger.fg, fontWeight: 'bold' }]}>
                                         Never share this phrase with anyone. Write it down on paper and keep it secure.
                                     </Text>
                                     <View style={styles.seedGrid}>
@@ -2833,7 +2766,7 @@ export default function SettingsScreen() {
                                         </NoScreenCapture>
                                     </View>
                                     <Pressable
-                                        style={[styles.primaryBtn, { backgroundColor: colors.brand.primary, marginTop: 16 }]}
+                                        style={[styles.primaryBtn, { backgroundColor: colors.brand.fill, marginTop: 16 }]}
                                         onPress={handleCopySeed}
                                         accessibilityRole="button"
                                     >
@@ -2858,7 +2791,7 @@ export default function SettingsScreen() {
 
             {mode === 'wipe' && (
                 <View style={styles.card}>
-                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.feedback.danger.solid, marginBottom: 8 }}>
+                    <Text style={{ fontSize: 18, fontWeight: 'bold', color: colors.feedback.danger.fg, marginBottom: 8 }}>
                         Account Deletion & Sign Out
                     </Text>
 
@@ -3094,7 +3027,7 @@ export default function SettingsScreen() {
 
                                 <Text style={styles.label}>TYPE 'DELETE' OR '{nodeCallsign || identity?.callsign || 'CALLSIGN'}' TO CONFIRM</Text>
                                 <TextInput
-                                    style={[styles.input, { textAlign: 'center', fontWeight: 'bold', color: colors.feedback.danger.solid, borderColor: colors.feedback.danger.border }]}
+                                    style={[styles.input, { textAlign: 'center', fontWeight: 'bold', color: colors.feedback.danger.fg, borderColor: colors.feedback.danger.border }]}
                                     value={purgeConfirm}
                                     onChangeText={setPurgeConfirm}
                                     placeholder="DELETE"
@@ -3161,7 +3094,7 @@ export default function SettingsScreen() {
 
                         {/* Progress Bar Container */}
                         <View style={{ width: '100%', height: 8, backgroundColor: colors.surface.app, borderRadius: 4, overflow: 'hidden', marginBottom: 16, borderWidth: 1, borderColor: colors.border.default }}>
-                            <View style={{ width: `${Math.round((resyncProgressStep / resyncTotalSteps) * 100)}%`, height: '100%', backgroundColor: colors.brand.primary }} />
+                            <View style={{ width: `${Math.round((resyncProgressStep / resyncTotalSteps) * 100)}%`, height: '100%', backgroundColor: colors.brand.fill }} />
                         </View>
 
                         <Text style={{ fontSize: 12, color: colors.text.muted, textAlign: 'center', lineHeight: 18 }}>
@@ -3213,7 +3146,7 @@ export default function SettingsScreen() {
                                                     setBlockedUsersList(prev => prev.filter(u => u.pubkey !== item.pubkey));
                                                 }}
                                             >
-                                                <Text style={{ color: colors.feedback.danger.solid, fontWeight: '700', fontSize: 12 }}>Unblock</Text>
+                                                <Text style={{ color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 12 }}>Unblock</Text>
                                             </Pressable>
                                         </View>
                                     ))}
@@ -3236,7 +3169,7 @@ export default function SettingsScreen() {
                                         ]);
                                     }}
                                 >
-                                    <Text style={{ color: colors.feedback.danger.solid, fontWeight: '700', fontSize: 14 }}>Unblock All</Text>
+                                    <Text style={{ color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 14 }}>Unblock All</Text>
                                 </Pressable>
                             </>
                         )}

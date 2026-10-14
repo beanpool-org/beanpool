@@ -57,7 +57,7 @@ export default function ClaimCommunityScreen() {
         codeInput: { minHeight: 48, fontSize: 16, color: colors.text.heading, fontFamily: 'monospace', paddingVertical: 8, paddingHorizontal: 0 },
         input: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.app, color: colors.text.heading, fontSize: 16, paddingHorizontal: 12, paddingVertical: 10 },
         actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-        primary: { minHeight: 48, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
+        primary: { minHeight: 48, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.brand.fill, alignItems: 'center', justifyContent: 'center', marginTop: 16 },
         primaryText: { color: colors.text.inverse, fontSize: 16, fontWeight: '800', textAlign: 'center' },
         secondary: { minHeight: 48, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
         secondaryText: { color: colors.text.body, fontSize: 15, fontWeight: '700', textAlign: 'center', flexShrink: 1 },

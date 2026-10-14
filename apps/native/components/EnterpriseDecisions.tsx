@@ -158,7 +158,7 @@ function ScopedDecisions({ read, cast, nameOf, note, lifecycle, refreshKey, prop
                         {isOpen && !mine && d.canVote === true && (
                             <View style={s.voteRow}>
                                 <Pressable
-                                    style={[s.voteBtn, { backgroundColor: colors.brand.primary }, busyId === d.id && { opacity: 0.5 }]}
+                                    style={[s.voteBtn, { backgroundColor: colors.brand.fill }, busyId === d.id && { opacity: 0.5 }]}
                                     disabled={busyId === d.id} onPress={() => vote(d, true)}
                                     accessibilityRole="button" accessibilityLabel={`Vote Yes on ${d.title}`}
                                 >
@@ -280,7 +280,7 @@ function ProposeScopedDecision({ treasuryKey, me, roll, balance, earnedSurplus, 
                             placeholder="Say why, in a sentence or two." placeholderTextColor={colors.text.muted} accessibilityLabel="Why" />
                         {error && <Text style={s.error}>{error}</Text>}
                         <View style={s.voteRow}>
-                            <Pressable style={[s.voteBtn, { backgroundColor: colors.brand.primary }, (!ready || busy) && { opacity: 0.5 }]}
+                            <Pressable style={[s.voteBtn, { backgroundColor: colors.brand.fill }, (!ready || busy) && { opacity: 0.5 }]}
                                 disabled={!ready || busy} onPress={send} accessibilityRole="button"
                                 accessibilityLabel={busy ? "Opening the vote..." : "Open the vote"}
                                 accessibilityHint="Opens a new decision vote"
@@ -391,7 +391,7 @@ function ProposeGroupDecision({ groupId, me, people, joinPolicy, onClose, onDone
                             placeholder="Say why, in a sentence or two." placeholderTextColor={colors.text.muted} accessibilityLabel="Why" />
                         {error && <Text style={s.error}>{error}</Text>}
                         <View style={s.voteRow}>
-                            <Pressable style={[s.voteBtn, { backgroundColor: colors.brand.primary }, (!ready || busy) && { opacity: 0.5 }]}
+                            <Pressable style={[s.voteBtn, { backgroundColor: colors.brand.fill }, (!ready || busy) && { opacity: 0.5 }]}
                                 disabled={!ready || busy} onPress={send} accessibilityRole="button"
                                 accessibilityLabel={busy ? "Opening the vote..." : "Open the vote"}
                                 accessibilityHint="Opens a new decision vote"
@@ -436,7 +436,7 @@ const styles = (colors: any) => StyleSheet.create({
     fieldLabel: { fontSize: 13, fontWeight: '700', color: colors.text.heading, marginTop: 10, marginBottom: 6 },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     chip: { borderWidth: 1, borderColor: colors.border.default, borderRadius: 18, paddingHorizontal: 12, minHeight: 44, justifyContent: 'center', maxWidth: '100%' },
-    chipOn: { backgroundColor: colors.brand.primary, borderColor: colors.brand.primary },
+    chipOn: { backgroundColor: colors.brand.fill, borderColor: colors.brand.primary },
     chipText: { color: colors.text.body, fontSize: 14 },
     chipTextOn: { color: colors.text.inverse, fontWeight: '700' },
     input: { borderWidth: 1, borderColor: colors.border.default, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, color: colors.text.body, fontSize: 15, backgroundColor: colors.surface.subtle },

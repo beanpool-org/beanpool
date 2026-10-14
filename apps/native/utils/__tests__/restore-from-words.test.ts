@@ -56,7 +56,7 @@ const BELLINGEN = 'https://bellingen.beanpool.org';
 const ANCHOR = 'beanpool_anchor_url';
 const INVITE_RECORD = { step: 'profileSetup' as const, inviteCode: 'INV-ABC', anchorUrl: MULLUM, callsign: 'Kim', redeemed: true };
 /** What stays through any restore: a setting about the phone, not the member. */
-const PHONE_KEPT = { beanpool_light_palette: 'sand' };
+const PHONE_KEPT = { beanpool_theme_mode: 'dark' }; // THEME_PREFERENCE_KEY: light, dark or system
 
 /**
  * The app storage an account leaves on the phone: its guest markers, the communities it asked, its sync cursors, its

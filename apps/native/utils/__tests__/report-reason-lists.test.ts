@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { CHILD_SAFETY_REASON, REPORT_REASONS } from '../reportReasons';
+import { CHILD_SAFETY_REASON, REPORT_REASONS, reportReasonWithWords } from '../reportReasons';
 
 const APP = path.join(__dirname, '..', '..');
 const read = (rel: string) => fs.readFileSync(path.join(APP, rel), 'utf8');
@@ -55,6 +55,45 @@ describe('the phone\'s report lists', () => {
         const b = box(src, 'Report this post — why?', '<View style={styles.reportActions}>');
         expect(b).toContain('{PULSE_REPORT_REASONS.map((r) =>');
         expect(b).toContain(HINT);
+    });
+
+    // The follow-up to #1895 (director, 14 Oct): every report screen offers the list before the socialism.org launch.
+    // The event screen and an enterprise or project used a fixed reason and a free-text box, so a child-safety concern
+    // there hung on the server's keyword guess.
+    it('the shared report box (components/ReportReasonBox.tsx) lists the shared reasons, says what Child safety is for, and sends the reason first', () => {
+        const src = read('components/ReportReasonBox.tsx');
+        expect(src).toMatch(/import \{[^}]*\bREPORT_REASONS\b[^}]*\} from '\.\.\/utils\/reportReasons'/);
+        expect(src).toContain('{REPORT_REASONS.map((r) =>');
+        expect(src).toContain(HINT);
+        expect(src).toContain('placeholder="Add a few words (optional)"');
+        expect(src).toContain('await onSubmit(reportReasonWithWords(reason, words));');
+    });
+
+    it('the event screen (components/EventDetail.tsx) reports through the shared box, never a fixed reason', () => {
+        const src = read('components/EventDetail.tsx');
+        expect(src).toContain("import { ReportReasonBox } from './ReportReasonBox';");
+        expect(src).toMatch(/<ReportReasonBox onSubmit=\{report\}/);
+        expect(src).toMatch(/reportAbuse\(identity\.publicKey, [^,]+, reason, post\.id\)/);
+        expect(src).not.toContain('Event reported from the event screen');
+    });
+
+    it('an enterprise or project (app/treasury-detail.tsx) reports through the shared box, never a free-text reason', () => {
+        const src = read('app/treasury-detail.tsx');
+        expect(src).toContain("import { ReportReasonBox } from '../components/ReportReasonBox';");
+        const b = box(src, '{showReportForm && (', 'Alert.alert(\'Reported\'');
+        expect(b).toContain('<ReportReasonBox');
+        expect(b).toContain('await reportAbuse(identity.publicKey, treasuryKey, reason, treasuryKey);');
+        expect(b).not.toContain('TextInput');
+        // A failed send rethrows after its alert, so the box keeps the choice and the words (review of #1912, finding 3;
+        // the event screen's side is drawn in event-report-render.test.ts).
+        expect(src).toMatch(/Alert\.alert\('Error', e\.message \|\| 'Could not submit report\.'\);\s*throw e;/);
+    });
+
+    it('what a report sends: the picked reason first, then any words', () => {
+        expect(reportReasonWithWords(CHILD_SAFETY_REASON, '')).toBe('Child safety');
+        expect(reportReasonWithWords(CHILD_SAFETY_REASON, '   ')).toBe('Child safety');
+        expect(reportReasonWithWords(CHILD_SAFETY_REASON, ' messages to my daughter ')).toBe('Child safety: messages to my daughter');
+        expect(reportReasonWithWords('Other', 'x')).toBe('Other: x');
     });
 
     it('no screen spells out a list of its own', () => {

@@ -277,7 +277,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
     noticeText: { flex: 1, fontSize: 13, lineHeight: 19, color: colors.text.secondary },
     primaryBtn: {
         minHeight: 56, borderRadius: 16, marginTop: 20, alignItems: 'center', justifyContent: 'center',
-        backgroundColor: colors.brand.primary, paddingHorizontal: 16, alignSelf: 'stretch',
+        backgroundColor: colors.brand.fill, paddingHorizontal: 16, alignSelf: 'stretch',
     },
     btnDisabled: { opacity: 0.55 },
     primaryText: { color: colors.text.inverse, fontSize: 18, fontWeight: '800' },

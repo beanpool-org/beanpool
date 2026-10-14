@@ -19,6 +19,16 @@ vi.mock('../lib/api', () => ({
     markNoticesSeen: vi.fn(async () => ({ success: true, marked: 1 })),
     getCommunityMe: vi.fn(async () => ({ probation: { rules: 'ordinary', keptPosts: 0, ageEndsAt: null } })),
 }));
+// The shared town search (components/AddressSearch.tsx over @beanpool/core createAddressLookup), stood in for by one
+// match: what is tested here is where a picked town goes, never OpenStreetMap.
+vi.mock('../components/AddressSearch', () => ({
+    AddressSearch: ({ onPick, words }: { onPick: (r: unknown) => void; words?: { label: string } }) => (
+        <button type="button" data-testid="town-search" aria-label={words?.label}
+            onClick={() => onPick({ lat: -28.8135, lng: 153.2773, displayName: 'Lismore, New South Wales, Australia', shortName: 'Lismore' })}>
+            pick Lismore
+        </button>
+    ),
+}));
 vi.mock('../lib/sync', () => ({
     onSyncActivity: vi.fn((cb: () => unknown) => { hooks.sync.push(cb); return () => { hooks.sync = hooks.sync.filter(c => c !== cb); }; }),
     onSocketOpen: vi.fn((cb: () => void) => { hooks.open.push(cb); return () => { hooks.open = hooks.open.filter(c => c !== cb); }; }),
@@ -27,7 +37,7 @@ vi.mock('../lib/sync', () => ({
 
 import * as api from '../lib/api';
 import { HomePage, HOME_HINT, HOME_NOT_ON_NODE, HOME_OFFLINE, HOME_SIGNED_OUT, TIPS_DONE_WORDS, tipsKey } from './HomePage';
-import { START_CARD_WORDS, TOUR_WORDS, localDay, skyToday, starterCards, tipsFor, tourSteps } from '@beanpool/core';
+import { FIND_TOWN_SEARCH_WORDS, START_CARD_WORDS, TOUR_WORDS, localDay, skyToday, starterCards, tipsFor, tourSteps } from '@beanpool/core';
 import * as tourStore from '../lib/tour-store';
 import { removedLine } from '../lib/home-layout';
 import { NOTICES_SEEN_EVENT, SKY_NO_PLACE_LINE } from '../lib/home-cards';
@@ -498,6 +508,72 @@ describe("a visitor's Home in the global lobby (§5.3)", () => {
         fireEvent.click(await screen.findByTestId('home-share-area'));
         await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
         expect(vi.mocked(api.getHome).mock.calls[1][0]).toEqual({ lat: -28.6, lng: 153.5 });
+    });
+
+    it('or type your town (Marty 14 Oct): a picked town is sent as the point, as roughly as a shared one, and shown with "change"', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(visitorAnswer()));
+        const getCurrentPosition = vi.fn();
+        vi.stubGlobal('navigator', { ...navigator, geolocation: { getCurrentPosition } });
+        render(<HomePage identity={null} visitor={{ joinCard: null, beans: false }} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('home-type-town'));
+        expect(screen.getByTestId('town-search')).toHaveAccessibleName(FIND_TOWN_SEARCH_WORDS.label);
+        fireEvent.click(screen.getByTestId('town-search'));
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
+        expect(vi.mocked(api.getHome).mock.calls[1][0]).toEqual({ lat: -28.8, lng: 153.3 });
+        expect(getCurrentPosition).not.toHaveBeenCalled();
+        expect(await screen.findByTestId('home-town-picked')).toHaveTextContent('Near Lismore');
+        fireEvent.click(within(screen.getByTestId('home-town-picked')).getByRole('button', { name: /change/i }));
+        expect(screen.getByTestId('town-search')).toBeInTheDocument();
+    });
+
+    // The #1917 check's findings 3, 4 and 6 (web side).
+    it('after a town: "change" can be cancelled back to it, "Share my area" is still there and lets the town go; a known place keeps "Not here?"', async () => {
+        const placed = (): HomeAnswer => { const a = visitorAnswer(); a.cards.find!.point = 'request'; return a; };
+        vi.mocked(api.getHome).mockResolvedValueOnce(fresh(visitorAnswer())).mockResolvedValue(fresh(placed()));
+        const getCurrentPosition = vi.fn((ok: PositionCallback) => ok({ coords: { latitude: -28.5543, longitude: 153.4999 } } as GeolocationPosition));
+        vi.stubGlobal('navigator', { ...navigator, geolocation: { getCurrentPosition } });
+        render(<HomePage identity={null} visitor={{ joinCard: null, beans: false }} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('home-type-town'));
+        fireEvent.click(screen.getByTestId('town-search'));
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(2));
+        expect(await screen.findByTestId('home-town-picked')).toHaveTextContent('Near Lismore');
+        // The answer now has a point, from the town: the GPS route stays, the other town links don't repeat it.
+        expect(screen.getByTestId('home-share-area')).toBeInTheDocument();
+        expect(screen.queryByTestId('home-type-town')).toBeNull();
+        expect(screen.queryByTestId('home-type-town-instead')).toBeNull();
+        // change, then Cancel: the box closes with nothing picked, and the town stands.
+        fireEvent.click(within(screen.getByTestId('home-town-picked')).getByRole('button', { name: /change/i }));
+        expect(screen.queryByTestId('home-town-picked')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel, and keep near Lismore' }));
+        expect(screen.queryByTestId('town-search')).toBeNull();
+        expect(screen.getByTestId('home-town-picked')).toHaveTextContent('Near Lismore');
+        expect(api.getHome).toHaveBeenCalledTimes(2);
+        // Share my area: the browser's place, and the town is let go.
+        fireEvent.click(screen.getByTestId('home-share-area'));
+        await waitFor(() => expect(api.getHome).toHaveBeenCalledTimes(3));
+        expect(vi.mocked(api.getHome).mock.calls[2][0]).toEqual({ lat: -28.6, lng: 153.5 });
+        await waitFor(() => expect(screen.queryByTestId('home-town-picked')).toBeNull());
+        expect(screen.queryByTestId('home-share-area')).toBeNull();
+        // A known place still offers the town, quietly.
+        expect(screen.getByTestId('home-type-town-instead')).toHaveTextContent('Not here? Type your town');
+        // The library's link role, light and dark alike, never a raw shade (finding 5).
+        expect(screen.getByTestId('home-type-town-instead').className).toMatch(/\btext-link\b.*\bring-accent\b/);
+        expect(screen.getByTestId('home-type-town-instead').className).not.toMatch(/nature-|emerald-/);
+        fireEvent.click(screen.getByTestId('home-type-town-instead'));
+        expect(screen.getByTestId('town-search')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel the town search' }));
+        expect(screen.queryByTestId('town-search')).toBeNull();
+        expect(screen.getByTestId('home-type-town-instead')).toBeInTheDocument();
+    });
+
+    it('a location the browser refused offers typing the town instead, and opens the box', async () => {
+        vi.mocked(api.getHome).mockResolvedValue(fresh(visitorAnswer()));
+        const getCurrentPosition = vi.fn((_ok: PositionCallback, no?: PositionErrorCallback | null) => no?.({ code: 1 } as GeolocationPositionError));
+        vi.stubGlobal('navigator', { ...navigator, geolocation: { getCurrentPosition } });
+        render(<HomePage identity={null} visitor={{ joinCard: null, beans: false }} onNavigate={vi.fn()} />);
+        fireEvent.click(await screen.findByTestId('home-share-area'));
+        expect(await screen.findByRole('alert')).toHaveTextContent('Type your town instead');
+        expect(screen.getByTestId('town-search')).toBeInTheDocument();
     });
 });
 
@@ -1401,12 +1477,15 @@ describe('an empty version-1 account list, no copy here: every edit stands once 
 describe('a read that overtakes the first save\'s answer on an empty version-1 list: the newer edit stands and is sent (review of #1701 confirmation, finding 2)', () => {
     const ids = (l: unknown) => ((l as { cards?: Array<{ id: string }> } | null)?.cards ?? []).map(c => c.id);
     /**
-     * nodeKeeping, but a save is applied at once and answered `delayMs` later. As home-preferences.ts, a date ahead of the
-     * node's clock is held to its now; `behindMs`: the node's clock is that far behind this browser's.
+     * nodeKeeping, but a save is applied at once and, with `hold`, answered only when the test calls answerSaves(): never on
+     * a timer, so which comes first is the test's choice and not how fast this machine runs (a 400 ms answer lost the race
+     * to the test's own waits under load). As home-preferences.ts, a date ahead of the node's clock is held to its now;
+     * `behindMs`: the node's clock is that far behind this browser's.
      */
-    function nodeSlowSave(full: HomeAnswer, start: unknown, delayMs: number, behindMs = 0) {
+    function nodeSlowSave(full: HomeAnswer, start: unknown, hold: boolean, behindMs = 0) {
         let account: unknown = start;
         const log: string[] = [];
+        const out: Array<() => void> = [];
         const at = (x: unknown) => (x && typeof x === 'object' && typeof (x as { updatedAt?: unknown }).updatedAt === 'string' ? Date.parse((x as { updatedAt: string }).updatedAt) : -Infinity);
         vi.mocked(api.saveHomePreferences).mockImplementation(async (_pk, prefs) => {
             const sent = prefs['home.layout'] as unknown;
@@ -1414,7 +1493,8 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
             const nodeNow = Date.now() - behindMs;
             const l = sent && at(sent) > nodeNow ? { ...(sent as object), updatedAt: new Date(nodeNow).toISOString() } : sent;
             if (l && at(l) >= at(account)) account = l;
-            await new Promise(r => setTimeout(r, delayMs));
+            if (hold) await new Promise<void>(r => { out.push(r); });
+            else await new Promise(r => setTimeout(r, 0));
             log.push('answered');
             return { success: true, 'home.layout': account } as never;
         });
@@ -1423,27 +1503,40 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
             const asked = params.cards ? [...params.cards] : Object.keys(full.cards);
             return fresh({ ...full, layout: account as never, cards: Object.fromEntries(Object.entries(full.cards).filter(([id]) => asked.includes(id))) });
         });
-        return { log, account: () => account };
+        // Every save still out answers now, oldest first; one sent after this is held again.
+        const answerSaves = () => act(async () => { for (const r of out.splice(0)) r(); });
+        return { log, account: () => account, answerSaves };
     }
     const add = (t: string) => {
         fireEvent.click(screen.getByTestId('home-add-open'));
         fireEvent.click(screen.getByTestId(`home-add-${t}`));
     };
     const posts = (log: string[]) => log.filter(l => l.startsWith('POST ')).length;
+    const reads = (log: string[]) => log.filter(l => l.startsWith('GET')).length;
+    /** The read an edit made has answered and been drawn: it was asked after `before` reads, and the page has taken it in. */
+    const readAnswered = async (log: string[], before: number) => {
+        await waitFor(() => expect(reads(log)).toBeGreaterThan(before));
+        await pause(20);
+    };
 
     it('X1: Add Your Beans, then Add The Pulse before the first save answers, and the second edit\'s read answers first: both stand, on the account too', async () => {
-        const node = nodeSlowSave(answer(), EMPTY_V1, 400);
+        const node = nodeSlowSave(answer(), EMPTY_V1, true);
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-events');
         add('beans');
         await waitFor(() => expect(posts(node.log)).toBe(1));
         await pause(20);
         // The node has the first save; its answer is still out. The second edit's read answers before it.
+        const before = reads(node.log);
         add('pulse');
-        await pause(60);
+        await readAnswered(node.log, before);
         expect(node.log).not.toContain('answered');
         expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
-        await pause(900);
+        // Now the first save answers, then the second edit's save that waited on it.
+        await node.answerSaves();
+        await waitFor(() => expect(posts(node.log)).toBe(2));
+        await node.answerSaves();
+        await pause(100);
         expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
         expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
         // The second edit is sent once, after the first save's answer (one save out at a time).
@@ -1453,7 +1546,7 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
     });
 
     it('X1, the mark kept in this browser: closed before either answer, opened again, the account\'s list is this browser\'s own save, so the newer edit wins and is sent', async () => {
-        const node = nodeSlowSave(answer(), EMPTY_V1, 400);
+        const node = nodeSlowSave(answer(), EMPTY_V1, true);
         const first = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-events');
         add('beans');
@@ -1465,7 +1558,11 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
         await pause(20);
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-pulse');
-        await pause(900);
+        expect(node.log).not.toContain('answered');
+        await node.answerSaves();
+        await waitFor(() => expect(posts(node.log)).toBe(2));
+        await node.answerSaves();
+        await pause(100);
         expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
         expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
         expect(posts(node.log)).toBe(2);
@@ -1503,17 +1600,24 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
 
     for (const behind of [200, 5_000]) {
         it(`S1: X1 with the node's clock ${behind} ms behind this browser's, so the node dates the first save earlier than sent: both edits stand, on the account too (review of #1715, finding 1)`, async () => {
-            const node = nodeSlowSave(answer(), EMPTY_V1, 400, behind);
+            const node = nodeSlowSave(answer(), EMPTY_V1, true, behind);
             render(<HomePage identity={ME} onNavigate={vi.fn()} />);
             await screen.findByTestId('home-card-events');
             add('beans');
             await waitFor(() => expect(posts(node.log)).toBe(1));
             await pause(20);
             // The second edit's read carries the first save back with the node's date, not the one this browser sent.
+            const before = reads(node.log);
             add('pulse');
-            await pause(60);
+            await readAnswered(node.log, before);
             expect(node.log).not.toContain('answered');
-            await pause(900);
+            // The second save reaches the node at least 250 ms after its edit (a slower machine only makes it later): a node
+            // 200 ms behind takes its date as sent, one 5 s behind still holds it to its now.
+            await pause(250);
+            await node.answerSaves();
+            await waitFor(() => expect(posts(node.log)).toBe(2));
+            await node.answerSaves();
+            await pause(100);
             expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
             expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
             expect(posts(node.log)).toBe(2);
@@ -1528,7 +1632,7 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
     }
 
     it('S2: the member\'s own list, the node\'s clock 5 s behind this browser\'s: one Add is sent once, and the reads after it send nothing (review of #1715, note 1)', async () => {
-        const node = nodeSlowSave(answer(), v2(['events', 'market', 'pulse'], AT), 0, 5_000);
+        const node = nodeSlowSave(answer(), v2(['events', 'market', 'pulse'], AT), false, 5_000);
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-events');
         add('beans');
@@ -1545,7 +1649,7 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
     });
 
     it('S1, the mark kept in this browser: the node\'s clock 5 s behind, closed before either answer, opened again: the node\'s copy of the first save is still this browser\'s own, so the newer edit wins and is sent', async () => {
-        const node = nodeSlowSave(answer(), EMPTY_V1, 400, 5_000);
+        const node = nodeSlowSave(answer(), EMPTY_V1, true, 5_000);
         const first = render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-events');
         add('beans');
@@ -1556,7 +1660,11 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
         await pause(20);
         render(<HomePage identity={ME} onNavigate={vi.fn()} />);
         await screen.findByTestId('home-card-pulse');
-        await pause(900);
+        expect(node.log).not.toContain('answered');
+        await node.answerSaves();
+        await waitFor(() => expect(posts(node.log)).toBe(2));
+        await node.answerSaves();
+        await pause(100);
         expect(cardIds()).toEqual(expect.arrayContaining(['beans', 'pulse']));
         expect(ids(node.account())).toEqual(expect.arrayContaining(['beans', 'pulse']));
         expect(posts(node.log)).toBe(2);
@@ -1567,12 +1675,14 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
         const at = (x: unknown) => (x && typeof x === 'object' && typeof (x as { updatedAt?: unknown }).updatedAt === 'string' ? Date.parse((x as { updatedAt: string }).updatedAt) : -Infinity);
         let account: unknown = EMPTY_V1;
         const log: string[] = [];
+        let answerFirst = () => {};
         vi.mocked(api.saveHomePreferences).mockImplementation(async (_pk, prefs) => {
             const l = prefs['home.layout'] as unknown;
             log.push(`POST ${ids(l).join(',')}`);
             if (log.filter(x => x.startsWith('POST ')).length === 1) {
-                // The first save is applied only as it answers; another device's list, dated 5 ms after it, lands first.
-                await new Promise(r => setTimeout(r, 400));
+                // The first save is applied only as it answers, when the test says (never on a timer); another device's
+                // list, dated 5 ms after it, lands first.
+                await new Promise<void>(r => { answerFirst = r; });
                 const other = {
                     v: 2, dismissed: {}, updatedAt: new Date(at(l) + 5).toISOString(),
                     cards: [{ id: 'market', type: 'market' }, { id: 'decide', type: 'decide' }, { id: 'search-k2x7', type: 'search', settings: { q: 'eggs', kind: 'any' } }],
@@ -1594,9 +1704,13 @@ describe('a read that overtakes the first save\'s answer on an empty version-1 l
         await waitFor(() => expect(posts(log)).toBe(1));
         await pause(40);
         // The second edit's read still sees the empty row: the first save is not applied yet.
+        const before = reads(log);
         add('pulse');
-        await pause(920);
-        expect(log).toContain('answered');
+        await readAnswered(log, before);
+        expect(log).not.toContain('answered');
+        await act(async () => { answerFirst(); });
+        await waitFor(() => expect(log).toContain('answered'));
+        await pause(100);
         expect(posts(log)).toBe(1);
         expect(ids(account)).toEqual(['market', 'decide', 'search-k2x7']);
         expect(cardIds()).toEqual(expect.arrayContaining(['market', 'search-k2x7']));

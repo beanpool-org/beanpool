@@ -242,7 +242,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
         fontWeight: '600',
     },
     resetText: {
-        color: colors.feedback.danger.solid,
+        color: colors.feedback.danger.fg,
         fontSize: 16,
         fontWeight: '600',
     },
@@ -280,7 +280,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
         fontWeight: '600',
     },
     radiusValue: {
-        color: theme === 'dark' ? palette.amber400 : palette.amber600,
+        color: theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg,
         fontSize: 20,
         fontWeight: '900',
     },
@@ -307,7 +307,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
         fontWeight: '500',
     },
     applyBtn: {
-        backgroundColor: palette.orange600,
+        backgroundColor: colors.action.fab,
         paddingVertical: 15,
         borderRadius: 14,
         alignItems: 'center',

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { MemberAvatar } from '../../components/MemberAvatar';
+import { AddedYouLines } from '../../components/AddedYouLines';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Platform, DeviceEventEmitter } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getDb, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi } from '../../utils/db';
@@ -97,45 +98,45 @@ export default function PeopleScreen() {
         dateText: { fontSize: 12, color: colors.text.muted, marginTop: 2, fontWeight: '500' },
         // The distance a member on demand reads (the near list): 4.5:1 on a card, light and dark.
         distanceText: { color: colors.text.secondary },
-        addBtn: { backgroundColor: colors.brand.dark, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, flexShrink: 0, marginLeft: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
+        addBtn: { backgroundColor: colors.brand.fill, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, flexShrink: 0, marginLeft: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
         addBtnText: { color: colors.text.inverse, fontWeight: 'bold', fontSize: 12 },
 
         searchWrap: { paddingHorizontal: 16, paddingTop: 16, backgroundColor: colors.surface.app },
         searchInput: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 12, fontSize: 15, color: colors.text.heading, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
         sortRow: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4, backgroundColor: colors.surface.app, gap: 6 },
         sortPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default },
-        sortPillActive: { backgroundColor: colors.brand.dark, borderColor: colors.brand.dark },
+        sortPillActive: { backgroundColor: colors.brand.fill, borderColor: colors.brand.dark },
         sortPillText: { fontSize: 11, fontWeight: '600', color: colors.text.secondary },
         sortPillTextActive: { color: colors.text.inverse },
 
         sectionHeader: { fontSize: 20, fontWeight: '800', color: colors.text.heading, marginBottom: 6 },
         sectionDesc: { fontSize: 13, color: colors.text.secondary, marginBottom: 20, lineHeight: 18 },
         input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, padding: 16, borderRadius: 12, fontSize: 15, fontWeight: '500', marginBottom: 16, color: colors.text.heading },
-        btnGenerate: { backgroundColor: colors.brand.dark, padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 24, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
+        btnGenerate: { backgroundColor: colors.brand.fill, padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 24, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
         btnGenerateText: { color: colors.text.inverse, fontSize: 15, fontWeight: 'bold' },
 
         qrCard: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50, borderWidth: 2, borderColor: colors.brand.primary, borderRadius: 16, padding: 20, alignItems: 'center', marginBottom: 24 },
-        qrTitle: { color: theme === 'dark' ? colors.text.body : palette.emerald700, fontSize: 14, fontWeight: '600', marginBottom: 16 },
+        qrTitle: { color: theme === 'dark' ? colors.text.body : colors.brand.primary, fontSize: 14, fontWeight: '600', marginBottom: 16 },
         qrBox: { backgroundColor: colors.surface.card, padding: 16, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2, marginBottom: 16 },
         btnCopyQR: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 10 },
         btnCopyQRText: { color: colors.text.body, fontSize: 14, fontWeight: '700' },
 
         pendingHeader: { fontSize: 12, fontWeight: '800', color: colors.text.muted, marginBottom: 12, letterSpacing: 1 },
         pendingCard: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 3, elevation: 1 },
-        pendingFor: { fontSize: 12, fontWeight: '700', color: colors.brand.dark, marginBottom: 4 },
+        pendingFor: { fontSize: 12, fontWeight: '700', color: colors.brand.primary, marginBottom: 4 },
         pendingCode: { fontSize: 13, fontFamily: 'monospace', color: colors.text.heading, fontWeight: '600' },
         btnCopySmall: { backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, marginLeft: 12 },
         btnCopySmallText: { fontSize: 12, fontWeight: '600', color: colors.text.secondary },
 
         // Friend-specific styles
-        friendChip: { fontSize: 10, fontWeight: '800', color: palette.amber500, backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, overflow: 'hidden', flexShrink: 0 },
+        friendChip: { fontSize: 10, fontWeight: '800', color: colors.feedback.warning.fg, backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, overflow: 'hidden', flexShrink: 0 },
         addBtnFriended: { backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong, shadowOpacity: 0 },
-        addBtnTextFriended: { color: colors.brand.dark },
+        addBtnTextFriended: { color: colors.brand.primary },
         friendActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
         msgBtn: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50, width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.green100 },
         msgBtnText: { fontSize: 18 },
         removeFriendBtn: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.red50, width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red200 },
-        removeFriendBtnText: { fontSize: 16, color: colors.feedback.danger.solid, fontWeight: '700' },
+        removeFriendBtnText: { fontSize: 16, color: colors.feedback.danger.fg, fontWeight: '700' },
 
         // Community virtualized row (fixed height)
         communityRow: {
@@ -154,7 +155,7 @@ export default function PeopleScreen() {
         },
         communityFriendDot: {
             position: 'absolute', bottom: -2, right: -2, width: 16, height: 16, borderRadius: 8,
-            backgroundColor: palette.amber500, justifyContent: 'center', alignItems: 'center',
+            backgroundColor: colors.feedback.warning.solid, justifyContent: 'center', alignItems: 'center',
             borderWidth: 2, borderColor: colors.text.inverse,
         },
     }));
@@ -829,6 +830,7 @@ export default function PeopleScreen() {
                     </View>
                 ) : friends.length === 0 ? (
                     <View style={styles.emptyContainer}>
+                        {identity?.publicKey ? <View style={{ alignSelf: 'stretch' }}><AddedYouLines myKey={identity.publicKey} onAddedBack={() => loadFriends(true)} /></View> : null}
                         <Text style={styles.emptyEmoji}>👫</Text>
                         <Text style={styles.emptyTitle}>No friends yet</Text>
                         <Text style={styles.emptyDesc}>Go to Community to browse members and add friends.</Text>
@@ -837,6 +839,7 @@ export default function PeopleScreen() {
                     <FlatList
                         ref={listRef}
                         data={friends}
+                        ListHeaderComponent={identity?.publicKey ? <AddedYouLines myKey={identity.publicKey} onAddedBack={() => loadFriends(true)} /> : null}
                         keyExtractor={(item, index) => `${item.publicKey}_${index}`}
                         contentContainerStyle={[styles.list, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 16 }]}
                         renderItem={({ item, index }) => {
@@ -997,7 +1000,7 @@ export default function PeopleScreen() {
                                     <MemberAvatar avatarUrl={item.avatar_url} pubkey={item.public_key} callsign={item.callsign || '?'} size={44} />
                                     {isFriend && (
                                         <View style={styles.communityFriendDot}>
-                                            <Text style={{ fontSize: 8, color: colors.text.inverse, fontWeight: '800' }}>★</Text>
+                                            <Text style={{ fontSize: 8, color: colors.text.onGold, fontWeight: '800' }}>★</Text>
                                         </View>
                                     )}
                                 </View>
@@ -1021,7 +1024,12 @@ export default function PeopleScreen() {
                                         if (isFriend) {
                                             await removeFriendLocal(identity.publicKey, item.public_key);
                                         } else {
-                                            await addFriendLocal(identity.publicKey, item.public_key);
+                                            // Refused by the node (100 adds a day, or someone you blocked): said, not dropped.
+                                            try {
+                                                await addFriendLocal(identity.publicKey, item.public_key);
+                                            } catch (e: any) {
+                                                Alert.alert('Not added', e?.message || 'Your community did not add them.');
+                                            }
                                         }
                                         loadFriends();
                                     }}
@@ -1044,7 +1052,7 @@ export default function PeopleScreen() {
                 <KeyboardAwareScrollView ref={listRef} contentContainerStyle={[styles.list, { paddingBottom: 16 }]} bottomOffset={16}>
                     {isGuest ? (
                         <View style={{ backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50, borderRadius: 12, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.amber200 }}>
-                            <Text style={{ color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber600, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>
+                            <Text style={{ color: colors.feedback.warning.fg, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>
                                 ⚠️ Guest Connection Mode
                             </Text>
                             <Text style={{ color: theme === 'dark' ? colors.text.body : palette.amber700, fontSize: 13, lineHeight: 18 }}>
@@ -1214,7 +1222,7 @@ export default function PeopleScreen() {
                         )}
                         <Pressable
                             accessibilityRole="button"
-                            style={{ backgroundColor: colors.brand.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 8 }}
+                            style={{ backgroundColor: colors.brand.fill, paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 8 }}
                             onPress={handleRedeem}
                             disabled={redeeming || !redeemCode.trim()}
                         >
@@ -1231,7 +1239,7 @@ export default function PeopleScreen() {
 
                     {isGuest && (
                         <View style={{ marginTop: 8, backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red50, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.danger.border : palette.red300, marginBottom: 32 }}>
-                            <Text style={{ color: theme === 'dark' ? colors.feedback.danger.fg : palette.red600, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>
+                            <Text style={{ color: colors.feedback.danger.fg, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>
                                 🛠️ Connection Troubleshooting
                             </Text>
                             <Text style={{ color: theme === 'dark' ? colors.text.body : palette.red800, fontSize: 13, lineHeight: 18, marginBottom: 12 }}>

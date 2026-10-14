@@ -167,8 +167,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, Props>(function ChatC
                     onPress={handleSend}
                 >
                     {busy
-                        ? <ActivityIndicator size="small" color={colors.text.inverse} />
-                        : <MaterialCommunityIcons name="send" size={20} color={canSend ? colors.text.inverse : colors.text.muted} />}
+                        ? <ActivityIndicator size="small" color={canSend ? colors.text.onAccent : colors.text.inverse} />
+                        : <MaterialCommunityIcons name="send" size={20} color={canSend ? colors.text.onAccent : colors.text.muted} />}
                 </Pressable>
             </View>
         </View>

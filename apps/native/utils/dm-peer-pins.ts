@@ -46,6 +46,11 @@ export interface DmPeerOffer {
      * met with two keys in its rows), not by a sync against a pin: the banner opens with the restored-phone sentence.
      */
     firstSight?: true;
+    /**
+     * A first-sight pause the re-seed after the member's reset made (§3.4 amendment 7 §1): the banner opens with the reset's
+     * sentence in the restored-phone sentence's place.
+     */
+    afterReset?: true;
 }
 
 export interface DmPeerPin {
@@ -168,7 +173,7 @@ export function isDmPinStoreError(e: unknown): e is DmPinStoreError {
 }
 
 /** The one line under the box when a DM with nothing kept can't be pinned because its community's pins value is full. */
-export const DM_PINS_FULL_TEXT = "This community lists more chats than this phone can keep track of, so a new chat here can't send. Your other chats here still can.";
+export const DM_PINS_FULL_TEXT = "This community lists more chats than this phone can keep track of, so a chat you haven't sent in yet can't send. Your other chats here still can.";
 
 /**
  * A file's pins value is at its cap ({@link DM_PINS_MAX_BYTES}, §3.4 amendment 6 §2): a write still over it is refused as
@@ -236,6 +241,7 @@ function pinOf(raw: unknown): DmPinEntry | null {
         const rekeyedAt = says ? rekeyDateOf(says.rekeyedAt) : undefined;
         if (rekeyedAt) offered.nodeSays = { rekeyedAt };
         if (o.firstSight === true) offered.firstSight = true;
+        if (o.afterReset === true) offered.afterReset = true;
         pin.offered = offered;
     }
     if (r.checked === true) pin.checked = true;
@@ -250,18 +256,27 @@ function pinOf(raw: unknown): DmPinEntry | null {
  * a pin, or kept under an id over {@link DM_PIN_ID_MAX}, is passed over. Nothing stored: no pins.
  */
 export async function readDmPeerPins(storage: Pick<PinStorage, 'getItem'>, myPubkey: string, file: string): Promise<DmPeerPins> {
-    return (await readStoredPins(storage, myPubkey, file)) ?? emptyPins();
+    return (await readStoredPins(storage, myPubkey, file)).pins ?? emptyPins();
 }
 
-/** One file's stored pins, or null when nothing is stored (that file's seed hasn't run: §3.4 amendments 5 and 6). */
-async function readStoredPins(storage: Pick<PinStorage, 'getItem'>, myPubkey: string, file: string): Promise<DmPeerPins | null> {
+/**
+ * One file's stored value as read (§3.4 amendment 7 §2): its pins, or `pins: null` while that file's seed hasn't run
+ * (amendments 5 and 6), with `reset` (the date) when the member's reset left its marker in the value's place.
+ */
+interface StoredPins { pins: DmPeerPins | null; reset?: string }
+
+/**
+ * One file's stored value: `{ pins }` held; `{ reset: <date> }` (no `pins`) unseeded after the member's reset; nothing
+ * stored, unseeded since the update; anything else DmPinStoreError.
+ */
+async function readStoredPins(storage: Pick<PinStorage, 'getItem'>, myPubkey: string, file: string): Promise<StoredPins> {
     let raw: string | null;
     try {
         raw = await storage.getItem(dmPeerPinsStoreKey(myPubkey, file));
     } catch {
         throw new DmPinStoreError();
     }
-    if (raw == null) return null;
+    if (raw == null) return { pins: null };
     let parsed: unknown;
     try {
         parsed = JSON.parse(raw);
@@ -270,13 +285,33 @@ async function readStoredPins(storage: Pick<PinStorage, 'getItem'>, myPubkey: st
     }
     const stored = parsed as Record<string, unknown> | null;
     if (!stored || typeof stored !== 'object' || Array.isArray(stored)) throw new DmPinStoreError();
+    if (stored.pins === undefined) {
+        const reset = resetMarkOf(stored);
+        if (reset) return { pins: null, reset };
+        throw new DmPinStoreError();
+    }
     if (!stored.pins || typeof stored.pins !== 'object' || Array.isArray(stored.pins)) throw new DmPinStoreError();
     const pins = emptyPins();
     for (const [id, value] of Object.entries(stored.pins as Record<string, unknown>)) {
         const pin = pinOf(value);
         if (pin) setPin(pins, dmPinId(id), pin);
     }
-    return pins;
+    return { pins };
+}
+
+/** The member's reset's marker (§3.4 amendment 7 §2): a value with no `pins` and `reset` a 24-character ISO date. */
+function resetMarkOf(stored: Record<string, unknown>): string | undefined {
+    return stored.pins === undefined && typeof stored.reset === 'string' && rekeyDateOf(stored.reset) === stored.reset ? stored.reset : undefined;
+}
+
+/** True when `raw` is the reset's marker (nothing seeded there to set aside). */
+function isResetMarker(raw: string): boolean {
+    try {
+        const v = JSON.parse(raw);
+        return !!v && typeof v === 'object' && !Array.isArray(v) && !!resetMarkOf(v);
+    } catch {
+        return false;
+    }
 }
 
 /** UTF-8 bytes of a string, without building it. */
@@ -406,9 +441,12 @@ export interface DmPinBook<H> {
     update(myPubkey: string, at: H, change: (pins: DmPeerPins) => boolean): Promise<boolean>;
     /**
      * The member's reset of one file's pins (Settings → Account → Chat memory, §3.4 amendment 6 §3), never the phone's
-     * own: the raw value is copied aside when storage returns it (a corrupt one reads as a string), the value is removed,
-     * the copy forgotten, and the next ask seeds the file as at the update, over its own rows and its held lines (which
-     * the reset keeps). A value storage can't return is removed and logged, with nothing set aside. In the file's queue.
+     * own: the raw value is copied aside when storage returns it (a corrupt one reads as a string), the value is replaced
+     * by the reset's marker `{ reset: <date> }` (§3.4 amendment 7 §2), the copy forgotten, and the next ask seeds the file
+     * over its own rows and its held lines (which the reset keeps), handed the marker's date: that seed judges, never
+     * trusts, and its one pin write replaces the marker. A value storage can't return is removed and logged, with nothing
+     * set aside, and the marker written. A marker that can't be written throws DmPinStoreError (the reset failed); this
+     * run's seed still judges. In the file's queue.
      */
     reset(myPubkey: string, file: string): Promise<DmPinsReset>;
     /** Drop every copy: the next ask reads storage again (a fresh app session). */
@@ -422,23 +460,28 @@ export interface DmPinBook<H> {
  * value (`{ pins: {} }` when they pin nothing: its presence is the record) before that ask (and every ask waiting on the
  * same seed) answers. So every writer of a file's rows, which asks for the pins first, writes after its seed has read
  * them; and a seed whose write is refused (or that throws) records nothing: the ask throws, and the next one seeds again
- * from the same rows. `afterWrite`: run once each write stands, in the same turn, with that file.
+ * from the same rows. `reset`: the date of the member's reset whose marker is stored in the value's place (§3.4 amendment
+ * 7), undefined at the update. `afterWrite`: run once each write stands, in the same turn, with that file.
  */
 export function createDmPinBook<H>(
     storage: PinStorage,
     fileOf: (at: H) => string | null | undefined,
-    seedFile?: (myPubkey: string, at: H, file: string) => Promise<(pins: DmPeerPins) => boolean>,
+    seedFile?: (myPubkey: string, at: H, file: string, reset?: string) => Promise<(pins: DmPeerPins) => boolean>,
     afterWrite?: (myPubkey: string, pins: DmPeerPins, file: string) => Promise<void>,
 ): DmPinBook<H> {
-    /** By store key: the file's pins as held, null while nothing is stored (not seeded, or reset). */
-    const copies = new Map<string, Promise<{ pins: DmPeerPins | null }>>();
+    /** By store key: the file's pins as held, null while not seeded (since the update, or since the member's reset: `reset`). */
+    const copies = new Map<string, Promise<StoredPins>>();
     const queues = new Map<string, Promise<unknown>>();
     const seeds = new Map<string, Promise<void>>();
-    function load(myPubkey: string, file: string): Promise<{ pins: DmPeerPins | null }> {
+    /** A reset this run whose marker couldn't be written: this run's seed of that file still judges. */
+    const resetUnwritten = new Map<string, string>();
+    function load(myPubkey: string, file: string): Promise<StoredPins> {
         const key = dmPeerPinsStoreKey(myPubkey, file);
         const held = copies.get(key);
         if (held) return held;
-        const loading = readStoredPins(storage, myPubkey, file).then((pins) => ({ pins: pins && measured(pins) }));
+        const loading = readStoredPins(storage, myPubkey, file).then((s): StoredPins => s.pins
+            ? { pins: measured(s.pins) }
+            : { pins: null, reset: s.reset ?? resetUnwritten.get(key) });
         copies.set(key, loading);
         loading.catch(() => { if (copies.get(key) === loading) copies.delete(key); });
         return loading;
@@ -448,15 +491,20 @@ export function createDmPinBook<H>(
         queues.set(key, turn);
         return turn;
     }
-    async function writeThrough(myPubkey: string, file: string, copy: Promise<{ pins: DmPeerPins | null }>, pins: DmPeerPins): Promise<void> {
+    async function writeThrough(myPubkey: string, file: string, copy: Promise<StoredPins>, pins: DmPeerPins): Promise<void> {
         const key = dmPeerPinsStoreKey(myPubkey, file);
         try {
             await writeDmPeerPins(storage, myPubkey, file, pins);
         } catch (e) {
+            // A reset's marker stays where it was (never written over): the next ask judges again.
             if (copies.get(key) === copy) copies.delete(key);
             throw e;
         }
-        (await copy).pins = pins;
+        // The pins and the marker's end in one write (§3.4 amendment 7 §2).
+        const held = await copy;
+        held.pins = pins;
+        delete held.reset;
+        resetUnwritten.delete(key);
         // In the same turn, once the write stands (db.ts drops the update's held lines of each DM now pinned).
         await afterWrite?.(myPubkey, pins, file).catch(() => {});
     }
@@ -467,7 +515,7 @@ export function createDmPinBook<H>(
         if (held.pins) return held.pins;
         let seed: ((pins: DmPeerPins) => boolean) | null = null;
         try {
-            if (seedFile) seed = await seedFile(myPubkey, at, file);
+            if (seedFile) seed = await seedFile(myPubkey, at, file, held.reset);
         } catch {
             throw new DmPinStoreError();
         }
@@ -516,21 +564,35 @@ export function createDmPinBook<H>(
                 readable = false;
                 console.warn('[DM pins] The chat memory being reset could not be read, so none of it is set aside', e);
             }
-            if (raw != null) {
+            // A marker already there (reset again before a seed) has nothing to keep: the copy set aside before it stays.
+            const marked = raw != null && isResetMarker(raw);
+            if (raw != null && !marked) {
                 try {
                     await storage.setItem(dmPeerPinsSetAsideStoreKey(myPubkey, file), raw);
                 } catch (e) {
                     console.warn('[DM pins] The chat memory being reset could not be set aside', e);
                 }
             }
-            if (!storage.removeItem) throw new DmPinStoreError();
-            await storage.removeItem(key);
+            // The marker in the value's place (§3.4 amendment 7 §2): a value storage can't return is removed first.
+            const date = new Date().toISOString();
             copies.delete(key);
             seeds.delete(key);
-            return !readable ? 'unreadable-removed' : raw != null ? 'set-aside' : 'nothing-stored';
+            resetUnwritten.set(key, date);
+            if (!readable) {
+                if (!storage.removeItem) throw new DmPinStoreError();
+                await storage.removeItem(key);
+            }
+            try {
+                await storage.setItem(key, JSON.stringify({ reset: date }));
+            } catch (e) {
+                console.warn('[DM pins] The chat memory reset could not be recorded', e);
+                throw new DmPinStoreError();
+            }
+            resetUnwritten.delete(key);
+            return !readable ? 'unreadable-removed' : raw != null && !marked ? 'set-aside' : 'nothing-stored';
         });
     }
-    return { read, update, reset, forget: () => { copies.clear(); queues.clear(); seeds.clear(); } };
+    return { read, update, reset, forget: () => { copies.clear(); queues.clear(); seeds.clear(); resetUnwritten.clear(); } };
 }
 
 /** The entry kept under this id: own entries only, so an id the node chose ("__proto__", "constructor") is never a pin. */
@@ -649,6 +711,25 @@ function judged(pins: DmPeerPins, id: string, verdict: SightVerdict, listed: str
 }
 
 /**
+ * The re-seed after the member's reset (§3.4 amendment 7 §1), for one DM whose rows name one other key, `rowsKey`: the
+ * rows are this build's since the update (the listing's key for an unchecked pin, a rule-5 record, a mark), never the
+ * phone's history, so `verdict` (the thread's lines, judged with `rowsKey` as the listed one) decides, as first sight:
+ * rule 2 pins it checked; rules 3-4 pin the lines' key checked with `rowsKey` offered, a first-sight pause marked
+ * `afterReset`; rule 5 keeps the record, `listed` = `rowsKey`; rule 1 (no line) pins `rowsKey` UNCHECKED, judged at its
+ * first send as any new DM is. True when the pins changed.
+ */
+export function applyResetVerdict(pins: DmPeerPins, conversationId: string, verdict: SightVerdict, rowsKey: string, now: string): boolean {
+    const id = dmPinId(conversationId);
+    if (!isPinnableId(id) || ownPin(pins, id)) return false;
+    return resized(pins, id, () => {
+        if (!judged(pins, id, verdict, rowsKey, undefined, now)) return false;
+        const pin = ownPin(pins, id);
+        if (pin && !isUnplacedSight(pin) && pin.offered?.firstSight) pin.offered.afterReset = true;
+        return true;
+    });
+}
+
+/**
  * The update's marks (§3.4 amendment 4): each DM in `ids` with nothing kept is refused, as rule 5, until a judgement on
  * the lines the update held replaces the mark ({@link DmUnplacedSight.heldLost}). True when the pins changed.
  */
@@ -733,6 +814,7 @@ function applyDmListingsTo(pin: DmPeerPin, named: string[][], now: string, heard
     pin.offered = { peer, at: pause?.peer === peer ? pause.at : now };
     if (rekeyedAt) pin.offered.nodeSays = { rekeyedAt };
     if (pause?.firstSight) pin.offered.firstSight = true;
+    if (pause?.afterReset) pin.offered.afterReset = true;
     return true;
 }
 

@@ -122,10 +122,10 @@ export default function ChatsScreen() {
         talkTabText: { fontSize: 13, fontWeight: '600', color: colors.text.secondary },
         talkTabBadge: {
             position: 'absolute', top: -4, right: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
-            backgroundColor: colors.accent.primary, alignItems: 'center', justifyContent: 'center',
+            backgroundColor: colors.accent.fill, alignItems: 'center', justifyContent: 'center',
             borderWidth: 1.5, borderColor: colors.surface.subtle,
         },
-        talkTabBadgeText: { color: colors.text.inverse, fontSize: 10, fontWeight: '800' },
+        talkTabBadgeText: { color: colors.text.onAccent, fontSize: 10, fontWeight: '800' },
         talkTabTextActive: { color: colors.text.heading, fontWeight: '800' },
         header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle },
         title: { fontSize: 32, fontWeight: '800', color: colors.text.body, letterSpacing: -0.5 },
@@ -163,8 +163,8 @@ export default function ChatsScreen() {
         keyChangedTag: { backgroundColor: colors.feedback.warning.bg, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1, marginLeft: 6, flexShrink: 0 },
         keyChangedTagText: { fontSize: 11, fontWeight: '700', color: colors.feedback.warning.fg },
         actionNeededText: { fontSize: 13, color: colors.feedback.warning.fg, fontWeight: '700', flex: 1 },
-        unreadBadge: { backgroundColor: colors.accent.primary, width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-        unreadCount: { color: colors.text.inverse, fontSize: 11, fontWeight: '800' },
+        unreadBadge: { backgroundColor: colors.accent.fill, width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+        unreadCount: { color: colors.text.onAccent, fontSize: 11, fontWeight: '800' },
         contextRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 4 },
         contextPostTitle: { fontSize: 13, color: colors.text.secondary, fontWeight: '500', flex: 1, marginRight: 8 },
         statusPill: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 },
@@ -185,18 +185,18 @@ export default function ChatsScreen() {
         actionSection: { margin: 12, padding: 16, backgroundColor: theme === 'dark' ? colors.brand.tint : palette.green50, borderRadius: 16, borderWidth: 1, borderColor: theme === 'dark' ? colors.brand.primary : palette.green200 },
         actionSectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 6 },
         actionSectionTitle: { fontSize: 15, fontWeight: '800', color: theme === 'dark' ? colors.text.heading : palette.green800, letterSpacing: 0.3 },
-        actionCountBadge: { backgroundColor: colors.brand.dark, width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
+        actionCountBadge: { backgroundColor: colors.brand.fill, width: 22, height: 22, borderRadius: 11, justifyContent: 'center', alignItems: 'center' },
         actionCountText: { color: colors.text.inverse, fontSize: 12, fontWeight: '800' },
         actionCard: { backgroundColor: colors.surface.card, borderRadius: 14, padding: 12, marginBottom: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2, borderWidth: 1, borderColor: colors.border.default },
         actionCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
-        actionIconContainer: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.brand.dark, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+        actionIconContainer: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.brand.fill, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
         actionCardInfo: { flex: 1 },
         actionCardTitle: { fontSize: 15, fontWeight: '700', color: colors.text.body },
         actionCardPeer: { fontSize: 13, color: colors.text.secondary, marginTop: 1 },
         actionAmountBadge: { backgroundColor: theme === 'dark' ? colors.brand.tint : palette.emerald100, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-        actionAmountText: { fontSize: 14, fontWeight: '800', color: colors.brand.dark },
+        actionAmountText: { fontSize: 14, fontWeight: '800', color: colors.brand.primary },
         actionCardFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 8, borderTopWidth: 1, borderTopColor: colors.surface.subtle },
-        actionLabel: { fontSize: 14, fontWeight: '700', color: colors.brand.dark },
+        actionLabel: { fontSize: 14, fontWeight: '700', color: colors.brand.primary },
     
         searchBarRow: { flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 10, gap: 10, alignItems: 'center' },
         searchContainer: { flex: 1, flexDirection: 'row', backgroundColor: colors.surface.subtle, borderRadius: 12, alignItems: 'center', paddingHorizontal: 10, height: 42 },
@@ -204,7 +204,7 @@ export default function ChatsScreen() {
         searchInput: { flex: 1, fontSize: 15, color: colors.text.body, height: '100%', paddingVertical: 0 },
         clearBtn: { padding: 4 },
         optionsToggleBtn: { width: 42, height: 42, borderRadius: 12, backgroundColor: colors.surface.subtle, justifyContent: 'center', alignItems: 'center' },
-        optionsToggleBtnActive: { backgroundColor: colors.accent.primary },
+        optionsToggleBtnActive: { backgroundColor: colors.accent.fill },
         filterBadge: { position: 'absolute', top: -3, right: -3, backgroundColor: colors.action.fab, width: 18, height: 18, borderRadius: 9, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.surface.card },
         filterBadgeText: { color: colors.text.inverse, fontSize: 10, fontWeight: '800' },
     
@@ -217,7 +217,7 @@ export default function ChatsScreen() {
         chipTextActive: { color: colors.text.inverse },
         optionsFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, borderTopWidth: 1, borderTopColor: colors.border.default, paddingTop: 12 },
         resetBtn: { paddingVertical: 4 },
-        resetBtnText: { color: colors.feedback.danger.solid, fontSize: 14, fontWeight: '700' },
+        resetBtnText: { color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '700' },
         closeBtn: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: colors.border.default },
         closeBtnText: { color: colors.text.secondary, fontSize: 13, fontWeight: '700' },
     }));
@@ -432,7 +432,7 @@ export default function ChatsScreen() {
             </View>
             <View style={styles.actionCardFooter}>
                 <Text style={styles.actionLabel}>{getActionLabel(item)}</Text>
-                <MaterialCommunityIcons name="chevron-right" size={20} color={colors.brand.dark} />
+                <MaterialCommunityIcons name="chevron-right" size={20} color={colors.brand.primary} />
             </View>
         </Pressable>
     );
@@ -496,7 +496,7 @@ export default function ChatsScreen() {
                 ) : item.postId ? (
                     <View style={styles.avatarComposite}>
                         <View style={[styles.avatar, styles.avatarMarketplace]}>
-                            <MaterialCommunityIcons name="shopping-outline" size={24} color={colors.brand.dark} />
+                            <MaterialCommunityIcons name="shopping-outline" size={24} color={colors.brand.primary} />
                         </View>
                         <View style={styles.overlayAvatarWrap}>
                             <MemberAvatar avatarUrl={item.peerAvatar} pubkey={item.peerPubkey || ''} callsign={item.peer} size={20} />
@@ -543,7 +543,7 @@ export default function ChatsScreen() {
                     <View style={styles.messageRow}>
                         {needsAction ? (
                             <Text style={styles.actionNeededText} numberOfLines={1}>
-                                <MaterialCommunityIcons name={actionIcon} size={14} color={palette.amber500} /> {actionText}
+                                <MaterialCommunityIcons name={actionIcon} size={14} color={colors.feedback.warning.fg} /> {actionText}
                             </Text>
                         ) : (
                             <Text style={[styles.lastMessage, item.unread > 0 && styles.lastMessageUnread]} numberOfLines={1}>
@@ -570,7 +570,7 @@ export default function ChatsScreen() {
             {actionRequired.length > 0 && (
                 <View style={styles.actionSection}>
                     <View style={styles.actionSectionHeader}>
-                        <MaterialCommunityIcons name="lightning-bolt" size={18} color={colors.brand.dark} />
+                        <MaterialCommunityIcons name="lightning-bolt" size={18} color={colors.brand.primary} />
                         <Text style={styles.actionSectionTitle}>Action Required</Text>
                         <View style={styles.actionCountBadge}>
                             <Text style={styles.actionCountText}>{actionRequired.length}</Text>
@@ -732,9 +732,9 @@ export default function ChatsScreen() {
             <Pressable
                 accessibilityRole="button"
                 onPress={() => router.push('/(tabs)/market')}
-                style={{ marginTop: 12, backgroundColor: colors.accent.primary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 }}
+                style={{ marginTop: 12, backgroundColor: colors.accent.fill, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 8 }}
             >
-                <Text style={{ color: colors.text.inverse, fontWeight: 'bold' }}>Browse Market</Text>
+                <Text style={{ color: colors.text.onAccent, fontWeight: 'bold' }}>Browse Market</Text>
             </Pressable>
         </View>
     ) : null;
@@ -814,7 +814,7 @@ export default function ChatsScreen() {
                     style={[styles.optionsToggleBtn, (showOptions || activeFiltersCount > 0) && styles.optionsToggleBtnActive]}
                     onPress={() => setShowOptions(!showOptions)}
                 >
-                    <MaterialCommunityIcons name="tune-variant" size={20} color={showOptions || activeFiltersCount > 0 ? colors.text.inverse : palette.gray600} />
+                    <MaterialCommunityIcons name="tune-variant" size={20} color={showOptions || activeFiltersCount > 0 ? colors.text.onAccent : palette.gray600} />
                     {activeFiltersCount > 0 && (
                         <View style={styles.filterBadge}>
                             <Text style={styles.filterBadgeText}>{activeFiltersCount}</Text>

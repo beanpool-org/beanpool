@@ -170,7 +170,7 @@ function makeStyles(colors: AppColors, dark: boolean) {
         disabledBtn: { opacity: 0.5 },
         townBox: { marginBottom: 10 },
         townSpinner: { marginTop: 8 },
-        error: { color: dark ? colors.feedback.danger.fg : (palette.red600 || '#dc2626'), fontSize: 13, marginBottom: 8, textAlign: 'center' },
+        error: { color: colors.feedback.danger.fg, fontSize: 13, marginBottom: 8, textAlign: 'center' },
         skipBtn: { minHeight: 48, padding: 12, alignItems: 'center', justifyContent: 'center' },
         skipText: { color: colors.text.secondary, fontSize: 15, fontWeight: '600', textDecorationLine: 'underline' },
         footnote: { fontSize: 13, color: colors.text.muted, textAlign: 'center', lineHeight: 18, marginTop: 4 },

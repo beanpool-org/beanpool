@@ -165,7 +165,7 @@ async function kimsPhone(more: { url: string; alias?: string }[] = []) {
     mem.async.set(ANCHOR, MULLUM);
     mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: MULLUM, alias: 'Mullum' }, { url: BELLINGEN, alias: 'Bellingen' }, ...more]));
     mem.async.set(GUESTS, JSON.stringify([MULLUM, BYRON]));
-    mem.async.set('beanpool_light_palette', 'sand');
+    mem.async.set('beanpool_theme_mode', 'dark');
     mem.secure.set(PUSH_TOKEN_STORE_KEY, PHONE_TOKEN);
     mem.async.set(PUSH_REGISTERED_AT_STORE_KEY, JSON.stringify([MULLUM, BELLINGEN]));
 }
@@ -212,7 +212,7 @@ describe('Delete account with another saved community where Kim is a member', ()
         expect(onPhone?.privateKey).toBe(kim.privateKey);
         expect(onPhone?.mnemonic).toEqual(kim.mnemonic);
         expect(mem.secure.get(PUSH_TOKEN_STORE_KEY)).toBe(PHONE_TOKEN);
-        expect(mem.async.get('beanpool_light_palette')).toBe('sand');
+        expect(mem.async.get('beanpool_theme_mode')).toBe('dark');
 
         // Mullum is gone from the list, the push record and the guest markers; only its cached copy went.
         expect(savedUrls()).toEqual([BELLINGEN]);
@@ -318,7 +318,7 @@ describe('Delete account at Kim\'s last community', () => {
         // no vi.mock reaches: wipe-identity-storage.test.ts checks that part.)
         expect(mem.async.has(SAVED_NODES_STORE_KEY)).toBe(false);
         expect(removeCommunityCaches).toHaveBeenCalledTimes(1);
-        expect(mem.async.get('beanpool_light_palette')).toBe('sand');
+        expect(mem.async.get('beanpool_theme_mode')).toBe('dark');
         // The key was still on the phone when the purge went out.
         const purgeAt = vi.mocked(fetch).mock.invocationCallOrder[sent.indexOf(purges(sent)[0])];
         expect(purgeAt).toBeLessThan(vi.mocked(clearDB).mock.invocationCallOrder[0]);

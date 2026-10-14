@@ -92,13 +92,63 @@ function* timedSteps<T>(steps: Generator<void, T>, time: { ms: number }): Genera
  */
 export const WASH_PAIR_PAGE_BUYERS = 2000;
 
+/**
+ * Trades one page of the 30-day query reads (the cluster step's first, #1908). Set from the 100,000-member review world
+ * (39,925 trades in 30 days): see the PR for the step times.
+ */
+export const WASH_30_DAY_PAGE_ROWS = 5000;
+
+/** Members the cluster step's search visits between yields (#1908). */
+export const WASH_BFS_STEP_NODES = 5000;
+
+/** A row of the 30-day query: a completed trade between two members, completed in the last 30 days. */
+export interface ThirtyDayTrade {
+    buyer_pubkey: string;
+    seller_pubkey: string;
+    credits: number;
+}
+
+/**
+ * The cluster step's 30-day query, a page at a time: every completed trade between two members, completed after
+ * datetime('now', '-30 days') (worked out once, before the first page), `pageRows` rows a page. The pages run on in
+ * (completed_at, rowid) order, the order of the index the one query read through (idx_marketplace_transactions_status_completed:
+ * status, completed_at, then rowid), so together they are its rows in its order: the same edges, summed in the same order.
+ * A tie on completed_at goes on by rowid, so a page's edge drops no row and doubles none. There is always a first page,
+ * empty or not: the read is a step, as the one query was.
+ */
+export function* thirtyDayTradePages(db: Db, pageRows = WASH_30_DAY_PAGE_ROWS): Generator<ThirtyDayTrade[]> {
+    const { since } = db.prepare(`SELECT datetime('now', '-30 days') AS since`).get() as { since: string };
+    const firstPage = db.prepare(`
+        SELECT rowid AS rid, completed_at AS at, buyer_pubkey, seller_pubkey, credits
+        FROM marketplace_transactions
+        WHERE status = 'completed' AND buyer_pubkey != seller_pubkey
+          AND completed_at > ?
+        ORDER BY completed_at, rowid LIMIT ?
+    `);
+    const nextPage = db.prepare(`
+        SELECT rowid AS rid, completed_at AS at, buyer_pubkey, seller_pubkey, credits
+        FROM marketplace_transactions
+        WHERE status = 'completed' AND buyer_pubkey != seller_pubkey
+          AND completed_at >= ? AND (completed_at > ? OR rowid > ?)
+        ORDER BY completed_at, rowid LIMIT ?
+    `);
+    let rows = firstPage.all(since, pageRows) as (ThirtyDayTrade & { rid: number; at: unknown })[];
+    for (;;) {
+        yield rows;
+        if (rows.length < pageRows) return;
+        const last = rows[rows.length - 1];
+        rows = nextPage.all(last.at, last.at, last.rid, pageRows) as (ThirtyDayTrade & { rid: number; at: unknown })[];
+    }
+}
+
 /** A pair whose gross is at least the cap and whose flows are this close (|a − b| / gross below it) is a wash pair. */
 export const WASH_PAIR_MAX_RATIO = 0.15;
 
 /**
- * runWashTradingAnalysis, one step at a time: it yields after each page of buyers' pair totals and after each cluster's
- * query, so a caller can give the event loop a turn between steps (engine audit.ts computeWashSybilMetricsInSlices) and
- * the analysis never holds it for long. runWashTradingAnalysis drains it in one go, so both give the same analysis.
+ * runWashTradingAnalysis, one step at a time: it yields after each page of buyers' pair totals, each page of the 30-day
+ * trades, every WASH_BFS_STEP_NODES members of a search and each cluster's query, so a caller can give the event loop a
+ * turn between steps (engine audit.ts computeWashSybilMetricsInSlices) and the analysis never holds it for long.
+ * runWashTradingAnalysis drains it in one go, so both give the same analysis.
  */
 export function washTradingAnalysisSteps(db: Db): Generator<void, WashAnalysis> {
     return analysisSteps(db, false, db);
@@ -178,31 +228,28 @@ function* analysisSteps(db: Db, strict: boolean, countFor: Db): Generator<void, 
 
     // --- 2. Cluster insularity (connected components over rolling 30 days) ---
     try {
-        const txs30 = db.prepare(`
-            SELECT buyer_pubkey, seller_pubkey, credits
-            FROM marketplace_transactions
-            WHERE status = 'completed' AND buyer_pubkey != seller_pubkey
-              AND completed_at > datetime('now', '-30 days')
-        `).all() as { buyer_pubkey: string; seller_pubkey: string; credits: number }[];
-        yield;
-
         const adj = new Map<string, Set<string>>();
         const edgeVol30 = new Map<string, number>();
         const nodes30 = new Set<string>();
 
-        for (const tx of txs30) {
-            const u = tx.buyer_pubkey;
-            const v = tx.seller_pubkey;
-            nodes30.add(u);
-            nodes30.add(v);
+        // A page at a time (#1908): in one query it held the loop 140 ms at 39,925 trades (load 6-8), which no slice could
+        // split. Every page reads the rows in the one query's order, so the analysis is the same to the last bit.
+        for (const txs30 of thirtyDayTradePages(db)) {
+            for (const tx of txs30) {
+                const u = tx.buyer_pubkey;
+                const v = tx.seller_pubkey;
+                nodes30.add(u);
+                nodes30.add(v);
 
-            if (!adj.has(u)) adj.set(u, new Set());
-            if (!adj.has(v)) adj.set(v, new Set());
-            adj.get(u)!.add(v);
-            adj.get(v)!.add(u);
+                if (!adj.has(u)) adj.set(u, new Set());
+                if (!adj.has(v)) adj.set(v, new Set());
+                adj.get(u)!.add(v);
+                adj.get(v)!.add(u);
 
-            const key = u < v ? `${u}|${v}` : `${v}|${u}`;
-            edgeVol30.set(key, (edgeVol30.get(key) || 0) + tx.credits);
+                const key = u < v ? `${u}|${v}` : `${v}|${u}`;
+                edgeVol30.set(key, (edgeVol30.get(key) || 0) + tx.credits);
+            }
+            yield;
         }
 
         const visited = new Set<string>();
@@ -214,8 +261,10 @@ function* analysisSteps(db: Db, strict: boolean, countFor: Db): Generator<void, 
             const queue = [node];
             visited.add(node);
 
-            while (queue.length > 0) {
-                const curr = queue.shift()!;
+            // A head index, not queue.shift() (the same order), and a yield every WASH_BFS_STEP_NODES members: one
+            // component can hold most of the node (#1908).
+            for (let head = 0; head < queue.length; head++) {
+                const curr = queue[head];
                 comp.push(curr);
                 const neighbors = adj.get(curr) || new Set();
                 for (const next of neighbors) {
@@ -224,6 +273,7 @@ function* analysisSteps(db: Db, strict: boolean, countFor: Db): Generator<void, 
                         queue.push(next);
                     }
                 }
+                if ((head + 1) % WASH_BFS_STEP_NODES === 0) yield;
             }
             components.push(comp);
             yield;
@@ -385,9 +435,7 @@ function snapshotHandleFor(db: Db): Db | null {
         return null;
     }
     try {
-        const Ctor = db.constructor as unknown as new (file: string, options: Database.Options) => Db;
-        const handle = new Ctor(db.name, { readonly: true, fileMustExist: true });
-        handle.pragma('busy_timeout = 5000');
+        const handle = openReadOnly(db);
         snapshotHandles.set(db, handle);
         return handle;
     } catch (e) {
@@ -395,15 +443,63 @@ function snapshotHandleFor(db: Db): Db | null {
     }
 }
 
+/** A second, read-only handle on a file database's file. */
+function openReadOnly(db: Db): Db {
+    const Ctor = db.constructor as unknown as new (file: string, options: Database.Options) => Db;
+    const handle = new Ctor(db.name, { readonly: true, fileMustExist: true });
+    handle.pragma('busy_timeout = 5000');
+    return handle;
+}
+
+/** The metrics audits' read-only handles open now (washTradingAnalysisStepsOnSnapshot): closeWashSnapshotHandle closes them too. */
+const auditSnapshots = new WeakMap<Db, Set<Db>>();
+
+/**
+ * washTradingAnalysisSteps through a snapshot of its own, for the metrics audit (engine audit.ts): a read-only handle
+ * opened for it, one read transaction spanning every step, closed at its end. So a row written between its steps is
+ * read as it stood at the first, as the refresh reads (runWashAnalysisInSlices): a trade whose completed_at moves
+ * meanwhile (the deferred-wage payout, a standby's upsert) is never read by two of the 30-day pages, nor by none, as
+ * the one 30-day query before the pages could neither (#1919's review). Not the refresh's handle: the two can run at
+ * once, and a handle holds one transaction. An in-memory database (tests) reads through the node's own handle, as its
+ * refresh does. Its handle closed under it (closeWashSnapshotHandle) throws WashSnapshotClosed: nothing part-made
+ * comes back.
+ */
+export function* washTradingAnalysisStepsOnSnapshot(db: Db): Generator<void, WashAnalysis> {
+    if (db.memory) return yield* analysisSteps(db, false, db);
+    let snap: Db;
+    try {
+        snap = openReadOnly(db);
+    } catch (e) {
+        throw new Error(`the audit's read-only snapshot did not open (${e instanceof Error ? e.message : String(e)})`);
+    }
+    let open = auditSnapshots.get(db);
+    if (!open) auditSnapshots.set(db, open = new Set());
+    open.add(snap);
+    try {
+        // A deferred transaction takes its snapshot at its first read: the first page of buyers, in the first step.
+        snap.exec('BEGIN');
+        const analysis = yield* analysisSteps(snap, false, db);
+        if (!(snap.open && snap.inTransaction)) throw snap.open ? new Error('the snapshot ended before the analysis did') : new WashSnapshotClosed();
+        return analysis;
+    } catch (e) {
+        throw !snap.open && !(e instanceof WashSnapshotClosed) ? new WashSnapshotClosed() : e;
+    } finally {
+        open.delete(snap);
+        try { snap.close(); } catch { /* closed either way */ }
+    }
+}
+
 /**
  * Closes the refresh's read-only handle, where the node closes its data-version probe (a restore about to replace the
  * file, a shutdown): open, closing the node's own handle would not be the last close. A refresh reading through it
- * then throws, and lands nothing. The next refresh opens a new one.
+ * then throws, and lands nothing. The next refresh opens a new one. A metrics audit's analysis reading through its own
+ * (washTradingAnalysisStepsOnSnapshot) is closed too, and that audit fails.
  */
 export function closeWashSnapshotHandle(db: Db): void {
     const handle = snapshotHandles.get(db);
     snapshotHandles.delete(db);
     try { handle?.close(); } catch { /* closed either way */ }
+    for (const audit of auditSnapshots.get(db) ?? []) try { audit.close(); } catch { /* closed either way */ }
 }
 
 /** A refresh whose snapshot handle was closed under it (closeWashSnapshotHandle): expected, and logged as such. */
@@ -425,6 +521,8 @@ export async function runWashAnalysisInSlices(db: Db, opts: { sliceMs?: number; 
     try {
         const time = { ms: 0 };
         const analysis = await runStepsInSlices(timedSteps(analysisSteps(snap ?? db, true, db), time), opts);
+        // Reached with the handle closed too (closed after the last step: the test "closes after its last step"), where
+        // the catch below would name it WashSnapshotClosed anyway; named here so this line says which it is (#1908).
         if (snap && !(snap.open && snap.inTransaction)) throw snap.open ? new Error('the snapshot ended before the analysis did') : new WashSnapshotClosed();
         return { analysis, snapshotAt, finishedAt: Date.now(), stepMs: time.ms, wallMs: performance.now() - wallStart };
     } catch (e) {
@@ -459,9 +557,12 @@ export const WASH_HARD_CAP_MS = 60_000;
  *   last one's snapshot, less the time its turns took (its `D` less its `c`), never sooner than WASH_MIN_DUE_MS: so the
  *   next lands about WASH_KEEP_MS after the last one's rows were read, and what a read sees is at most WASH_KEEP_MS + `c`
  *   old, as when it was worked out in one go. A read that finds it older than that with no refresh running that can land
- *   (after a quiet spell, when no read started one; or one that read its rows before an analysis worked out in one go
- *   since) works the next out in one go, as before. A snapshot WASH_HARD_CAP_MS old (refreshes
- *   failing to land) is worked out in one go at the read, as before, and said once a minute.
+ *   in time (after a quiet spell, when no read started one; or one that read its rows before an analysis worked out in one
+ *   go since; or one that `again` or the server started at or past that bound) works the next out in one go, as before.
+ *   A refresh that started before that bound holds the one go off, whoever started it: a read, `again`, or the server
+ *   (Step 6.1 once it listens, or a take-over). What a read sees is then at most that refresh's run time past the bound,
+ *   under WASH_HARD_CAP_MS. A snapshot WASH_HARD_CAP_MS old (refreshes failing to land) is worked out in one go at the
+ *   read, as before, and said once a minute.
  *
  * Wash pairs are also caught live, per member, whatever the analysis's age (qualifiedTradeValue); clusters are the
  * analysis's alone.

@@ -270,7 +270,7 @@ export function NeedsYouIcons({ sheetTop }: { sheetTop: number }) {
                             <Pressable key={e.kind} style={({ pressed }) => [s.sheetRow, pressed && { backgroundColor: colors.surface.subtle }]}
                                 onPress={() => { setSheet(false); open(e.target); }} accessibilityRole="button" accessibilityLabel={e.label}>
                                 <MaterialCommunityIcons name={ICON[e.kind]} size={22}
-                                    color={e.accent ? palette.amber600 : colors.text.secondary} />
+                                    color={e.accent ? colors.feedback.warning.fg : colors.text.secondary} />
                                 <Text style={[s.sheetText, { color: colors.text.heading, fontWeight: e.accent ? '700' : '500' }]} numberOfLines={2}>
                                     {e.label}
                                 </Text>

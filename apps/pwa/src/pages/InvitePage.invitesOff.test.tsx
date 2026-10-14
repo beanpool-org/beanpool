@@ -28,7 +28,7 @@ vi.mock('qrcode.react', () => ({ QRCodeSVG: () => null }));
 
 import { InvitePage } from './InvitePage';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
-import { buildOfflineInviteCode, generateInvite } from '../lib/api';
+import { buildOfflineInviteCode, generateInvite, getInviteTree } from '../lib/api';
 import { communityLinkText, invitesOn, invitesOffRefusal, INVITES_OFF_FALLBACK } from '../lib/node-invites';
 import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_SHEET } from '@beanpool/core';
 
@@ -115,6 +115,21 @@ describe('the Invites page where the node takes no invites (the global node)', (
         } finally {
             delete (navigator as { share?: unknown }).share;
         }
+    });
+
+    it('the whole tree refused (403 members_on_demand, features.openMembership): no tree drawn, no error, the link to share', async () => {
+        // DESIGN-global-member-privacy-fable.md §3: where anyone can join in a minute the whole invite tree is every member,
+        // and the node refuses it. The page asks for it as it always did, and swallows the refusal.
+        vi.mocked(communityInfoOnce).mockResolvedValue({ ...GLOBAL, features: { ...GLOBAL.features, membersOnDemand: true, openMembership: true } });
+        vi.mocked(getInviteTree).mockRejectedValue(Object.assign(new Error('On this community you see the people you invited, not everyone: ask with root set to your own key'), { status: 403, code: 'members_on_demand' }));
+        render(<InvitePage identity={IDENTITY} />);
+        await waitFor(() => expect(screen.getByText(/Bring someone here/)).toBeInTheDocument());
+        await waitFor(() => expect(getInviteTree).toHaveBeenCalled());
+        expect(screen.queryByRole('button', { name: /Tree/ })).toBeNull();
+        expect(screen.queryByText(/Community Tree/)).toBeNull();
+        expect(screen.queryByText(/No members yet/)).toBeNull();
+        expect(screen.queryByText(/not everyone|members_on_demand|people you invited/)).toBeNull();
+        expect(screen.getByText(window.location.origin)).toBeInTheDocument();
     });
 
     it("a generate the node refuses before the page heard: the node's words, and no offline ticket", async () => {

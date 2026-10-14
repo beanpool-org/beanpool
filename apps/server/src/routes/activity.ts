@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import Router from '@koa/router';
 import { getActivityFeed, ACTIVITY_FEED_MAX_LIMIT } from '../db/activity-feed-db.js';
 import { getActivityVersion, getMembersVersion } from '../engine/versions.js';
+import { getProfileSwitches } from '../config/node-profile.js';
 import type { RouteDeps } from './types.js';
 
 export function createActivityRouter(deps: RouteDeps): Router {
@@ -39,7 +40,10 @@ export function createActivityRouter(deps: RouteDeps): Router {
         // the same page get different bodies, and one member's copy must never confirm another's.
         const viewer = (ctx.state.actor as string | undefined) ?? null;
         const viewerSig = crypto.createHash('sha256').update(viewer ?? '').digest('hex').slice(0, 8);
-        const etag = `W/"activity-feed-${getActivityVersion()}-${getMembersVersion()}-${limit}-${offset}-${viewerSig}"`;
+        // Where anyone can join in a minute (`openMembership`), no "joined" lines (getActivityFeed), and the tag says so:
+        // an operator's switch flipped never confirms a copy made the other way. Elsewhere the tag is as before.
+        const joins = !getProfileSwitches().openMembership;
+        const etag = `W/"activity-feed-${getActivityVersion()}-${getMembersVersion()}-${limit}-${offset}-${viewerSig}${joins ? '' : '-nj'}"`;
         ctx.set('ETag', etag);
 
         // `private`: the body varies by member, and only a signed member may read it, so no shared cache (a CDN
@@ -57,7 +61,7 @@ export function createActivityRouter(deps: RouteDeps): Router {
             }
         }
 
-        const feed = getActivityFeed(limit, offset, viewer);
+        const feed = getActivityFeed(limit, offset, viewer, joins);
         ctx.status = 200;
         ctx.body = { feed };
     });

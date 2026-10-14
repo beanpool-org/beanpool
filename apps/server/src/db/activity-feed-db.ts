@@ -77,9 +77,11 @@ export const TRADE_ACTIVITY_TYPES: readonly ActivityEventType[] = ['trade_comple
 
 /**
  * Retrieves recent community activity events with member callsigns joined, as `viewerPubkey` (the verified signer) may
- * see them: every event but the trades of other people (TRADE_ACTIVITY_TYPES).
+ * see them: every event but the trades of other people (TRADE_ACTIVITY_TYPES). With `joins` false (`openMembership`, the
+ * global node) no "joined" line, left out in the query so every page stays full: each one named a newcomer, with their
+ * key and the millisecond they came in, to anyone who had joined a minute before (DESIGN-global-member-privacy-fable.md §3).
  */
-export function getActivityFeed(limit: number = 50, offset: number = 0, viewerPubkey: string | null = null): ActivityFeedItem[] {
+export function getActivityFeed(limit: number = 50, offset: number = 0, viewerPubkey: string | null = null, joins = true): ActivityFeedItem[] {
     const safeLimit = Math.max(1, Math.min(ACTIVITY_FEED_MAX_LIMIT, limit));
     const safeOffset = Math.max(0, offset);
     const tradeTypes = TRADE_ACTIVITY_TYPES.map(t => `'${t}'`).join(', ');
@@ -104,7 +106,9 @@ export function getActivityFeed(limit: number = 50, offset: number = 0, viewerPu
              WHERE hp.id = CASE WHEN json_valid(af.metadata) THEN json_extract(af.metadata, '$.postId') END
                AND hp.hidden_by_reports_at IS NOT NULL))
           -- A trade only to the people in it.
-          AND (af.event_type NOT IN (${tradeTypes}) OR af.actor_pubkey = @viewer OR af.target_pubkey = @viewer)
+          AND (af.event_type NOT IN (${tradeTypes}) OR af.actor_pubkey = @viewer OR af.target_pubkey = @viewer)${joins ? '' : `
+          -- Where anyone can join in a minute, nobody's joining is news.
+          AND af.event_type != 'member_joined'`}
         ORDER BY af.created_at DESC, af.id DESC
         LIMIT @limit OFFSET @offset
     `).all({ viewer: viewerPubkey ?? '', limit: safeLimit, offset: safeOffset }) as any[];

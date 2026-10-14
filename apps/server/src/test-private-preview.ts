@@ -129,6 +129,9 @@ async function main() {
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
     WS_BASE = `wss://localhost:${port}`;
+    // This suite reads the whole directory as a member, to see that a preview lets members read as usual and keys each face. Where `openMembership` is on (the global node's default) those reads are refused, which
+    // test-open-membership-reads proves; here the operator's override keeps them, and nothing this suite measures depends on it.
+    db.prepare("INSERT INTO node_config (key, value) VALUES ('nodeProfile.openMembership', 'false') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run();
 
     // ── 1. the info the apps read ──
     const info = await call('GET', null, '/api/community/info');

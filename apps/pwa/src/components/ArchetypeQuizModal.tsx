@@ -209,7 +209,7 @@ export function ArchetypeQuizModal({
                                             <span className="text-[15px] font-bold text-nature-950 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors min-w-0">
                                                 Quick Spark
                                             </span>
-                                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
+                                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
                                                 9 Qs • ~1 min
                                             </span>
                                         </div>
@@ -242,7 +242,7 @@ export function ArchetypeQuizModal({
                                             <span className="text-[15px] font-bold text-nature-950 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors min-w-0">
                                                 Deep Resonance
                                             </span>
-                                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
+                                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
                                                 27 Qs • ~3 min
                                             </span>
                                         </div>
@@ -410,7 +410,7 @@ export function ArchetypeQuizModal({
                                     aria-label={saving ? "Saving archetype to profile" : "Done · Save to Profile"}
                                     onClick={handleSave}
                                     disabled={saving}
-                                    className="w-full py-3.5 px-4 rounded-xl font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 disabled:opacity-60 text-white shadow-md transition-all cursor-pointer text-sm sm:text-base border-none flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                                    className="w-full py-3.5 px-4 rounded-xl font-bold bg-bp-commit-fill hover:bg-bp-commit-hover disabled:opacity-60 text-bp-commit-on shadow-md transition-all cursor-pointer text-sm sm:text-base border-none flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                                 >
                                     {saving ? (
                                         <>

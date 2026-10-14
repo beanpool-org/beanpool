@@ -29,6 +29,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 import resolveConfig from 'tailwindcss/resolveConfig';
+import { brandCssVariableMap } from '@beanpool/core/brand-colours';
 
 const SRC = path.resolve(__dirname);
 
@@ -92,7 +93,7 @@ function hex(value: string): Rgba | null {
     return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16), 1];
 }
 
-/** The app's palette (tailwind.config.js over Tailwind's own) and the `:root.dark-theme` variables in index.css. */
+/** The app's palette (tailwind.config.js over Tailwind's own), the brand library's dark roles and the `:root.dark-theme` variables in index.css. */
 async function darkPalette(): Promise<Palette> {
     const configUrl = pathToFileURL(path.resolve(SRC, '../tailwind.config.js')).href;
     const { default: config } = await import(/* @vite-ignore */ configUrl);
@@ -105,7 +106,8 @@ async function darkPalette(): Promise<Palette> {
     };
     walk('', resolveConfig(config).theme.colors);
 
-    const vars = new Map<string, string>();
+    // The brand roles (bg-bp-commit-fill …) are the library's variables, which tailwind.config.js adds to index.css.
+    const vars = new Map<string, string>(Object.entries(brandCssVariableMap('dark')));
     const css = fs.readFileSync(path.join(SRC, 'index.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     for (const block of css.matchAll(/:root\.dark-theme\s*\{([^}]*)\}/g)) {
         for (const decl of block[1].matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) vars.set(decl[1], decl[2].trim());

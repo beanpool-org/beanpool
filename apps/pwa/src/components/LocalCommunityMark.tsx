@@ -77,7 +77,7 @@ export function LocalCommunitySheet({ feature, onClose, onStart, onNearYou, onGu
                         type="button"
                         onClick={onStart}
                         data-testid="local-community-start"
-                        className="w-full rounded-xl bg-terra-600 hover:bg-terra-500 px-4 py-3 text-center font-bold text-white"
+                        className="w-full rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover px-4 py-3 text-center font-bold text-bp-cta-on"
                     >{LOCAL_COMMUNITY_SHEET.start}</button>
                     {onNearYou && (
                         <button type="button" onClick={go(onNearYou)} data-testid="local-community-near-you"
@@ -158,7 +158,7 @@ export function LocalCommunityStrip({ feature, ...ways }: { feature: ShowcaseFea
                     </p>
                     <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                         <button type="button" onClick={start} data-testid="local-community-strip-start"
-                            className="w-full rounded-xl bg-terra-600 hover:bg-terra-500 px-4 py-2.5 font-bold text-white">{LOCAL_COMMUNITY_SHEET.start}</button>
+                            className="w-full rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover px-4 py-2.5 font-bold text-bp-cta-on">{LOCAL_COMMUNITY_SHEET.start}</button>
                         {ways.onNearYou && (
                             <button type="button" onClick={ways.onNearYou}
                                 className="w-full rounded-xl border border-blue-300 dark:border-blue-700 bg-white/70 dark:bg-nature-900/60 px-4 py-2.5 font-bold text-nature-800 dark:text-nature-100">

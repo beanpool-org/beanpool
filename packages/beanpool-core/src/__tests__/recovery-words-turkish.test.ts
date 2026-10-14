@@ -45,10 +45,10 @@ const TURKISH_TYPINGS: [string, string | string[]][] = [
     // Caps lock on a Turkish keyboard: every i is İ.
     ['all Turkish capitals', I_WORDS.toLocaleUpperCase('tr-TR')],
     // The keyboard's auto-capital on the first word, and on every box when each word is typed in its own box.
-    ['first word auto-capitalised', I_WORDS.replace(/^i/, 'İ')],
-    ['each box auto-capitalised', I_WORDS.split(' ').map((w) => 'İ' + w.slice(1))],
+    ['first word auto-capitalised', I_WORDS.replace(/^i/, '\u0130')],
+    ['each box auto-capitalised', I_WORDS.split(' ').map((w) => '\u0130' + w.slice(1))],
     // The same capital as "I" + combining dot (decomposed, NFD), as some keyboards and pastes send it.
-    ['decomposed capital İ', I_WORDS.toLocaleUpperCase('tr-TR').normalize('NFD')],
+    ['decomposed capital \u0130', I_WORDS.toLocaleUpperCase('tr-TR').normalize('NFD')],
     // Capitals lowercased the Turkish way (a Turkish-locale lowercase on the way in): every I is ı.
     ['lowercased in tr-TR', I_WORDS.toUpperCase().toLocaleLowerCase('tr-TR')],
     ['Turkish capitals lowercased', I_WORDS.toLocaleUpperCase('tr-TR').toLowerCase()],
@@ -57,7 +57,7 @@ const TURKISH_TYPINGS: [string, string | string[]][] = [
 describe('the 12 words typed with Turkish capitals', () => {
     it('the typings really are what a Turkish keyboard sends (not plain ASCII)', () => {
         for (const [, typed] of TURKISH_TYPINGS) {
-            expect([typed, /[İı̇]/.test(String(typed))]).toEqual([typed, true]);
+            expect([typed, /\u0130|\u0131|\u0307/.test(String(typed))]).toEqual([typed, true]);
         }
     });
 
@@ -79,10 +79,9 @@ describe('the 12 words typed with Turkish capitals', () => {
 
     it('the same key when the runtime lowercases the Turkish way (toLowerCase following a tr-TR locale)', () => {
         const plain = String.prototype.toLowerCase;
-        // eslint-disable-next-line no-extend-native
         String.prototype.toLowerCase = function (this: string) { return this.toLocaleLowerCase('tr-TR'); };
         try {
-            expect('ITEM'.toLowerCase()).toBe('ıtem');
+            expect('ITEM'.toLowerCase()).toBe('\u0131tem');
             const typed = I_WORDS.toUpperCase();
             expect(normaliseRecoveryWords(typed)).toEqual(I_WORDS.split(' '));
             expect(seedHex(typed)).toBe(PINNED[I_WORDS].seed);
@@ -96,7 +95,7 @@ describe('the 12 words typed with Turkish capitals', () => {
     it('Turkish capitals still make no other account', () => {
         expect(recoveryWordsMatchPublicKey(I_WORDS.toLocaleUpperCase('tr-TR'), PINNED[VALID].publicKey)).toBe(false);
         // A word that is not on the list stays not on the list: only the letter i is folded.
-        expect(unknownRecoveryWords('İTEMS İDEA')).toEqual(['items']);
+        expect(unknownRecoveryWords('\u0130TEMS \u0130DEA')).toEqual(['items']);
     });
 });
 

@@ -54,7 +54,7 @@ function wordIndex(word: string): number | undefined {
  * for byte.
  */
 export function lowercaseRecoveryWords(text: string): string {
-    return text.replace(/İ/g, 'i').toLowerCase().replace(/ı/g, 'i').replace(/̇/g, '');
+    return text.replace(/\u0130/g, 'i').toLowerCase().replace(/\u0131/g, 'i').replace(/\u0307/g, '');
 }
 
 function splitWords(text: string): string[] {

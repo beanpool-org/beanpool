@@ -32,8 +32,8 @@ const PINNED = {
 /** What a Turkish keyboard gives for the same words, one entry per box. */
 const TURKISH: [string, string[]][] = [
     ['all Turkish capitals', PLAIN.map((w) => w.toLocaleUpperCase('tr-TR'))],
-    ['each box auto-capitalised', PLAIN.map((w) => 'İ' + w.slice(1))],
-    ['decomposed capital İ', PLAIN.map((w) => w.toLocaleUpperCase('tr-TR').normalize('NFD'))],
+    ['each box auto-capitalised', PLAIN.map((w) => '\u0130' + w.slice(1))],
+    ['decomposed capital \u0130', PLAIN.map((w) => w.toLocaleUpperCase('tr-TR').normalize('NFD'))],
     ['lowercased in tr-TR', PLAIN.map((w) => w.toUpperCase().toLocaleLowerCase('tr-TR'))],
     ['Turkish capitals lowercased', PLAIN.map((w) => w.toLocaleUpperCase('tr-TR').toLowerCase())],
 ];
@@ -45,14 +45,13 @@ describe('the key the words make (crypto.ts)', () => {
     });
 
     it.each(TURKISH)('%s: valid, and the same key byte for byte', async (_, boxes) => {
-        expect(boxes.some((w) => /[İı̇]/.test(w))).toBe(true);
+        expect(boxes.some((w) => /\u0130|\u0131|\u0307/.test(w))).toBe(true);
         expect(validateMnemonic(boxes)).toBe(true);
         expect(await mnemonicToKeypair(boxes)).toEqual({ publicKeyHex: PINNED.publicKey, privateKeyHex: PINNED.seed });
     });
 
     it('the same key when the runtime lowercases the Turkish way (toLowerCase following a tr-TR locale)', async () => {
         const plain = String.prototype.toLowerCase;
-        // eslint-disable-next-line no-extend-native
         String.prototype.toLowerCase = function (this: string) { return this.toLocaleLowerCase('tr-TR'); };
         try {
             const caps = PLAIN.map((w) => w.toUpperCase());
@@ -84,8 +83,8 @@ describe('the add-your-words boxes (add-words.ts)', () => {
     });
 
     it('the start of a word typed with a Turkish capital is still "typing", not a typo', () => {
-        expect(wordBoxState('İDE')).toBe('typing');
-        expect(wordBoxState('ıde')).toBe('typing');
-        expect(wordBoxState('İDEAZ')).toBe('unknown');
+        expect(wordBoxState('\u0130DE')).toBe('typing');
+        expect(wordBoxState('\u0131de')).toBe('typing');
+        expect(wordBoxState('\u0130DEAZ')).toBe('unknown');
     });
 });

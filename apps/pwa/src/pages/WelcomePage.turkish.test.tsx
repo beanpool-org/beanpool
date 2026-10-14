@@ -67,13 +67,13 @@ describe('the 12 words typed on a Turkish keyboard', () => {
         expect(await loadIdentity()).toMatchObject({ publicKey: PINNED_PUBLIC_KEY, mnemonic: PLAIN });
     });
 
-    it('a phrase lowercased the Turkish way (ı) pasted into the first box: the same account', async () => {
+    it('a phrase lowercased the Turkish way (\u0131) pasted into the first box: the same account', async () => {
         stubMemberNode();
         const onComplete = vi.fn();
         render(<WelcomePage onComplete={onComplete} />);
         await openWordBoxes();
         const typed = PLAIN.join(' ').toUpperCase().toLocaleLowerCase('tr-TR');
-        expect(typed).toContain('ı');
+        expect(typed).toContain('\u0131');
         fireEvent.change(screen.getByLabelText('Recovery word 1'), { target: { value: typed } });
         expect(boxValues()).toEqual(PLAIN);
         fireEvent.click(screen.getByRole('button', { name: 'Recover Identity' }));

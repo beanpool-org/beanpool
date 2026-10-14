@@ -20,8 +20,8 @@ const PINNED = {
 
 const TURKISH: [string, string[]][] = [
     ['all Turkish capitals', PLAIN.map((w) => w.toLocaleUpperCase('tr-TR'))],
-    ['each box auto-capitalised', PLAIN.map((w) => 'İ' + w.slice(1))],
-    ['decomposed capital İ', PLAIN.map((w) => w.toLocaleUpperCase('tr-TR').normalize('NFD'))],
+    ['each box auto-capitalised', PLAIN.map((w) => '\u0130' + w.slice(1))],
+    ['decomposed capital \u0130', PLAIN.map((w) => w.toLocaleUpperCase('tr-TR').normalize('NFD'))],
     ['lowercased in tr-TR', PLAIN.map((w) => w.toUpperCase().toLocaleLowerCase('tr-TR'))],
 ];
 
@@ -38,7 +38,7 @@ describe('the key the words make on the web (lib/mnemonic.ts)', () => {
     });
 
     it.each(TURKISH)('%s: valid, and the same key byte for byte', async (_, boxes) => {
-        expect(boxes.some((w) => /[İı̇]/.test(w))).toBe(true);
+        expect(boxes.some((w) => /\u0130|\u0131|\u0307/.test(w))).toBe(true);
         expect(validateMnemonic(boxes)).toBe(true);
         expect(await keyOf(boxes)).toEqual({ publicKeyHex: PINNED.publicKey, seed: PINNED.seed });
     });

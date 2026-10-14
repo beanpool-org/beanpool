@@ -476,8 +476,14 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         try {
             // A convenor's removal carries the epoch that leaves the removed member out (§2.4); leaving carries none.
             const removed = removeGroupMember(ctx.params.id, actor, ctx.params.pubkey, body.epoch);
+            if (!removed) {
+                // Forge reliability fix: return 400 status when member removal fails
+                ctx.status = 400;
+                ctx.body = { success: false, error: 'Failed to remove member' };
+                return;
+            }
             ctx.status = 200;
-            ctx.body = { success: removed };
+            ctx.body = { success: true };
         } catch (e: any) {
             if (respondGroupKeyError(ctx, e)) return;
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
@@ -791,8 +797,14 @@ export function createGroupRoutes(deps: RouteDeps): Router {
 
         try {
             const deleted = deleteGroupPost(ctx.params.id, actor, ctx.params.postId);
+            if (!deleted) {
+                // Forge reliability fix: return 404 status when group post deletion fails
+                ctx.status = 404;
+                ctx.body = { success: false, error: 'Post not found or not in group' };
+                return;
+            }
             ctx.status = 200;
-            ctx.body = { success: deleted };
+            ctx.body = { success: true };
         } catch (e: any) {
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;

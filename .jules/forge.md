@@ -159,3 +159,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `POST /api/commons/projects/delete` in `apps/server/src/routes/commons.ts` called `deleteProject` without a `try/catch` block.
 **Learning:** `deleteProject` checks non-zero ledger balances and throws errors (e.g. "Cannot delete project with non-zero balance: would violate ledger conservation"), which caused uncaught 500 exceptions instead of formatted 400 error responses.
 **Pattern:** Ensure deletion routes calling domain functions that enforce balance/ledger constraints wrap the deletion call in a `try/catch` block that catches errors and sets `ctx.status = 400`.
+
+## 2026-10-20 - [Missing HTTP status codes when group member removal or post deletion fails]
+**Issue:** `DELETE /api/groups/:id/members/:pubkey` and `DELETE /api/groups/:id/posts/:postId` in `apps/server/src/routes/groups.ts` returned `200 OK` with `{ success: false }` when `removeGroupMember` or `deleteGroupPost` returned `false`.
+**Learning:** Returning HTTP `200 OK` on failed group member removals or post deletions misleads clients into treating failed mutations as successful operations.
+**Pattern:** Ensure deletion handlers inspecting boolean state mutation flags explicitly return `400` or `404` status codes when operations fail (`!success`).

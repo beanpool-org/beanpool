@@ -122,6 +122,11 @@ async function serve(): Promise<void> {
     initAdminPassword();
     await initTls();
     se.initStateEngine();
+    // This suite loads the cap with whole-directory reads. Where `openMembership` is on (the global node's default) those
+    // are refused before the cap, which test-open-membership-reads proves; here the operator's override keeps them, as on
+    // any node that serves them, and nothing this suite measures depends on it.
+    const { db } = await import('./db/db.js');
+    db.prepare("INSERT INTO node_config (key, value) VALUES ('nodeProfile.openMembership', 'false') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run();
     const port = await startHttpsServer(0);
     let peak = 0;
     setInterval(() => { const h = process.memoryUsage().heapUsed; if (h > peak) peak = h; }, 5).unref();

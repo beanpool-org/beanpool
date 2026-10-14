@@ -2,10 +2,23 @@
   "_meta": {
     "language": "de",
     "name": "German",
-    "draftedBy": null,
-    "review": null,
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5)",
+    "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
+  },
+  "just now": "gerade eben",
+  "{n} day ago|{n} days ago": {
+    "one": "vor {n} Tag",
+    "other": "vor {n} Tagen"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "one": "vor {n} Stunde",
+    "other": "vor {n} Stunden"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "one": "vor {n} Minute",
+    "other": "vor {n} Minuten"
   }
 }

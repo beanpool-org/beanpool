@@ -2,10 +2,35 @@
   "_meta": {
     "language": "ar",
     "name": "Arabic",
-    "draftedBy": null,
-    "review": null,
+    "draftedBy": "claude-sonnet-5-5 (machine draft; words-web lane S2, directed by claude-opus-5-5)",
+    "review": "machine",
     "reviewed": false,
     "updated": "2026-10-15",
-    "note": "Empty until the drafting lane (S8). Keys are the English sentences; a key that is missing shows the English."
+    "note": "MACHINE DRAFT: not yet read by a native speaker (design M4: ships labelled; Settings → Language says so). Keys are the English sentences; a missing key shows the English."
+  },
+  "just now": "الآن",
+  "{n} day ago|{n} days ago": {
+    "zero": "منذ {n} يوم",
+    "one": "منذ يوم",
+    "two": "منذ يومين",
+    "few": "منذ {n} أيام",
+    "many": "منذ {n} يومًا",
+    "other": "منذ {n} يوم"
+  },
+  "{n} hour ago|{n} hours ago": {
+    "zero": "منذ {n} ساعة",
+    "one": "منذ ساعة",
+    "two": "منذ ساعتين",
+    "few": "منذ {n} ساعات",
+    "many": "منذ {n} ساعة",
+    "other": "منذ {n} ساعة"
+  },
+  "{n} minute ago|{n} minutes ago": {
+    "zero": "منذ {n} دقيقة",
+    "one": "منذ دقيقة",
+    "two": "منذ دقيقتين",
+    "few": "منذ {n} دقائق",
+    "many": "منذ {n} دقيقة",
+    "other": "منذ {n} دقيقة"
   }
 }

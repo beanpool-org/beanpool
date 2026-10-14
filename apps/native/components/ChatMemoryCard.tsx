@@ -7,7 +7,8 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable } from 'react-native';
 import { useStyles } from '../app/ThemeContext';
-import { CHAT_MEMORY_COPY, CHAT_MEMORY_FAILED_LINE, chatMemoryConfirmTitle, chatMemoryDoneLine, chatMemoryStyleSpec } from '../utils/chat-memory';
+import { t } from '@beanpool/core';
+import { CHAT_MEMORY_COPY, chatMemoryConfirmTitle, chatMemoryDoneLine, chatMemoryResetLabel, chatMemoryStyleSpec } from '../utils/chat-memory';
 
 export interface ChatMemoryCommunity { url: string; name: string }
 
@@ -30,30 +31,30 @@ export function ChatMemoryCard({ communities, onReset }: { communities: ChatMemo
     };
     return (
         <View>
-            <Text style={styles.body}>{CHAT_MEMORY_COPY.body}</Text>
-            {communities.length === 0 ? <Text style={styles.doneLine}>{CHAT_MEMORY_COPY.none}</Text> : null}
+            <Text style={styles.body}>{t(CHAT_MEMORY_COPY.body)}</Text>
+            {communities.length === 0 ? <Text style={styles.doneLine}>{t(CHAT_MEMORY_COPY.none)}</Text> : null}
             {communities.map((c) => (
                 <View key={c.url} style={styles.row}>
                     <Text style={styles.name}>{c.name}</Text>
                     {asking === c.url ? (
                         <View style={styles.confirmBox}>
                             <Text style={styles.confirmTitle} accessibilityRole="header">{chatMemoryConfirmTitle(c.name)}</Text>
-                            <Text style={styles.confirmText}>{CHAT_MEMORY_COPY.confirm}</Text>
-                            <Pressable style={styles.confirmBtn} onPress={() => { void reset(c.url); }} disabled={busy} accessibilityRole="button" accessibilityLabel={`${CHAT_MEMORY_COPY.reset} chat memory for ${c.name}`}>
-                                <Text style={styles.confirmBtnText}>{CHAT_MEMORY_COPY.reset}</Text>
+                            <Text style={styles.confirmText}>{t(CHAT_MEMORY_COPY.confirm)}</Text>
+                            <Pressable style={styles.confirmBtn} onPress={() => { void reset(c.url); }} disabled={busy} accessibilityRole="button" accessibilityLabel={chatMemoryResetLabel(c.name)}>
+                                <Text style={styles.confirmBtnText}>{t(CHAT_MEMORY_COPY.reset)}</Text>
                             </Pressable>
                             <Pressable style={styles.cancelBtn} onPress={() => setAsking(null)} disabled={busy} accessibilityRole="button">
-                                <Text style={styles.cancelText}>{CHAT_MEMORY_COPY.cancel}</Text>
+                                <Text style={styles.cancelText}>{t(CHAT_MEMORY_COPY.cancel)}</Text>
                             </Pressable>
                         </View>
                     ) : (
-                        <Pressable style={styles.resetBtn} onPress={() => { setOutcome(null); setAsking(c.url); }} accessibilityRole="button" accessibilityLabel={`${CHAT_MEMORY_COPY.reset} chat memory for ${c.name}`}>
-                            <Text style={styles.resetText}>{CHAT_MEMORY_COPY.reset}</Text>
+                        <Pressable style={styles.resetBtn} onPress={() => { setOutcome(null); setAsking(c.url); }} accessibilityRole="button" accessibilityLabel={chatMemoryResetLabel(c.name)}>
+                            <Text style={styles.resetText}>{t(CHAT_MEMORY_COPY.reset)}</Text>
                         </Pressable>
                     )}
                     {outcome?.url === c.url ? (
                         <Text style={outcome.ok ? styles.doneLine : styles.failedLine} accessibilityLiveRegion="polite">
-                            {outcome.ok ? chatMemoryDoneLine(c.name) : CHAT_MEMORY_FAILED_LINE}
+                            {outcome.ok ? chatMemoryDoneLine(c.name) : t(CHAT_MEMORY_COPY.failed)}
                         </Text>
                     ) : null}
                 </View>

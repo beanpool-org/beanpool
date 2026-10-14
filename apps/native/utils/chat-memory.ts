@@ -1,25 +1,31 @@
 /**
  * Settings → Account → Chat memory (DESIGN-dm-peer-key-pin §3.4 amendment 6 §3, slice 2's row): the member's reset of one
  * community's DM pins, the only reset there is (the phone never resets on its own). The words and the look live here so
- * the card and its 320 dp test read the same ones; the reset itself is db.ts resetDmChatMemory.
+ * the card and its 320 dp test read the same ones; the reset itself is db.ts resetDmChatMemory. Since the reset takes the
+ * DM guard's list too (§3.4 amendment 8 §3), the row's subtitle, the body and the confirmation are dm-guard-list.ts
+ * CHAT_MEMORY_RESET_WORDS. Every sentence is a word() key, put through t() where it is shown.
  */
+import { t, word } from '@beanpool/core';
 import type { AppColors } from '../constants/colors';
+import { CHAT_MEMORY_RESET_WORDS } from './dm-guard-list';
 
 export const CHAT_MEMORY_COPY = {
-    row: 'Chat memory',
-    rowSub: 'Who your chats in each community are with',
-    title: 'Chat memory',
-    body: "This phone remembers who each of your chats in a community is with, so the community can't quietly swap the person behind a chat. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.",
-    reset: 'Reset',
-    cancel: 'Cancel',
-    /** Amendment 6 §3's confirmation, word for word: the reset's stated residual. */
-    confirm: 'A chat that was paused because its key changed may open with the new key. Check any key code again before you send.',
-    none: 'No communities on this phone yet.',
+    row: word('Chat memory'),
+    rowSub: CHAT_MEMORY_RESET_WORDS.rowSub,
+    title: word('Chat memory'),
+    body: CHAT_MEMORY_RESET_WORDS.body,
+    reset: word('Reset'),
+    cancel: word('Cancel'),
+    /** Amendment 8 §3's confirmation, word for word (case 14's reword): the reset's two stated residuals. */
+    confirm: CHAT_MEMORY_RESET_WORDS.confirm,
+    none: word('No communities on this phone yet.'),
+    failed: word("This phone couldn't reset it. Try again."),
 } as const;
 
-export const chatMemoryConfirmTitle = (community: string) => `Reset chat memory for ${community}?`;
-export const chatMemoryDoneLine = (community: string) => `Reset. Every chat in ${community} is checked again from the start.`;
-export const CHAT_MEMORY_FAILED_LINE = "This phone couldn't reset it. Try again.";
+export const chatMemoryConfirmTitle = (community: string) => t('Reset chat memory for {community}?', { community });
+export const chatMemoryDoneLine = (community: string) => t('Reset. Every chat in {community} is checked again from the start.', { community });
+export const chatMemoryResetLabel = (community: string) => t('Reset chat memory for {community}', { community });
+export const CHAT_MEMORY_FAILED_LINE = CHAT_MEMORY_COPY.failed;
 
 /** The card's look, from the colour library's roles only (constants/colors.ts), light and dark alike. */
 export function chatMemoryStyleSpec(colors: AppColors) {

@@ -20,6 +20,7 @@
  * salvage of the raw value's own ids), and the next read seeds `keep` first, then the file's `dm` rows, in one write.
  */
 
+import { t, word } from '@beanpool/core';
 import { dmConversationsSeenStoreKey, dmConversationsSeenSetAsideStoreKey } from './storage-keys';
 import { DM_PIN_ID_MAX } from './dm-peer-pins';
 
@@ -40,7 +41,10 @@ export const DM_SEEN_MAX_BYTES = 1024 * 1024;
  * The one line a send refused while this community's list can't be read says (§3.4 amendment 7 §3 iii), and where the way
  * out is (amendment 8: the member's reset, the pins' twin).
  */
-export const DM_GUARD_UNREAD_TEXT = "This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Account → Chat memory can reset this community's, which re-checks every chat here from the start.";
+const GUARD_WORDS = {
+    unread: word("This phone couldn't read which chats here are private, so nothing was sent. Try again; if it keeps failing, Settings → Account → Chat memory can reset this community's, which re-checks every chat here from the start."),
+} as const;
+export const DM_GUARD_UNREAD_TEXT = GUARD_WORDS.unread;
 
 /**
  * Settings → Account → Chat memory's words once its reset takes this list too (§3.4 amendment 8 §3), word for word: the
@@ -48,14 +52,14 @@ export const DM_GUARD_UNREAD_TEXT = "This phone couldn't read which chats here a
  * CHAT_MEMORY_COPY.rowSub, body, confirm) takes them from here.
  */
 export const CHAT_MEMORY_RESET_WORDS = {
-    rowSub: 'Who your chats are with, and which are private.',
-    body: "This phone remembers who each of your chats in a community is with, and which chats there are private, so the community can't quietly swap the person behind a chat or turn a private chat into a group one. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.",
-    confirm: "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.",
+    rowSub: word('Who your chats are with, and which are private.'),
+    body: word("This phone remembers who each of your chats in a community is with, and which chats there are private, so the community can't quietly swap the person behind a chat or turn a private chat into a group one. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start."),
+    confirm: word("A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send."),
 } as const;
 
 export class DmGuardUnreadError extends Error {
     constructor() {
-        super(DM_GUARD_UNREAD_TEXT);
+        super(t(GUARD_WORDS.unread));
         this.name = 'DmGuardUnreadError';
     }
 }

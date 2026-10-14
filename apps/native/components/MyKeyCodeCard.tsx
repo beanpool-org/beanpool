@@ -5,6 +5,7 @@
  */
 import React from 'react';
 import { View, Text } from 'react-native';
+import { t } from '@beanpool/core';
 import { useStyles } from '../app/ThemeContext';
 import { dmKeyChangeStyleSpec, MY_KEY_CODE_COPY } from '../utils/dm-key-change';
 import { keyCodeOf, keyCodeSpoken } from '../utils/key-code';
@@ -17,7 +18,7 @@ export function MyKeyCodeCard({ publicKey }: { publicKey?: string | null }) {
             <Text style={styles.myCodeTitle} accessibilityRole="header">{MY_KEY_CODE_COPY.title}</Text>
             {code ? (
                 <View style={styles.codeBox}>
-                    <Text style={styles.myCode} accessibilityLabel={`My key code: ${keyCodeSpoken(code)}`} selectable>{code}</Text>
+                    <Text style={styles.myCode} accessibilityLabel={t('My key code: {code}', { code: keyCodeSpoken(code) })} selectable>{code}</Text>
                 </View>
             ) : null}
             <Text style={styles.myCodeBody}>{code ? MY_KEY_CODE_COPY.body : MY_KEY_CODE_COPY.unknown}</Text>

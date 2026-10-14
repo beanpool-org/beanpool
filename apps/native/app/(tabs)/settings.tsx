@@ -1707,8 +1707,8 @@ export default function SettingsScreen() {
                     <Pressable style={styles.menuBtn} onPress={() => setMode('chatMemory')} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>💬</Text></View>
                         <View style={{ flex: 1 }}>
-                            <Text style={styles.menuText}>{CHAT_MEMORY_COPY.row}</Text>
-                            <Text style={styles.menuSub}>{CHAT_MEMORY_COPY.rowSub}</Text>
+                            <Text style={styles.menuText}>{t(CHAT_MEMORY_COPY.row)}</Text>
+                            <Text style={styles.menuSub}>{t(CHAT_MEMORY_COPY.rowSub)}</Text>
                         </View>
                         <Text style={styles.menuChevron}>›</Text>
                     </Pressable>
@@ -2428,13 +2428,13 @@ export default function SettingsScreen() {
 
             {mode === 'chatMemory' && (
                 <View style={styles.card}>
-                    <Text style={styles.sectionTitle}>{CHAT_MEMORY_COPY.title}</Text>
+                    <Text style={styles.sectionTitle}>{t(CHAT_MEMORY_COPY.title)}</Text>
                     <ChatMemoryCard
                         communities={savedNodes.map((n) => ({ url: n.url, name: communityName({ url: n.url, alias: n.alias }) }))}
                         onReset={resetDmChatMemory}
                     />
                     <Pressable style={styles.backBtn} onPress={() => setMode('menu')} accessibilityRole="button">
-                        <Text style={styles.backBtnText}>← Back</Text>
+                        <Text style={styles.backBtnText}>{t('← Back')}</Text>
                     </Pressable>
                 </View>
             )}

@@ -92,10 +92,10 @@ function whole(page: HTMLElement, text: string) {
 
 describe('Settings → Account → Chat memory at 320dp with 1.3× text (amendment 6 §3)', () => {
     it('the confirmation is the design\'s sentence, word for word; the row is in Settings\' Account group and opens the card with the reset', () => {
-        expect(CHAT_MEMORY_COPY.confirm).toBe('A chat that was paused because its key changed may open with the new key. Check any key code again before you send.');
+        expect(CHAT_MEMORY_COPY.confirm).toBe("A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.");
         const src = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/settings.tsx'), 'utf-8');
         const group = src.indexOf('<Text style={styles.sectionHeader}>ACCOUNT & IDENTITY</Text>');
-        const row = src.indexOf('<Text style={styles.menuText}>{CHAT_MEMORY_COPY.row}</Text>');
+        const row = src.indexOf('<Text style={styles.menuText}>{t(CHAT_MEMORY_COPY.row)}</Text>');
         const nextGroup = src.indexOf('<Text style={styles.sectionHeader}>', group + 1);
         expect(group).toBeGreaterThan(0);
         expect(row).toBeGreaterThan(group);
@@ -104,7 +104,8 @@ describe('Settings → Account → Chat memory at 320dp with 1.3× text (amendme
         expect(src).toMatch(/\{mode === 'chatMemory' && \([\s\S]*?<ChatMemoryCard[\s\S]*?onReset=\{resetDmChatMemory\}/);
         expect(CHAT_MEMORY_COPY.row).toBe('Chat memory');
         // §3.4 amendment 7 §1 and §5: true as written once the reset judges before it trusts, each pinned word for word.
-        expect(CHAT_MEMORY_COPY.body).toBe("This phone remembers who each of your chats in a community is with, so the community can't quietly swap the person behind a chat. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.");
+        expect(CHAT_MEMORY_COPY.rowSub).toBe('Who your chats are with, and which are private.');
+        expect(CHAT_MEMORY_COPY.body).toBe("This phone remembers who each of your chats in a community is with, and which chats there are private, so the community can't quietly swap the person behind a chat or turn a private chat into a group one. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.");
         expect(chatMemoryDoneLine('Castlemaine')).toBe('Reset. Every chat in Castlemaine is checked again from the start.');
     });
 

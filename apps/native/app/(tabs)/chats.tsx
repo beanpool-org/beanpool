@@ -22,7 +22,7 @@ import { unreadLabel, groupsUnreadTotal, yourGroupsPaneState } from '../../utils
 import { YourGroupsRows, YourGroupsEmpty, YourGroupsLoading, YourGroupsError, NewGroupButton, FindGroupsButton, useCreateGroupFlow } from '../../components/YourGroupsPane';
 import { findGroupsInTalk, FIND_GROUPS_HREF } from '../../utils/commons-sections';
 import { useYourGroups } from '../../components/useYourGroups';
-import { listPhotoUrl } from '@beanpool/core';
+import { listPhotoUrl, t } from '@beanpool/core';
 
 export default function ChatsScreen() {
     const { theme, colors } = useTheme();
@@ -512,8 +512,8 @@ export default function ChatsScreen() {
                     <View style={styles.chatHeader}>
                         <Text style={[styles.peerName, item.unread > 0 && styles.peerNameUnread]}>{item.peer}</Text>
                         {item.keyChanged && (
-                            <View style={styles.keyChangedTag} accessibilityLabel="The key behind this chat changed">
-                                <Text style={styles.keyChangedTagText}>key changed</Text>
+                            <View style={styles.keyChangedTag} accessibilityLabel={t('The key behind this chat changed')}>
+                                <Text style={styles.keyChangedTagText}>{t('key changed')}</Text>
                             </View>
                         )}
                         <Text style={[styles.timestamp, item.unread > 0 && styles.timestampUnread]}>{item.timestamp}</Text>

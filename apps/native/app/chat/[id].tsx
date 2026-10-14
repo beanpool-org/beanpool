@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet, Pressable, FlatList, ScrollView, Alert, Image, ActivityIndicator, Linking, Modal, DeviceEventEmitter, AppState, useWindowDimensions, type AppStateStatus } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController, useKeyboardState } from 'react-native-keyboard-controller';
 import { withJitter } from '../../utils/jitter';
+import { t } from '@beanpool/core';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLocalSearchParams, router, useFocusEffect, Stack, ErrorBoundary } from 'expo-router';
 
@@ -556,12 +557,12 @@ function ChatScreen({ id }: { id: string }) {
             const moved = await acceptOfferedPeer(id as string, peer);
             if (!moved) {
                 const now = await getDmKeyChange(id as string).catch(() => undefined);
-                if (now === null) Alert.alert('Nothing changed', 'This chat no longer offers that key, so nothing was moved.');
-                else Alert.alert('Nothing changed', 'The key on offer changed while you were checking. Look at the new code and check it again.');
+                if (now === null) Alert.alert(t('Nothing changed'), t('This chat no longer offers that key, so nothing was moved.'));
+                else Alert.alert(t('Nothing changed'), t('The key on offer changed while you were checking. Look at the new code and check it again.'));
             }
         } catch (e: any) {
-            Alert.alert('Nothing changed', isDmPinStoreError(e) || !e?.message
-                ? "This phone couldn't read or save who this chat is with, so nothing was moved. Try again in a moment."
+            Alert.alert(t('Nothing changed'), isDmPinStoreError(e) || !e?.message
+                ? t("This phone couldn't read or save who this chat is with, so nothing was moved. Try again in a moment.")
                 : e.message);
         }
         await loadMessages(true).catch(() => {});

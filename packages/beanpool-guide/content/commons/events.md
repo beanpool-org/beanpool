@@ -8,7 +8,7 @@ related: event-chat, notifications, pin-locations, map-pins, polls
 ## Finding events
 
 - In the **Market**, tap **Events**. Choose **Today**, **This weekend** or **Next 7 days**.
-- On the **Map**, tap **Events** to see them as purple pins.
+- On the **Map**, events are purple pins. On the phone, tap **Events** to see only them. In the web app they are always there, and the date chips narrow them.
 
 ## Your events
 
@@ -25,7 +25,7 @@ When you are **Going**:
 - you can read the host's **Note for people who are going**;
 - you can open the **event chat**. See "Event chat".
 
-Tap the event to see everything, and **Show on map** to open the place in your phone's maps app.
+Tap the event to see everything, and **Show on map**. On the phone it opens your maps app. In the web app it shows the place on the Map.
 
 ## Being reminded
 
@@ -33,6 +33,7 @@ When you are **Going** or **Interested**, the event shows **Remind me** and how 
 
 - Tap **Change** to pick **1 week**, **1 day**, **2 hours**, **1 hour** or **30 minutes** before. You can tick more than one.
 - Tick nothing to get no reminder for this event.
+- Then tap **Save for this event**. A tick is not saved until you do.
 - Tap **Use my default** to hand it back to your usual choice.
 
 To change your usual choice for every event, see "Notifications".
@@ -66,6 +67,10 @@ The entry carries the name, the time, the place and the link back to the event. 
 - **Who can see it:** your whole community, or one group.
 - If you keep a project or enterprise or are a convenor of a group, **Post as** lets you post the event in its name. A group hosts for its own members only; an enterprise hosts for the whole community, so an enterprise event is never group-only.
 - Tap **Create**. Your event is in the Market and on the Map.
+
+In the web app the title box is **What's happening**, the pin buttons are **📍 My location** and **📌 Drop a pin**, and the last button is **Create Event**.
+
+You can have 5 upcoming events at a time. A group's events count against the group, and an enterprise's against the enterprise.
 
 ## Running your event
 

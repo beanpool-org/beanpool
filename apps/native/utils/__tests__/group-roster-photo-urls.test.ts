@@ -35,6 +35,7 @@ vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(), saveCanon
 
 import { fetchGroupDetails, getGroupForLanding, getGroupActiveMembers, getTreasuries } from '../db';
 import { avatarUri } from '../image-processing';
+import { inviteLandingFacts } from '../your-groups';
 
 const NODE = 'https://faces.example';
 const KEY = 'AbCdEfGhIjKlMnOpQrSt_-';
@@ -104,6 +105,24 @@ describe("a group's faces come from the node's photo URLs", () => {
         expect(faces.map(f => drawn(f.avatarUrl ?? undefined, f.memberPubkey))).toEqual([
             `${NODE}${leadUrl}&_v=${LEAD.slice(0, 8)}`, `${NODE}${memberUrl}&_v=${MEMBER.slice(0, 8)}`, 'bundled://leaf', null,
         ]);
+    });
+
+    it("an invitee to an open group where anyone can join (openMembership): no row of faces, and the inviter's face and the count stay", async () => {
+        // DESIGN-global-member-privacy-fable.md §5 and its amendment 1 item 2: the node keeps an open group's roster for its
+        // members, so the landing's faces read is refused for someone only invited. app/group/[id].tsx then leaves the faces
+        // row out (membersFailed) and draws who invited them and the count from the group's own card, which still has both.
+        fetchMock.mockImplementation(async (url: string) => {
+            const path = url.replace(NODE, '');
+            if (path === '/api/groups/g1') return { ok: true, status: 200, json: async () => ({ ...card, joinPolicy: 'open', memberCount: 4, viewerStatus: 'invited' }) };
+            if (path === '/api/groups/g1/members?status=active') return { ok: false, status: 403, json: async () => ({ error: 'Join the group to see who is here', code: 'join_to_see' }) };
+            return { ok: false, status: 404, json: async () => ({ error: 'Not found' }) };
+        });
+        const landing = await getGroupForLanding('g1');
+        await expect(getGroupActiveMembers('g1')).rejects.toThrow('Join the group to see who is here');
+        expect(landing?.viewerInvitedBy?.avatarUrl).toBe(leadUrl);
+        expect(drawn(landing!.viewerInvitedBy!.avatarUrl, LEAD)).toBe(`${NODE}${leadUrl}&_v=${LEAD.slice(0, 8)}`);
+        // The landing's own sum: with no faces read (members null), the count is the card's.
+        expect(inviteLandingFacts({ category: landing!.category, memberCount: landing!.memberCount, joinPolicy: landing!.joinPolicy })).toContain('4 members');
     });
 
     it("still draws a photo an older node sends inline", () => {

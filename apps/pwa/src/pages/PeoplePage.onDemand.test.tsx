@@ -86,6 +86,26 @@ describe('People on a community with members on demand', () => {
         expect(whole).not.toHaveBeenCalled();
     });
 
+    it("the nearest read's day budget spent (429, features.openMembership): Try again, and the search still works", async () => {
+        // DESIGN-global-member-privacy-fable.md §3: where anyone can join in a minute, a member may ask who is near a place
+        // 100 times a day (READ_LIMITS.nearestPeoplePerDay on the server). Past it the page says it couldn't check, and
+        // the search by name still answers; the page never reads the directory whole instead.
+        info.value = { ...GLOBAL, features: { ...GLOBAL.features, openMembership: true } };
+        cards.mockImplementation(async (path: string) => {
+            if (path.includes('lat=')) throw Object.assign(new Error('You have looked up the people near a place 100 times today'), { status: 429, code: 'nearest_people_day_budget' });
+            if (path.includes('q=')) return [card('e', 'Alma')];
+            return [];
+        });
+        openCommunity();
+        const failed = await screen.findByTestId('people-near-failed');
+        expect(failed).toHaveTextContent("Couldn't check who's near you just now.");
+        expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText('Search members by name'), { target: { value: 'al' } });
+        await screen.findByTestId('people-found');
+        expect(screen.getByTestId('people-found')).toHaveTextContent('Alma');
+        expect(whole).not.toHaveBeenCalled();
+    });
+
     it('waits for the typing to pause: one search for a name typed quickly, for what was typed last', async () => {
         openCommunity();
         await screen.findByTestId('people-near');

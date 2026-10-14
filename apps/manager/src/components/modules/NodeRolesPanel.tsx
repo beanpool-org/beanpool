@@ -43,9 +43,9 @@ const ROLE_LABEL: Record<MemberNodeRole, string> = { owner: 'Owner', admin: 'Adm
 const ROLE_ICON: Record<MemberNodeRole, string> = { owner: '👑', admin: '⚡', moderator: '🛡️' };
 const ROLE_ARTICLE: Record<MemberNodeRole, string> = { owner: 'an owner', admin: 'an admin', moderator: 'a moderator' };
 const ROLE_BADGE: Record<MemberNodeRole, string> = {
-    owner: 'bg-amber-500/15 border-amber-500/40 text-amber-300',
+    owner: 'bg-bp-chip-warn-tint border-amber-500/40 text-bp-chip-warn-ink',
     admin: 'bg-blue-500/15 border-blue-500/40 text-blue-300',
-    moderator: 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300',
+    moderator: 'bg-bp-chip-ok-tint border-emerald-500/40 text-bp-chip-ok-ink',
 };
 
 /** What a role lets someone do, in plain words — shown before anyone is given it. */
@@ -315,8 +315,8 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSigne
                     role={notice.kind === 'error' ? 'alert' : 'status'}
                     className={`p-3 rounded-xl border text-sm flex items-start justify-between gap-3 ${
                         notice.kind === 'error'
-                            ? 'bg-red-500/10 border-red-500/30 text-red-300'
-                            : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                            ? 'bg-bp-chip-danger-tint border-red-500/30 text-bp-chip-danger-ink'
+                            : 'bg-bp-chip-ok-tint border-emerald-500/30 text-bp-chip-ok-ink'
                     }`}
                 >
                     <span>

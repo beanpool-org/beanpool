@@ -217,7 +217,7 @@ export function StandbyReplicationPanel({
                         id="backup-role-badge"
                         className={`px-3 py-1 rounded-full text-xs font-bold font-mono uppercase ${
                             isStandby
-                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-amber-500/30'
                                 : 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
                         }`}
                     >
@@ -245,9 +245,9 @@ export function StandbyReplicationPanel({
                             id="backup-health-badge"
                             className={`px-2 py-0.5 rounded text-xs font-bold ${
                                 failStreak === 0 && hasLastSuccess
-                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                    ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-emerald-500/30'
                                     : failStreak > 0
-                                        ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                                        ? 'bg-bp-chip-danger-tint text-bp-chip-danger-ink border border-red-500/30'
                                         : 'bg-nature-800 text-nature-400'
                             }`}
                         >
@@ -395,7 +395,7 @@ export function StandbyReplicationPanel({
                         type="submit"
                         id="save-rep-config-btn"
                         disabled={savingConfig}
-                        className="min-h-[44px] px-5 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50"
+                        className="min-h-[44px] px-5 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all disabled:opacity-50"
                     >
                         {savingConfig ? 'Saving...' : 'Save Connection'}
                     </button>
@@ -474,7 +474,7 @@ export function StandbyReplicationPanel({
                                 id="confirm-resync-btn"
                                 onClick={handleConfirmResync}
                                 disabled={resyncing}
-                                className="min-h-[44px] px-5 py-2 rounded-xl bg-amber-700 hover:bg-amber-600 text-xs font-bold text-white border border-amber-500 shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
+                                className="min-h-[44px] px-5 py-2 rounded-xl bg-bp-gold-fill hover:bg-bp-gold-hover text-xs font-bold text-bp-gold-on border border-amber-500 shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
                             >
                                 {resyncing ? (
                                     <>

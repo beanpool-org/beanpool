@@ -274,7 +274,7 @@ export function MemberDetailModal({
                                     <span
                                         className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
                                             currentRole === 'owner'
-                                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                                ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink border-amber-500/40'
                                                 : currentRole === 'admin'
                                                 ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
                                                 : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
@@ -284,7 +284,7 @@ export function MemberDetailModal({
                                     </span>
                                 )}
                                 {isFrozen && (
-                                    <span className="px-2 py-0.5 rounded bg-red-600 text-white text-[10px] font-mono font-bold">
+                                    <span className="px-2 py-0.5 rounded bg-bp-danger-fill text-bp-danger-on text-[10px] font-mono font-bold">
                                         FROZEN
                                     </span>
                                 )}
@@ -382,7 +382,7 @@ export function MemberDetailModal({
                         </span>
                         <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${
                             currentRole === 'owner'
-                                ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+                                ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink border-amber-500/40'
                                 : currentRole === 'admin'
                                 ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
                                 : currentRole === 'moderator'
@@ -483,7 +483,7 @@ export function MemberDetailModal({
                                 <div key={idx} className="p-2.5 bg-red-950/60 border border-red-900/60 rounded-xl text-xs space-y-1">
                                     <div className="flex items-center justify-between">
                                         <span className="font-mono font-bold text-red-300 uppercase text-[10px]">{flag.type}</span>
-                                        <span className="px-1.5 py-0.5 rounded bg-red-800 text-white font-mono text-[9px] uppercase font-bold">
+                                        <span className="px-1.5 py-0.5 rounded bg-bp-danger-fill text-bp-danger-on font-mono text-[9px] uppercase font-bold">
                                             {flag.severity || 'ALERT'}
                                         </span>
                                     </div>
@@ -556,7 +556,7 @@ export function MemberDetailModal({
                                         <button
                                             onClick={handleSuspend}
                                             disabled={suspendBusy || suspendReasonTrimmed.length < MIN_SUSPEND_REASON}
-                                            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-[11px] disabled:opacity-50 disabled:cursor-not-allowed"
+                                            className="px-3 py-1.5 rounded-lg bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on font-bold text-[11px] disabled:opacity-50 disabled:cursor-not-allowed"
                                         >
                                             {suspendBusy ? 'Suspending…' : 'Suspend now'}
                                         </button>
@@ -593,7 +593,7 @@ export function MemberDetailModal({
                                         onPrune?.(pubkey);
                                         setShowPruneConfirm(false);
                                     }}
-                                    className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-[11px] shadow-lg"
+                                    className="px-3 py-1.5 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-[11px] shadow-lg"
                                 >
                                     Yes, Prune Account
                                 </button>
@@ -636,8 +636,8 @@ export function MemberDetailModal({
                                 onClick={() => onToggleFreeze(pubkey)}
                                 className={`px-3 py-2 rounded-xl font-bold transition-all border text-[11px] ${
                                     isFrozen
-                                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500'
-                                        : 'bg-amber-600 hover:bg-amber-500 text-white border-amber-500'
+                                        ? 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-emerald-500'
+                                        : 'bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on border-amber-500'
                                 }`}
                             >
                                 <span>{isFrozen ? '🟢 Unfreeze' : '🛑 Freeze'}</span>

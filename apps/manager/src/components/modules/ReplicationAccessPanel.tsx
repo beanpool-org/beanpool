@@ -632,7 +632,7 @@ export function ReplicationAccessPanel({
                                 id="confirm-clear-token-btn"
                                 onClick={handleConfirmClear}
                                 disabled={clearing}
-                                className="min-h-[44px] px-5 py-2 rounded-xl bg-red-800 hover:bg-red-700 text-xs font-bold text-white border border-red-600 transition-all disabled:opacity-50 flex items-center gap-2"
+                                className="min-h-[44px] px-5 py-2 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on border border-red-600 transition-all disabled:opacity-50 flex items-center gap-2"
                             >
                                 {clearing ? (
                                     <>

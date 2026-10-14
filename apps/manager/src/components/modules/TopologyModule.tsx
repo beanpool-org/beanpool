@@ -466,7 +466,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     onClick={() => setActiveTab('fleet-backups')}
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                         activeTab === 'fleet-backups'
-                            ? 'bg-terra-500 text-white shadow-lg shadow-terra-500/20'
+                            ? 'bg-bp-cta-fill text-bp-cta-on shadow-lg shadow-terra-500/20'
                             : 'bg-nature-950/60 text-nature-400 hover:text-white border border-nature-800'
                     }`}
                 >
@@ -477,7 +477,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     onClick={() => setActiveTab('snapshots')}
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                         activeTab === 'snapshots'
-                            ? 'bg-terra-500 text-white shadow-lg shadow-terra-500/20'
+                            ? 'bg-bp-cta-fill text-bp-cta-on shadow-lg shadow-terra-500/20'
                             : 'bg-nature-950/60 text-nature-400 hover:text-white border border-nature-800'
                     }`}
                 >
@@ -488,7 +488,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     onClick={() => setActiveTab('replication')}
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                         activeTab === 'replication'
-                            ? 'bg-terra-500 text-white shadow-lg shadow-terra-500/20'
+                            ? 'bg-bp-cta-fill text-bp-cta-on shadow-lg shadow-terra-500/20'
                             : 'bg-nature-950/60 text-nature-400 hover:text-white border border-nature-800'
                     }`}
                 >
@@ -499,7 +499,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     onClick={() => setActiveTab('name-claims')}
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                         activeTab === 'name-claims'
-                            ? 'bg-terra-500 text-white shadow-lg shadow-terra-500/20'
+                            ? 'bg-bp-cta-fill text-bp-cta-on shadow-lg shadow-terra-500/20'
                             : 'bg-nature-950/60 text-nature-400 hover:text-white border border-nature-800'
                     }`}
                 >
@@ -510,7 +510,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     onClick={() => setActiveTab('runbook')}
                     className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                         activeTab === 'runbook'
-                            ? 'bg-terra-500 text-white shadow-lg shadow-terra-500/20'
+                            ? 'bg-bp-cta-fill text-bp-cta-on shadow-lg shadow-terra-500/20'
                             : 'bg-nature-950/60 text-nature-400 hover:text-white border border-nature-800'
                     }`}
                 >
@@ -543,7 +543,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             <button
                                 onClick={() => handleTriggerSync('all')}
                                 disabled={harvestingNodeId === 'all'}
-                                className="px-3 py-1.5 rounded-lg bg-terra-500 hover:bg-terra-600 text-white font-bold text-xs shadow-md transition-all active:scale-95 disabled:opacity-50"
+                                className="px-3 py-1.5 rounded-lg bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on font-bold text-xs shadow-md transition-all active:scale-95 disabled:opacity-50"
                             >
                                 {harvestingNodeId === 'all' ? 'Syncing...' : 'Sync All Now'}
                             </button>
@@ -732,7 +732,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                         <button
                             onClick={handleCreateSnapshot}
                             disabled={creatingSnapshot}
-                            className="px-4 py-2 rounded-xl bg-terra-500 hover:bg-terra-600 text-white font-bold text-xs shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                            className="px-4 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on font-bold text-xs shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
                         >
                             <span>{creatingSnapshot ? '⏳' : '📸'}</span>
                             <span>Create Snapshot Now</span>
@@ -760,7 +760,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                 <button
                                     onClick={handleCreateSnapshot}
                                     disabled={creatingSnapshot}
-                                    className="px-4 py-2 rounded-xl bg-terra-500 hover:bg-terra-600 text-white font-bold text-xs shadow-md transition-all active:scale-95 disabled:opacity-50 inline-flex items-center gap-2"
+                                    className="px-4 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on font-bold text-xs shadow-md transition-all active:scale-95 disabled:opacity-50 inline-flex items-center gap-2"
                                 >
                                     <span>{creatingSnapshot ? '⏳' : '📸'}</span>
                                     <span>Create First Snapshot</span>
@@ -863,7 +863,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                             <button
                                 onClick={handleSaveCadence}
                                 disabled={cadenceSaving}
-                                className="w-full py-2.5 rounded-xl bg-terra-500 hover:bg-terra-600 text-white font-bold text-xs shadow-lg transition-all active:scale-95 disabled:opacity-50"
+                                className="w-full py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on font-bold text-xs shadow-lg transition-all active:scale-95 disabled:opacity-50"
                             >
                                 {cadenceSaving ? 'Saving...' : 'Save Cadence Configuration'}
                             </button>

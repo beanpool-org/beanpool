@@ -266,7 +266,7 @@ export function TelemetryModule({
                 <div>
                     <h2 className="text-xl font-bold text-white tracking-tight m-0 flex items-center gap-2.5">
                         <span>📊 Multi-Node Fleet Telemetry & Analytics</span>
-                        <span className="px-2.5 py-0.5 rounded-full bg-terra-500/20 text-terra-300 border border-terra-500/30 text-xs font-mono font-bold">
+                        <span className="px-2.5 py-0.5 rounded-full bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/30 text-xs font-mono font-bold">
                             {profiles.length} Nodes Fleet
                         </span>
                     </h2>
@@ -341,7 +341,7 @@ export function TelemetryModule({
                 {onSelectTab && (
                     <button
                         onClick={() => onSelectTab('analytics')}
-                        className="px-4 py-2 rounded-xl bg-terra-500 hover:bg-terra-400 text-white text-xs font-bold transition-all shadow-md active:scale-95 flex items-center gap-1.5 shrink-0"
+                        className="px-4 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on text-xs font-bold transition-all shadow-md active:scale-95 flex items-center gap-1.5 shrink-0"
                     >
                         <span>Open Peak Analytics</span>
                         <span>→</span>
@@ -362,7 +362,7 @@ export function TelemetryModule({
                             onClick={() => handleToggleViewMode('condensed')}
                             className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                                 viewMode === 'condensed'
-                                    ? 'bg-terra-500 text-white shadow-sm'
+                                    ? 'bg-bp-cta-fill text-bp-cta-on shadow-sm'
                                     : 'text-nature-400 hover:text-white hover:bg-nature-800/60'
                             }`}
                             title="Condensed Grid View - Fits all nodes on one screen"
@@ -374,7 +374,7 @@ export function TelemetryModule({
                             onClick={() => handleToggleViewMode('expanded')}
                             className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                                 viewMode === 'expanded'
-                                    ? 'bg-terra-500 text-white shadow-sm'
+                                    ? 'bg-bp-cta-fill text-bp-cta-on shadow-sm'
                                     : 'text-nature-400 hover:text-white hover:bg-nature-800/60'
                             }`}
                             title="Expanded Cards View - Detailed node metrics"
@@ -439,7 +439,7 @@ export function TelemetryModule({
                                             </span>
                                             <h4 className="text-sm font-bold text-white truncate m-0">{profile.name}</h4>
                                             {isSelected && (
-                                                <span className="px-1.5 py-0.2 rounded bg-terra-500/20 text-terra-300 text-[9px] font-mono font-bold shrink-0 border border-terra-500/30">
+                                                <span className="px-1.5 py-0.2 rounded bg-bp-chip-need-tint text-bp-chip-need-ink text-[9px] font-mono font-bold shrink-0 border border-terra-500/30">
                                                     ACTIVE
                                                 </span>
                                             )}
@@ -581,7 +581,7 @@ export function TelemetryModule({
                                                 <div className="flex items-center gap-2">
                                                     <h4 className="text-base font-bold text-white m-0">{profile.name}</h4>
                                                     {isSelected && (
-                                                        <span className="px-2 py-0.5 rounded bg-terra-500/20 text-terra-300 text-[10px] font-mono font-bold border border-terra-500/30">
+                                                        <span className="px-2 py-0.5 rounded bg-bp-chip-need-tint text-bp-chip-need-ink text-[10px] font-mono font-bold border border-terra-500/30">
                                                             PRIMARY TARGET
                                                         </span>
                                                     )}
@@ -614,7 +614,7 @@ export function TelemetryModule({
                                                 }}
                                                 className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
                                                     isSelected
-                                                        ? 'bg-terra-500 text-white shadow-sm'
+                                                        ? 'bg-bp-cta-fill text-bp-cta-on shadow-sm'
                                                         : 'bg-nature-800 hover:bg-nature-700 text-nature-200 border border-nature-700'
                                                 }`}
                                             >

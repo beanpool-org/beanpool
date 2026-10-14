@@ -619,7 +619,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                 title={isUnfinished ? 'Not finished' : undefined}
                                 className={`p-2.5 rounded-xl border text-center transition-all ${
                                     isActive
-                                        ? 'bg-terra-500/20 border-terra-500/50 text-terra-300 font-bold'
+                                        ? 'bg-bp-chip-need-tint border-terra-500/50 text-bp-chip-need-ink font-bold'
                                         : isDone
                                         ? 'bg-nature-950 border-nature-800 text-emerald-400 font-semibold'
                                         : isUnfinished
@@ -723,7 +723,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                                 type="button"
                                                 onClick={handleStep1TfaCode}
                                                 disabled={savingStep1}
-                                                className="min-h-[48px] px-5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50"
+                                                className="min-h-[48px] px-5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all disabled:opacity-50"
                                             >
                                                 Enter 2FA code
                                             </button>
@@ -732,7 +732,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                             type="button"
                                             onClick={handleRetryStep1}
                                             disabled={savingStep1}
-                                            className="min-h-[48px] px-5 rounded-xl bg-red-800 hover:bg-red-700 text-xs font-bold text-white transition-all disabled:opacity-50"
+                                            className="min-h-[48px] px-5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on transition-all disabled:opacity-50"
                                         >
                                             {savingStep1 ? 'Trying...' : 'Retry'}
                                         </button>
@@ -753,7 +753,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                 <button
                                     type="submit"
                                     disabled={savingStep1 || !communityName.trim()}
-                                    className="min-h-[48px] px-6 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-md disabled:opacity-50"
+                                    className="min-h-[48px] px-6 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all shadow-md disabled:opacity-50"
                                 >
                                     {savingStep1 ? 'Saving...' : 'Next: Owner & 2FA →'}
                                 </button>
@@ -828,7 +828,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                                 type="button"
                                                 onClick={handleStartTfa}
                                                 disabled={tfaState === 'starting'}
-                                                className="w-full min-h-[48px] rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-md disabled:opacity-50"
+                                                className="w-full min-h-[48px] rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all shadow-md disabled:opacity-50"
                                             >
                                                 {tfaState === 'starting' ? 'Starting...' : 'Set up 2FA'}
                                             </button>
@@ -863,7 +863,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                             <button
                                                 type="submit"
                                                 disabled={tfaState === 'verifying' || !tfaCode.trim()}
-                                                className="w-full min-h-[48px] rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-md disabled:opacity-50"
+                                                className="w-full min-h-[48px] rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all shadow-md disabled:opacity-50"
                                             >
                                                 {tfaState === 'verifying' ? 'Checking...' : 'Turn on 2FA'}
                                             </button>
@@ -896,7 +896,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                     <button
                                         type="button"
                                         onClick={handleDownloadKit}
-                                        className="w-full min-h-[48px] rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-md"
+                                        className="w-full min-h-[48px] rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all shadow-md"
                                     >
                                         💾 Download Recovery Kit (.txt)
                                     </button>
@@ -965,7 +965,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                         <button
                             type="button"
                             onClick={() => setCurrentStep(3)}
-                            className="min-h-[48px] px-6 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-md disabled:opacity-50"
+                            className="min-h-[48px] px-6 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all shadow-md disabled:opacity-50"
                         >
                             Next: Create First Enterprise →
                         </button>
@@ -1125,7 +1125,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                     <button
                                         type="submit"
                                         disabled={creatingEnterprise}
-                                        className="min-h-[48px] px-5 rounded-xl bg-red-800 hover:bg-red-700 text-xs font-bold text-white transition-all disabled:opacity-50"
+                                        className="min-h-[48px] px-5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on transition-all disabled:opacity-50"
                                     >
                                         {creatingEnterprise ? 'Trying...' : 'Retry'}
                                     </button>
@@ -1152,7 +1152,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                 <button
                                     type="submit"
                                     disabled={creatingEnterprise || !enterpriseName.trim()}
-                                    className="min-h-[48px] px-6 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-md disabled:opacity-50"
+                                    className="min-h-[48px] px-6 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all shadow-md disabled:opacity-50"
                                 >
                                     {creatingEnterprise ? 'Creating...' : 'Next: The Commons →'}
                                 </button>
@@ -1221,7 +1221,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                 setCommonsRead(true);
                                 setCurrentStep(5);
                             }}
-                            className="min-h-[48px] px-6 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-md"
+                            className="min-h-[48px] px-6 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all shadow-md"
                         >
                             Next: Founding Invites →
                         </button>
@@ -1273,7 +1273,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                 <button
                                     type="button"
                                     onClick={handleGenerateFoundingInvites}
-                                    className="min-h-[48px] px-5 rounded-xl bg-red-800 hover:bg-red-700 text-xs font-bold text-white transition-all"
+                                    className="min-h-[48px] px-5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on transition-all"
                                 >
                                     {foundingCards.length === 0
                                         ? 'Try again'
@@ -1305,7 +1305,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                 type="button"
                                 onClick={handleGenerateFoundingInvites}
                                 disabled={generatingInvites}
-                                className="px-6 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-md disabled:opacity-50"
+                                className="px-6 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all shadow-md disabled:opacity-50"
                             >
                                 {generatingInvites ? 'Generating Cards...' : 'Generate 3 Founding Invites'}
                             </button>
@@ -1362,7 +1362,7 @@ KEEP THIS FILE OFF THE SERVER (PRINTED, OR ON AN OFFLINE USB STICK).
                                 <button
                                     type="button"
                                     onClick={handleFinishWizard}
-                                    className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition-all shadow-md shrink-0"
+                                    className="px-5 py-2.5 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-xs font-bold text-bp-commit-on transition-all shadow-md shrink-0"
                                 >
                                     Exit to Dashboard →
                                 </button>

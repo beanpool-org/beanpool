@@ -98,7 +98,7 @@ export function GatewayModule({
                         </div>
                         <button
                             type="submit"
-                            className="w-full py-2.5 rounded-xl bg-terra-500 hover:bg-terra-600 font-bold text-white transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
+                            className="w-full py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover font-bold text-bp-cta-on transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
                         >
                             <span>🔓</span>
                             <span>Unlock Node Gateway Config</span>
@@ -135,7 +135,7 @@ export function GatewayModule({
                         <div className="p-4 rounded-xl bg-red-950/40 border border-red-800/80 flex items-start justify-between gap-3 text-xs animate-pulse">
                             <div className="space-y-1">
                                 <div className="flex items-center gap-2">
-                                    <span className="px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-mono font-bold uppercase">
+                                    <span className="px-1.5 py-0.5 rounded bg-bp-danger-fill text-bp-danger-on text-[9px] font-mono font-bold uppercase">
                                         THROTTLING RISK
                                     </span>
                                     <strong className="text-red-300 font-mono">PEAK TRAFFIC APPROACHING THRESHOLD LIMIT</strong>
@@ -151,7 +151,7 @@ export function GatewayModule({
                         <div className="p-4 rounded-xl bg-red-950/40 border border-red-800/80 flex items-start justify-between gap-3 text-xs">
                             <div className="space-y-1">
                                 <div className="flex items-center gap-2">
-                                    <span className="px-1.5 py-0.5 rounded bg-red-600 text-white text-[9px] font-mono font-bold uppercase">
+                                    <span className="px-1.5 py-0.5 rounded bg-bp-danger-fill text-bp-danger-on text-[9px] font-mono font-bold uppercase">
                                         CRITICAL SECURITY THREAT
                                     </span>
                                     <strong className="text-red-300 font-mono">RATE LIMITING DISABLED</strong>
@@ -167,7 +167,7 @@ export function GatewayModule({
                                         rateLimiting: { ...gateway.rateLimiting, enabled: true },
                                     });
                                 }}
-                                className="px-3 py-1.5 rounded-lg bg-red-800 hover:bg-red-700 text-white text-xs font-bold transition-all shrink-0 active:scale-95"
+                                className="px-3 py-1.5 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on text-xs font-bold transition-all shrink-0 active:scale-95"
                             >
                                 Enable Rate Limiting
                             </button>
@@ -178,7 +178,7 @@ export function GatewayModule({
                         <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-800/80 flex items-start justify-between gap-3 text-xs">
                             <div className="space-y-1">
                                 <div className="flex items-center gap-2">
-                                    <span className="px-1.5 py-0.5 rounded bg-amber-500 text-black text-[9px] font-mono font-bold uppercase">
+                                    <span className="px-1.5 py-0.5 rounded bg-bp-gold-fill text-bp-gold-on text-[9px] font-mono font-bold uppercase">
                                         WARNING
                                     </span>
                                     <strong className="text-amber-300 font-mono">WILDCARD CORS ACTIVE (`*`)</strong>
@@ -194,7 +194,7 @@ export function GatewayModule({
                                         corsAllowedOrigins: ['https://app.beanpool.org', 'http://localhost:3001', 'http://localhost:3000'],
                                     });
                                 }}
-                                className="px-3 py-1.5 rounded-lg bg-amber-700 hover:bg-amber-600 text-white text-xs font-bold transition-all shrink-0 active:scale-95"
+                                className="px-3 py-1.5 rounded-lg bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on text-xs font-bold transition-all shrink-0 active:scale-95"
                             >
                                 Restrict CORS Origins
                             </button>
@@ -469,7 +469,7 @@ export function GatewayModule({
                                                 }
                                                 className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono transition-all border ${
                                                     gateway.rateLimiting.maxRequestsPerMinute === preset.val
-                                                        ? 'bg-terra-500 text-white border-terra-400 shadow-sm'
+                                                        ? 'bg-bp-cta-fill text-bp-cta-on border-terra-400 shadow-sm'
                                                         : 'bg-nature-900 hover:bg-nature-800 text-nature-300 border-nature-700'
                                                 }`}
                                             >
@@ -561,7 +561,7 @@ export function GatewayModule({
                     onClick={onSaveGateway}
                     disabled={gatewaySaving}
                     aria-busy={gatewaySaving}
-                    className="px-5 py-2.5 rounded-xl bg-terra-500 hover:bg-terra-600 font-bold text-white text-xs transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-5 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover font-bold text-bp-cta-on text-xs transition-all shadow-lg active:scale-95 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <span aria-hidden="true" className={gatewaySaving ? 'animate-spin' : ''}>{gatewaySaving ? '🔄' : '💾'}</span>
                     <span>{gatewaySaving ? 'Saving...' : 'Save Gateway Config'}</span>

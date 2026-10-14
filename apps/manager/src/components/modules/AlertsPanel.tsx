@@ -26,9 +26,9 @@ function when(t: number | null | undefined): string {
 }
 
 const PRIORITY_LABEL: Record<number, { text: string; className: string }> = {
-    5: { text: 'Urgent', className: 'bg-red-500/20 text-red-300 border border-red-500/30' },
-    4: { text: 'High', className: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
-    3: { text: 'Warning', className: 'bg-amber-500/20 text-amber-300 border border-amber-500/30' },
+    5: { text: 'Urgent', className: 'bg-bp-chip-danger-tint text-bp-chip-danger-ink border border-red-500/30' },
+    4: { text: 'High', className: 'bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-amber-500/30' },
+    3: { text: 'Warning', className: 'bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-amber-500/30' },
     2: { text: 'Low', className: 'bg-nature-800 text-nature-300' },
     1: { text: 'Info', className: 'bg-nature-800 text-nature-300' },
 };
@@ -166,7 +166,7 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
                         <div className="flex flex-wrap gap-2">
                             {status.channel && (
                                 <button type="button" disabled={busy} onClick={() => void test()}
-                                    className="px-4 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50">
+                                    className="px-4 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on disabled:opacity-50">
                                     Send a test
                                 </button>
                             )}
@@ -210,7 +210,7 @@ export function AlertsPanel({ activeNode }: AlertsPanelProps) {
                                 <span className="block text-xs text-nature-500 mt-1">Sent as "Authorization: Bearer". Never shown again.</span>
                             </label>
                             <div className="flex flex-wrap gap-2">
-                                <button type="submit" disabled={busy} className="px-4 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50">Save</button>
+                                <button type="submit" disabled={busy} className="px-4 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on disabled:opacity-50">Save</button>
                                 <button type="button" disabled={busy} onClick={() => setForm(null)} className="px-4 py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white disabled:opacity-50">Cancel</button>
                             </div>
                         </form>

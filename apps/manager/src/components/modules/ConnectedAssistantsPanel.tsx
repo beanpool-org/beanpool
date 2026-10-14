@@ -433,7 +433,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                 <button
                                     type="button"
                                     onClick={() => void copyText(shownToken, 'token')}
-                                    className="min-h-[48px] w-full sm:w-auto sm:flex-1 px-3 py-2.5 break-words rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white"
+                                    className="min-h-[48px] w-full sm:w-auto sm:flex-1 px-3 py-2.5 break-words rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on"
                                 >
                                     {copied === 'token' ? 'Token copied' : 'Copy token'}
                                 </button>
@@ -501,7 +501,7 @@ export function ConnectedAssistantsPanel({ activeNode, viewer = { kind: 'passwor
                                 type="button"
                                 onClick={() => void handleMake()}
                                 disabled={busy}
-                                className="min-h-[48px] w-full py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50"
+                                className="min-h-[48px] w-full py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on disabled:opacity-50"
                             >
                                 Connect
                             </button>

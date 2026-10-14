@@ -456,7 +456,7 @@ export function EconomySection({
                         aria-current={subTab === 'enterprises' ? 'page' : undefined}
                         className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'enterprises'
-                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
@@ -468,7 +468,7 @@ export function EconomySection({
                         aria-current={subTab === 'decisions' ? 'page' : undefined}
                         className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'decisions'
-                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
@@ -480,7 +480,7 @@ export function EconomySection({
                         aria-current={subTab === 'pool' ? 'page' : undefined}
                         className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'pool'
-                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
@@ -492,7 +492,7 @@ export function EconomySection({
                         aria-current={subTab === 'disputes' ? 'page' : undefined}
                         className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'disputes'
-                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
@@ -513,7 +513,7 @@ export function EconomySection({
                         </div>
                         <button
                             onClick={() => setShowCreateModal(true)}
-                            className="px-4 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-md flex items-center gap-1.5"
+                            className="px-4 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all shadow-md flex items-center gap-1.5"
                         >
                             <span>+</span>
                             <span>Create Enterprise</span>
@@ -533,7 +533,7 @@ export function EconomySection({
                             </p>
                             <button
                                 onClick={() => setShowCreateModal(true)}
-                                className="px-4 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white"
+                                className="px-4 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on"
                             >
                                 + Create First Enterprise
                             </button>
@@ -565,7 +565,7 @@ export function EconomySection({
                                                         </span>
                                                     </div>
                                                 </div>
-                                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-emerald-500/30">
                                                     Active
                                                 </span>
                                             </div>
@@ -916,7 +916,7 @@ export function EconomySection({
                                 <button
                                     type="submit"
                                     disabled={creatingEnterprise}
-                                    className="min-h-[48px] px-4 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50"
+                                    className="min-h-[48px] px-4 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on disabled:opacity-50"
                                 >
                                     {creatingEnterprise ? 'Creating...' : 'Create Enterprise'}
                                 </button>
@@ -1091,7 +1091,7 @@ export function EconomySection({
                             <button
                                 type="submit"
                                 disabled={keeperActionLoading || (!assignMemberPubkey && !customKeeperPubkey)}
-                                className="w-full py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-40"
+                                className="w-full py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all disabled:opacity-40"
                             >
                                 {keeperActionLoading ? 'Assigning...' : '+ Assign Keeper'}
                             </button>
@@ -1169,7 +1169,7 @@ export function EconomySection({
                                 <button
                                     type="submit"
                                     disabled={seedingOffer}
-                                    className="px-4 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50"
+                                    className="px-4 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on disabled:opacity-50"
                                 >
                                     {seedingOffer ? 'Posting...' : 'Post Offer'}
                                 </button>

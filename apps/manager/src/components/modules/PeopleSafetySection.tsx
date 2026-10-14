@@ -218,7 +218,7 @@ export function PeopleSafetySection({
                         aria-current={subTab === 'directory' ? 'page' : undefined}
                         className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'directory'
-                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
@@ -230,7 +230,7 @@ export function PeopleSafetySection({
                         aria-current={subTab === 'invites' ? 'page' : undefined}
                         className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'invites'
-                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
@@ -242,7 +242,7 @@ export function PeopleSafetySection({
                         aria-current={subTab === 'funnel' ? 'page' : undefined}
                         className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'funnel'
-                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
@@ -254,13 +254,13 @@ export function PeopleSafetySection({
                         aria-current={subTab === 'moderation' ? 'page' : undefined}
                         className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'moderation'
-                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
                         <span>Triage &amp; Moderation</span>
                         {openReportsCount > 0 && (
-                            <span className="px-1.5 py-0.2 rounded-full bg-amber-500 text-black text-[10px] font-bold">
+                            <span className="px-1.5 py-0.2 rounded-full bg-bp-gold-fill text-bp-gold-on text-[10px] font-bold">
                                 {openReportsCount}
                             </span>
                         )}
@@ -271,7 +271,7 @@ export function PeopleSafetySection({
                         aria-current={subTab === 'roles' ? 'page' : undefined}
                         className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'roles'
-                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
@@ -291,7 +291,7 @@ export function PeopleSafetySection({
                                 onClick={() => setDirectoryView('roster')}
                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                                     directoryView === 'roster'
-                                        ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                        ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                         : 'text-nature-400 hover:text-white border border-transparent'
                                 }`}
                             >
@@ -304,7 +304,7 @@ export function PeopleSafetySection({
                                 onClick={() => setDirectoryView('tree')}
                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
                                     directoryView === 'tree'
-                                        ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                        ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                         : 'text-nature-400 hover:text-white border border-transparent'
                                 }`}
                             >
@@ -440,7 +440,7 @@ export function PeopleSafetySection({
                                 onClick={() => setReportFilter('open')}
                                 className={`px-3 py-1.5 rounded-lg text-xs font-bold transition min-h-[48px] lg:min-h-0 ${
                                     reportFilter === 'open'
-                                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                                        ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-amber-500/40 shadow-sm'
                                         : 'text-nature-400 hover:text-white border border-transparent'
                                 }`}
                             >
@@ -505,7 +505,7 @@ export function PeopleSafetySection({
                                         >
                                             <div className="space-y-1.5 min-w-0 break-words flex-1">
                                                 <div className="flex flex-wrap lg:flex-nowrap items-center gap-2">
-                                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-amber-500/30">
                                                         {report.severity || 'Report'}
                                                     </span>
                                                     {report.outcome && report.outcome !== 'open' && (
@@ -602,7 +602,7 @@ export function PeopleSafetySection({
                                                 })()}
                                                 <button
                                                     onClick={() => setSelectedThreat(report)}
-                                                    className="px-3 py-1.5 rounded-lg bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-sm min-h-[48px] lg:min-h-0"
+                                                    className="px-3 py-1.5 rounded-lg bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all shadow-sm min-h-[48px] lg:min-h-0"
                                                 >
                                                     Inspect &amp; Action
                                                 </button>

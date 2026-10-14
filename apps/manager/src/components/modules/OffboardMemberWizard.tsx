@@ -382,7 +382,7 @@ export function OffboardMemberWizard({
                                 onClick={guardGated(blockedByRule, () => void handleConfirmOffboard())}
                                 className={`px-4 py-2 rounded-xl font-bold transition-all shadow-lg text-xs ${
                                     !submitting && !submittingRef.current && !blockedByRule
-                                        ? 'bg-red-600 hover:bg-red-500 text-white'
+                                        ? 'bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on'
                                         : `bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700 ${blockedByRule ? GATED_FOCUS : ''}`
                                 }`}
                             >

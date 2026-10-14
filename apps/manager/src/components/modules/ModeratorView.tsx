@@ -149,7 +149,7 @@ function ModeratorScreen({ nodeUrl, communityName, onLogout, back }: ModeratorVi
                             aria-pressed={filter === f.id}
                             onClick={() => setFilter(f.id)}
                             className={`min-h-[48px] px-4 rounded-xl text-sm font-bold border transition-colors ${filter === f.id
-                                ? 'bg-terra-600 border-terra-500 text-white'
+                                ? 'bg-bp-cta-fill border-terra-500 text-bp-cta-on'
                                 : 'bg-nature-900 border-nature-700 text-nature-200 hover:border-nature-500'}`}
                         >
                             {f.label}
@@ -231,7 +231,7 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
         <li className="p-4 rounded-2xl bg-nature-900/80 border border-nature-800 space-y-3 break-words" data-testid="moderator-report">
             <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className={`px-2 py-0.5 rounded font-bold border ${isOpen
-                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                    ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink border-amber-500/30'
                     : 'bg-nature-800 text-nature-300 border-nature-700'}`}>
                     {outcomeLabel}
                 </span>

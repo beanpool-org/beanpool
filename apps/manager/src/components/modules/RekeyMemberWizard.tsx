@@ -552,7 +552,7 @@ export function RekeyMemberWizard({
                                 onClick={handleIssueCode}
                                 className={`px-4 py-2 rounded-xl font-bold transition-all shadow-lg ${
                                     mayMakeCode
-                                        ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                                        ? 'bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on'
                                         : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700'
                                 }`}
                             >
@@ -612,7 +612,7 @@ export function RekeyMemberWizard({
                                                 resetChecklist();
                                                 setStep(1);
                                             }}
-                                            className="px-3 py-2 rounded-xl bg-amber-700 hover:bg-amber-600 text-white text-[11px] font-semibold"
+                                            className="px-3 py-2 rounded-xl bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on text-[11px] font-semibold"
                                         >
                                             Make a new code
                                         </button>
@@ -636,7 +636,7 @@ export function RekeyMemberWizard({
                                     type="button"
                                     onClick={handleReread}
                                     disabled={rereading}
-                                    className="px-3 py-2 rounded-xl bg-amber-700 hover:bg-amber-600 text-white text-[11px] font-semibold"
+                                    className="px-3 py-2 rounded-xl bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on text-[11px] font-semibold"
                                 >
                                     {rereading ? 'Checking…' : 'Show the code'}
                                 </button>
@@ -701,7 +701,7 @@ export function RekeyMemberWizard({
                                                     onClick={handleBindByMatch}
                                                     className={`px-3 py-2 rounded-xl text-xs font-bold ${
                                                         !completing && /^\d{2}$/.test(typedMatch)
-                                                            ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                                                            ? 'bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on'
                                                             : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700'
                                                     }`}
                                                 >
@@ -819,7 +819,7 @@ export function RekeyMemberWizard({
                                     onClick={handleCompleteRekey}
                                     className={`px-4 py-2 rounded-xl font-bold transition-all shadow-lg ${
                                         !completing && issuedCode && newPubkey.trim() && !(expiresAt && new Date(expiresAt).getTime() < Date.now())
-                                            ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                                            ? 'bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on'
                                             : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700'
                                     }`}
                                 >
@@ -866,7 +866,7 @@ export function RekeyMemberWizard({
                         <button
                             type="button"
                             onClick={onClose}
-                            className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-all shadow-lg"
+                            className="w-full py-2.5 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold transition-all shadow-lg"
                         >
                             Done
                         </button>

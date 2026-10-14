@@ -150,7 +150,7 @@ export function HomeScreen({
                                 {communityName || 'Sovereign Community'}
                             </h1>
                             <HelpLink screen="home" />
-                            <span className="px-2.5 py-0.5 rounded-full bg-terra-500/20 border border-terra-500/30 text-terra-400 text-xs font-semibold max-w-full truncate lg:overflow-visible lg:shrink-0">
+                            <span className="px-2.5 py-0.5 rounded-full bg-bp-chip-need-tint border border-terra-500/30 text-bp-chip-need-ink text-xs font-semibold max-w-full truncate lg:overflow-visible lg:shrink-0">
                                 {publicDomain || 'local'}
                             </span>
                         </div>
@@ -214,7 +214,7 @@ export function HomeScreen({
                                         await onAcknowledgeShutdown().catch(() => {});
                                     }
                                 }}
-                                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-md active:scale-95"
+                                className="px-4 py-2 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-xs font-bold transition-all shadow-md active:scale-95"
                             >
                                 Dismiss
                             </button>
@@ -251,7 +251,7 @@ export function HomeScreen({
                                 <button
                                     type="button"
                                     onClick={() => onNavigate('appliance', 'backups')}
-                                    className="px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-black transition-all shadow-lg active:scale-95 flex items-center gap-1.5"
+                                    className="px-4 py-2.5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on text-xs font-black transition-all shadow-lg active:scale-95 flex items-center gap-1.5"
                                 >
                                     <span>💾</span>
                                     <span>Restore from Backup</span>

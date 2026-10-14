@@ -227,7 +227,7 @@ export function DecisionsAdminPanel({ activeNode, tfaToken }: DecisionsAdminPane
                             <button
                                 onClick={confirmHalt}
                                 disabled={!reasonOk || halting}
-                                className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-xs font-bold text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="px-3 py-2 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {haltIsLift ? (halting ? 'Lifting…' : 'Lift suspension') : (halting ? 'Halting…' : 'Halt Decision')}
                             </button>

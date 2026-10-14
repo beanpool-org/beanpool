@@ -457,7 +457,7 @@ export function PeerConnectorsPanel({
                                                 <span>Passive</span>
                                             </span>
                                         ) : (
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 border border-amber-500/30 text-amber-300">
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-bp-chip-warn-tint border border-amber-500/30 text-bp-chip-warn-ink">
                                                 <span aria-hidden="true">⚡</span>
                                                 <span>Active</span>
                                             </span>
@@ -465,7 +465,7 @@ export function PeerConnectorsPanel({
 
                                         {/* Collision badge */}
                                         {isCollision && (
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/20 border border-red-500/40 text-red-300 animate-pulse">
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-bp-chip-danger-tint border border-red-500/40 text-bp-chip-danger-ink animate-pulse">
                                                 <span aria-hidden="true">⚠️</span>
                                                 <span>Collision</span>
                                             </span>
@@ -473,7 +473,7 @@ export function PeerConnectorsPanel({
 
                                         {/* Deadlock badge */}
                                         {isDeadlock && (
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 border border-amber-500/40 text-amber-300">
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-bp-chip-warn-tint border border-amber-500/40 text-bp-chip-warn-ink">
                                                 <span aria-hidden="true">⚠️</span>
                                                 <span>Deadlock</span>
                                             </span>
@@ -481,7 +481,7 @@ export function PeerConnectorsPanel({
 
                                         {/* Connection status badge */}
                                         {isConnected && isMutual ? (
-                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-bp-chip-ok-tint border border-emerald-500/30 text-bp-chip-ok-ink">
                                                 <span>●</span>
                                                 <span>Mutual Trust</span>
                                             </span>
@@ -526,7 +526,7 @@ export function PeerConnectorsPanel({
                                             type="button"
                                             onClick={() => handleToggleMode(c)}
                                             disabled={Boolean(currentAction)}
-                                            className="px-3.5 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs shrink-0 self-start sm:self-auto transition-all min-h-[44px] flex items-center justify-center"
+                                            className="px-3.5 py-2 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold text-xs shrink-0 self-start sm:self-auto transition-all min-h-[44px] flex items-center justify-center"
                                         >
                                             💤 Make Passive
                                         </button>
@@ -547,7 +547,7 @@ export function PeerConnectorsPanel({
                                             type="button"
                                             onClick={() => handleToggleMode(c)}
                                             disabled={Boolean(currentAction)}
-                                            className="px-3.5 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shrink-0 self-start sm:self-auto transition-all min-h-[44px] flex items-center justify-center"
+                                            className="px-3.5 py-2 rounded-lg bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on font-bold text-xs shrink-0 self-start sm:self-auto transition-all min-h-[44px] flex items-center justify-center"
                                         >
                                             ⚡ Make Active
                                         </button>
@@ -570,7 +570,7 @@ export function PeerConnectorsPanel({
                                             type="button"
                                             onClick={() => handleConnect(safeAddress)}
                                             disabled={Boolean(currentAction)}
-                                            className="px-3 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50 min-h-[44px]"
+                                            className="px-3 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all disabled:opacity-50 min-h-[44px]"
                                         >
                                             {currentAction === 'connecting' ? 'Connecting…' : 'Connect'}
                                         </button>
@@ -722,7 +722,7 @@ export function PeerConnectorsPanel({
                         <button
                             type="submit"
                             disabled={adding}
-                            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50 min-h-[44px]"
+                            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all disabled:opacity-50 min-h-[44px]"
                         >
                             {adding ? 'Adding Peer…' : 'Add Peer'}
                         </button>
@@ -741,7 +741,7 @@ export function PeerConnectorsPanel({
                 >
                     <div className="m-auto w-full max-w-md bg-nature-900 border border-nature-700 rounded-2xl p-6 shadow-2xl space-y-4">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-red-500/20 text-red-400 border border-red-500/30 flex items-center justify-center text-lg shrink-0">
+                            <div className="w-10 h-10 rounded-xl bg-bp-chip-danger-tint text-bp-chip-danger-ink border border-red-500/30 flex items-center justify-center text-lg shrink-0">
                                 🛑
                             </div>
                             <h3 id="remove-peer-modal-title" className="text-base font-bold text-white m-0">
@@ -765,7 +765,7 @@ export function PeerConnectorsPanel({
                             <button
                                 type="button"
                                 onClick={handleConfirmRemove}
-                                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-xs font-bold text-white transition-all min-h-[44px]"
+                                className="px-4 py-2 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on transition-all min-h-[44px]"
                             >
                                 Remove Connector
                             </button>

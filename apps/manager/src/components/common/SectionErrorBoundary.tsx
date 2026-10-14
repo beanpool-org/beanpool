@@ -77,7 +77,7 @@ export class SectionErrorBoundary extends Component<SectionErrorBoundaryProps, S
                         <button
                             type="button"
                             onClick={this.handleRetry}
-                            className="px-4 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-sm active:scale-95"
+                            className="px-4 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all shadow-sm active:scale-95"
                         >
                             Retry Section
                         </button>

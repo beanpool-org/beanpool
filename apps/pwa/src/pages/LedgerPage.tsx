@@ -728,7 +728,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                         // Peer transfers are fee-free — recipient receives the full amount.
                                         return (
                                             <div className="bg-nature-100 dark:bg-nature-900 rounded-xl p-3 mb-4 text-xs space-y-1.5 border border-nature-200 dark:border-nature-800">
-                                                <div className="flex justify-between items-center text-nature-750 dark:text-nature-300">
+                                                <div className="flex justify-between items-center text-nature-700 dark:text-nature-300">
                                                     <span>Recipient receives:</span>
                                                     <span className="font-mono font-bold text-nature-950 dark:text-white">{parsedAmount.toFixed(2)} B</span>
                                                 </div>
@@ -849,7 +849,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                                     {BLOCKED_BEANS_NOTE}
                                                 </p>
                                             ) : note && (
-                                                <p className="text-[13px] text-nature-550 dark:text-nature-400 mt-1 leading-snug">
+                                                <p className="text-[13px] text-nature-700 dark:text-nature-400 mt-1 leading-snug">
                                                     {renderMemoText(note)}
                                                 </p>
                                             )}

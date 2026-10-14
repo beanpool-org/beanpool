@@ -26,6 +26,7 @@
  * the member sees a date, and nothing changes after.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { formatDate } from '@beanpool/core';
 import type { BeanPoolIdentity } from './identity';
 import { signedGet, signedPost } from './node-post';
 import { makeKeySuccession } from './group-chat-crypto';
@@ -63,7 +64,7 @@ const PUBKEY_HEX = /^[0-9a-f]{64}$/;
 function shortDate(at: string): string {
     const d = new Date(at);
     if (!Number.isFinite(d.getTime())) return at;
-    return `${d.getUTCDate()} ${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+    return formatDate(d, 'day-month-year', { utc: true });
 }
 
 /** The re-keys to this key the node lists (GET /api/community/me `rekeyedFrom`); [] when it lists none or won't say. */

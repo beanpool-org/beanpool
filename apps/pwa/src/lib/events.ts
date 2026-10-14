@@ -6,23 +6,21 @@
  * taken from `toLocaleDateString`, so a card reads the same on every browser at 320px.
  */
 
+import { formatDate } from '@beanpool/core';
 import type { MarketplacePost } from './api';
 
 /** Every post type this client can render. Sent as `types=` so the node includes events (§2.6). */
 export const CLIENT_POST_TYPES = 'offer,need,poll,event';
 
-const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-
 /** An event ends at `eventEndAt`; one without falls back to start + 2 hours, as the server defaults it. */
 export const EVENT_DEFAULT_DURATION_MS = 2 * 60 * 60 * 1000;
 
 function time(d: Date): string {
-    return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+    return formatDate(d, 'time');
 }
 
 function day(d: Date): string {
-    return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+    return formatDate(d, 'weekday-day-month', { caps: true });
 }
 
 function sameLocalDay(a: Date, b: Date): boolean {

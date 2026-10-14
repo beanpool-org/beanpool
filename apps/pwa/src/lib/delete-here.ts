@@ -13,6 +13,11 @@
  *   asked, so a poor connection never costs the key): the node deletes the account, then the web app goes back to the
  *   page's own node ({@link leaveThisCommunity}). The key stays.
  * - Otherwise this is the last community this copy serves: the delete wipes it, as before.
+ *
+ * BeanPool's key vault is never asked from here (measured 14 Oct): the web app has no vault client and puts no copy
+ * there (its sign-in copies stay at the community, whose delete takes them: server state-engine.ts `purgeMemberSelf`).
+ * A copy the phone app put there belongs to the phone's key, which a delete here leaves, so the panel says where to
+ * remove it ({@link WEB_VAULT_COPY_LINE}); the phone app removes it at its own last community (native delete-here.ts).
  */
 import { fetchMembershipAt, getNodeApiUrl, purgeAccountApi, setNodeApiUrl } from './api';
 import { clearHomeCache } from './home-cache';
@@ -198,6 +203,11 @@ export function webLastCommunityLine(hasWords: boolean): string {
         : "Your key leaves this browser, for this web address. The phone app, and other communities' web addresses, " +
           'keep their own copy.';
 }
+
+/** Under {@link webLastCommunityLine}: a copy at BeanPool's key vault, which only the phone app makes, stays. */
+export const WEB_VAULT_COPY_LINE =
+    "If the phone app put a copy of your key in BeanPool's key vault, when you linked a sign-in there, deleting here " +
+    "doesn't remove it. Remove it in the phone app: Settings → Account Protection → Disconnect.";
 
 /** The node did not delete the account: nothing in this browser changed. */
 export function webDeleteFailedLine(reason: string): string {

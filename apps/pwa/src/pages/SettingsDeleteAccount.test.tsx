@@ -86,6 +86,9 @@ describe('Settings: Permanently Delete Account', () => {
         // answer, not just for the line to exist (it raced on CI, PR #1456).
         await waitFor(() => expect(screen.getByTestId('delete-key-plan')).toHaveTextContent(
             "Your key and 12 words leave this browser, for this web address. The phone app, and other communities' web addresses, keep their own copy."));
+        // The web app never reaches the key vault: it says where a copy the phone app put there is removed.
+        expect(screen.getByTestId('delete-vault-copy')).toHaveTextContent(
+            "If the phone app put a copy of your key in BeanPool's key vault, when you linked a sign-in there, deleting here doesn't remove it. Remove it in the phone app: Settings → Account Protection → Disconnect.");
         await act(async () => { fireEvent.click(purgeButton()); });
 
         expect(api.purgeAccountApi).toHaveBeenCalledTimes(1);
@@ -104,6 +107,8 @@ describe('Settings: Permanently Delete Account', () => {
 
         const home = window.location.host;
         expect(await screen.findByText(new RegExp(`Your key and 12 words stay in this browser, for ${home.replace('.', '\\.')}`))).toBeInTheDocument();
+        // The key stays: nothing to say about the vault.
+        expect(screen.queryByTestId('delete-vault-copy')).toBeNull();
         await act(async () => { fireEvent.click(purgeButton()); });
 
         expect(api.purgeAccountApi).toHaveBeenCalledTimes(1);

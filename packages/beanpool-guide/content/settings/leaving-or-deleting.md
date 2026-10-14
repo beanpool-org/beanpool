@@ -66,10 +66,12 @@ Your community's server deletes all of the above at once. It also takes your nam
 - **If you are a member of another community on this phone,** your key and 12 words stay. The community you deleted goes from the phone's list, with its data on the phone, and the app opens one of your other communities. The app names them before you confirm.
 - A community the app can't reach counts as one you are still in, so a bad connection never takes your key.
 - **If this is the last community on this phone where you are a member,** your key and 12 words go from the phone too, as when you sign out. Write your 12 words down first: they get you back into any community this phone does not list.
+- **If BeanPool's key vault keeps a copy of your key,** from a sign-in account you linked, the app removes it first, while your key is still on the phone. Only your key can remove it, so afterwards nobody could. The vault deletes it at once, and from its backups within 30 days.
+- If the vault does not confirm it, the app says so, and your key stays on the phone for now. Tap **Try Again**, or **Delete Anyway**: your key leaves the phone and the vault copy stays, locked to your sign-in account. To remove it later, you need your key back, with your 12 words or that sign-in account, and a community that has you, to tap **Disconnect** in **Account Protection**.
 - To take BeanPool off the phone altogether, use **Sign Out (Device Only)**.
 - If the community refuses the delete, or does not answer within 20 seconds, nothing on the phone changes. The app says so, and you can try again.
 
-The web app keeps your key in the browser for each community's web address, and deleting removes it for that address only. The phone app and other communities' web addresses keep their own copy. If you pointed the web app at another community under **Advanced / Subsystem**, and the community whose web address it is still has you, the key stays and the web app goes back to that community.
+The web app keeps your key in the browser for each community's web address, and deleting removes it for that address only. The phone app and other communities' web addresses keep their own copy. If you pointed the web app at another community under **Advanced / Subsystem**, and the community whose web address it is still has you, the key stays and the web app goes back to that community. If the phone app put a copy of your key in BeanPool's key vault, deleting in the web app does not remove it: remove it in the phone app, with **Disconnect** in **Account Protection**.
 
 ### If a community does not recognise you
 

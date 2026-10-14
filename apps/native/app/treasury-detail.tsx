@@ -32,6 +32,7 @@ import { groupKindLine, keeperWords } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
+import { ReportReasonBox } from '../components/ReportReasonBox';
 import { pledgeClosedLine } from '../utils/enterprise-pledge';
 import { useTheme, useStyles } from './ThemeContext';
 
@@ -76,8 +77,6 @@ export default function TreasuryDetailScreen() {
     const [pledging, setPledging] = useState(false);
     const [cancelling, setCancelling] = useState(false);
     const [showReportForm, setShowReportForm] = useState(false);
-    const [reportReason, setReportReason] = useState('');
-    const [reporting, setReporting] = useState(false);
     const [identity, setIdentity] = useState<any>(null);
 
     // Keeper Join Request State
@@ -1837,38 +1836,21 @@ export default function TreasuryDetailScreen() {
                                 <Text style={{ color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '600' }}>Report {kw.Kind}</Text>
                             </Pressable>
                             {showReportForm && (
-                                <View style={{ marginTop: 12, backgroundColor: colors.feedback.danger.bg, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.feedback.danger.border }}>
-                                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.feedback.danger.fg, marginBottom: 8, letterSpacing: 0.5 }}>REPORT REASON</Text>
-                                    <TextInput
-                                        accessibilityLabel="Report reason"
-                                        style={{ backgroundColor: colors.surface.card, height: 40, borderRadius: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.border.default, marginBottom: 10, color: colors.text.body }}
-                                        placeholder={`Why are you reporting this ${kw.kind}?`}
-                                        placeholderTextColor={colors.text.muted}
-                                        value={reportReason}
-                                        onChangeText={setReportReason}
-                                    />
-                                    <Pressable
-                                        accessibilityRole="button"
-                                        style={{ backgroundColor: reportReason ? colors.feedback.danger.solid : colors.surface.subtle, height: 40, borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}
-                                        disabled={!reportReason || reporting}
-                                        onPress={async () => {
-                                            if (!identity?.publicKey || !treasuryKey) return;
-                                            setReporting(true);
-                                            try {
-                                                await reportAbuse(identity.publicKey, treasuryKey, reportReason, treasuryKey);
-                                                setShowReportForm(false);
-                                                setReportReason('');
-                                                Alert.alert('Reported', `This ${kw.kind} has been flagged for review.`);
-                                            } catch (e: any) {
-                                                Alert.alert('Error', e.message || 'Could not submit report.');
-                                            } finally {
-                                                setReporting(false);
-                                            }
-                                        }}
-                                    >
-                                        <Text style={{ color: colors.text.inverse, fontWeight: 'bold' }}>{reporting ? 'Reporting...' : 'Submit Report'}</Text>
-                                    </Pressable>
-                                </View>
+                                // The same short reason list as a post (ReportReasonBox): "Child safety" is told to the owners at once.
+                                <ReportReasonBox
+                                    onCancel={() => setShowReportForm(false)}
+                                    onSubmit={async (reason) => {
+                                        if (!identity?.publicKey || !treasuryKey) return;
+                                        try {
+                                            await reportAbuse(identity.publicKey, treasuryKey, reason, treasuryKey);
+                                            setShowReportForm(false);
+                                            Alert.alert('Reported', `This ${kw.kind} has been flagged for review.`);
+                                        } catch (e: any) {
+                                            Alert.alert('Error', e.message || 'Could not submit report.');
+                                            throw e; // the box keeps the choice and the words
+                                        }
+                                    }}
+                                />
                             )}
                         </View>
                     </ScrollView>

@@ -543,6 +543,14 @@ export function PeopleSafetySection({
                                                     </div>
                                                 )}
 
+                                                {/* The node lists these first (getReports); the alert told the owners to look at them first. */}
+                                                {report.childSafety && (
+                                                    <p className="m-0">
+                                                        <span className="px-2 py-0.5 rounded text-xs font-bold border bg-red-950/60 text-red-200 border-red-800" data-testid="child-safety-badge">
+                                                            Child safety
+                                                        </span>
+                                                    </p>
+                                                )}
                                                 <p className="text-xs text-white m-0">
                                                     {report.reason || report.description || 'No reason provided'}
                                                 </p>

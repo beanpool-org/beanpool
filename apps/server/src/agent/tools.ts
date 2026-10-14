@@ -142,6 +142,8 @@ function reportView(r: AbuseReport, withText: boolean, boundary: string): Record
         id: r.id,
         at: r.createdAt,
         status: r.outcome ?? (r.status === 'actioned' ? 'actioned' : r.status === 'reviewed' ? 'dismissed' : 'open'),
+        // Read as the alerts and the queue read it (the review of #1912, finding 5): the list's order alone said so.
+        childSafety: r.childSafety === true,
         targetKind: targetKind(r),
         postRemoved: r.postRemoved === true || r.pulseItem?.removed === true,
         hiddenByReports: r.postHiddenByReports === true,
@@ -363,8 +365,9 @@ export const AGENT_TOOLS: AgentTool[] = [
     {
         name: 'reports_list',
         title: 'Moderation reports',
-        reads: `the moderation reports, open (the default) or all, newest first, at most ${AGENT_LIST_MAX}: id, when, status, what kind of `
-            + 'thing was reported and a Settings path; with include_text, the reason, the reported title and description and its '
+        reads: `the moderation reports, open (the default) or all, open child-safety reports first, then newest first, at most `
+            + `${AGENT_LIST_MAX}: id, when, status, whether it is a child-safety report, what kind of thing was reported and a `
+            + 'Settings path; with include_text, the reason, the reported title and description and its '
             + "author's name, fenced",
         never: "who reported (their name or key), any key, a Pulse item's URL, or chat text",
         memberText: true,

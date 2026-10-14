@@ -235,6 +235,12 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
                     : 'bg-nature-800 text-nature-300 border-nature-700'}`}>
                     {outcomeLabel}
                 </span>
+                {/* The node lists these first (getReports); the alert told the owners to look at them first. */}
+                {report.childSafety && (
+                    <span className="px-2 py-0.5 rounded font-bold border bg-red-950/60 text-red-200 border-red-800" data-testid="child-safety-badge">
+                        Child safety
+                    </span>
+                )}
                 <span className="text-nature-400">
                     Reported by {report.reporterCallsign || 'a member'}{report.createdAt ? ` · ${when(report.createdAt)}` : ''}
                 </span>

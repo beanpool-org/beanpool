@@ -7,10 +7,10 @@ related: pulse-and-announcements, members-and-invites, decisions-and-emergencies
 
 ## How members report
 
-In the app, members report a post, a person or a Pulse item and choose a reason: spam or scam, offensive content, misleading post, or other. A note of up to 500 characters goes with it. Blocking someone in the phone app also files a report.
+In the app, members report a post, an event, a Pulse item, a project or an enterprise (and, in the web app, a person) and choose a reason: spam or scam, offensive content, misleading post, child safety, or other. Every report screen offers the same list. A note of up to 500 characters goes with it. Blocking someone in the phone app also files a report.
 
 - A member can file at most **10 reports an hour**.
-- Reporting the same thing again, while the first report is still open, does nothing new.
+- Reporting the same thing again, while the first report is still open, does nothing new, unless the member now chooses **Child safety**: the open report changes to it, and you are told as for a new child-safety report.
 - Nobody can report themselves.
 
 The report form tells members their note goes to moderators. It goes to everyone who looks after reports: the owners, the admins, and any moderators you have made (see Owners, admins and moderators).
@@ -20,6 +20,7 @@ The report form tells members their note goes to moderators. It goes to everyone
 Owners and admins: **People & Safety**, then **Triage & Moderation**. Moderators: **Reports**, the only screen they have (below).
 
 - In **Triage & Moderation** the list opens on **Open** reports, with tabs to see **Dismissed**, **Actioned** or **All**. The count beside the tab counts open reports only, and falls as you handle them.
+- A **Child safety** report is marked so. While it is open it is listed first, before newer reports of any other kind (see below). Once handled it stays marked, and under **All** it takes its place by date.
 - Each row shows which post the report is about, who wrote it, and whether it has already been removed. A report about a post is about its author, whoever the reporter named: its **Target**, **Freeze Accounts** and a suspension from it all act on the post's author. A report on a post that isn't on this server is refused.
 
 ![The Triage and Moderation screen in Settings](images/people-moderation.webp)
@@ -37,6 +38,7 @@ You open Settings from the app's **🛡️ Moderate** button (it reads "Moderate
 
 - **Open**, **Handled**, **Dismissed** and **All** choose which reports you see. The count beside Open is how many are waiting.
 - Each report shows what was reported: a post (its title, what it says and who wrote it), a Pulse item, or a member; then the reporter's words, who reported it and when.
+- A **Child safety** report is marked so. While it is open it is listed first, before newer reports of any other kind; once handled it stays marked, and under **All** it takes its place by date. That covers a member who picked **Child safety**, and one whose words say it (from an older app). The owners' alert asks you to look at these first.
 - **Remove the post**: choose a reason (or none) and press **Remove it**. The post comes down exactly as below, and the report is marked handled.
 - **Remove from the Pulse** (for a Pulse item): takes it off the Pulse and marks the report handled.
 - **Dismiss (keep the post)**, or **Dismiss**: the report is closed and nothing happens to anyone. Whoever reported a post is told it was reviewed and kept.

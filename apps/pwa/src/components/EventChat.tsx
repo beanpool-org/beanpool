@@ -21,6 +21,7 @@ import { imageFromTransfer, dragCarriesFile } from '../lib/chat-image-transfer';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { sendRouteOf, GROUP_HOLD_EVENT_TEXT, GROUP_HOLD_UNREAD_TEXT } from '../lib/group-hold';
 import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from '../lib/chat-tombstone';
+import { EVENT_CHAT_WAITING_TEXT, isWaitingForHost } from '../lib/events';
 
 /**
  * Messages are stored base64 `plaintext-v1`: node-readable by design, not end-to-end encrypted. A removed one is the
@@ -77,7 +78,8 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
             setView(res);
             setLoadError(null);
         } catch (e: any) {
-            setLoadError(e?.message || 'Could not open this event chat.');
+            // Going, and the host hasn't let them in: said as that, never as "only the host and people going".
+            setLoadError(isWaitingForHost(e) ? EVENT_CHAT_WAITING_TEXT : (e?.message || 'Could not open this event chat.'));
         }
     }, [postId]);
 

@@ -524,7 +524,9 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         fireEvent.change(within(panel).getByLabelText('Starts'), { target: { value: '2030-09-28T09:00' } });
         fireEvent.change(within(panel).getByLabelText('Place name'), { target: { value: 'Bindarrabi Hall' } });
         fireEvent.change(within(panel).getByLabelText('Note for people who are going'), { target: { value: 'Gate code 1234' } });
-        expect(within(panel).getByText('Only people who tap Going see this.')).toBeInTheDocument();
+        // A local community (no openMembership): unticked, and the words say everyone Going reads it (the privacy design §2.3).
+        expect(within(panel).getByText('Everyone who taps Going sees this.')).toBeInTheDocument();
+        expect(within(panel).getByTestId('event-host-lets-in')).not.toBeChecked();
         expect(within(panel).getByTestId('event-location-visibility')).toHaveTextContent("Anyone who opens this node's map will see this spot.");
 
         await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
@@ -540,7 +542,7 @@ describe('MapPage: events (docs/events-on-the-map.md §3, slice 2)', () => {
         expect(body).toMatchObject({
             type: 'event', category: 'community', credits: 0, title: 'Working bee', authorPublicKey: mockIdentity.publicKey,
             lat: -28.554, lng: 153.503, eventPlaceName: 'Bindarrabi Hall', eventPrivateNote: 'Gate code 1234',
-            eventStartAt: new Date('2030-09-28T09:00').toISOString(), audienceScope: 'public',
+            eventStartAt: new Date('2030-09-28T09:00').toISOString(), audienceScope: 'public', eventHostLetsIn: false,
         });
         expect(body).not.toHaveProperty('eventEndAt');
         expect(body).not.toHaveProperty('reach');

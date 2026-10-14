@@ -219,6 +219,8 @@ export interface EventEditForm {
     lng: number | null;
     privateNote: string;
     photos: string[];
+    /** "Only people I let in see the note and chat". */
+    hostLetsIn: boolean;
 }
 
 /** The form, filled from the event as it is now — every field the create form has. */
@@ -233,6 +235,7 @@ export function eventEditForm(post: MarketplacePost): EventEditForm {
         lng: post.lng ?? null,
         privateNote: post.eventPrivateNote || '',
         photos: Array.isArray(post.photos) ? post.photos : [],
+        hostLetsIn: post.eventHostLetsIn === true,
     };
 }
 
@@ -246,6 +249,7 @@ export interface EventEditPayload {
     lat?: number;
     lng?: number;
     photos?: string[];
+    eventHostLetsIn?: boolean;
 }
 
 /**
@@ -273,7 +277,69 @@ export function eventEditPayload(before: EventEditForm, after: EventEditForm): E
         out.lng = after.lng;
     }
     if (after.photos.length !== before.photos.length || after.photos.some((p, i) => p !== before.photos[i])) out.photos = after.photos;
+    // Silent like the note: who reads the note is the host's to change.
+    if (after.hostLetsIn !== before.hostLetsIn) out.eventHostLetsIn = after.hostLetsIn;
     return out;
+}
+
+// ===================== THE HOST LETS PEOPLE IN (scratch/global-node/DESIGN-global-member-privacy-fable.md §2) =====================
+
+/** The node's refusal code for "Going, and the host hasn't let you in yet" (403 on the chat). */
+export const EVENT_CHAT_WAITING_CODE = 'waiting_for_host';
+export const HOST_LETS_IN_LABEL = 'Only people I let in see the note and chat';
+export const HOST_LETS_IN_HINT = 'Tick this if the note is your home address or a gate code.';
+/** What the chat entry says, disabled, while the host hasn't let this member in. */
+export const EVENT_CHAT_WAITING_TEXT = 'Chat opens when the host lets you in.';
+
+/** A new event's tickbox: ticked where anyone can join in a minute (`features.openMembership`), unticked elsewhere. */
+export function hostLetsInDefault(features: { openMembership?: boolean } | null | undefined): boolean {
+    return features?.openMembership === true;
+}
+
+/** The words under the note, by the tickbox and the node (§2.3). */
+export function privateNoteHelper(hostLetsIn: boolean, openMembership: boolean): string {
+    if (hostLetsIn) {
+        return openMembership
+            ? "Anyone can join this community in a minute. Only the people you let in will see this note and the event chat. You let people in from Who's going."
+            : 'Only the people you let in see this.';
+    }
+    return openMembership
+        ? 'Everyone who taps Going sees this. Anyone can join this community in a minute.'
+        : 'Everyone who taps Going sees this.';
+}
+
+/** Where a member stands on an event: 'open' where the host doesn't let people in (and for the host). */
+export type EventLetInState = 'open' | 'before' | 'waiting' | 'in';
+
+export function eventLetInState(post: Pick<MarketplacePost, 'eventHostLetsIn' | 'myRsvp' | 'myLetIn'>, isHost: boolean): EventLetInState {
+    if (!post.eventHostLetsIn || isHost) return 'open';
+    if ((post.myRsvp ?? null) !== 'going') return 'before';
+    return post.myLetIn ? 'in' : 'waiting';
+}
+
+/** The line the event shows a member who isn't let in yet; null otherwise. */
+export function eventLetInLine(state: EventLetInState): string | null {
+    if (state === 'before') return 'The host lets people in. Tap Going, and the note and the chat open once they do.';
+    if (state === 'waiting') return "You're going. The host hasn't let you in yet: the note and the chat open when they do.";
+    return null;
+}
+
+/** Going and not let in, from the host's RSVP list. */
+export function eventWaitingCount(rsvps: MarketplacePost['eventRsvps']): number {
+    return (rsvps ?? []).filter(r => r.status === 'going' && !r.letInAt).length;
+}
+
+export function eventWaitingLine(n: number): string {
+    return `${n} waiting to be let in`;
+}
+
+export function letEveryoneInQuestion(n: number): string {
+    return `Let all ${n} in? People who tap Going later still wait.`;
+}
+
+/** Whether a node refusal is "you're going, the host hasn't let you in" — never shown as "only the host and people going". */
+export function isWaitingForHost(err: unknown): boolean {
+    return !!err && typeof err === 'object' && (err as { code?: unknown }).code === EVENT_CHAT_WAITING_CODE;
 }
 
 /** True when a save would move the event in time or place, so the form can say who will be told. */

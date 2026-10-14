@@ -167,7 +167,7 @@ How many have happened since the server last started, and what the last one said
 
 A few of these are not an emergency, and the server is still doing its work. Many of the same one is worth reporting — see Feedback.
 
-A real crash is different. The server still stops and starts again, because carrying on half-way through a change could damage the ledger, and it leaves a report file in data whose name starts with report. and ends in .json, beside the freeze reports. That file holds no passwords and no keys, so it is safe to hand on when you ask someone for help. Reports written by older versions of the server did hold them, in full, and the server cleans those up the next time it starts, without deleting a single one. It can only do that once it has started: if the server is not starting at all, any older reports still in the folder have not been through that cleanup, so say so before you hand the folder to anyone.
+A real crash is different. The server still stops and starts again, because carrying on half-way through a change could damage the ledger, and it leaves a report file in data whose name starts with report and ends in .json, beside the freeze reports. That file holds no passwords and no keys, so it is safe to hand on when you ask someone for help. Reports written by older versions of the server did hold them, in full, and the server cleans those up the next time it starts, without deleting a single one. It can only do that once it has started: if the server is not starting at all, any older reports still in the folder have not been through that cleanup, so say so before you hand the folder to anyone.
 
 ## Disk space
 
@@ -175,4 +175,4 @@ The disk card warns at **80%** full. Nothing stops the server writing when the d
 
 - **Clean Orphaned Media & Compress Logs** shows what it would remove, then deletes photos no post uses and cached Pulse pictures no item uses, packs old log lines into data/logs/archived, and trims the database's write-ahead file.
 - Keep fewer snapshots, or copy old ones off the server.
-- Things that grow with no limit: the crash and freeze reports in data (names starting report. and ending .json). Archived log lines go after 30 days. Docker's own log is held to two files of 5 MB by the current docker-compose.yml.
+- Things that grow with no limit: the crash and freeze reports in data (names starting report and ending .json). Archived log lines go after 30 days. Docker's own log is held to two files of 5 MB by the current docker-compose.yml.

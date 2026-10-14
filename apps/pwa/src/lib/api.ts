@@ -1589,6 +1589,14 @@ export async function getRatingsGiven(publicKey: string): Promise<{ ratings: Rat
     return request('GET', `/api/ratings/${publicKey}?direction=given`);
 }
 
+/**
+ * "Tell me when a community starts near here" on the global node (`POST /api/global/watches`): a member's, signed; the
+ * node keeps the ~10 km cell, never the exact point. The phone's is utils/community-directory.ts watchPlace.
+ */
+export async function watchPlace(lat: number, lng: number): Promise<{ success: boolean }> {
+    return request('POST', '/api/global/watches', { lat, lng });
+}
+
 // ===================== REPORTS =====================
 
 export async function reportAbuse(reporterPubkey: string, targetPubkey: string, reason: string, targetPostId?: string, targetPulseItemId?: string): Promise<{ success: boolean }> {

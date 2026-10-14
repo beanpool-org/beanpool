@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
     KEEPER_ALG_RELEASE,
     recordShareForHub,
@@ -47,6 +47,7 @@ import { recoverAccountWithSso, RELEASED_COPY_NOT_OPENED } from '../sso-recovery
 import { seedToKeypair } from '../crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import { stubCommunityLookup } from './community-lookup';
 
 const SUB = '110169484474386276334';
 const COLLECTION = 'coll-sealed-1';
@@ -105,11 +106,17 @@ function nothingSaved(): void {
 }
 
 describe('the copy comes back sealed to the restore, and only this phone opens it', () => {
-    beforeEach(() => vi.clearAllMocks());
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // No node is contacted: the community's lookup lists only the account a test names (community-lookup.ts).
+        stubCommunityLookup('https://test.beanpool.org', []);
+    });
+    afterEach(() => vi.unstubAllGlobals());
 
     it('asks for it sealed, with the key that opened the session, opens it, and restores the account', async () => {
         const seed = new Uint8Array(32).fill(42);
         const account = await seedToKeypair(seed);
+        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: account.publicKeyHex, callsign: 'Monnunit' }]);
         const seen = community([{ holderType: 'sso', shareIndex: 1, copy: await sealSeedToSso(seed, 'google', SUB) }], { seals: true });
 
         const result = await restore();
@@ -123,6 +130,7 @@ describe('the copy comes back sealed to the restore, and only this phone opens i
     it('opens both pieces of an old two-part copy, each sealed to the restore', async () => {
         const seed = new Uint8Array(32).fill(7);
         const account = await seedToKeypair(seed);
+        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: account.publicKeyHex, callsign: 'Monnunit' }]);
         const { hubShare, otherHalf } = await splitHubAndWhole(seed);
         const seen = community([
             { holderType: 'sso', shareIndex: 2, copy: await sealShareToSso(otherHalf, 'google', SUB) },
@@ -137,6 +145,7 @@ describe('the copy comes back sealed to the restore, and only this phone opens i
     it('a community from before the seal sends the copy as stored, and the restore works as it always did', async () => {
         const seed = new Uint8Array(32).fill(42);
         const account = await seedToKeypair(seed);
+        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: account.publicKeyHex, callsign: 'Monnunit' }]);
         community([{ holderType: 'sso', shareIndex: 1, copy: await sealSeedToSso(seed, 'google', SUB) }], { seals: false });
         expect((await restore()).identity.publicKey).toBe(account.publicKeyHex);
     });
@@ -144,6 +153,7 @@ describe('the copy comes back sealed to the restore, and only this phone opens i
     it('a copy sealed to another key, or for another session, saves nothing', async () => {
         const seed = new Uint8Array(32).fill(42);
         const copy = await sealSeedToSso(seed, 'google', SUB);
+        stubCommunityLookup('https://test.beanpool.org', [{ publicKey: (await seedToKeypair(seed)).publicKeyHex, callsign: 'Monnunit' }]);
         const someoneElse = (await seedToKeypair(new Uint8Array(32).fill(3))).publicKeyHex;
 
         community([{ holderType: 'sso', shareIndex: 1, copy }], { seals: true, sealTo: someoneElse });

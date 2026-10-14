@@ -4,7 +4,7 @@
  * never reaches the words layer (#1944, core recovery-path-files.test.ts).
  *
  * The English is pinned as it read before the move (origin/main 61041a51, sso-recovery.ts `lookupUnreachable`,
- * `noRestorableAccount`, `notThatAccount`), byte for byte.
+ * `noRestorableAccount`, `notThatAccount`; a2317dc2, #1977's `twoAccountsOneName`), byte for byte.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -24,6 +24,8 @@ const BEFORE = {
     unreachable: "Can't reach the community right now. Try again in a minute.",
     noAccount: (name: string) => `No account called ${name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.`,
     notThat: (name: string) => `The account that came back isn't ${name}, so nothing was saved on this phone. Try again, or use your 12 words.`,
+    /** #1977's sentence (a2317dc2 sso-recovery.ts `twoAccountsOneName`). */
+    twoAccounts: "Two accounts here have this name. Use your 12 words, or ask your community's admin.",
 };
 /** Names as typed: plain, Turkish capitals, an apostrophe, a space, another script, and braces that look like a placeholder. */
 const NAMES = ['Marty', '\u0130rem', "O'Neil", 'Kim Lee', 'Мария', '{name}'];
@@ -35,6 +37,7 @@ describe('the restore screen\'s sentences for a refused sign-in restore', () => 
         expect(communityRestoreRefusalText({ code: 'lookup_unreachable' })).toBe(BEFORE.unreachable);
         expect(communityRestoreRefusalText({ code: 'no_restorable_account', name })).toBe(BEFORE.noAccount(name));
         expect(communityRestoreRefusalText({ code: 'not_that_account', name })).toBe(BEFORE.notThat(name));
+        expect(communityRestoreRefusalText({ code: 'two_accounts_one_name' })).toBe(BEFORE.twoAccounts);
     });
 
     it('a refusal carries its code and the name as data, and the screen says its sentence', () => {

@@ -97,6 +97,19 @@ describe('the 12 words typed with Turkish capitals', () => {
         // A word that is not on the list stays not on the list: only the letter i is folded.
         expect(unknownRecoveryWords('\u0130TEMS \u0130DEA')).toEqual(['items']);
     });
+
+    it('a combining dot goes only after an i: on any other letter the word stays off the list (review N1)', () => {
+        const chef = 'chef idea ice icon identify idle ignore ill illegal illness image imitate';
+        const publicKey = bytesToHex(ed25519.getPublicKey(seedFromRecoveryWords(normaliseRecoveryWords(chef))));
+        expect(recoveryWordsMatchPublicKey(chef, publicKey)).toBe(true);
+        // c or h plus U+0307, and the precomposed c with a dot (U+010B): none of them is "chef".
+        for (const dotted of ['c\u0307hef', 'ch\u0307ef', '\u010bhef', 'C\u0307HEF']) {
+            expect(unknownRecoveryWords(dotted)).toEqual([dotted.toLowerCase()]);
+            expect(recoveryWordsMatchPublicKey(chef.replace('chef', dotted), publicKey)).toBe(false);
+        }
+        // The Turkish capital decomposed (I plus U+0307) and a dotless i with the dot still read as i.
+        expect(normaliseRecoveryWords('I\u0307TEM \u0131\u0307dea')).toEqual(['item', 'idea']);
+    });
 });
 
 describe('the canonical words: unchanged, byte for byte', () => {

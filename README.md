@@ -350,10 +350,9 @@ All endpoints are served on port 8443 (HTTPS):
 | `/api/messages/conversations/:pubkey` | GET | List conversations for a member |
 | `/api/messages/messages/:conversationId` | GET | Get messages in a conversation |
 | `/api/messages/mark-read` | POST | Mark a conversation as read |
-| `/api/friends/:publicKey` | GET | List a member's friends |
+| `/api/friends/:publicKey` | GET | List your own friends (signed by that key; any other key is refused) |
 | `/api/friends/add` | POST | Add a friend |
 | `/api/friends/remove` | POST | Remove a friend |
-| `/api/friends/guardian` | POST | Set/unset a friend as recovery guardian |
 | `/api/recovery/request` | POST | Submit a new social recovery migration request |
 | `/api/recovery/approve` | POST | Approve a recovery request as a guardian |
 | `/api/recovery/reject` | POST | Reject a recovery request as a guardian |

@@ -971,7 +971,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 Funding Progress
                                             </div>
                                             <div className={`text-2xl font-black mt-1 ${isFunded ? 'text-emerald-600 dark:text-emerald-400' : 'text-nature-900 dark:text-white'}`}>
-                                                {current} 🫘 <span className="text-xs font-semibold text-nature-500">raised of {goal} 🫘 goal</span>
+                                                {current} 🫘 <span className="text-xs font-semibold text-nature-500 dark:text-nature-400">raised of {goal} 🫘 goal</span>
                                             </div>
                                         </div>
                                         {daysRemaining && (
@@ -1029,7 +1029,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             <button
                                                 type="submit"
                                                 disabled={pledging || !pledgeAmount}
-                                                className="py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-sm transition-all disabled:opacity-40 whitespace-nowrap"
+                                                className="py-2 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-sm shadow-sm transition-all disabled:opacity-40 whitespace-nowrap"
                                             >
                                                 {pledging ? 'Pledging…' : 'Pledge Beans 🌱'}
                                             </button>
@@ -1063,7 +1063,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 at the text size in use (rem-based, so this follows the phone's font scale too). */}
                             <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-3 mt-5 pt-5 border-t border-nature-100 dark:border-nature-800" data-testid="enterprise-balance-tiles">
                                 <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
-                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">
+                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-300">
                                         Credit Line
                                     </div>
                                     <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
@@ -1071,7 +1071,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     </div>
                                 </div>
                                 <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
-                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">
+                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-300">
                                         Live Offers
                                     </div>
                                     <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
@@ -1079,7 +1079,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     </div>
                                 </div>
                                 <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
-                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">
+                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-300">
                                         Earned Surplus
                                     </div>
                                     <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
@@ -1087,7 +1087,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     </div>
                                 </div>
                                 <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
-                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">
+                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-300">
                                         Capital Ceiling
                                     </div>
                                     <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
@@ -1099,14 +1099,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             {pendingClaims.length > 0 && (
                                 <div className="mt-4 p-3.5 rounded-xl bg-nature-50 dark:bg-nature-800/50 border border-nature-200 dark:border-nature-700">
                                     <div className="flex justify-between items-center text-xs">
-                                        <span className="font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
+                                        <span className="font-bold uppercase tracking-wider text-nature-500 dark:text-nature-300">
                                             Pending Wage Claims ({pendingClaims.length})
                                         </span>
                                         <span className="font-black text-amber-500 dark:text-amber-400 text-sm">
                                             {pendingClaimsTotal} 🫘
                                         </span>
                                     </div>
-                                    <p className="text-xs text-nature-500 dark:text-nature-400 mt-1 leading-relaxed">
+                                    <p className="text-xs text-nature-500 dark:text-nature-300 mt-1 leading-relaxed">
                                         Deferred until the {kw.kind} earns sufficient trading profit. Paid automatically from future sales.
                                     </p>
                                 </div>
@@ -1153,7 +1153,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             setPostRepeatable(true);
                                             setPostError(null);
                                         }}
-                                        className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        className="py-3 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         <span>🏷️</span> Post Offer
                                     </button>
@@ -1165,7 +1165,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             setPostRepeatable(false);
                                             setPostError(null);
                                         }}
-                                        className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        className="py-3 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         <span>🤝</span> Post Need
                                     </button>
@@ -1272,7 +1272,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             type="button"
                                                             disabled={actionState?.id === b.id}
                                                             onClick={() => handleApproveBid(b.id)}
-                                                            className="flex-1 min-h-[44px] py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
+                                                            className="flex-1 min-h-[44px] py-2 px-3 rounded-lg bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
                                                         >
                                                             {actionState?.id === b.id && actionState?.type === 'approve' ? 'Approving…' : `Approve Bid (${b.credits} 🫘)`}
                                                         </button>
@@ -1280,7 +1280,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             type="button"
                                                             disabled={actionState?.id === b.id}
                                                             onClick={() => handleRejectBid(b.id)}
-                                                            className="min-h-[44px] py-2 px-3 rounded-lg border border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 font-bold text-xs hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 flex items-center justify-center"
+                                                            className="min-h-[44px] py-2 px-3 rounded-lg border border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-300 font-bold text-xs hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 flex items-center justify-center"
                                                         >
                                                             {actionState?.id === b.id && actionState?.type === 'reject' ? 'Declining…' : 'Decline'}
                                                         </button>
@@ -1321,7 +1321,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         {d.action_required === 'fulfill' ? (
                                                             <div
                                                                 onClick={() => onNavigatePost?.(d.post_id)}
-                                                                className="w-full min-h-[44px] py-2.5 px-4 rounded-lg bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 font-bold text-xs text-center flex items-center justify-center cursor-pointer hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors"
+                                                                className="w-full min-h-[44px] py-2.5 px-4 rounded-lg bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 font-bold text-xs text-center flex items-center justify-center cursor-pointer hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors"
                                                             >
                                                                 Fulfill Deal · Awaiting Customer Release
                                                             </div>
@@ -1330,7 +1330,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 type="button"
                                                                 disabled={actionState?.id === d.id}
                                                                 onClick={() => handleCompleteDeal(d.id, d.post_title, d.credits, d.price_type, d.hours)}
-                                                                className="w-full min-h-[44px] py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
+                                                                className="w-full min-h-[44px] py-2.5 px-4 rounded-lg bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-extrabold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
                                                             >
                                                                 {actionState?.id === d.id && actionState?.type === 'complete' ? 'Releasing…' : `Release Payment (${d.credits} 🫘)`}
                                                             </button>
@@ -1395,7 +1395,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         type="button"
                                                         disabled={lifecycleActionLoading}
                                                         onClick={handleResume}
-                                                        className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                        className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
                                                     >
                                                         {lifecycleActionLoading ? 'Resuming…' : 'Confirm Resume'}
                                                     </button>
@@ -1460,7 +1460,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         type="button"
                                                         disabled={lifecycleActionLoading}
                                                         onClick={handleCancelWindUp}
-                                                        className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                        className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
                                                     >
                                                         {lifecycleActionLoading ? 'Stopping Wind-Up…' : 'Confirm Stop Wind-Up'}
                                                     </button>
@@ -1619,7 +1619,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     type="button"
                                                     disabled={requestProcessingId === req.id}
                                                     onClick={() => handleApproveRequest(req.id)}
-                                                    className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 min-h-[36px]"
+                                                    className="px-3 py-2 rounded-lg bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 min-h-[36px]"
                                                 >
                                                     {requestProcessingId === req.id ? 'Approving…' : 'Approve'}
                                                 </button>
@@ -1710,7 +1710,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             disabled={submittingSuccession}
                                                             onClick={() => handleVoteSuccession(activeProposal.id, 'yes')}
                                                             aria-label={`Yes, make ${activeProposal.candidateCallsign} ${kw.lead}`}
-                                                            className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[48px]"
+                                                            className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[48px]"
                                                         >
                                                             {submittingSuccession ? 'Registering…' : 'Yes'}
                                                         </button>
@@ -1836,7 +1836,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         <button
                                             type="submit"
                                             disabled={submittingJoinRequest}
-                                            className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[44px]"
+                                            className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[44px]"
                                         >
                                             {submittingJoinRequest ? 'Submitting request…' : `Request to join as a ${kw.keeper}`}
                                         </button>
@@ -1865,12 +1865,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             <KeeperRow
                                                 key={keeperKey}
                                                 {...(canOpen ? { type: 'button' as const, onClick: () => onOpenProfile!(keeperKey!) } : {})}
-                                                className={`inline-flex items-center gap-2 px-3 py-1.5 min-h-[48px] rounded-xl bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-xs font-semibold text-nature-800 dark:text-nature-200 text-left ${canOpen ? 'cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 transition-colors' : ''} ${isSuspended ? 'opacity-60' : ''}`}
+                                                className={`inline-flex items-center gap-2 px-3 py-1.5 min-h-[48px] rounded-xl bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-xs font-semibold text-nature-800 dark:text-nature-100 text-left ${canOpen ? 'cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 transition-colors' : ''} ${isSuspended ? 'opacity-60 dark:opacity-90' : ''}`}
                                             >
                                                 <span aria-hidden="true">👤</span>
                                                 <span>{k.callsign}</span>
                                                 {isSuspended && (
-                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-nature-200 text-nature-700 dark:bg-nature-700 dark:text-nature-300">
+                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-nature-200 text-nature-700 dark:bg-nature-700 dark:text-nature-200">
                                                         Suspended
                                                     </span>
                                                 )}
@@ -1879,7 +1879,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         {kw.Lead}
                                                     </span>
                                                 ) : (
-                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-nature-200/70 text-nature-700 dark:bg-nature-700 dark:text-nature-300">
+                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-nature-200/70 text-nature-700 dark:bg-nature-700 dark:text-nature-200">
                                                         {kw.Keeper}
                                                     </span>
                                                 )}
@@ -1943,7 +1943,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             className={`px-3 py-2.5 text-xs font-bold rounded-lg transition-colors ${
                                                 ledgerPeriod === period
                                                     ? 'bg-white dark:bg-nature-700 text-nature-900 dark:text-white shadow-xs'
-                                                    : 'text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white'
+                                                    : 'text-nature-600 dark:text-nature-300 hover:text-nature-900 dark:hover:text-white'
                                             }`}
                                         >
                                             {period === 'all' ? 'All time' : period === '30d' ? '30d' : period === '90d' ? '90d' : '1y'}
@@ -1971,7 +1971,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     </div>
                                 </div>
                                 <div className="col-span-2 sm:col-span-1 bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
-                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">
+                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-300">
                                         Net change
                                     </div>
                                     <div className={`text-lg font-black mt-1 ${
@@ -2002,12 +2002,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     The full income and spend record is visible to members.
                                 </div>
                             ) : ledgerError ? (
-                                <div className="py-4 text-center text-xs text-red-500 font-medium space-y-2">
+                                <div className="py-4 text-center text-xs text-red-500 dark:text-red-300 font-medium space-y-2">
                                     <p>{ledgerError}</p>
                                     <button
                                         type="button"
                                         onClick={() => loadLedger(ledgerPeriod)}
-                                        className="text-xs font-bold underline text-red-600 dark:text-red-400"
+                                        className="text-xs font-bold underline text-red-600 dark:text-red-300"
                                     >
                                         Try again
                                     </button>
@@ -2035,7 +2035,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             <tbody className="block sm:table-row-group divide-y divide-nature-100 dark:divide-nature-800">
                                                 {ledgerData.entries.map((entry) => (
                                                     <tr key={entry.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5 py-2.5 sm:py-0 sm:table-row hover:bg-nature-50/50 dark:hover:bg-nature-800/30 transition-colors" data-testid="ledger-entry">
-                                                        <td className="order-5 text-[11px] sm:text-xs sm:order-none sm:py-2.5 sm:pr-3 text-nature-500 dark:text-nature-400 whitespace-nowrap">
+                                                        <td className="order-5 text-[11px] sm:text-xs sm:order-none sm:py-2.5 sm:pr-3 text-nature-500 dark:text-nature-300 whitespace-nowrap">
                                                             {formatShortDate(entry.timestamp)}
                                                         </td>
                                                         <td className="order-1 sm:order-none sm:py-2.5 sm:px-3 font-semibold text-nature-800 dark:text-nature-200 [overflow-wrap:anywhere] sm:max-w-[140px] sm:truncate" title={entry.memo}>
@@ -2045,13 +2045,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             {entry.counterpartyName || 'Member'}
                                                         </td>
                                                         <td className={`${entry.direction === 'income' ? 'order-2' : 'hidden'} sm:order-none sm:table-cell sm:py-2.5 sm:px-3 text-right font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap`}>
-                                                            {entry.direction === 'income' ? `+${entry.amount.toFixed(2)} 🫘` : <span className="text-nature-300 dark:text-nature-700 font-normal">—</span>}
+                                                            {entry.direction === 'income' ? `+${entry.amount.toFixed(2)} 🫘` : <span className="text-nature-300 dark:text-nature-300 font-normal">—</span>}
                                                         </td>
                                                         <td className={`${entry.direction === 'spend' ? 'order-2' : 'hidden'} sm:order-none sm:table-cell sm:py-2.5 sm:px-3 text-right font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap`}>
-                                                            {entry.direction === 'spend' ? `-${entry.amount.toFixed(2)} 🫘` : <span className="text-nature-300 dark:text-nature-700 font-normal">—</span>}
+                                                            {entry.direction === 'spend' ? `-${entry.amount.toFixed(2)} 🫘` : <span className="text-nature-300 dark:text-nature-300 font-normal">—</span>}
                                                         </td>
                                                         <td className="order-4 text-[11px] sm:text-xs sm:order-none sm:py-2.5 sm:pl-3 text-right font-extrabold text-nature-900 dark:text-white whitespace-nowrap">
-                                                            <span className="sm:hidden font-semibold text-nature-500 dark:text-nature-400">bal </span>{entry.runningBalance.toFixed(2)} 🫘
+                                                            <span className="sm:hidden font-semibold text-nature-500 dark:text-nature-300">bal </span>{entry.runningBalance.toFixed(2)} 🫘
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -2153,7 +2153,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         {formatTimestamp(tx.timestamp)}
                                                     </div>
                                                 </div>
-                                                <div className={`font-black text-sm shrink-0 ${isOut ? 'text-amber-500' : 'text-emerald-500'}`}>
+                                                <div className={`font-black text-sm shrink-0 ${isOut ? 'text-amber-500' : 'text-emerald-500 dark:text-emerald-400'}`}>
                                                     {isOut ? '-' : '+'}{tx.amount} 🫘
                                                 </div>
                                             </div>
@@ -2227,14 +2227,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 onClick={() => handleRemoveThreadMessage(m.id)}
                                                                 disabled={threadRemovingId === m.id}
                                                                 aria-label={`Remove message from ${authorName}`}
-                                                                className="py-1 px-2 -my-1 -mx-2 text-[11px] font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:underline cursor-pointer bg-transparent border-none rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                className="py-1 px-2 -my-1 -mx-2 text-[11px] font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-300 dark:hover:text-rose-300 hover:underline cursor-pointer bg-transparent border-none rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                                                 title="Remove message"
                                                             >
                                                                 {threadRemovingId === m.id ? 'Removing...' : 'Remove'}
                                                             </button>
                                                         )}
                                                     </div>
-                                                    <div className={`mt-1 leading-relaxed ${isRemoved ? 'italic text-nature-400 dark:text-nature-500' : 'text-nature-800 dark:text-nature-200'}`}>
+                                                    <div className={`mt-1 leading-relaxed ${isRemoved ? 'italic text-nature-400 dark:text-nature-400' : 'text-nature-800 dark:text-nature-200'}`}>
                                                         {textContent}
                                                     </div>
                                                 </div>
@@ -2253,7 +2253,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             {!threadReadOnly && viewerIsMember && (
                                 <form onSubmit={handlePostThreadMessage} className="mt-2 space-y-2">
                                     {threadError && (
-                                        <div className="text-xs text-rose-600 dark:text-rose-400 font-medium">
+                                        <div className="text-xs text-rose-600 dark:text-rose-300 font-medium">
                                             {threadError}
                                         </div>
                                     )}
@@ -2271,7 +2271,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         <button
                                             type="submit"
                                             disabled={!threadInput.trim() || threadPosting}
-                                            className="px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
+                                            className="px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
                                         >
                                             {threadPosting ? 'Posting...' : 'Post'}
                                         </button>
@@ -2428,7 +2428,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <button
                                     type="submit"
                                     disabled={posting}
-                                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm disabled:opacity-50"
+                                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-sm disabled:opacity-50"
                                 >
                                     {posting ? 'Posting…' : 'Publish Listing'}
                                 </button>

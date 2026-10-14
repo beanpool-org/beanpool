@@ -247,7 +247,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                                             <span className="flex-1 min-w-0 truncate text-sm font-bold text-nature-900 dark:text-white">{author}</span>
                                             <span className="flex-shrink-0 text-[11px] text-nature-400">{formatTime(m.timestamp)}</span>
                                         </div>
-                                        <p className={`m-0 mt-1 text-sm leading-relaxed whitespace-pre-wrap break-words ${isRemoved ? 'italic text-nature-400 dark:text-nature-500' : 'text-nature-800 dark:text-nature-200'}`}>
+                                        <p className={`m-0 mt-1 text-sm leading-relaxed whitespace-pre-wrap break-words ${isRemoved ? 'italic text-nature-400 dark:text-nature-400' : 'text-nature-800 dark:text-nature-200'}`}>
                                             {decodeEventChatText(m.ciphertext, m.type, m.metadata)}
                                         </p>
                                         {view.isHost && !isRemoved && (

@@ -72,7 +72,7 @@ function Avatar({ callsign, avatarUrl, size = 40 }: { callsign: string; avatarUr
 
     return (
         <div 
-            className="rounded-full flex items-center justify-center font-bold text-lg border bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-700"
+            className="rounded-full flex items-center justify-center font-bold text-lg border bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300 border-nature-200 dark:border-nature-700"
             style={sizeStyle}
         >
             {initial}
@@ -322,7 +322,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                             >
                                                 {f.callsign}
                                             </button>
-                                            <div className="text-[11px] text-nature-400 dark:text-nature-500 font-medium mt-0.5">
+                                            <div className="text-[11px] text-nature-400 dark:text-nature-300 font-medium mt-0.5">
                                                 Added {relativeDate(f.addedAt)}
                                             </div>
                                         </div>
@@ -332,7 +332,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                             <button
                                                 type="button"
                                                 onClick={() => handleMessage(f.publicKey)}
-                                                className="bg-emerald-600 border-none text-white rounded-lg px-2.5 py-1 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                                className="bg-emerald-600 dark:bg-emerald-700 border-none text-white rounded-lg px-2.5 py-1 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                                 title={`Message ${f.callsign}`}
                                                 aria-label={`Message ${f.callsign}`}
                                             >
@@ -343,7 +343,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                             type="button"
                                             onClick={() => handleRemoveFriend(f.publicKey)}
                                             aria-label={`Remove ${f.callsign} from friends`}
-                                            className="bg-transparent border-none text-red-500 text-xs font-semibold cursor-pointer px-2.5 py-1 rounded-lg hover:bg-red-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                                            className="bg-transparent border-none text-red-500 dark:text-red-300 text-xs font-semibold cursor-pointer px-2.5 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                                         >
                                             Remove
                                         </button>
@@ -429,7 +429,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                             placeholder="🔍 Search members..."
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            className="w-full p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all placeholder:text-nature-400"
+                            className="w-full p-3 rounded-xl border border-nature-200 dark:border-nature-500 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all placeholder:text-nature-400"
                         />
                         {searchQuery && (
                             <div className="text-xs text-nature-400 mt-1.5 font-medium">
@@ -461,7 +461,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                                 >
                                                     {m.callsign}
                                                 </button>
-                                                <div className="text-[11px] text-nature-400 dark:text-nature-500 font-medium mt-0.5">
+                                                <div className="text-[11px] text-nature-400 dark:text-nature-300 font-medium mt-0.5">
                                                     Joined {relativeDate(m.joinedAt)}
                                                 </div>
                                             </div>
@@ -475,7 +475,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                                 type="button"
                                                 onClick={() => handleAddFriend(m.publicKey)}
                                                 aria-label={`Add ${m.callsign} as friend`}
-                                                className="bg-emerald-600 border-none text-white rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                                className="bg-emerald-600 dark:bg-emerald-700 border-none text-white rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                             >
                                                 + Add
                                             </button>

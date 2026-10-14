@@ -1534,7 +1534,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 onClick={() => setReportTarget({ pubkey: peerPubkey, name: getConversationTitle(activeConv) })}
                                 title="Report user"
                                 aria-label="Report user"
-                                className="px-2.5 py-1 rounded-lg border border-nature-300 dark:border-nature-700 bg-white/80 dark:bg-nature-800 text-nature-600 dark:text-nature-300 font-bold text-xs cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 transition-colors flex items-center gap-1"
+                                className="px-2.5 py-1 rounded-lg border border-nature-300 dark:border-nature-700 bg-white/80 dark:bg-nature-800 text-nature-600 dark:text-nature-300 font-bold text-xs cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors flex items-center gap-1"
                             >
                                 <span>🚩</span> <span className="hidden sm:inline">Report</span>
                             </button>
@@ -1562,7 +1562,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                 aria-label={isPeerBlocked ? 'Unblock user' : 'Block user'}
                                 className={`px-2.5 py-1 rounded-lg border font-bold text-xs cursor-pointer transition-colors flex items-center gap-1 ${
                                     isPeerBlocked
-                                        ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200'
+                                        ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                         : 'border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30'
                                 }`}
                             >
@@ -2331,7 +2331,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     }
                                 }
                             }}
-                            className="px-3 py-1 bg-white dark:bg-nature-900 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 font-bold rounded-lg text-xs cursor-pointer hover:bg-red-50 shrink-0"
+                            className="px-3 py-1 bg-white dark:bg-nature-900 border border-red-300 dark:border-red-700 text-red-600 dark:text-red-300 font-bold rounded-lg text-xs cursor-pointer hover:bg-red-50 dark:hover:bg-red-950/30 shrink-0"
                         >
                             Unblock
                         </button>
@@ -2542,7 +2542,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         {(conv.unreadCount || 0) > 0 && (
                                             <span style={{
                                                 position: 'absolute', top: '-4px', left: '-4px',
-                                                background: 'var(--danger)', color: '#fff', fontSize: '0.6rem', fontWeight: 700,
+                                                background: 'var(--danger)', color: 'var(--on-danger, #fff)', fontSize: '0.6rem', fontWeight: 700,
                                                 minWidth: '16px', height: '16px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                 padding: '0 3px', lineHeight: 1, boxShadow: '0 0 6px var(--danger)',
                                             }}>{conv.unreadCount! > 99 ? '99+' : conv.unreadCount}</span>
@@ -2565,7 +2565,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         {(conv.unreadCount || 0) > 0 && (
                                             <span style={{
                                                 position: 'absolute', top: '-4px', right: '-4px',
-                                                background: 'var(--danger)', color: '#fff', fontSize: '0.6rem', fontWeight: 700,
+                                                background: 'var(--danger)', color: 'var(--on-danger, #fff)', fontSize: '0.6rem', fontWeight: 700,
                                                 minWidth: '16px', height: '16px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                                 padding: '0 3px', lineHeight: 1, boxShadow: '0 0 6px var(--danger)',
                                             }}>{conv.unreadCount! > 99 ? '99+' : conv.unreadCount}</span>

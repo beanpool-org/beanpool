@@ -119,10 +119,23 @@ vi.mock('expo-navigation-bar', () => ({ setBackgroundColorAsync: vi.fn(async () 
 // The phone's database: the real utils/db on its real schema, in memory.
 const sql = new DatabaseSync(':memory:');
 const sqlParams = (p: unknown) => (p === undefined ? [] : Array.isArray(p) ? p : [p]) as any[];
+// A read the test holds back: one whose statement matches `match` answers `ms` late (a slow phone's disk), or, with a
+// `gate` (holdReads), only once the test opens it.
+const slowRead: { match: RegExp | null; ms: number; gate: Promise<void> | null } = { match: null, ms: 0, gate: null };
+/** Holds every read matching `match` until the returned function is called: no wall-clock race on a slow runner. */
+function holdReads(match: RegExp): () => void {
+    let open!: () => void;
+    slowRead.match = match;
+    slowRead.gate = new Promise<void>(r => { open = r; });
+    return open;
+}
 const adapter = {
     runAsync: async (q: string, p?: unknown) => { const r = sql.prepare(q).run(...sqlParams(p)); return { changes: Number(r.changes), lastInsertRowId: Number(r.lastInsertRowid) }; },
     execAsync: async (q: string) => { sql.exec(q); },
-    getAllAsync: async (q: string, p?: unknown) => sql.prepare(q).all(...sqlParams(p)),
+    getAllAsync: async (q: string, p?: unknown) => {
+        if (slowRead.match?.test(q)) await (slowRead.gate ?? new Promise(r => setTimeout(r, slowRead.ms)));
+        return sql.prepare(q).all(...sqlParams(p));
+    },
     getFirstAsync: async (q: string, p?: unknown) => sql.prepare(q).get(...sqlParams(p)) ?? null,
     closeAsync: async () => {},
     withTransactionAsync: async (cb: () => Promise<void>) => { await cb(); },
@@ -172,8 +185,11 @@ const community = vi.hoisted(() => ({
     membersOnDemand: true,
     // The worldwide community as it ships also shows its switched-off features from Example Valley (#1852).
     showcase: false,
-    // On a real phone useNodeProfile starts null and answers a moment after the screen mounts; set, it answers this late.
-    lateMs: 0,
+    // On a real phone useNodeProfile starts null and answers a moment after the screen mounts; held, it answers only when
+    // the test calls release(): a gate, never a timer, so a slow runner can't let it in early (review of #1899, B1).
+    held: false,
+    waiting: new Set<() => void>(),
+    release() { this.held = false; for (const open of [...this.waiting]) open(); },
     area: { lat: -28.55, lng: 153.5 } as null | { lat: number; lng: number },
     profile() {
         const on = this.membersOnDemand;
@@ -186,13 +202,13 @@ const community = vi.hoisted(() => ({
 vi.mock('../use-node-profile', async () => {
     const React = await import('react');
     const useNodeProfile = () => {
-        const [late, setLate] = React.useState<ReturnType<typeof community.profile> | null>(null);
+        const [, answered] = React.useReducer((n: number) => n + 1, 0);
         React.useEffect(() => {
-            if (!community.lateMs) return;
-            const t = setTimeout(() => setLate(community.profile()), community.lateMs);
-            return () => clearTimeout(t);
+            if (!community.held) return;
+            community.waiting.add(answered);
+            return () => { community.waiting.delete(answered); };
         }, []);
-        return community.lateMs ? late : community.profile();
+        return community.held ? null : community.profile();
     };
     // The showcase's hooks (#1852, use-reader-features.ts) read the same answer, with `copyRead` once it has come.
     const useNodeProfileState = () => {
@@ -279,7 +295,10 @@ beforeEach(async () => {
     nav.pushed.length = 0;
     community.membersOnDemand = true;
     community.showcase = false;
-    community.lateMs = 0;
+    community.held = false;
+    community.waiting.clear();
+    slowRead.match = null;
+    slowRead.gate = null;
     community.area = { lat: -28.55, lng: 153.5 };
     globalThis.fetch = vi.fn(nodeFetch) as typeof fetch;
     const database = await db.getDb();
@@ -299,14 +318,16 @@ const settle = async (ms = 0) => {
 const render = async (node: unknown) => { await act(async () => { root.render(node as any); }); await settle(); };
 const text = () => host.textContent ?? '';
 const press = async (el: Element) => { await act(async () => { (el as HTMLElement).click(); }); await settle(); };
-const type = async (value: string) => {
+/** The node's profile, held at mount (community.held), answers now. */
+const releaseProfile = async () => { await act(async () => { community.release(); }); await settle(); };
+const type = async (value: string, wait = 450) => {
     const input = host.querySelector('input')!;
     await act(async () => {
         const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
         setter.call(input, value);
         input.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    await settle(450); // the 400 ms debounce the screens wait before asking
+    await settle(wait); // by default past the 400 ms debounce the screens wait before asking
 };
 const styleOf = (el: Element) => JSON.parse(el.getAttribute('data-style') || '{}');
 const membersRequests = () => node.requests.filter(r => r.startsWith('/api/members'));
@@ -483,6 +504,62 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(text()).not.toContain('Loading');
                 expect(contrastOf("People you've dealt with. Connect to search everyone.", colors)).toBeGreaterThanOrEqual(4.5);
                 await fits([OWN, ROSA]);
+            });
+
+            it('the node profile known a moment after the screen mounts: no count of the cards held, before it or after', async () => {
+                community.held = true;
+                await render(createElement(PeopleScreen));
+                // Before the profile: the list is the cards held, which are not the node's members (review of #1859, NB-1).
+                expect(text()).not.toMatch(/members on this node/);
+                expect(text()).toContain('Tap + Add to follow as a friend.');
+                await releaseProfile();
+                // Known, and the node's list not read yet: still no count.
+                expect(text()).not.toMatch(/members on this node/);
+                await fits([OWN]);
+            });
+
+            it('a local community whose profile comes a moment late: no count until it comes, then the count of the whole copy', async () => {
+                community.membersOnDemand = false;
+                community.held = true;
+                await holdCard(ROSA, 'Rosa');
+                await render(createElement(PeopleScreen));
+                expect(text()).not.toMatch(/members on this node/);
+                expect(text()).toContain('Rosa');
+                await releaseProfile();
+                expect(text()).toContain('2 members on this node. Tap + Add to follow as a friend.');
+                expect(membersRequests()).toEqual([]);
+            });
+
+            it('a local community whose profile is known before its list is read: no count, never "0 members", until the list lands', async () => {
+                community.membersOnDemand = false;
+                await holdCard(ROSA, 'Rosa');
+                // The phone's copy of the profile (one storage read) beats the whole-members read (review of #1899, NB-A 1).
+                const open = holdReads(/SELECT \* FROM members WHERE public_key NOT LIKE/);
+                await render(createElement(PeopleScreen));
+                expect(text()).not.toMatch(/members on this node/);
+                expect(text()).toContain('Tap + Add to follow as a friend.');
+                await act(async () => { open(); });
+                await settle();
+                expect(text()).toContain('2 members on this node. Tap + Add to follow as a friend.');
+            });
+
+            it('a local community, a search typed: no count of the matches as the node\'s members; cleared, the count of the whole list again', async () => {
+                community.membersOnDemand = false;
+                await holdCard(ROSA, 'Rosa');
+                await render(createElement(PeopleScreen));
+                expect(text()).toContain('2 members on this node.');
+                // Typed, before the search is read and after (review of #1899, NB-A 2).
+                await type('Ro', 0);
+                expect(text()).not.toMatch(/members on this node/);
+                await settle(450);
+                expect(text()).toContain('Rosa');
+                expect(text()).not.toMatch(/members on this node/);
+                expect(text()).toContain('Tap + Add to follow as a friend.');
+                // Cleared, the matches still on screen until the whole list is read again: never their count.
+                await type('', 0);
+                expect(text()).not.toMatch(/\b1 members on this node/);
+                await settle(450);
+                expect(text()).toContain('2 members on this node.');
             });
 
             it('a local community (switch absent): the whole list from the copy as today, and nothing asked of /api/members', async () => {
@@ -664,11 +741,12 @@ for (const scheme of ['light', 'dark'] as const) {
             });
 
             it('the node profile known a moment after the screen mounts: each read once, the stale card fetched once', async () => {
-                community.lateMs = 30;
+                community.held = true;
                 await holdCard(ROSA, 'Rosa');
                 await (await db.getDb()).runAsync('UPDATE members SET card_fetched_at = ? WHERE public_key = ?', ['2026-01-01T00:00:00.000Z', ROSA]);
                 nav.params = { publicKey: ROSA, callsign: 'Rosa' };
                 await render(createElement(PublicProfileScreen));
+                await releaseProfile();
                 await settle(100);
                 const byPath: Record<string, number> = {};
                 for (const r of node.requests) { const p = r.split('?')[0].replace(/[0-9a-f]{64}/, ':key'); byPath[p] = (byPath[p] ?? 0) + 1; }
@@ -676,6 +754,22 @@ for (const scheme of ['light', 'dark'] as const) {
                 expect(Object.keys(byPath).length).toBeGreaterThan(1);
                 for (const [path, n] of Object.entries(byPath)) expect(n, path).toBe(1);
                 expect(text()).toContain('Rosa');
+            });
+
+            it('a card fetched by key before the screen\'s own read lands: the late read never puts the stale card back', async () => {
+                await holdCard(ROSA, 'Old Name');
+                await (await db.getDb()).runAsync('UPDATE members SET card_fetched_at = ? WHERE public_key = ?', ['2026-01-01T00:00:00.000Z', ROSA]);
+                // The screen's first reads (the card, the listings) answer after the node's card has landed (review of #1859, NB-3).
+                slowRead.match = /FROM posts\s+WHERE author_pubkey = \?/;
+                slowRead.ms = 80;
+                nav.params = { publicKey: ROSA };
+                await render(createElement(PublicProfileScreen));
+                await settle(20);
+                expect(membersRequests()).toEqual([`/api/members?keys=${ROSA}`]);
+                expect(text()).toContain('Rosa');
+                await settle(120);
+                expect(text()).toContain('Rosa');
+                expect(text()).not.toContain('Old Name');
             });
 
             it('(a) a card held and fresh: no request for it, the name it holds', async () => {

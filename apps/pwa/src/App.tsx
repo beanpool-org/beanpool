@@ -754,7 +754,7 @@ export function App() {
                             aria-label="Help for this screen"
                             title="Help for this screen"
                             data-testid="sidebar-help"
-                            className="ml-auto p-2 rounded-lg transition-colors cursor-pointer text-nature-600 dark:text-nature-400 hover:bg-nature-200/60 dark:hover:bg-nature-800/60"
+                            className="ml-auto p-2 rounded-lg transition-colors cursor-pointer text-nature-600 dark:text-nature-300 hover:bg-nature-200/60 dark:hover:bg-nature-800/60"
                         >
                             <HelpIcon className="w-5 h-5" />
                         </button>
@@ -763,7 +763,7 @@ export function App() {
                             aria-label="Settings"
                             aria-pressed={showSettings}
                             className={`p-2 rounded-lg transition-colors cursor-pointer ${
-                                showSettings ? 'bg-nature-200 dark:bg-nature-800 text-nature-900 dark:text-white' : 'text-nature-600 dark:text-nature-400 hover:bg-nature-200/60 dark:hover:bg-nature-800/60'
+                                showSettings ? 'bg-nature-200 dark:bg-nature-800 text-nature-900 dark:text-white' : 'text-nature-600 dark:text-nature-300 hover:bg-nature-200/60 dark:hover:bg-nature-800/60'
                             }`}
                             title="Settings"
                         >
@@ -1149,7 +1149,7 @@ export function App() {
                                             top: '-6px',
                                             right: '-10px',
                                             background: 'var(--danger)',
-                                            color: '#fff',
+                                            color: 'var(--on-danger, #fff)',
                                             fontSize: '0.6rem',
                                             fontWeight: 700,
                                             minWidth: '16px',
@@ -1172,7 +1172,7 @@ export function App() {
                                             top: '-6px',
                                             right: '-10px',
                                             background: 'var(--danger)',
-                                            color: '#fff',
+                                            color: 'var(--on-danger, #fff)',
                                             fontSize: '0.6rem',
                                             fontWeight: 700,
                                             minWidth: '16px',

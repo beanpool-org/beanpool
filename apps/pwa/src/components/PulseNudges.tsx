@@ -228,7 +228,7 @@ export function PulseNudges({
                         <button
                             type="button"
                             onClick={dismissClipboard}
-                            className="min-h-[44px] px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500 focus-visible:ring-offset-1"
+                            className="min-h-[44px] px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500 focus-visible:ring-offset-1"
                         >
                             Dismiss
                         </button>
@@ -278,7 +278,7 @@ export function PulseNudges({
                             <button
                                 type="button"
                                 onClick={() => handleDismissPostCountNudge(nudge)}
-                                className="min-h-[44px] px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500 focus-visible:ring-offset-1"
+                                className="min-h-[44px] px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-terra-500 focus-visible:ring-offset-1"
                             >
                                 Dismiss
                             </button>

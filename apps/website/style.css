@@ -8,7 +8,8 @@
     
     --text-primary: #f8fafc;
     --text-secondary: #cbd5e1;
-    --text-muted: #64748b;
+    --text-muted: #8190a6;   /* 4.5:1 or better on a panel and on the doodle's ground (was #64748b: 3.5:1 on the doodle ground) */
+    --text-muted-on-doodle: #b4bfcc;   /* muted text with no panel under it: 4.7:1 on the doodle's brightest stroke (#454c49) */
     
     --accent: #f59e0b;      /* Ambient Amber */
     --accent-glow: rgba(245, 158, 11, 0.15);
@@ -175,6 +176,8 @@ section {
     align-items: center;
     gap: 0.5rem;
 }
+/* the link is the tap target: at least 44px tall, though the picture stays its size (40px on a phone) */
+a.logo { min-height: 44px; }
 .logo span { 
     background: linear-gradient(135deg, var(--accent), #fb923c);
     -webkit-background-clip: text;
@@ -929,6 +932,9 @@ section {
     align-items: center;
     justify-content: center;
     position: relative;
+    /* main.js gives each pin a 44px box to tap; this keeps the pin where it was in the old 24px box */
+    width: 24px;
+    margin: 10px;
 }
 .map-pulse-core {
     width: 12px;
@@ -974,6 +980,10 @@ section {
     background: rgba(11, 15, 25, 0.92) !important;
     border: 1px solid var(--border) !important;
 }
+/* 44px to tap. On a touch screen the zoom buttons grow (they touch each other, so nothing can grow unseen);
+   the popup's × keeps its place, centred in a bigger box. */
+.leaflet-touch .leaflet-bar a { width: 44px; height: 44px; line-height: 44px; }
+.leaflet-container a.leaflet-popup-close-button { top: -10px; right: -10px; width: 44px; height: 44px; font: 16px/44px Tahoma, Verdana, sans-serif; }
 
 .map-stats {
     display: flex;
@@ -999,7 +1009,7 @@ section {
 }
 .map-stat-label {
     font-size: 0.85rem;
-    color: var(--text-muted);
+    color: var(--text-muted-on-doodle);
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.1em;
@@ -1674,7 +1684,8 @@ footer {
     /* the node commands were squeezed to a four-character column at 320px */
     .terminal-body { padding: 0.9rem 0.6rem; }
     .cta-step code { padding: 0.7rem 2.6rem 0.7rem 0.7rem; font-size: 0.8rem; }
-    .copy-btn { min-width: 40px; min-height: 40px; right: 0.2rem; bottom: 0.15rem; }
+    /* 44px to tap; 2px nearer the corner than at 40px, so the icon stays where it was */
+    .copy-btn { min-width: 44px; min-height: 44px; right: calc(0.2rem - 2px); bottom: calc(0.15rem - 2px); }
     .principle-text { white-space: normal; text-align: center; }
     /* these two had min-widths of 300px and 320px, which made the page scroll sideways on a phone */
     .newsletter-content, .newsletter-form-container { min-width: 0; width: 100%; }
@@ -1751,7 +1762,7 @@ footer {
 .nav-links a[aria-current="page"]::after { width: 100%; }
 .help-centre { max-width: 1000px; }
 .help-centre .lede { font-size: 1.1rem; color: var(--text-secondary); margin-bottom: 0.5rem; }
-.help-centre h2 { font-size: 1.15rem; line-height: 1.3; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; margin: 2.25rem 0 0.85rem; }
+.help-centre h2 { font-size: 1.15rem; line-height: 1.3; color: var(--text-muted-on-doodle); text-transform: uppercase; letter-spacing: 0.08em; margin: 2.25rem 0 0.85rem; }
 .help-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
@@ -1824,3 +1835,29 @@ footer {
 .hero-door .btn { width: 100%; max-width: none; min-height: 48px; height: auto; padding: 0.6rem 0.85rem; font-size: 0.95rem; font-weight: 700; white-space: normal; text-align: center; line-height: 1.3; }
 .hero-door .btn-ghost { color: var(--text-primary); }
 .hero-door p { font-size: 0.86rem; color: var(--text-secondary); line-height: 1.45; margin: 0; overflow-wrap: anywhere; }
+
+/* 44px to tap at 320px with 130% text, with the page looking as it did */
+/* privacy and data deletion keep their own nav. Get Started was cut off at the right edge below 346px (at 130% text);
+   there the word beside the bean goes, as on the guide pages (the bean still goes home), and Get Started stays on one
+   line. From 346px both fit, so the word stays. */
+@media (max-width: 345px) {
+    #navbar:not(.guide-nav) .nav-inner:not(.has-menu) { gap: 0.5rem; }
+    #navbar:not(.guide-nav) .nav-inner:not(.has-menu) .logo span { display: none; }
+    #navbar:not(.guide-nav) .nav-inner:not(.has-menu) .nav-cta { white-space: nowrap; }
+}
+/* Guide pages (their other styles are in each page, from packages/beanpool-guide) */
+/* the nav links: 12px wider to tap (Help was 42px), the negative margin keeps every word where it was */
+@media (max-width: 768px) { .guide-nav .nav-links a { padding-left: 6px; padding-right: 6px; margin-left: -6px; margin-right: -6px; } }
+.guide .guide-toc a { min-width: 44px; }
+/* the breadcrumb links over each guide page: 44x44 to tap, and the line wraps word for word as it did. Padding on an
+   inline link grows its tap box without moving a word (the margin cancels the sides). The first link's box grows up (it
+   is always on the first line) and the section's grows down, so a breadcrumb on two lines has no two boxes overlapping.
+   Relative, so the box is above the heading under it and the text beside it, which would otherwise take the tap. */
+.guide .kicker a { position: relative; padding: 0 6px; margin: 0 -6px; }
+.guide .kicker a:first-child { padding-top: 28px; }
+.guide .kicker a:last-child { padding-bottom: 28px; }
+/* rows of separate links (the index's fine print, getting-started's "Guide:" lines): 44px to tap at 100% text and up,
+   with the lines 52px apart so a link's box never reaches into the next line's (50px tall at 130%); relative, so the
+   " · " beside a link doesn't take the tap from its edge */
+.feature-card p.card-links, .rules-content p.guide-links { line-height: 52px; }
+.card-links a, .guide-links a { position: relative; padding: 13px 4px; margin: 0 -4px; }

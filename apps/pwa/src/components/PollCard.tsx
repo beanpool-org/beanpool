@@ -163,7 +163,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                     <span
                         className={`text-[10px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-lg border ${
                             isClosed
-                                ? 'bg-nature-100 text-nature-600 dark:bg-nature-800 dark:text-nature-400 border-nature-300/40'
+                                ? 'bg-nature-100 text-nature-600 dark:bg-nature-800 dark:text-nature-300 border-nature-300/40'
                                 : 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border-purple-200 dark:border-purple-800'
                         }`}
                     >
@@ -272,7 +272,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                                     <span className="font-black text-nature-700 dark:text-nature-300">
                                         {isVotingThis ? 'Voting...' : `${pct}%`}
                                     </span>
-                                    <span className="text-[10px] text-nature-400 dark:text-nature-500">
+                                    <span className="text-[10px] text-nature-400 dark:text-nature-400">
                                         ({count})
                                     </span>
                                 </div>
@@ -398,7 +398,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
 
             {/* Village Notice */}
             {!visitor && (
-            <p className="mt-2 text-[9px] text-nature-400 dark:text-nature-500 text-center">
+            <p className="mt-2 text-[9px] text-nature-400 dark:text-nature-400 text-center">
                 <span aria-hidden="true">ℹ️ </span>{openVote ? 'Open vote' : 'Anonymous vote'} · Re-voting overwrites choice
             </p>
             )}

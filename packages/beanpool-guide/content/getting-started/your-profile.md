@@ -19,9 +19,9 @@ In the web app, tap **Edit Profile**, change the photo with **Camera** or **Gall
 
 You can also tap **Re-run Setup** in Settings. It walks you through your name and photo again, roughly where you are (on the global community, in the phone app), and the short tour of how BeanPool works. In a web browser, set your area in **Settings**, under **Your area**.
 
-## A name and a photo come first
+## Before you post
 
-You need a name and a photo before you can post or accept a trade. If one is missing, the app says **Finish your profile first**. Tap **Set up profile** to add it.
+In a community with Beans you need a name and a photo before you can post or accept a trade. Where there are no Beans, as on the global community, a name is enough. If something is missing, the app says **Finish your profile first**. Tap **Set up profile** to add it.
 
 ## Contact details
 

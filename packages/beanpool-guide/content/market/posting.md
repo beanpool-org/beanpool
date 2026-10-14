@@ -7,11 +7,13 @@ related: a-deal-step-by-step, my-deals, map-pins, credit-line
 
 ## Offer first
 
-You must have posted at least one **Offer** before you can post a **Need** or take up someone's Offer. Everyone brings something. How many Offers you have up also decides how far below zero you can go. See "Your credit line".
+In a community with Beans, you must have posted at least one **Offer** before you can post a **Need** or take up someone's Offer. Everyone brings something. How many Offers you have up also decides how far below zero you can go. See "Your credit line".
+
+Where there are no Beans, as on the global community, your first post can be a Need.
 
 ## Before you start
 
-You need a name and a profile photo. If one is missing, the app asks you to **Set up profile** first.
+In a community with Beans you need a name and a profile photo. Where there are no Beans, a name is enough. If something is missing, the app asks you to **Set up profile** first.
 
 ## Posting
 
@@ -20,7 +22,7 @@ You need a name and a profile photo. If one is missing, the app asks you to **Se
 - **Title:** a few words, up to 50 characters on the phone. "Sourdough loaf", "Lift to town on Fridays".
 - **Category:** pick the closest one.
 - **Description:** what, when, where, anything people should know.
-- **Photos:** at least one, up to five. Tap **Camera** or **Gallery**.
+- **Photos:** at least one, up to five. Tap **Camera** or **Gallery**. Where there are no Beans, a Need's photos are optional.
 - **Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. Every member of your community can see the pin, so drop it near you rather than on your front door if you prefer. See "Where your pin goes".
 - **Price:** a number of beans. Tap the unit button to choose **Total** or **/ Hr**. Tap **FREE** to give it away. The button also offers **/ Dy**, **/ Wk** and **/ Mo**, but a new post does not keep them yet: it is saved as a total price. Choose **Total** and say the period in the description.
 - Tap **Post Offer** or **Post Need**.

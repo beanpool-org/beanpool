@@ -343,6 +343,7 @@ export const SUITES = [
     'test-sample-id-guard',
     'test-profile-feature-gate',
     'test-global-no-beans',
+    'test-global-first-post',
     'test-open-door-hardening',
     'test-funnel-event',
     'test-handshake',

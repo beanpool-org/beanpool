@@ -16,7 +16,7 @@
 import { beansOn, type NodeFeatures, type NodeProfile } from './node-profile';
 import type { MarketExtraFilter } from './market-filters';
 import { feedSections, type FeedSection } from './feed-sections';
-import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
 
 /** Whether the Market shows Beans: a price on each card and the "Beans only" filter. */
 export function marketShowsBeans(features: NodeFeatures | null | undefined): boolean {
@@ -83,9 +83,41 @@ export interface PostFormState {
     category: string;
     hasLocation: boolean;
     photoCount: number;
+    /** False where a photo is optional (a Need where Beans are off: postFormRules); left out, one is required. */
+    photoRequired?: boolean;
     credits: string;
     title: string;
     description: string;
+}
+
+/**
+ * What a post on the map's form needs first, from the node's Beans switch (@beanpool/core postRulesFor, as the node
+ * decides it): where Beans are off (the global node) a Need waits for no Offer and carries no photo it doesn't want, and
+ * no post waits for a profile photo. A node that says nothing yet: the local rules.
+ */
+export function postFormRules(
+    features: NodeFeatures | null | undefined, postType: 'offer' | 'need', blockedFromTrading: boolean,
+): { needBlocked: boolean; photoRequired: boolean; profilePhoto: boolean } {
+    const rules = postRulesFor(beansOn(features));
+    return {
+        needBlocked: rules.offerFirst && blockedFromTrading && postType === 'need',
+        photoRequired: postType !== 'need' || rules.needPhoto,
+        profilePhoto: rules.profilePhoto,
+    };
+}
+
+/**
+ * Whether opening the map's post form waits for a profile photo (postFormRules().profilePhoto): from the screen's copy of
+ * the node's profile when it has one, else from this phone's saved copy (`readCached`), read before deciding. A
+ * `?newPost=` link from another tab mounts the map and opens the form at once, before the screen's copy arrives; without
+ * the saved copy a member on the global node would be asked for a photo it doesn't need (review #1936 N1). No copy, or
+ * one that can't be read: the local rule.
+ */
+export async function composerNeedsProfilePhoto(
+    features: NodeFeatures | null | undefined, readCached: () => Promise<NodeProfile | null>,
+): Promise<boolean> {
+    const known = features ?? (await Promise.resolve().then(readCached).catch(() => null))?.features;
+    return postFormRules(known, 'offer', false).profilePhoto;
 }
 
 /** The submit button's words: the next thing missing, or Post Offer / Post Need. */
@@ -94,7 +126,7 @@ export function postFormSubmitLabel(s: PostFormState, features: NodeFeatures | n
         : s.needBlocked ? '🟢 List an Offer first to post Needs'
         : (!s.category) ? '📂 Select a category'
         : (!s.hasLocation) ? '📍 Set a location'
-        : (s.photoCount < 1) ? '📷 Add a photo'
+        : (s.photoRequired !== false && s.photoCount < 1) ? '📷 Add a photo'
         : postFormPriceMissing(s.credits, features) ? '💰 Set a price'
         : (!s.title.trim() || !s.description.trim()) ? '✏️ Fill required fields'
         : `Post ${s.postType === 'offer' ? 'Offer' : 'Need'}`;

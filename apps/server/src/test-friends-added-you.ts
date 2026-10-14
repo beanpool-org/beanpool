@@ -212,6 +212,53 @@ async function main() {
             `A6: the newest 20 of 25, newest first, and 5 more (${keysOf(r).length}, more ${r.body?.more})`);
     }
 
+    // A7 — the adder's own later block. E added B, then E blocked B: B's line for E goes (Add back would otherwise meet a
+    // block the blocker is never told of).
+    {
+        resetGatewayRateLimit();
+        const e = member('a7-e'), b = member('a7-b');
+        await add(e, b);
+        assert(keysOf(await addedYou(b)).includes(e.pk), 'A7: B sees E\'s add');
+        const blocked = await block(e, b);
+        const after = await addedYou(b);
+        assert(blocked.status === 200 && after.status === 200 && !keysOf(after).includes(e.pk),
+            `A7: E blocks B, and B's line for E goes (${blocked.status}, ${keysOf(after).length})`);
+    }
+
+    // A8 — only members of this node are named. An adder who has since been pruned, or whose row is a visitor's, is not.
+    {
+        resetGatewayRateLimit();
+        const x = member('a8-x'), pruned = member('a8-pruned'), visitor = member('a8-visitor'), stays = member('a8-stays');
+        await add(pruned, x);
+        await add(stays, x);
+        // A visitor adds nobody through the route; its row is seeded, as one left from before it became a visitor's.
+        db.prepare('UPDATE members SET is_visitor = 1 WHERE public_key = ?').run(visitor.pk);
+        db.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey, added_at) VALUES (?, ?, ?)').run(visitor.pk, x.pk, new Date().toISOString());
+        assert(JSON.stringify(keysOf(await addedYou(x)).sort()) === JSON.stringify([pruned.pk, stays.pk].sort()), 'A8: X sees both members\' adds, and not the visitor\'s');
+        db.prepare("UPDATE members SET status = 'pruned' WHERE public_key = ?").run(pruned.pk);
+        const r = await addedYou(x);
+        assert(r.status === 200 && JSON.stringify(keysOf(r)) === JSON.stringify([stays.pk]) && !r.text.includes(pruned.pk) && !r.text.includes(visitor.pk),
+            `A8: once pruned, that adder leaves X's line; the visitor never shows (${keysOf(r).length})`);
+    }
+
+    // A9 — the line names other members: a member's read only. A visitor and a suspended member who were added are refused
+    // 403, naming nobody: the route's own members_only (memberReadsOnlyHere), or with read auth on, the read gate before it
+    // for a visitor. The readauth-off run (scripts/server-suites.mjs) is where the route's own refusal of a visitor shows.
+    {
+        resetGatewayRateLimit();
+        const adder = member('a9-adder'), visitor = member('a9-visitor'), suspended = member('a9-suspended');
+        await add(adder, visitor);
+        await add(adder, suspended);
+        db.prepare('UPDATE members SET is_visitor = 1 WHERE public_key = ?').run(visitor.pk);
+        db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = ?").run(suspended.pk);
+        const readAuthOff = process.env.ENFORCE_READ_AUTH === 'false';
+        for (const [who, label, byRoute] of [[visitor, 'a visitor', readAuthOff], [suspended, 'a suspended member', true]] as const) {
+            const r = await addedYou(who);
+            assert(r.status === 403 && (!byRoute || r.body?.code === 'members_only') && !r.text.includes(adder.pk),
+                `A9: ${label}'s read is refused and names nobody (${r.status} ${r.text.slice(0, 80)})`);
+        }
+    }
+
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);
     console.log('⭐️ Added-you, add cap and blocked-add checks PASSED.');

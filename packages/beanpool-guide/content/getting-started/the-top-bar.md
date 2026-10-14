@@ -60,7 +60,7 @@ When nothing needs you, there are no icons at all. You have not missed anything.
 
 Instead of the icons, you may see a button:
 
-- **Join** (amber): you are visiting as a guest. Tap it to open **Invites**. In a local community you join there with an invite. In the global community, tap **Join with 12 words or a sign-in**.
+- **Join** (amber): you are visiting as a guest. Tap it to open **Invites**. In a local community you join there with an invite. In the global community, tap **Join with a sign-in** (**Join with 12 words or a sign-in** where the community takes the 12 words).
 - **Connect** (red): this phone is not connected to a community. Tap it to open **Settings**, where you can add one.
 
 While one of these shows, the invite icon is hidden.

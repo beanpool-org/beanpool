@@ -57,4 +57,4 @@ A keeper who steps down during a vote leaves it, and their vote goes with them. 
 
 ## When the lead goes quiet
 
-If the lead keeper has not been active for a long time, the other keepers see **Propose Active Keeper as Lead** and can vote **Yes** or **No**. In the web app, pick an active keeper from the list, then tap **Propose Lead**. Votes on keepers cannot be changed.
+If the lead keeper has not been active for a long time, the other keepers see **Propose Active Keeper as Lead** and can vote **Yes** or **No**. In the web app, pick an active keeper from the list, then tap **Propose Lead** (on a project it reads **Propose Leader**). Votes on keepers cannot be changed.

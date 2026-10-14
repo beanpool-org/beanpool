@@ -12,7 +12,7 @@ import {
     getMember,
 } from '../state-engine.js';
 import { MessagingError, CHAT_GROUP_REMOVED_ERROR, DM_NAME_REFUSED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
-import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatHiddenFrom, EVENT_CHAT_GONE } from '../engine/event-thread.js';
+import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatHiddenFrom, waitingForHost, EVENT_CHAT_GONE, EVENT_CHAT_WAITING, EVENT_CHAT_WAITING_CODE } from '../engine/event-thread.js';
 import { GROUP_THREAD_TYPE, groupChatRefusal, groupLineForReader, syncGroupThreadMembership } from '../engine/group-thread.js';
 import { fromEpochOf } from '../engine/group-keys.js';
 import { isKeeperOfEnterprise, markKeeperThreadRead, isEnterpriseThreadGone } from '../engine/enterprise-thread.js';
@@ -63,6 +63,11 @@ function refuseGroupChat(ctx: any, groupId: string, actor: string | undefined, n
 }
 
 const CONVERSATION_NOT_FOUND = { status: 404, error: 'Conversation not found' };
+
+/** Going to this event chat's event, and waiting for the host to let them in (engine/event-thread.ts waitingForHost). */
+function eventWaitingFor(postId: string, actor: string | undefined): boolean {
+    try { return waitingForHost(loadEventForThread(postId), actor); } catch { return false; }
+}
 const SEND_NOT_FOUND = { status: 400, error: 'Failed to send — conversation not found or not a participant' };
 
 export function createMessagingRoutes(deps: RouteDeps): Router {
@@ -596,7 +601,10 @@ router.get('/api/messages/:conversationId', async (ctx) => {
     // participants/reactions/post-linkage/read-cursors leak for every thread).
     else if (ENFORCE_READ_AUTH && conv.type !== 'enterprise_thread' && !conv.participants.includes(ctx.state.actor as string)) {
         ctx.status = 403;
-        ctx.body = { error: 'You are not a participant in this conversation' };
+        // Going to an event whose host hasn't let them in yet (no seat until they do): the event chat route's words and code.
+        ctx.body = conv.type === 'event_thread' && eventWaitingFor(conversationId, ctx.state.actor as string | undefined)
+            ? { error: EVENT_CHAT_WAITING, code: EVENT_CHAT_WAITING_CODE }
+            : { error: 'You are not a participant in this conversation' };
         return;
     }
     // An event chat is the host plus everyone Going, re-checked against the RSVP rather than the
@@ -606,6 +614,7 @@ router.get('/api/messages/:conversationId', async (ctx) => {
     if (conv.type === 'event_thread') {
         let allowed = false;
         let gone = false;
+        let waiting = false;
         try {
             const eventRow = loadEventForThread(conversationId);
             // Hidden by reports (G3): not there for anyone but its author, as the event chat route answers.
@@ -621,6 +630,8 @@ router.get('/api/messages/:conversationId', async (ctx) => {
             // answer does not depend on who is asking.
             gone = isEventThreadExpired(eventRow);
             allowed = !gone && canReadEventThread(eventRow, ctx.state.actor as string | undefined);
+            // Going, and the host hasn't let them in: the event chat route's own words and code (the #1953 review's N5).
+            waiting = !allowed && !gone && waitingForHost(eventRow, ctx.state.actor as string | undefined);
         } catch { allowed = false; }
         if (gone) {
             ctx.status = 410;
@@ -629,7 +640,9 @@ router.get('/api/messages/:conversationId', async (ctx) => {
         }
         if (!allowed) {
             ctx.status = 403;
-            ctx.body = { error: 'Only the host and people going can open this event chat' };
+            ctx.body = waiting
+                ? { error: EVENT_CHAT_WAITING, code: EVENT_CHAT_WAITING_CODE }
+                : { error: 'Only the host and people going can open this event chat' };
             return;
         }
     }

@@ -48,6 +48,12 @@ export const EVENT_CHAT_GONE = 'This event is no longer available';
  */
 export const EVENT_CHAT_WAITING = "The host hasn't let you in yet: the chat opens when they do.";
 export const EVENT_CHAT_WAITING_CODE = 'waiting_for_host';
+/**
+ * The system line an edit from ticked to unticked leaves in the chat (Marty, 15 Oct, board card privacy-global-calls): every
+ * line so far opens to everyone Going. The apps show it in the reader's language by its system type; old apps show this text.
+ */
+export const EVENT_CHAT_OPENED_TEXT = 'The host opened this chat to everyone going.';
+export const EVENT_CHAT_OPENED_SYSTEM_TYPE = 'event_opened_to_going';
 /** The host of an event hidden by reports (G3): its chat takes no new line until a moderator restores it. */
 export const EVENT_CHAT_HIDDEN = 'This event is hidden while a moderator looks at reports about it, so its chat is paused until it is restored.';
 
@@ -63,6 +69,8 @@ export interface EventThreadMessage {
     metadata?: string;
     timestamp: string;
     editedAt?: string | null;
+    /** A system line's kind (EVENT_CHAT_OPENED_SYSTEM_TYPE): the apps word it in the reader's language. */
+    systemType?: string;
 }
 
 export interface EventThreadView {
@@ -325,6 +333,7 @@ export function toThreadMessage(r: any, conversationId: string, removedText = EV
         metadata: r.metadata,
         timestamp: r.timestamp,
         editedAt: r.edited_at,
+        ...(r.type === 'system' && r.system_type ? { systemType: r.system_type } : {}),
     };
 }
 
@@ -338,6 +347,29 @@ export function getEventThreadMessages(postId: string, limit = 50, offset = 0): 
         LIMIT ? OFFSET ?
     `).all(postId, limit, offset) as any[];
     return rows.reverse().map(r => toThreadMessage(r, postId));
+}
+
+/**
+ * Writes the "opened to everyone going" system line (EVENT_CHAT_OPENED_TEXT), in the shape a group chat's system lines
+ * have (type 'system', author SYSTEM, nonce '00000', the text as-is), which every app in the stores draws as a small grey
+ * centred line. Inside the edit's transaction; the caller broadcasts it once that commits.
+ */
+export function writeEventOpenedLine(postId: string): EventThreadMessage {
+    ensureEventThread(postId);
+    const id = crypto.randomUUID();
+    const timestamp = new Date().toISOString();
+    const metadata = JSON.stringify({ postId });
+    db.prepare(`
+        INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, system_type, metadata, timestamp)
+        VALUES (?, ?, 'SYSTEM', ?, '00000', 'system', ?, ?, ?)
+    `).run(id, postId, EVENT_CHAT_OPENED_TEXT, EVENT_CHAT_OPENED_SYSTEM_TYPE, metadata, timestamp);
+    return {
+        ...toThreadMessage({
+            id, author_pubkey: 'SYSTEM', author_callsign: 'System', ciphertext: EVENT_CHAT_OPENED_TEXT, nonce: '00000',
+            type: 'system', metadata, timestamp,
+        }, postId),
+        systemType: EVENT_CHAT_OPENED_SYSTEM_TYPE,
+    };
 }
 
 /**
@@ -468,6 +500,8 @@ export function removeEventThreadMessage(
     const msgRow = db.prepare('SELECT * FROM messages WHERE id = ? AND conversation_id = ?')
         .get(messageId, postId) as any;
     if (!msgRow) throw new Error('Message not found');
+    // The host's own "opened this chat to everyone going" stays: it is what tells everyone the earlier lines are open.
+    if (msgRow.type === 'system') throw new Error('A system line cannot be removed');
 
     const ciphertext = Buffer.from(EVENT_THREAD_REMOVED_TEXT, 'utf8').toString('base64');
     let metaObj: any = {};
@@ -503,8 +537,8 @@ export function removeEventThreadMessage(
  * Live update to the people in the chat only. Unlike the enterprise thread — which is public and broadcasts
  * to every socket — an event chat is the host plus Going, and a group-only event's chat is narrower still.
  */
-function broadcastEventThreadMessage(
-    cb: MessagingCallbacks,
+export function broadcastEventThreadMessage(
+    cb: Pick<MessagingCallbacks, 'broadcast'>,
     postId: string,
     message: EventThreadMessage,
     action?: 'removed',

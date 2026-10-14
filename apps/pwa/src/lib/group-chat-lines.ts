@@ -21,6 +21,7 @@
  * from its store; a store that can't be read refuses, and a chat answer that can't be read refuses too (a never-held
  * browser sends readable words only when the chat answer says unlocked).
  */
+import { isCollapsedRun, removedLineRuns, type RemovedLineKind } from '@beanpool/core';
 import { detectMentions, sealLine, openLine, type GroupEpochProgress } from './group-chat-crypto';
 import {
     groupKeyring, GroupKeysRequestError, GroupChatKeyError, GROUP_CHAT_NOT_MEMBER_TEXT,
@@ -261,6 +262,38 @@ export function groupTombstoneText(m: { authorPubkey?: string | null; metadata?:
     const by = meta.removedBy;
     if (by && m.authorPubkey && by === m.authorPubkey) return GROUP_LINE_DELETED_TEXT;
     return by ? GROUP_LINE_REMOVED_TEXT : GROUP_LINE_DELETED_TEXT;
+}
+
+/** Which removal a drawn line is (a tombstone in the app's words), or null for every other line. */
+export function groupRemovedKind(g: GroupLineShown | null | undefined): RemovedLineKind | null {
+    if (!g?.nodeLine || g.text === null) return null;
+    if (g.text === GROUP_LINE_REMOVED_TEXT) return 'convenor';
+    return g.text === GROUP_LINE_DELETED_TEXT ? 'author' : null;
+}
+
+/** A run of two or more removed lines of one kind, drawn as one line by its first line (core removed-line-runs). */
+export interface GroupRemovedRun {
+    kind: RemovedLineKind;
+    ids: string[];
+}
+
+/**
+ * The runs among the lines as drawn, in order (hidden lines are not drawn, so they neither join nor break a run). Each
+ * run's first id maps to the run; every other id in it maps to null (drawn by the first). A line in no run is absent.
+ */
+export function groupRemovedRuns(
+    lines: readonly { id: string }[], shown: ReadonlyMap<string, GroupLineShown> | null,
+): Map<string, GroupRemovedRun | null> {
+    const runs = new Map<string, GroupRemovedRun | null>();
+    if (!shown) return runs;
+    const drawn = lines.filter((m) => !shown.get(m.id)?.hidden);
+    for (const run of removedLineRuns(drawn, (m) => groupRemovedKind(shown.get(m.id)))) {
+        if (!isCollapsedRun(run)) continue;
+        const ids = run.lines.map((m) => m.id);
+        runs.set(ids[0], { kind: run.kind, ids });
+        for (const id of ids.slice(1)) runs.set(id, null);
+    }
+    return runs;
 }
 
 /**

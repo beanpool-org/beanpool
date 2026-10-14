@@ -59,7 +59,7 @@ import {
     type YourChatMute,
 } from '../utils/your-groups';
 import {
-    buildChatListItems, chatActionErrorMessage, hasAnyAction, isTombstone, messageActions,
+    buildChatListItems, chatActionErrorMessage, chatListIndexOf, hasAnyAction, isTombstone, messageActions,
     pendingAfterRead, shouldFollowNewMessages, showsAuthorName, tombstoneText,
     type ChatMessage, type ChatViewer,
 } from '../utils/chat-actions';
@@ -366,7 +366,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
         () => (searchOpen && searchQuery.trim() ? searchShownLines(messages.filter(m => m.type !== 'system' && m.senderId !== 'SYSTEM' && !m.unattributed), searchQuery) : messages),
         [messages, searchOpen, searchQuery],
     );
-    const listItems = useMemo(() => buildChatListItems(shownMessages), [shownMessages]);
+    const listItems = useMemo(() => buildChatListItems(shownMessages, new Date(), kind), [shownMessages, kind]);
     const showAuthorById = useMemo(() => {
         const map = new Map<string, boolean>();
         messages.forEach((m, i) => map.set(m.id, showsAuthorName(m, messages[i - 1], { kind, myPubkey: me })));
@@ -667,7 +667,8 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
                 author: parentAuthor,
                 text: parentText,
                 onPress: () => {
-                    const index = listItems.findIndex((m: any) => m.id === item.metadata.replyToId);
+                    // A removed line drawn inside a run of them: the run's row (chatListIndexOf).
+                    const index = chatListIndexOf(listItems, item.metadata.replyToId);
                     if (index > -1) {
                         try { listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 }); }
                         catch (e) { console.warn(e); }

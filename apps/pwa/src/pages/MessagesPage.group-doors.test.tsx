@@ -610,3 +610,47 @@ describe('the node\'s answer to "start a DM" never makes a held group a DM (conf
         expect(String(vi.mocked(sendMessageApi).mock.calls[0][3]).startsWith('x25519-xc20p-v2:')).toBe(true);
     });
 });
+
+describe('removed lines in a row are one line (Marty, 15 Oct: "Yes, one line")', () => {
+    /** A line removed by a convenor (Ana), or deleted by its author (Ben): the node's tombstone row. */
+    const tombstone = (by: 'convenor' | 'author') => {
+        const id = crypto.randomUUID();
+        node.lines.push({ id, author: ben.publicKey, ciphertext: 'eA==', nonce: 'plaintext-v1', metadata: { removed: true, removedBy: by === 'convenor' ? ana.publicKey : ben.publicKey } });
+        return id;
+    };
+    const sealedLine = async (text: string) => {
+        const { epoch, key } = await groupKeyring(node.as(ben.publicKey), ben, G, memoryGroupLockStore()).prepareToSeal();
+        const id = crypto.randomUUID();
+        const sealed = sealLine(text, { myEdPrivHex: ben.privateKey, groupKey: key, groupId: G, epoch, messageId: id });
+        node.lines.push({ id, author: ben.publicKey, ciphertext: sealed.ciphertext, nonce: sealed.nonce, metadata: { epoch, sender: ben.publicKey } });
+        forgetGroupKeys();
+        return id;
+    };
+    const drawn = () => screen.queryAllByTestId('group-line-tombstone').map((el) => el.textContent);
+
+    it('eleven in a row: one line that counts them, every line still an anchor a reply can scroll to', async () => {
+        const ids = Array.from({ length: 11 }, () => tombstone('convenor'));
+        await openChat();
+        await waitFor(() => expect(drawn()).toEqual(['11 messages removed by a convenor']), { timeout: 3000 });
+        expect(screen.queryByText('Removed by a convenor')).toBeNull();
+        const run = screen.getByTestId('group-line-tombstone');
+        expect(run.id).toBe(`msg-${ids[0]}`);
+        for (const id of ids) expect(run.contains(document.getElementById(`msg-${id}`))).toBe(true);
+    });
+
+    it('a real line between breaks the run; one alone keeps today\'s words; an author\'s own deletes join only each other', async () => {
+        tombstone('convenor'); tombstone('convenor');
+        await sealedLine('Bring gloves');
+        tombstone('convenor'); tombstone('convenor'); tombstone('convenor');
+        await sealedLine('See you there');
+        tombstone('convenor');
+        await sealedLine('Thanks all');
+        tombstone('author'); tombstone('author'); tombstone('convenor');
+        await openChat();
+        await waitFor(() => expect(drawn()).toEqual([
+            '2 messages removed by a convenor', '3 messages removed by a convenor', 'Removed by a convenor',
+            '2 messages were deleted', 'Removed by a convenor',
+        ]), { timeout: 3000 });
+        expect(screen.getByText('Bring gloves')).toBeTruthy();
+    });
+});

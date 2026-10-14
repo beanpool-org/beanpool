@@ -8,6 +8,7 @@
  *
  * No React and no device modules here on purpose: utils/__tests__ runs in plain node.
  */
+import { isCollapsedRun, removedLineRuns, removedRunText, type RemovedLineKind } from '@beanpool/core';
 import { dmQuoteLabel, type DmQuoteFrom } from './e2e-crypto';
 
 /** Authors may edit a text message for this long after sending (mirrors the node's window). */
@@ -274,19 +275,56 @@ export interface ChatDaySeparator {
     label: string;
 }
 
-export type ChatListItem = ChatMessage | ChatDaySeparator;
+/**
+ * Two or more removed lines in a row, of one kind, drawn as one line (core removed-line-runs; Marty, 15 Oct). Keyed by
+ * its first line's id, so the list keeps a stable key as the run grows; `lineIds` holds every line it stands for.
+ */
+export interface ChatRemovedRun {
+    id: string;
+    type: 'removed-run';
+    kind: RemovedLineKind;
+    lineIds: string[];
+    /** The time under it: its last line's. */
+    timestamp: string;
+}
+
+export type ChatListItem = ChatMessage | ChatDaySeparator | ChatRemovedRun;
 
 export function isDaySeparator(item: ChatListItem): item is ChatDaySeparator {
     return (item as ChatDaySeparator).type === 'day-separator';
+}
+
+export function isRemovedRun(item: ChatListItem): item is ChatRemovedRun {
+    return (item as ChatRemovedRun).type === 'removed-run';
+}
+
+/** A run's words, in the device's language: "11 messages removed by a convenor". */
+export function removedRunLineText(run: ChatRemovedRun): string {
+    return removedRunText(run.kind, run.lineIds.length);
+}
+
+/**
+ * Which removal a line is, for joining runs: only in a group chat, the one chat with two readings (tombstoneText). Every
+ * other line, and every line of another kind of chat, is null and joins nothing.
+ */
+export function removedLineKind(m: ChatMessage, kind: ChatKind | undefined): RemovedLineKind | null {
+    if (kind !== 'group' || !isTombstone(m)) return null;
+    return tombstoneText(m, kind) === REMOVED_BY_CONVENOR_TEXT ? 'convenor' : 'author';
+}
+
+/** Where a line is drawn in the list: its own row, or the run that stands for it. -1 when it is not there. */
+export function chatListIndexOf(items: readonly ChatListItem[], id: string): number {
+    return items.findIndex((item) => item.id === id || (isRemovedRun(item) && item.lineIds.includes(id)));
 }
 
 /**
  * The rows an inverted list draws: day pills interleaved between messages from different calendar days, then
  * the whole thing reversed, because index 0 of an inverted list renders at the visual BOTTOM.
  *
- * `messages` comes in oldest-first, which is what both the DM database read and the node's thread read give.
+ * `messages` comes in oldest-first, which is what both the DM database read and the node's thread read give. In a group
+ * chat (`kind`), two or more removed lines in a row of one kind are drawn as one (ChatRemovedRun); a day pill breaks a run.
  */
-export function buildChatListItems(messages: ChatMessage[], now: Date = new Date()): ChatListItem[] {
+export function buildChatListItems(messages: ChatMessage[], now: Date = new Date(), kind?: ChatKind): ChatListItem[] {
     const items: ChatListItem[] = [];
     let lastDay: string | null = null;
     for (const m of messages) {
@@ -300,7 +338,17 @@ export function buildChatListItems(messages: ChatMessage[], now: Date = new Date
         }
         items.push(m);
     }
-    return items.reverse();
+    const runs = removedLineRuns(items, (item) => (isDaySeparator(item) || isRemovedRun(item) ? null : removedLineKind(item, kind)));
+    const drawn: ChatListItem[] = [];
+    for (const run of runs) {
+        if (!isCollapsedRun(run)) { drawn.push(...run.lines); continue; }
+        const lines = run.lines as ChatMessage[];
+        drawn.push({
+            id: lines[0].id, type: 'removed-run', kind: run.kind,
+            lineIds: lines.map((l) => l.id), timestamp: lines[lines.length - 1].timestamp ?? '',
+        });
+    }
+    return drawn.reverse();
 }
 
 /**

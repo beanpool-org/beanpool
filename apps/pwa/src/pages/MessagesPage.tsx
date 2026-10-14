@@ -26,7 +26,7 @@ import { groupKeyring, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_WAITI
 import { indexedDbGroupLockStore } from '../lib/group-chat-lock-store';
 import {
     chatIsLocked, groupChatNotice, groupChatSendPlan, heldGroupRefusal, sendSealedGroupLine, editSealedGroupLine, openGroupThread,
-    groupLineShown, type GroupLineShown, type OpenedGroupThread,
+    groupLineShown, groupRemovedRuns, type GroupLineShown, type OpenedGroupThread,
 } from '../lib/group-chat-lines';
 import { searchShownLines, GROUP_LINE_UNVERIFIED_NAME, type DisplayRosterRow } from '../lib/group-line-display';
 import { type BeanPoolIdentity } from '../lib/identity';
@@ -41,7 +41,7 @@ import { nodeRefusal } from '../lib/node-refusal';
 import { useMembersOnDemand, useMemberSearch, memberKeysBatches, membersByKeys, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { ReportModal } from '../components/ReportModal';
 import { EventChat } from '../components/EventChat';
-import { listPhotoUrl } from '@beanpool/core';
+import { listPhotoUrl, removedRunText } from '@beanpool/core';
 
 const ALLOWED_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '😁'];
 const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -290,6 +290,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
             .map((m) => ({ m, text: groupShown?.get(m.id)?.text ?? (groupLocked ? '' : decryptMessage(m)) }));
         return searchShownLines(texts, q).map((x) => x.m);
     }, [shownMessages, chatSearch, groupShown, groupLocked]);
+    // Two or more removed lines in a row, of one kind, drawn as one line (Marty, 15 Oct): display only, every id kept.
+    const removedRuns = useMemo(() => groupRemovedRuns(searchedMessages, groupShown), [searchedMessages, groupShown]);
     // Every line of the open DM judged in that order (e2e-crypto checkDmThread): an encrypted line opened bound to the
     // author and id the node shows it under, and one that doesn't open never shown as anyone's words; a row in a member's
     // name that isn't an encrypted line never either; one the node moved or reordered, and every old-format line, marked;
@@ -1694,11 +1696,15 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                         // From before this member's membership (design §3): never drawn.
                         if (groupLine?.hidden) return null;
                         if (groupLine?.nodeLine && groupLine.text !== null) {
-                            // A tombstone, in the app's own words: no name, no actions.
+                            // A tombstone, in the app's own words: no name, no actions. A run of them is drawn once, by its
+                            // first line, which keeps every line's anchor so a reply's "show the message" still lands.
+                            const run = removedRuns.get(msg.id);
+                            if (run === null) return null;
                             return (
-                                <div key={msg.id} id={`msg-${msg.id}`} data-testid="group-line-tombstone" style={{ alignSelf: 'center', margin: '0.5rem 0', maxWidth: '90%' }}>
+                                <div key={msg.id} id={`msg-${msg.id}`} data-testid="group-line-tombstone" data-removed-count={run ? run.ids.length : undefined} style={{ alignSelf: 'center', margin: '0.5rem 0', maxWidth: '90%' }}>
+                                    {run?.ids.slice(1).map((id) => <span key={id} id={`msg-${id}`} />)}
                                     <div style={{ background: 'var(--bg-hover)', color: 'var(--text-muted)', borderRadius: '16px', padding: '0.4rem 0.8rem', fontSize: '0.8rem', fontStyle: 'italic', textAlign: 'center' }}>
-                                        {groupLine.text}
+                                        {run ? removedRunText(run.kind, run.ids.length) : groupLine.text}
                                     </div>
                                 </div>
                             );

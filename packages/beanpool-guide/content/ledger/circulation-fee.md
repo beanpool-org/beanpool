@@ -29,8 +29,6 @@ The fee builds up day by day and is taken a little at a time, whenever your acco
 
 ## Seeing it
 
-On the **Ledger**, **Wallet**, the **Community Circulation** box shows about how much you will pay this month. It only shows when you hold beans. Above 1,000 beans it turns amber and suggests spending some.
-
-Tap it for **System Circulation**, which explains the fee.
+On the **Ledger**, **Wallet**, the **Community Circulation** box shows about how much you will pay this month. It only shows when you hold beans. Above 1,000 beans it turns amber. On the phone it also suggests spending some, and you can tap it for **System Circulation**, which explains the fee.
 
 Holiday Mode does not pause the fee.

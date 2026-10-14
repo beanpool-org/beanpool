@@ -7,7 +7,7 @@ related: the-pulse, learn, your-profile, privacy
 
 ## Add a channel
 
-- In the **Pulse**, tap **+ Channels**. Or open **Settings** and tap **Channels & Showcase**.
+- In the **Pulse**, tap **+ Channels**. On the phone you can also open **Settings** and tap **Channels & Showcase**.
 - Tap **+ Add a channel**.
 - Under **Where do you post?**, choose the site.
 - Type or paste **Your link or handle**.
@@ -17,8 +17,10 @@ related: the-pulse, learn, your-profile, privacy
 Each site works a little differently. The screen says which:
 
 - **Updates itself** (YouTube, SoundCloud, a blog): new posts appear on the Pulse by themselves.
-- **A tap per post** (Instagram, TikTok, Facebook): share each post by hand. Where the screen offers **Connect**, you can link the account instead. The link is kept on this phone only. Signing out of the phone removes it, so connect again when you come back.
+- **A tap per post** (Instagram, TikTok, Facebook): share each post by hand. Where the screen offers **Connect**, you can link the account instead. Your posts then come in when you connect and each time you tap **↻ Sync videos**. Your community's server does not fetch them by itself. The link is kept on this phone only. Signing out of the phone removes it. When you come back the channel keeps its badge, but to bring in posts again tap **Disconnect**, then **Connect**.
 - **Shows as a card** (a website).
+
+**Connect** is only in the phone app. In the web app, share each post with **+ Share post**.
 
 ## Verified accounts
 
@@ -41,4 +43,4 @@ Tap **Share a post to Pulse**. Paste the **Post URL**, check which channel and s
 
 ## Remember
 
-Whatever you share to the Pulse is shown with your name and photo. Anyone who opens your community's Pulse can see it, including people who have not joined.
+Whatever you share to the Pulse is shown with your name and photo. Everyone in your community can see it. People who have not joined cannot.

@@ -20,7 +20,7 @@ Your trust badge does not matter.
 - Tap **Select recipient...**, search for their name and tap it.
 - Type the **Amount**. Add a **Memo** if you like, such as "Thanks for the tomatoes".
 - Check **Recipient receives**. Gifts have no fee, so they get it all.
-- Tap **Confirm Transfer**. You see **Sent!**
+- Tap **Confirm Transfer**. On the phone you see **Sent!**; in the web app the form closes and the gift shows in your transactions.
 
 A gift cannot be taken back. Check the name before you send.
 

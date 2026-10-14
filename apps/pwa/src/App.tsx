@@ -51,7 +51,6 @@ import { ProfileSetup } from './components/ProfileSetup';
 import { RecoveryAlertBanner } from './components/RecoveryAlertBanner';
 import { OwnerWordsPrompt } from './components/OwnerWordsPrompt';
 import { NewAccountCard } from './components/NewAccountCard';
-import { OneWayBackCard } from './components/OneWayBack';
 import { captureAuthReturn, consumeCapturedAuthReturn } from './lib/web-join';
 import { clearPendingLink, finishLink, isLinkReturn, type LinkResult } from './lib/link-signin';
 import { ModerationPauseCard } from './components/ModerationPauseCard';
@@ -130,7 +129,7 @@ export function App() {
 
     // ── The tour (DESIGN-getting-started-fable.md §2) and the "?" (§4) ──
     // Home starts the tour and owns what it writes (lib/tour-store.ts); the bar is drawn here, over the real tabs.
-    const { run: tour, home: tourHomeNow } = useTour();
+    const { run: tour, home: tourHomeNow, offered: tourOffered } = useTour();
     const tourRunning = !!tour && !!identity && tour.publicKey === identity.publicKey;
     const steps = tour ? tourSteps('web', tour.node) : [];
     const tourIndex = tour ? Math.min(tour.step, steps.length - 1) : 0;
@@ -232,6 +231,10 @@ export function App() {
     // null as a member, as before.
     const [isGuest, setIsGuest] = useState<boolean | null>(null);
     const [showProfileSetup, setShowProfileSetup] = useState(false);
+    // The install banner (rehearsal 14 Oct, B1) never sits on the tour or a screen drawn over the tabs, and a member is
+    // first offered it once the tour has ended: while Home has not said, or says its Getting started card is up, it waits.
+    const tourStillOffered = !!identity && isGuest === false && (tourOffered?.publicKey !== identity.publicKey || tourOffered.up);
+    const installHeldBack = tourRunning || tourStillOffered || showSettings || showProfileSetup || !!openTreasuryPubkey || !!openProfilePubkey;
     // "Your account is new" (G11-e): put away in this browser for this account; Settings keeps showing it.
     const [newAccountCardClosed, setNewAccountCardClosed] = useState(false);
     useEffect(() => {
@@ -915,18 +918,13 @@ export function App() {
                                     />
                                     {/* A member only: a guest has no standing here to read. A pause is never put away. */}
                                     {isGuest === false && <ModerationPauseCard refreshKey={standingKey} />}
-                                    {isGuest === false && !newAccountCardClosed && (
+                                    {/* The new account's limits and One way back show on Home only (rehearsal 14 Oct, S1): above
+                                        every tab they pushed the Market, Commons and Ledger below the first screen at 320 px. */}
+                                    {isGuest === false && activeTab === 'home' && !newAccountCardClosed && (
                                         <NewAccountCard onClose={closeNewAccountCard} />
                                     )}
-                                    {/* Joined with 12 words alone: one way back, said plainly, with a sign-in to add. On Home it is
-                                        the `safety` card, in its place among the cards (pages/HomePage.tsx). */}
-                                    {isGuest === false && activeTab !== 'home' && (
-                                        <OneWayBackCard
-                                            identity={identity}
-                                            placement="landing"
-                                            onSeeWords={() => { setSettingsInitialMode('seed'); setShowSettings(true); }}
-                                        />
-                                    )}
+                                    {/* Joined with 12 words alone, One way back is Home's `safety` card, in its place among the
+                                        cards (pages/HomePage.tsx), and not repeated above the other tabs. */}
                                 </div>
                             )}
                             {activeTab === 'map' && (
@@ -1235,7 +1233,7 @@ export function App() {
             )}
 
             {/* PWA Install Banner */}
-            <InstallPrompt />
+            <InstallPrompt hidden={installHeldBack} />
         </div>
     );
 }

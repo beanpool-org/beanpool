@@ -5,7 +5,7 @@ summary: What an owner's or admin's AI assistant can read about you, what it nev
 related: what-the-admins-can-see, reporting, privacy, joining
 ---
 
-Your community's owners can connect their own AI assistant (for example Claude or ChatGPT) to your community's server, to help them look after it: to ask what needs them, or to summarise the open reports. Admins will be able to as well, approved on their phone, in a coming update. They connect it themselves, and they can disconnect it at any time. The other owners are told when one is connected.
+Your community's owners can connect their own AI assistant (for example Claude or ChatGPT) to your community's server, to help them look after it: to ask what needs them, or to summarise the open reports. Admins can too: they add your community's address to their assistant and approve it on their phone. They connect it themselves, and they can disconnect it at any time. The other owners are told when one is connected.
 
 ## What it can read about you
 
@@ -17,7 +17,7 @@ An assistant sees much less than an admin does in Settings. Your community's ser
 
 ## What it never sees
 
-Your messages and chats, your balance and trades, your keys, your address, your photos, the names list, and who reported anyone. It can't change anything about you: it can't remove you, mute you, take down your post or answer your join request. An admin does those, in Settings.
+Your messages and chats, your balance and trades, your keys, your address, your photos, the names list, and who reported anyone. It can't change anything about you: it can't remove you, mute you, take down your post or answer your join request. Those are done by people. An admin does them in Settings or on their phone, and a join request is answered in the app by any member who may invite.
 
 An assistant can suggest what to do about a report, for example to keep your post or take it down. Nothing happens unless the admin it works for reads the report and approves; anything you hear about it comes from your community's moderators, as always.
 

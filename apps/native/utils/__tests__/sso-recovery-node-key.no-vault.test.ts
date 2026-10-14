@@ -152,6 +152,21 @@ async function expectEmptyPhone() {
 }
 
 describe('a sign-in restore at the community: the key must be the account the community lists for the name', () => {
+    it('opens the session for the one listed account by its key, so a name another account holds in another case still opens', async () => {
+        listed([{ publicKey: accountPub, callsign: 'Marty' }]);
+        mockSignInAndNode(await singleBlob(OTHER_SEED));
+        await restore('marty').catch(() => undefined);
+        expect(routesAsked()[0]).toBe('/api/recovery/collect');
+        expect(vi.mocked(signedPost).mock.calls[0][2]).toEqual({ callsign: 'marty', candidatePublicKey: accountPub });
+    });
+
+    it('with several accounts listed, opens by the name alone, as before (this screen has no list to pick from)', async () => {
+        listed([{ publicKey: accountPub, callsign: 'Marty' }, { publicKey: 'ab'.repeat(32), callsign: 'MARTY' }]);
+        mockSignInAndNode(await singleBlob(OTHER_SEED));
+        await restore('marty').catch(() => undefined);
+        expect(vi.mocked(signedPost).mock.calls[0][2]).toEqual({ callsign: 'marty' });
+    });
+
     it('a copy that opens to another key than the listed account saves nothing, and says so', async () => {
         listed([{ publicKey: accountPub, callsign: 'Marty' }]);
         mockSignInAndNode(await singleBlob(OTHER_SEED));

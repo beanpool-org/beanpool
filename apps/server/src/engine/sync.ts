@@ -1094,6 +1094,11 @@ function postScope(rp: any): [string, string | null, string | null, string | nul
  * update: a restore clears the hide on the replica too. A main server from before G3 sends neither, and never set
  * either, so null is what it holds.
  */
+/** The event's "host lets people in" flag as the main server holds it; null from a peer older than it (the update keeps what is here). */
+function hostLetsInValue(rp: any): number | null {
+    return rp.eventHostLetsIn === true ? 1 : rp.eventHostLetsIn === false ? 0 : null;
+}
+
 function postModeration(rp: any): [string | null, string | null] {
     return [instantOrNull(rp.hiddenByReportsAt), instantOrNull(rp.removedByModeratorAt)];
 }
@@ -1854,10 +1859,10 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 const pollClosesAtVal = rp.pollClosesAt || null;
                 if (!existing) {
                     db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, poll_open_vote, created_by,
-                                event_start_at, event_end_at, event_place_name, event_private_note, event_state,
+                                event_start_at, event_end_at, event_place_name, event_private_note, event_state, event_host_lets_in,
                                 audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
                                 hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''))`).run(
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''))`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -1893,6 +1898,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         rp.eventPlaceName ?? null,
                         rp.eventPrivateNote ?? null,
                         rp.eventState ?? null,
+                        hostLetsInValue(rp),
                         ...postScope(rp),
                         ...postModeration(rp),
                         ...postSearch(rp),
@@ -1928,6 +1934,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         event_place_name = ?,
                         event_private_note = ?,
                         event_state = ?,
+                        event_host_lets_in = COALESCE(?, event_host_lets_in),
                         audience_scope = ?,
                         target_group_id = ?,
                         target_pubkey = ?,
@@ -1966,6 +1973,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         rp.eventPlaceName ?? null,
                         rp.eventPrivateNote ?? null,
                         rp.eventState ?? null,
+                        hostLetsInValue(rp),
                         ...postScope(rp),
                         ...postModeration(rp),
                         ...postSearch(rp),
@@ -2594,6 +2602,11 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         signature = excluded.signature,
                         updated_at = excluded.updated_at
                     ${RSVP_CONFLICT_GUARD}`);
+                // The let-in (DESIGN-global-member-privacy-fable.md §2.4) rides on the same row and the same watermark: written
+                // only onto the row this import just made the main server's (its updated_at), so an older copy never sets
+                // or clears it. `undefined` (a peer older than the let-in) keeps what is here, as for reminders.
+                const importLetIn = db.prepare(`UPDATE event_rsvps SET let_in_at = ?, let_in_by = ?
+                    WHERE post_id = ? AND member_pubkey = ? AND updated_at = ?`);
                 const tombstoneAt = db.prepare(`SELECT deleted_at FROM tombstones WHERE table_name = 'event_rsvps' AND row_key = ?`);
                 for (const er of remote.eventRsvps) {
                     if (er.status !== 'going' && er.status !== 'interested') continue;
@@ -2608,6 +2621,9 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                     } else {
                         importRsvp.run(er.postId, er.memberPubkey, er.status, er.signature || '',
                             er.reminderOffsets, updatedAt);
+                    }
+                    if (er.letInAt !== undefined) {
+                        importLetIn.run(er.letInAt ?? null, er.letInBy ?? null, er.postId, er.memberPubkey, updatedAt);
                     }
                 }
             }

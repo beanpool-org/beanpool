@@ -1337,6 +1337,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_private_note TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_state TEXT CHECK (event_state IS NULL OR event_state IN ('scheduled', 'updated', 'cancelled'))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_conversation_id TEXT`).run(); } catch { }
+    // "Host lets people in" (DESIGN-global-member-privacy-fable.md §2.4). NULL on every existing row reads as off.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_host_lets_in INTEGER`).run(); } catch { }
     // Moderation on the global profile (G3, engine/auto-moderation.ts). Before the schema.sql exec, which indexes
     // hidden_by_reports_at and (author_pubkey, removed_by_moderator_at), and whose members_touch_updated_at (dropped
     // below, so the exec recreates it) lists moderation_muted_until. NULL on every existing row: nothing hidden,
@@ -1366,6 +1368,10 @@ export function initSchema() {
     // is not the failure we want to discover at boot. NULL on every existing row means "my default
     // applies", which is exactly the behaviour a node that upgrades into this should have.
     try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN reminder_offsets TEXT`).run(); } catch { }
+    // Who the host let in (DESIGN-global-member-privacy-fable.md §2.4). NULL on every existing row: nobody let in yet, which
+    // matters only on an event whose host lets people in, and no existing event is one.
+    try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN let_in_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE event_rsvps ADD COLUMN let_in_by TEXT`).run(); } catch { }
 
     // Enterprise pause and wind-up (docs/the-commons.md §2.2, §2.6, Slice 6)
     try { db.prepare(`ALTER TABLE members ADD COLUMN paused_at DATETIME`).run(); } catch { }

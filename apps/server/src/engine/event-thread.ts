@@ -17,6 +17,7 @@ import {
     getMember,
     getConversation,
     isEventHost,
+    mayReadEventPrivate,
     convenorHostPaused,
     CONVENOR_POWERS_PAUSED,
     isVisitorKey,
@@ -35,10 +36,18 @@ export const EVENT_THREAD_MESSAGE_MAX = 2000;
 export const EVENT_THREAD_REMOVED_TEXT = 'removed by the host';
 /** The one line the chat screen carries: this chat is not end-to-end encrypted (decision 25). */
 export const EVENT_THREAD_NOTICE = "Visible to the host, everyone going, and this node's operator.";
+/** The same line where the host lets people in (DESIGN-global-member-privacy-fable.md §2.3). */
+export const EVENT_THREAD_NOTICE_LET_IN = "Visible to the host, the people going whom the host let in, and this node's operator.";
 
 export const EVENT_NOT_FOUND = 'Event not found';
 export const EVENT_CHAT_FORBIDDEN = 'Only the host and people going can open this event chat';
 export const EVENT_CHAT_GONE = 'This event is no longer available';
+/**
+ * Going to an event whose host lets people in, and not let in yet (DESIGN-global-member-privacy-fable.md §2.3). The route
+ * answers 403 with `code: 'waiting_for_host'`, so an app tells it from EVENT_CHAT_FORBIDDEN without reading words.
+ */
+export const EVENT_CHAT_WAITING = "The host hasn't let you in yet: the chat opens when they do.";
+export const EVENT_CHAT_WAITING_CODE = 'waiting_for_host';
 /** The host of an event hidden by reports (G3): its chat takes no new line until a moderator restores it. */
 export const EVENT_CHAT_HIDDEN = 'This event is hidden while a moderator looks at reports about it, so its chat is paused until it is restored.';
 
@@ -85,11 +94,12 @@ interface EventRow {
     audience_scope: string | null;
     target_group_id: string | null;
     event_private_note: string | null;
+    event_host_lets_in: number | null;
     hidden_by_reports_at: string | null;
 }
 
 const EVENT_COLUMNS = `id, title, active, status, event_state, event_end_at, author_pubkey, created_by,
-                       audience_scope, target_group_id, event_private_note, hidden_by_reports_at, type`;
+                       audience_scope, target_group_id, event_private_note, event_host_lets_in, hidden_by_reports_at, type`;
 
 /** The event row behind a chat, or a refusal. The chat id IS the post id (§2.1). */
 export function loadEventForThread(postId: string): EventRow {
@@ -168,7 +178,25 @@ export function canReadEventThread(row: EventRow, pubkey: string | undefined): b
     if (!pubkey || isVisitorKey(db, pubkey)) return false;
     if (eventHiddenFrom(row, pubkey)) return false;
     if (isEventHost(db, row, pubkey)) return true;
-    return !postOutOfSight(row, pubkey) && eventRsvpStatusOf(row.id, pubkey) === 'going';
+    // Going, and let in where the host lets people in: the one rule the post read uses for the note (@beanpool/engine
+    // mayReadEventPrivate, DESIGN-global-member-privacy-fable.md §2.4).
+    return !postOutOfSight(row, pubkey) && mayReadEventPrivate(db, row, pubkey);
+}
+
+/**
+ * Going to an event whose host lets people in, in sight of it, and not let in: told they are waiting, never "only the
+ * host and people going" (they are going). False for everyone canReadEventThread lets in or refuses for another reason.
+ */
+export function waitingForHost(row: EventRow, pubkey: string | undefined): boolean {
+    if (!pubkey || row.event_host_lets_in !== 1 || isVisitorKey(db, pubkey)) return false;
+    if (eventHiddenFrom(row, pubkey) || postOutOfSight(row, pubkey) || isEventHost(db, row, pubkey)) return false;
+    return eventRsvpStatusOf(row.id, pubkey) === 'going' && !mayReadEventPrivate(db, row, pubkey);
+}
+
+/** The refusal for someone canReadEventThread turns away: waiting for the host, or not Going at all. */
+function eventChatRefusal(row: EventRow, pubkey: string | undefined): Error {
+    if (waitingForHost(row, pubkey)) return Object.assign(new Error(EVENT_CHAT_WAITING), { code: EVENT_CHAT_WAITING_CODE });
+    return new Error(EVENT_CHAT_FORBIDDEN);
 }
 
 /**
@@ -244,7 +272,9 @@ export function addEventThreadParticipant(postId: string, pubkey: string | null 
 
 /**
  * Mirror one RSVP into chat membership (§2.2): Going adds you, Interested or "not going" removes you. The
- * host never leaves the chat.
+ * host never leaves the chat. Where the host lets people in, Going adds you once you are let in, and a take-back removes
+ * you (DESIGN-global-member-privacy-fable.md §2.4): a seat in the mirror is a key every other reader of the chat is
+ * handed in its participants (the #1939 review's N6), so a stranger waiting for the host has none.
  *
  * Leaving writes a `conversation_participants` tombstone, so a backup drops the row too rather than
  * keeping a membership whose RSVP is gone. The read and post paths still re-check the RSVP rather than
@@ -257,7 +287,7 @@ export function syncEventThreadMembership(postId: string, pubkey: string, status
     } catch {
         return;
     }
-    if (status === 'going') {
+    if (status === 'going' && mayReadEventPrivate(db, row, pubkey)) {
         ensureEventThread(postId);
         addEventThreadParticipant(postId, pubkey);
         return;
@@ -323,9 +353,12 @@ export function getEventThread(
     const row = loadEventForThread(postId);
     if (eventUnknownTo(row, viewerPubkey)) throw new Error(EVENT_NOT_FOUND);
     if (isEventThreadExpired(row)) throw new Error(EVENT_CHAT_GONE);
-    if (!canReadEventThread(row, viewerPubkey)) throw new Error(EVENT_CHAT_FORBIDDEN);
+    if (!canReadEventThread(row, viewerPubkey)) throw eventChatRefusal(row, viewerPubkey);
 
-    const conversation = ensureEventThread(postId);
+    const ensured = ensureEventThread(postId);
+    // Only the people who may read the chat now (the #1939 review's N6): the mirror keeps the seat of someone removed
+    // from the event's group, and their key is not the other readers' to have.
+    const conversation = { ...ensured, participants: ensured.participants.filter(pk => canReadEventThread(row, pk)) };
     const readOnlyReason = eventThreadReadOnlyReason(row);
     const host = isEventHost(db, row, viewerPubkey);
 
@@ -340,7 +373,7 @@ export function getEventThread(
         eventEndAt: row.event_end_at,
         eventState: row.event_state || 'scheduled',
         privateNote: row.event_private_note || null,
-        notice: EVENT_THREAD_NOTICE,
+        notice: row.event_host_lets_in === 1 ? EVENT_THREAD_NOTICE_LET_IN : EVENT_THREAD_NOTICE,
     };
 }
 
@@ -356,7 +389,7 @@ export function postEventThreadMessage(
     // Its author still reads it, but a line now would reach the people Going, whom the event is hidden from.
     if (row.hidden_by_reports_at) throw new Error(EVENT_CHAT_HIDDEN);
     if (isEventThreadExpired(row)) throw new Error(EVENT_CHAT_GONE);
-    if (!canReadEventThread(row, authorPubkey)) throw new Error(EVENT_CHAT_FORBIDDEN);
+    if (!canReadEventThread(row, authorPubkey)) throw eventChatRefusal(row, authorPubkey);
     const readOnlyReason = eventThreadReadOnlyReason(row);
     if (readOnlyReason) throw new Error(readOnlyReason);
 

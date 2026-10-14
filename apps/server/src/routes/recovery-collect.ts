@@ -79,7 +79,9 @@ import type { RouteDeps } from './types.js';
 /**
  * The account a sign-in restore by `callsign` is for: by the one name rule (`foldName`, the engine's names.ts), with the
  * status predicate of idx_members_callsign_unique, and never a visitor's row (a member of another community, or a key
- * someone sent to), which no restore here brings back and which a federation peer names (review of #1956, N3).
+ * someone sent to), which no restore here brings back and which a federation peer names (review of #1956, N3), nor an
+ * enterprise's or a project's row, which no one restores and which may hold a member's name in another case from before
+ * #1956, making an older app's restore by name ambiguous for nothing (deciding review of #1977, N6).
  *
  * `publicKey`, when the device sends one (`candidatePublicKey`, a candidate's key from the lookup, findRecoveryCandidates,
  * which lists the same rows; named so the middleware's spoof check reads it as someone else's key, as it is: the device
@@ -90,7 +92,7 @@ import type { RouteDeps } from './types.js';
 function resolveCallsign(callsign: string, publicKey?: string): { pubkey?: string; ambiguous: boolean } {
     const rows = db.prepare(`
         SELECT public_key FROM members
-        WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned') AND is_visitor = 0
+        WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned') AND is_visitor = 0 AND COALESCE(is_treasury, 0) = 0
     `).all(foldName(callsign)) as { public_key: string }[];
     if (publicKey !== undefined) return { pubkey: rows.find((r) => r.public_key === publicKey)?.public_key, ambiguous: false };
     if (rows.length > 1) return { ambiguous: true };

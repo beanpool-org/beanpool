@@ -32,15 +32,28 @@ export function foldName(name: string): string {
 /**
  * The member name of a project's enterprise row (a crowdfund's, a Commons proposal's) for `title`: its first 40 characters,
  * or, when another live row (not migrated, not pruned) holds a name that folds the same, those cut to 33 with "-" and the
- * row id's first six. A project's title is free text and two may be alike; the row's name is a member name like any other,
- * so it takes the one name rule at the create and at every title edit, which wrote the title there unchecked (review of
- * #1956, N3). The title itself is stored as typed (projects, commons_projects).
+ * row id's first six, else its first 8, 10 … up to the whole id, else the whole id and a number: the first that is free.
+ * A project's title is free text and two may be alike; the row's name is a member name like any other, so it takes the
+ * one name rule at the create and at every title edit, which wrote the title there unchecked (review of #1956, N3). The
+ * suffixed name is checked too: the id of a project being edited is public, so a member may hold "<title>-<first six>"
+ * (deciding review of #1977, N1). The title itself is stored as typed (projects, commons_projects).
  */
 export function projectRowName(db: Db, title: string, id: string): string {
     const base = (title || 'Project').trim().slice(0, 40) || 'Project';
-    const taken = db.prepare(`SELECT 1 FROM members WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ? LIMIT 1`)
-        .get(foldName(base), id);
-    return taken ? `${base.slice(0, 33)}-${id.slice(0, 6)}` : base;
+    const taken = db.prepare(`SELECT 1 FROM members WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ? LIMIT 1`);
+    const free = (name: string) => !taken.get(foldName(name), id);
+    if (free(base)) return base;
+    const head = base.slice(0, 33);
+    for (let n = 6; ; n += 2) {
+        const name = `${head}-${id.slice(0, n)}`;
+        if (free(name)) return name;
+        if (n >= id.length) break;
+    }
+    for (let i = 2; i < 1000; i++) {
+        const name = `${head}-${id}-${i}`;
+        if (free(name)) return name;
+    }
+    return `${head}-${id}-${Date.now()}`;
 }
 
 /**

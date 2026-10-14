@@ -13,6 +13,13 @@
  *   4. A Commons project's and a crowdfund's title edit, to a member's name in another case: the enterprise row gets a name
  *      of its own (the title with "-" and the id's first six, as a create on a clash), never a database error, and the
  *      member's restore by name still opens.
+ *   5. A member holding a key's "Visitor-<first 8>" (names are not reserved, and a key's first 8 are public): a member
+ *      still opens a conversation with that key, and every federation path still makes its row, by no name or a taken
+ *      one, under a "Visitor-…" name free by the one rule (deciding review of #1977, B1).
+ *   6. A project's suffixed name is checked too: with "Rake" and "Rake-<first six of the id>" held, an edit to "Rake"
+ *      lengthens the id part (N1).
+ *   7. A peer's name is cut to a member's 32 characters (N5), and an enterprise row holding a member's name in another
+ *      case no longer makes an older app's restore by name ambiguous (N6).
  *
  *   BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-name-writers.ts
  */
@@ -95,6 +102,9 @@ function rowAsBefore(callsign: string, visitor: boolean): string {
     return pk;
 }
 
+/** No other live row holds a name that folds the same as `pk`'s. */
+const foldsAlone = (pk: string): boolean => !db.prepare(`SELECT 1 FROM members a JOIN members b ON b.callsign_fold = a.callsign_fold
+    WHERE a.public_key = ? AND b.public_key != a.public_key AND b.status NOT IN ('migrated', 'pruned') LIMIT 1`).get(pk);
 const nameOf = (pk: string) => (db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(pk) as { callsign: string } | undefined)?.callsign;
 const lookup = async (name: string) => call('GET', null, `/api/recovery/lookup/${encodeURIComponent(name)}`);
 const lookedUpKeys = (r: Res): string[] => (Array.isArray(r.body) ? r.body.map((c: any) => c.publicKey) : []);
@@ -163,7 +173,7 @@ async function main(): Promise<void> {
     const marisol = await join('Marisol');
     giveSignInCopy(marisol.pk);
     const v1 = keypair().pk, v2 = keypair().pk, v3 = keypair().pk;
-    const visit = (pk: string, name: string): string => {
+    const visit = (pk: string, name: string | undefined): string => {
         try { registerVisitor(pk, name, 'https://peer.example'); return ''; } catch (e) { return (e as Error).message; }
     };
     const e1 = visit(v1, 'даша');
@@ -218,6 +228,50 @@ async function main(): Promise<void> {
     assert(afterEdits.res.status === 200 && afterEdits.owner === dasha.pk, `after the edits the member's restore by name still opens for the member (got ${show(afterEdits.res)})`);
     const m = await collect({ callsign: 'MARISOL' });
     assert(m.res.status === 200 && m.owner === marisol.pk, `and "Marisol"'s too (got ${show(m.res)})`);
+
+    console.log('\n— 5. a member holding a key\'s "Visitor-…" name —');
+    const k = keypair();
+    await join(`Visitor-${k.pk.slice(0, 8)}`);
+    const dm = await call('POST', founder, '/api/messages/conversation', { type: 'dm', participants: [founder.pk, k.pk], createdBy: founder.pk });
+    assert(dm.status === 200 && nameOf(k.pk) === `Visitor-${k.pk.slice(0, 12)}` && foldsAlone(k.pk),
+        `a member still opens a conversation with a key whose "Visitor-<first 8>" a member holds; its row is "Visitor-<first 12>" (got ${show(dm)}, "${nameOf(k.pk) ?? '(no row)'}")`);
+    const k2 = keypair().pk;
+    await join(`Visitor-${k2.slice(0, 8)}`);
+    await join(`Visitor-${k2.slice(0, 12)}`);
+    const e5 = visit(k2, undefined);
+    assert(!e5 && nameOf(k2) === `Visitor-${k2.slice(0, 16)}` && foldsAlone(k2),
+        `a peer naming no name, with "Visitor-<first 8>" and "<first 12>" held, makes the row "Visitor-<first 16>" (got "${nameOf(k2) ?? '(no row)'}"${e5 ? `, ${e5}` : ''})`);
+    const k3 = keypair().pk;
+    await join(`VISITOR-${k3.slice(0, 8).toUpperCase()}`);
+    const e6 = visit(k3, 'MARISOL');
+    assert(!e6 && nameOf(k3) === `Visitor-${k3.slice(0, 12)}` && foldsAlone(k3),
+        `a peer naming a taken name, with "VISITOR-<FIRST 8>" held in capitals, makes the row "Visitor-<first 12>" (got "${nameOf(k3) ?? '(no row)'}"${e6 ? `, ${e6}` : ''})`);
+
+    console.log('\n— 6. a project\'s suffixed name is checked too —');
+    const shed = await call('POST', founder, '/api/crowdfund/projects', { title: 'Garden Shed', description: 'Shed', goalAmount: 100 });
+    const shedId = shed.body?.project?.id as string | undefined;
+    if (shedId) {
+        await join('Rake');
+        await join(`Rake-${shedId.slice(0, 6)}`);
+        const rake = await call('POST', founder, '/api/crowdfund/projects/update', { id: shedId, title: 'Rake', description: 'Shed', goalAmount: 100 });
+        assert(rake.status === 200 && nameOf(shedId) === `Rake-${shedId.slice(0, 8)}` && foldsAlone(shedId),
+            `with "Rake" and "Rake-<first six>" held, an edit to "Rake" names the row "Rake-<first eight>" (got ${show(rake)}, "${nameOf(shedId)}")`);
+    } else assert(false, `a crowdfund is created for the suffix case (got ${show(shed)})`);
+
+    console.log('\n— 7. a peer\'s long name; an enterprise row holding a member\'s name —');
+    const longName = `${'Ana'.repeat(10)} Long Name From Afar`;
+    const v4 = keypair().pk;
+    visit(v4, longName);
+    assert(nameOf(v4) === longName.slice(0, 32).trim(), `a peer's ${longName.length}-character name is cut to a member's 32 (got ${nameOf(v4)?.length} characters)`);
+    const timur = await join('Тимур');
+    giveSignInCopy(timur.pk);
+    const ent = crypto.randomUUID();
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_treasury, lifecycle) VALUES (?, 'ТИМУР', ?, 'active', 1, 'ongoing')`).run(ent, new Date().toISOString());
+    const tOld = await collect({ callsign: 'тимур' });
+    assert(tOld.res.status === 200 && tOld.owner === timur.pk,
+        `a member "Тимур" beside an enterprise row "ТИМУР": an older app's restore by name opens for the member (got ${show(tOld.res)})`);
+    const tEnt = await collect({ callsign: 'тимур', candidatePublicKey: ent });
+    assert(tEnt.res.status === 400 && !tEnt.owner, `the enterprise row's id as the key opens nothing (got ${show(tEnt.res)})`);
 
     console.log(`\n${passed}/${run} passed`);
 }

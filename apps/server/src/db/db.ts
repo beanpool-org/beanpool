@@ -79,7 +79,7 @@ export function migrateCallsignFold(conn: Database.Database): void {
             GROUP BY callsign_fold HAVING count(*) > 1 ORDER BY callsign_fold`).all() as { names: string; n: number }[];
         for (const c of clashes) {
             const names = (JSON.parse(c.names) as string[]).map((n) => JSON.stringify(n)).join(', ');
-            console.warn(`[DB] ⚠️  ${c.n} members hold one name in different cases: ${names}. All are kept and none is renamed; no one else can take it, a sign-in restore by this name lists each of them and restores the one chosen (an app too old to say which is refused), and their 12 words still work.`);
+            console.warn(`[DB] ⚠️  ${c.n} members hold one name in different cases: ${names}. All are kept and none is renamed; no one else can take it, the web restore lists each of them and restores the one chosen; the phone restores the one with a sign-in copy, and refuses when both have one; their 12 words still work.`);
         }
     } catch (e) {
         console.error('[DB] ⚠️  Could not set up callsign_fold; names outside A–Z may not be found or kept unique until the next boot.', e);

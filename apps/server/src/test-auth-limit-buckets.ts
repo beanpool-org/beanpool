@@ -1,8 +1,9 @@
 /**
  * The auth limiter's buckets, one per route (auth-rate-limit.ts; the privacy review's S8, 2026-10-14), through the
- * real middleware, from one address: a hall's Wi-Fi or a carrier's NAT. Pairing, the name check, the recovery lookup
- * and the password check each keep their own 15 a minute per address; none spends another's. The password check
- * still shares one bucket with every other route that takes the admin password, so a guesser gets no more than before.
+ * real middleware, from one address: a hall's Wi-Fi or a carrier's NAT. Pairing, the names (the name check and the
+ * recovery lookup, which share one bucket: both say whether a name is here) and the password check each keep their own
+ * 15 a minute per address; none spends another's. The password check still shares one bucket with every other route
+ * that takes the admin password, so a guesser gets no more than before.
  *
  * Before this, one bucket served them all: after 15 pairing calls the name check answered 429 to everyone behind
  * the address (fail-first on origin/main 1b85fb83: the checks marked FAIL-FIRST below fail there).
@@ -70,15 +71,14 @@ async function main() {
     const passwordAfterPairs = await passwordCheck();
     assert(passwordAfterPairs === 400, `FAIL-FIRST: and the password check reads the request (${passwordAfterPairs}: 400 no password; was 429)`);
 
-    // ── 2. Each route still meets its own limit at its own number ──
-    console.log('\n── 2. each route keeps its own 15 a minute ──');
+    // ── 2. Each bucket still meets its own limit at its own number ──
+    console.log('\n── 2. each bucket keeps its own 15 a minute ──');
     resetGatewayRateLimit();
-    const names = await statuses(N - 1, i => nameCheck(`Name${i}`));
-    assert(names.every(s => s === 200) && await nameCheck('NameLast') === 429,
-        `the name check: ${N} in the minute, then 429 (${names.length + 1} answered)`);
-    const lookups = await statuses(N - 1, i => lookup(`name${i}`));
-    assert(lookups.every(s => s === 200) && await lookup('namelast') === 429,
-        `the recovery lookup: ${N} in the minute, then 429`);
+    // Section 1 spent 2 of the names bucket (one name check, one lookup).
+    const names = await statuses(N - 2, i => (i % 2 ? lookup(`name${i}`) : nameCheck(`Name${i}`)));
+    const namesFull = [await nameCheck('NameLast'), await lookup('namelast')];
+    assert(names.every(s => s === 200) && namesFull.join(',') === '429,429',
+        `the name check and the recovery lookup: ${N} in the minute between them, then 429 for both (${[...names, ...namesFull].join(',')})`);
     resetGatewayRateLimit();
     const passwords = await statuses(N - 1, () => passwordCheck());
     assert(passwords.every(s => s === 400) && await passwordCheck() === 429,

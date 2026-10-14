@@ -9,8 +9,10 @@ import { clientLimiterKey } from './client-ip.js';
  *
  * `admin`, the default, is every route that takes the admin password, a 2FA code, a claim proof or an admin session
  * (verify-password, change-password, the 2FA routes, owner unlock, the admin pairing, reset, the connectors...): they
- * still share one bucket, so a guesser gets exactly the 15 a minute per address it got before, across all of them. A
- * route that guards nothing a guess can win has its own. The open door's own name check is not here at all
+ * still share one bucket, so a guesser gets exactly the 15 a minute per address it got before, across all of them.
+ * `names` is the name check and the recovery lookup together: both tell whether a name is here, so a prober gets the 15
+ * a minute it got before across the two (the privacy review's F5, test-privacy-defaults.ts). Every other route that
+ * guards nothing a guess can win has its own. The open door's own name check is not here at all
  * (`doorRateLimit` below). Chat lines do NOT come through here — they have their own per-member bucket
  * (chat-rate-limit.ts), so members chatting behind one NAT cannot lock each other out of recovery.
  *
@@ -22,8 +24,8 @@ export const AUTH_RATE_LIMIT = { perAddress: 15, windowMs: 60_000 } as const;
 export type AuthLimitBucket =
     | 'admin'
     | 'pairing'           // QR pairing: /api/pair/init and /api/pair/transfer, one pairing's two calls
-    | 'recovery-lookup'   // /api/recovery/lookup/:callsign
-    | 'callsign-check'    // /api/members/callsign-available/:callsign, unless a key joining at the open door signs it
+    | 'names'             // /api/recovery/lookup/:callsign and /api/members/callsign-available/:callsign (unless a key
+                          // joining at the open door signs it): one bucket, as both say whether a name is taken
     | 'funnel-event'      // the wizard's three counted steps, every newcomer's
     | 'knock'             // /api/join/knock (and its own daily caps, engine/knocks.ts)
     | 'pricing-guide'     // the pricing guide's read and its anonymous report

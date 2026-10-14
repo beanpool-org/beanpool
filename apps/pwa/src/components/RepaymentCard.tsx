@@ -112,7 +112,7 @@ export function RepaymentCard({ onPaid }: { onPaid?: () => void }) {
                     )}
                     <div className="flex flex-wrap gap-2">
                         {!paid && (
-                            <button type="button" onClick={pay} disabled={busy} className="flex-1 min-h-[48px] px-4 rounded-xl bg-emerald-700 text-white font-bold disabled:opacity-50">
+                            <button type="button" onClick={pay} disabled={busy} className="flex-1 min-h-[48px] px-4 rounded-xl bg-bp-commit-fill text-bp-commit-on font-bold disabled:opacity-50">
                                 {held ? 'Try again' : REPAYMENT_WORDS.payTitle}
                             </button>
                         )}

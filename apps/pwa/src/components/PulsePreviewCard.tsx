@@ -80,7 +80,7 @@ export function PulsePreviewCard({
                     <span className="truncate max-w-[150px]">{displayCallsign}</span>
                     {preview.isVerified && (
                         <span
-                            className="w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] font-black shrink-0"
+                            className="w-3.5 h-3.5 rounded-full bg-bp-commit-fill text-bp-commit-on flex items-center justify-center text-[9px] font-black shrink-0"
                             title="Verified creator"
                             aria-label="Verified creator"
                         >

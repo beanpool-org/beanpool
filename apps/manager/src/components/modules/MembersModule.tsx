@@ -938,7 +938,7 @@ export function MembersModule({
                                                                 e.stopPropagation();
                                                                 handleToggleFreezeMember(pubkey);
                                                             }}
-                                                            className="px-2.5 py-1 rounded bg-emerald-900/60 hover:bg-emerald-800 text-emerald-200 text-[10px] font-sans font-bold transition-all border border-emerald-700/80 shrink-0"
+                                                            className="px-2.5 py-1 rounded bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-[10px] font-sans font-bold transition-all border border-bp-commit-fill shrink-0"
                                                         >
                                                             🟢 Unfreeze
                                                         </button>

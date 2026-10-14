@@ -472,7 +472,7 @@ export function FleetSidebar({
                                                 onSelectNode(p.id);
                                                 onSelectTab('members');
                                             }}
-                                            className="shrink-0 px-1.5 py-0.2 rounded bg-red-900/80 hover:bg-red-800 text-red-200 text-[9px] font-sans font-bold border border-red-700 animate-pulse transition-all cursor-pointer"
+                                            className="shrink-0 px-1.5 py-0.2 rounded bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink text-[9px] font-sans font-bold border border-bp-chip-danger-ink animate-pulse transition-all cursor-pointer"
                                             title="Click to jump directly to Security Threat Inspector"
                                         >
                                             🚨 ALERT (Inspect)
@@ -484,7 +484,7 @@ export function FleetSidebar({
                                                 onSelectNode(p.id);
                                                 onSelectTab('members');
                                             }}
-                                            className="shrink-0 px-1.5 py-0.2 rounded bg-amber-900/80 hover:bg-amber-800 text-amber-200 text-[9px] font-sans font-bold border border-amber-700 transition-all cursor-pointer"
+                                            className="shrink-0 px-1.5 py-0.2 rounded bg-bp-chip-warn-tint hover:opacity-90 text-bp-chip-warn-ink text-[9px] font-sans font-bold border border-bp-chip-warn-ink transition-all cursor-pointer"
                                             title="Click to inspect Node Warnings"
                                         >
                                             ⚠️ WARN (Inspect)

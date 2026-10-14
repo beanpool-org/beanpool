@@ -1104,10 +1104,10 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                                         if (confirmType === 'approve') handleApproveClaim(claim.name);
                                                                         else handleRejectClaim(claim.name);
                                                                     }}
-                                                                    className={`px-3 py-1 rounded-lg font-bold text-xs text-white shadow-md transition-all active:scale-95 ${
+                                                                    className={`px-3 py-1 rounded-lg font-bold text-xs shadow-md transition-all active:scale-95 ${
                                                                         confirmType === 'approve'
-                                                                            ? 'bg-emerald-600 hover:bg-emerald-500'
-                                                                            : 'bg-rose-600 hover:bg-rose-500'
+                                                                            ? 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on'
+                                                                            : 'bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on'
                                                                     }`}
                                                                 >
                                                                     Yes, {confirmType === 'approve' ? 'Approve' : 'Reject'}

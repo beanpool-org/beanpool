@@ -474,7 +474,7 @@ export function StandbyReplicationPanel({
                                 id="confirm-resync-btn"
                                 onClick={handleConfirmResync}
                                 disabled={resyncing}
-                                className="min-h-[44px] px-5 py-2 rounded-xl bg-bp-gold-fill hover:bg-bp-gold-hover text-xs font-bold text-bp-gold-on border border-amber-500 shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
+                                className="min-h-[44px] px-5 py-2 rounded-xl bg-bp-gold-fill hover:bg-bp-gold-hover text-xs font-bold text-bp-gold-on border border-bp-gold-fill shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
                             >
                                 {resyncing ? (
                                     <>

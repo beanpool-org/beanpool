@@ -149,7 +149,7 @@ function ModeratorScreen({ nodeUrl, communityName, onLogout, back }: ModeratorVi
                             aria-pressed={filter === f.id}
                             onClick={() => setFilter(f.id)}
                             className={`min-h-[48px] px-4 rounded-xl text-sm font-bold border transition-colors ${filter === f.id
-                                ? 'bg-bp-cta-fill border-terra-500 text-bp-cta-on'
+                                ? 'bg-bp-cta-fill border-bp-cta-fill text-bp-cta-on'
                                 : 'bg-nature-900 border-nature-700 text-nature-200 hover:border-nature-500'}`}
                         >
                             {f.label}
@@ -289,14 +289,14 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
                 <div className="flex flex-wrap gap-2">
                     {canRemovePost && (
                         <button type="button" disabled={!!busy} onClick={() => setChoosingReason(true)}
-                            className={`${btn} bg-red-900/80 hover:bg-red-800 border border-red-700 text-white`}>
+                            className={`${btn} bg-bp-danger-fill hover:bg-bp-danger-hover border border-bp-danger-fill text-bp-danger-on`}>
                             Remove the post
                         </button>
                     )}
                     {canRemovePulse && (
                         <button type="button" disabled={!!busy}
                             onClick={() => void run('pulse', () => actionNodeReport(nodeUrl, report.id, { removePulseItem: true }))}
-                            className={`${btn} bg-red-900/80 hover:bg-red-800 border border-red-700 text-white`}>
+                            className={`${btn} bg-bp-danger-fill hover:bg-bp-danger-hover border border-bp-danger-fill text-bp-danger-on`}>
                             {busy === 'pulse' ? 'Removing…' : 'Remove from the Pulse'}
                         </button>
                     )}
@@ -337,7 +337,7 @@ function ReportCard({ report, nodeUrl, onDone, onShowBurst }: {
                     <div className="flex flex-wrap gap-2">
                         <button type="button" disabled={!!busy}
                             onClick={() => void run('post', () => actionNodeReport(nodeUrl, report.id, { deletePost: true, reasonCategory: reason || undefined }))}
-                            className={`${btn} bg-red-700 hover:bg-red-600 text-white`}>
+                            className={`${btn} bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on`}>
                             {busy === 'post' ? 'Removing…' : 'Remove it'}
                         </button>
                         <button type="button" disabled={!!busy} onClick={() => setChoosingReason(false)}

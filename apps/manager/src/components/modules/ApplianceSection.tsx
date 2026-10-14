@@ -1122,7 +1122,7 @@ export function ApplianceSection({
                                 <button
                                     type="submit"
                                     disabled={!restoreFile || restoring}
-                                    className="w-full py-2.5 rounded-xl bg-red-900/80 hover:bg-red-800 text-xs font-bold text-white border border-red-700 transition-all disabled:opacity-50"
+                                    className="w-full py-2.5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on border border-bp-danger-fill transition-all disabled:opacity-50"
                                 >
                                     {restoring ? 'Restoring Database...' : 'Restore from Backup'}
                                 </button>
@@ -1576,7 +1576,7 @@ export function ApplianceSection({
                                         <button
                                             type="button"
                                             onClick={handleDisable2FA}
-                                            className="min-h-[48px] px-5 py-2.5 rounded-xl bg-red-900/80 hover:bg-red-800 text-xs font-bold text-white border border-red-700 transition-all"
+                                            className="min-h-[48px] px-5 py-2.5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on border border-bp-danger-fill transition-all"
                                         >
                                             Disable 2FA
                                         </button>

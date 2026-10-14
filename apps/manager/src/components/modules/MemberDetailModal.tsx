@@ -636,8 +636,8 @@ export function MemberDetailModal({
                                 onClick={() => onToggleFreeze(pubkey)}
                                 className={`px-3 py-2 rounded-xl font-bold transition-all border text-[11px] ${
                                     isFrozen
-                                        ? 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-emerald-500'
-                                        : 'bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on border-amber-500'
+                                        ? 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on border-bp-commit-fill'
+                                        : 'bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on border-bp-gold-fill'
                                 }`}
                             >
                                 <span>{isFrozen ? '🟢 Unfreeze' : '🛑 Freeze'}</span>

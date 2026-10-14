@@ -469,7 +469,7 @@ export function GatewayModule({
                                                 }
                                                 className={`px-2.5 py-1 rounded-lg text-[10px] font-bold font-mono transition-all border ${
                                                     gateway.rateLimiting.maxRequestsPerMinute === preset.val
-                                                        ? 'bg-bp-cta-fill text-bp-cta-on border-terra-400 shadow-sm'
+                                                        ? 'bg-bp-cta-fill text-bp-cta-on border-bp-cta-fill shadow-sm'
                                                         : 'bg-nature-900 hover:bg-nature-800 text-nature-300 border-nature-700'
                                                 }`}
                                             >

@@ -372,7 +372,7 @@ export function PostModerationPanel({
                                 type="button"
                                 onClick={handleConfirmDelete}
                                 disabled={isDeleting}
-                                className="min-h-[44px] px-5 py-2 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on border border-red-500 shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
+                                className="min-h-[44px] px-5 py-2 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on border border-bp-danger-fill shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
                             >
                                 {isDeleting ? (
                                     <>

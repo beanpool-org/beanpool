@@ -489,7 +489,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
 
             {/* A take-over that stopped and was rolled back is over: another can start. */}
             {isStandby && (state === 'none' || (state === 'failed' && !!progress?.rolledBack)) && (
-                <button type="button" id="takeover-start-btn" className={`${BTN} bg-red-900/70 hover:bg-red-800 border border-red-700 text-red-100 w-full sm:w-auto`}
+                <button type="button" id="takeover-start-btn" className={`${BTN} bg-bp-danger-fill hover:bg-bp-danger-hover border border-bp-danger-fill text-bp-danger-on w-full sm:w-auto`}
                     onClick={() => { setError(null); setStage('explain'); }}>
                     Take over as the main server
                 </button>
@@ -539,11 +539,11 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                                 </ul>
                                 <div className="flex flex-col sm:flex-row flex-wrap gap-3 justify-end pt-2">
                                     <button type="button" className={`${BTN} bg-nature-800 hover:bg-nature-700 text-white`} onClick={close}>Cancel</button>
-                                    <button type="button" id="takeover-phone-btn" className={`${BTN} bg-red-900 hover:bg-red-800 text-white border border-red-700`}
+                                    <button type="button" id="takeover-phone-btn" className={`${BTN} bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on border border-bp-danger-fill`}
                                         onClick={startPhone} disabled={busy}>
                                         {busy ? 'Starting…' : "I understand: use an owner's phone"}
                                     </button>
-                                    <button type="button" id="takeover-continue-btn" className={`${BTN} bg-red-800 hover:bg-red-700 text-white`}
+                                    <button type="button" id="takeover-continue-btn" className={`${BTN} bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on`}
                                         onClick={() => { setError(null); setStage('code'); }}>
                                         I understand, continue
                                     </button>
@@ -569,7 +569,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                                 />
                                 <div className="flex flex-col sm:flex-row gap-3 justify-end">
                                     <button type="button" className={`${BTN} bg-nature-800 hover:bg-nature-700 text-white`} onClick={close} disabled={busy}>Cancel</button>
-                                    <button type="submit" id="takeover-open-btn" className={`${BTN} bg-red-800 hover:bg-red-700 text-white`} disabled={busy || !code.trim()}>
+                                    <button type="submit" id="takeover-open-btn" className={`${BTN} bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on`} disabled={busy || !code.trim()}>
                                         {busy ? 'Opening…' : 'Open the keys'}
                                     </button>
                                 </div>
@@ -591,7 +591,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                         {stage === 'phone' && !phone && (
                             <div className="flex flex-col sm:flex-row gap-3 justify-end">
                                 <button type="button" className={`${BTN} bg-nature-800 hover:bg-nature-700 text-white`} onClick={close}>Cancel</button>
-                                <button type="button" id="takeover-phone-again-btn" className={`${BTN} bg-red-800 hover:bg-red-700 text-white`} onClick={startPhone} disabled={busy}>
+                                <button type="button" id="takeover-phone-again-btn" className={`${BTN} bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on`} onClick={startPhone} disabled={busy}>
                                     Make a new code
                                 </button>
                             </div>
@@ -632,7 +632,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                                 </label>
                                 <div className="flex flex-col sm:flex-row gap-3 justify-end">
                                     <button type="button" className={`${BTN} bg-nature-800 hover:bg-nature-700 text-white`} onClick={close} disabled={busy}>Cancel</button>
-                                    <button type="button" id="takeover-confirm-btn" className={`${BTN} bg-red-700 hover:bg-red-600 text-white border border-red-500`}
+                                    <button type="button" id="takeover-confirm-btn" className={`${BTN} bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on border border-bp-danger-fill`}
                                         onClick={confirm} disabled={busy || !mainGone}>
                                         {busy ? 'Taking over…' : 'Take over now'}
                                     </button>

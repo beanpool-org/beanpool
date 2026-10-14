@@ -782,7 +782,7 @@ export function RekeyMemberWizard({
                                     type="button"
                                     onClick={handleCancelCode}
                                     disabled={cancelling || completing}
-                                    className="px-3 py-2 rounded-xl bg-red-900/80 hover:bg-red-800 text-red-100 text-xs font-semibold border border-red-800"
+                                    className="px-3 py-2 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on text-xs font-semibold border border-bp-danger-fill"
                                 >
                                     {cancelling ? 'Cancelling…' : 'Cancel this code'}
                                 </button>

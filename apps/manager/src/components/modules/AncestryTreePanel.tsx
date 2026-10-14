@@ -429,8 +429,8 @@ export function AncestryTreePanel({
                             {/* Health Flag Pill */}
                             {hasFlags && (
                                 <span
-                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold text-white ${
-                                        isAlert ? 'bg-red-600' : 'bg-amber-600'
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                        isAlert ? 'bg-bp-chip-danger-tint text-bp-chip-danger-ink' : 'bg-bp-chip-warn-tint text-bp-chip-warn-ink'
                                     }`}
                                     title={bFlags.map((f) => f?.type || '').join(', ')}
                                 >
@@ -479,8 +479,8 @@ export function AncestryTreePanel({
                             {/* Health Flag Pill */}
                             {hasFlags && (
                                 <span
-                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold text-white ${
-                                        isAlert ? 'bg-red-600' : 'bg-amber-600'
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                        isAlert ? 'bg-bp-chip-danger-tint text-bp-chip-danger-ink' : 'bg-bp-chip-warn-tint text-bp-chip-warn-ink'
                                     }`}
                                     title={bFlags.map((f) => f?.type || '').join(', ')}
                                 >

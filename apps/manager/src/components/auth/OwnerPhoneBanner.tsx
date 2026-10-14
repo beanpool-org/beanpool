@@ -35,7 +35,7 @@ export function OwnerPhoneBanner({ nodeUrl }: { nodeUrl: string | undefined }) {
             <button
                 type="button"
                 onClick={() => setShown(false)}
-                className="min-h-[44px] px-3 rounded-xl font-medium hover:bg-terra-500"
+                className="min-h-[44px] px-3 rounded-xl font-medium hover:bg-bp-cta-fill hover:text-bp-cta-on"
             >
                 Dismiss
             </button>

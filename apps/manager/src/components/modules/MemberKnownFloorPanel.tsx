@@ -222,7 +222,7 @@ export function MemberKnownFloorPanel({ nodeUrl, pubkey, displayName, adminPassw
                             Cancel
                         </button>
                         <button type="button" onClick={() => { void send(pending); }} disabled={busy} aria-busy={busy}
-                            className={`${button} bg-terra-500 hover:bg-terra-600 text-white`}>
+                            className={`${button} bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on`}>
                             {busy ? 'Saving…' : pending.kind === 'amount' ? 'Yes, set it' : pending.kind === 'freeze' ? 'Yes, freeze it' : 'Yes, restore it'}
                         </button>
                     </div>
@@ -242,7 +242,7 @@ export function MemberKnownFloorPanel({ nodeUrl, pubkey, displayName, adminPassw
                     <div className="flex flex-wrap gap-2">
                         <button type="button" disabled={amount === '' || !!amountProblem}
                             onClick={() => { setPending({ kind: 'amount', amount: amountN }); setStatus(null); }}
-                            className={`${button} bg-terra-500 hover:bg-terra-600 text-white`}>
+                            className={`${button} bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on`}>
                             Set
                         </button>
                         {!line.exception?.frozen && (

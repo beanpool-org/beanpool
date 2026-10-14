@@ -802,7 +802,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                 type="button"
                                 onClick={requestRotateConfirmation}
                                 disabled={rotating}
-                                className="px-3.5 py-2 rounded-xl bg-bp-chip-warn-tint hover:opacity-90 text-bp-chip-warn-ink hover:text-amber-300 text-xs font-bold border border-amber-500/30 transition-all disabled:opacity-50 min-h-[44px] flex items-center gap-1.5"
+                                className="px-3.5 py-2 rounded-xl bg-bp-chip-warn-tint hover:opacity-90 text-bp-chip-warn-ink text-xs font-bold border border-amber-500/30 transition-all disabled:opacity-50 min-h-[44px] flex items-center gap-1.5"
                             >
                                 <span>🔑</span>
                                 <span>{rotating ? 'Getting a new key…' : 'New tunnel key'}</span>
@@ -814,7 +814,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                 type="button"
                                 onClick={requestOfflineConfirmation}
                                 disabled={takingOffline}
-                                className="px-3.5 py-2 rounded-xl bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink hover:text-red-300 text-xs font-bold border border-red-500/30 transition-all disabled:opacity-50 min-h-[44px] flex items-center gap-1.5"
+                                className="px-3.5 py-2 rounded-xl bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink text-xs font-bold border border-red-500/30 transition-all disabled:opacity-50 min-h-[44px] flex items-center gap-1.5"
                             >
                                 <span>🛑</span>
                                 <span>{takingOffline ? 'Taking offline…' : 'Take offline'}</span>
@@ -1037,12 +1037,12 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                             <button
                                 type="button"
                                 onClick={handleConfirmAction}
-                                className={`px-4 py-2 rounded-xl text-xs font-bold text-white transition-all min-h-[44px] ${
+                                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all min-h-[44px] ${
                                     confirmModal.actionType === 'offline'
-                                        ? 'bg-red-600 hover:bg-red-500'
+                                        ? 'bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on'
                                         : confirmModal.actionType === 'release-name'
-                                            ? 'bg-terra-600 hover:bg-terra-500'
-                                            : 'bg-blue-600 hover:bg-blue-500'
+                                            ? 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
+                                            : 'bg-blue-600 hover:bg-blue-500 text-white'
                                 }`}
                             >
                                 {confirmModal.confirmButtonText}

@@ -581,7 +581,7 @@ export function PeopleSafetySection({
                                                     <button
                                                         onClick={() => handleRemovePulseItem(String(report.id))}
                                                         disabled={removingReportId === report.id}
-                                                        className="px-3 py-1.5 rounded-lg bg-red-900/80 hover:bg-red-800 border border-red-700 text-xs font-bold text-white transition-all disabled:opacity-50 min-h-[48px] lg:min-h-0"
+                                                        className="px-3 py-1.5 rounded-lg bg-bp-danger-fill hover:bg-bp-danger-hover border border-bp-danger-fill text-xs font-bold text-bp-danger-on transition-all disabled:opacity-50 min-h-[48px] lg:min-h-0"
                                                     >
                                                         {removingReportId === report.id ? 'Removing...' : 'Remove from the Pulse'}
                                                     </button>
@@ -645,7 +645,7 @@ export function PeopleSafetySection({
                             <button
                                 onClick={handleBulkDeletePosts}
                                 disabled={bulkDeleting}
-                                className="px-4 py-2 rounded-xl bg-red-900/80 hover:bg-red-800 text-xs font-bold text-white border border-red-700 transition-all disabled:opacity-50"
+                                className="px-4 py-2 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on border border-bp-danger-fill transition-all disabled:opacity-50"
                             >
                                 {bulkDeleting ? 'Pruning...' : 'Prune Stale Posts'}
                             </button>

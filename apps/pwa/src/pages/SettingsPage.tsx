@@ -70,7 +70,7 @@ function ToggleSwitch({
     onChange,
     disabled,
     label,
-    activeBgClass = 'bg-emerald-500 border-emerald-600',
+    activeBgClass = 'bg-bp-commit-fill border-bp-commit-fill',
     inactiveBgClass = 'bg-nature-200 dark:bg-nature-700 border-nature-300 dark:border-nature-600',
 }: {
     checked: boolean;
@@ -693,7 +693,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                         <span className="text-[15px] font-bold text-nature-950 dark:text-white truncate">
                                                             {primary.name}
                                                         </span>
-                                                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
+                                                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
                                                             {parsed.mode === 'deep' ? '27 Qs' : '9 Qs'}
                                                         </span>
                                                     </div>
@@ -948,7 +948,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         checked={useModernMarkers}
                                         onChange={handleToggleModernMarkers}
                                         label="Modern Map Pins"
-                                        activeBgClass="bg-emerald-500 border-emerald-600"
+                                        activeBgClass="bg-bp-commit-fill border-bp-commit-fill"
                                     />
                                 </div>
 
@@ -968,7 +968,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         onChange={handleToggleHoliday}
                                         disabled={holidayLoading}
                                         label="Holiday Mode"
-                                        activeBgClass="bg-amber-500 border-amber-600"
+                                        activeBgClass="bg-bp-gold-fill border-bp-gold-fill"
                                     />
                                 </div>
                             </div>

@@ -1945,8 +1945,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         </span>
                         <button
                             onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
-                            className={`py-2 px-4 rounded-xl border-none font-bold text-white text-sm cursor-pointer shadow-sm transition-transform hover:scale-[1.02] active:scale-[0.98] ${
-                                previewPost.type === 'offer' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-terra-600 hover:bg-terra-700'
+                            className={`py-2 px-4 rounded-xl border-none font-bold text-sm cursor-pointer shadow-sm transition-transform hover:scale-[1.02] active:scale-[0.98] ${
+                                previewPost.type === 'offer' ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
                             }`}
                         >
                             View Details
@@ -2233,7 +2233,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                         Approximate (~100m)
                                     </button>
                                     {postApproximate && (
-                                        <span className="px-1.5 py-0.5 rounded bg-terra-100 dark:bg-terra-900/60 text-terra-700 dark:text-terra-300 text-[11px] font-semibold border border-terra-300 dark:border-terra-700/50">
+                                        <span className="px-1.5 py-0.5 rounded bg-bp-chip-warn-tint text-bp-chip-warn-ink text-[11px] font-semibold border border-bp-chip-warn-ink">
                                             ~100m
                                         </span>
                                     )}

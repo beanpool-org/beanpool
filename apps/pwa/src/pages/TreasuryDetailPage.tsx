@@ -977,8 +977,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                         {daysRemaining && (
                                             <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
                                                 daysRemaining === 'Expired'
-                                                    ? 'bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-400'
-                                                    : 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300'
+                                                    ? 'bg-bp-chip-danger-tint text-bp-chip-danger-ink'
+                                                    : 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                             }`}>
                                                 ⏳ {daysRemaining}
                                             </span>
@@ -1246,7 +1246,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     <div className="pt-4 border-t border-emerald-500/20 space-y-3">
                                         <div className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 flex items-center justify-between">
                                             <span>Pending Bids on Needs</span>
-                                            <span className="bg-emerald-200/60 dark:bg-emerald-900/60 text-emerald-900 dark:text-emerald-200 px-2 py-0.5 rounded-full text-[11px]">
+                                            <span className="bg-bp-chip-ok-tint text-bp-chip-ok-ink px-2 py-0.5 rounded-full text-[11px]">
                                                 {pendingBids.length}
                                             </span>
                                         </div>
@@ -1296,7 +1296,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     <div className="pt-4 border-t border-emerald-500/20 space-y-3">
                                         <div className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400 flex items-center justify-between">
                                             <span>Active Deals</span>
-                                            <span className="bg-emerald-200/60 dark:bg-emerald-900/60 text-emerald-900 dark:text-emerald-200 px-2 py-0.5 rounded-full text-[11px]">
+                                            <span className="bg-bp-chip-ok-tint text-bp-chip-ok-ink px-2 py-0.5 rounded-full text-[11px]">
                                                 {activeDeals.length}
                                             </span>
                                         </div>
@@ -1875,7 +1875,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     </span>
                                                 )}
                                                 {isLead ? (
-                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
+                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-bp-chip-warn-tint text-bp-chip-warn-ink">
                                                         {kw.Lead}
                                                     </span>
                                                 ) : (
@@ -2085,7 +2085,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 <div className="flex items-center gap-1.5 mb-1">
                                                     <span className={`text-[10px] font-black uppercase px-2 py-0.5 rounded-md ${
                                                         post.type === 'offer'
-                                                            ? 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300'
+                                                            ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                             : 'bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300'
                                                     }`}>
                                                         {post.type}
@@ -2094,12 +2094,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         <span className="text-[10px] text-nature-400 font-semibold">🔄 recurring</span>
                                                     )}
                                                     {detail.paused && detail.status !== 'winding_up' && detail.status !== 'completed' && (
-                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">
+                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink">
                                                             ⏸️ Paused
                                                         </span>
                                                     )}
                                                     {detail.status === 'winding_up' && (
-                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300">
+                                                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-bp-chip-danger-tint text-bp-chip-danger-ink">
                                                             ⏳ Winding up
                                                         </span>
                                                     )}

@@ -178,7 +178,7 @@ export function DecideSection({
                             disabled={!canPropose || hasOpenDecision}
                             className={`w-full sm:w-auto py-2.5 px-5 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                 canPropose && !hasOpenDecision
-                                    ? 'bg-accent dark:bg-nature-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white'
+                                    ? 'bg-bp-accent-fill hover:bg-bp-accent-hover text-bp-accent-on'
                                     : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700/50'
                             }`}
                         >

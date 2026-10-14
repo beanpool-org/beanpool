@@ -275,7 +275,7 @@ export function ChannelsPage({ identity, onBack, onViewFeed, onSharePost }: Prop
                                             {channel.handle && <span className="font-normal text-nature-500 dark:text-nature-400"> · {channel.handle}</span>}
                                         </h3>
                                         {channel.oauthVerifiedAt && (
-                                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 shrink-0">
+                                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
                                                 ✓ Verified
                                             </span>
                                         )}

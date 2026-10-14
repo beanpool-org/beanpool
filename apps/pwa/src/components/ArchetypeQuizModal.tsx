@@ -209,7 +209,7 @@ export function ArchetypeQuizModal({
                                             <span className="text-[15px] font-bold text-nature-950 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors min-w-0">
                                                 Quick Spark
                                             </span>
-                                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
+                                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
                                                 9 Qs • ~1 min
                                             </span>
                                         </div>
@@ -242,7 +242,7 @@ export function ArchetypeQuizModal({
                                             <span className="text-[15px] font-bold text-nature-950 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors min-w-0">
                                                 Deep Resonance
                                             </span>
-                                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shrink-0">
+                                            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
                                                 27 Qs • ~3 min
                                             </span>
                                         </div>

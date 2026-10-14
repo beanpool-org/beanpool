@@ -584,7 +584,7 @@ function TreeNodeView({ node, depth, identity }: { node: TreeNode; depth: number
                             {node.callsign}
                         </span>
                         {isMe && (
-                            <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-50 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 px-1.5 py-0.5 rounded-md border border-emerald-100 dark:border-emerald-800">
+                            <span className="text-[10px] font-bold uppercase tracking-wider bg-bp-chip-ok-tint text-bp-chip-ok-ink px-1.5 py-0.5 rounded-md border border-transparent">
                                 you
                             </span>
                         )}

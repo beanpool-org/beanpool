@@ -266,7 +266,7 @@ export function GroupDetailModal({
                             </span>
                         )}
                         {isConvenor && (
-                            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent">
                                 <span aria-hidden="true">🛡️ </span>{roster.viewerIsLead ? 'Lead convenor' : 'Convenor'}
                             </span>
                         )}
@@ -449,7 +449,7 @@ export function GroupDetailModal({
                                             <div className="flex items-center gap-2">
                                                 <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
                                                     highlight
-                                                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/40'
+                                                        ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-bp-chip-ok-ink'
                                                         : 'bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300'
                                                 }`}>
                                                     {row.isLead ? 'Lead' : m.role}

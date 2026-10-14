@@ -228,7 +228,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                         <span>Lat: {lat != null ? lat.toFixed(isApproximate ? 3 : 5) : '—'}</span>
                         <span>Lng: {lng != null ? lng.toFixed(isApproximate ? 3 : 5) : '—'}</span>
                         {isApproximate && (
-                            <span className="px-1.5 py-0.5 rounded bg-terra-100 dark:bg-terra-900/60 text-terra-700 dark:text-terra-300 text-[10px] font-sans font-semibold border border-terra-300 dark:border-terra-700/50">
+                            <span className="px-1.5 py-0.5 rounded bg-bp-chip-warn-tint text-bp-chip-warn-ink text-[10px] font-sans font-semibold border border-bp-chip-warn-ink">
                                 ~100m
                             </span>
                         )}

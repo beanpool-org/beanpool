@@ -227,7 +227,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                 </span>
             </button>
             {friendPubkeys.has(m.publicKey) ? (
-                <span className="shrink-0 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/40 px-2.5 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800">
+                <span className="shrink-0 text-xs font-bold text-bp-chip-ok-ink bg-bp-chip-ok-tint px-2.5 py-1 rounded-lg border border-transparent">
                     ✓ Friend
                 </span>
             ) : (
@@ -467,7 +467,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                             </div>
                                         </div>
                                         {friendPubkeys.has(m.publicKey) ? (
-                                            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/40 px-2.5 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800 shadow-sm">
+                                            <span className="text-xs font-bold text-bp-chip-ok-ink bg-bp-chip-ok-tint px-2.5 py-1 rounded-lg border border-transparent shadow-sm">
                                                 ✓ Friend
                                             </span>
                                         ) : (

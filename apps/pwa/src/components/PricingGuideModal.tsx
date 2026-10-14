@@ -294,7 +294,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
 
                                     {/* Price & Actions */}
                                     <div className="flex flex-col items-end flex-shrink-0">
-                                        <div className="flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800 text-xs font-bold">
+                                        <div className="flex items-center gap-1 bg-bp-chip-ok-tint text-bp-chip-ok-ink px-2.5 py-1 rounded-lg border border-transparent text-xs font-bold">
                                             <span><span aria-hidden="true">🫘</span> {effectivePrice}<span className="sr-only"> Beans</span></span>
                                             {item.unit && <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 font-normal">/{item.unit}</span>}
                                             {item.trend === 'up' && <><span className="text-emerald-500 text-[10px] ml-0.5" aria-hidden="true">▲</span><span className="sr-only">, price rising</span></>}
@@ -362,7 +362,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                             onClick={() => setReportType('too_high')}
                                             className={`py-2 px-1 min-h-[44px] text-xs font-semibold rounded-xl border text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                                 reportType === 'too_high'
-                                                    ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 text-emerald-700 dark:text-emerald-300'
+                                                    ? 'bg-bp-chip-ok-tint border-bp-chip-ok-ink text-bp-chip-ok-ink'
                                                     : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300'
                                             }`}
                                         >
@@ -375,7 +375,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                             onClick={() => setReportType('too_low')}
                                             className={`py-2 px-1 min-h-[44px] text-xs font-semibold rounded-xl border text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                                 reportType === 'too_low'
-                                                    ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 text-emerald-700 dark:text-emerald-300'
+                                                    ? 'bg-bp-chip-ok-tint border-bp-chip-ok-ink text-bp-chip-ok-ink'
                                                     : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300'
                                             }`}
                                         >
@@ -388,7 +388,7 @@ export function PricingGuideModal({ isOpen, onClose, onSelectOfferItem, reporter
                                             onClick={() => setReportType('other')}
                                             className={`py-2 px-1 min-h-[44px] text-xs font-semibold rounded-xl border text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                                 reportType === 'other'
-                                                    ? 'bg-emerald-50 dark:bg-emerald-950/50 border-emerald-500 text-emerald-700 dark:text-emerald-300'
+                                                    ? 'bg-bp-chip-ok-tint border-bp-chip-ok-ink text-bp-chip-ok-ink'
                                                     : 'bg-zinc-50 dark:bg-zinc-800 border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300'
                                             }`}
                                         >

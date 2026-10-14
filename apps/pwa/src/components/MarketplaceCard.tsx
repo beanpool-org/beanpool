@@ -54,13 +54,13 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     // distinguishable in "My Posts" from live listings.
     const isPaused = post.status === 'paused';
     const pausedPill = isPaused ? (
-        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300/50">⏸ Paused</span>
+        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-transparent">⏸ Paused</span>
     ) : null;
     const youPill = isOwnPost ? (
         <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-300/50">👤 You</span>
     ) : null;
     const pulsePill = isPulse ? (
-        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-300 border border-amber-400/60 shadow-sm">🗞️ Daily Pulse</span>
+        <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-transparent shadow-sm">🗞️ Daily Pulse</span>
     ) : null;
 
     const elderCard = isElder(authorEnergy);
@@ -93,12 +93,12 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             by {post.authorCallsign || 'Anonymous'} {elderCard && '⛰️'} {isOwnPost && <span className="text-blue-600 dark:text-blue-400 font-bold">👤 (You)</span>}
                             {distanceTag}
                             {post.authorFoundingNeeded && (
-                                <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300/30 shrink-0">
+                                <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
                                     🌱 FOUNDING
                                 </span>
                             )}
                             {groupScopeBadge && (
-                                <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/50 shrink-0">
+                                <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent shrink-0">
                                     {groupScopeBadge}
                                 </span>
                             )}
@@ -120,13 +120,13 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
                     {/* Daily Pulse or Needs/Offers pill */}
                     {isPulse ? (
-                        <span className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-300 border border-amber-400/60 shadow-sm">
+                        <span className="text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-transparent shadow-sm">
                             PULSE
                         </span>
                     ) : (
                         <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
-                            post.type === 'offer' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'
-                            : 'bg-orange-100 text-orange-850 dark:bg-orange-900/40 dark:text-orange-400'
+                            post.type === 'offer' ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
+                            : 'bg-bp-chip-need-tint text-bp-chip-need-ink'
                         }`}>
                             {post.type}
                         </span>
@@ -181,8 +181,8 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                         <div className="flex flex-wrap gap-x-2 gap-y-1 items-center min-w-0">
                             {!isPulse && (
                                 <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
-                                    post.type === 'offer' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'
-                                    : 'bg-orange-105 text-orange-800 dark:bg-orange-900/40 dark:text-orange-400'
+                                    post.type === 'offer' ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
+                                    : 'bg-bp-chip-need-tint text-bp-chip-need-ink'
                                 }`}>
                                     {post.type}
                                 </span>
@@ -198,7 +198,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             )}
                             {distanceTag}
                             {post.repeatable && (
-                                <span className={`text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-400`}>
+                                <span className={`text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-warn-tint text-bp-chip-warn-ink`}>
                                     ↻ RECURRING
                                 </span>
                             )}
@@ -206,19 +206,19 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                 that nobody discovers a cash requirement in paragraph three. */}
                             {post.cashAlsoNeeded && (
                                 <span
-                                    className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300"
+                                    className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-need-tint text-bp-chip-need-ink"
                                     title="Cash also needed for fuel or materials — agreed in chat"
                                 >
                                     💸 CASH TOO
                                 </span>
                             )}
                             {post.authorFoundingNeeded && (
-                                <span className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300/50">
+                                <span className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent">
                                     🌱 FOUNDING TRADE
                                 </span>
                             )}
                             {groupScopeBadge && (
-                                <span className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/50">
+                                <span className="text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent">
                                     {groupScopeBadge}
                                 </span>
                             )}
@@ -295,7 +295,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     {pausedPill && <div className="mt-1">{pausedPill}</div>}
                     {groupScopeBadge && (
                         <div className="mt-1">
-                            <span className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/50 block truncate">
+                            <span className="text-[9px] font-black tracking-wider px-1.5 py-0.5 rounded bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-transparent block truncate">
                                 {groupScopeBadge}
                             </span>
                         </div>
@@ -346,7 +346,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             </span>
                         )}
                         {post.authorFoundingNeeded && (
-                            <span className={`font-bold bg-emerald-500/90 dark:bg-emerald-700/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
+                            <span className={`font-bold bg-bp-commit-fill text-bp-commit-on backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
                                 🌱 FOUNDING TRADE
                             </span>
                         )}
@@ -367,7 +367,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
                     {/* Recurring Overlay */}
                     {post.repeatable && (
-                        <div className={`absolute left-2 bg-terra-500/90 dark:bg-terra-600/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
+                        <div className={`absolute left-2 bg-bp-cta-fill backdrop-blur-md text-bp-cta-on font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
                             ↻ RECURRING
                         </div>
                     )}
@@ -389,7 +389,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             </span>
                         )}
                         {post.authorFoundingNeeded && (
-                            <span className={`font-bold bg-emerald-500/90 dark:bg-emerald-700/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
+                            <span className={`font-bold bg-bp-commit-fill text-bp-commit-on backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
                                 🌱 FOUNDING TRADE
                             </span>
                         )}
@@ -409,7 +409,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
                     {/* Recurring Overlay */}
                     {post.repeatable && (
-                        <div className={`absolute left-2 bg-terra-500/90 dark:bg-terra-600/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
+                        <div className={`absolute left-2 bg-bp-cta-fill backdrop-blur-md text-bp-cta-on font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
                             ↻ RECURRING
                         </div>
                     )}

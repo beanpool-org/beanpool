@@ -271,7 +271,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             className={`min-h-[48px] min-w-[48px] px-2.5 py-1 rounded-lg border font-bold text-xs cursor-pointer transition-colors flex items-center justify-center gap-1 ${
                                 isBlocked
                                     ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200'
-                                    : 'border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30'
+                                    : 'border-bp-chip-danger-ink bg-bp-chip-danger-tint text-bp-chip-danger-ink hover:brightness-95'
                             }`}
                         >
                             <span aria-hidden="true">{isBlocked ? '🛡️' : '🚫'}</span>
@@ -833,8 +833,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                 <div className="flex justify-between items-start mb-1">
                                                                     <div className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
                                                                         p.type === 'offer' 
-                                                                            ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400'
-                                                                            : 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
+                                                                            ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
+                                                                            : 'bg-bp-chip-need-tint text-bp-chip-need-ink'
                                                                     }`}>
                                                                         {p.type?.toUpperCase()}
                                                                     </div>
@@ -871,7 +871,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                             <div className="text-amber-500 text-xs">{renderStars(r.stars)}</div>
                                                             <div className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
                                                                 r.role === 'provider'
-                                                                    ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
+                                                                    ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                                     : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300'
                                                             }`}>
                                                                 {r.role === 'provider' ? 'Provided Service' : 'Paid for Service'}
@@ -1056,8 +1056,8 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                             setSubmittingReview(false);
                                         }
                                     }}
-                                    className={`flex-[1.5] py-3 text-white text-sm font-bold rounded-xl shadow-[0_4px_15px_rgb(203,83,38,0.4)] border-none cursor-pointer transition-all ${
-                                        submittingReview ? 'bg-terra-400 opacity-75 cursor-not-allowed' : 'bg-gradient-to-r from-terra-500 to-amber-500 hover:-translate-y-0.5'
+                                    className={`flex-[1.5] py-3 text-bp-gold-on text-sm font-bold rounded-xl shadow-[0_4px_15px_rgb(203,83,38,0.4)] border-none cursor-pointer transition-all ${
+                                        submittingReview ? 'bg-bp-gold-fill opacity-75 cursor-not-allowed' : 'bg-bp-gold-fill hover:bg-bp-gold-hover hover:-translate-y-0.5'
                                     }`}
                                 >
                                     {submittingReview ? 'Updating...' : 'Update Rating'}

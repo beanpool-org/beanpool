@@ -285,6 +285,9 @@ let ben: Person;
 let dm: Conv;
 
 beforeEach(async () => {
+    // Call history only (implementations stay): the database and store mocks keep every argument and result otherwise,
+    // and the cap tests (Z1, Z3, Z10, R4) move megabytes through them, past the worker's heap over the whole file.
+    vi.clearAllMocks();
     h.store.clear();
     h.store.set('beanpool_anchor_url', ANCHOR);
     h.store.set('bp_trust_sync_v3', 'true');

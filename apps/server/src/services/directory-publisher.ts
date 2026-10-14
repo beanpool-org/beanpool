@@ -12,7 +12,11 @@ function directoryRegistryUrl(): string {
 /** Why a node whose profile switch `publishToDirectory` is off sends nothing (the global profile's default). */
 export const NOT_LISTED_MESSAGE = 'This node is not listed in the directory: its publishToDirectory switch is off (the global profile\'s default: the lobby is not a place on the map).';
 
-/** The name every screen shows before a community is named (routes/community.ts community-info's fallback), and what a save of that screen untouched stores. */
+/**
+ * The name the public community-info shows for a community with neither a name nor a callsign (routes/community.ts), and
+ * what the node's settings page stored when saved untouched before its name box read the stored name. The owners' boxes
+ * now start from the stored name (diagnostics, null for none), so a save left untouched stores none.
+ */
 export const DEFAULT_COMMUNITY_NAME = 'BeanPool Community';
 
 /** Why a community with no name of its own is held back (the manual push's answer and the log; the owners' screens word it themselves). */
@@ -36,10 +40,18 @@ export function isDefaultOrEmptyCommunityName(name: string | null | undefined): 
     return !clean || clean === DEFAULT_COMMUNITY_NAME;
 }
 
+const UNLISTED_YES = ['1', 'true', 'yes', 'on'];
+const UNLISTED_NO = ['', '0', 'false', 'no', 'off'];
+
 /** DIRECTORY_UNLISTED in the env, read at every call. */
 export function directoryUnlistedByEnv(): boolean {
-    const v = (process.env.DIRECTORY_UNLISTED || '').trim().toLowerCase();
-    return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+    return UNLISTED_YES.includes((process.env.DIRECTORY_UNLISTED || '').trim().toLowerCase());
+}
+
+/** A DIRECTORY_UNLISTED that is neither a yes nor a no ("ture"): the community is listed, and the boot says so. */
+function unrecognisedUnlistedValue(): string | null {
+    const raw = process.env.DIRECTORY_UNLISTED ?? '';
+    return UNLISTED_YES.includes(raw.trim().toLowerCase()) || UNLISTED_NO.includes(raw.trim().toLowerCase()) ? null : raw;
 }
 
 function holdBack(): DirectoryHoldBack | null {
@@ -79,6 +91,10 @@ function safePush(): void {
 // pushes at once (communityNameSaved), with no restart. DIRECTORY_UNLISTED, which only a restart changes, sets none.
 // Returns whether the timer is set.
 export function initDirectoryPublisher(): boolean {
+    const typo = unrecognisedUnlistedValue();
+    if (typo !== null) {
+        console.warn(`[Directory] ⚠️ DIRECTORY_UNLISTED=${JSON.stringify(typo)} in this server's .env is not a yes (1, true, yes, on) or a no (empty, 0, false, no, off), so this community is listed. To keep it off the public map, set DIRECTORY_UNLISTED=1 and restart.`);
+    }
     if (getNodeRole() !== 'primary') {
         console.log('[Directory] 🔒 Skipping — backup replicas do not publish to the directory.');
         return false;

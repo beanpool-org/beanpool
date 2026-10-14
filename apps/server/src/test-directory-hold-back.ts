@@ -9,13 +9,20 @@
  * Boots the real server (real middleware) as a main server whose community has no name yet, with the registry pointed
  * at a local fixture, and starts the publisher as index.ts does at boot. Asserts:
  *   1. unnamed: the boot starts the publisher anyway, nothing is sent, and the diagnostics say `unnamed`
+ *   1b. the owners' own screens saved untouched send nothing either (deciding review finding 1): the diagnostics give
+ *      the STORED name (null when none), never a display fallback ("BeanPool Community Node", the callsign), so the
+ *      manager's first-start wizard, saved as it opened, stores no name, and Node Identity (or the node's settings
+ *      page) saved only to set a place on an unnamed node whose callsign is "admin" stores none either; the director's
+ *      read-only check, GET /api/directory/info communityName, says null; settings.js fills its name box from the
+ *      diagnostics, not from the public community-info
  *   2. the default name "BeanPool Community" saved through POST /api/local/update-identity: still nothing sent
  *   3. a real name saved through that route is published at once: no restart, no push-interval save (the first-start
  *      wizard saves the name alone), and the diagnostics then say nothing holds it back
  *   4. a rename is published at once too
  *   5. a test-looking address (CF_RECORD_NAME test.example.org) and callsign ("test") hide nothing
  *   6. DIRECTORY_UNLISTED=1: a rename sends nothing, the diagnostics say `unlisted`, and the manual push answers 409
- *      saying why; removed again, a rename is published
+ *      saying why; removed again, a rename is published. A value it doesn't recognise ("ture") lists the community and
+ *      the boot says so in a warning line naming the value
  *   7. docker-compose.yml passes DIRECTORY_UNLISTED from a node's .env (it passes only what it names), and .env.example
  *      lists it
  *
@@ -107,8 +114,40 @@ async function main() {
     assert(started === true, `the boot starts the publisher on an unnamed community too (initDirectoryPublisher() = ${started})`);
     assert(await heldBack() === 'unnamed', `the owners' diagnostics say it is held back for having no name (${JSON.stringify(await heldBack())})`);
 
-    // ── 2. The default name is no name ───────────────────────────────────────────────────────────────────────────────
+    // ── 1b. The owners' screens saved untouched: a name box shows the stored name, never a display fallback ───────────
+    const diag = (await call('GET', '/api/local/admin/diagnostics')).json;
+    assert(diag?.communityName === null, `the owners' diagnostics give the stored name, null when there is none (${JSON.stringify(diag?.communityName)})`);
+    const listedName = async () => (await call('GET', '/api/directory/info')).json?.communityName;
+    assert(await listedName() === null, `the read-only check before a deploy, GET /api/directory/info communityName, says null (${JSON.stringify(await listedName())})`);
+    // The manager's first-start wizard (ColdStartWizard.tsx): its name box starts as diagnostics' communityName and it
+    // saves that box alone. Saved as it opened:
     let from = pushes.length;
+    const wizard = await call('POST', '/api/local/update-identity', { communityName: String(diag?.communityName ?? '').trim() });
+    assert(wizard.status === 200, `the first-start wizard's save answers 200 (${wizard.status})`);
+    assert(await nextPush(from, 1500) === null, 'the first-start wizard saved untouched publishes nothing');
+    assert(await heldBack() === 'unnamed' && getLocalConfig().communityName === null,
+        `and stores no name: the diagnostics still say unnamed (${JSON.stringify(await heldBack())}, stored ${JSON.stringify(getLocalConfig().communityName)})`);
+    // An unnamed node whose callsign is "admin" (what the wizard used to store): the public community-info shows that as
+    // the name, for visitors. Node Identity (NodeIdentityPanel.tsx) and the node's settings page (static/settings.js)
+    // take the name box from the diagnostics and the callsign from community-info; saved only to set a place:
+    await call('POST', '/api/local/update-identity', { callsign: 'admin' });
+    const info = (await call('GET', '/api/local/community-info')).json;
+    assert(info?.communityName === 'admin', `the public community-info shows the callsign as the name (${JSON.stringify(info?.communityName)})`);
+    const stored = (await call('GET', '/api/local/admin/diagnostics')).json?.communityName;
+    from = pushes.length;
+    const place = await call('POST', '/api/local/update-identity', { callsign: info?.callsign ?? '', communityName: String(stored ?? '').trim(), lat: -28.5, lng: 153.5 });
+    assert(place.status === 200, `Node Identity's save of a place answers 200 (${place.status})`);
+    assert(await nextPush(from, 1500) === null, 'Node Identity saved only to set a place on an unnamed node publishes nothing');
+    assert(await heldBack() === 'unnamed' && getLocalConfig().communityName === null,
+        `and stores no name: still unnamed (${JSON.stringify(await heldBack())}, stored ${JSON.stringify(getLocalConfig().communityName)})`);
+    const fs = await import('node:fs');
+    const settingsJs = fs.readFileSync(new URL('../static/settings.js', import.meta.url), 'utf-8');
+    const loadInfo = settingsJs.slice(settingsJs.indexOf('async function loadCommunityInfo()'), settingsJs.indexOf('// ======================== SEED INVITE'));
+    assert(loadInfo.length > 0 && !loadInfo.includes('/community-info') && /getElementById\('community-name'\)\.value = [^;]*data\.communityName/.test(loadInfo),
+        "the node's settings page fills its name box from the diagnostics' stored name, not the public community-info");
+
+    // ── 2. The default name is no name ───────────────────────────────────────────────────────────────────────────────
+    from = pushes.length;
     const dflt = await rename('BeanPool Community');
     assert(dflt.status === 200, `saving the default name answers 200 (${dflt.status})`);
     assert(await nextPush(from, 1500) === null, 'the default name "BeanPool Community" is not published');
@@ -123,6 +162,7 @@ async function main() {
         `the name saved through the route is published at once, with no restart and no interval save (${JSON.stringify(first && { communityName: first.communityName, nodeId: first.nodeId })})`);
     assert(first !== null && first.nodeId === p2p.peerId.toString(), 'signed as this node');
     assert(await heldBack() === null, `the diagnostics then say nothing holds it back (${JSON.stringify(await heldBack())})`);
+    assert(await listedName() === 'Riverbend Commons', `and GET /api/directory/info says the name (${JSON.stringify(await listedName())})`);
 
     // ── 4. A rename is published at once ─────────────────────────────────────────────────────────────────────────────
     from = pushes.length;
@@ -153,9 +193,23 @@ async function main() {
     await rename('Riverbend Again');
     const back = await nextPush(from, 5000);
     assert(back !== null && back.communityName === 'Riverbend Again', `without it, a rename is published again (${JSON.stringify(back?.communityName)})`);
+    // A value it doesn't recognise lists the community (as before), and the boot says so rather than nothing.
+    const warned: string[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => { warned.push(args.map(String).join(' ')); };
+    process.env.DIRECTORY_UNLISTED = 'ture';
+    let typoStarted: boolean;
+    try { typoStarted = initDirectoryPublisher(); } finally { console.warn = warn; }
+    assert(typoStarted === true && await heldBack() === null, `DIRECTORY_UNLISTED=ture is not a yes: the community is listed (${typoStarted}, ${JSON.stringify(await heldBack())})`);
+    assert(warned.some(l => l.includes('DIRECTORY_UNLISTED') && l.includes('"ture"')), `and the boot warns, naming the value (${JSON.stringify(warned)})`);
+    warned.length = 0;
+    console.warn = (...args: unknown[]) => { warned.push(args.map(String).join(' ')); };
+    process.env.DIRECTORY_UNLISTED = '';
+    try { initDirectoryPublisher(); } finally { console.warn = warn; }
+    assert(!warned.some(l => l.includes('DIRECTORY_UNLISTED')), `an empty DIRECTORY_UNLISTED warns of nothing (${JSON.stringify(warned)})`);
+    delete process.env.DIRECTORY_UNLISTED;
 
     // ── 7. The flag reaches a node: docker-compose.yml passes only the variables it names from a node's .env ───────────
-    const fs = await import('node:fs');
     const root = new URL('../../../', import.meta.url);
     assert(/^\s*- DIRECTORY_UNLISTED=\$\{DIRECTORY_UNLISTED:-\}\s*$/m.test(fs.readFileSync(new URL('docker-compose.yml', root), 'utf-8')),
         'docker-compose.yml passes DIRECTORY_UNLISTED from the node\'s .env to the server, empty by default');

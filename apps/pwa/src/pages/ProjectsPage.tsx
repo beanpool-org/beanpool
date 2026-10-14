@@ -556,13 +556,13 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         {g.viewerRole ? (
                                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
                                                 g.viewerRole === 'convenor'
-                                                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700/60'
+                                                    ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                     : 'bg-nature-800 text-nature-300'
                                             }`}>
                                                 {g.viewerRole}
                                             </span>
                                         ) : g.viewerStatus === 'pending_approval' ? (
-                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-700/60">
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-bp-chip-warn-tint text-bp-chip-warn-ink">
                                                 Pending
                                             </span>
                                         ) : null}

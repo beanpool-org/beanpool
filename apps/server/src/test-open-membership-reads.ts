@@ -121,7 +121,10 @@ async function main() {
     const quiet = se.createGroup({ name: 'Quiet Circle', slug: 'quiet-circle', description: 'Invite only', joinPolicy: 'invite_only', createdBy: alice.pubKeyHex });
     se.inviteGroupMember(quiet.id, alice.pubKeyHex, carol.pubKeyHex, 'member');
     se.joinGroup(quiet.id, carol.pubKeyHex);
-    const groupIds = [open.id, quiet.id];
+    // What each run makes afresh: the group ids, their slugs' random ends, and the node's own key (a member made at boot).
+    const seeded = new Set([alice, bob, carol, dan, eve].map(m => m.pubKeyHex));
+    const runOwn = [open.id, quiet.id, ...[open.id, quiet.id].map(g => (db.prepare('SELECT slug FROM groups WHERE id = ?').get(g) as any).slug as string),
+        ...(db.prepare("SELECT public_key FROM members WHERE public_key != 'SYSTEM'").all() as { public_key: string }[]).map(r => r.public_key).filter(k => !seeded.has(k))];
 
     const at = 'lat=-28.65&lng=153.55';
     // Every read compared across profiles: [label, path, reader].
@@ -148,10 +151,10 @@ async function main() {
         ['invite-only group roster, member', `/api/groups/${quiet.id}/members`, carol],
         ['groups list', '/api/groups', dan],
     ];
-    /** The same bytes whatever run made them: the group ids and the times this run wrote are named, not printed. */
+    /** The same bytes whatever run made them: what this run made afresh (runOwn) and the times it wrote are named, not printed. */
     const normalise = (text: string) => {
         let s = text;
-        groupIds.forEach((g, i) => { s = s.split(g).join(`<group-${i}>`); });
+        runOwn.forEach((v, i) => { s = s.split(v).join(`<run-own-${i}>`); });
         s = s.replace(/\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?/g, (t) => {
             const ms = Date.parse(t.includes('T') ? t : t.replace(' ', 'T') + 'Z');
             return Number.isFinite(ms) && ms >= STARTED ? '<this-run>' : t;

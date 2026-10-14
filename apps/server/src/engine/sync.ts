@@ -89,8 +89,9 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *     only by a force-resync, and may lack the rows of a table a copy left out for its size.
  *  8. Listing photos travel by reference (P4): a copy's photo rows name each object by its sha256, and the standby fetches
  *     only the objects its store lacks (routes/backup.ts sync-object). A standby sends this number when it opens a copy
- *     (X-Replica-Format), and a main server sends photos by reference only to one at this format or later: an older one's
- *     import drops a photo row that carries no bytes, so it is refused, loudly, rather than sent a copy without its photos.
+ *     (X-Replica-Format), and a main server sends a copy only to one at OLDEST_STANDBY_FORMAT or later (8 from here): an
+ *     older one's import drops a photo row that carries no bytes, so it is refused, loudly, rather than sent a copy without
+ *     its photos.
  *     A copy made by format 7 holds the same rows, its photos stored from the bytes that came inline; its re-seed fetches
  *     no object this standby's store already holds.
  *  9. Members' phones are locked (services/push-token-seal.ts, push design step 2): each push_tokens row is a token's id
@@ -100,12 +101,17 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *     brings them all.
  * 10. Events keep the host's clock, its zone, and whether they are online, with the join link (event_start_local,
  *     event_end_local, event_tz, event_online, event_link; DESIGN-event-times §2): an importer before this one drops the
- *     five, so a copy it made lacks them and the re-seed brings them.
+ *     five, so a copy it made lacks them and the re-seed brings them. OLDEST_STANDBY_FORMAT is 10 from here: a main server
+ *     refuses a copy or a delta to an older standby, loudly, rather than send it one that loses them (an online event
+ *     would land as a pinless in-person one with no link).
  */
 export const REPLICA_FORMAT = 10;
 
-/** The format a standby must say it reads for its main server to send it a copy (routes/backup.ts sync-copy): photos by reference. */
-export const PHOTOS_BY_REFERENCE_FORMAT = 8;
+/**
+ * The oldest importer a main server sends a copy to (routes/backup.ts sync-copy, a whole copy or a delta): 8 photos by
+ * reference, 10 event times; raise it with any format whose older importer drops a column.
+ */
+export const OLDEST_STANDBY_FORMAT = 10;
 
 /**
  * The format this standby's copy was made with; 0 when it has no record of one: it has never landed a copy, or only

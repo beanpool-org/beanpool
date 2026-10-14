@@ -435,9 +435,7 @@ function snapshotHandleFor(db: Db): Db | null {
         return null;
     }
     try {
-        const Ctor = db.constructor as unknown as new (file: string, options: Database.Options) => Db;
-        const handle = new Ctor(db.name, { readonly: true, fileMustExist: true });
-        handle.pragma('busy_timeout = 5000');
+        const handle = openReadOnly(db);
         snapshotHandles.set(db, handle);
         return handle;
     } catch (e) {
@@ -445,15 +443,63 @@ function snapshotHandleFor(db: Db): Db | null {
     }
 }
 
+/** A second, read-only handle on a file database's file. */
+function openReadOnly(db: Db): Db {
+    const Ctor = db.constructor as unknown as new (file: string, options: Database.Options) => Db;
+    const handle = new Ctor(db.name, { readonly: true, fileMustExist: true });
+    handle.pragma('busy_timeout = 5000');
+    return handle;
+}
+
+/** The metrics audits' read-only handles open now (washTradingAnalysisStepsOnSnapshot): closeWashSnapshotHandle closes them too. */
+const auditSnapshots = new WeakMap<Db, Set<Db>>();
+
+/**
+ * washTradingAnalysisSteps through a snapshot of its own, for the metrics audit (engine audit.ts): a read-only handle
+ * opened for it, one read transaction spanning every step, closed at its end. So a row written between its steps is
+ * read as it stood at the first, as the refresh reads (runWashAnalysisInSlices): a trade whose completed_at moves
+ * meanwhile (the deferred-wage payout, a standby's upsert) is never read by two of the 30-day pages, nor by none, as
+ * the one 30-day query before the pages could neither (#1919's review). Not the refresh's handle: the two can run at
+ * once, and a handle holds one transaction. An in-memory database (tests) reads through the node's own handle, as its
+ * refresh does. Its handle closed under it (closeWashSnapshotHandle) throws WashSnapshotClosed: nothing part-made
+ * comes back.
+ */
+export function* washTradingAnalysisStepsOnSnapshot(db: Db): Generator<void, WashAnalysis> {
+    if (db.memory) return yield* analysisSteps(db, false, db);
+    let snap: Db;
+    try {
+        snap = openReadOnly(db);
+    } catch (e) {
+        throw new Error(`the audit's read-only snapshot did not open (${e instanceof Error ? e.message : String(e)})`);
+    }
+    let open = auditSnapshots.get(db);
+    if (!open) auditSnapshots.set(db, open = new Set());
+    open.add(snap);
+    try {
+        // A deferred transaction takes its snapshot at its first read: the first page of buyers, in the first step.
+        snap.exec('BEGIN');
+        const analysis = yield* analysisSteps(snap, false, db);
+        if (!(snap.open && snap.inTransaction)) throw snap.open ? new Error('the snapshot ended before the analysis did') : new WashSnapshotClosed();
+        return analysis;
+    } catch (e) {
+        throw !snap.open && !(e instanceof WashSnapshotClosed) ? new WashSnapshotClosed() : e;
+    } finally {
+        open.delete(snap);
+        try { snap.close(); } catch { /* closed either way */ }
+    }
+}
+
 /**
  * Closes the refresh's read-only handle, where the node closes its data-version probe (a restore about to replace the
  * file, a shutdown): open, closing the node's own handle would not be the last close. A refresh reading through it
- * then throws, and lands nothing. The next refresh opens a new one.
+ * then throws, and lands nothing. The next refresh opens a new one. A metrics audit's analysis reading through its own
+ * (washTradingAnalysisStepsOnSnapshot) is closed too, and that audit fails.
  */
 export function closeWashSnapshotHandle(db: Db): void {
     const handle = snapshotHandles.get(db);
     snapshotHandles.delete(db);
     try { handle?.close(); } catch { /* closed either way */ }
+    for (const audit of auditSnapshots.get(db) ?? []) try { audit.close(); } catch { /* closed either way */ }
 }
 
 /** A refresh whose snapshot handle was closed under it (closeWashSnapshotHandle): expected, and logged as such. */

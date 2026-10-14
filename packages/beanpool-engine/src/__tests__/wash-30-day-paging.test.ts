@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
     WASH_30_DAY_PAGE_ROWS, WASH_BFS_STEP_NODES, thirtyDayTradePages, runWashTradingAnalysis, runWashAnalysisInSlices,
-    closeWashSnapshotHandle, type WashAnalysis,
+    closeWashSnapshotHandle, washTradingAnalysisStepsOnSnapshot, type WashAnalysis,
 } from '../trust.js';
 
 // The cluster step's 30-day query, a page at a time (#1908): the same rows in the same order as the one query, so the
@@ -291,4 +291,95 @@ describe('wash analysis: the 30-day query in pages (#1908)', { timeout: 60_000 }
         }
         db.close();
     });
+});
+
+/**
+ * #1919's review world (midpage.mjs): two 30-day pages of trades between old members, and one ring of four new members
+ * whose six trades lie in both pages, r0-r1 in the first and r2-r3 in the last; r0 also sold `oldOut` Beans 40 days ago.
+ */
+function ringWorld(oldOut: number): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wash-ring-'));
+    dirs.push(dir);
+    const file = path.join(dir, 'template.db');
+    const db = new Database(file);
+    db.exec(SCHEMA);
+    const rnd = mulberry32(12345);
+    const now = Date.now(), day = 86400_000;
+    const iso = (msAgo: number) => new Date(now - msAgo).toISOString();
+    const addMember = db.prepare('INSERT INTO members (public_key, joined_at) VALUES (?, ?)');
+    const ins = db.prepare(`INSERT INTO marketplace_transactions (id, buyer_pubkey, seller_pubkey, credits, status, completed_at) VALUES (?, ?, ?, ?, 'completed', ?)`);
+    db.transaction(() => {
+        for (let i = 0; i < 3000; i++) addMember.run(`k${i}`, iso((100 + rnd() * 200) * day));
+        for (const m of ['r0', 'r1', 'r2', 'r3']) addMember.run(m, iso(3 * day));
+        const ringAt: [string, string, number][] = [['r0', 'r1', 29.9], ['r0', 'r2', 15], ['r0', 'r3', 14], ['r1', 'r2', 13], ['r1', 'r3', 12], ['r2', 'r3', 0.5]];
+        for (const [b, sl, d] of ringAt) ins.run(`ring-${b}|${sl}`, b, sl, 10, iso(d * day));
+        ins.run('ring-old-out', 'r0', 'k1', oldOut, iso(40 * day));
+        for (let i = 0; i < WASH_30_DAY_PAGE_ROWS + 1000; i++) {
+            let b, sl;
+            do { b = Math.floor(rnd() * 3000); sl = Math.floor(rnd() * 3000); } while (b === sl);
+            ins.run(`f${i}`, `k${b}`, `k${sl}`, Math.round(rnd() * 9000) / 100, iso((1 + rnd() * 28) * day));
+        }
+    })();
+    db.close();
+    return file;
+}
+
+function copyOf(template: string): Database.Database {
+    const file = path.join(path.dirname(template), `copy-${Math.random().toString(36).slice(2)}.db`);
+    fs.copyFileSync(template, file);
+    const db = new Database(file);
+    db.pragma('journal_mode = WAL');
+    return db;
+}
+
+const ringOf = (a: WashAnalysis) => ({ flagged: a.flaggedClusters.has('r0'), internal: a.clusterDetails.find((c) => c.members.includes('r0'))?.internalVol ?? null });
+
+// #1919's review, finding 2: the metrics audit's analysis read its 30-day pages through the node's own handle, so a trade
+// whose completed_at moved between two of them was read twice (a ring flagged that main never flagged) or by none (one
+// main always flagged missed). Through its own snapshot it is read once, as the one query read it.
+describe('the metrics audit\'s wash analysis: one snapshot for every step (#1919)', { timeout: 120_000 }, () => {
+    const writes = [
+        // The deferred-wage payout (apps/server/src/state-engine.ts) on a completed trade in the first page.
+        ['moved on, from the first page to the last', 16, (db: Database.Database) => db.prepare(`UPDATE marketplace_transactions SET credits = credits + 1, completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = 'ring-r0|r1'`).run()],
+        // A standby's upsert (apps/server/src/engine/sync.ts) giving a trade in the last page an earlier completed_at.
+        ['moved back, from the last page to the first', 10, (db: Database.Database) => db.prepare(`UPDATE marketplace_transactions SET completed_at = ? WHERE id = 'ring-r2|r3'`).run(new Date(Date.now() - 29.95 * 86400_000).toISOString())],
+    ] as const;
+    for (const [name, oldOut, write] of writes) {
+        it(`a ring trade's completed_at ${name} at any step: main's answer, before the write or after`, () => {
+            const template = ringWorld(oldOut);
+            // Main's answers: one go (no turn given, so nothing written meanwhile), before the write and after.
+            const db = copyOf(template);
+            const before = ringOf(runWashTradingAnalysis(db));
+            write(db);
+            const after = ringOf(runWashTradingAnalysis(db));
+            db.close();
+            expect(before.flagged).toBe(after.flagged);
+            let steps = 0;
+            {
+                const db = copyOf(template);
+                const g = washTradingAnalysisStepsOnSnapshot(db);
+                while (!g.next().done) steps++;
+                db.close();
+            }
+            // Two 30-day pages at least: the write can land between them.
+            expect(steps).toBeGreaterThan(5);
+            const seen: string[] = [];
+            for (let k = 0; k <= steps; k++) {
+                const db = copyOf(template);
+                const g = washTradingAnalysisStepsOnSnapshot(db);
+                let r: IteratorResult<void, WashAnalysis>;
+                let i = 0;
+                for (;;) {
+                    if (i++ === k) write(db);
+                    r = g.next();
+                    if (r.done) break;
+                }
+                const got = ringOf(r.value);
+                if (JSON.stringify(got) !== JSON.stringify(before) && JSON.stringify(got) !== JSON.stringify(after)) seen.push(`step ${k}: ${JSON.stringify(got)}`);
+                closeWashSnapshotHandle(db);
+                db.close();
+            }
+            expect(seen).toEqual([]);
+        });
+    }
 });

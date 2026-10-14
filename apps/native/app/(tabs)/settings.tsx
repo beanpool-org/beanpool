@@ -16,7 +16,7 @@ import {
 } from '../../utils/delete-here';
 import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
-import { updateMemberProfile, getMemberProfile, signedRequest } from '../../utils/db';
+import { updateMemberProfile, getMemberProfile, signedRequest, signedGet } from '../../utils/db';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
     reminderOffsetLabel,
@@ -908,6 +908,18 @@ export default function SettingsScreen() {
     const [appLockEnabled, setAppLockEnabledState] = useState(false);
     const onAppLockTurnedOn = React.useCallback(() => setAppLockEnabledState(true), []);
     const [showBlockedModal, setShowBlockedModal] = useState(false);
+    // "Show me as a connection in common" (server SHOW_AS_CONNECTION_PREF), on unless turned off. null until the node says:
+    // it is served to the member alone, so it is read with a signed request.
+    const [showAsConnection, setShowAsConnection] = useState<boolean | null>(null);
+    useEffect(() => {
+        if (!identity?.publicKey) return;
+        let cancelled = false;
+        signedGet(`/api/members/preferences?publicKey=${identity.publicKey}`)
+            .then(res => (res.ok ? res.json() : null))
+            .then(prefs => { if (!cancelled && prefs && typeof prefs.show_as_connection_in_common === 'string') setShowAsConnection(prefs.show_as_connection_in_common !== 'false'); })
+            .catch(e => console.warn('[Prefs] Could not read the connection-in-common setting:', e));
+        return () => { cancelled = true; };
+    }, [identity?.publicKey]);
     const [blockedUsersList, setBlockedUsersList] = useState<{ pubkey: string; callsign?: string }[]>([]);
     const [loadingBlockedList, setLoadingBlockedList] = useState(false);
 
@@ -1910,6 +1922,26 @@ export default function SettingsScreen() {
                         <Text style={[styles.menuText, { flex: 1 }]}>Manage Blocked Users</Text>
                         <Text style={styles.menuChevron} aria-hidden={true} importantForAccessibility="no">›</Text>
                     </Pressable>
+                    {showAsConnection !== null && (
+                        <View style={styles.menuBtn}>
+                            <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🤝</Text></View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.menuText}>Show me as a connection in common</Text>
+                                <Text style={styles.menuSub}>When you and two people are friends both ways, each can see your name on the other's profile</Text>
+                            </View>
+                            <Pressable style={[styles.toggle, showAsConnection && styles.toggleOn]} accessibilityRole="switch" accessibilityLabel="Show me as a connection in common" accessibilityState={{ checked: showAsConnection }} onPress={async () => {
+                                const next = !showAsConnection; setShowAsConnection(next);
+                                try {
+                                    if (identity?.publicKey) await signedRequest('/api/members/preferences', { publicKey: identity.publicKey, preferences: { show_as_connection_in_common: next } });
+                                } catch (e: any) {
+                                    setShowAsConnection(!next);
+                                    Alert.alert('Not saved', e?.message || 'Your community could not save that.');
+                                }
+                            }}>
+                                <View style={[styles.toggleThumb, showAsConnection && styles.toggleThumbOn]} />
+                            </Pressable>
+                        </View>
+                    )}
                     <Pressable style={styles.menuBtn} onPress={() => Linking.openURL('https://beanpool.org/privacy.html')} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🛡️</Text></View>
                         <Text style={[styles.menuText, { flex: 1 }]}>Privacy Policy</Text>

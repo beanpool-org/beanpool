@@ -67,6 +67,8 @@ import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.j
 import { muteOf } from '../engine/auto-moderation.js';
 import { respondIfMuted, respondProfileRefusal, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
 import { assertMayMakeInvite } from '../engine/writer-bounds.js';
+import { FriendRefusal } from '../engine/social.js';
+import { getAddedYou } from '../engine/friends-added-you.js';
 import { isPoint, nearestPeople, readMemberArea, setMemberArea, withAreaDistances } from '../engine/member-area.js';
 import { parsePoint, type Point } from './distance-query.js';
 import { isSyntheticAccount, CONTACT_VALUE_LIMIT, textTooLongMessage } from '@beanpool/core';
@@ -2187,6 +2189,21 @@ router.post('/api/reports', async (ctx) => {
 
 // ======================== FRIENDS ========================
 
+// Who added the signer lately and hasn't been added back (engine/friends-added-you.ts): the signer's own, nobody else's.
+// Registered before /api/friends/:publicKey, which would otherwise take this path as a key.
+router.get('/api/friends/added-you', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    // It names other members: a member's read only (a visitor, a suspended account and a guest are refused).
+    if (!memberReadsOnlyHere(ctx)) return;
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = getAddedYou(actor);
+});
+
 // A member's friends list (each friend's name and face) is read by that member alone, whatever ENFORCE_READ_AUTH says:
 // every app asks only for its own. Anyone else, an admin and the owner included, is refused before any lookup with one
 // answer whatever key is named, so a refusal says nothing of whether that key is a member or has friends; walking
@@ -2222,7 +2239,19 @@ router.post('/api/friends/add', async (ctx) => {
         ctx.body = { error: 'ownerPubkey and friendPubkey are required' };
         return;
     }
-    const entry = addFriend(activeOwner, friendPubkey);
+    let entry;
+    try {
+        entry = addFriend(activeOwner, friendPubkey);
+    } catch (e) {
+        // Over the day's adds (429, with when it lets up), or someone the signer blocked: refused in words, never dropped.
+        if (respondProfileRefusal(ctx, e)) return;
+        if (e instanceof FriendRefusal) {
+            ctx.status = 400;
+            ctx.body = { error: e.message, code: 'blocked' };
+            return;
+        }
+        throw e;
+    }
     if (!entry) {
         ctx.status = 400;
         ctx.body = { error: 'Failed — both must be registered members' };

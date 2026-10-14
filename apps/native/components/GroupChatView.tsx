@@ -53,6 +53,7 @@ import {
 import { chatIsLocked, groupChatNotice, groupChatShownLines, openGroupThread, type OpenedGroupThread } from '../utils/group-chat-lines';
 import { isSealedGroupLine, searchShownLines } from '../utils/group-line-display';
 import { groupKeysLookUnopenable, GroupChatKeyError, GROUP_KEY_WAITING_TEXT, GROUP_KEYS_UNOPENABLE_TEXT } from '../utils/group-chat-keys';
+import { refusedSendNotice } from '../utils/dm-lock';
 import {
     isMuted, showInvitePrompt as shouldShowInvitePrompt, chatMuteFromRows, chatMuteFromAnswer, muteMenuLabel, chatLifecycleFromRows,
     ENTERPRISE_CHAT_NOTICE,
@@ -430,8 +431,10 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             // The bubble stays, marked "not delivered" — tapping it offers Resend or Discard, as in a DM.
             setPending(prev => prev.map(x => (x.clientId === p.clientId ? { ...x, state: 'failed' } : x)));
             setSecuring(null);
-            // A key reason (an older key than this phone holds, a key not here yet) is said above the box.
-            if (e instanceof GroupChatKeyError) setKeyNotice(e.message);
+            // A key reason (an older key than this phone holds, a key not here yet) is said above the box, and so is a
+            // refusal's one true line: the pins or the DM list can't be read, and where to reset them (#1938 confirmation 7, finding 3).
+            const why = e instanceof GroupChatKeyError ? e.message : refusedSendNotice(e);
+            if (why) setKeyNotice(why);
             console.warn('[GroupChat] send failed:', e?.message || e);
         }
     }, [kind, id, load, locked, rawMessages, rosterRows]);

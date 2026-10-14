@@ -2525,10 +2525,14 @@ export async function getEnterpriseDecisions(treasury: string): Promise<ScopedDe
     }
 }
 
-/** A keeper proposes a vote. A pay-out names its recipient as params.to; the node checks everything again. */
+/**
+ * A keeper proposes a vote. A pay-out names its recipient as params.to; the node checks everything again. The title, the why
+ * and a pay-out's memo are words the node reads, so a known DM's id refuses first (#1938 confirmation 7, finding 2).
+ */
 export async function proposeEnterpriseDecision(treasury: string, body: {
     title: string; description: string; effect: ScopedEffect; subject?: string; params?: { to: string; amount: number; memo?: string };
 }) {
+    await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/decisions`, body);
 }
 
@@ -2552,10 +2556,15 @@ export async function getGroupDecisions(groupId: string): Promise<ScopedDecision
     }
 }
 
-/** A member or convenor proposes a group vote: the group's own things only, never a recipient or an amount. */
+/**
+ * A member or convenor proposes a group vote: the group's own things only, never a recipient or an amount. The title and the
+ * why are words the node reads, so a known DM's id refuses first; a group this phone holds keys of is never a DM, and its
+ * votes never wait on the pins (#1938 confirmation 7, finding 2).
+ */
 export async function proposeGroupDecision(groupId: string, body: {
     title: string; description: string; effect: GroupEffect; subject?: string; params?: { role?: 'convenor' | 'member'; policy?: string };
 }) {
+    if (!(await isHeldGroupChat(groupId))) await refuseReadableIntoDm(groupId);
     return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/decisions`, body);
 }
 
@@ -2750,11 +2759,12 @@ async function dmConversationsByFold(database?: SQLite.SQLiteDatabase): Promise<
  * group's keys are about to be synced or made, never per row of a sync. A dm row or a sealed line kept under a mixed-case
  * spelling the DM list never got (written while the key memory couldn't be read) is caught here (#1863 review). With the
  * list unreadable and no spelling known anywhere else, DmGuardUnreadError: no group key is asked on a list it couldn't read.
+ * `pinsMustRead` asks the pins strictly: pins that can't be read throw DmPinStoreError.
  */
-async function isKnownDmInAnySpelling(conversationId: string): Promise<boolean> {
+async function isKnownDmInAnySpelling(conversationId: string, opts: { pinsMustRead?: boolean } = {}): Promise<boolean> {
     let listUnread = false;
     try {
-        if (await isKnownDmConversation(conversationId)) return true;
+        if (await isKnownDmConversation(conversationId, opts)) return true;
     } catch (e) {
         if (!isDmGuardUnreadError(e)) throw e;
         listUnread = true;
@@ -7804,11 +7814,15 @@ export function groupKeyStore(nodeUrl: string): GroupKeyStore {
 /**
  * A conversation this phone knows as a DM, and has never held a group's keys for, gets no group keys here: nothing is
  * posted, edited, joined or rotated under its id as a group's. Group keys are what make a group held, and a held group
- * is asked first everywhere, so this keeps a known DM from ever becoming one (confirmation 2 of #1788, finding 2).
+ * is asked first everywhere, so this keeps a known DM from ever becoming one (confirmation 2 of #1788, finding 2). The pins
+ * are asked strictly (§3.4 amendment 7 §3 iv, "refusing when unreadable"), as an unreadable list already refuses here:
+ * pins that can't be read throw DmPinStoreError, so a pinned DM the node relists as a locked group while they can't be read
+ * gets no keys, and so never becomes a held group that outranks its pin for good (#1938 confirmation 7, finding 1). A
+ * group whose keys this phone holds never asks; a locked group it never held waits until the pins can be read.
  */
 async function refuseGroupKeysForDm(ring: GroupKeyring): Promise<void> {
     if (await ring.seenLocked()) return;
-    if (await isKnownDmInAnySpelling(ring.groupId)) throw new GroupChatKeyError(GROUP_KEYS_FOR_DM_TEXT, 'refused');
+    if (await isKnownDmInAnySpelling(ring.groupId, { pinsMustRead: true })) throw new GroupChatKeyError(GROUP_KEYS_FOR_DM_TEXT, 'refused');
 }
 
 /**

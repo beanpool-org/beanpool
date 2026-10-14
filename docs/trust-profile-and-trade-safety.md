@@ -68,7 +68,11 @@ Adding a friend is visible and bounded, because a connection in common is made o
 - You can't add someone you blocked: refused, saying so. If they add you, you aren't told: the add is taken as any add
   (it counts against their 100), and your "added you" line leaves out anyone you blocked (`member_blocks`, the web's
   block list; the phone also leaves out its own blocks). Refusing it would tell them of the block, which a block never
-  does (engine/member-blocks.ts).
+  does (engine/member-blocks.ts). You stop counting as a connection in common between them and your friends: a blocker
+  is never counted on the profile of the member they blocked, nor for a viewer who blocked them; the friend rows stay,
+  so the blocked member's own reads don't change (`getTrustProfileForViewer`; `test-trust-mutuals` T11-T14). It does
+  not take them off your People list, and if your contact is set to Friends they still see it. Remove them if you want
+  that; they can notice a removal.
 
 ### Suggested "trust at a glance" layout
 1. Tier badge · member since · last active

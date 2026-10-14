@@ -34,12 +34,13 @@ Your community does this for blocks it keeps for you. Today that is a block made
 - If they ask for a deal on one of your listings, the request waits in your deals with no notification. If you leave it, it ends after 7 days, also with no notification.
 - If they accept one of your Offers straight away, you get no notification, and none if they then cancel that deal. The deal still shows in your deals, and its messages in your chat with them, as with anyone. Their Beans are held and given back as usual.
 - They cannot make a listing addressed only to you.
-- You can't add them. If they add you, you aren't told. If they had added you, the "added you" line on your People tab goes.
+- You can't add them. If they add you, you aren't told. If they had added you, the "added you" line on your People tab goes. You stop counting as a connection in common between them and your friends.
 - If they send you Beans with a note, the Beans arrive in full and the note does not. You see "Beans from a member you blocked" instead, and you still do after you unblock them.
 
 ## What it does not do
 
 - They are not told. To them, their messages look sent, and so do the notes with their Beans.
+- It does not take them off your People list, and if your contact is set to Friends they still see it. Remove them if you want that; they can notice a removal.
 - Group chats, event chats and project and enterprise chats are shared: everyone in them sees the same messages. Their messages there still show, to you as to everyone else.
 - A deal you already have with them goes on as before, with its notices and notifications.
 - If you have traded with them before, they can still send you Beans. Every Bean arrives, with no notification.

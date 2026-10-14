@@ -160,8 +160,8 @@ describe('events: cache columns', () => {
         expect(eventCacheColumns({
             type: 'event', eventStartAt: 's', eventEndAt: 'e', eventPlaceName: 'Hall', eventState: 'updated',
             goingCount: 7, interestedCount: 3, eventPrivateNote: 'secret', myRsvp: 'going',
-        })).toEqual(['s', 'e', 'Hall', 'updated', 7, 3]);
-        expect(eventCacheColumns({ type: 'offer', eventStartAt: 's' })).toEqual([null, null, null, null, 0, 0]);
+        })).toEqual(['s', 'e', 'Hall', 'updated', 7, 3, null, null, null, null]);
+        expect(eventCacheColumns({ type: 'offer', eventStartAt: 's' })).toEqual([null, null, null, null, 0, 0, null, null, null, null]);
     });
 });
 

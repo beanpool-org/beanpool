@@ -2,8 +2,15 @@
  * Events on the phone — the logic under the chooser row, NewEventModal, the feed card and the event detail
  * (docs/events-on-the-map.md §3, slice 3). No React Native imports, so vitest can hold it to the design.
  *
- * Times travel as ISO UTC and are shown in the phone's local time.
+ * Times travel as ISO UTC, and from a node with event times (DESIGN-event-times-fable.md, slice 3) also as the host's clock
+ * and its zone. The phone never converts a time into another zone: the place's clock is the node's string, the reader's
+ * is the Date getters, and @beanpool/core eventWhenParts turns the two into the card's lines.
  */
+
+import {
+    eventWhenParts, deviceLocalClock, zoneLabelFor, utcOffsetName, offsetMinutesOf, localClockMs, CURRENT_ZONE_IDS,
+    LOCAL_CLOCK_RE, type EventWhenParts,
+} from '@beanpool/core';
 
 export type EventRsvpStatus = 'going' | 'interested';
 export type EventState = 'scheduled' | 'updated' | 'cancelled';
@@ -49,6 +56,13 @@ export interface EventFormInput {
     audienceGroupId: string | null;
     /** The member, or an enterprise pubkey the member keeps. */
     authorPubkey: string;
+    /** Online: no pin and no place name, and a link to join (DESIGN-event-times §9). */
+    online?: boolean;
+    link?: string;
+    /** The zone the Starts and Ends clocks are in (the pin's, the device's or a picked one); null while unknown. */
+    tz?: string | null;
+    /** That zone's offset now, in minutes, for the past check; null while unknown (the device's own clock is used). */
+    tzOffsetMinutes?: number | null;
 }
 
 export interface EventPostDraft {
@@ -59,12 +73,18 @@ export interface EventPostDraft {
     credits: 0;
     price_type: 'fixed';
     author_pubkey: string;
-    lat: number;
-    lng: number;
+    lat?: number;
+    lng?: number;
     reach: 'local';
+    /** The instant, for a node from before event times; a node with them reads the clock below instead. */
     eventStartAt: string;
     eventEndAt: string;
-    eventPlaceName: string;
+    eventStartLocal?: string;
+    eventEndLocal?: string;
+    eventTz?: string;
+    eventOnline?: true;
+    eventLink?: string;
+    eventPlaceName?: string;
     eventPrivateNote?: string;
     audienceScope?: 'group';
     targetGroupId?: string;
@@ -81,15 +101,25 @@ export function buildEventDraft(input: EventFormInput, now: Date = new Date()):
     if (!title) return { ok: false, error: 'Give the event a title.' };
     if (title.length > EVENT_TITLE_MAX) return { ok: false, error: `Keep the title under ${EVENT_TITLE_MAX} characters.` };
     if (!input.start) return { ok: false, error: 'Pick when the event starts.' };
-    if (input.start.getTime() <= now.getTime()) return { ok: false, error: 'The start time has already passed. Pick a time in the future.' };
+    const startLocal = deviceLocalClock(input.start);
+    if (clockInstantMs(startLocal, input.tzOffsetMinutes, input.start) <= now.getTime()) return { ok: false, error: 'The start time has already passed. Pick a time in the future.' };
     const end = input.end ?? defaultEventEnd(input.start);
     if (end.getTime() <= input.start.getTime()) return { ok: false, error: 'The end time must be after the start.' };
-    if (input.lat == null || input.lng == null || !Number.isFinite(input.lat) || !Number.isFinite(input.lng)) {
-        return { ok: false, error: 'Put a pin on the map so people can find it.' };
+    const online = input.online === true;
+    let link: string | null = null;
+    let placeName = '';
+    if (online) {
+        const checked = checkEventLink(input.link ?? '');
+        if (!checked.ok) return checked;
+        link = checked.link;
+    } else {
+        if (input.lat == null || input.lng == null || !Number.isFinite(input.lat) || !Number.isFinite(input.lng)) {
+            return { ok: false, error: 'Put a pin on the map so people can find it.' };
+        }
+        placeName = input.placeName.trim();
+        if (!placeName) return { ok: false, error: 'Name the place, e.g. "The old bowls club".' };
+        if (placeName.length > EVENT_PLACE_NAME_MAX) return { ok: false, error: `Keep the place name under ${EVENT_PLACE_NAME_MAX} characters.` };
     }
-    const placeName = input.placeName.trim();
-    if (!placeName) return { ok: false, error: 'Name the place, e.g. "The old bowls club".' };
-    if (placeName.length > EVENT_PLACE_NAME_MAX) return { ok: false, error: `Keep the place name under ${EVENT_PLACE_NAME_MAX} characters.` };
     const note = input.privateNote.trim();
     if (note.length > EVENT_PRIVATE_NOTE_MAX) return { ok: false, error: `Keep the note under ${EVENT_PRIVATE_NOTE_MAX} characters.` };
     const description = input.description.trim();
@@ -103,12 +133,18 @@ export function buildEventDraft(input: EventFormInput, now: Date = new Date()):
         credits: 0,
         price_type: 'fixed',
         author_pubkey: input.authorPubkey,
-        lat: input.lat,
-        lng: input.lng,
+        ...(online ? {} : { lat: input.lat!, lng: input.lng! }),
         reach: 'local',
         eventStartAt: input.start.toISOString(),
         eventEndAt: end.toISOString(),
-        eventPlaceName: placeName,
+        // The clock the host picked. In person a node reads it at the pin when no zone goes with it; online it needs the
+        // zone, so with none (a device that cannot name its own) only the instant goes and the node keeps it as UTC (§3).
+        ...(!online || input.tz ? {
+            eventStartLocal: startLocal,
+            eventEndLocal: input.end ? deviceLocalClock(input.end) : addClockMinutes(startLocal, EVENT_DEFAULT_DURATION_MS / 60000),
+        } : {}),
+        ...(input.tz ? { eventTz: input.tz } : {}),
+        ...(online ? { eventOnline: true as const, ...(link ? { eventLink: link } : {}) } : { eventPlaceName: placeName }),
         ...(note ? { eventPrivateNote: note } : {}),
         ...(input.audienceGroupId ? { audienceScope: 'group' as const, targetGroupId: input.audienceGroupId } : {}),
     };
@@ -347,8 +383,18 @@ export function distanceKm(lat1: number, lng1: number, lat2: number, lng2: numbe
  * are the public ones; the viewer's own RSVP and the private note are not cached here — the sync pull is
  * unsigned and never carries them.
  */
-export function eventCacheColumns(p: any): [string | null, string | null, string | null, string | null, number, number] {
-    if (p?.type !== 'event') return [null, null, null, null, 0, 0];
+export const EVENT_CACHE_COLUMN_NAMES = [
+    'event_start_at', 'event_end_at', 'event_place_name', 'event_state', 'event_going_count', 'event_interested_count',
+    'event_start_local', 'event_end_local', 'event_tz', 'event_online',
+] as const;
+
+/**
+ * The host's clock, its zone and online ride along (DESIGN-event-times amendment 1, item 3), so the card reads right from the
+ * cache. The join link does not: it is served like the private note, to the host and Going only.
+ */
+export function eventCacheColumns(p: any): [string | null, string | null, string | null, string | null, number, number, string | null, string | null, string | null, number | null] {
+    if (p?.type !== 'event') return [null, null, null, null, 0, 0, null, null, null, null];
+    const online = p.event_online ?? p.eventOnline;
     return [
         p.event_start_at ?? p.eventStartAt ?? null,
         p.event_end_at ?? p.eventEndAt ?? null,
@@ -356,6 +402,10 @@ export function eventCacheColumns(p: any): [string | null, string | null, string
         p.event_state ?? p.eventState ?? 'scheduled',
         Number(p.event_going_count ?? p.goingCount ?? 0) || 0,
         Number(p.event_interested_count ?? p.interestedCount ?? 0) || 0,
+        p.event_start_local ?? p.eventStartLocal ?? null,
+        p.event_end_local ?? p.eventEndLocal ?? null,
+        p.event_tz ?? p.eventTz ?? null,
+        online == null ? null : (online === true || online === 1 ? 1 : 0),
     ];
 }
 
@@ -536,6 +586,11 @@ export interface EventEditValues {
     privateNote: string;
     /** The node's photo URL, a new data URL, or null for none. */
     photo: string | null;
+    online?: boolean;
+    link?: string;
+    /** The zone the clocks above are in; null for an event from a node before zones (the device's clock, as before). */
+    tz?: string | null;
+    tzOffsetMinutes?: number | null;
 }
 
 /** The form, filled from the node's view of the event (camelCase) or the cached row (snake_case). */
@@ -544,16 +599,24 @@ export function eventEditValues(post: any): EventEditValues {
     const num = (v: any) => (v == null || !Number.isFinite(Number(v)) ? null : Number(v));
     let photos: any = post?.photos;
     if (typeof photos === 'string') { try { photos = JSON.parse(photos); } catch { photos = []; } }
+    // The pickers show the host's clock: a Date whose getters read the place's "20:50", wherever this phone is (§2 Edit).
+    const t = eventTimeFields(post);
+    const clock = (local: string | null, iso: string | null) => (t.tz ? clockDate(local) : null) ?? date(iso);
+    const offset = offsetMinutesOf(t.startLocal, t.startAt);
     return {
         title: post?.title || '',
         description: post?.description || '',
-        start: date(post?.eventStartAt ?? post?.event_start_at),
-        end: date(post?.eventEndAt ?? post?.event_end_at),
+        start: clock(t.startLocal, t.startAt),
+        end: clock(t.endLocal, t.endAt),
         placeName: post?.eventPlaceName ?? post?.event_place_name ?? '',
         lat: num(post?.lat),
         lng: num(post?.lng),
         privateNote: post?.eventPrivateNote ?? '',
         photo: Array.isArray(photos) && typeof photos[0] === 'string' && photos[0] ? photos[0] : null,
+        online: t.online,
+        link: post?.eventLink ?? '',
+        tz: t.tz,
+        tzOffsetMinutes: t.tz && Number.isFinite(offset) ? offset : null,
     };
 }
 
@@ -562,6 +625,11 @@ export interface EventEditPatch {
     description?: string;
     eventStartAt?: string;
     eventEndAt?: string;
+    eventStartLocal?: string;
+    eventEndLocal?: string;
+    eventTz?: string;
+    eventOnline?: boolean;
+    eventLink?: string;
     eventPlaceName?: string;
     eventPrivateNote?: string;
     lat?: number;
@@ -582,14 +650,21 @@ export function buildEventEditPatch(before: EventEditValues, after: EventEditVal
     if (title.length > EVENT_TITLE_MAX) return { ok: false, error: `Keep the title under ${EVENT_TITLE_MAX} characters.` };
     if (!after.start) return { ok: false, error: 'Pick when the event starts.' };
     const startMoved = !before.start || after.start.getTime() !== before.start.getTime();
-    if (startMoved && after.start.getTime() <= now.getTime()) return { ok: false, error: 'The start time has already passed. Pick a time in the future.' };
+    const startLocal = deviceLocalClock(after.start);
+    if (startMoved && clockInstantMs(startLocal, after.tzOffsetMinutes, after.start) <= now.getTime()) return { ok: false, error: 'The start time has already passed. Pick a time in the future.' };
     const end = after.end ?? defaultEventEnd(after.start);
     if (end.getTime() <= after.start.getTime()) return { ok: false, error: 'The end time must be after the start.' };
-    if (after.lat == null || after.lng == null || !Number.isFinite(after.lat) || !Number.isFinite(after.lng)) {
+    const online = after.online === true;
+    let link = '';
+    if (online) {
+        const checked = checkEventLink(after.link ?? '');
+        if (!checked.ok) return checked;
+        link = checked.link ?? '';
+    } else if (after.lat == null || after.lng == null || !Number.isFinite(after.lat) || !Number.isFinite(after.lng)) {
         return { ok: false, error: 'Put a pin on the map so people can find it.' };
     }
-    const placeName = after.placeName.trim();
-    if (!placeName) return { ok: false, error: 'Name the place, e.g. "The old bowls club".' };
+    const placeName = online ? '' : after.placeName.trim();
+    if (!online && !placeName) return { ok: false, error: 'Name the place, e.g. "The old bowls club".' };
     if (placeName.length > EVENT_PLACE_NAME_MAX) return { ok: false, error: `Keep the place name under ${EVENT_PLACE_NAME_MAX} characters.` };
     const note = after.privateNote.trim();
     if (note.length > EVENT_PRIVATE_NOTE_MAX) return { ok: false, error: `Keep the note under ${EVENT_PRIVATE_NOTE_MAX} characters.` };
@@ -599,19 +674,31 @@ export function buildEventEditPatch(before: EventEditValues, after: EventEditVal
     const patch: EventEditPatch = {};
     if (title !== before.title.trim()) patch.title = title;
     if (description !== before.description.trim()) patch.description = description;
-    if (startMoved) patch.eventStartAt = after.start.toISOString();
+    // The clock goes with the instant whenever a zone is known: a node with event times reads the clock (in the zone the
+    // event has, or the one sent below), and one from before them reads the instant.
+    const clocks = !!(after.tz ?? before.tz);
+    if (startMoved) {
+        patch.eventStartAt = after.start.toISOString();
+        if (clocks) patch.eventStartLocal = startLocal;
+    }
     const endBefore = before.end?.getTime() ?? null;
     const endAfter = after.end?.getTime() ?? null;
     // A cleared end goes as '', which the node turns into start + 2 hours. When the start moves, the end the
     // form shows goes with it: the node keeps the old LENGTH when no end is named, so moving 9:00–11:00 to
     // 10:00 would otherwise save 10:00–12:00 while the form said 11:00.
-    if (endAfter !== endBefore || (startMoved && after.end)) patch.eventEndAt = after.end ? after.end.toISOString() : '';
-    if (placeName !== before.placeName.trim()) patch.eventPlaceName = placeName;
+    if (endAfter !== endBefore || (startMoved && after.end)) {
+        patch.eventEndAt = after.end ? after.end.toISOString() : '';
+        if (clocks) patch.eventEndLocal = after.end ? deviceLocalClock(after.end) : '';
+    }
+    if (after.tz && after.tz !== before.tz) patch.eventTz = after.tz;
+    if (online !== (before.online === true)) patch.eventOnline = online;
+    if (online && (patch.eventOnline !== undefined || link !== (before.link ?? '').trim())) patch.eventLink = link;
+    if (!online && placeName !== before.placeName.trim()) patch.eventPlaceName = placeName;
     if (note !== before.privateNote.trim()) patch.eventPrivateNote = note;
-    if (after.lat !== before.lat || after.lng !== before.lng) { patch.lat = after.lat; patch.lng = after.lng; }
+    if (!online && (after.lat !== before.lat || after.lng !== before.lng)) { patch.lat = after.lat!; patch.lng = after.lng!; }
     if (after.photo !== before.photo) patch.photos = after.photo ? [after.photo] : [];
     const notifies = patch.eventStartAt !== undefined || patch.eventEndAt !== undefined || patch.eventPlaceName !== undefined
-        || patch.lat !== undefined;
+        || patch.lat !== undefined || patch.eventTz !== undefined || patch.eventOnline !== undefined;
     return { ok: true, patch, notifies };
 }
 
@@ -632,11 +719,247 @@ export interface EventPinCard {
 export function eventPinCard(post: any): EventPinCard {
     const going = Number(post?.goingCount ?? post?.event_going_count ?? 0) || 0;
     const place = (post?.eventPlaceName ?? post?.event_place_name ?? '').trim();
+    // The pin card is one line of time (map.tsx is protected, so no second line): when the place's clock is not the
+    // reader's, it carries the place's zone, so it is never read as the reader's own.
+    const parts = eventWhen(post);
+    const zone = parts?.note ? parts.note.slice(0, parts.note.indexOf(' · ')) : null;
     return {
-        when: formatEventWhen(post?.eventStartAt ?? post?.event_start_at, post?.eventEndAt ?? post?.event_end_at),
+        when: `${formatEventWhenFor(post)}${zone ? ` · ${zone}` : ''}`,
         badge: eventBadge(post),
         title: post?.title || 'Event',
         place: place || null,
         going: `${going} going`,
     };
+}
+
+// ===================== EVENT TIMES: ZONES AND ONLINE (DESIGN-event-times-fable.md §3, §4, §9, slice 3) =====================
+
+export const EVENT_LINK_MAX = 500;
+export const EVENT_LINK_HINT = 'Link to join · only people who tap Going see it';
+/** The zone line when an online event's zone is not known: the device could not name its own (§3, §7 item 7). */
+export const EVENT_ZONE_PROMPT = 'Pick the time zone these times are in';
+
+/** One row of the node's `GET /api/events/zone` and of `GET /api/events/zones`. */
+export interface EventZone {
+    tz: string;
+    label: string;
+    offsetMinutes: number;
+}
+
+/** Where the form's zone came from: the pin's lookup, this phone, or the picker. */
+export type EventZoneSource = 'pin' | 'device' | 'picked';
+
+/** Online, from a node row (true) or the cached one (1). */
+export function isOnlineEvent(post: any): boolean {
+    const v = post?.eventOnline ?? post?.event_online;
+    return v === true || v === 1 || v === '1';
+}
+
+/** The time fields of an event, from a server row (camelCase) or a cached one (snake_case). */
+function eventTimeFields(post: any) {
+    return {
+        startAt: (post?.eventStartAt ?? post?.event_start_at ?? null) as string | null,
+        endAt: (post?.eventEndAt ?? post?.event_end_at ?? null) as string | null,
+        startLocal: (post?.eventStartLocal ?? post?.event_start_local ?? null) as string | null,
+        endLocal: (post?.eventEndLocal ?? post?.event_end_local ?? null) as string | null,
+        tz: (post?.eventTz ?? post?.event_tz ?? null) as string | null,
+        online: isOnlineEvent(post),
+    };
+}
+
+/** A clock as a Date whose getters read it on this phone ("20:50" stays 20:50), or null when it is not a clock. */
+function clockDate(local: string | null | undefined): Date | null {
+    const m = local ? LOCAL_CLOCK_RE.exec(local) : null;
+    if (!m) return null;
+    const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+    return isNaN(d.getTime()) ? null : d;
+}
+
+/** The instant of a clock in a zone whose offset is known; else the device's own reading of the picked Date. */
+function clockInstantMs(local: string, offsetMinutes: number | null | undefined, picked: Date): number {
+    return offsetMinutes != null && Number.isFinite(offsetMinutes) ? localClockMs(local) - offsetMinutes * 60000 : picked.getTime();
+}
+
+/** A clock moved on by minutes on the clock itself: "2026-10-17T20:50" + 120 → "2026-10-17T22:50". */
+function addClockMinutes(local: string, minutes: number): string {
+    const d = new Date(localClockMs(local) + minutes * 60000);
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+}
+
+/**
+ * The join link, checked as the node checks it (engine/posts.ts cleanEventLink) so the host hears before a round trip:
+ * http(s) only, at most 500 characters, no user name or password (`https://zoom.us@evil.example`). Blank is allowed.
+ * No URL parser: React Native's URL has no `username`.
+ */
+export function checkEventLink(raw: string): { ok: true; link: string | null } | { ok: false; error: string } {
+    const v = (raw || '').trim();
+    if (!v) return { ok: true, link: null };
+    if (!/^https?:\/\/[^\s/?#]/i.test(v)) return { ok: false, error: 'The link to join must start with https:// or http://' };
+    if (v.length > EVENT_LINK_MAX) return { ok: false, error: `Keep the link to join under ${EVENT_LINK_MAX} characters.` };
+    const authority = v.replace(/^https?:\/\//i, '').split(/[/?#]/)[0];
+    if (authority.includes('@')) return { ok: false, error: 'The link to join must not hold a user name or password' };
+    return { ok: true, link: v };
+}
+
+/**
+ * The card's lines (§4) for an event, from either row shape: the place's clock first for an event in person, the
+ * reader's own for an online one ("your time"). An event from a node before zones reads in device time, as before.
+ */
+export function eventWhen(post: any): EventWhenParts | null {
+    const t = eventTimeFields(post);
+    const start = t.startAt ? new Date(t.startAt) : null;
+    if (!start || isNaN(start.getTime())) return null;
+    const end = t.endAt ? new Date(t.endAt) : defaultEventEnd(start);
+    return eventWhenParts({
+        startAt: t.startAt, endAt: t.endAt, startLocal: t.startLocal, endLocal: t.endLocal, tz: t.tz, online: t.online,
+        deviceStart: deviceLocalClock(start),
+        deviceEnd: isNaN(end.getTime()) ? null : deviceLocalClock(end),
+    });
+}
+
+/** The first line as one string, "SAT 17 OCT · 20:50–22:50"; '' when the event has no readable start. */
+export function formatEventWhenFor(post: any): string {
+    const p = eventWhen(post);
+    return p ? `${p.first}${p.sep}${p.second}` : '';
+}
+
+/** The card's place line: "Online" for an online event, else the place name and the distance. */
+export function eventPlaceLine(post: any, distance: string | null): string {
+    if (isOnlineEvent(post)) return 'Online';
+    const placeName = post?.event_place_name ?? post?.eventPlaceName ?? '';
+    return [placeName, distance].filter(Boolean).join(' · ');
+}
+
+const DAY_WORDS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_WORDS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function clockDay(local: string): string {
+    const d = clockDate(local)!;
+    return `${DAY_WORDS[d.getDay()]} ${d.getDate()} ${MONTH_WORDS[d.getMonth()]}`;
+}
+
+function clockTime(local: string): string {
+    const m = LOCAL_CLOCK_RE.exec(local)!;
+    return `${+m[4]}:${m[5]}`;
+}
+
+/**
+ * The share text's time, labelled so it is right outside the app (§4): "Sat 17 Oct, 20:50 Lagos time", online "Fri 16 Oct,
+ * 20:50 Sydney time (online)". From a node before zones, the phone's own clock with no label, as before.
+ */
+export function eventShareWhen(post: any): string {
+    const t = eventTimeFields(post);
+    if (t.startLocal && t.tz && LOCAL_CLOCK_RE.test(t.startLocal)) {
+        const label = zoneLabelFor(t.tz, offsetMinutesOf(t.startLocal, t.startAt));
+        return `${clockDay(t.startLocal)}, ${clockTime(t.startLocal)} ${label}${t.online ? ' (online)' : ''}`;
+    }
+    const start = t.startAt ? new Date(t.startAt) : null;
+    if (!start || isNaN(start.getTime())) return '';
+    return `${formatPickerValue(start)}${t.online ? ' (online)' : ''}`;
+}
+
+/**
+ * Home's "Coming up" date (§4): the day, as today; with the place's clock and zone when they are not the reader's; an
+ * online event in the reader's own time. Reads `startLocal`, `tz` and `online` when the node's Home answer carries them.
+ */
+export function eventHomeWhen(item: { startsAt: string; startLocal?: string | null; tz?: string | null; online?: boolean | null }): string {
+    const start = new Date(item.startsAt);
+    if (isNaN(start.getTime())) return '';
+    const device = deviceLocalClock(start);
+    if (item.online) return `${clockDay(device)}, ${clockTime(device)} your time`;
+    if (item.startLocal && item.tz && LOCAL_CLOCK_RE.test(item.startLocal) && item.startLocal !== device) {
+        return `${clockDay(item.startLocal)}, ${clockTime(item.startLocal)} ${zoneLabelFor(item.tz, offsetMinutesOf(item.startLocal, item.startsAt))}`;
+    }
+    return clockDay(device);
+}
+
+/** A zone id spelled the current way (Europe/Kiev → Europe/Kyiv), as the node stores it. */
+export function currentZoneId(tz: string): string {
+    return CURRENT_ZONE_IDS[tz] ?? tz;
+}
+
+/** Whether two zone ids are the same zone, however each is spelled. */
+export function sameZone(a: string | null | undefined, b: string | null | undefined): boolean {
+    return !!a && !!b && currentZoneId(a) === currentZoneId(b);
+}
+
+const ZONE_ID_RE = /^(?:UTC|[A-Za-z]+(?:\/[A-Za-z0-9_+\-]+)+)$/;
+
+/**
+ * This phone's zone: the ONE Intl call the phone makes (§7 item 7), `Intl.DateTimeFormat().resolvedOptions().timeZone`.
+ * Hermes on Android answers it from android.icu; anything that is not an IANA id (missing, empty, "GMT+10:00", a throw)
+ * is null, and the form then asks for a zone instead of guessing one. No zone arithmetic ever runs here.
+ */
+export function deviceTimeZone(intl: any = (globalThis as any).Intl): string | null {
+    try {
+        const tz = intl?.DateTimeFormat?.().resolvedOptions?.().timeZone;
+        return typeof tz === 'string' && ZONE_ID_RE.test(tz) ? currentZoneId(tz) : null;
+    } catch {
+        return null;
+    }
+}
+
+export type EventZoneLine = { zone: string; why: string; moved: boolean } | { prompt: string };
+
+/**
+ * The muted line under Starts and Ends (§3). In person it shows only when the times are not the phone's own zone (every
+ * ordinary local-node case shows nothing); online it always shows, because the zone anchors the clock.
+ * "Times are **Lagos time** (where the pin is) · Change"; after the pin moves, "Times are now **Accra time**".
+ */
+export function eventZoneLine(s: {
+    online: boolean; tz: string | null; source: EventZoneSource | null; deviceTz: string | null; offsetMinutes: number | null; moved?: boolean;
+}): EventZoneLine | null {
+    if (!s.tz) return s.online ? { prompt: EVENT_ZONE_PROMPT } : null;
+    if (!s.online && s.source !== 'picked' && sameZone(s.tz, s.deviceTz)) return null;
+    const zone = zoneLabelFor(s.tz, s.offsetMinutes ?? NaN);
+    const why = s.source === 'pin' ? ' (where the pin is)' : s.source === 'device' ? ' (your device)' : '';
+    return { zone, why, moved: !!s.moved };
+}
+
+/** A picker row: "Lagos (UTC+1)", "Kolkata (UTC+5:30)"; a zone that is not a place reads as its offset, "UTC+1". */
+export function zonePickerEntry(z: EventZone): string {
+    const name = z.label.replace(/ time$/, '');
+    const offset = utcOffsetName(z.offsetMinutes);
+    return name === offset ? name : `${name} (${offset})`;
+}
+
+/** The picker's search box: the place's name or the zone id, any case; blank shows them all. */
+export function filterZones(zones: EventZone[], query: string): EventZone[] {
+    const q = query.trim().toLowerCase();
+    if (!q) return zones;
+    return zones.filter(z => z.label.toLowerCase().includes(q) || z.tz.toLowerCase().includes(q) || z.tz.toLowerCase().replace(/_/g, ' ').includes(q));
+}
+
+/** One side of the node's `eventTimeAdjusted` (create and edit answer it next to the post). */
+export interface EventClockAdjustment { kind: 'gap' | 'overlap'; asked: string; saved: string }
+
+function clock12(local: string): string {
+    const m = LOCAL_CLOCK_RE.exec(local)!;
+    const h = +m[4];
+    return `${h % 12 === 0 ? 12 : h % 12}:${m[5]} ${h < 12 ? 'am' : 'pm'}`;
+}
+
+/**
+ * The DST words (§3, §7 items 1–2), from what the node answered after saving: "2:30 am does not exist on 4 Oct in Sydney
+ * (clocks go forward). It was saved as 3:30 am." / "2:30 am happens twice on 5 Apr in Sydney (clocks go back). The first
+ * one is used." One line per side the node adjusted; none when it adjusted nothing.
+ */
+export function eventTimeAdjustedText(adjusted: { start?: EventClockAdjustment | null; end?: EventClockAdjustment | null } | null | undefined, tz: string | null | undefined): string[] {
+    if (!adjusted) return [];
+    const place = zoneLabelFor(tz, NaN).replace(/ time$/, '');
+    const lines: string[] = [];
+    for (const [side, a] of [['start', adjusted.start], ['end', adjusted.end]] as const) {
+        if (!a || !LOCAL_CLOCK_RE.test(a.asked)) continue;
+        const d = clockDate(a.asked)!;
+        const on = `on ${d.getDate()} ${MONTH_WORDS[d.getMonth()]} in ${place}`;
+        const what = side === 'start' ? clock12(a.asked) : `The end, ${clock12(a.asked)},`;
+        if (a.kind === 'gap') {
+            const saved = LOCAL_CLOCK_RE.test(a.saved) ? ` It was saved as ${clock12(a.saved)}.` : '';
+            lines.push(`${what} does not exist ${on} (clocks go forward).${saved}`);
+        } else {
+            lines.push(`${what} happens twice ${on} (clocks go back). The first one is used.`);
+        }
+    }
+    return lines;
 }

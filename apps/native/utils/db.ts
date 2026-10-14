@@ -338,6 +338,10 @@ async function _doInitDB() {
             event_state TEXT,
             event_going_count INTEGER DEFAULT 0,
             event_interested_count INTEGER DEFAULT 0,
+            event_start_local TEXT,
+            event_end_local TEXT,
+            event_tz TEXT,
+            event_online INTEGER,
             carried_callsign TEXT,
             carried_avatar TEXT
         );
@@ -662,6 +666,11 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_state TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_going_count INTEGER DEFAULT 0;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_interested_count INTEGER DEFAULT 0;`); } catch (e) {}
+        // Event times (DESIGN-event-times amendment 1, item 3): the host's clock, its zone, online. Never the join link.
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_start_local TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_end_local TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_tz TEXT;`); } catch (e) {}
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN event_online INTEGER;`); } catch (e) {}
         try {
             await database.execAsync(`
                 CREATE TABLE IF NOT EXISTS event_rsvps (
@@ -1987,8 +1996,8 @@ export async function createPost(post: any) {
     // 2. Local Database Confirmation
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [post.id, post.type, post.category, post.title, post.description, post.credits,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0, post.photos || null,
@@ -2069,11 +2078,11 @@ export async function persistEventView(post: any, memberPubkey: string) {
     if (!post || post.type !== 'event' || !post.id) return;
     try {
         const database = await waitForInit();
-        const [, , , state, going, interested] = eventCacheColumns(post);
+        const [, , , state, going, interested, startLocal, endLocal, tz, online] = eventCacheColumns(post);
         await database.runAsync(
-            `UPDATE posts SET event_start_at = ?, event_end_at = ?, event_place_name = ?, event_state = ?, event_going_count = ?, event_interested_count = ?, status = COALESCE(?, status), updated_at = COALESCE(?, updated_at) WHERE id = ?`,
+            `UPDATE posts SET event_start_at = ?, event_end_at = ?, event_place_name = ?, event_state = ?, event_going_count = ?, event_interested_count = ?, event_start_local = ?, event_end_local = ?, event_tz = ?, event_online = ?, status = COALESCE(?, status), updated_at = COALESCE(?, updated_at) WHERE id = ?`,
             [post.eventStartAt ?? post.event_start_at ?? null, post.eventEndAt ?? post.event_end_at ?? null,
-             post.eventPlaceName ?? post.event_place_name ?? null, state, going, interested,
+             post.eventPlaceName ?? post.event_place_name ?? null, state, going, interested, startLocal, endLocal, tz, online,
              post.status ?? null, post.updatedAt ?? post.updated_at ?? null, post.id]
         );
         if (post.myRsvp === 'going' || post.myRsvp === 'interested') {
@@ -3140,7 +3149,7 @@ function syncedPhotosColumn(p: any): string | null {
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, carried_callsign, carried_avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, event_start_local, event_end_local, event_tz, event_online, carried_callsign, carried_avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END)',
         [
             p.id ?? null,
             p.type ?? null,

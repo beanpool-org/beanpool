@@ -315,18 +315,24 @@ const PIN_FORMAT_NAMES = new Set([
     'unplaced', 'listed', 'stale', 'heldLost', 'reset',
 ]);
 
+/** A member's key: 64 hex digits. Never a DM's id (the server names a DM with a UUID, messaging.ts), so never salvaged. */
+const KEY_SHAPED = /^[0-9a-f]{64}$/i;
+
 /**
  * The conversation ids the member's reset salvages from a stored value it can't read as pins (§3.4 amendment 8a, case 14
  * Q2 (ii)), for the guard list's `keep`: each JSON string literal standing as an object key (after `{` or `,`, before
- * `:`), parsed so a damaged one costs only itself, lower-cased, at most {@link DM_PIN_ID_MAX} characters, never one of the
- * format's own member names. A value (a peer's key, a date) is never a key, so never an id. It can only add DM-ness.
+ * `:`) whose value opens an object, as every pins entry's does, parsed so a damaged one costs only itself, lower-cased,
+ * at most {@link DM_PIN_ID_MAX} characters, never one of the format's own member names and never a member's key. A value
+ * (a peer's key, a date) is never a key, so never an id; and one changed byte that makes a key in `former` or
+ * `heard.tryKeys` look like a key (`,` or `]` turned into `:`) is still refused twice over: no `{` follows it, and it is
+ * key-shaped (#1938 confirmation 10, finding 2, hardenings (a) and (b)). It can only add DM-ness.
  */
 export function salvagePinIds(raw: string): string[] {
     const out = new Set<string>();
-    for (const m of raw.matchAll(/[{,]\s*("(?:[^"\\]|\\.)*")\s*:/g)) {
+    for (const m of raw.matchAll(/[{,]\s*("(?:[^"\\]|\\.)*")\s*:(?=\s*\{)/g)) {
         let key: unknown;
         try { key = JSON.parse(m[1]); } catch { continue; }
-        if (typeof key !== 'string' || !key || PIN_FORMAT_NAMES.has(key)) continue;
+        if (typeof key !== 'string' || !key || PIN_FORMAT_NAMES.has(key) || KEY_SHAPED.test(key)) continue;
         const id = dmPinId(key);
         if (id.length <= DM_PIN_ID_MAX) out.add(id);
     }

@@ -595,9 +595,35 @@ describe('salvagePinIds and the reset\'s ids for the guard list (#1938 case 14 Q
         expect(salvagePinIds(JSON.stringify({ reset: NOW }))).toEqual([]);
         expect(salvagePinIds('{"pins":{"x":{"peer":"' + BEN + '","since":"' + NOW + '","by":"member","checked":true,"former":[],"offered":{"peer":null,"at":"","nodeSays":{"rekeyedAt":""},"firstSight":true,"afterReset":true},"heard":{"tryKeys":[],"rekeyedAt":""},"unplaced":true,"listed":null,"stale":true,"heldLost":true')).toEqual(['x']);
         const long = 'e'.repeat(65);
-        expect(salvagePinIds(`{"pins":{"${'d'.repeat(64)}":{},"${long}":{},"${I2}":{`)).toEqual(['d'.repeat(64), I2]);
+        expect(salvagePinIds(`{"pins":{"${'g'.repeat(64)}":{},"${long}":{},"${I2}":{`)).toEqual(['g'.repeat(64), I2]);
         // A value is never a key: a peer's key, a date, a string with a colon in it.
         expect(salvagePinIds(`{"pins":{"${I2}":{"peer":"${BEN}","since":"a:b","by":"x:"`)).toEqual([I2]);
+    });
+
+    // #1938 confirmation 10, finding 2: one changed byte in `former` or `heard.tryKeys` (`,` or `]` turned into `:`) made
+    // `,"<64-hex>":` read as a key, and the list then refused that key's enterprise for good. Hardening (a): a key counts
+    // only when its value opens an object, as every pins entry's does; (b): a 64-hex key (a member's key) is never an id.
+    it('one changed byte in former or heard.tryKeys salvages no key: (a) no object follows it, (b) it is key-shaped', () => {
+        const [K1, K2, K3] = ['1a'.repeat(32), '2b'.repeat(32), '3C'.repeat(32)];
+        const raw = record({
+            [I1]: { peer: BEN, since: NOW, by: 'first-seen', checked: true, former: [K1, K2, K3] },
+            [I2]: { unplaced: true, since: NOW, listed: PUPPET, heard: { tryKeys: [K1, K2, K3] } },
+        });
+        const damaged = [
+            raw.replace(`"${K2}",`, `"${K2}":`),                       // an array separator turned into `:`
+            raw.replace(`"${K3}"]`, `"${K3}":`),                       // an array's `]` turned into `:`
+            raw.replace(`"${K3}"]`, `"${K3}":`).replace(`"${K2}",`, `"${K2}":`),
+        ];
+        for (const v of damaged) {
+            expect(() => JSON.parse(v)).toThrow();
+            const got = salvagePinIds(v);
+            for (const k of [K1, K2, K3]) expect(got).not.toContain(k.toLowerCase());
+            expect(got).toEqual([I1.toLowerCase(), I2]);
+        }
+        // (a) alone: a value-key with an object after it would still be a key-shaped id, and (b) refuses it.
+        expect(salvagePinIds(`{"pins":{"${K1}":{"peer":"${BEN}"},"${I2}":{`)).toEqual([I2]);
+        // (b) alone: a non-hex key with no object after it is refused by (a).
+        expect(salvagePinIds(`{"pins":{"${I3}":"x","${I2}":{`)).toEqual([I2]);
     });
 
     it('nine adversarial values of 1-2 MiB: each salvaged quickly (measured, logged)', () => {

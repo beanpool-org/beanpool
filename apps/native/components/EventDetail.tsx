@@ -22,7 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
-import { fetchEventDetail, rsvpEvent, deletePost, reportAbuse } from '../utils/db';
+import { fetchEventDetail, rsvpEvent, deletePost, reportAbuse, letInToEvent } from '../utils/db';
 import { hapticTick } from '../utils/haptics';
 import { PhotoCarousel } from './PhotoCarousel';
 import { EVENT_ACCENT } from './EventCard';
@@ -32,6 +32,7 @@ import { ReportReasonBox } from './ReportReasonBox';
 import {
     formatEventWhen, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
     canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, isOwnEvent, eventEditBlockedReason, eventEditValues,
+    eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, EVENT_CHAT_WAITING_TEXT,
     type EventRsvpStatus, type RsvpCounts, type EventCopy, type EventEditValues,
 } from '../utils/events';
 
@@ -58,6 +59,8 @@ export function EventDetail({ post }: EventDetailProps) {
     const [counts, setCounts] = useState<RsvpCounts>(() => countsOf(post));
     const [pending, setPending] = useState<EventRsvpStatus | null>(null);
     const [showRsvps, setShowRsvps] = useState(false);
+    // The member (or 'everyone') a let-in is being saved for.
+    const [letting, setLetting] = useState<string | null>(null);
     const [cancelling, setCancelling] = useState(false);
     // Non-null while the copy form is open; holding the draft rather than a boolean means NewEventModal
     // applies it once, on the opening it was built for.
@@ -95,6 +98,28 @@ export function EventDetail({ post }: EventDetailProps) {
     const hostView = isEventHostView(view);
     const isHost = hostView || (!view && isOwnEvent(p, identity?.publicKey));
     const editBlocked = eventEditBlockedReason(p);
+    // Where the host lets people in (DESIGN-global-member-privacy-fable.md §2.3): before Going, waiting, or let in.
+    const letInState = eventLetInState({ ...p, myRsvp: counts.mine }, isHost);
+    const letInLine = eventLetInLine(letInState);
+    const hostLetsIn = !!p.eventHostLetsIn;
+    const waiting = hostLetsIn ? eventWaitingCount(rsvps) : 0;
+
+    const saveLetIn = async (key: string, who: { memberPublicKey: string } | { everyone: true }, on: boolean) => {
+        if (letting) return;
+        setLetting(key);
+        try {
+            const res = await letInToEvent(post.id, who, on);
+            if (res?.post) setView(res.post);
+        } catch (err: any) {
+            Alert.alert('Not saved', err?.message || 'Could not reach the node. Try again when you have signal.');
+        } finally {
+            setLetting(null);
+        }
+    };
+    const letEveryoneIn = () => Alert.alert('Let everyone in', letEveryoneInQuestion(waiting), [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Let them in', onPress: () => { saveLetIn('everyone', { everyone: true }, true); } },
+    ]);
     const hostName = p.authorCallsign || p.author_callsign || (p.author_pubkey || p.authorPublicKey || '').slice(0, 6) || 'Unknown';
     const groupName = p.targetGroupName || p.target_group_name;
     const isGroupOnly = (p.audienceScope || p.audience_scope) === 'group';
@@ -245,6 +270,10 @@ export function EventDetail({ post }: EventDetailProps) {
                     </View>
                 )}
 
+                {letInLine && !closed && (
+                    <Text style={styles.letInLine} accessibilityLiveRegion="polite" testID="event-let-in-line">{letInLine}</Text>
+                )}
+
                 {/* Send it on, and put it in a diary. Neither needs the node, so neither depends on its age. */}
                 <EventShareAndCalendar post={p} />
                 {/* The host is running it and has no RSVP, so they get no reminder line (decision 2). */}
@@ -252,6 +281,12 @@ export function EventDetail({ post }: EventDetailProps) {
                     <EventReminder post={p} myRsvp={counts.mine} viewerPublicKey={identity?.publicKey} />
                 )}
 
+                {letInState === 'waiting' && (
+                    <View style={[styles.chatBtn, styles.chatBtnDisabled]} accessibilityRole="button" accessibilityState={{ disabled: true }}
+                        accessibilityLabel={EVENT_CHAT_WAITING_TEXT} testID="event-chat-waiting">
+                        <Text style={styles.chatBtnWaitingText} numberOfLines={2}>💬 {EVENT_CHAT_WAITING_TEXT}</Text>
+                    </View>
+                )}
                 {canOpenEventChat({ ...p, type: 'event', myRsvp: counts.mine, eventRsvps: rsvps }) && (
                     <Pressable
                         onPress={() => router.push({ pathname: `/chat/${post.id}`, params: { event: '1' } })}
@@ -301,12 +336,34 @@ export function EventDetail({ post }: EventDetailProps) {
                             <Text style={styles.hostRowText} numberOfLines={1}>Who's going ({rsvps!.length})</Text>
                             <Text style={styles.hostRowText}>{showRsvps ? '▲' : '▼'}</Text>
                         </Pressable>)}
+                        {hostView && waiting > 0 && (
+                            <Text style={styles.waitingCount} testID="event-waiting-count">{eventWaitingLine(waiting)}</Text>
+                        )}
+                        {hostView && showRsvps && waiting >= 2 && !closed && (
+                            <Pressable onPress={letEveryoneIn} disabled={!!letting} style={styles.letAllBtn} accessibilityRole="button"
+                                accessibilityLabel="Let everyone in" testID="event-let-everyone-in">
+                                <Text style={styles.letAllText} numberOfLines={1}>Let everyone in</Text>
+                            </Pressable>
+                        )}
                         {hostView && showRsvps && (rsvps!.length === 0
                             ? <Text style={styles.rsvpEmpty}>Nobody has replied yet.</Text>
                             : rsvps!.map((r: any) => (
                                 <View key={r.memberPubkey} style={styles.rsvpListRow}>
                                     <Text style={styles.rsvpName} numberOfLines={1}>{r.memberCallsign || r.memberPubkey.slice(0, 8)}</Text>
-                                    <Text style={styles.rsvpStatus} numberOfLines={1}>{r.status === 'going' ? 'Going' : 'Interested'}</Text>
+                                    {hostLetsIn && r.status === 'going' && !closed ? (
+                                        <Pressable
+                                            onPress={() => saveLetIn(r.memberPubkey, { memberPublicKey: r.memberPubkey }, !r.letInAt)}
+                                            disabled={!!letting}
+                                            style={[styles.letInBtn, r.letInAt && styles.letInBtnOn]}
+                                            accessibilityRole="button"
+                                            accessibilityState={{ selected: !!r.letInAt, busy: letting === r.memberPubkey }}
+                                            accessibilityLabel={r.letInAt ? `Let in. Tap to take it back from ${r.memberCallsign || 'them'}` : `Let ${r.memberCallsign || 'them'} in`}
+                                        >
+                                            <Text style={[styles.letInText, r.letInAt && styles.letInTextOn]} numberOfLines={1}>{r.letInAt ? 'Let in ✓' : 'Let in'}</Text>
+                                        </Pressable>
+                                    ) : (
+                                        <Text style={styles.rsvpStatus} numberOfLines={1}>{r.status === 'going' ? 'Going' : 'Interested'}</Text>
+                                    )}
                                 </View>
                             )))}
                         {editBlocked ? (
@@ -416,6 +473,22 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             borderRadius: 12, borderWidth: 1.5, borderColor: EVENT_ACCENT, backgroundColor: colors.surface.card,
         },
         chatBtnText: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT },
+        chatBtnDisabled: { borderColor: colors.border.default, backgroundColor: colors.surface.subtle, paddingVertical: 8 },
+        chatBtnWaitingText: { fontSize: 14, fontWeight: '600', color: colors.text.secondary, lineHeight: 19 },
+        letInLine: { fontSize: 14, color: colors.text.body, lineHeight: 20, marginBottom: 14 },
+        waitingCount: { fontSize: 14, fontWeight: '700', color: colors.text.body, paddingBottom: 8 },
+        letAllBtn: {
+            minHeight: 44, justifyContent: 'center', alignItems: 'center', borderRadius: 12, borderWidth: 1.5,
+            borderColor: EVENT_ACCENT, marginBottom: 8, paddingHorizontal: 12,
+        },
+        letAllText: { fontSize: 14, fontWeight: '700', color: EVENT_ACCENT },
+        letInBtn: {
+            minHeight: 44, minWidth: 88, justifyContent: 'center', alignItems: 'center', borderRadius: 10, borderWidth: 1.5,
+            borderColor: EVENT_ACCENT, paddingHorizontal: 10, flexShrink: 0,
+        },
+        letInBtnOn: { backgroundColor: EVENT_ACCENT },
+        letInText: { fontSize: 14, fontWeight: '700', color: EVENT_ACCENT },
+        letInTextOn: { color: colors.text.inverse },
         placeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
         place: { flex: 1, fontSize: 15, fontWeight: '600', color: colors.text.body },
         linkBtn: { minHeight: 48, justifyContent: 'center', flexShrink: 0 },

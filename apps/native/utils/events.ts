@@ -49,6 +49,8 @@ export interface EventFormInput {
     audienceGroupId: string | null;
     /** The member, or an enterprise pubkey the member keeps. */
     authorPubkey: string;
+    /** "Only people I let in see the note and chat" (hostLetsInDefault for a new event). */
+    hostLetsIn: boolean;
 }
 
 export interface EventPostDraft {
@@ -66,6 +68,8 @@ export interface EventPostDraft {
     eventEndAt: string;
     eventPlaceName: string;
     eventPrivateNote?: string;
+    /** Always sent: the host's choice, never left to the node's default. */
+    eventHostLetsIn: boolean;
     audienceScope?: 'group';
     targetGroupId?: string;
 }
@@ -110,9 +114,72 @@ export function buildEventDraft(input: EventFormInput, now: Date = new Date()):
         eventEndAt: end.toISOString(),
         eventPlaceName: placeName,
         ...(note ? { eventPrivateNote: note } : {}),
+        eventHostLetsIn: input.hostLetsIn,
         ...(input.audienceGroupId ? { audienceScope: 'group' as const, targetGroupId: input.audienceGroupId } : {}),
     };
     return { ok: true, draft };
+}
+
+// ===================== THE HOST LETS PEOPLE IN (scratch/global-node/DESIGN-global-member-privacy-fable.md §2) =====================
+
+/** The node's refusal code for "Going, and the host hasn't let you in yet" (403 on the chat). */
+export const EVENT_CHAT_WAITING_CODE = 'waiting_for_host';
+export const HOST_LETS_IN_LABEL = 'Only people I let in see the note and chat';
+export const HOST_LETS_IN_HINT = 'Tick this if the note is your home address or a gate code.';
+/** What the chat entry says, disabled, while the host hasn't let this member in. */
+export const EVENT_CHAT_WAITING_TEXT = 'Chat opens when the host lets you in.';
+export const EVENT_CHAT_NOTICE_LET_IN = "Visible to the host, the people going whom the host let in, and this node's operator.";
+
+/** A new event's tickbox: ticked where anyone can join in a minute (`features.openMembership`), unticked elsewhere. */
+export function hostLetsInDefault(features: { openMembership?: boolean } | null | undefined): boolean {
+    return features?.openMembership === true;
+}
+
+/** The words under the note, by the tickbox and the node (§2.3). */
+export function privateNoteHelper(hostLetsIn: boolean, openMembership: boolean): string {
+    if (hostLetsIn) {
+        return openMembership
+            ? "Anyone can join this community in a minute. Only the people you let in will see this note and the event chat. You let people in from Who's going."
+            : 'Only the people you let in see this.';
+    }
+    return openMembership
+        ? 'Everyone who taps Going sees this. Anyone can join this community in a minute.'
+        : 'Everyone who taps Going sees this.';
+}
+
+/** Where a member stands on an event: 'open' where the host doesn't let people in (and for the host). */
+export type EventLetInState = 'open' | 'before' | 'waiting' | 'in';
+
+export function eventLetInState(post: any, isHost: boolean): EventLetInState {
+    if (!post?.eventHostLetsIn || isHost) return 'open';
+    if ((post.myRsvp ?? null) !== 'going') return 'before';
+    return post.myLetIn ? 'in' : 'waiting';
+}
+
+/** The line the event shows a member who isn't let in yet; null otherwise. */
+export function eventLetInLine(state: EventLetInState): string | null {
+    if (state === 'before') return 'The host lets people in. Tap Going, and the note and the chat open once they do.';
+    if (state === 'waiting') return "You're going. The host hasn't let you in yet: the note and the chat open when they do.";
+    return null;
+}
+
+/** Going and not let in, from the host's RSVP list. */
+export function eventWaitingCount(rsvps: any[] | null | undefined): number {
+    if (!Array.isArray(rsvps)) return 0;
+    return rsvps.filter(r => r?.status === 'going' && !r?.letInAt).length;
+}
+
+export function eventWaitingLine(n: number): string {
+    return `${n} waiting to be let in`;
+}
+
+export function letEveryoneInQuestion(n: number): string {
+    return `Let all ${n} in? People who tap Going later still wait.`;
+}
+
+/** Whether a node refusal is "you're going, the host hasn't let you in" — never shown as "only the host and people going". */
+export function isWaitingForHost(err: unknown): boolean {
+    return !!err && typeof err === 'object' && (err as { code?: unknown }).code === EVENT_CHAT_WAITING_CODE;
 }
 
 // ===================== COPY TO A NEW DATE (docs/events-on-the-map.md §3, decision 8, slice 5) =====================
@@ -476,6 +543,8 @@ export function trimEventChatDraft(text: string): string {
 export function canOpenEventChat(post: any): boolean {
     if (!post || post.type !== 'event') return false;
     if (Array.isArray(post.eventRsvps)) return true;
+    // Where the host lets people in, Going opens it only once they have (the entry shows EVENT_CHAT_WAITING_TEXT).
+    if (post.eventHostLetsIn && post.myLetIn === false) return false;
     return (post.myRsvp ?? null) === 'going';
 }
 
@@ -536,6 +605,8 @@ export interface EventEditValues {
     privateNote: string;
     /** The node's photo URL, a new data URL, or null for none. */
     photo: string | null;
+    /** "Only people I let in see the note and chat". */
+    hostLetsIn: boolean;
 }
 
 /** The form, filled from the node's view of the event (camelCase) or the cached row (snake_case). */
@@ -554,6 +625,7 @@ export function eventEditValues(post: any): EventEditValues {
         lng: num(post?.lng),
         privateNote: post?.eventPrivateNote ?? '',
         photo: Array.isArray(photos) && typeof photos[0] === 'string' && photos[0] ? photos[0] : null,
+        hostLetsIn: post?.eventHostLetsIn === true,
     };
 }
 
@@ -567,6 +639,7 @@ export interface EventEditPatch {
     lat?: number;
     lng?: number;
     photos?: string[];
+    eventHostLetsIn?: boolean;
 }
 
 /**
@@ -610,6 +683,8 @@ export function buildEventEditPatch(before: EventEditValues, after: EventEditVal
     if (note !== before.privateNote.trim()) patch.eventPrivateNote = note;
     if (after.lat !== before.lat || after.lng !== before.lng) { patch.lat = after.lat; patch.lng = after.lng; }
     if (after.photo !== before.photo) patch.photos = after.photo ? [after.photo] : [];
+    // Silent like the note: who reads the note is the host's to change.
+    if (after.hostLetsIn !== before.hostLetsIn) patch.eventHostLetsIn = after.hostLetsIn;
     const notifies = patch.eventStartAt !== undefined || patch.eventEndAt !== undefined || patch.eventPlaceName !== undefined
         || patch.lat !== undefined;
     return { ok: true, patch, notifies };

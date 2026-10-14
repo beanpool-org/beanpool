@@ -31,11 +31,13 @@ import { Image } from 'expo-image';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
 import { createPost, fetchGroups, getBalance, getTreasuries, updateEvent } from '../utils/db';
+import { useNodeProfile } from '../utils/use-node-profile';
 import { HAS_MAPS_KEY } from '../utils/maps';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
 import {
     buildEventDraft, buildEventEditPatch, approximatePin, defaultEventEnd, formatPickerValue,
     EVENT_PIN_WARNING, EVENT_PIN_HINT, EVENT_PLACE_NAME_MAX, EVENT_PRIVATE_NOTE_MAX, EVENT_TITLE_MAX,
+    HOST_LETS_IN_LABEL, HOST_LETS_IN_HINT, hostLetsInDefault, privateNoteHelper,
     type EventCopy, type EventEditValues,
 } from '../utils/events';
 import { effectiveEventAudience } from '../utils/event-extras';
@@ -100,6 +102,12 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const [description, setDescription] = useState('');
     const [photo, setPhoto] = useState<string | null>(null);
     const [note, setNote] = useState('');
+    // "Only people I let in see the note and chat" (DESIGN-global-member-privacy-fable.md §2.2): ticked where anyone can
+    // join in a minute. Null until the host touches it, so a profile that arrives late still sets the default.
+    const nodeProfile = useNodeProfile();
+    const openMembership = hostLetsInDefault(nodeProfile?.features);
+    const [hostLetsInChoice, setHostLetsIn] = useState<boolean | null>(null);
+    const hostLetsIn = hostLetsInChoice ?? openMembership;
     const [audienceGroupId, setAudienceGroupId] = useState<string | null>(null);
     const [hostKey, setHostKey] = useState('me');
     // The host a copy names, held separately so the copy is posted by the same enterprise or group even if the
@@ -167,7 +175,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const reset = () => {
         setTitle(''); setStart(null); setEnd(null); setPlaceName(''); setPin(null); setApproximate(false);
         setDescription(''); setPhoto(null); setNote(''); setAudienceGroupId(null); setHostKey('me'); setPicker(null);
-        setCopiedHost(null); setIsCopy(false);
+        setCopiedHost(null); setIsCopy(false); setHostLetsIn(null);
     };
 
     // Fill the form from the copied event, once per opening: a host who then edits a field must not have it
@@ -215,6 +223,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setEnd(v.end);
         setPlaceName(v.placeName);
         setNote(v.privateNote);
+        setHostLetsIn(v.hostLetsIn);
         setPhoto(v.photo);
         setPicker(null);
         setApproximate(false);
@@ -331,6 +340,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
 
     const editValues = (): EventEditValues => ({
         title, description, start, end, placeName, lat: pin?.lat ?? null, lng: pin?.lng ?? null, privateNote: note, photo,
+        hostLetsIn,
     });
     const editCheck = editOf ? buildEventEditPatch(editOf.values, editValues()) : null;
 
@@ -371,6 +381,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
             title, description, start, end, placeName,
             lat: pin?.lat ?? null, lng: pin?.lng ?? null,
             privateNote: note, audienceGroupId: effectiveAudience, authorPubkey: host.authorPubkey || identity.publicKey,
+            hostLetsIn,
         });
         if (!built.ok) {
             Alert.alert('Almost there', built.error);
@@ -613,7 +624,21 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                 maxLength={EVENT_PRIVATE_NOTE_MAX}
                                 accessibilityLabel="Note for people who are going"
                             />
-                            <Text style={styles.helper}>Only people who tap Going see this.</Text>
+                            <Text style={styles.helper} testID="event-note-helper">{privateNoteHelper(hostLetsIn, openMembership)}</Text>
+                            <Pressable
+                                onPress={() => setHostLetsIn(!hostLetsIn)}
+                                style={styles.tickRow}
+                                accessibilityRole="checkbox"
+                                accessibilityState={{ checked: hostLetsIn }}
+                                accessibilityLabel={HOST_LETS_IN_LABEL}
+                                testID="event-host-lets-in"
+                            >
+                                <Text style={styles.tickBox}>{hostLetsIn ? '☑' : '☐'}</Text>
+                                <View style={styles.tickTextCol}>
+                                    <Text style={styles.tickTitle}>{HOST_LETS_IN_LABEL}</Text>
+                                    <Text style={styles.helper}>{HOST_LETS_IN_HINT}</Text>
+                                </View>
+                            </Pressable>
                         </View>
 
                         {editOf && editCheck?.ok && editCheck.notifies && (
@@ -710,6 +735,10 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => {
         },
         mapFallback: { justifyContent: 'center', alignItems: 'center', padding: 16 },
         helper: { fontSize: 12, color: colors.text.secondary, marginTop: 6, lineHeight: 16 },
+        tickRow: { flexDirection: 'row', alignItems: 'flex-start', marginTop: 10, minHeight: 44, paddingVertical: 4 },
+        tickBox: { fontSize: 22, color: colors.text.body, marginRight: 8, lineHeight: 26 },
+        tickTextCol: { flex: 1, minWidth: 0 },
+        tickTitle: { fontSize: 14, fontWeight: '700', color: colors.text.body, lineHeight: 19 },
         copyNote: {
             fontSize: 13, color: colors.text.secondary, lineHeight: 18, marginBottom: 12,
             padding: 10, borderRadius: 10, backgroundColor: colors.surface.subtle,

@@ -75,6 +75,11 @@ export interface NodeFeatures {
      * that doesn't say is read as before.
      */
     membersOnDemand?: boolean;
+    /**
+     * Anyone can join in a minute (the global node; DESIGN-global-member-privacy-fable.md §1): a new event's "Only people I
+     * let in" starts ticked, and the form says who reads the note. A node that doesn't say is a local community.
+     */
+    openMembership?: boolean;
 }
 
 export type NodeDoor = 'open' | 'members' | 'admins';
@@ -83,7 +88,7 @@ const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
 const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings'>> = [
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
     'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
-    'privatePreview', 'showcase', 'membersOnDemand',
+    'privatePreview', 'showcase', 'membersOnDemand', 'openMembership',
 ];
 
 export interface NodeProfile {

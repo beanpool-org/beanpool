@@ -6,9 +6,9 @@
 
 import { useState, useEffect, useMemo, useRef, type KeyboardEvent } from 'react';
 import {
-    getFriends, addFriendApi, removeFriendApi,
+    getFriends, addFriendApi, removeFriendApi, getAddedYou,
     getMembers,
-    type FriendEntry, type Member, type MemberCard,
+    type FriendEntry, type Member, type MemberCard, type AddedYou,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
@@ -114,7 +114,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
     const [nearState, setNearState] = useState<'loading' | 'done' | 'none' | 'failed'>('loading');
     const [nearTry, setNearTry] = useState(0);
 
-    useEffect(() => { loadFriends(); }, []);
+    useEffect(() => { loadFriends(); loadAddedYou(); }, []);
     useEffect(() => { if (view === 'community' && onDemand === false) loadMembers(); }, [view, onDemand]);
     useEffect(() => { if (initialView) setView(initialView); }, [initialView]);
 
@@ -155,6 +155,19 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
         } catch { /* offline */ }
     }
 
+    // "Added you · Add back": who added you lately and hasn't been added back. Nothing when nobody has, or the node can't say.
+    const [addedYou, setAddedYou] = useState<AddedYou[]>([]);
+    const [addedYouMore, setAddedYouMore] = useState(0);
+    // An add the node refused (100 a day, or someone you blocked), in its words: said, never dropped.
+    const [addRefusal, setAddRefusal] = useState<string | null>(null);
+    async function loadAddedYou() {
+        try {
+            const data = await getAddedYou();
+            setAddedYou(Array.isArray(data?.addedYou) ? data.addedYou : []);
+            setAddedYouMore(Number(data?.more) || 0);
+        } catch { /* an older node, or offline: nothing to show */ }
+    }
+
     async function loadMembers() {
         setLoading(true);
         try {
@@ -165,10 +178,14 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
     }
 
     async function handleAddFriend(pubkey: string) {
+        setAddRefusal(null);
         try {
             await addFriendApi(identity.publicKey, pubkey);
+            setAddedYou(a => a.filter(x => x.publicKey !== pubkey));
             await loadFriends();
-        } catch { /* error */ }
+        } catch (e) {
+            setAddRefusal(e instanceof Error && e.message ? e.message : 'Your community did not add them.');
+        }
     }
 
     async function handleRemoveFriend(pubkey: string) {
@@ -283,12 +300,47 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                 ))}
             </div>
 
+            {addRefusal && (
+                <p role="alert" data-testid="add-refusal" className="mb-3 p-3 rounded-xl border border-border-primary bg-bg-card text-text-primary text-[13px] font-medium">
+                    {addRefusal}
+                </p>
+            )}
             {/* Each tab's panel always exists so aria-controls points at something; only the selected one is shown
                 and has content, so Community and Invites still load only when opened. */}
             {/* ===== FRIENDS ===== */}
             <div role="tabpanel" id={panelId('friends')} aria-labelledby={tabId('friends')} hidden={view !== 'friends'} tabIndex={0} className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl">
             {view === 'friends' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    {addedYou.filter(a => !blockedSet.has(a.publicKey)).length > 0 && (
+                        <ul data-testid="added-you" aria-label="People who added you" className="mb-4 list-none p-0 m-0 bg-bg-card rounded-2xl border border-border-primary shadow-sm divide-y divide-border-primary overflow-hidden">
+                            {addedYou.filter(a => !blockedSet.has(a.publicKey)).map(a => (
+                                <li key={a.publicKey} className="p-2 px-3 flex items-center justify-between gap-2 min-w-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => onOpenProfile?.(a.publicKey)}
+                                        aria-label={`${a.callsign} added you. Open their profile`}
+                                        className="flex items-center gap-3 min-w-0 min-h-[44px] bg-transparent border-none p-0 cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-lg"
+                                    >
+                                        <Avatar callsign={a.callsign} avatarUrl={a.avatarUrl} size={32} />
+                                        <span className="min-w-0 text-[14px] text-text-primary break-words">
+                                            <strong className="font-bold">{a.callsign}</strong> added you
+                                        </span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleAddFriend(a.publicKey)}
+                                        aria-label={`Add ${a.callsign} back`}
+                                        className="shrink-0 min-h-[44px] min-w-[44px] px-3 rounded-lg border border-accent bg-transparent text-text-primary text-xs font-bold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                    >
+                                        Add back
+                                    </button>
+                                </li>
+                            ))}
+                            {addedYouMore > 0 && (
+                                <li className="p-2 px-3 text-[12px] text-text-muted">and {addedYouMore} more</li>
+                            )}
+                        </ul>
+                    )}
                     {visibleFriends.length === 0 ? (
                         <div className="text-center p-10 text-nature-500 dark:text-nature-400 bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm mt-4">
                             <p className="text-4xl mb-3">👫</p>

@@ -6262,16 +6262,47 @@ export async function isFriendLocal(ownerPubkey: string, friendPubkey: string): 
     return !!row;
 }
 
-/** Add a friend locally + sync to server */
+/**
+ * Add a friend: the node first, then this phone's copy. The node tells the person added (their People tab's "added you"),
+ * so it can refuse: past 100 adds in a day, or someone you blocked. Then this THROWS the node's own words and adds
+ * nothing here, so the member is told, never left believing a refused add went through. When the node can't be reached
+ * at all (off-grid, no answer), it is kept on this phone, as every add was before.
+ */
 export async function addFriendLocal(ownerPubkey: string, friendPubkey: string): Promise<void> {
     if (ownerPubkey === friendPubkey) return;
+    try {
+        await _syncFriendToServer('add', ownerPubkey, friendPubkey);
+    } catch (e: any) {
+        if (e?.nodeAnswered) throw new Error(String(e.message || 'Your community did not add them.'));
+        console.warn('[Friends] Server sync failed:', e?.message);
+    }
     const database = await getDb();
     await database.runAsync(
         'INSERT OR IGNORE INTO friends (owner_pubkey, friend_pubkey, added_at) VALUES (?, ?, ?)',
         [ownerPubkey, friendPubkey, new Date().toISOString()]
     );
-    // Fire-and-forget server sync
-    _syncFriendToServer('add', ownerPubkey, friendPubkey).catch(e => console.warn('[Friends] Server sync failed:', e.message));
+}
+
+/** Someone who added you lately and whom you haven't added back (GET /api/friends/added-you, your own only). */
+export interface AddedYou {
+    publicKey: string;
+    callsign: string;
+    avatarUrl: string | null;
+    addedAt: string;
+}
+
+/** Who added you lately, newest first (at most 20) and how many more; nothing when the node can't say (an older node, off-grid). */
+export async function fetchAddedYou(): Promise<{ addedYou: AddedYou[]; more: number }> {
+    try {
+        const res = await signedGet('/api/friends/added-you');
+        if (res.ok) {
+            const body = await res.json();
+            if (Array.isArray(body?.addedYou)) return { addedYou: body.addedYou, more: Number(body.more) || 0 };
+        }
+    } catch (e) {
+        console.warn('[Friends] Could not read who added you:', e);
+    }
+    return { addedYou: [], more: 0 };
 }
 
 /** Remove a friend locally + sync to server */

@@ -1273,7 +1273,7 @@ async function main(): Promise<void> {
             'PUT /api/events/:postId/reminder', 'GET /api/events/mine',
             'POST /api/federation/commission', 'GET /api/federation/commission/capacity', 'GET /api/federation/links', 'POST /api/federation/purchase',
             'GET /api/federation/reachable-peers',
-            'GET /api/friends/:publicKey', 'POST /api/friends/add', 'POST /api/friends/remove',
+            'GET /api/friends/:publicKey', 'GET /api/friends/added-you', 'POST /api/friends/add', 'POST /api/friends/remove',
             'POST /api/funnel-event',
             'GET /api/global/communities', 'GET /api/global/home', 'GET /api/global/watches', 'POST /api/global/watches',
             'DELETE /api/global/watches/:id',

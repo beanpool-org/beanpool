@@ -48,6 +48,8 @@ export const SUITES = [
     'test-pulse-thumbnail-recovery',
     'test-pulse-cache-eviction',
     'test-callsign-predicates',
+    'test-callsign-any-alphabet',
+    'test-callsign-fold-migration',
     'test-message-tombstone',
     'test-recovery-shares',
     'test-sso',

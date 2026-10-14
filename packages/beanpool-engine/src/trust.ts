@@ -513,8 +513,8 @@ export const WASH_HARD_CAP_MS = 60_000;
  *   old, as when it was worked out in one go. A read that finds it older than that with no refresh running that can land
  *   in time (after a quiet spell, when no read started one; or one that read its rows before an analysis worked out in one
  *   go since; or one that `again` or the server started at or past that bound) works the next out in one go, as before.
- *   A refresh that started before that bound holds the one go off, whoever started it: a read, `again`, or the server's
- *   Step 6.1 (a take-over, or once it listens). What a read sees is then at most that refresh's run time past the bound,
+ *   A refresh that started before that bound holds the one go off, whoever started it: a read, `again`, or the server
+ *   (Step 6.1 once it listens, or a take-over). What a read sees is then at most that refresh's run time past the bound,
  *   under WASH_HARD_CAP_MS. A snapshot WASH_HARD_CAP_MS old (refreshes failing to land) is worked out in one go at the
  *   read, as before, and said once a minute.
  *

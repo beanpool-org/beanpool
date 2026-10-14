@@ -21,13 +21,18 @@ interface PairingSession {
     sessionId: string;
     desktopPubHex: string;
     createdAt: number;
+    /** 120 s after it opened: the latest the session ends. Nothing moves it, a poll included. */
     expiresAt: number;
+    /** When it ends now: `expiresAt`, or sooner once its payload is collected (the grace, never past `expiresAt`). */
+    endsAt: number;
     status: 'waiting' | 'transferred';
     payload?: PairingPayload;
-    timer: NodeJS.Timeout;
+    timer?: NodeJS.Timeout;
 }
 
 const PAIRING_TTL_MS = 120_000; // 2 minutes
+/** Once the computer has its payload, a retry of a lost answer gets it again for this long, never past `expiresAt`. */
+const COLLECT_GRACE_MS = 15_000;
 // The relay's memory, measured (#1950: the real functions, --expose-gc, --max-old-space-size=512, the deciding review's
 // probes/relay-full.mts). Anyone can open a session and fill it without signing in, so the caps bound what an unsigned
 // sender can hold for the 2 minutes.
@@ -39,6 +44,12 @@ const PAIRING_TTL_MS = 120_000; // 2 minutes
 //   the payload limit of 4,096 hex to +9.4 MB in all (10,000 waiting, 1,000 holding the largest payload allowed).
 //   4,096 is 2.6x the largest the phone builds (1,548 hex: a 32-character name in the costliest characters, the longest
 //   key and 24 of the longest words, through core's encryptPairingPayload; a 5-letter name and 12 words is 782).
+// - A payload's slot is free the moment the computer collects it. The collected payload is kept for the grace, for a
+//   retry, and those kept are capped at MAX_HELD_PAYLOADS too: past it a collect ends the session at once, its answer
+//   carrying the payload. Without that cap, a sender collecting its own payloads could keep 10,000 of them.
+// - No session outlives its 120 s, so polling a collected one every few seconds can't keep it: the grace is re-armed
+//   only inside that. The computer polls every 1.5 s and stops at 120 s (apps/pwa WelcomePage), so no honest collect
+//   needs longer.
 // A payload past MAX_HELD_PAYLOADS is refused with the busy answer, which the phone shows, and its session stays waiting
 // so the phone can try again; nobody else's held payload is ever dropped to make room.
 const MAX_SESSIONS = 10_000;
@@ -50,16 +61,55 @@ export const PAIRING_RELAY_LIMITS = {
     sessions: MAX_SESSIONS,
     heldPayloads: MAX_HELD_PAYLOADS,
     ciphertextHex: MAX_CIPHERTEXT_HEX_LEN,
+    ttlMs: PAIRING_TTL_MS,
+    graceMs: COLLECT_GRACE_MS,
 } as const;
 
 const sessions = new Map<string, PairingSession>();
-/** The sessions holding a payload (status 'transferred'), so MAX_HELD_PAYLOADS is counted without a walk. */
+/** Payloads not yet collected: at most MAX_HELD_PAYLOADS. */
 const held = new Set<string>();
+/** Payloads collected and kept for the grace: at most MAX_HELD_PAYLOADS. */
+const collected = new Set<string>();
 
-/** Every way a session ends goes through here, so `held` never counts one that is gone. */
+let clockOffsetMs = 0;
+const now = () => Date.now() + clockOffsetMs;
+
+/** Tests move the relay's clock (a session's 120 s without waiting them); every read checks `endsAt` against it. */
+export function _setPairingClockForTests(offsetMs: number): void {
+    clockOffsetMs = offsetMs;
+}
+
+export function _pairingRelayCountsForTests(): { sessions: number; held: number; collected: number } {
+    return { sessions: sessions.size, held: held.size, collected: collected.size };
+}
+
+/** Every way a session ends goes through here, so `held` and `collected` never count one that is gone. */
 function dropSession(sessionId: string): void {
+    clearTimeout(sessions.get(sessionId)?.timer);
     sessions.delete(sessionId);
     held.delete(sessionId);
+    collected.delete(sessionId);
+}
+
+/** The session ends at `endsAt`: a timer frees the memory, and every read checks the time itself (`liveSession`). */
+function endAt(session: PairingSession, endsAt: number): void {
+    clearTimeout(session.timer);
+    session.endsAt = endsAt;
+    const timer = setTimeout(() => {
+        if (sessions.get(session.sessionId) === session) dropSession(session.sessionId);
+    }, Math.max(0, endsAt - now()));
+    if (timer.unref) timer.unref();
+    session.timer = timer;
+}
+
+/** The session, or undefined once its time is up (dropped then). */
+function liveSession(sessionId: string): PairingSession | undefined {
+    const session = sessions.get(sessionId);
+    if (session && now() >= session.endsAt) {
+        dropSession(sessionId);
+        return undefined;
+    }
+    return session;
 }
 
 /**
@@ -79,29 +129,15 @@ export function initPairingSession(sessionId: string, desktopPubHex: string): { 
     }
 
     // Clean up existing session if re-initialized
-    const existing = sessions.get(sessionId);
-    if (existing) {
-        clearTimeout(existing.timer);
-        dropSession(sessionId);
-    }
+    if (sessions.has(sessionId)) dropSession(sessionId);
 
-    const now = Date.now();
-    const expiresAt = now + PAIRING_TTL_MS;
-
-    const timer = setTimeout(() => {
-        dropSession(sessionId);
-    }, PAIRING_TTL_MS);
-
-    if (timer.unref) timer.unref();
-
-    sessions.set(sessionId, {
-        sessionId,
-        desktopPubHex,
-        createdAt: now,
-        expiresAt,
-        status: 'waiting',
-        timer,
-    });
+    const createdAt = now();
+    const expiresAt = createdAt + PAIRING_TTL_MS;
+    const session: PairingSession = {
+        sessionId, desktopPubHex, createdAt, expiresAt, endsAt: expiresAt, status: 'waiting',
+    };
+    sessions.set(sessionId, session);
+    endAt(session, expiresAt);
 
     return { ok: true, expiresAt };
 }
@@ -115,7 +151,7 @@ export function transferPairingPayload(
     nonceHex: string,
     ciphertextHex: string
 ): { ok: boolean; error?: string } {
-    const session = sessions.get(sessionId);
+    const session = liveSession(sessionId);
     if (!session) {
         return { ok: false, error: 'Pairing session expired or not found' };
     }
@@ -145,6 +181,7 @@ export function transferPairingPayload(
         return { ok: false, error: RELAY_BUSY };
     }
 
+    // Its end stays `expiresAt`: 120 s from opening, so at most 120 s from now.
     session.status = 'transferred';
     session.payload = {
         mobilePubHex,
@@ -158,8 +195,8 @@ export function transferPairingPayload(
 
 /**
  * Polled by the waiting desktop PWA.
- * If transferred, delivers the payload and schedules immediate cleanup with a 15-second
- * resilience grace period to tolerate transient browser retry loops.
+ * If transferred, delivers the payload: its slot is free at once, and it is kept for a 15-second grace (a retry of a
+ * lost answer gets it again), re-armed by each poll but never past the session's 120 s.
  */
 export function pollPairingSession(sessionId: string): {
     status: 'waiting' | 'transferred' | 'expired';
@@ -170,19 +207,22 @@ export function pollPairingSession(sessionId: string): {
         return { status: 'expired' };
     }
 
-    const session = sessions.get(sessionId);
+    const session = liveSession(sessionId);
     if (!session) {
         return { status: 'expired' };
     }
 
     if (session.status === 'transferred' && session.payload) {
         const payload = session.payload;
-        // Schedule deletion within 15 seconds to allow retry resilience
-        clearTimeout(session.timer);
-        session.timer = setTimeout(() => {
-            dropSession(sessionId);
-        }, 15_000);
-        if (session.timer.unref) session.timer.unref();
+        if (held.delete(sessionId)) {
+            // Collected: the slot is free now. Kept for the grace if the kept ones have room; else it ends now.
+            if (collected.size >= MAX_HELD_PAYLOADS) {
+                dropSession(sessionId);
+                return { status: 'transferred', payload };
+            }
+            collected.add(sessionId);
+        }
+        endAt(session, Math.min(now() + COLLECT_GRACE_MS, session.expiresAt));
 
         return {
             status: 'transferred',
@@ -200,11 +240,7 @@ export function pollPairingSession(sessionId: string): {
  * Cancels and deletes an active pairing session.
  */
 export function cancelPairingSession(sessionId: string): void {
-    const session = sessions.get(sessionId);
-    if (session) {
-        clearTimeout(session.timer);
-        dropSession(sessionId);
-    }
+    if (sessions.has(sessionId)) dropSession(sessionId);
 }
 
 /**
@@ -216,4 +252,5 @@ export function clearAllPairingSessions(): void {
     }
     sessions.clear();
     held.clear();
+    collected.clear();
 }

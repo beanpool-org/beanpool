@@ -7,6 +7,7 @@
  * 3. Strict single-use destruction on successful poll
  * 4. End-to-end cryptographic roundtrip between Desktop and Mobile via relay
  * 5. What an unsigned sender can hold (#1950): 10,000 waiting sessions, 1,000 payloads, 4,096 hex each
+ * 6. A session's life (#1950): never past its 120 s, however often it is polled; a collected payload's slot free at once
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-pairing-relay.ts
  */
@@ -18,6 +19,8 @@ import {
     cancelPairingSession,
     clearAllPairingSessions,
     PAIRING_RELAY_LIMITS,
+    _pairingRelayCountsForTests,
+    _setPairingClockForTests,
 } from './pairing-relay.js';
 import {
     createPairingSession,
@@ -165,17 +168,80 @@ async function main() {
     assert(ids.length === 1_001 && taken === 1_000 && !over.ok && over.error === 'Pairing relay at capacity. Please try again shortly.',
         `1,000 payloads are held; the 1,001st is refused with the relay's busy answer (${taken} taken, then ${JSON.stringify(over)})`);
     assert(pollPairingSession(ids[1_000]).status === 'waiting', 'its session stays waiting, so the phone can try again');
+    const another = opened();
+    assert(!!another, 'a new waiting session still opens while the payloads are full');
+    // A payload's slot is free the moment its computer collects it (the Sonnet check's F3), not 15 s later.
+    const first = pollPairingSession(ids[0]);
+    const afterCollect = _pairingRelayCountsForTests();
+    assert(first.status === 'transferred' && first.payload?.ciphertextHex === marker(0) + 'c'.repeat(60) && afterCollect.held === 999 && afterCollect.collected === 1,
+        `a computer collects its payload: its slot is free at once (${JSON.stringify(afterCollect)})`);
+    assert(transferPairingPayload(ids[1_000], mobileHex, nonce, 'd'.repeat(64)).ok, 'so the waiting phone\'s payload is taken at once');
+    assert(!transferPairingPayload(another!.sessionId, mobileHex, nonce, 'e'.repeat(64)).ok, 'and the cap holds again at 1,000');
+    assert(pollPairingSession(ids[0]).payload?.ciphertextHex === marker(0) + 'c'.repeat(60), 'a retry of the collected one still gets its payload, in the grace');
     let intact = 0;
-    for (let i = 0; i < 1_000; i++) {
+    for (let i = 1; i < 1_000; i++) {
         const got = pollPairingSession(ids[i]);
         if (got.status === 'transferred' && got.payload?.ciphertextHex === marker(i) + 'c'.repeat(60)) intact++;
     }
-    assert(intact === 1_000, `and nothing was dropped to make room: each of the first 1,000 still holds its own payload (${intact})`);
-    const another = opened();
-    assert(!!another, 'a new waiting session still opens while the payloads are full');
-    cancelPairingSession(ids[0]);
-    assert(transferPairingPayload(ids[1_000], mobileHex, nonce, 'd'.repeat(64)).ok, 'once one computer is done, the waiting phone\'s payload is taken');
-    assert(!transferPairingPayload(another!.sessionId, mobileHex, nonce, 'e'.repeat(64)).ok, 'and the cap holds again at 1,000');
+    assert(intact === 999, `and nothing was dropped to make room: each of the other 999 still holds its own payload (${intact})`);
+    clearAllPairingSessions();
+
+    // 6. A session's life, on the relay's own clock (the Sonnet check's F1): no poll keeps it past its 120 s
+    console.log('\n── 6. a session\'s life ──');
+    _setPairingClockForTests(0);
+    const life = opened()!;
+    assert(transferPairingPayload(life.sessionId, mobileHex, nonce, 'f'.repeat(64)).ok, 'a phone sends its payload as the session opens');
+    let answered = 0;
+    for (let t = 5_000; t < 120_000; t += 5_000) {
+        _setPairingClockForTests(t);
+        const r = pollPairingSession(life.sessionId);
+        if (r.status === 'transferred' && r.payload) answered++;
+    }
+    _setPairingClockForTests(120_000);
+    const atEnd = pollPairingSession(life.sessionId);
+    const lifeCounts = _pairingRelayCountsForTests();
+    assert(answered === 23 && atEnd.status === 'expired' && lifeCounts.sessions === 0 && lifeCounts.held === 0 && lifeCounts.collected === 0,
+        `polled every 5 s it answers until 115 s (${answered} polls); at 120 s it is gone and nothing counts it (${JSON.stringify(lifeCounts)})`);
+    _setPairingClockForTests(0);
+    const late = opened()!;
+    _setPairingClockForTests(100_000);
+    assert(transferPairingPayload(late.sessionId, mobileHex, nonce, 'f'.repeat(64)).ok, 'a phone that sends at 100 s is taken');
+    const lateAnswers = [105_000, 110_000, 115_000, 120_000].map((t) => { _setPairingClockForTests(t); return pollPairingSession(late.sessionId).status; });
+    assert(lateAnswers.join(',') === 'transferred,transferred,transferred,expired',
+        `and its session still ends at 120 s from opening, 20 s after the transfer (${lateAnswers.join(',')})`);
+    _setPairingClockForTests(0);
+    const unpolled = opened()!;
+    transferPairingPayload(unpolled.sessionId, mobileHex, nonce, 'f'.repeat(64));
+    _setPairingClockForTests(120_000);
+    const unpolledEnd = pollPairingSession(unpolled.sessionId);
+    assert(unpolledEnd.status === 'expired' && _pairingRelayCountsForTests().held === 0, 'a payload nobody collects ends at 120 s too, and its slot is free');
+    _setPairingClockForTests(0);
+    const tooLate = opened()!;
+    _setPairingClockForTests(120_000);
+    assert(!transferPairingPayload(tooLate.sessionId, mobileHex, nonce, 'f'.repeat(64)).ok, 'a payload sent at 120 s is refused: the session is over');
+    _setPairingClockForTests(0);
+    const graceOnly = opened()!;
+    transferPairingPayload(graceOnly.sessionId, mobileHex, nonce, 'f'.repeat(64));
+    _setPairingClockForTests(10_000);
+    const collectedOnce = pollPairingSession(graceOnly.sessionId).status;
+    _setPairingClockForTests(24_000);
+    const inGrace = pollPairingSession(graceOnly.sessionId).status;
+    _setPairingClockForTests(39_000);
+    const pastGrace = pollPairingSession(graceOnly.sessionId).status;
+    assert(collectedOnce === 'transferred' && inGrace === 'transferred' && pastGrace === 'expired',
+        `collected at 10 s and retried at 24 s it answers; at 39 s, 15 s after that retry, it is gone (${collectedOnce}, ${inGrace}, ${pastGrace})`);
+    _setPairingClockForTests(0);
+    clearAllPairingSessions();
+    // The collected payloads kept for a retry are capped too, or a sender collecting its own could keep 10,000.
+    const kept: string[] = [];
+    for (let i = 0; i < 1_001; i++) { const d = opened(); if (d) kept.push(d.sessionId); }
+    for (let i = 0; i < 1_000; i++) { transferPairingPayload(kept[i], mobileHex, nonce, 'a'.repeat(64)); pollPairingSession(kept[i]); }
+    transferPairingPayload(kept[1_000], mobileHex, nonce, 'b'.repeat(64));
+    const lastCollect = pollPairingSession(kept[1_000]);
+    const keptCounts = _pairingRelayCountsForTests();
+    assert(lastCollect.payload?.ciphertextHex === 'b'.repeat(64) && pollPairingSession(kept[1_000]).status === 'expired'
+        && keptCounts.collected === 1_000 && keptCounts.held === 0,
+        `past 1,000 kept, a collect still brings its payload and the session ends at once (${JSON.stringify(keptCounts)})`);
     clearAllPairingSessions();
 
     console.log(`\nDevice Pairing Test Summary: ${passed}/${run} assertions passed.`);

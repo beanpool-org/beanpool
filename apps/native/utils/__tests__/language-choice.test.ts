@@ -83,6 +83,22 @@ describe('the languages the build declares and carries', () => {
         expect(app.expo.plugins).toContain('./plugins/withAppLanguages');
     });
 
+    it('right to left stays off: the manifest says supportsRtl="false" from the first launch, and the app turns RTL off at boot', () => {
+        // The plugin's manifest change, run on a plain manifest as Expo hands it over (review of #1954, N4).
+        const manifest: { manifest: { application: { $: Record<string, string> }[] } } = { manifest: { application: [{ $: { 'android:name': '.MainApplication', 'android:supportsRtl': 'true' } }] } };
+        plugin.applyAppLanguagesManifest(manifest.manifest);
+        expect(manifest.manifest.application[0].$['android:supportsRtl']).toBe('false');
+        expect(manifest.manifest.application[0].$['android:localeConfig']).toBe('@xml/locales_config');
+        expect(manifest.manifest.application[0].$['android:name']).toBe('.MainApplication');
+        // …and the plugin's Android mod is that function.
+        const pluginSource = fs.readFileSync(path.resolve(__dirname, '../../plugins/withAppLanguages.js'), 'utf8');
+        expect(pluginSource).toMatch(/withAndroidManifest\(config, \(config\) => \{\s*applyAppLanguagesManifest\(config\.modResults\.manifest\);/);
+        // I18nManager, at module load in the root layout, before anything renders: allowRTL(false) and forceRTL(false).
+        const layout = fs.readFileSync(path.resolve(__dirname, '../../app/_layout.tsx'), 'utf8');
+        expect(layout).toMatch(/^try \{ I18nManager\.allowRTL\(false\); I18nManager\.forceRTL\(false\); \}/m);
+        expect(layout).toMatch(/import \{[^}]*\bI18nManager\b[^}]*\} from 'react-native';/);
+    });
+
     it('every other language has a phone catalog and a core catalog, marked a machine draft, and the loader requires each', () => {
         const loader = fs.readFileSync(path.resolve(__dirname, '../words-catalogs.ts'), 'utf8');
         for (const lang of LANGS.filter((l) => l !== 'en')) {

@@ -22,6 +22,16 @@ function localesConfigXml(languages) {
   return `<?xml version="1.0" encoding="utf-8"?>\n<locale-config xmlns:android="http://schemas.android.com/apk/res/android">\n${rows}\n</locale-config>\n`;
 }
 
+/** The manifest's part: per-app languages, and right to left off. Pure, so a test can run it on a plain manifest. */
+function applyAppLanguagesManifest(manifest) {
+  const application = manifest.application && manifest.application[0];
+  if (application) {
+    application.$['android:localeConfig'] = '@xml/locales_config';
+    application.$['android:supportsRtl'] = 'false';
+  }
+  return manifest;
+}
+
 function withAppLanguages(config) {
   config = withInfoPlist(config, (config) => {
     config.modResults.CFBundleDevelopmentRegion = 'en';
@@ -29,11 +39,7 @@ function withAppLanguages(config) {
     return config;
   });
   config = withAndroidManifest(config, (config) => {
-    const application = config.modResults.manifest.application && config.modResults.manifest.application[0];
-    if (application) {
-      application.$['android:localeConfig'] = '@xml/locales_config';
-      application.$['android:supportsRtl'] = 'false';
-    }
+    applyAppLanguagesManifest(config.modResults.manifest);
     return config;
   });
   config = withDangerousMod(config, ['android', async (config) => {
@@ -48,3 +54,4 @@ function withAppLanguages(config) {
 module.exports = withAppLanguages;
 module.exports.APP_LANGUAGES = APP_LANGUAGES;
 module.exports.localesConfigXml = localesConfigXml;
+module.exports.applyAppLanguagesManifest = applyAppLanguagesManifest;

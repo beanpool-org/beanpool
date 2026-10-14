@@ -9,9 +9,10 @@
 
 ## What is BeanPool?
 
-BeanPool is a free app a community runs for itself. Members post what they can offer or need (a lift to town, eggs, fixing a bike, an hour of gardening), message each other, and settle trades in **Beans**, the community's own credit: you earn Beans by helping someone and spend them with anyone in your community, and your balance can go a little below zero on a credit line you earn by trading. There is no interest, no ads and no company in the middle.
+BeanPool is a free app a community runs for itself. Members post what they can offer or need (a lift to town, eggs, fixing a bike, an hour of gardening), message each other, and settle trades in **Beans**, the community's own credit: you earn Beans by helping someone and spend them with anyone in your community, and your balance can go a little below zero on a credit line you earn by trading. There is no interest, no ads and no bank or lender in the middle.
 
 Each community runs its own server (a **node**) on a spare computer or a small rented server, so its listings, messages and balances stay with it. A small monthly circulation charge on the part of a balance above 200 Beans, and a small charge on trades, go into the community's **Commons Pool**, which members vote to spend. The **global community** at global.beanpool.org, which BeanPool runs, shows newcomers around and leads them to a community near them; it has no Beans, and today it is a private preview. iPhone, Android and web. The website says more: [beanpool.org](https://beanpool.org), and why we built it this way: [post-extraction](https://beanpool.org/post-extraction.html).
+<!-- OPEN-GLOBAL: "it has no Beans, and today it is a private preview." becomes "it has no Beans, and anyone can join it, no invite needed, in the browser or the app." -->
 
 **Communities running today:** see [the map on beanpool.org](https://beanpool.org/#find-or-start). Two communities can link so their members can trade with each other; Beans never leave home. Linking is built, has been tried only between two of our own test communities, never between live ones, and is off unless both operators switch it on.
 
@@ -207,7 +208,7 @@ Node-enforced security controls in `local-config.json`:
 - **Subsystem Feature Toggles**: Dynamic 503/530 interceptors for `servePwa`, `marketplace`, `messaging`, `federation`, and `invites`.
 
 ### 🌐 Detached PWA & Sovereign Node Connection
-- **Configurable API Target**: PWA can be hosted on any static server or CDN (e.g., `https://app.beanpool.org`) while targeting any sovereign node API (`getNodeApiUrl()`).
+- **Configurable API Target**: PWA can be hosted on any static server or CDN (e.g., `https://app.example.org`) while targeting any sovereign node API (`getNodeApiUrl()`).
 - **Dynamic WebSockets**: Automatic `wss://` / `ws://` endpoint derivation (`getNodeWsUrl()`).
 - **Connection Manager**: Interactive node tester & target selector in PWA Settings → Advanced.
 
@@ -239,7 +240,7 @@ beanpool/
 ├── docs/              # Architecture vision, assessment, and setup guides
 ├── Dockerfile         # Multi-stage build (accepts APP_VERSION build arg from CI)
 ├── docker-compose.yml # Docker orchestration
-└── deploy.sh          # Deploy to live nodes via SSH — pulls pre-built GHCR image
+└── deploy.sh          # Deploy script — updates a node over SSH (local build, or the pre-built GHCR image)
 ```
 
 ---
@@ -357,10 +358,6 @@ All endpoints are served on port 8443 (HTTPS):
 | `/api/friends/:publicKey` | GET | List your own friends (signed by that key; any other key is refused) |
 | `/api/friends/add` | POST | Add a friend |
 | `/api/friends/remove` | POST | Remove a friend |
-| `/api/recovery/request` | POST | Submit a new social recovery migration request |
-| `/api/recovery/approve` | POST | Approve a recovery request as a guardian |
-| `/api/recovery/reject` | POST | Reject a recovery request as a guardian |
-| `/api/recovery/cancel` | POST | Cancel a recovery request as the target member |
 | `/api/members` | GET | List all community members |
 | `/api/community/membership/:publicKey` | GET | Probe whether a public key is a member of this node |
 | `/api/push-tokens` | POST | Register an Expo push notification token |
@@ -411,7 +408,7 @@ All endpoints are served on port 8443 (HTTPS):
 - **Self-Managed Identity** — Ed25519 keypairs from 12-word BIP-39 mnemonic (deterministic, recoverable)
 - **Invite Tree** — hierarchical membership: node genesis → seed codes → admin identity → organic invites
 - **Handshake Protocol** — mutual trust verification + latency measurement between connected nodes via yamux streams (`/beanpool/handshake/1.0.0`)
-- **Bean Reputation** — 5-tier community trust score with comments
+- **Trade ratings** — after a completed trade, each side can give the other 1–5 stars and a comment; the four tiers (Newcomer, Resident, Steward, Elder) are badges and gate nothing
 - **Abuse Reporting** — flagging system with admin review panel
 
 ---
@@ -433,7 +430,7 @@ All endpoints are served on port 8443 (HTTPS):
 | **Server Node** | `apps/server/` | Gateway — genesis, admin, REST APIs, WebSocket, connectors, libp2p. Includes full [network topology setup guide](apps/server/README.md). |
 | **PWA** | `apps/pwa/` | Web UI — map, marketplace (13 categories), messaging, people/friends, ledger. See [PWA Docs](apps/pwa/README.md). |
 | **Native App** | `apps/native/` | 7-tab Expo + React Native mobile client. Contains all native deferred deep-linking. See [Native Docs](apps/native/README.md). |
-| **Core Protocol**| `packages/beanpool-core/` | Shared Library — Identity, Mutual Credit economics, CRDT Mesh synchronisation, Ed25519 cryptography. See [Core Docs](packages/beanpool-core/README.md). |
+| **Core Protocol**| `packages/beanpool-core/` | Shared Library — Identity, Mutual Credit economics, Ed25519 cryptography. See [Core Docs](packages/beanpool-core/README.md). |
 
 ### Config Files
 
@@ -442,7 +439,7 @@ All endpoints are served on port 8443 (HTTPS):
 | `docker-compose.yml` | Port mappings, env vars, volume mounts |
 | `.env` | Cloudflare + admin secrets (**gitignored**) |
 | `Dockerfile` | Multi-stage build: core → PWA → BeanPool Node (accepts `APP_VERSION` build arg) |
-| `deploy.sh` | Deploy script — pulls pre-built GHCR image to Azure + Debian nodes |
+| `deploy.sh` | Deploy script — updates a node over SSH, from a local build or the pre-built GHCR image |
 | `turbo.json` | Turborepo build pipeline |
 | `pnpm-workspace.yaml` | Monorepo workspace config |
 
@@ -457,7 +454,7 @@ BeanPool is in active development. The PWA is **fully functional** and a **React
 - ✅ **Active/Passive Collision & Deadlock HUD (v1.0.87 / v1.0.88)** — Resolves P2P Yamux concurrent dial-racing and silent listener deadlocks. Configures Active Dialer (`enabled: true`) and Passive Listener (`enabled: false`) roles that exchange enabled states on handshake, automatically rendering red `⚠️ Collision` and yellow `⚠️ Deadlock` warning badges with custom inline warning instructions.
 - ⛔ **Push-on-Write Real-Time Replication (v1.0.87 / v1.0.88)** — replaced: a backup now pulls a signed snapshot from its primary over HTTPS (`apps/server/src/services/backup-puller.ts`). Originally: — Real-time event delta broadcasts using `/beanpool/sync/delta/2.0.0` secure WebSockets. Instantly signs delta event payloads with the node's libp2p Ed25519 private key upon any SQLite write, verified cryptographically by target mirrors.
 - ✅ **15-Min Reconcile & 24h Tombstone Pruning** — Shipped a robust 15-minute background full Merkle-tree state comparison safety net to repair dropped delta frames, paired with a 24-hour database garbage collector that prunes soft-deleted tombstones older than 30 days once downstream peers' cursors have synced past them.
-- ✅ **P2P WebSocket Tunneling & Self-Healing (v1.0.85 / v1.0.86)** — Establish stable bidirectional P2P mirroring through Cloudflare Tunnels (port `443` secure WebSockets) using orange-clouded DNS subdomains (e.g. `p2p-mullum2.beanpool.org`). Automatic periodic Yamux handshake checks prune stale socket references forcefully using `p2pNode.hangUp` and trigger clean recovery dials within 30 seconds of a node restart.
+- ✅ **P2P WebSockets & Self-Healing (v1.0.85 / v1.0.86)** — libp2p links between nodes can run over WebSockets (`:4002`) as well as TCP (`:4001`). Automatic periodic Yamux handshake checks prune stale socket references forcefully using `p2pNode.hangUp` and trigger clean recovery dials within 30 seconds of a node restart.
 - ✅ **SQLite Diagnostics & Health Gates (v1.0.83 / v1.0.84)** — Active `PRAGMA integrity_check` scans and multi-table counters (Members, Posts, DMs, Txns) displaying database health indicators in Settings. Includes Koa health check `minAppVersion` gates matched dynamically on client boot to overlay updates.
 - ✅ Dynamic Node-Centered Mapping — Leaflet map bounds are dynamically tethered to the node's configured radius, and GPS pin-drop race conditions have been resolved
 - ✅ Invite-only membership with single-use codes + hierarchical invite tree
@@ -482,7 +479,7 @@ BeanPool is in active development. The PWA is **fully functional** and a **React
 - ✅ Mirror state sync — a backup pulls a signed snapshot from its primary every 60 seconds, with a full re-compare every 15 minutes
 - ✅ Handshake protocol (~570ms latency between continents)
 - ✅ Let's Encrypt auto-TLS via DNS-01 challenge (Cloudflare API)
-- ⛔ 5 live nodes (no longer the fleet; see the map on beanpool.org) — Mullum 1 (Azure AU), Mullum 2 (bare metal), Review (bare metal), Test (bare metal, offline SQLite recovery node), and Test Mirror (bare metal real-time backup node)
+- ⛔ Earlier five-node test fleet (no longer how BeanPool runs; see the map on beanpool.org).
 - ✅ Node admin setup guide with LE and no-domain instructions
 - ✅ Database (SQLite) — `better-sqlite3` with WAL mode, self-healing schema migrations
 - ✅ FTS5 full-text search — marketplace search with synonym mapping
@@ -530,10 +527,9 @@ BeanPool is in active development. The PWA is **fully functional** and a **React
 - ✅ Monorepo ESLint Flat Config — Configured monorepo-wide flat linting rules via `eslint.config.mjs` to maintain code health standards.
 - ✅ Release v1.0.76 Settings Lockout Fix — Resolved Admin Settings CSP lockouts by explicitly permitting Leaflet, OpenStreetMap, and geocoding API domains (`https://unpkg.com`, `https://*.tile.openstreetmap.org`, `https://nominatim.openstreetmap.org`).
 - ✅ Release v1.0.76 Password Complexity Engine — Enforced high-entropy complexity rules (minimum 8 chars, requiring uppercase, lowercase, digit, and special character check) dynamically evaluated at system boot, settings inputs, and API boundaries.
-- ✅ Release v1.0.77 SQLite Database Restoration — Restored SQLite database state on the `test.beanpool.org` node using simulator datasets to recover 28 members, 21 posts, and 24 messages.
 - ✅ Release v1.0.77 "Never" Sync Schedule — Added a "Never (Disabled)" option to Directory settings, allowing admins to completely bypass periodic directory pushes.
 - ✅ Production EAS Native Builds (v1.0.76-b97) — Successfully generated production iOS ipa bundle and Android aab bundle, distributing them to local and desktop build stores.
-- ⛔ Global Mesh Node Deployment (June 2026; that fleet is gone) — Automated and verified the global mesh deployment of version `v1.1.40` using `deploy.sh` across all 5 mesh nodes (`mullum1.beanpool.org`, `mullum2.beanpool.org`, `review.beanpool.org`, `test.beanpool.org`, and `test-mirror.beanpool.org`) with valid Let's Encrypt TLS certificates.
+- ⛔ Deployment of v1.1.40 to the earlier five-node test fleet, with Let's Encrypt TLS (June 2026; superseded).
 
 **Coming next:**
 - Native App Polish & App Store Submission (federation parity)

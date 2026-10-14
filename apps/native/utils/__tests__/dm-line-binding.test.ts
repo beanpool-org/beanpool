@@ -3447,7 +3447,7 @@ describe('a node can\'t make the phone keep unbounded pins, and the gate holds o
         expect(await sendTo(dmNew.id, 'Hello Eve', [eve, puppet])).toEqual({ err: null, posts: 1, readBy: ['Puppet'] });
     }, 120_000);
 
-    it('Z6 the member\'s reset: B\'s value corrupt refuses B\'s sends with the true sentence, every time, and the phone never resets it on its own; A sends; the reset sets the raw value aside and removes it, keeps the held lines, and the next read seeds B from its own rows; a value storage can\'t return is removed and logged with nothing set aside; a transient throw needs no reset', async () => {
+    it('Z6 the member\'s reset: B\'s value corrupt refuses B\'s sends with the true sentence, every time, and the phone never resets it on its own; A sends; the reset sets the raw value aside and puts its marker in the value\'s place (§3.4 amendment 7 §2), keeps the held lines, and the next read seeds B from its own rows, judging each DM on its lines; a value storage can\'t return is removed and logged with nothing set aside, and the marker written; a transient throw needs no reset', async () => {
         sealed(ben, ana, dm, 'Ben in A');
         await phoneOf(ana);
         await switchTo('B');
@@ -3496,16 +3496,18 @@ describe('a node can\'t make the phone keep unbounded pins, and the gate holds o
         // The member's reset of B's chat memory.
         expect(await dbPort.resetDmChatMemory(B_URL)).toBe('set-aside');
         expect(h.store.get(dmPeerPinsSetAsideStoreKey(ana.publicKey, FILE_B))).toBe(corrupt);
-        expect(h.store.has(PINS_B())).toBe(false);
+        expect(Object.keys(JSON.parse(h.store.get(PINS_B())!))).toEqual(['reset']);
         expect(h.store.get(dmLinesAtUpdateStoreKey(ana.publicKey, FILE_B))).toBe(lines);
         await syncMessages(ana.publicKey);
+        expect(Object.keys(JSON.parse(h.store.get(PINS_B())!))).toEqual(['pins']);
         expect(pinOf(dmB.id)).toMatchObject({ peer: ben.publicKey, checked: true });
         expect(await sendTo(dmB.id, 'Back again')).toEqual({ err: null, posts: 1, readBy: ['Ben'] });
-        // The relisted DM's rows were written per its pin ([Ana, Ben]): re-seeded on Ben, paused again.
-        expect(pinOf(relisted.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey } });
+        // The relisted DM's rows were written per its pin ([Ana, Ben]) and its only line is PUPPET's (the prune took Ben's):
+        // judged with the rows' key listed, rule 3 pins the lines' key and offers the rows' (§3.4 amendment 7 §1), a pause.
+        expect(pinOf(relisted.id)).toMatchObject({ peer: puppet.publicKey, checked: true, offered: { peer: ben.publicKey, firstSight: true, afterReset: true } });
         expect(await sendTo(relisted.id, 'The code is 4821')).toEqual(paused);
-        // The stated residual: a DM first met on the node's word, unchecked before the fault, is re-seeded from its rows as
-        // the phone's own (the confirmation says so: "may open with the new key").
+        // The stated residual: a DM first met on the node's word, unchecked before the fault, whose only line is PUPPET's:
+        // judged on it, rule 2 pins PUPPET (the confirmation says so: "may open with the new key").
         expect(pinOf(firstMet.id)).toMatchObject({ peer: puppet.publicKey, checked: true });
         // A value storage can't return: removed and logged, nothing set aside.
         h.store.delete(dmPeerPinsSetAsideStoreKey(ana.publicKey, FILE_B));
@@ -3515,7 +3517,7 @@ describe('a node can\'t make the phone keep unbounded pins, and the gate holds o
             expect(r).toBe('unreadable-removed');
             expect(warn.mock.calls.some((c) => String(c[0]).includes('could not be read'))).toBe(true);
         } finally { warn.mockRestore(); }
-        expect(h.store.has(PINS_B())).toBe(false);
+        expect(Object.keys(JSON.parse(h.store.get(PINS_B())!))).toEqual(['reset']);
         expect(h.store.has(dmPeerPinsSetAsideStoreKey(ana.publicKey, FILE_B))).toBe(false);
         await syncMessages(ana.publicKey);
         expect(pinOf(dmB.id)).toMatchObject({ peer: ben.publicKey, checked: true });

@@ -404,29 +404,41 @@ describe('the caps: a node can\'t make the phone keep unbounded pins (§3.4 amen
         expect(dmSightFor(back, D1)).toEqual({ unplaced: true, since: NOW, listed: PUPPET, heard: { tryKeys: Array.from({ length: 8 }, (_, i) => String(i).padStart(2, '0').repeat(32)) } });
     });
 
-    it('the member\'s reset of one file: the raw value is set aside (the newest kept) and removed, the copy forgotten, and the next ask seeds the file again; another file is untouched; a value storage can\'t return is removed with nothing set aside; nothing stored, nothing set aside', async () => {
+    it('the member\'s reset of one file: the raw value is set aside (the newest kept) and replaced by the reset\'s marker, the copy forgotten, and the next ask seeds the file again, handed the marker\'s date, whose one pin write replaces it; another file is untouched; a value storage can\'t return is removed with nothing set aside and the marker written; a marker is never set aside (§3.4 amendment 7 §2)', async () => {
         const s = memory({
             [dmPeerPinsStoreKey(ME, FA)]: '{not json',
             [dmPeerPinsStoreKey(ME, FB)]: record({ [D1]: { peer: BEN, since: NOW, by: 'first-seen' } }),
             [dmPeerPinsSetAsideStoreKey(ME, FA)]: 'an older one',
         });
         let seeds = 0;
-        const book = createDmPinBook<string>(s, (f) => f, async () => { seeds++; return (p) => pinAtFirstSight(p, D0, BEN, NOW, undefined, true); });
+        const handed: Array<string | undefined> = [];
+        const book = createDmPinBook<string>(s, (f) => f, async (_me, _at, _file, reset) => { seeds++; handed.push(reset); return (p) => pinAtFirstSight(p, D0, BEN, NOW, undefined, true); });
+        const marker = (key: string) => { const v = JSON.parse(s.data.get(key)!); expect(Object.keys(v)).toEqual(['reset']); expect(v.reset).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/); return v.reset as string; };
         await expect(book.read(ME, FA)).rejects.toBeInstanceOf(DmPinStoreError);
         await expect(book.read(ME, FA)).rejects.toBeInstanceOf(DmPinStoreError);   // never reset by the phone on its own
         expect(seeds).toBe(0);
         expect(await book.reset(ME, FA)).toBe('set-aside');
         expect(s.data.get(dmPeerPinsSetAsideStoreKey(ME, FA))).toBe('{not json');
+        const date = marker(dmPeerPinsStoreKey(ME, FA));
         expect(dmPinFor(await book.read(ME, FA), D0)).toMatchObject({ peer: BEN, checked: true });
         expect(seeds).toBe(1);
+        expect(handed).toEqual([date]);
+        // The seed's one pin write replaced the marker: pins, and no `reset`.
+        expect(Object.keys(JSON.parse(s.data.get(dmPeerPinsStoreKey(ME, FA))!))).toEqual(['pins']);
         expect(s.data.get(dmPeerPinsStoreKey(ME, FB))).toBe(record({ [D1]: { peer: BEN, since: NOW, by: 'first-seen' } }));
         // A readable value is set aside as it was, too, and the copy in memory is forgotten.
         const before = s.data.get(dmPeerPinsStoreKey(ME, FA));
         expect(await book.reset(ME, FA)).toBe('set-aside');
         expect(s.data.get(dmPeerPinsSetAsideStoreKey(ME, FA))).toBe(before);
-        expect(s.data.has(dmPeerPinsStoreKey(ME, FA))).toBe(false);
+        marker(dmPeerPinsStoreKey(ME, FA));
+        // Reset again before a seed: the marker isn't set aside over the copy kept, and is written again.
         expect(await book.reset(ME, FA)).toBe('nothing-stored');
         expect(s.data.get(dmPeerPinsSetAsideStoreKey(ME, FA))).toBe(before);
+        marker(dmPeerPinsStoreKey(ME, FA));
+        // Nothing stored at all (a file never seeded): the marker is written, so its seed judges too.
+        s.data.delete(dmPeerPinsStoreKey(ME, FB));
+        expect(await book.reset(ME, FB)).toBe('nothing-stored');
+        marker(dmPeerPinsStoreKey(ME, FB));
         // Storage can't return it (a value past the read window): removed, nothing set aside.
         const t = memory({ [dmPeerPinsStoreKey(ME, FA)]: 'x' });
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -435,6 +447,43 @@ describe('the caps: a node can\'t make the phone keep unbounded pins (§3.4 amen
             expect(await throwing.reset(ME, FA)).toBe('unreadable-removed');
             expect(warn).toHaveBeenCalled();
         } finally { warn.mockRestore(); }
-        expect(t.data.size).toBe(0);
+        expect([...t.data.keys()]).toEqual([dmPeerPinsStoreKey(ME, FA)]);
+        expect(Object.keys(JSON.parse(t.data.get(dmPeerPinsStoreKey(ME, FA))!))).toEqual(['reset']);
+    });
+
+    it('the reset\'s marker as read (§3.4 amendment 7 §2): no pins and \'reset\' a 24-character date reads as unseeded (no pins); any other value with no pins is unreadable; a pin write that fails leaves the marker, and the next ask is handed it again; a marker that can\'t be written fails the reset, and this run\'s seed still judges', async () => {
+        const date = '2026-10-14T09:00:00.000Z';
+        expect(await readDmPeerPins(memory({ [dmPeerPinsStoreKey(ME, FA)]: JSON.stringify({ reset: date }) }), ME, FA)).toEqual({});
+        for (const raw of [JSON.stringify({ reset: 'soon' }), JSON.stringify({ reset: 'Thu Oct 01 2026' }), JSON.stringify({ reset: 7 }), '{}', JSON.stringify({ reset: date, pins: [] })]) {
+            await expect(readDmPeerPins(memory({ [dmPeerPinsStoreKey(ME, FA)]: raw }), ME, FA)).rejects.toBeInstanceOf(DmPinStoreError);
+        }
+        // The seed's pin write throws once: the marker stays, and the next ask is handed it again.
+        const s = memory({ [dmPeerPinsStoreKey(ME, FA)]: JSON.stringify({ reset: date }) });
+        let fail = 1;
+        const handed: Array<string | undefined> = [];
+        const flaky = { ...s, setItem: async (k: string, v: string) => { if (fail-- > 0) throw new Error('disk full'); return s.setItem(k, v); } };
+        const book = createDmPinBook<string>(flaky, (f) => f, async (_me, _at, _file, reset) => { handed.push(reset); return (p) => pinAtFirstSight(p, D0, BEN, NOW); });
+        await expect(book.read(ME, FA)).rejects.toBeInstanceOf(DmPinStoreError);
+        expect(s.data.get(dmPeerPinsStoreKey(ME, FA))).toBe(JSON.stringify({ reset: date }));
+        expect(dmPinFor(await book.read(ME, FA), D0)).toMatchObject({ peer: BEN });
+        expect(handed).toEqual([date, date]);
+        expect(Object.keys(JSON.parse(s.data.get(dmPeerPinsStoreKey(ME, FA))!))).toEqual(['pins']);
+        // A value storage can't return, removed, and then the marker can't be written: the reset throws, the value is gone,
+        // and this run's seed of that file is still handed a date (never the update's trust).
+        const t = memory({ [dmPeerPinsStoreKey(ME, FA)]: 'x'.repeat(10) });
+        let refuse = true;
+        const handedT: Array<string | undefined> = [];
+        const tb = createDmPinBook<string>({
+            ...t,
+            getItem: async (k: string) => { if (refuse && k === dmPeerPinsStoreKey(ME, FA)) throw new Error('Row too big to fit into CursorWindow'); return t.getItem(k); },
+            setItem: async (k: string, v: string) => { if (refuse && k === dmPeerPinsStoreKey(ME, FA)) throw new Error('disk full'); return t.setItem(k, v); },
+        }, (f) => f, async (_me, _at, _file, reset) => { handedT.push(reset); return () => false; });
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        try { await expect(tb.reset(ME, FA)).rejects.toBeInstanceOf(DmPinStoreError); } finally { warn.mockRestore(); }
+        expect(t.data.has(dmPeerPinsStoreKey(ME, FA))).toBe(false);
+        refuse = false;
+        await tb.read(ME, FA);
+        expect(handedT).toHaveLength(1);
+        expect(handedT[0]).toMatch(/^\d{4}-\d\d-\d\dT/);
     });
 });

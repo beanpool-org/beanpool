@@ -12,7 +12,7 @@ import {
 } from './e2e-crypto';
 import { DmNotLockedError, DmKeyChangedError, isNodeReadableChatType } from './dm-lock';
 import {
-    createDmPinBook, dmPinFor, dmSightFor, dmPinId, pinKeyOf, pinAtFirstSight, applyDmListings, applySightVerdict, judgeFirstSight,
+    createDmPinBook, dmPinFor, dmSightFor, dmPinId, pinKeyOf, pinAtFirstSight, applyDmListings, applySightVerdict, applyResetVerdict, judgeFirstSight,
     settleFirstSight, isUnplacedSight, isHeldLostSight, markHeldLost, isDmPinStoreError, isDmPinsFullError, DmPinsFullError, isPinnableId,
     noRoomForFirstSight, rekeyDateOf, DM_PINS_UNREAD_LINE, type DmPeerPins, type DmPinEntry, type DmHeard, type SightVerdict, type DmPinsReset,
 } from './dm-peer-pins';
@@ -4562,8 +4562,12 @@ async function dropHeldLinesOfPinned(me: string, pins: DmPeerPins, file: string)
  * rows' pins and the file's name go in one pin write: where the lines couldn't be kept, that same write marks those DMs
  * heldLost (amendment 4). The pin's memory starts at the update (§3.7): a rewrite, a tombstone or a prune the node serves
  * after it moves nothing; one before it is the phone's history as it stands.
+ *
+ * After the member's reset (`reset`, the marker's date: §3.4 amendment 7) the rows are what this build wrote since the
+ * update, not the phone's history, so they pin nothing on their word: each DM they name one other key in is judged on
+ * the lines the file holds ({@link judgeRowsAfterReset}), and the same one pin write replaces the marker.
  */
-const dmPins = createDmPinBook<SQLite.SQLiteDatabase>(AsyncStorage, (database) => dbFileOf.get(database), async (me, database, file) => {
+const dmPins = createDmPinBook<SQLite.SQLiteDatabase>(AsyncStorage, (database) => dbFileOf.get(database), async (me, database, file, reset) => {
     // Through the handle the caller named, and thrown when the rows can't be read: a seed records nothing it didn't read.
     // The 2,000 DMs held longest only (§3.4 amendment 6 §1), rows' pins, kept lines and marks together; the rest pinless.
     const held = seedBudget(await readDmPeersHeld(database));
@@ -4573,11 +4577,53 @@ const dmPins = createDmPinBook<SQLite.SQLiteDatabase>(AsyncStorage, (database) =
         if (window.length) lines.set(id, window.map(heldLineOf));
     }
     const kept = await keepLinesHeldAtUpdate(me, file, lines);
+    const sights = reset ? await judgeRowsAfterReset(me, file, database, held) : null;
     return (pins) => {
-        const seeded = seedPinsFromRows(pins, me, held, true);
-        return (!kept && markHeldLost(pins, lines.keys(), new Date().toISOString())) || seeded;
+        const now = new Date().toISOString();
+        const seeded = sights ? applyResetSights(pins, sights, now) : seedPinsFromRows(pins, me, held, true);
+        return (!kept && markHeldLost(pins, lines.keys(), now)) || seeded;
     };
 }, dropHeldLinesOfPinned);
+
+interface ResetSight { id: string; rowsKey: string; verdict: SightVerdict }
+
+/**
+ * The re-seed after the member's reset (§3.4 amendment 7 §1): each DM in `rows` ({@link seedBudget}'s) whose rows name
+ * exactly one other key, judged by the history rule on the lines this file holds of it (the update's kept lines of that
+ * file's key, then its {@link sightWindow}), with the rows' key as the listed one. At most SEED_DMS_MAX, once, in the
+ * file's turn at the first read after the member's tap. Throws when there is no key to open them with.
+ */
+async function judgeRowsAfterReset(me: string, file: string, database: SQLite.SQLiteDatabase, rows: ReadonlyArray<any>): Promise<ResetSight[]> {
+    const identity = await loadIdentity();
+    if (!identity?.privateKey) throw new Error('No identity found.');
+    const mine = me.toLowerCase();
+    const others = new Map<string, Set<string>>();
+    for (const r of rows) {
+        const pk = typeof r?.pk === 'string' ? r.pk.toLowerCase() : '';
+        if (!pk || pk === mine || typeof r?.id !== 'string') continue;
+        const id = dmPinId(r.id);
+        if (!others.has(id)) others.set(id, new Set());
+        others.get(id)!.add(pk);
+    }
+    const keptLines = dmLinesHeldAtUpdate.get(heldKey(me, file))?.lines ?? new Map<string, HeldLine[]>();
+    const sights: ResetSight[] = [];
+    for (const [id, keys] of others) {
+        if (keys.size !== 1) continue;
+        const rowsKey = [...keys][0];
+        const kept = keptLines.get(id) ?? [];
+        const keptIds = new Set(kept.map((l) => l.id));
+        const thread = new Map([[id, [...kept, ...(await sightWindow(id, database)).filter((r) => !keptIds.has(r.id))]]]);
+        sights.push({ id, rowsKey, verdict: await judgeThread(id, identity.privateKey, me, rowsKey, undefined, thread, database) });
+    }
+    return sights;
+}
+
+/** {@link judgeRowsAfterReset}'s verdicts, each kept for a DM still keeping nothing. True when the pins changed. */
+function applyResetSights(pins: DmPeerPins, sights: ReadonlyArray<ResetSight>, now: string): boolean {
+    let changed = false;
+    for (const s of sights) if (applyResetVerdict(pins, s.id, s.verdict, s.rowsKey, now)) changed = true;
+    return changed;
+}
 
 /** How many DMs one file's seed takes (§3.4 amendment 6 §1): a seed entry is about 250 bytes, so at most about 500 KiB. */
 const SEED_DMS_MAX = 2000;
@@ -4609,9 +4655,10 @@ function fileOfDb(database: SQLite.SQLiteDatabase): string {
 
 /**
  * The member's reset of one community's chat memory (Settings → Account → Chat memory, §3.4 amendment 6 §3), never the
- * phone's own: that community's DM pins are set aside and removed, and the next read seeds them as at the update, over
- * the community file's own rows and the lines the update held there (kept). A chat that was paused because its key
- * changed may open with the new key: the confirmation says so. `community`: the node's address, as the switcher keeps it.
+ * phone's own: that community's DM pins are set aside and replaced by the reset's marker, and the next read seeds them
+ * over the community file's own rows and the lines the update held there (kept), judging every DM before it trusts one
+ * (§3.4 amendment 7). A chat whose history the node withheld may open with the new key: the confirmation says so.
+ * `community`: the node's address, as the switcher keeps it.
  */
 export async function resetDmChatMemory(community: string): Promise<DmPinsReset> {
     const me = (await loadIdentity())?.publicKey;

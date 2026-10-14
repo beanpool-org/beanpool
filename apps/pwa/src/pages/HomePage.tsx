@@ -1470,7 +1470,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
             )}
             {visitor?.joinCard}
             {saveNote && (
-                <p data-testid="home-save-search-note" className="m-0 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-bg-card border border-border-primary text-sm text-text-primary">
+                <p data-testid="home-save-search-note" className="m-0 mb-3 pl-3 py-1 flex items-center gap-2 rounded-xl bg-bg-card border border-border-primary text-sm text-text-primary">
                     <span className="min-w-0 flex-1 break-words">{saveNote}</span>
                     <button type="button" aria-label="Close this note" onClick={() => setSaveNote(null)}
                         className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-text-secondary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">

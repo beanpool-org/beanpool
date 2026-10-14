@@ -1222,6 +1222,8 @@ export default function WelcomeScreen() {
         recoveryAbortRef.current?.abort();
         const abort = new AbortController();
         recoveryAbortRef.current = abort;
+        // Set once the provider has handed back its token: from then on its page may be in front of the app.
+        let signedIn = false;
         try {
             const result = await recoverAccountWithSso({
                 callsign: trimmedCallsign,
@@ -1229,6 +1231,7 @@ export default function WelcomeScreen() {
                 provider,
                 onProgress: (p) => setSsoProgressMessage(p.message),
                 signal: abort.signal,
+                onSignedIn: () => { signedIn = true; },
                 // Onto a phone that holds another account: "Replace this phone's account?" first, as the
                 // 12-word restore does. Nothing is written until the member says yes; Keep changes nothing.
                 confirmReplace: askToReplace('ssoRecover'),
@@ -1259,6 +1262,9 @@ export default function WelcomeScreen() {
                 router.replace('/');
             }
         } catch (e: any) {
+            // Refused after the sign-in (the release, the copy, another account's key): on Android the provider's page can
+            // still be in front of the app, over the sentence below. Brought back first, as a success and Replace are.
+            if (signedIn) await returnToApp();
             // A replace this phone couldn't save has already taken the old account off it (its app storage and wizard, and
             // its key unless even that failed): the app must not go on as it.
             if (e instanceof ReplaceNotSaved) setIdentity(null);

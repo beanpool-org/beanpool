@@ -228,6 +228,12 @@ export async function recoverAccountWithSso(options: {
      */
     signal?: AbortSignal;
     /**
+     * Runs once the provider has handed back its token, before anything is released. From then on its page may still be
+     * in front of the app (Android's Custom Tab), so a screen that shows a refusal brings the app back first
+     * (welcome.tsx), as the vault's {@link startSsoRestore} does here. Never run when the sign-in itself didn't finish.
+     */
+    onSignedIn?: () => void | Promise<void>;
+    /**
      * Asked before this restore writes another account over the one the phone holds ("Replace this phone's
      * account?", restore-account.ts). Called after the account has been rebuilt and before anything is written: the
      * community's address, the key and the onboarding record all stay as they are unless it says yes. Without it, a
@@ -316,6 +322,7 @@ export async function recoverAccountWithSso(options: {
     } else {
         signInResult = await signInWithFacebook(nonce);
     }
+    await options.onSignedIn?.();
     const sub = parseJwtSub(signInResult.idToken);
 
     // The last point a cancel can be honoured: nothing has been released yet, so nothing is. The release cannot be

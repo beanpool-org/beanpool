@@ -380,6 +380,9 @@ describe('a sign-in Replace takes the old account\'s push alerts and communities
         await restore();
 
         expect(elsewhere).not.toHaveBeenCalled();
+        // The one request: the community's lookup, before the restore.
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(String(vi.mocked(fetch).mock.calls[0][0])).toBe(`${NODE}/api/recovery/lookup/Marty`);
         expect(mem.secure.get(PUSH_TOKEN_STORE_KEY)).toBe(PHONE_TOKEN);
         expect(mem.async.has(SAVED_NODES_STORE_KEY)).toBe(true);
         expect(removeCommunityCaches).not.toHaveBeenCalled();

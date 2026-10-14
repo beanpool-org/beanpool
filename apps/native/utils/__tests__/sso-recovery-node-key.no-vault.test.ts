@@ -52,6 +52,7 @@ import { recoverAccountWithSso } from '../sso-recovery';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
 import { mnemonicToKeypair, seedToKeypair } from '../crypto';
 import { getPendingOnboarding, setPendingOnboarding } from '../onboarding-state';
+import { PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from '../storage-keys';
 
 // Test phrases only (BIP-39 vectors), never a real account's.
 const WORDS = 'legal winner thank year wave sausage worth useful legal winner thank yellow'.split(' ');
@@ -139,9 +140,15 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
+/** Everything the phone keeps, app storage and SecureStore both, as one value to compare before and after. */
+function wholePhone(): string {
+    return JSON.stringify({ async: [...mem.async].sort(), secure: [...mem.secure].sort() });
+}
+
+/** Nothing at all was written: both stores are as empty as the test began them. */
 async function expectEmptyPhone() {
+    expect(wholePhone()).toBe(JSON.stringify({ async: [], secure: [] }));
     expect(await loadIdentity()).toBeNull();
-    expect(mem.async.get(ANCHOR)).toBeUndefined();
 }
 
 describe('a sign-in restore at the community: the key must be the account the community lists for the name', () => {
@@ -175,6 +182,11 @@ describe('a sign-in restore at the community: the key must be the account the co
         const record = { step: 'profileSetup' as const, inviteCode: 'INV-ABC', anchorUrl: 'https://mullum.example.org', callsign: 'Kim', redeemed: true };
         await setPendingOnboarding(record);
         mem.async.set(ANCHOR, 'https://mullum.example.org');
+        // The rest of what an account and the phone keep: its saved communities, a theme, a push token.
+        mem.async.set(SAVED_NODES_STORE_KEY, JSON.stringify([{ url: 'https://mullum.example.org', name: 'Mullum' }]));
+        mem.async.set('beanpool_theme_mode', 'dark');
+        mem.secure.set(PUSH_TOKEN_STORE_KEY, 'ExponentPushToken[kims-phone]');
+        const before = wholePhone();
         listed([{ publicKey: accountPub, callsign: 'Marty' }]);
         mockSignInAndNode(await singleBlob(OTHER_SEED));
         const confirmReplace = vi.fn(async () => true);
@@ -182,6 +194,8 @@ describe('a sign-in restore at the community: the key must be the account the co
         await expect(restore('Marty', confirmReplace)).rejects.toThrow(WRONG_ACCOUNT);
 
         expect(confirmReplace).not.toHaveBeenCalled();
+        // Not one key in either store changed.
+        expect(wholePhone()).toBe(before);
         expect(await loadIdentity()).toEqual(phone);
         expect(await getPendingOnboarding()).toEqual(record);
         expect(mem.async.get(ANCHOR)).toBe('https://mullum.example.org');
@@ -224,6 +238,10 @@ describe('a sign-in restore at the community: the key must be the account the co
         expect((await loadIdentity())?.callsign).toBe('Marty');
     });
 
+    // Defensive only: a real community refuses a name that more than one live account answers to, at
+    // /api/recovery/collect with 409 (apps/server/src/routes/recovery-collect.ts, `resolveCallsign` ambiguous), before
+    // anything is released, and registration refuses a case namesake. This pins that the name saved is always the one
+    // listed for the rebuilt key.
     it('two accounts listed for one name (namesakes in different case): the one whose key it is', async () => {
         const otherPub = (await seedToKeypair(OTHER_SEED)).publicKeyHex;
         listed([{ publicKey: otherPub, callsign: 'marty' }, { publicKey: accountPub, callsign: 'Marty' }]);

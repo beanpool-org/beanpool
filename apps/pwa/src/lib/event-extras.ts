@@ -137,6 +137,33 @@ export interface ShareableEvent {
     endAt?: string | null;
     placeName?: string | null;
     description?: string | null;
+    /**
+     * The start in words that name their zone ("Sat 17 Oct, 20:50 Lagos time"; online "… Sydney time (online)"), for a
+     * calendar entry's description: the entry itself is in UTC and shows in the calendar's zone (DESIGN-event-times §4).
+     */
+    whenText?: string | null;
+    /** The IANA zone the host's clock is in: Google Calendar's `ctz`. */
+    tz?: string | null;
+    /** An online event: no place. */
+    online?: boolean;
+    /** Where to join, only when the viewer may see it (the host and Going). */
+    joinLink?: string | null;
+}
+
+/** What a calendar entry says under its title: the description, the labelled time, where to join, and the event's page. */
+function calendarDetails(event: ShareableEvent, link: string): string {
+    return [
+        event.description || '',
+        event.whenText ? `Starts ${event.whenText}` : '',
+        event.joinLink ? `Join: ${event.joinLink}` : '',
+        link,
+    ].filter(Boolean).join('\n\n');
+}
+
+/** A calendar entry's place: the place's name, or for an online event where to join (or just "Online"). */
+function calendarLocation(event: ShareableEvent): string | null {
+    if (event.online) return event.joinLink || 'Online';
+    return event.placeName || null;
 }
 
 /**
@@ -144,7 +171,7 @@ export interface ShareableEvent {
  * is pasted into a chat as often as it is sent by a share sheet, and a wrapped paragraph reads worse there.
  */
 export function buildShareText(event: ShareableEvent, when: string, link: string): string {
-    return [event.title, when, event.placeName || '', link].filter(Boolean).join('\n');
+    return [event.title, when, event.online ? '' : event.placeName || '', link].filter(Boolean).join('\n');
 }
 
 // ===================== ADD TO CALENDAR (.ics) =====================
@@ -193,7 +220,8 @@ export function icsFold(line: string): string {
  * UID is the post's id at the community's host, so re-adding the same event updates the entry instead of
  * making a second one. Times are UTC (the `Z` form), which needs no VTIMEZONE and cannot be read in the
  * wrong zone. The link goes in both URL and DESCRIPTION, because several calendars show one and not the
- * other.
+ * other. DESCRIPTION also carries the start with its zone named (DESIGN-event-times §4). No RRULE: a rule on a UTC
+ * start drifts an hour at every DST change.
  */
 export function buildIcs(event: ShareableEvent, link: string, now: number = Date.now()): string {
     const startMs = Date.parse(event.startAt);
@@ -202,7 +230,8 @@ export function buildIcs(event: ShareableEvent, link: string, now: number = Date
     const host = (() => {
         try { return new URL(link).host; } catch { return 'beanpool'; }
     })();
-    const description = [event.description || '', link].filter(Boolean).join('\n\n');
+    const description = calendarDetails(event, link);
+    const location = calendarLocation(event);
     const lines = [
         'BEGIN:VCALENDAR',
         'VERSION:2.0',
@@ -215,7 +244,7 @@ export function buildIcs(event: ShareableEvent, link: string, now: number = Date
         `DTSTART:${icsStamp(startMs)}`,
         `DTEND:${icsStamp(end)}`,
         `SUMMARY:${icsEscape(event.title)}`,
-        ...(event.placeName ? [`LOCATION:${icsEscape(event.placeName)}`] : []),
+        ...(location ? [`LOCATION:${icsEscape(location)}`] : []),
         `DESCRIPTION:${icsEscape(description)}`,
         `URL:${icsEscape(link)}`,
         'END:VEVENT',
@@ -236,7 +265,7 @@ export function icsFileName(event: ShareableEvent): string {
 
 /**
  * Google Calendar's "add an event" template, for a phone with no way to open a file. Dates are the same
- * UTC stamps the .ics carries.
+ * UTC stamps the .ics carries; `ctz` names the host's zone, which Google uses to show the entry.
  */
 export function googleCalendarUrl(event: ShareableEvent, link: string): string {
     const startMs = Date.parse(event.startAt);
@@ -246,9 +275,11 @@ export function googleCalendarUrl(event: ShareableEvent, link: string): string {
         action: 'TEMPLATE',
         text: event.title,
         dates: `${icsStamp(startMs)}/${icsStamp(end)}`,
-        details: [event.description || '', link].filter(Boolean).join('\n\n'),
+        details: calendarDetails(event, link),
     });
-    if (event.placeName) params.set('location', event.placeName);
+    const location = calendarLocation(event);
+    if (location) params.set('location', location);
+    if (event.tz) params.set('ctz', event.tz);
     return `https://calendar.google.com/calendar/render?${params.toString()}`;
 }
 

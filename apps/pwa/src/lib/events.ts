@@ -2,56 +2,91 @@
  * Events on the web app (docs/events-on-the-map.md §3): how an event's time reads on a card, and which events
  * the map's Today / This weekend / Next 7 days chips keep.
  *
- * Times arrive as ISO UTC and are shown in the viewer's local time. The names are spelled out here rather than
- * taken from `toLocaleDateString`, so a card reads the same on every browser at 320px.
+ * Times arrive as ISO UTC with the host's clock and its zone beside them (DESIGN-event-times §4). In person, the place's
+ * clock leads and the viewer's own follows only when it differs; online, the viewer's own clock leads, "your time".
+ * The names are spelled out (@beanpool/core event-when) rather than taken from `toLocaleDateString`, so a card reads
+ * the same on every browser at 320px, and no zone arithmetic runs here: the viewer's clock comes from the Date getters.
  */
 
+import { deviceLocalClock, eventPlaceTimeText, eventWhenParts as whenParts, localClockMs, type EventWhenParts } from '@beanpool/core';
 import type { MarketplacePost } from './api';
 
 /** Every post type this client can render. Sent as `types=` so the node includes events (§2.6). */
 export const CLIENT_POST_TYPES = 'offer,need,poll,event';
 
-const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-
 /** An event ends at `eventEndAt`; one without falls back to start + 2 hours, as the server defaults it. */
 export const EVENT_DEFAULT_DURATION_MS = 2 * 60 * 60 * 1000;
-
-function time(d: Date): string {
-    return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
-function day(d: Date): string {
-    return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
-}
-
-function sameLocalDay(a: Date, b: Date): boolean {
-    return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-}
 
 export function eventEndMs(post: Pick<MarketplacePost, 'eventStartAt' | 'eventEndAt'>): number {
     if (post.eventEndAt) return Date.parse(post.eventEndAt);
     return post.eventStartAt ? Date.parse(post.eventStartAt) + EVENT_DEFAULT_DURATION_MS : NaN;
 }
 
+/** The post fields an event's time is read from. */
+export type EventTimeFields = Pick<MarketplacePost, 'eventStartAt' | 'eventEndAt' | 'eventStartLocal' | 'eventEndLocal' | 'eventTz' | 'eventOnline'>;
+
+/** A wall clock moved by some minutes, as clock arithmetic (no zone): "2026-10-16T20:50" + 120 → "2026-10-16T22:50". */
+function addClockMinutes(local: string, minutes: number): string | null {
+    const ms = localClockMs(local);
+    return Number.isFinite(ms) ? new Date(ms + minutes * 60000).toISOString().slice(0, 16) : null;
+}
+
 /**
- * The two halves of an event's time, each kept whole when a narrow card wraps: ["SAT 27 SEP", "9:00–12:00"],
- * or ["SAT 27 SEP 22:00", "SUN 28 SEP 2:00"] across midnight.
+ * The lines an event's time reads as (DESIGN-event-times §4), each half kept whole when a narrow card wraps:
+ *   ["SAT 27 SEP", "9:00–12:00"], or ["SAT 27 SEP 22:00", "SUN 28 SEP 2:00"] across midnight;
+ *   in person where the viewer's clock differs, `note` "Lagos time · 15:50 your time";
+ *   online, the viewer's own clock with "your time" on the second half, and `hostLine` for the detail.
+ * A node that sends no clock or zone gives the viewer's own lines, as before.
  */
-export function eventWhenParts(post: Pick<MarketplacePost, 'eventStartAt' | 'eventEndAt'>): { first: string; second: string; sep: string } | null {
+export function eventWhenParts(post: EventTimeFields): EventWhenParts | null {
     if (!post.eventStartAt) return null;
     const start = new Date(post.eventStartAt);
     if (Number.isNaN(start.getTime())) return null;
     const end = new Date(eventEndMs(post));
-    if (Number.isNaN(end.getTime())) return { first: day(start), second: time(start), sep: ' · ' };
-    if (sameLocalDay(start, end)) return { first: day(start), second: `${time(start)}–${time(end)}`, sep: ' · ' };
-    return { first: `${day(start)} ${time(start)}`, second: `${day(end)} ${time(end)}`, sep: ' – ' };
+    const hasEnd = !Number.isNaN(end.getTime());
+    // A place clock with no end clock (never sent by a node that stores clocks, but cheap to cover): the same length on the clock.
+    const endLocal = post.eventEndLocal
+        || (post.eventStartLocal && hasEnd ? addClockMinutes(post.eventStartLocal, Math.round((end.getTime() - start.getTime()) / 60000)) : null);
+    return whenParts({
+        startAt: post.eventStartAt,
+        endAt: hasEnd ? end.toISOString() : null,
+        startLocal: post.eventStartLocal ?? null,
+        endLocal,
+        tz: post.eventTz ?? null,
+        online: post.eventOnline ?? false,
+        deviceStart: deviceLocalClock(start),
+        deviceEnd: hasEnd ? deviceLocalClock(end) : null,
+    });
 }
 
-/** "SAT 27 SEP · 9:00–12:00", or "SAT 27 SEP 22:00 – SUN 28 SEP 2:00" across midnight. */
-export function formatEventWhen(post: Pick<MarketplacePost, 'eventStartAt' | 'eventEndAt'>): string {
+/**
+ * "SAT 27 SEP · 9:00–12:00", or "SAT 27 SEP 22:00 – SUN 28 SEP 2:00" across midnight, with the second time after it when
+ * there is one ("… · Lagos time · 15:50 your time"). The words a screen reader hears and a visitor's page shows.
+ */
+export function formatEventWhen(post: EventTimeFields): string {
     const parts = eventWhenParts(post);
-    return parts ? `${parts.first}${parts.sep}${parts.second}` : '';
+    if (!parts) return '';
+    const line = `${parts.first}${parts.sep}${parts.second}`;
+    return parts.note ? `${line} · ${parts.note}` : line;
+}
+
+const SHARE_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const SHARE_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * The time in a shared message, which is read outside the app by someone whose zone nobody knows, so it always names its
+ * zone (§4): "Sat 17 Oct, 20:50 Lagos time"; online "Fri 16 Oct, 20:50 Sydney time (online)". A node that sends no
+ * clock gives today's line in the sharer's own time.
+ */
+export function eventShareWhen(post: EventTimeFields): string {
+    const placeTime = post.eventStartLocal && post.eventTz
+        ? eventPlaceTimeText(post.eventStartLocal, post.eventTz, post.eventStartAt) : null;
+    const ms = post.eventStartLocal ? localClockMs(post.eventStartLocal) : NaN;
+    if (!placeTime || !Number.isFinite(ms)) return formatEventWhen(post);
+    const d = new Date(ms);
+    // placeTime is "Sat 20:50 Lagos time": the date goes after the weekday.
+    const rest = placeTime.slice(placeTime.indexOf(' ') + 1);
+    return `${SHARE_DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${SHARE_MONTHS[d.getUTCMonth()]}, ${rest}${post.eventOnline ? ' (online)' : ''}`;
 }
 
 /** True while an event can still be joined: not cancelled, not removed, not over. */

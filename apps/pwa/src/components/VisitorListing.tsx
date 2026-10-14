@@ -11,7 +11,8 @@ import type { MarketplacePost } from '../lib/api';
 import { formatEventWhen } from '../lib/events';
 import { PLACE_AFTER_JOIN, visitorDistanceText, visitorPriceText } from '../lib/visitor-lobby';
 import { PollCard } from './PollCard';
-import { listPhotoUrl } from '@beanpool/core';
+import { listPhotoUrl, t } from '@beanpool/core';
+import { REPORT_WORDS, VISITOR_REPORT_URL } from '../lib/reportReasons';
 
 function typeLabel(post: MarketplacePost): string {
     return post.type === 'offer' ? 'Offer' : post.type === 'need' ? 'Need' : post.type === 'event' ? 'Event' : 'Poll';
@@ -183,6 +184,13 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
             >
                 {joinToSeeLabel(post)}
             </button>
+            {/* A visitor can't report from here (a report is a member's, signed): where they can (rehearsal 14 Oct N3). */}
+            <p data-testid="visitor-report" className="m-0 mt-3 text-sm text-nature-700 dark:text-nature-300 break-words">
+                <span>{t(REPORT_WORDS.visitorLine)}</span>{' '}
+                <a href={VISITOR_REPORT_URL} target="_blank" rel="noopener noreferrer" className="font-semibold underline text-bp-ink-accent">
+                    {t(REPORT_WORDS.visitorLink)}
+                </a>
+            </p>
         </div>
     );
 }

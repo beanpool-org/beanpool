@@ -25,8 +25,8 @@ export interface ActiveConnectionInfo {
 export interface RouteDeps {
     /** Async admin password verification (with tarpit on failure) */
     checkAdminAuth: (ctx: any, opts?: import('../admin-auth.js').PasswordAuthOptions) => Promise<boolean>;
-    /** Per-IP rate limiter for auth endpoints */
-    rateLimit: (ctx: Koa.Context) => boolean;
+    /** Per-IP rate limiter for auth endpoints, one bucket per route (auth-rate-limit.ts); `admin` when none is named */
+    rateLimit: (ctx: Koa.Context, bucket?: import('../auth-rate-limit.js').AuthLimitBucket) => boolean;
     /** Clamp a client-supplied limit to [1, MAX_PAGE_LIMIT] */
     clampLimit: (v: unknown, def?: number) => number;
     /** Clamp a client-supplied offset to >= 0 */

@@ -12,6 +12,7 @@
  * - **The marker** never greys, dims, locks or talks tiers; every variant opens the same sheet, which says why the
  *   feature lives in a local community and offers Start a community, Communities near you and How it works.
  */
+import { t } from './words.js';
 
 export type FeatureMode = 'live' | 'preview' | 'read-only' | 'hidden';
 
@@ -126,4 +127,14 @@ export type PostRules = {
 
 export function postRulesFor(beansOn: boolean): PostRules {
     return { offerFirst: beansOn, profilePhoto: beansOn, needPhoto: beansOn };
+}
+
+/**
+ * Sign-up's photo step with no picture picked yet (rehearsal 14 Oct S9): Next works either way, never a gate (memory
+ * onboarding-no-hard-gates), and this says what the node will ask for, by the rule above.
+ */
+export function photoStepNote(beansOn: boolean): string {
+    return postRulesFor(beansOn).profilePhoto
+        ? t('This community asks for a profile picture before you post. You can add one later from your profile.')
+        : t('A picture is optional here. You can add one later from your profile.');
 }

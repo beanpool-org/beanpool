@@ -117,6 +117,11 @@ CREATE TABLE IF NOT EXISTS members (
     -- statement, so delta sync carries it to a standby (the one-time fill doesn't, on purpose: db.ts
     -- backfillBoardStanding); listed, the touch trigger would restamp a standby's copied row.
     board_standing_changed_at TEXT,
+    -- foldName(callsign) (engine names.ts), the one rule by which two names are the same name (#1956): what every name
+    -- lookup and name check compares, through idx_members_callsign_fold (db.ts migrateCallsignFold, which also adds it to
+    -- an older table). Written by per-connection TEMP triggers, never stored ones, and re-folded at every boot. Not
+    -- copied to a standby (each server makes its own) and not in members_touch_updated_at's list.
+    callsign_fold TEXT,
     CONSTRAINT enterprise_lat_lng_check CHECK (lat BETWEEN -90 AND 90 AND lng BETWEEN -180 AND 180)
 );
 CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
@@ -292,6 +297,14 @@ CREATE TABLE IF NOT EXISTS posts (
     event_host_lets_in INTEGER,
     event_state TEXT CHECK (event_state IS NULL OR event_state IN ('scheduled', 'updated', 'cancelled')),
     event_conversation_id TEXT,
+    -- Event times (DESIGN-event-times §2): the clock the host typed, "YYYY-MM-DDTHH:MM", in event_tz (a canonical IANA id).
+    -- The node turns the pair into event_start_at/event_end_at. NULL on an event from before them.
+    event_start_local TEXT,
+    event_end_local TEXT,
+    event_tz TEXT,
+    -- 1 for an online event: no pin (lat/lng NULL). Its join link is shown, like the private note, to the host and Going only.
+    event_online INTEGER,
+    event_link TEXT,
     -- Moderation (global profile G3, engine/auto-moderation.ts). On every node, NULL where unused.
     -- hidden_by_reports_at: enough established members reported it, so it is out of every listing and search for
     -- everyone but its author and the moderators until a moderator looks. Not a removal: active/status are untouched.

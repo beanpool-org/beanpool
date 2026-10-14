@@ -1612,7 +1612,7 @@ describe('sending a Need where Beans are off (review #1936 N3)', () => {
 
     it('Beans on: a member the node calls blocked is asked for an Offer first, and nothing is sent', async () => {
         const { panel, create } = await fillNeed(true, true);
-        const send = within(panel).getByRole('button', { name: '🔵 List an Offer first to post Needs' });
+        const send = within(panel).getByRole('button', { name: '🟢 List an Offer first to post Needs' });
         expect(send).toBeDisabled();
         await act(async () => { fireEvent.click(send); });
         expect(create).not.toHaveBeenCalled();

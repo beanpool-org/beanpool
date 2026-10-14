@@ -33,7 +33,8 @@ import {
     SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences } from '../lib/api';
+import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences, watchPlace } from '../lib/api';
+import { StartCommunityScreen } from '../components/StartCommunityScreen';
 import {
     NOTICES_SEEN_EVENT, beansLines, cardTitle, closesWords, communityFacts, communityLine, communityName, dayLabel, dealsLine,
     decideLine, distanceText, findBody, frameOf, isHomeCardId, joinedLine, nearbyLine, probationSentence, shownFrame, shownLayout, starredFirst,
@@ -70,12 +71,20 @@ import { EditHomeDialog, type EditHomeRow } from '../components/EditHomeDialog';
 import { AddCardDialog, CardSettingsDialog } from '../components/AddCardDialog';
 import { OneWayBackCard } from '../components/OneWayBack';
 import { AddressSearch } from '../components/AddressSearch';
-import { FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, type AddressResult } from '@beanpool/core';
+import { FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, t, word, type AddressResult } from '@beanpool/core';
 
 /** A doorbell's re-read waits this long, so a burst of changes is one read (§5.2). */
 export const HOME_DOORBELL_DEBOUNCE_MS = 3_000;
 
 /** Find your community's town links ("or type your town", "change", "Cancel"): the link and accent roles, light and dark. */
+/** The find card's buttons, as its Share my area. */
+const FIND_ACTION = 'w-full min-h-[44px] px-4 rounded-xl border border-nature-300 dark:border-nature-700 bg-transparent text-sm font-bold text-nature-900 dark:text-white cursor-pointer break-words focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500';
+/** "Tell me when one starts here", in the phone's words where it has them (FindCommunityBody); t(WATCH_WORDS.…) where shown. */
+export const WATCH_WORDS = {
+    done: word("Done. You'll be told when a community starts near here."),
+    joinFirst: word('Join first: being told is kept for a member. Join is at the top of this page.'),
+    needsPlace: word('Share your area or type your town first, so we know where "here" is.'),
+} as const;
 const TOWN_LINK = 'min-h-[44px] px-1 border-0 bg-transparent text-sm font-semibold underline text-link cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent';
 /** The safety poll while the tab is in front (§5.2: the 120 s the header runs on the phone). */
 export const HOME_SAFETY_POLL_MS = 120_000;
@@ -194,6 +203,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
     // "Or type your town" (Marty, 14 Oct): the shared address search, open; and the town picked, by its short name.
     const [townOpen, setTownOpen] = useState(false);
     const [townName, setTownName] = useState<string | null>(null);
+    // The find card's two ways on with none near (Sonnet review S5; the phone's FindCommunityBody): start one, or be told.
+    const [startOpen, setStartOpen] = useState(false);
+    const [watched, setWatched] = useState(false);
+    const [watchNote, setWatchNote] = useState<string | null>(null);
     const [reveal, setReveal] = useState(false);
     const [hintOpen, setHintOpen] = useState(false);
     /** The tour ended in this browser (Done or Skip) before the account's answer says so (DESIGN-getting-started-fable.md §2). */
@@ -853,6 +866,21 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         );
     }
 
+    /** "Tell me when one starts here": a member's, at the point Home was read from; a visitor is told to join first. */
+    async function tellMe() {
+        setWatchNote(null);
+        if (!publicKey) { setWatchNote(t(WATCH_WORDS.joinFirst)); return; }
+        const p = pointRef.current;
+        if (!p) { setWatchNote(t(WATCH_WORDS.needsPlace)); setTownOpen(true); return; }
+        try {
+            await watchPlace(p.lat, p.lng);
+            setWatched(true);
+            setWatchNote(t(WATCH_WORDS.done));
+        } catch (e: any) {
+            setWatchNote(e?.message || t("That didn't go through. Try again."));
+        }
+    }
+
     /** A town picked in the shared search: the point Home is read from, as roughly as a shared location (`coarse`). */
     function pickTown(r: AddressResult) {
         if (!Number.isFinite(r.lat) || !Number.isFinite(r.lng)) return;
@@ -1103,6 +1131,20 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             <button type="button" onClick={() => setTownOpen(true)} data-testid="home-type-town-instead" className={TOWN_LINK}>
                                 {NOT_HERE_TYPE_YOUR_TOWN}
                             </button>
+                        )}
+                        {f.communities.length === 0 && f.point !== null && (
+                            <div className="mt-2 flex flex-col gap-2" data-testid="home-find-actions">
+                                <button type="button" onClick={() => setStartOpen(true)} data-testid="home-find-start" className={FIND_ACTION}>
+                                    {t('Start a community')}
+                                </button>
+                                {!(watched || (f.watches?.length ?? 0) > 0) && (
+                                    <button type="button" onClick={() => void tellMe()} data-testid="home-find-watch" className={FIND_ACTION}
+                                        aria-label={t('Tell me when a community starts near here')}>
+                                        {t('Tell me when one starts here')}
+                                    </button>
+                                )}
+                                {watchNote && <p role="status" data-testid="home-find-watch-note" className="m-0 text-sm text-nature-800 dark:text-nature-100 break-words">{watchNote}</p>}
+                            </div>
                         )}
                         {townOpen && (
                             <div className="mt-2">
@@ -1473,6 +1515,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 <p data-testid="home-offline" className="m-0 mb-2 text-xs text-nature-700 dark:text-nature-200">{HOME_OFFLINE}</p>
             )}
             {visitor?.joinCard}
+            {startOpen && <StartCommunityScreen onClose={() => setStartOpen(false)} />}
             {saveNote && (
                 <p data-testid="home-save-search-note" className="m-0 mb-3 pl-3 py-1 flex items-center gap-2 rounded-xl bg-bg-card border border-border-primary text-sm text-text-primary">
                     <span className="min-w-0 flex-1 break-words">{saveNote}</span>

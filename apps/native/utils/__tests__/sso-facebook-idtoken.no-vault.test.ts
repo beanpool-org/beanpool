@@ -483,6 +483,7 @@ async function recoveryNode() {
     const keypair = await seedToKeypair(seed);
     const sealed = await sealSeedToSso(seed, 'facebook', FB_SUB);
     const seen = installNode({
+        '/api/recovery/lookup/member': { status: 200, body: [{ publicKey: keypair.publicKeyHex, callsign: 'member', canRecoverBySso: true }] },
         '/api/recovery/collect': { status: 200, body: { collectionId: 'coll-fb-1', generation: 1, threshold: 1 } },
         '/api/recovery/collect/sso-nonce': { status: 200, body: { nonce: RECOVERY_NONCE, expiresInSeconds: 600 } },
         [RELEASE]: { status: 200, body: { collected: 1, threshold: 1, enough: true } },
@@ -504,7 +505,7 @@ function recoverWithFacebook() {
     return recoverAccountWithSso({ callsign: 'member', anchorUrl: NODE, provider: 'facebook' });
 }
 
-const BEFORE_THE_RELEASE = ['/api/recovery/collect', '/api/recovery/collect/sso-nonce'];
+const BEFORE_THE_RELEASE = ['/api/recovery/lookup/member', '/api/recovery/collect', '/api/recovery/collect/sso-nonce'];
 
 describe('recovering with Facebook releases against the id_token only', () => {
     it("releases with the id_token and the nonce, opens the piece with the token's sub, and asks Graph nothing", async () => {

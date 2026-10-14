@@ -356,7 +356,8 @@ import {
     letInEvent as letInEventEngine,
     adminDeletePost as adminDeletePostEngine,
     assertPostWagesWritable,
-    type EscrowRefundShortfall
+    type EscrowRefundShortfall,
+    type EventTimeOut
 } from './engine/posts.js';
 import { assertPostFields, type PostFieldsIn, type PostTextStored } from './engine/post-fields.js';
 import {
@@ -5166,6 +5167,14 @@ export function createPost(
         eventPlaceName?: unknown;
         eventPrivateNote?: unknown;
         eventHostLetsIn?: unknown;
+        /** The host's clock and its zone, and online with its link (DESIGN-event-times §2, §9). */
+        eventStartLocal?: unknown;
+        eventEndLocal?: unknown;
+        eventTz?: unknown;
+        eventOnline?: unknown;
+        eventLink?: unknown;
+        /** Filled when a clock the host set was adjusted (engine/posts.ts EventTimeOut). */
+        out?: EventTimeOut;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
         beforeWrite?: () => void;
     }
@@ -5219,14 +5228,14 @@ export function removePost(id: string, authorPublicKey: string): boolean {
     return removePostEngine(broadcast, id, authorPublicKey, dispatchPushNotification);
 }
 
-export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, actorPubkey?: string): MarketplacePost | null {
+export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, actorPubkey?: string, out?: EventTimeOut): MarketplacePost | null {
     // Every field the edit names, held to the create path's rules (engine/post-fields.ts) before anything is written: a
     // price of "abc" stored as text poisoned every buyer's balance with NaN (review F1, measured). The listing's own text,
     // sent back unchanged, is not held to a length limit it was stored before (#1493).
     const storedText = db.prepare('SELECT title, description, category FROM posts WHERE id = ?').get(id) as PostTextStored | undefined;
     assertPostFields(updates as PostFieldsIn, 'edit', storedText);
     if (updates.credits !== undefined) updates = { ...updates, credits: beansOffPrice(updates.credits) };
-    return updatePostEngine(broadcast, id, authorPublicKey, updates, dispatchPushNotification, actorPubkey);
+    return updatePostEngine(broadcast, id, authorPublicKey, updates, dispatchPushNotification, actorPubkey, out);
 }
 
 /**
@@ -7803,7 +7812,7 @@ export function createTreasury(
     // so this pre-check agrees with the index that will actually enforce it on INSERT. Under
     // the old `status!='migrated'` a pruned member's callsign still read as taken here, while
     // the index happily allowed it — a treasury name refused for a member the node has let go.
-    if (db.prepare("SELECT 1 FROM members WHERE lower(callsign)=lower(?) AND status NOT IN ('migrated', 'pruned')").get(trimmed)) {
+    if (db.prepare("SELECT 1 FROM members WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned')").get(engine.foldName(trimmed))) {
         throw new Error('That name is already taken');
     }
     if (opts.leadKeeperPubkey && isOperatorSwitchedOff(opts.leadKeeperPubkey)) {
@@ -8708,8 +8717,8 @@ export function createProject(proposerPubkey: string, title: string, description
     const now = new Date().toISOString();
     const baseCallsign = (project.title || 'Project').trim().slice(0, 40) || 'Project';
     const existingCallsign = db.prepare(
-        "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
-    ).get(baseCallsign, project.id) as any;
+        "SELECT public_key FROM members WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
+    ).get(engine.foldName(baseCallsign), project.id) as any;
     const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${project.id.slice(0, 6)}` : baseCallsign;
 
     db.transaction(() => {

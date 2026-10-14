@@ -42,6 +42,7 @@
 import Router from '@koa/router';
 
 import { db } from '../db/db.js';
+import { foldName } from '@beanpool/engine';
 import { isSingleBlobSso, KEEPER_ALG_RELEASE, sealReleaseToDevice } from '@beanpool/core';
 import { getActingMember, dispatchPushNotification } from '../state-engine.js';
 import {
@@ -75,12 +76,12 @@ import { isSingleBlobSsoStored, requireRecoverySealKey } from '../services/recov
 import { recoverySealFailure, signInFailure } from './keepers.js';
 import type { RouteDeps } from './types.js';
 
-/** Callsign resolution, matching idx_members_callsign_unique's predicate exactly (see keepers.ts). */
+/** Callsign resolution by the one name rule (`foldName`, the engine's names.ts), with the status predicate of idx_members_callsign_unique. */
 function resolveCallsign(callsign: string): { pubkey?: string; ambiguous: boolean } {
     const rows = db.prepare(`
         SELECT public_key FROM members
-        WHERE LOWER(callsign) = ? AND status NOT IN ('migrated', 'pruned')
-    `).all(callsign) as { public_key: string }[];
+        WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned')
+    `).all(foldName(callsign)) as { public_key: string }[];
     if (rows.length > 1) return { ambiguous: true };
     return { pubkey: rows[0]?.public_key, ambiguous: false };
 }
@@ -172,9 +173,9 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
         // Hard-limited: this is the closest thing to an unauthenticated write in the system, since
         // anybody can mint a keypair. This bounds the sessions in their sign-in window, which nothing evicts; the cap
         // in pruneCollectionsFor bounds the idle ones.
-        if (!rateLimit(ctx)) return;
+        if (!rateLimit(ctx, 'sign-in-recovery')) return;
 
-        const callsign = String((ctx as any).requestBody?.callsign ?? '').trim().toLowerCase();
+        const callsign = String((ctx as any).requestBody?.callsign ?? '').trim();
         if (!callsign) { ctx.status = 400; ctx.body = { error: 'Which account are you recovering?' }; return; }
 
         const { pubkey, ambiguous } = resolveCallsign(callsign);
@@ -308,7 +309,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
     router.post('/api/recovery/collect/sso-nonce', async (ctx) => {
         const collection = sessionFor(ctx);
         if (!collection) return notMySession(ctx);
-        if (!rateLimit(ctx)) return;
+        if (!rateLimit(ctx, 'sign-in-recovery')) return;
         ctx.status = 200;
         ctx.body = {
             nonce: issueNonce(collection.requesterEphemeralPubkey),
@@ -322,7 +323,7 @@ export function createRecoveryCollectRoutes(deps: RouteDeps): Router {
     router.post('/api/recovery/collect/sso', async (ctx) => {
         const collection = sessionFor(ctx);
         if (!collection) return notMySession(ctx);
-        if (!rateLimit(ctx)) return;
+        if (!rateLimit(ctx, 'sign-in-recovery')) return;
 
         const body = (ctx as any).requestBody || {};
         if (!isSsoProvider(body.provider)) {

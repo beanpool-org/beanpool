@@ -5,6 +5,10 @@
  */
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
+import { forgetRecentLookups } from '../lib/members-on-demand';
+
+// Each case asks the node afresh: an answer kept from the last case (the search's and near read's recent answers) isn't this one's.
+beforeEach(() => forgetRecentLookups());
 import React from 'react';
 import { PeoplePage } from './PeoplePage';
 import type { BeanPoolIdentity } from '../lib/identity';

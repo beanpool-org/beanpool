@@ -3,11 +3,15 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import {
     memberKeysPaths, memberSearchPath, membersNearPath, membersOnDemandOn, useMembersOnDemand, useMemberSearch,
     MEMBERS_ON_DEMAND_SEEN_PREFIX, MEMBERS_SEARCH_DEBOUNCE_MS, MEMBERS_REQUEST_TIMEOUT_MS, membersNear, searchMembers,
+    forgetRecentLookups, membersByKeys, RECENT_LOOKUP_MS,
 } from './members-on-demand';
 import * as api from './api';
 
 const info = vi.hoisted(() => ({ read: (async () => ({})) as () => Promise<unknown> }));
 vi.mock('./visitor-lobby-gate', () => ({ communityInfoOnce: vi.fn(() => info.read()) }));
+
+// Each case asks the node afresh: an answer kept from the last case isn't this one's.
+beforeEach(() => forgetRecentLookups());
 
 describe('members on demand: the requests the web app builds (DESIGN-global-members-by-area §2.1)', () => {
     it('reads the switch only when the node says true', () => {
@@ -95,6 +99,37 @@ describe('members on demand: a node that can\'t be asked counts as it last answe
         expect(await switchOnce()).toBe(true);
         fails();
         expect(await switchOnce()).toBe(false);
+    });
+});
+
+describe("members on demand: never spending a member's day of lookups in the background (Marty's call 3, 15 Oct 2026)", () => {
+    const card = (k: string, callsign: string) => ({ publicKey: k.repeat(64), callsign, joinedAt: '2026-01-01T00:00:00.000Z' });
+    beforeEach(() => forgetRecentLookups());
+    afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+    it('the same search or "near you" asked again soon is answered without asking the node; after two minutes it asks', async () => {
+        vi.useFakeTimers();
+        const cards = vi.spyOn(api, 'getMemberCards').mockResolvedValue([card('e', 'Alma')]);
+        await searchMembers('al');
+        await membersNear({ lat: -28.5, lng: 153.5 });
+        vi.advanceTimersByTime(RECENT_LOOKUP_MS - 1);
+        expect(await searchMembers('al')).toEqual([card('e', 'Alma')]);
+        await membersNear({ lat: -28.5, lng: 153.5 });
+        expect(cards.mock.calls.map(c => c[0])).toEqual(['/api/members?q=al&limit=20', '/api/members?lat=-28.5&lng=153.5&limit=50']);
+        vi.advanceTimersByTime(1);
+        await searchMembers('al');
+        expect(cards).toHaveBeenCalledTimes(3);
+    });
+
+    it('a read by key is never kept, nor a refusal', async () => {
+        const cards = vi.spyOn(api, 'getMemberCards').mockResolvedValue([card('e', 'Alma')]);
+        await membersByKeys(['e'.repeat(64)]);
+        await membersByKeys(['e'.repeat(64)]);
+        expect(cards).toHaveBeenCalledTimes(2);
+        cards.mockRejectedValueOnce(Object.assign(new Error('You have searched for people by name 100 times today'), { status: 429, code: 'people_search_day_budget' }));
+        await expect(searchMembers('zo')).rejects.toThrow();
+        await searchMembers('zo');
+        expect(cards).toHaveBeenCalledTimes(4);
     });
 });
 

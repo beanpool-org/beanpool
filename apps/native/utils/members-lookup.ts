@@ -45,18 +45,57 @@ export function asHeldRow(m: any): { public_key: string; callsign: string; avata
 const readFor = new WeakMap<object, Awaited<ReturnType<typeof copyForRead>>>();
 
 /**
+ * Where anyone can join in a minute the node counts each search by name and each "near you" against a day's budget
+ * (100 each a member), so the phone never spends one the member didn't ask for (Marty's call 3, 15 Oct 2026): the same
+ * search or "near you" asked again soon, for the same copy, is answered from here. A re-render, a sort, a block, a
+ * screen opened again: none of them asks the node twice. Only those two reads; a read by key is never counted.
+ */
+export const RECENT_LOOKUP_MS = 2 * 60 * 1000;
+const RECENT_LOOKUPS_MAX = 50;
+const recentLookups = new Map<string, { at: number; rows: any[] }>();
+const COUNTED_LOOKUP = /^\/api\/members\?(q|lat)=/;
+let lastRefusedAsSpent = false;
+
+/** Whether the last lookup the node refused was refused because the member had used up today's (a 429 day budget). */
+export function lookUpWasSpent(): boolean {
+    return lastRefusedAsSpent;
+}
+
+/** Forget the answers kept (tests, and a new identity or node). */
+export function forgetRecentLookups(): void {
+    recentLookups.clear();
+    lastRefusedAsSpent = false;
+}
+
+/**
  * Ask the node one of the small reads above. The rows, or null when the node could not be asked or did not answer a list
  * (offline, busy, refused): the screen then shows the cards held.
  */
-export async function lookUpMembers(path: string, options?: { signal?: AbortSignal }): Promise<any[] | null> {
+export async function lookUpMembers(path: string, options?: { signal?: AbortSignal }, nowMs = Date.now()): Promise<any[] | null> {
     try {
         const copy = await copyForRead();
+        const counted = COUNTED_LOOKUP.test(path);
+        const key = `${copy.dbName ?? ''}|${copy.generation}|${path}`;
+        const kept = counted ? recentLookups.get(key) : undefined;
+        if (kept && nowMs - kept.at < RECENT_LOOKUP_MS) return kept.rows;
         const res = await signedGet(path, { signal: options?.signal });
-        if (!res.ok) return null;
+        if (!res.ok) {
+            if (res.status === 429) {
+                const refusal = await res.json().catch(() => null);
+                lastRefusedAsSpent = typeof refusal?.code === 'string' && refusal.code.endsWith('_day_budget');
+            }
+            return null;
+        }
         const body = await res.json();
         if (!Array.isArray(body)) return null;
         const rows = body.map(asHeldRow).filter((r): r is NonNullable<ReturnType<typeof asHeldRow>> => r !== null);
         for (const r of rows) readFor.set(r, copy);
+        lastRefusedAsSpent = false;
+        if (counted) {
+            recentLookups.delete(key);
+            recentLookups.set(key, { at: nowMs, rows });
+            if (recentLookups.size > RECENT_LOOKUPS_MAX) recentLookups.delete(recentLookups.keys().next().value!);
+        }
         return rows;
     } catch {
         return null;

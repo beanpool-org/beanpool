@@ -77,16 +77,41 @@ function cardsWithin(path: string, signal?: AbortSignal): Promise<MemberCard[]> 
     return bounded(stop => getMemberCards(path, stop), MEMBERS_REQUEST_TIMEOUT_MS, signal);
 }
 
+/**
+ * Where anyone can join in a minute the node counts each search by name and each "near you" against a day's budget
+ * (100 each a member), so the web app never spends one the member didn't ask for (Marty's call 3, 15 Oct 2026): the same
+ * search or "near you" asked again soon is answered from here. A page opened again, a re-render, a tab switched back: none
+ * of them asks the node twice. A read by key is never counted, and never kept.
+ */
+export const RECENT_LOOKUP_MS = 2 * 60 * 1000;
+const RECENT_LOOKUPS_MAX = 50;
+const recentLookups = new Map<string, { at: number; cards: MemberCard[] }>();
+
+/** Forget the answers kept (tests, and another identity). */
+export function forgetRecentLookups(): void {
+    recentLookups.clear();
+}
+
+async function countedCards(path: string, signal?: AbortSignal): Promise<MemberCard[]> {
+    const kept = recentLookups.get(path);
+    if (kept && Date.now() - kept.at < RECENT_LOOKUP_MS) return kept.cards;
+    const cards = await cardsWithin(path, signal);
+    recentLookups.delete(path);
+    recentLookups.set(path, { at: Date.now(), cards });
+    if (recentLookups.size > RECENT_LOOKUPS_MAX) recentLookups.delete(recentLookups.keys().next().value!);
+    return cards;
+}
+
 /** The members whose name starts with what was typed; none, without asking, under 2 characters. */
 export async function searchMembers(typed: string, signal?: AbortSignal): Promise<MemberCard[]> {
     const path = memberSearchPath(typed);
-    return path ? cardsWithin(path, signal) : [];
+    return path ? countedCards(path, signal) : [];
 }
 
 /** The 50 members nearest a stored area, nearest first; none, without asking, with no area. */
 export async function membersNear(point: { lat: number; lng: number } | null | undefined, signal?: AbortSignal): Promise<MemberCard[]> {
     const path = membersNearPath(point);
-    return path ? cardsWithin(path, signal) : [];
+    return path ? countedCards(path, signal) : [];
 }
 
 /** One batch of people's cards (memberKeysBatches): those the node holds, in the order asked. */

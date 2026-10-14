@@ -64,15 +64,27 @@ function measure() {
         }
         return false;
     };
-    const label = (el) => `${el.tagName.toLowerCase()}${el.dataset.testid ? `[${el.dataset.testid}]` : ''} "${(el.textContent || '').trim().slice(0, 60)}"`;
+    const label = (el) => `${el.tagName.toLowerCase()}${el.dataset.testid ? `[${el.dataset.testid}]` : ''} "${(el.textContent || el.getAttribute('placeholder') || el.value || '').trim().slice(0, 60)}"`;
     for (const el of document.body.querySelectorAll('*')) {
         const ownText = [...el.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && n.textContent.trim());
-        if (!ownText) continue;
+        // A form control's words are its placeholder or value, not a text node.
+        const control = /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(el.tagName);
+        if (!ownText && !control) continue;
         const cs = getComputedStyle(el);
         if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0) continue;
         const r = el.getBoundingClientRect();
         if (r.width === 0 || r.height === 0) continue;
-        if ((r.right > W + 0.5 || r.left < -0.5) && !scrollsSideways(el)) out.past.push(`${label(el)} spans ${Math.round(r.left)}–${Math.round(r.right)} px`);
+        // The words themselves, not the box: a word too long to break spills out of its box, and the box's rectangle
+        // does not include the spill. A Range over the element's own text measures where the glyphs actually are.
+        let left = r.left;
+        let right = r.right;
+        for (const n of el.childNodes) {
+            if (n.nodeType !== Node.TEXT_NODE || !n.textContent.trim()) continue;
+            const range = document.createRange();
+            range.selectNodeContents(n);
+            for (const rr of range.getClientRects()) { left = Math.min(left, rr.left); right = Math.max(right, rr.right); }
+        }
+        if ((right > W + 0.5 || left < -0.5) && !scrollsSideways(el)) out.past.push(`${label(el)} spans ${Math.round(left)}–${Math.round(right)} px`);
         const clips = (v) => v === 'hidden' || v === 'clip';
         if ((clips(cs.overflowX) && el.scrollWidth > el.clientWidth + 1) || (clips(cs.overflowY) && el.scrollHeight > el.clientHeight + 1 && cs.webkitLineClamp === 'none')) {
             out.clipped.push(`${label(el)} needs ${el.scrollWidth}×${el.scrollHeight} in ${el.clientWidth}×${el.clientHeight}`);
@@ -87,6 +99,12 @@ function measure() {
         const cs = getComputedStyle(el);
         if (cs.display === 'none' || cs.visibility === 'hidden') continue;
         if (!/[[\]~]/.test(text) && !el.closest('[translate="no"]')) out.unpadded.push(text.slice(0, 80));
+    }
+    // When the page scrolls sideways, the deepest elements that reach past the edge: what to fix.
+    if (out.scrollWidth > W) {
+        const wide = [...document.body.querySelectorAll('*')].filter((el) => el.getBoundingClientRect().right > W + 0.5);
+        out.widest = wide.filter((el) => !wide.some((o) => o !== el && el.contains(o))).slice(0, 4)
+            .map((el) => `${label(el)} (${el.className && typeof el.className === 'string' ? el.className.slice(0, 50) : ''}) right ${Math.round(el.getBoundingClientRect().right)} px`);
     }
     out.html = { lang: document.documentElement.lang, dir: document.documentElement.dir };
     const sw = document.querySelector('[data-testid="language-switch"]');
@@ -146,7 +164,7 @@ async function main() {
                 await page.waitForTimeout(400);
                 const m = await page.evaluate(measure);
                 await page.screenshot({ path: path.join(SHOTS_DIR, `${screen.name}-${lang}-${theme}.png`), fullPage: true });
-                if (m.scrollWidth > m.width) failures.push(`${run}: the page scrolls sideways (${m.scrollWidth}px in ${m.width}px)`);
+                if (m.scrollWidth > m.width) failures.push(`${run}: the page scrolls sideways (${m.scrollWidth}px in ${m.width}px): ${(m.widest ?? []).join('; ')}`);
                 for (const p of m.past) failures.push(`${run}: past the edge: ${p}`);
                 for (const c of m.clipped) failures.push(`${run}: clipped: ${c}`);
                 if (m.html.lang !== html) failures.push(`${run}: <html lang="${m.html.lang}">, expected ${html}`);

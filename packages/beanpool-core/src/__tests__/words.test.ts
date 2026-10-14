@@ -178,6 +178,19 @@ describe('t and tn', () => {
         expect(tn(3, '{n} new message', '{n} new messages')).toMatch(/^\[3 ñéŵ ɱéššāĝéš~+\]$/);
     });
 
+    it('a long pseudo-locale pad breaks like words do: never a run a 320 px screen cannot wrap', () => {
+        const long = 'Your identity is yours. It lives on this device, backed by cryptography.';
+        const out = pseudoLocalise(long);
+        const pad = out.slice(out.indexOf('\u200B') + 1, -1);
+        expect(out).toContain('.\u200B~');
+        expect(out.replace(/\u200B/g, '').match(/~/g)).toHaveLength(Math.ceil(long.length * 0.35));
+        expect(pad.split('\u200B').every((w) => w.length <= 5)).toBe(true);
+        expect(Math.max(...out.split(/[\s\u200B]/).map((w) => w.length))).toBeLessThanOrEqual(15);
+        // Short pads stay one run, as the screens' button checks have always read them.
+        expect(pseudoLocalise('Save')).toBe('[Ŝāṽé~~]');
+        expect(pseudoLocalise('{n} new messages')).not.toContain('\u200B');
+    });
+
     it('normaliseLang maps device tags to the 25 BCP-47 tags, and nothing else', () => {
         expect(['ru-RU', 'pt-BR', 'pt_PT', 'ES', 'fr-CA', 'en-AU', 'de-DE', 'nl-NL', 'he', '', '1x', null].map(normaliseLang)).toEqual([
             'ru', 'pt', 'pt', 'es', 'fr', 'en', 'de', null, null, null, null, null,

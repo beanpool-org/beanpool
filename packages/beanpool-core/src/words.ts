@@ -375,11 +375,26 @@ const ACCENTED: Record<string, string> = {
 export const PSEUDO_OPEN = '[';
 export const PSEUDO_CLOSE = ']';
 
-/** "Save" → "[Šāṽé~~]": accented, padded ~35 % (at least one ~), placeholders and `**bold**` marks kept intact. */
+/** A pad this long or longer may break: see pseudoLocalise. */
+const PSEUDO_PAD_BREAKS_FROM = 7;
+const PSEUDO_PAD_WORD = 5;
+const ZERO_WIDTH_SPACE = '\u200B';
+
+/**
+ * "Save" → "[Šāṽé~~]": accented, padded ~35 % (at least one ~), placeholders and `**bold**` marks kept intact.
+ *
+ * A long pad breaks the way the longer words of a real translation do: a zero-width space before it and after every
+ * five tildes. Glued to the last word as one run, 35 % of a long sentence is a "word" no screen can wrap (a 100-letter
+ * sentence ends in 35 tildes), and a 320 px check then fails on the padding rather than on the layout: the web app's
+ * welcome page measured 668 px wide in 320 (apps/pwa/e2e/words-screens-check.mjs). Pads under seven stay one run.
+ */
 export function pseudoLocalise(source: string): string {
     const parts = source.split(/(\{[A-Za-z0-9_]+\})/);
     const body = parts.map((part) => (/^\{[A-Za-z0-9_]+\}$/.test(part) ? part : part.replace(/[A-Za-z]/g, (c) => ACCENTED[c] ?? c))).join('');
-    const pad = '~'.repeat(Math.max(1, Math.ceil(source.length * 0.35)));
+    const length = Math.max(1, Math.ceil(source.length * 0.35));
+    const pad = length < PSEUDO_PAD_BREAKS_FROM
+        ? '~'.repeat(length)
+        : ZERO_WIDTH_SPACE + Array.from({ length: Math.ceil(length / PSEUDO_PAD_WORD) }, (_, i) => '~'.repeat(Math.min(PSEUDO_PAD_WORD, length - i * PSEUDO_PAD_WORD))).join(ZERO_WIDTH_SPACE);
     return `${PSEUDO_OPEN}${body}${pad}${PSEUDO_CLOSE}`;
 }
 

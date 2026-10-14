@@ -8,8 +8,7 @@
  * leads, always with the words "your time".
  */
 
-const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+import { formatDate } from './words.js';
 
 /** A wall clock as the node stores it: "2026-10-16T20:50". */
 export const LOCAL_CLOCK_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/;
@@ -111,8 +110,8 @@ export function zoneLabelFor(tz: string | null | undefined, offsetMinutes: numbe
 
 function dayOf(local: string): string {
     const p = parseLocal(local)!;
-    const weekday = new Date(Date.UTC(p.y, p.mo - 1, p.d)).getUTCDay();
-    return `${DAYS[weekday]} ${p.d} ${MONTHS[p.mo - 1]}`;
+    // The day label comes from the words tables (#1941), in capitals the language's way: "SAT 17 OCT" in English.
+    return formatDate(new Date(Date.UTC(p.y, p.mo - 1, p.d)), 'weekday-day-month', { utc: true, caps: true });
 }
 
 function timeOf(local: string): string {

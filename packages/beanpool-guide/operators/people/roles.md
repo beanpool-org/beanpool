@@ -17,6 +17,12 @@ Owners can do everything in Settings. Only owners can:
 - suspend an owner, or suspend an owner or an admin through a report;
 - lift a suspension that took away an owner's or an admin's role, which gives that role back;
 - end the waiting time early when an owner or admin is being removed;
+- change or retire the admin password, reset the node, and turn two-factor sign-in on or off;
+- choose who may invite, set the known floor and the cap, and move the exception lines;
+- make or revoke automation tokens, set the alerts, and choose where off-box backups go;
+- make the recovery code, or take over;
+- allow or stop AI assistants;
+- write off a stuck escrow from the Commons;
 - sign other people out of Settings;
 - switch break-glass mode on or off, and be issued a break-glass code;
 - restore a backup, download a backup or a snapshot, delete a snapshot, or change when snapshots are taken and how many are kept;
@@ -29,7 +35,7 @@ The **admin password** counts as an owner. Anyone who knows it can do all of the
 
 ## Admin
 
-Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse and diagnostics. Of backups they see the status and the list of snapshots, and can take a snapshot or check one for damage. A backup file holds the whole community, so downloading one, restoring one and the replication token are an owner's (see Backups and replicas). They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, they cannot change anyone who already holds a role, and they cannot act against an owner. Nor can they re-key an owner or another admin, or suspend one through a report: both take that person's role away. An admin can still re-key or suspend a member or a moderator. Nobody can make a re-key code for their own account, so another owner re-keys an admin.
+Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse and diagnostics. Of backups they see the status and the list of snapshots, and can take a snapshot or check one for damage. A backup file holds the whole community, so downloading one, restoring one and the replication token are an owner's (see Backups and replicas). They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, and they cannot act against an owner. They can suspend another admin from that person's page, which sets the admin role aside (see Decisions and emergencies), but not through a report, and they cannot re-key another admin. An admin can re-key or suspend a member or a moderator. Nobody can make a re-key code for their own account, so another owner re-keys an admin.
 
 ## Moderator
 
@@ -100,7 +106,7 @@ To hand over, first give owner to the new person, then step down yourself.
 
 ## A community with no owner
 
-A server with no owner, which is a brand-new one before its first invite, or one whose data has no founding member, shows "This community has no owner yet — add yourself" under **Owners & admins**. While that is true the server lets whoever is signed in make the first owner. Do it straight away.
+A server with no owner, such as one set up before the claim code whose data has no founding member, shows "This community has no owner yet — add yourself" under **Owners & admins**. (A new server shows the claim card at sign-in instead: see First-time setup.) While that is true the server lets whoever is signed in make the first owner. Do it straight away.
 
 - Signed in with the admin password: press **Find myself**, search for your own callsign, choose **Owner** and confirm. After that, **Manage** appears in your app.
 - Signed in with your key (you are an admin, but the server has no owner): press **Make me the owner** and confirm.
@@ -111,4 +117,4 @@ If the community has owners but none of them can sign in any more (phones and 12
 
 ## The first owner, Admin
 
-The first time you make an invite on an empty server, it creates a member called **Admin** as the first owner (see First-time setup). Nobody holds its key, so it cannot sign in or do anything. If you take its owner role away, the server gives it back at the next restart. It is harmless, and it means the community is never without an owner while you set up. The global community has no such member: invites are off there, and its first owner joins through the open door and is made owner with the admin password.
+Making an invite never makes an owner: a new server's first owner is the phone that claims it, on the global community too (see First-time setup). A server set up before the claim code may have a member called **Admin**, made owner by an older version. Nobody holds its key, so it cannot sign in or do anything. If you take its owner role away, the server gives it back at the next restart. It is harmless.

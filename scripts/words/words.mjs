@@ -6,7 +6,8 @@
 //                                          placeholders as the English, the plural forms its language needs, no key that no
 //                                          source uses any more. A MISSING translation is never a failure (the English shows).
 //   node scripts/words/words.mjs lint      the ratchet: English literals a member reads (JSX text, text props, alert
-//                                          arguments) outside t(), per directory, may only go down. --update records today's.
+//                                          arguments) outside t(), per directory, may only go down. --update records a
+//                                          fall; a rise is refused unless --raise "<reason>", which the file records.
 //   node scripts/words/words.mjs extract   writes <package>/words/en.sources.json (key → file:line), the drafting lane's
 //                                          context. Not tracked: line numbers would conflict in every PR.
 //   node scripts/words/words.mjs count     the user-facing strings per package (--json for the raw numbers).
@@ -22,8 +23,11 @@ import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const BASELINE = 'scripts/words/lint-baseline.json';
-/** The languages that have catalog files; en has none (the key is the English). */
-export const CATALOG_LANGS = ['ru', 'fr', 'pt', 'es'];
+/** The languages that may have catalog files: core's LANGS but en (the key is the English). */
+export async function catalogLangs(root = ROOT) {
+    const { LANGS } = await loadCoreChecks(root);
+    return LANGS.filter((l) => l !== 'en');
+}
 
 /**
  * What is scanned. `words`: the catalog folder the package's sentences are translated in (the server's catalog also
@@ -83,30 +87,101 @@ function isSentence(text) {
     return /^[A-Z]/.test(text) && /\s/.test(text) && /[a-z]/.test(text) && !SQL.test(text);
 }
 
+const WORDS_FNS = new Set(['t', 'tn', 'word']);
+const FUNCTION_LIKE = (n) => ts.isFunctionDeclaration(n) || ts.isFunctionExpression(n) || ts.isArrowFunction(n) || ts.isMethodDeclaration(n)
+    || ts.isConstructorDeclaration(n) || ts.isGetAccessorDeclaration(n) || ts.isSetAccessorDeclaration(n)
+    || (ts.isPropertyDeclaration(n) && !n.modifiers?.some((m) => m.kind === ts.SyntaxKind.StaticKeyword));
+const unwrapUp = (n) => { let up = n.parent; while (up && (ts.isParenthesizedExpression(up) || ts.isNonNullExpression(up) || ts.isAsExpression(up))) up = up.parent; return up; };
+const unwrap = (n) => { while (n && (ts.isParenthesizedExpression(n) || ts.isNonNullExpression(n))) n = n.expression; return n; };
+
+/** A JSX child that is an element, not text: `<Row/>`, `{c && <Row/>}`, `{c ? <A/> : null}`, `{items.map(…)}`. */
+function isJsxValued(e) {
+    e = unwrap(e);
+    if (!e) return true;
+    if (ts.isJsxElement(e) || ts.isJsxSelfClosingElement(e) || ts.isJsxFragment(e)) return true;
+    if (e.kind === ts.SyntaxKind.NullKeyword || (ts.isIdentifier(e) && e.text === 'undefined')) return true;
+    if (ts.isBinaryExpression(e) && (e.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken || e.operatorToken.kind === ts.SyntaxKind.BarBarToken)) return isJsxValued(e.right);
+    if (ts.isConditionalExpression(e)) return isJsxValued(e.whenTrue) && isJsxValued(e.whenFalse);
+    if (ts.isCallExpression(e) && ts.isPropertyAccessExpression(e.expression) && e.expression.name.text === 'map') return true;
+    return false;
+}
+
 /**
- * One file's t()/tn() calls and the English a member reads outside them.
- * A call counts only when `t`/`tn` is imported from @beanpool/core or a words module (or is words.ts's own), so a
- * local variable named `t` is never mistaken for it.
+ * Is this words call glued to other text? `+`, a span of a template literal that has other text or spans, an element of
+ * an array that is `.join()`ed, or a JSX child beside other text or values (`<Text>{t('You have')} {n} …</Text>`).
+ */
+function isFragment(node, isPlus) {
+    const up = unwrapUp(node);
+    if (isPlus(up) || node.arguments.some(isPlus)) return true;
+    if (up && ts.isTemplateSpan(up)) {
+        const tpl = up.parent;
+        return !(tpl.head.text === '' && tpl.templateSpans.length === 1 && up.literal.text === '');
+    }
+    if (up && ts.isArrayLiteralExpression(up) && up.elements.length > 1) {
+        const pa = unwrapUp(up);
+        if (pa && ts.isPropertyAccessExpression(pa) && pa.name.text === 'join' && ts.isCallExpression(pa.parent) && pa.parent.expression === pa) return true;
+    }
+    if (up && ts.isJsxExpression(up) && up.parent && (ts.isJsxElement(up.parent) || ts.isJsxFragment(up.parent))) {
+        return up.parent.children.some((c) => c !== up && (
+            (ts.isJsxText(c) && c.text.trim().length > 0) || (ts.isJsxExpression(c) && c.expression && !isJsxValued(c.expression))));
+    }
+    return false;
+}
+
+/**
+ * One file's t()/tn()/word() calls, the English a member reads outside them, and how the file reaches the words layer.
+ *
+ * What counts as a words call (N7: the extractor SEES these rather than refusing them):
+ *   - `t` / `tn` / `word` imported by name from ANY module (core, a words module, or a module that re-exports them);
+ *     an alias is followed (`import { t as tr }`);
+ *   - `X.t(…)` where X is a namespace import (`import * as core from '@beanpool/core'`), a variable bound to a hook or
+ *     to wordsFor (`const w = useWords()`, `const w = wordsFor(lang)`), or `wordsFor(lang).t(…)` itself;
+ *   - `t` / `tn` destructured from a hook or from wordsFor (`const { t } = useWords()`).
+ * What it REFUSES: re-exporting t/tn/word by name from a module not named `words` (so every route to them is one the
+ * extractor knows). A local function that merely happens to be called `t` is not a words call.
  */
 export function extractFromSource(file, text) {
     const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith('.tsx') ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
     const tNames = new Map();
-    if (/(^|\/)beanpool-core\/src\/words\.ts$/.test(file)) { tNames.set('t', 't'); tNames.set('tn', 'tn'); }
+    const holders = new Set(); // identifiers whose .t / .tn / .word are words calls
+    // words.ts is the layer itself: its own t/tn calls count (timeAgo's sentences), its plumbing (active.t(source)) does not.
+    const isLayer = /(^|\/)beanpool-core\/src\/words\.ts$/.test(file);
+    const factories = new Set(isLayer ? [] : ['wordsFor']);
+    const problems = [];
+    const at = (node) => `${file}:${sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1}`;
+    if (isLayer) { tNames.set('t', 't'); tNames.set('tn', 'tn'); }
+    const isWordsModuleFile = /(^|\/)words\.tsx?$/.test(file);
     for (const st of sf.statements) {
-        if (!ts.isImportDeclaration(st) || !ts.isStringLiteral(st.moduleSpecifier)) continue;
-        const spec = st.moduleSpecifier.text;
-        const named = st.importClause?.namedBindings;
-        if (!named || !ts.isNamedImports(named) || !(spec === '@beanpool/core' || WORDS_MODULE.test(spec))) continue;
-        for (const el of named.elements) {
-            const imported = (el.propertyName ?? el.name).text;
-            if (imported === 't' || imported === 'tn') tNames.set(el.name.text, imported);
+        if (ts.isImportDeclaration(st) && ts.isStringLiteral(st.moduleSpecifier)) {
+            const named = st.importClause?.namedBindings;
+            if (named && ts.isNamespaceImport(named)) holders.add(named.name.text);
+            if (named && ts.isNamedImports(named)) {
+                for (const el of named.elements) {
+                    const imported = (el.propertyName ?? el.name).text;
+                    if (WORDS_FNS.has(imported)) tNames.set(el.name.text, imported);
+                    if (imported === 'wordsFor') factories.add(el.name.text);
+                }
+            }
+        }
+        if (ts.isExportDeclaration(st) && st.exportClause && ts.isNamedExports(st.exportClause) && !isWordsModuleFile) {
+            for (const el of st.exportClause.elements) {
+                const name = (el.propertyName ?? el.name).text;
+                if (WORDS_FNS.has(name) || WORDS_FNS.has(el.name.text)) {
+                    problems.push({ at: at(el), problem: `re-exports ${name}(): only a module named "words" may, so words:check can follow every route to it` });
+                }
+            }
         }
     }
+    const isHookOrFactoryCall = (e) => {
+        e = unwrap(e);
+        if (!e || !ts.isCallExpression(e)) return false;
+        const c = calleeText(e.expression);
+        return !!c && (/^use[A-Z]/.test(c.split('.').pop()) || factories.has(c));
+    };
 
     const calls = [];
     const found = [];
     const counted = new Set();
-    const at = (node) => `${file}:${sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1}`;
     const lit = (n) => (n && (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) ? n.text : null);
     const isPlus = (n) => !!n && ts.isBinaryExpression(n) && n.operatorToken.kind === ts.SyntaxKind.PlusToken;
     const add = (kind, node, value) => {
@@ -114,22 +189,48 @@ export function extractFromSource(file, text) {
         counted.add(node);
         found.push({ kind, text: value, at: at(node) });
     };
+    /** 't' | 'tn' | 'word' when this call goes to the words layer, else null. */
+    const wordsFn = (callee) => {
+        if (ts.isIdentifier(callee)) return tNames.get(callee.text) ?? null;
+        if (ts.isPropertyAccessExpression(callee) && WORDS_FNS.has(callee.name.text)) {
+            const obj = unwrap(callee.expression);
+            if (ts.isIdentifier(obj) && holders.has(obj.text)) return callee.name.text;
+            if (isHookOrFactoryCall(obj)) return callee.name.text;
+        }
+        return null;
+    };
+    const isModuleLevel = (node) => {
+        for (let up = node.parent; up; up = up.parent) if (FUNCTION_LIKE(up)) return false;
+        return true;
+    };
 
     const visit = (node) => {
+        // const w = wordsFor(lang) / useWords();  const { t, tn } = useWords();
+        if (ts.isVariableDeclaration(node) && node.initializer && isHookOrFactoryCall(node.initializer)) {
+            if (ts.isIdentifier(node.name)) holders.add(node.name.text);
+            else if (ts.isObjectBindingPattern(node.name)) {
+                for (const el of node.name.elements) {
+                    const prop = el.propertyName && ts.isIdentifier(el.propertyName) ? el.propertyName.text : ts.isIdentifier(el.name) ? el.name.text : null;
+                    if (prop && WORDS_FNS.has(prop) && ts.isIdentifier(el.name)) tNames.set(el.name.text, prop);
+                }
+            }
+        }
         if (ts.isCallExpression(node)) {
-            const callee = calleeText(node.expression);
-            if (callee && ts.isIdentifier(node.expression) && tNames.has(callee)) {
-                const fn = tNames.get(callee);
-                let up = node.parent;
-                while (up && ts.isParenthesizedExpression(up)) up = up.parent;
-                const concatenated = isPlus(up) || node.arguments.some(isPlus);
+            const fn = wordsFn(node.expression);
+            if (fn) {
+                const concatenated = isFragment(node, isPlus);
                 const args = node.arguments;
+                const first = unwrap(args[0]);
+                const keyed = fn === 't' && !!first && (ts.isPropertyAccessExpression(first) || ts.isElementAccessExpression(first));
                 const call = fn === 'tn'
                     ? { fn, text: lit(args[1]), other: lit(args[2]), concatenated, at: at(node) }
-                    : { fn, text: lit(args[0]), context: lit(args[2]) ?? undefined, concatenated, at: at(node) };
+                    : { fn, text: lit(args[0]), context: lit(args[fn === 'word' ? 1 : 2]) ?? undefined, concatenated, at: at(node) };
+                if (keyed) call.keyed = true;
+                if (isModuleLevel(node)) call.moduleLevel = true;
                 calls.push(call);
                 return; // what is inside t() is translated, not counted
             }
+            const callee = calleeText(node.expression);
             if (callee && LOG_CALL.test(callee)) return;
             if (callee && ALERT_CALLS.has(callee)) {
                 for (const a of node.arguments.slice(0, 2)) {
@@ -166,7 +267,7 @@ export function extractFromSource(file, text) {
         ts.forEachChild(node, visit);
     };
     visit(sf);
-    return { calls, found };
+    return { calls, found, problems };
 }
 
 export function extractRepo(root = ROOT, packages = PACKAGES) {
@@ -174,19 +275,21 @@ export function extractRepo(root = ROOT, packages = PACKAGES) {
         const files = sourceFiles(root, pkg.dirs);
         const calls = [];
         const found = [];
+        const problems = [];
         for (const file of files) {
             const r = extractFromSource(file, fs.readFileSync(path.join(root, file), 'utf8'));
             calls.push(...r.calls);
             found.push(...r.found);
+            problems.push(...r.problems);
         }
-        return { ...pkg, files: files.length, calls, found };
+        return { ...pkg, files: files.length, calls, found, problems };
     });
 }
 
 // ── Core's checks, compiled in memory ───────────────────────────────────────────────────────────────────────────
 
 let corePromise = null;
-/** words.ts and words-check.ts from the SOURCE, as ES modules, without writing a file. */
+/** words.ts (with words-dates.ts) and words-check.ts from the SOURCE, as ES modules, without writing a file. */
 export function loadCoreChecks(root = ROOT) {
     corePromise ??= (async () => {
         const compile = (rel) => ts.transpileModule(fs.readFileSync(path.join(root, rel), 'utf8'), {
@@ -196,7 +299,8 @@ export function loadCoreChecks(root = ROOT) {
         const datesUrl = asUrl(compile('packages/beanpool-core/src/words-dates.ts'));
         const wordsUrl = asUrl(compile('packages/beanpool-core/src/words.ts').replace(/(['"])\.\/words-dates\.js\1/g, JSON.stringify(datesUrl)));
         const checkJs = compile('packages/beanpool-core/src/words-check.ts').replace(/(['"])\.\/words\.js\1/g, JSON.stringify(wordsUrl));
-        return import(asUrl(checkJs));
+        const [words, check] = await Promise.all([import(wordsUrl), import(asUrl(checkJs))]);
+        return { ...words, ...check };
     })();
     return corePromise;
 }
@@ -209,9 +313,11 @@ export function loadCoreChecks(root = ROOT) {
  */
 export async function checkRepo({ root = ROOT, extracted = extractRepo(root), catalogs = null } = {}) {
     const { callProblem, callKey, checkCatalog } = await loadCoreChecks(ROOT);
+    const langs = await catalogLangs(ROOT);
     const problems = [];
     const byFolder = new Map();
     for (const pkg of extracted) {
+        for (const p of pkg.problems ?? []) problems.push(`${p.at}: ${p.problem}`);
         for (const call of pkg.calls) {
             const p = callProblem(call);
             if (p) problems.push(`${call.at}: ${p}`);
@@ -228,12 +334,20 @@ export async function checkRepo({ root = ROOT, extracted = extractRepo(root), ca
     }
     let catalogCount = 0;
     for (const [folder, { keys, plural }] of byFolder) {
-        for (const lang of CATALOG_LANGS) {
+        // A language with no file yet is simply untranslated (the English shows); a file no language owns is a mistake.
+        const dir = path.join(root, folder);
+        if (!catalogs?.[folder] && fs.existsSync(dir)) {
+            for (const name of fs.readdirSync(dir).sort()) {
+                if (name === 'en.sources.json' || (name.endsWith('.json') && langs.includes(name.slice(0, -5)))) continue;
+                problems.push(`${path.join(folder, name)}: not a catalog: a catalog is <tag>.json for one of ${langs.join(', ')}`);
+            }
+        }
+        for (const lang of langs) {
             let catalog = catalogs?.[folder]?.[lang];
             const file = path.join(folder, `${lang}.json`);
             if (!catalog) {
                 const full = path.join(root, file);
-                if (!fs.existsSync(full)) { problems.push(`${file}: missing (an empty catalog is { "_meta": … })`); continue; }
+                if (catalogs?.[folder] || !fs.existsSync(full)) continue;
                 try { catalog = JSON.parse(fs.readFileSync(full, 'utf8')); } catch (e) { problems.push(`${file}: not JSON (${e.message})`); continue; }
             }
             catalogCount++;
@@ -272,6 +386,35 @@ export function compareToBaseline(now, baseline) {
     return { rises, falls };
 }
 
+/**
+ * The rises in `doc` over `mainDoc` (the baseline on origin/main) that no `--raise "<reason>"` entry in `doc.raises`
+ * accounts for. Empty when every count is at or under main's, or each rise was recorded with a reason.
+ */
+export function unexplainedRises(mainDoc, doc) {
+    if (!mainDoc?.counts) return [];
+    const known = new Set((mainDoc.raises ?? []).map((r) => JSON.stringify(r)));
+    const added = (doc.raises ?? []).filter((r) => !known.has(JSON.stringify(r)) && typeof r.reason === 'string' && r.reason.trim().length > 0);
+    return compareToBaseline(doc.counts ?? {}, mainDoc.counts).rises
+        .filter((r) => !added.some((a) => Array.isArray(a.dirs?.[r.dir]) && a.dirs[r.dir][1] >= r.is));
+}
+
+/** The baseline document `lint --update` writes: today's counts; a rise only with a reason, recorded in `raises`. */
+export function updatedBaseline(doc, now, { raise = null, date = new Date().toISOString().slice(0, 10) } = {}) {
+    const { rises } = compareToBaseline(now, doc?.counts ?? {});
+    if (rises.length && !(typeof raise === 'string' && raise.trim())) {
+        return { error: rises.map((r) => `${r.dir}: ${r.was} → ${r.is}`) };
+    }
+    const raises = [...(doc?.raises ?? [])];
+    if (rises.length) raises.push({ date, reason: raise.trim(), dirs: Object.fromEntries(rises.map((r) => [r.dir, [r.was, r.is]])) });
+    return {
+        doc: {
+            _about: 'English a member reads outside t() (JSX text, text props, alert arguments), per directory. scripts/words/words.mjs lint fails when a count rises; S3 sweeps take each to 0. `lint --update` lowers it; a rise needs `--update --raise "<reason>"`, which is recorded in `raises` (words.test.mjs compares with origin/main).',
+            counts: now,
+            ...(raises.length ? { raises } : {}),
+        },
+    };
+}
+
 // ── count ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export function countStrings(extracted) {
@@ -305,11 +448,17 @@ async function main(argv) {
         const now = lintCounts(extracted);
         const file = path.join(ROOT, BASELINE);
         if (argv.includes('--update')) {
-            const doc = {
-                _about: 'English a member reads outside t() (JSX text, text props, alert arguments), per directory. scripts/words/words.mjs lint fails when a count rises; S3 sweeps take each to 0. Lower it with --update; raising it needs a reason in the PR.',
-                counts: now,
-            };
-            fs.writeFileSync(file, `${JSON.stringify(doc, null, 2)}\n`);
+            const i = argv.indexOf('--raise');
+            const raise = i >= 0 ? argv[i + 1] ?? '' : null;
+            const doc = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : { counts: {} };
+            const next = updatedBaseline(doc, now, { raise });
+            if (next.error) {
+                console.error('words:lint --update — refused: these counts would RISE. Wrap the new text in t() instead, or, when a rise');
+                console.error('is truly needed, say why: --update --raise "<reason>" (the reason is recorded in the baseline).');
+                for (const e of next.error) console.error(`  ${e}`);
+                return 1;
+            }
+            fs.writeFileSync(file, `${JSON.stringify(next.doc, null, 2)}\n`);
             console.log(`words:lint — recorded ${Object.keys(now).length} directories, ${Object.values(now).reduce((a, b) => a + b, 0)} literals`);
             return 0;
         }
@@ -354,7 +503,7 @@ async function main(argv) {
         }
         return 0;
     }
-    console.error('usage: node scripts/words/words.mjs check | lint [--update] | extract | count [--json]');
+    console.error('usage: node scripts/words/words.mjs check | lint [--update [--raise "<reason>"]] | extract | count [--json]');
     return 2;
 }
 

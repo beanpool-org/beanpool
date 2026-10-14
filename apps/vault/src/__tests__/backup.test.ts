@@ -413,6 +413,62 @@ describe('a restore from backup is finished before anything sees it', () => {
         expect(b.keyholder().status().restorePending).toBe(false);
     });
 
+    it('a newer backup with one flipped byte: the first try fails naming it, the next finishes from the last good one, and the report names the file it skipped (V2)', async () => {
+        const { a, g, older, newer } = await deletedAfterBackup();
+        const b = await restoring(a, older, inner => wrap(inner, {
+            get: async n => {
+                const bytes = Buffer.from(await inner.get(n));
+                if (n === newer) bytes[bytes.length - 100] ^= 1;
+                return bytes;
+            },
+        }));
+        await unlockWith(b, g.shares, [0]);
+        const [unlocked] = await unlockWith(b, g.shares, [1]);
+        // Named before anything is skipped: the custodians who unlocked see which file, and what skipping it costs.
+        expect(unlocked).toMatchObject({ status: 503, body: { code: 'restoring' } });
+        expect(unlocked.body.reason).toContain(`the newer backup ${newer} does not open`);
+        expect(unlocked.body.reason).toContain('the copies deleted in it come back');
+        expect((await get(b, '/v1/health')).body.state).toBe('locked');
+
+        b.clock.advance(RESTORE_RETRY_MS);
+        // Finished from the older backup alone: the copy deleted in the skipped one is back, with its hold held again,
+        // which is why the file is named.
+        const { reply } = await startRestore(b, 'google', 'deleted-later');
+        expect(reply).toMatchObject({ status: 409, body: { code: 'hold_open' } });
+        expect((await get(b, '/v1/health')).body.state).toBe('open');
+        expect(b.keyholder().status().restorePending).toBe(false);
+        const report = JSON.parse((await get(b, '/v1/report')).body.report.text as string) as { restoreSkipped: { name: string; why: string }[] };
+        expect(report.restoreSkipped).toEqual([{ name: newer, why: expect.stringContaining('not signed by this vault') }]);
+    });
+
+    it('a newer backup that doesn\'t open is skipped only after it is named, never a list or fetch error (V2)', async () => {
+        const { a, g, older, newer } = await deletedAfterBackup();
+        let failing: 'list' | 'get' | null = 'list';
+        const b = await restoring(a, older, inner => wrap(inner, {
+            list: async () => {
+                if (failing === 'list') throw new Error('the store is unreachable');
+                return inner.list();
+            },
+            get: async n => {
+                if (failing === 'get' && n === newer) throw new Error('the store timed out');
+                return inner.get(n);
+            },
+        }));
+        await unlockWith(b, g.shares, [0]);
+        expect((await unlockWith(b, g.shares, [1]))[0]).toMatchObject({ status: 503, body: { code: 'restoring', reason: 'the store is unreachable' } });
+        // A list or fetch error fails every try, however often: it is never taken for a file that doesn't open.
+        for (const why of ['list', 'get', 'get'] as const) {
+            failing = why;
+            b.clock.advance(RESTORE_RETRY_MS);
+            expect((await startRestore(b, 'google', 'deleted-later')).reply).toMatchObject({ status: 503, body: { code: 'restoring' } });
+            expect(b.keyholder().status().restorePending).toBe(true);
+        }
+        failing = null;
+        b.clock.advance(RESTORE_RETRY_MS);
+        await expectNoCopy(b, 'google', 'deleted-later');
+        expect((JSON.parse((await get(b, '/v1/report')).body.report.text as string) as { restoreSkipped: unknown[] }).restoreSkipped).toEqual([]);
+    });
+
     it('a failing list: nothing is served and nothing written until the restore finishes, and an API restart after it doesn\'t run it again', async () => {
         const { a, g, older } = await deletedAfterBackup();
         let failing = true;

@@ -486,6 +486,13 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     let restoreRetryAt = 0;
     /** Why the last try failed: for the custodians' unlock answer and the host's log, never for every caller. */
     let restoreFailure: string | null = null;
+    /**
+     * Newer backups that don't open (V2), by name: each was first named in a failed try (`restoreFailure`, the 503
+     * reason), and only a later try skips it. In memory: an API restart names it again before skipping it.
+     */
+    const unreadableNamed = new Map<string, string>();
+    /** The newer backups the finished restore skipped, for /v1/report (never silent: see completeRestore). */
+    let restoreSkipped: { name: string; why: string }[] = [];
 
     function restoreWaiting(): HttpError {
         return new HttpError(503, 'restoring', 'The key vault is finishing a restore from backup. It will try again shortly.', { locked: true });
@@ -552,9 +559,17 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     /**
      * After the unlock of a vault restored from a backup: the backup's database is built beside the vault's file, every
      * newer backup's deletion records are applied to it, so a copy deleted after that backup was made is dropped again
-     * (§1.7), and only then does it go into place. A newer backup that can't be listed, fetched or opened fails the
-     * whole restore, which is tried again: skipping one would bring back copies its members deleted. (A file of another
+     * (§1.7), and only then does it go into place. A newer backup that can't be listed or fetched fails the whole
+     * restore, which is tried again: skipping one would bring back copies its members deleted. (A file of another
      * vault in the same store is not one of this vault's backups and says nothing about its copies.)
+     *
+     * A newer file that is fetched but doesn't open (`bad_backup`: not a backup file, or not signed by this vault, or
+     * not under its keys) would otherwise stop every restore for good (V2, case 16). It is skipped, but never silently:
+     * the first try that meets it fails, naming the file and why in `restoreFailure` (the custodians' 503 reason and the
+     * host's log); only a later try skips it, and /v1/report lists it from then on. Naming matters because a genuine
+     * newer backup with one flipped byte fails the same check as junk, and skipping it brings back every copy deleted in
+     * it: the custodians must see which file, to put a good copy of it back in a store before the retry, or to know what
+     * they accept.
      *
      * A record the backup already holds is older than the backup and is left alone: a copy deposited again after it
      * must survive. The keyholder forgets the backup (`restoreDone`) only once the built database is in place: a crash
@@ -577,13 +592,28 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         opened.binary.fill(0);
         const built = VaultDb.open(opts.dataDir, RESTORE_BUILD);
         let reheld: HoldRow[];
+        const skipped: { name: string; why: string }[] = [];
         try {
             const newer = (await allBackupNames()).filter(n => compareBackupNames(n, opened.result.header.name) > 0);
             for (const name of newer) {
                 const bytes = await readBackup(name);
-                if (parseBackupFile(bytes).header.vaultId !== opened.result.header.vaultId) continue;
-                const d = await call<{ deletions: string }>('openBackupDeletions', {}, bytes, 300_000);
-                const records = JSON.parse(d.deletions) as WireDeletion[];
+                let records: WireDeletion[];
+                try {
+                    if (parseBackupFile(bytes).header.vaultId !== opened.result.header.vaultId) continue;
+                    const d = await call<{ deletions: string }>('openBackupDeletions', {}, bytes, 300_000);
+                    records = JSON.parse(d.deletions) as WireDeletion[];
+                } catch (e) {
+                    const unreadable = (e instanceof KeyholderCallError && e.code === 'bad_backup') || /^Not a vault backup:/.test((e as Error)?.message ?? '');
+                    if (!unreadable) throw e;
+                    const why = ((e as Error).message ?? '').slice(0, 80);
+                    if (!unreadableNamed.has(name)) {
+                        unreadableNamed.set(name, why);
+                        throw new Error(`the newer backup ${name} does not open (${why}); the next try skips it, and the copies deleted in it come back`);
+                    }
+                    skipped.push({ name, why });
+                    console.error(`vault-api: the restore skipped the newer backup ${name}, which does not open: ${why}`);
+                    continue;
+                }
                 built.transaction(() => {
                     for (const w of records) {
                         const rec: DeletionRow = { copy_id: w.id, pk_index: b64Bytes(w.pk), sub_index: b64Bytes(w.sub), day: w.day };
@@ -602,6 +632,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         db = null;
         rmSync(`${dbPath}-journal`, { force: true });
         renameSync(buildPath, dbPath);
+        restoreSkipped = skipped;
         await call('restoreDone');
         rmSync(pendingPath, { force: true });
         const restored = VaultDb.open(opts.dataDir);
@@ -1058,6 +1089,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             // After a reshare, envelopes still under the old K_wrap (which the old M opens) until the re-wrap is done.
             wraps: { current: status.wrapVersion, older: status.wrapVersion === null ? null : database.countEnvelopesNotUnder(status.wrapVersion) },
             backups: { lastOkAt: lastBackupOkAt, failuresInARow: backupFailuresInARow, error: backupError },
+            // Newer backups the restore from backup skipped because they don't open (V2): their deletions were not applied.
+            restoreSkipped,
             // The off-box copy (design §4), when a store is set: never its address, bucket or key.
             offsite: offsite ? { ...offsiteStatus } : null,
             // What the custodians are told about, and whether it reached them: never an address or a URL.

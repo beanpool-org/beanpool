@@ -16,6 +16,8 @@
  *   5. a test-looking address (CF_RECORD_NAME test.example.org) and callsign ("test") hide nothing
  *   6. DIRECTORY_UNLISTED=1: a rename sends nothing, the diagnostics say `unlisted`, and the manual push answers 409
  *      saying why; removed again, a rename is published
+ *   7. docker-compose.yml passes DIRECTORY_UNLISTED from a node's .env (it passes only what it names), and .env.example
+ *      lists it
  *
  * Contacts no registry: DIRECTORY_REGISTRY_URL is the fixture on 127.0.0.1.
  *
@@ -151,6 +153,13 @@ async function main() {
     await rename('Riverbend Again');
     const back = await nextPush(from, 5000);
     assert(back !== null && back.communityName === 'Riverbend Again', `without it, a rename is published again (${JSON.stringify(back?.communityName)})`);
+
+    // ── 7. The flag reaches a node: docker-compose.yml passes only the variables it names from a node's .env ───────────
+    const fs = await import('node:fs');
+    const root = new URL('../../../', import.meta.url);
+    assert(/^\s*- DIRECTORY_UNLISTED=\$\{DIRECTORY_UNLISTED:-\}\s*$/m.test(fs.readFileSync(new URL('docker-compose.yml', root), 'utf-8')),
+        'docker-compose.yml passes DIRECTORY_UNLISTED from the node\'s .env to the server, empty by default');
+    assert(/^DIRECTORY_UNLISTED=\s*$/m.test(fs.readFileSync(new URL('.env.example', root), 'utf-8')), '.env.example lists it, empty');
 
     console.log(`\n${passed}/${run} checks passed.`);
     await p2p.stop();

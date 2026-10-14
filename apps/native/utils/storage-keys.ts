@@ -69,6 +69,14 @@ export function dmConversationsSeenStoreKey(publicKey: string, file: string): st
 }
 
 /**
+ * Where the member's reset of one community file's DM guard list (§3.4 amendment 8) keeps the value it replaced, as storage
+ * returned it, the newest kept. Never read by the app, as the pins' set-aside isn't.
+ */
+export function dmConversationsSeenSetAsideStoreKey(publicKey: string, file: string): string {
+    return `beanpool_dm_conversations_seen_set_aside:${publicKey.toLowerCase()}:${file}`;
+}
+
+/**
  * The encrypted lines one account's phone held, at the update, in one community file, of each DM its rows there didn't pin
  * (utils/db.ts, the update's seed of that file, §3.4 amendment 5): an object, conversation id lower-cased → those lines.
  * Written the first time a build with pins reads that file for the account and never overwritten (only shrunk), so a DM

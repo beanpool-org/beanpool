@@ -446,9 +446,11 @@ export interface DmPinBook<H> {
      * over its own rows and its held lines (which the reset keeps), handed the marker's date: that seed judges, never
      * trusts, and its one pin write replaces the marker. A value storage can't return is removed and logged, with nothing
      * set aside, and the marker written. A marker that can't be written throws DmPinStoreError (the reset failed); this
-     * run's seed still judges. In the file's queue.
+     * run's seed still judges. In the file's queue. `before` (§3.4 amendment 8): run first in the same turn, handed the ids
+     * these pins keep anything for (from the copy held, or the stored value; null when they can't be read), so the DM
+     * guard list takes them before the pins go; when it throws, nothing here changes and the reset fails.
      */
-    reset(myPubkey: string, file: string): Promise<DmPinsReset>;
+    reset(myPubkey: string, file: string, before?: (pinIds: string[] | null) => Promise<unknown>): Promise<DmPinsReset>;
     /** Drop every copy: the next ask reads storage again (a fresh app session). */
     forget(): void;
 }
@@ -553,9 +555,20 @@ export function createDmPinBook<H>(
             return true;
         });
     }
-    async function reset(myPubkey: string, file: string): Promise<DmPinsReset> {
+    async function reset(myPubkey: string, file: string, before?: (pinIds: string[] | null) => Promise<unknown>): Promise<DmPinsReset> {
         const key = dmPeerPinsStoreKey(myPubkey, file);
         return inTurn(key, async () => {
+            if (before) {
+                let ids: string[] | null;
+                try {
+                    const held = copies.get(key);
+                    const stored = held ? await held : await readStoredPins(storage, myPubkey, file);
+                    ids = stored.pins ? Object.keys(stored.pins) : [];
+                } catch {
+                    ids = null;
+                }
+                await before(ids);
+            }
             let raw: string | null = null;
             let readable = true;
             try {

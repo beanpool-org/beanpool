@@ -4113,6 +4113,9 @@ export async function syncMessages(publicKey: string) {
                 console.warn('[Sync] Could not read the DM pins: the DMs here wait for the next pass', e);
             }
         }
+        // The DM guard list where the pins are asked, before any row is written or pruned: after the member's reset its seed
+        // reads the rows this pass hasn't touched (§3.4 amendment 8). Unreadable: the prune below waits (amendment 8 (a)).
+        const listUnreadAtStart = await dmConversationsSeen(database).then(() => false, () => true);
         if (!pinsUnread) {
             try {
                 await blankLinesOfDeletedAccounts(database, deletedAccounts, myIdentity?.publicKey);
@@ -4331,7 +4334,10 @@ export async function syncMessages(publicKey: string) {
                 [publicKey]
             );
             const localIds = localConvs.map(lc => lc.conversation_id);
-            const toDelete = pinsUnread ? [] : localIds.filter(id => !serverIds.includes(id));
+            // And none while the DM guard list can't be read: a pruned DM's row is the re-seed's source after the member's
+            // reset, so an unpinned DM the node omits now would be forgotten for good (§3.4 amendment 8 (a), GD5a).
+            const listUnread = listUnreadAtStart || await dmConversationsSeen(database).then(() => false, () => true);
+            const toDelete = pinsUnread || listUnread ? [] : localIds.filter(id => !serverIds.includes(id));
             if (toDelete.length > 0) {
                 console.log(`[Sync] Pruning ${toDelete.length} legacy/consolidated conversations locally...`);
                 await acquireSyncLock();
@@ -4769,12 +4775,16 @@ function fileOfDb(database: SQLite.SQLiteDatabase): string {
  * phone's own: that community's DM pins are set aside and replaced by the reset's marker, and the next read seeds them
  * over the community file's own rows and the lines the update held there (kept), judging every DM before it trusts one
  * (§3.4 amendment 7). A chat whose history the node withheld may open with the new key: the confirmation says so.
+ * The same tap resets that community's DM guard list first (§3.4 amendment 8), in the pins' turn and before they go: its
+ * marker keeps every id the pins keep anything for, so a DM whose pin the re-seed drops is still a DM here, never a
+ * group's chat sent readable. A list marker that can't be written fails the reset with the pins untouched.
  * `community`: the node's address, as the switcher keeps it.
  */
 export async function resetDmChatMemory(community: string): Promise<DmPinsReset> {
     const me = (await loadIdentity())?.publicKey;
     if (!me) throw new Error('No identity found.');
-    return dmPins.reset(me, getDatabaseFilenameForNode(community));
+    const file = getDatabaseFilenameForNode(community);
+    return dmPins.reset(me, file, (pinIds) => dmSeen.reset(me, file, pinIds));
 }
 
 /** As {@link seedDmPinsBeforeLeaving}, for the community open now, before Sign Out drops its tables. Never throws. */
@@ -4783,6 +4793,18 @@ export async function seedDmPinsHere(me: string): Promise<void> {
         await dmPins.read(me, await getDb());
     } catch (e) {
         console.warn('[DM pins] Could not keep what this phone held in the open community before it goes', e);
+    }
+    await seedDmGuardBeforeLeaving(me, await getDb().catch(() => null));
+}
+
+/** Sign Out's seed of one file's DM guard list from its `dm` rows (§3.4 amendment 8 (b)), as the pins'. Never throws. */
+async function seedDmGuardBeforeLeaving(me: string, handle: SQLite.SQLiteDatabase | null): Promise<void> {
+    const file = handle ? dbFileOf.get(handle) : null;
+    try {
+        if (!handle || !file) throw new DmGuardUnreadError();
+        await dmSeen.read(me, file, dmRowsOf(handle));
+    } catch (e) {
+        console.warn(`[DM guard] Could not keep which chats were private in ${file ?? 'the open community'} before it goes`, e);
     }
 }
 
@@ -4798,7 +4820,8 @@ export async function seedDmPinsBeforeLeaving(me: string, files: readonly string
         try {
             handle = await SQLite.openDatabaseAsync(file, { useNewConnection: true });
             dbFileOf.set(handle, file);
-            await dmPins.read(me, handle);
+            await dmPins.read(me, handle).catch((e) => console.warn(`[DM pins] Could not keep what this phone held in ${file} before it goes`, e));
+            await seedDmGuardBeforeLeaving(me, handle);
         } catch (e) {
             console.warn(`[DM pins] Could not keep what this phone held in ${file} before it goes`, e);
         } finally {

@@ -30,6 +30,7 @@ import {
     restartTips, tipNow, tipOnLanding, tipsCaption, tipsFor, tipsNextLabel,
     type TipsRecord,
     homeCardType, listPhotoUrl, readSearchSettings,
+    SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeSearchSettings,
 } from '@beanpool/core';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences } from '../lib/api';
@@ -157,9 +158,15 @@ interface Props {
     onNavigate: (tab: string, contextId?: string) => void;
     /** The safety card's "See my 12 words". */
     onSeeWords?: () => void;
+    /**
+     * The Market's "Save this search to Home" (Marty, 7 Oct): once Home knows the member's list, the saved search's dialog
+     * opens with it filled in (Add to Home its last button), or Home says why not; then `onSaveSearchTaken`.
+     */
+    saveSearch?: HomeSearchSettings | null;
+    onSaveSearchTaken?: () => void;
 }
 
-export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
+export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch, onSaveSearchTaken }: Props) {
     const publicKey = visitor ? null : identity?.publicKey ?? null;
     // Moves on when a clear (here or in another tab) has this page land again: the community may have changed with it.
     const [landing, setLanding] = useState(0);
@@ -642,6 +649,27 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     const drawnBase = () => shownLayout(answerRef.current, drawnRef.current, { tourOver: tourOverRef.current });
     const startUp = shown.some(c => c.type === 'start');
 
+    // ── "Save this search to Home" from the Market (Marty, 7 Oct) ──
+    // The search to add, its dialog open; and why one couldn't be (the same search there, five there, Home full, Home not
+    // answered), shown until closed and said: never a silent no.
+    const [addSearch, setAddSearch] = useState<HomeSearchSettings | null>(null);
+    const [saveNote, setSaveNote] = useState<string | null>(null);
+    const noteSaveSearch = (line: string) => { setSaveNote(line); setLive(line); };
+    // The search handed over that this page has taken: each is taken once, even before App lets go of it.
+    const takenSearch = useRef<HomeSearchSettings | null>(null);
+    useEffect(() => {
+        if (!saveSearch) { takenSearch.current = null; return; }
+        if (status === 'loading' || !answer || takenSearch.current === saveSearch) return;
+        takenSearch.current = saveSearch;
+        onSaveSearchTaken?.();
+        setSaveNote(null);
+        if (answer.welcome || !answer.me || visitor) { noteSaveSearch(SAVE_SEARCH_NOT_NOW); return; }
+        const state = saveSearchState(drawnBase(), saveSearch);
+        if (state !== 'add') { noteSaveSearch(saveSearchLine(state, saveSearch.q)!); return; }
+        pageRef.current?.scrollIntoView?.({ block: 'start' });
+        setAddSearch(saveSearch);
+    }, [saveSearch, status, answer]);
+
     // ── The tour's Home side (DESIGN-getting-started-fable.md §2–§3) ──
     // The bar is App's (lib/tour-store.ts); Home lends it the chips (Add's own path) and applies the end as it opens: one
     // layout write, then the account's record. Nothing here starts a tour by itself.
@@ -913,7 +941,12 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
     function addToHome(type: string, settings?: Record<string, unknown>) {
         setPickerOpen(false);
         const r = addCard(drawnBase(), type, Date.now(), { settings, pinned: pins });
-        if (!r.ok) return;
+        if (!r.ok) {
+            // The picker offers no Add it would refuse, but a search saved from the Market can meet a Home that filled
+            // while its dialog was open: said, never a silent no.
+            if (type === 'search') noteSaveSearch(saveSearchLine(r.refused === 'type-full' ? 'type-full' : 'home-full', readSearchSettings(settings).q)!);
+            return;
+        }
         const mark = { id: r.id, read: false };
         // Read once the save is answered (§2.4); sun and moon is worked out here and needs nothing from the node.
         if (!changeLayout(() => r.layout, { reread: type !== 'sky', afterRead: () => { mark.read = true; if (mounted.current) setAddRead(n => n + 1); } })) return;
@@ -1436,6 +1469,15 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 <p data-testid="home-offline" className="m-0 mb-2 text-xs text-nature-700 dark:text-nature-200">{HOME_OFFLINE}</p>
             )}
             {visitor?.joinCard}
+            {saveNote && (
+                <p data-testid="home-save-search-note" className="m-0 mb-3 pl-3 flex items-center gap-2 rounded-xl bg-bg-card border border-border-primary text-sm text-text-primary">
+                    <span className="min-w-0 flex-1 break-words">{saveNote}</span>
+                    <button type="button" aria-label="Close this note" onClick={() => setSaveNote(null)}
+                        className="shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full bg-transparent border-0 text-text-secondary cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+                        ✕
+                    </button>
+                </p>
+            )}
             {a.me?.standing === 'suspended' && (
                 <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100 bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
                     Your account here is paused for now. You can read your own messages, deals and Beans; the community's listings come back when it is lifted.
@@ -1486,6 +1528,19 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords }: Props) {
                 <AddCardDialog groups={picker.groups} full={picker.full} onAdd={addToHome} onClose={() => setPickerOpen(false)} hasPoint={hasPoint}
                     // Opened from Edit home, which has closed: the community card's Add a card.
                     returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]')} />
+            )}
+            {addSearch && (
+                <CardSettingsDialog
+                    type="search"
+                    name={cardName('search', profile)}
+                    mode="add"
+                    initial={addSearch}
+                    hasPoint={hasPoint}
+                    onSubmit={(next) => { setAddSearch(null); addToHome('search', next); }}
+                    onClose={() => setAddSearch(null)}
+                    // Its opener, the Market's button, is on another tab: the community card's Add a card.
+                    returnFocus={() => pageRef.current?.querySelector<HTMLElement>('[data-testid="home-add-open"]')}
+                />
             )}
             {settingsFor && (
                 <CardSettingsDialog

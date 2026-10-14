@@ -806,7 +806,7 @@ export function App() {
                     justifyContent: 'space-between',
                     alignItems: 'center',
                     padding: '0.3rem 0.75rem',
-                    borderBottom: (activeTab === 'map' && !showSettings) ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                    borderBottom: (activeTab === 'map' && !showSettings) ? 'none' : '1px solid #111',
                     position: (activeTab === 'map' && !showSettings) ? 'absolute' : 'sticky',
                     top: 0,
                     left: 0,

@@ -21,9 +21,10 @@ export function canInviteToGroup(opts: {
     const { group, members, myPubkey, muted } = opts;
     if (group.closedAt) return false;
     if (muted !== false) return false;
+    // The roster's own row, never the card alone: without the roster the sheet can't tell who is already in or asking,
+    // and an invitation to someone who asked admits them at once (review of #1979, N1).
     const mine = myPubkey ? members.find(m => m.memberPubkey === myPubkey) : undefined;
-    if (mine) return mine.role === 'convenor' && mine.status === 'active';
-    return group.viewerRole === 'convenor' && group.viewerStatus === 'active';
+    return !!mine && mine.role === 'convenor' && mine.status === 'active';
 }
 
 /** Already in the group, or already asked: active, invited or waiting for approval. A removed member may be invited again. */
@@ -49,14 +50,32 @@ export function invitableShown(people: readonly InvitablePerson[], query: string
     return out.sort((a, b) => (a.callsign || '').localeCompare(b.callsign || '', undefined, { sensitivity: 'base' }));
 }
 
+/**
+ * The node's words when it refused who is asking (403), `UNAUTHORIZED: ` taken off: a refusal that won't pass in a moment
+ * (a suspended convenor, whom the web can't see), said as the node says it (review of #1979, N2). Null for anything else,
+ * and for a 403 with no words of the node's own (a proxy's page: lib/api.ts refusalError `unsaid`).
+ */
+export function refusalWords(e: unknown): string | null {
+    const err = e as { status?: number; message?: unknown; unsaid?: boolean } | null;
+    if (!err || err.status !== 403 || err.unsaid || typeof err.message !== 'string') return null;
+    const words = err.message.replace(/^UNAUTHORIZED:\s*/, '').trim();
+    return words || null;
+}
+
 /** One call per person, four at a time (the phone's batching); what failed is named back, never hidden. */
-export async function sendInvitations(keys: readonly string[], invite: (pk: string) => Promise<unknown>): Promise<{ sent: string[]; failed: string[] }> {
+export async function sendInvitations(keys: readonly string[], invite: (pk: string) => Promise<unknown>): Promise<{ sent: string[]; failed: string[]; refusal: string | null }> {
     const sent: string[] = [];
     const failed: string[] = [];
+    let refusal: string | null = null;
     for (let i = 0; i < keys.length; i += 4) {
         const batch = keys.slice(i, i + 4);
         const results = await Promise.allSettled(batch.map(pk => invite(pk)));
-        batch.forEach((pk, j) => (results[j].status === 'rejected' ? failed : sent).push(pk));
+        batch.forEach((pk, j) => {
+            const r = results[j];
+            if (r.status === 'fulfilled') { sent.push(pk); return; }
+            failed.push(pk);
+            refusal ??= refusalWords(r.reason);
+        });
     }
-    return { sent, failed };
+    return { sent, failed, refusal };
 }

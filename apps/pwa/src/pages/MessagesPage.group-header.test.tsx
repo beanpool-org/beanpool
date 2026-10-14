@@ -107,7 +107,7 @@ async function send(composer: HTMLElement, text: string) {
 describe("a group chat's header opens the group", () => {
     it('the avatar and name are one button, named for the group, that lands on the group (its id is the chat id)', async () => {
         await openChat();
-        const header = screen.getByRole('button', { name: 'Group info: Garden crew' });
+        const header = screen.getByRole('button', { name: 'Garden crew, group info' });
         expect(header).toHaveAttribute('data-testid', 'chat-owner-header');
         expect(header.textContent).toContain('Garden crew');
         expect(header.textContent).toContain('2 members');
@@ -124,5 +124,23 @@ describe("a group chat's header opens the group", () => {
         expect(back.style.minWidth).toBe('44px');
         const search = screen.getByTestId('group-chat-search-toggle');
         expect(search.style.flexShrink).toBe('0');
+    });
+
+    it('an enterprise thread opens its enterprise page: its id is the enterprise key (the phone\'s treasury-detail)', async () => {
+        nodeType = 'enterprise_thread';
+        render(<MessagesPage identity={me} openConversationId={G} onNavigate={onNavigate} />);
+        const header = await screen.findByRole('button', { name: 'Garden crew, enterprise page' }, { timeout: 5000 });
+        expect(header).toHaveAttribute('data-testid', 'chat-owner-header');
+        expect(header.textContent).not.toContain('members');
+        fireEvent.click(header);
+        expect(onNavigate).toHaveBeenCalledWith('enterprise', G);
+    });
+
+    it('a DM header stays as it was: no button to an owner', async () => {
+        nodeType = 'dm';
+        render(<MessagesPage identity={me} openConversationId={G} onNavigate={onNavigate} />);
+        await screen.findByRole('button', { name: 'Back to messages' }, { timeout: 5000 });
+        expect(screen.queryByTestId('chat-owner-header')).toBeNull();
+        expect(screen.queryByRole('button', { name: /group info|enterprise page/ })).toBeNull();
     });
 });

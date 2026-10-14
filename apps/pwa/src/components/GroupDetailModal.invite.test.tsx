@@ -158,4 +158,53 @@ describe('Invite people on the web group sheet', () => {
         fireEvent.click(accept);
         await waitFor(() => expect(joinGroup).toHaveBeenCalledWith('g-1'));
     });
+
+    // Review of #1979, N1: without the roster the sheet can't tell who is in or asking, and an invitation to someone who
+    // asked admits them at once. The card alone (convenor, active) offers nothing.
+    it('a roster read that fails (a busy node) offers no Invite people, though the card says convenor', async () => {
+        vi.mocked(getGroupMembers).mockRejectedValue(Object.assign(new Error('The node is busy. Try again in a moment.'), { status: 503 }));
+        open();
+        await screen.findByText('martys group');
+        await waitFor(() => expect(getGroupMembers).toHaveBeenCalled());
+        await waitFor(() => expect(screen.queryByText('Loading members...')).toBeNull());
+        expect(screen.queryByTestId('group-invite-people')).toBeNull();
+    });
+
+    // Review of #1979, N2: a suspended convenor is shown the button (the web can't read the suspension) and the node
+    // refuses; the note says the node's words, never "Try again in a moment", which would not be true.
+    it("a refusal (403) is said in the node's words, UNAUTHORIZED taken off", async () => {
+        vi.mocked(inviteGroupMember).mockRejectedValue(Object.assign(
+            new Error('UNAUTHORIZED: Your account is suspended, so you cannot act as a convenor until the suspension ends. You are still a convenor.'),
+            { status: 403 }));
+        open();
+        fireEvent.click(await screen.findByTestId('group-invite-people'));
+        const sheet = await screen.findByTestId('invite-people-sheet');
+        fireEvent.click((await within(sheet).findByText('Dee')).closest('label')!.querySelector('input')!);
+        fireEvent.click(within(sheet).getByRole('button', { name: 'Invite 1 person' }));
+        const note = await within(sheet).findByTestId('invite-partial-failure');
+        expect(note.textContent).toBe('0 sent. Not sent: Dee. Your account is suspended, so you cannot act as a convenor until the suspension ends. You are still a convenor.');
+    });
+
+    // Review of #1979, N3: the sheet sits over the group's own aria-modal sheet (components/dialog-focus.ts).
+    it('focus goes to the sheet, Tab stays inside it, Escape closes only it, and focus returns to Invite people', async () => {
+        open();
+        const opener = await screen.findByTestId('group-invite-people');
+        opener.focus();
+        fireEvent.click(opener);
+        const sheet = await screen.findByTestId('invite-people-sheet');
+        const heading = within(sheet).getByRole('heading', { name: 'Invite people' });
+        await waitFor(() => expect(document.activeElement).toBe(heading));
+        await within(sheet).findByText('Dee');
+        // Tab from the last control (Invite button, disabled until a pick: the last enabled one is a checkbox) goes round.
+        const inside = Array.from(sheet.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled])'));
+        inside[inside.length - 1].focus();
+        fireEvent.keyDown(document, { key: 'Tab' });
+        expect(document.activeElement).toBe(inside[0]);
+        expect(sheet.contains(document.activeElement)).toBe(true);
+        fireEvent.keyDown(document, { key: 'Escape' });
+        await waitFor(() => expect(screen.queryByTestId('invite-people-sheet')).toBeNull());
+        // The group's sheet stays open, and focus is back on what opened the invite sheet.
+        expect(screen.getByRole('heading', { name: 'martys group' })).toBeInTheDocument();
+        expect(document.activeElement).toBe(screen.getByTestId('group-invite-people'));
+    });
 });

@@ -7,12 +7,13 @@
  * (lib/members-on-demand). Anywhere else the community's list, as the phone reads it.
  * At 320 px and 130% text: rows are 48 px targets, names truncate, the Invite button stays at the foot.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { t, tn } from '@beanpool/core';
 import { getMembers, inviteGroupMember } from '../lib/api';
 import { useMembersOnDemand, useMemberSearch, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
 import { invitableShown, sendInvitations, type InvitablePerson } from '../lib/group-invite';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { useDialogFocus } from './dialog-focus';
 
 interface Props {
     groupId: string;
@@ -50,11 +51,10 @@ export function InvitePeopleSheet({ groupId, groupName, existing, myPubkey, onCl
         return () => { alive = false; };
     }, [membersOnDemand]);
 
-    useEffect(() => {
-        const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
-        window.addEventListener('keydown', onKey, true);
-        return () => window.removeEventListener('keydown', onKey, true);
-    }, [onClose]);
+    // Drawn over the group's own sheet (also aria-modal): focus to the heading, Tab kept inside, Escape closes only this
+    // one, and focus goes back to Invite people on close (components/dialog-focus.ts; review of #1979, N3).
+    const dialog = useRef<HTMLDivElement>(null);
+    useDialogFocus(dialog, onClose);
 
     const shown = useMemo(() => {
         const found = (search.found ?? []).map(c => ({ publicKey: c.publicKey, callsign: c.callsign, avatarUrl: c.avatarUrl ?? null }));
@@ -75,12 +75,15 @@ export function InvitePeopleSheet({ groupId, groupName, existing, myPubkey, onCl
         if (!picked.size || sending) return;
         setSending(true);
         setFailedNote(null);
-        const { sent, failed } = await sendInvitations([...picked], pk => inviteGroupMember(groupId, pk));
+        const { sent, failed, refusal } = await sendInvitations([...picked], pk => inviteGroupMember(groupId, pk));
         setSending(false);
         onInvited?.(sent.length);
         if (failed.length) {
             const who = failed.map(pk => names.get(pk) || pk.slice(0, 8)).join(', ');
-            setFailedNote(t('{sent} sent. Not sent: {names}. Try again in a moment.', { sent: String(sent.length), names: who }));
+            // A refusal is said in the node's words (it won't pass in a moment); anything else is worth another go.
+            setFailedNote(refusal
+                ? t('{sent} sent. Not sent: {names}. {reason}', { sent: String(sent.length), names: who, reason: refusal })
+                : t('{sent} sent. Not sent: {names}. Try again in a moment.', { sent: String(sent.length), names: who }));
             setPicked(new Set(failed));
             return;
         }
@@ -99,6 +102,7 @@ export function InvitePeopleSheet({ groupId, groupName, existing, myPubkey, onCl
 
     return (
         <div
+            ref={dialog}
             className="fixed inset-0 z-[310] flex items-end sm:items-center justify-center"
             role="dialog"
             aria-modal="true"
@@ -114,7 +118,7 @@ export function InvitePeopleSheet({ groupId, groupName, existing, myPubkey, onCl
             >
                 <div className="flex items-center gap-2 p-4 border-b border-nature-200 dark:border-nature-800">
                     <div className="flex-1 min-w-0">
-                        <h2 id="invite-people-title" className="text-lg font-black text-nature-950 dark:text-white truncate">{t('Invite people')}</h2>
+                        <h2 id="invite-people-title" tabIndex={-1} className="text-lg font-black text-nature-950 dark:text-white truncate focus:outline-none">{t('Invite people')}</h2>
                         <p className="text-xs text-nature-600 dark:text-nature-400 truncate">{t('to {group}', { group: groupName })}</p>
                     </div>
                     <button
@@ -131,7 +135,8 @@ export function InvitePeopleSheet({ groupId, groupName, existing, myPubkey, onCl
                         type="search"
                         value={query}
                         onChange={e => setQuery(e.target.value)}
-                        placeholder={t('Search people in this community')}
+                        // Short enough to show whole at 320 px and 130% text (review of #1979, X4); the field's name says the rest.
+                        placeholder={t('Search by name')}
                         aria-label={t('Search people in this community')}
                         className="w-full min-h-[44px] px-3 rounded-xl bg-white dark:bg-nature-900 border border-nature-300 dark:border-nature-700 text-nature-900 dark:text-white placeholder:text-nature-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     />

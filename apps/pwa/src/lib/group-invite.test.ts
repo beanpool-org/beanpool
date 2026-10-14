@@ -3,7 +3,7 @@
  * active convenor; state-engine assertGroupNotClosed; routes/groups.ts assertNotMuted). Pinned beside the server rule.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { canInviteToGroup, alreadyInGroup, invitableShown, sendInvitations } from './group-invite';
+import { canInviteToGroup, alreadyInGroup, invitableShown, sendInvitations, refusalWords } from './group-invite';
 
 const ME = 'pk-me';
 const row = (role: 'convenor' | 'member' | 'observer', status: string) => [{ memberPubkey: ME, role, status } as any];
@@ -18,6 +18,9 @@ describe('canInviteToGroup mirrors the server', () => {
         expect(canInviteToGroup({ group: { viewerRole: 'convenor', viewerStatus: 'invited' }, members: row('convenor', 'invited'), myPubkey: ME, muted: false })).toBe(false);
         expect(canInviteToGroup({ group: { viewerRole: 'convenor', viewerStatus: 'pending_approval' }, members: [], myPubkey: ME, muted: false })).toBe(false);
         expect(canInviteToGroup({ group: { viewerRole: null, viewerStatus: null }, members: [], myPubkey: ME, muted: false })).toBe(false);
+    });
+    it('the card alone offers nothing: no roster row (a roster read that failed), no button (review of #1979, N1)', () => {
+        expect(canInviteToGroup({ group: { viewerRole: 'convenor', viewerStatus: 'active' }, members: [], myPubkey: ME, muted: false })).toBe(false);
     });
     it('the roster row wins over the card (a convenor demoted since the card was read)', () => {
         expect(canInviteToGroup({ group: { viewerRole: 'convenor', viewerStatus: 'active' }, members: row('member', 'active'), myPubkey: ME, muted: false })).toBe(false);
@@ -58,6 +61,16 @@ describe('the people offered and the send', () => {
         const res = await sendInvitations(keys, invite);
         expect(invite.mock.calls.map(c => c[0])).toEqual(keys);
         expect(most).toBeLessThanOrEqual(4);
-        expect(res).toEqual({ sent: ['p1', 'p2', 'p4', 'p5', 'p6'], failed: ['p3'] });
+        expect(res).toEqual({ sent: ['p1', 'p2', 'p4', 'p5', 'p6'], failed: ['p3'], refusal: null });
+    });
+
+    it("a 403's words come back once, UNAUTHORIZED taken off; other failures and a proxy's word-less 403 say nothing", async () => {
+        const suspended = Object.assign(new Error('UNAUTHORIZED: Your account is suspended, so you cannot act as a convenor until the suspension ends. You are still a convenor.'), { status: 403 });
+        expect(refusalWords(suspended)).toBe('Your account is suspended, so you cannot act as a convenor until the suspension ends. You are still a convenor.');
+        expect(refusalWords(Object.assign(new Error('Forbidden'), { status: 403, unsaid: true }))).toBeNull();
+        expect(refusalWords(Object.assign(new Error('The node is busy.'), { status: 503 }))).toBeNull();
+        expect(refusalWords(new TypeError('Failed to fetch'))).toBeNull();
+        const res = await sendInvitations(['a', 'b'], async (pk) => { if (pk === 'b') throw suspended; });
+        expect(res).toEqual({ sent: ['a'], failed: ['b'], refusal: 'Your account is suspended, so you cannot act as a convenor until the suspension ends. You are still a convenor.' });
     });
 });

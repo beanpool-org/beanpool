@@ -1190,6 +1190,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
         // An event chat is named after its event, which is why the conversation row carries `name`.
         if (conv.type === 'event_thread') return conv.name || 'Event chat';
         if (conv.type === 'group_thread') return conv.name || 'Group';
+        // An enterprise's thread is named after the enterprise (engine/enterprise-thread.ts), as the phone's header is: never
+        // after whichever member's key comes first, which made its header button read "Ben, enterprise page".
+        if ((conv.type as string) === 'enterprise_thread') return conv.name || t('Enterprise chat');
         // Prefer server-provided peerCallsign, fall back to member lookup
         if (conv.peerCallsign) return conv.peerCallsign;
         const otherPubkey = conv.participants.find(p => p !== identity.publicKey) || '';
@@ -1534,9 +1537,10 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                     data-testid="chat-owner-header"
                                     className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 hover:bg-[var(--bg-hover)]"
                                     onClick={() => onNavigate(ownerTab, ownerId)}
+                                    // The visible name first, so speech input matches it (review of #1979, X2).
                                     aria-label={ownerTab === 'group'
-                                        ? t('Group info: {name}', { name: title })
-                                        : t('Enterprise page: {name}', { name: title })}
+                                        ? t('{name}, group info', { name: title })
+                                        : t('{name}, enterprise page', { name: title })}
                                     style={{
                                         display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0, flex: '1 1 auto',
                                         minHeight: '44px', padding: '0 0.25rem', background: 'none', border: 'none',

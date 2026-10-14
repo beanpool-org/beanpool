@@ -97,6 +97,16 @@
   --accent: #647664;          /* nature-600 (Sage Green) */
   --accent-hover: #526052;    /* nature-700 */
   --danger: #c2583b;          /* terra-600 (Soft Terracotta) */
+  --on-danger: #fff;
+  --link: #2563eb;
+  /* Trust levels (LedgerPage TIER_LOOK) */
+  --tier-newcomer: #16a34a; --tier-newcomer-bg: #f0fdf4; --tier-newcomer-border: #bbf7d0;
+  --tier-resident: #2563eb; --tier-resident-bg: #eff6ff; --tier-resident-border: #bfdbfe;
+  --tier-steward: #7c3aed; --tier-steward-bg: #f5f3ff; --tier-steward-border: #ddd6fe;
+  --tier-elder: #d97706; --tier-elder-bg: #fffbeb; --tier-elder-border: #fde68a;
+  --cta-go: #10b981;
+  --sync-guest: #d97706; --sync-guest-bg: #fffbeb; --sync-offline: #ef4444;
+  --tier-track: #e2e8f0; --tier-card: #fff; --tier-card-border: #e5e7eb;
   --success: #647664;         /* nature-600 */
   --scrollbar-thumb: #c0ccc0; /* nature-300 */
   --header-bg: #fbfaf8;       /* oat-50 */
@@ -143,13 +153,27 @@
   --text-primary: #f6f4f0;
   --text-secondary: #dce3dc;
   --text-muted: #9eaf9e;
-  --text-faint: #647664;
+  --text-faint: #9eaf9e;
   --border-primary: #434e43;
   --border-secondary: #384038;
-  --border-input: #526052;
+  --border-input: #809380;
   --accent: #809380;
   --accent-hover: #9eaf9e;
   --danger: #e5967f;
+  --on-danger: #1d231d;
+  --link: #93c5fd;
+  /* A visitor listing's Offer / Need / Poll / Event word on the dark card (the 500s were 2.6 to 4.2:1 on #384038). */
+  --post-type-offer: #34d399; --post-type-need: #f0a08a; --post-type-poll: #c4b5fd; --post-type-event: #c4b5fd;
+  --legal-link: var(--link); /* Welcome's Terms and Privacy links: #3b82f6 was 3.5:1 on the dark backdrop */
+  /* Trust levels: the 400 inks on a tint of the same hue over the dark card (light slabs before, 13 Oct). */
+  --tier-newcomer: #4ade80; --tier-newcomer-bg: #1f3a27; --tier-newcomer-border: #2f6b44;
+  --tier-resident: #93c5fd; --tier-resident-bg: #1e2f45; --tier-resident-border: #2f4f7a;
+  --tier-steward: #c4b5fd; --tier-steward-bg: #2e2645; --tier-steward-border: #4c3d7a;
+  --tier-elder: #fcd34d; --tier-elder-bg: #3a2f17; --tier-elder-border: #6b5520;
+  --cta-go: #047857;
+  --sync-guest: #fcd34d; --sync-guest-bg: #3a2f17; --sync-offline: #f87171;
+  --credit-red: #f0a08a; --credit-warm: #f2b765; --credit-bean: #6fd38a; --credit-muted: #9eaf9e;
+  --tier-track: #434e43; --tier-card: #2a322a; --tier-card-border: #434e43;
   --success: #809380;
   --scrollbar-thumb: #526052;
   --header-bg: #1d231d;
@@ -364,6 +388,28 @@ html, body, #root {
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+/* Dark: the sage ring is under 3:1 on the cards; a pale ring, and placeholders at 4.5:1 on the dark fields. */
+:root.dark-theme :focus-visible {
+  outline-color: #c0ccc0;
+}
+
+/* Leaflet's controls and attribution keep their light surface in dark: the light theme's sage ring reads there (3.6:1 on #ddd). */
+:root.dark-theme .leaflet-container :focus-visible {
+  outline-color: #647664;
+}
+
+/* Fields that turn the outline off inline (Welcome, chat box) had no focus mark at all in dark. */
+:root.dark-theme :is(input, textarea, select)[style*="outline: none"]:focus-visible {
+  outline: 2px solid #c0ccc0 !important;
+  outline-offset: 0;
+}
+
+:root.dark-theme input::placeholder,
+:root.dark-theme textarea::placeholder {
+  color: #9eaf9e;
+  opacity: 1;
 }
 
 /* Dark Aura Glow for Typography Isolation */

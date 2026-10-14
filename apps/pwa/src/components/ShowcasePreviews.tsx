@@ -182,7 +182,7 @@ export function DealsPreviewDialog({ onClose, ...ways }: { onClose: () => void }
                 className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white dark:bg-nature-900 p-4 shadow-xl">
                 <div className="mb-3 flex items-center justify-between gap-2">
                     <h2 className="text-lg font-extrabold text-nature-900 dark:text-nature-50">🤝 My Deals</h2>
-                    <button type="button" onClick={onClose} aria-label="Close" className="-mr-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-nature-500 dark:text-nature-400 hover:bg-nature-100 dark:hover:bg-nature-800">✕</button>
+                    <button type="button" onClick={onClose} aria-label="Close" className="-mr-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-nature-500 dark:text-nature-400 hover:bg-nature-100 dark:hover:bg-nature-800 dark:hover:text-nature-200">✕</button>
                 </div>
                 <DealsPreview {...ways} />
             </div>

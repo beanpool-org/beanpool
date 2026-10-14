@@ -196,6 +196,9 @@ export default function PeopleScreen() {
     const [isOnline, setIsOnline] = useState(true);
 
     const [members, setMembers] = useState<any[]>([]);
+    // The search the list on screen was read for, set with it; null until the first read lands. Only a list read for no
+    // search is the node's members to count (review of #1899, NB-A).
+    const [listedFor, setListedFor] = useState<string | null>(null);
     const { identity } = useIdentity();
 
     // Requests to join (design §3.3): members of a local community see "Wants to join (n)"; on the worldwide
@@ -722,6 +725,7 @@ export default function PeopleScreen() {
         if (rows === null) return false;
         const blocked = await getBlockedUsers();
         setMembers(rows.filter(m => !blocked.includes(m.public_key)));
+        setListedFor(typed);
         setListNote(note);
         return true;
     };
@@ -777,6 +781,7 @@ export default function PeopleScreen() {
             const blocked = await getBlockedUsers();
             const filteredRows = rows.filter(m => !blocked.includes(m.public_key));
             setMembers(filteredRows);
+            setListedFor(query.trim());
         } catch (e) {
             console.error('Error loading members:', e);
         }
@@ -949,9 +954,16 @@ export default function PeopleScreen() {
                             <View style={styles.infoBanner}>
                                 {listNote ? (
                                     <Text style={styles.infoText}>{communityListNote(listNote, searchQuery)}</Text>
-                                ) : (
+                                ) : profileKnown && !membersOnDemand && listedFor === '' && searchQuery.trim() === '' ? (
                                 <Text style={styles.infoText}>
                                     {members.length} members on this node. Tap <Text style={styles.boldGreen}>+ Add</Text> to follow as a friend.
+                                </Text>
+                                ) : (
+                                // The node's profile not known yet, or its list not read yet on a community that says
+                                // `membersOnDemand`: the cards held are not the node's members, so no count (review of #1859, NB-1).
+                                // Nor before the whole list has been read, nor over a search's matches (review of #1899, NB-A).
+                                <Text style={styles.infoText}>
+                                    Tap <Text style={styles.boldGreen}>+ Add</Text> to follow as a friend.
                                 </Text>
                                 )}
                             </View>

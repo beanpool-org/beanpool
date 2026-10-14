@@ -133,7 +133,7 @@ export function AddressSearch({ onPick, words = EVENT_WORDS }: AddressSearchProp
                             className={`min-h-[48px] px-3 py-2 cursor-pointer text-sm ${selectedIndex === idx ? 'bg-violet-50 dark:bg-violet-950/40' : 'hover:bg-nature-50 dark:hover:bg-nature-700'}`}
                         >
                             <div className="font-semibold text-nature-900 dark:text-white break-words">{item.shortName || item.displayName}</div>
-                            <div className="text-xs text-nature-500 dark:text-nature-400 line-clamp-2 break-words">{item.displayName}</div>
+                            <div className="text-xs text-nature-500 dark:text-nature-300 line-clamp-2 break-words">{item.displayName}</div>
                         </li>
                     ))}
                 </ul>

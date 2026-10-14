@@ -283,7 +283,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                     >
                         <span>👥 Neighbours</span>
                         {neighbourItems.length > 0 && (
-                            <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-nature-200 dark:bg-nature-700 text-nature-700 dark:text-nature-300">
+                            <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-nature-200 dark:bg-nature-700 text-nature-700 dark:text-nature-200">
                                 {neighbourItems.length}
                             </span>
                         )}
@@ -300,7 +300,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                     >
                         <span>📰 Local</span>
                         {localItems.length > 0 && (
-                            <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-nature-200 dark:bg-nature-700 text-nature-700 dark:text-nature-300">
+                            <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded-full bg-nature-200 dark:bg-nature-700 text-nature-700 dark:text-nature-200">
                                 {localItems.length}
                             </span>
                         )}
@@ -315,7 +315,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                     onClick={() => handleSelectCategory('all')}
                     className={`shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                         selectedCategory === 'all'
-                            ? 'bg-terra-500 border-terra-500 text-white shadow-sm'
+                            ? 'bg-terra-500 dark:bg-terra-600 border-terra-500 text-white shadow-sm'
                             : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-800'
                     }`}
                     aria-pressed={selectedCategory === 'all'}
@@ -333,7 +333,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                             onClick={() => handleSelectCategory(c.id)}
                             className={`shrink-0 inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                                 active
-                                    ? 'bg-terra-500 border-terra-500 text-white shadow-sm'
+                                    ? 'bg-terra-500 dark:bg-terra-600 border-terra-500 text-white shadow-sm'
                                     : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-800'
                             }`}
                             aria-pressed={active}
@@ -362,7 +362,7 @@ export function PulsePage({ identity, onOpenProfile }: Props) {
                     <button
                         type="button"
                         onClick={() => void loadFeed(false, selectedCategory)}
-                        className="px-3 py-1 rounded-xl text-xs font-bold bg-white dark:bg-nature-800 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-50 cursor-pointer shrink-0"
+                        className="px-3 py-1 rounded-xl text-xs font-bold bg-white dark:bg-nature-800 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer shrink-0"
                     >
                         Retry
                     </button>

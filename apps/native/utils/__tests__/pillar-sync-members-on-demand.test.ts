@@ -58,7 +58,7 @@ const realLoad = (Module as any)._load;
 };
 afterAll(() => { (Module as any)._load = realLoad; });
 
-import { applyDelta, getDb, getPosts, getMemberRatings } from '../db';
+import { applyDelta, getDb, getPosts, getMyPosts, getPost, getMemberRatings } from '../db';
 import { performSync, resetSyncFingerprints } from '../../services/pillar-sync';
 
 const DB = 'beanpool_a.beanpool.org.db';
@@ -338,6 +338,77 @@ describe('review of #1859: what the phone holds, and what a by-key answer may wr
         expect(cardOf(STRANGER)).toBeUndefined();
         expect(held().sort()).toEqual([OWN, hexKey(1)].sort());
     });
+});
+
+// The confirmation review of #1859 (scratch/reviews/opus-1859-confirm1.md, NB-2): a held card is the author's face. On a
+// community with membersOnDemand on and nearbyListings off, a listing is re-sent only when the listing itself changes,
+// so the face it carried can be older than the held card; a held card with no photo must not fall back to it.
+describe('NB-2: a held card is the author\'s face, even when it has none', () => {
+    it('F3: a held partner removes their photo; their listing is never re-sent: the listing shows no face', async () => {
+        onDemandProfile(true);
+        partners(2);
+        const P1 = hexKey(1);
+        const LP = { ...listing('LP', P1), updatedAt: '2026-09-01T00:00:00.000Z' };
+        (globalThis as any).fetch = vi.fn(async (url: string) => {
+            const u = new URL(url);
+            if (u.pathname === '/api/marketplace/posts') {
+                node.requests.push(url);
+                // The plain delta: the author's face as it is now, on a listing sent only when it changed after the cursor.
+                const after = u.searchParams.get('updatedAfter');
+                const row = { ...LP, authorAvatarUrl: node.cards.get(P1)!.avatarUrl };
+                return answer(200, JSON.stringify(after === null || after < LP.updatedAt ? [row] : []));
+            }
+            return fetchMock(url);
+        });
+        const face = async () => ((await getPosts()) as any[]).find(p => p.id === 'LP')?.author_avatar;
+        const real = Date.now();
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+            vi.setSystemTime(real);
+            await performSync();
+            expect(await face()).toBe(FACE(P1));
+            node.cards.set(P1, { ...node.cards.get(P1)!, avatarUrl: null, profileUpdatedAt: new Date(real + 60_000).toISOString() });
+            for (let c = 1; c <= 6; c++) { vi.setSystemTime(real + c * 10 * 60_000); await performSync(); }
+            expect(cardOf(P1).avatar_url).toBeNull();
+            // The listing still carries the old face; it is not shown.
+            expect((sql.prepare('SELECT carried_avatar FROM posts WHERE id = ?').get('LP') as any).carried_avatar).toBe(FACE(P1));
+            expect(await face()).toBeNull();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    // The three reads that name a listing's author: the feed and map (getPosts), My Posts (getMyPosts), one listing (getPost).
+    const P = hexKey(0xb0b0);
+    const STRANGER = hexKey(0xc0c0);
+    const OLD = FACE(P);
+    function seed(card: { avatarUrl: string | null } | null) {
+        if (card) sql.prepare('INSERT INTO members (public_key, callsign, avatar_url) VALUES (?, ?, ?)').run(P, 'Held', card.avatarUrl);
+        for (const [id, author] of [['N1', P], ['N2', STRANGER]] as const) {
+            sql.prepare('INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status, active, audience_scope, created_at, updated_at, carried_callsign, carried_avatar) VALUES (?, ?, ?, ?, \'\', 5, ?, ?, 1, ?, ?, ?, ?, ?)')
+                .run(id, 'offer', 'food', id, author, 'active', 'public', '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z', 'Carried', FACE(author));
+        }
+    }
+    const reads = {
+        getPosts: async (id: string) => ((await getPosts()) as any[]).find(p => p.id === id),
+        getMyPosts: async (id: string) => ((await getMyPosts(id === 'N1' ? P : STRANGER)) as any[]).find(p => p.id === id),
+        getPost: async (id: string) => (await getPost(id)) as any,
+    };
+    for (const [name, read] of Object.entries(reads)) {
+        it(`${name}: a held card with no photo shows no face; a held face wins over the carried one; no card shows the carried face`, async () => {
+            seed({ avatarUrl: null });
+            const removed = await read('N1');
+            expect(removed.author_callsign).toBe('Held');
+            expect(removed.author_avatar).toBeNull();
+            sql.prepare('UPDATE members SET avatar_url = ? WHERE public_key = ?').run('/api/avatar/new?v=2', P);
+            expect((await read('N1')).author_avatar).toBe('/api/avatar/new?v=2');
+            const unheld = await read('N2');
+            expect(unheld.author_callsign).toBe('Carried');
+            expect(unheld.author_avatar).toBe(FACE(STRANGER));
+            sql.exec('DELETE FROM members');
+            expect((await read('N1')).author_avatar).toBe(OLD);
+        });
+    }
 });
 
 describe('a community that does not say membersOnDemand', () => {

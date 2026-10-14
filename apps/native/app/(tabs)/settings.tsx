@@ -12,7 +12,8 @@ import { namesCopiesBeforeSignOut, signOutOfThisPhone } from '../../utils/accoun
 import { NAMES_COPY, namesSignOutWords } from '../../utils/names-list';
 import {
     DELETE_CARD_LINE, DELETE_CHECKING_LINE, SIGN_OUT_INSTEAD_LINE, deleteAccountHere, deleteFailedLine, deletePlanFailedLine,
-    deletedButLine, keepsKeyLine, lastCommunityLine, listNames, planDelete, type DeletePlan,
+    deletedButLine, finishLastDelete, keepsKeyLine, lastCommunityLine, listNames, planDelete, vaultCopyStaysLine,
+    type DeleteOutcome, type DeletePlan, type VaultCopyChoice,
 } from '../../utils/delete-here';
 import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
@@ -1512,6 +1513,59 @@ export default function SettingsScreen() {
 
         const words = hasMnemonic(identity);
         const cannotUndo = words ? 'This CANNOT be undone, even with your 12-word phrase.' : 'This CANNOT be undone.';
+        const keptFor = plan.kind === 'this-one' ? listNames(plan.keeps.map((c) => c.name)) : '';
+
+        function showPurgeOutcome(outcome: DeleteOutcome) {
+            if (!identity || !plan) return;
+            switch (outcome.kind) {
+                case 'not-deleted':
+                    Alert.alert("Purge Failed", deleteFailedLine(outcome.reason || "Failed to purge account from node. Active escrow trades may need to be completed or cancelled first.", words));
+                    return;
+                case 'left-unfinished':
+                    Alert.alert("Account Deleted Here", deletedButLine(plan.hereName, outcome.reason, true, words));
+                    return;
+                case 'left':
+                    Alert.alert(
+                        "Account Deleted Here",
+                        `Your account at ${plan.hereName} has been permanently deleted. ${words ? 'Your key and 12 words stay' : 'Your key stays'} on this phone for ${keptFor}.`,
+                    );
+                    // Through Welcome for the next community, as switching community does.
+                    router.replace('/welcome');
+                    return;
+                case 'vault-copy-stays':
+                    // The account here is deleted and the key is still on the phone: the member chooses, and the
+                    // phone is wiped only by their answer (utils/delete-here.ts finishLastDelete).
+                    Alert.alert(
+                        "Vault Copy Not Removed",
+                        vaultCopyStaysLine(plan.hereName, outcome),
+                        [
+                            { text: "Try Again", onPress: () => { void finishPurgeAtLast('try-again'); } },
+                            { text: "Delete Anyway", style: "destructive", onPress: () => { void finishPurgeAtLast('delete-anyway'); } },
+                        ],
+                        { cancelable: false },
+                    );
+                    return;
+                case 'wipe-unfinished':
+                    Alert.alert("Account Purged", deletedButLine(plan.hereName, outcome.reason, false, words));
+                    return;
+                case 'wiped':
+                    setIdentity(null);
+                    Alert.alert("Account Purged", "Your account and profile have been permanently purged from the community node.");
+                    return;
+            }
+        }
+
+        async function finishPurgeAtLast(choice: VaultCopyChoice) {
+            if (!identity) return;
+            setAdvancedLoading(true);
+            try {
+                const outcome = await finishLastDelete(identity, choice);
+                showPurgeOutcome(outcome);
+            } finally {
+                setAdvancedLoading(false);
+            }
+        }
+
         Alert.alert(
             "Permanent Node Purge",
             plan.kind === 'this-one'
@@ -1528,30 +1582,7 @@ export default function SettingsScreen() {
                             // The node deletes the account here; only once it has, the phone leaves this community
                             // (other communities keep the key) or is wiped as Sign Out wipes it (the last one).
                             const outcome = await deleteAccountHere(identity, plan);
-                            const keptFor = plan.kind === 'this-one' ? listNames(plan.keeps.map((c) => c.name)) : '';
-                            switch (outcome.kind) {
-                                case 'not-deleted':
-                                    Alert.alert("Purge Failed", deleteFailedLine(outcome.reason || "Failed to purge account from node. Active escrow trades may need to be completed or cancelled first.", words));
-                                    return;
-                                case 'left-unfinished':
-                                    Alert.alert("Account Deleted Here", deletedButLine(plan.hereName, outcome.reason, true, words));
-                                    return;
-                                case 'left':
-                                    Alert.alert(
-                                        "Account Deleted Here",
-                                        `Your account at ${plan.hereName} has been permanently deleted. ${words ? 'Your key and 12 words stay' : 'Your key stays'} on this phone for ${keptFor}.`,
-                                    );
-                                    // Through Welcome for the next community, as switching community does.
-                                    router.replace('/welcome');
-                                    return;
-                                case 'wipe-unfinished':
-                                    Alert.alert("Account Purged", deletedButLine(plan.hereName, outcome.reason, false, words));
-                                    return;
-                                case 'wiped':
-                                    setIdentity(null);
-                                    Alert.alert("Account Purged", "Your account and profile have been permanently purged from the community node.");
-                                    return;
-                            }
+                            showPurgeOutcome(outcome);
                         } finally {
                             setAdvancedLoading(false);
                         }

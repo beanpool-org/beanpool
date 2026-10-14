@@ -3,13 +3,16 @@
  * (GET /api/friends/added-you; server engine/friends-added-you.ts). Quiet on purpose: a line each, no push, no badge.
  * Adding back makes it a friendship both ways, which is what a connection in common is made of. Nothing shows when
  * nobody has, or when the node can't say (an older node, off-grid).
+ * A block made on this phone stays on this phone (utils/blocklist.ts): the node never hears of it, so its own filter
+ * can't leave them out. They are left out here, as the People lists leave them out, and at once when blocked.
  */
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, Pressable, Alert } from 'react-native';
+import { DeviceEventEmitter, View, Text, Pressable, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { MemberAvatar } from './MemberAvatar';
 import { useStyles } from '../app/ThemeContext';
 import { addFriendLocal, fetchAddedYou, type AddedYou } from '../utils/db';
+import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../utils/blocklist';
 
 export function AddedYouLines({ myKey, onAddedBack }: { myKey: string; onAddedBack: () => void }) {
     const styles = useStyles(({ colors }) => ({
@@ -30,8 +33,8 @@ export function AddedYouLines({ myKey, onAddedBack }: { myKey: string; onAddedBa
 
     const load = useCallback(async () => {
         try {
-            const { addedYou, more: rest } = await fetchAddedYou();
-            setLines(addedYou);
+            const [{ addedYou, more: rest }, blocked] = await Promise.all([fetchAddedYou(), getBlockedUsers()]);
+            setLines(addedYou.filter(a => !blocked.includes(a.publicKey)));
             setMore(rest);
         } catch {
             setLines([]);
@@ -39,6 +42,10 @@ export function AddedYouLines({ myKey, onAddedBack }: { myKey: string; onAddedBa
         }
     }, []);
     useEffect(() => { void load(); }, [load, myKey]);
+    useEffect(() => {
+        const sub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, () => { void load(); });
+        return () => sub.remove();
+    }, [load]);
 
     if (lines.length === 0) return null;
     return (

@@ -55,4 +55,4 @@ The sheet's **Start a community** leads to a page on how to run a community. Wit
 - Or set the row startCommunityUrl in node_config, the same way as above. A value that isn't such an address is ignored, and the default is used.
 - It travels to your standby with the community's other settings, and is reported to the apps on /api/community/info.
 
-The web app links it from its Start a community screen. The phone app's own Start a community screen doesn't read it yet: it links beanpool.org's page.
+The web app and the phone app both link it from their Start a community screens.

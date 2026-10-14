@@ -15,11 +15,13 @@ When a member buys something, their beans are held until they confirm they got i
 
 Only real disputes that needed an admin ruling appear in the Resolved history; ordinary finished deals do not. The list pages through disputes 50 at a time, so you can reach every dispute on the node.
 
+Every time you open Escrow Disputes, or one dispute, Settings writes down who looked and which deals it showed; if it can't write that down, it shows nothing. Every owner and admin can read it under People & Safety, then Invites & QR, in **Community health**: "Who looked at trades and alerts".
+
 Nothing is decided by the server on its own. Held beans are never released automatically. The buyer is reminded every 7 days while beans are held.
 
 ## Before you rule
 
-Message both people. Most stuck deals are someone who forgot to press Received. A ruling is the last step, not the first.
+Message both people. Most stuck deals are a buyer who forgot to press **Release Credits**. A ruling is the last step, not the first.
 
 ## The three rulings
 
@@ -45,4 +47,4 @@ The chat line, the ledger memo and, when an enterprise was in the deal, its publ
 - **Signed in with your own key:** your callsign.
 - **Signed in with the admin password:** "a community admin".
 
-They never show a key or "owner:password". Settings still records exactly who ruled, for the other admins.
+They never show a key or "owner:password". The server keeps the exact signer in its records. Settings shows the other admins the same name the two people see.

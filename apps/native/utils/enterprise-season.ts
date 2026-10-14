@@ -10,7 +10,7 @@
  * Pure: no React Native imports, so it runs under the node test runner.
  */
 
-import { keeperWords, type KeeperWords } from '@beanpool/core';
+import { formatDate, keeperWords, type KeeperWords } from '@beanpool/core';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PAUSE_DAYS = 90;
@@ -18,8 +18,6 @@ const GRACE_DAYS = 7;
 
 // A closed enterprise refuses every lifecycle call (requireKeeperOrAdmin). Same list the web map-pin gate uses (#844).
 const CLOSED_STATUSES = ['completed', 'disabled', 'suspended', 'pruned'];
-
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -34,7 +32,7 @@ export function formatPauseDate(iso: string | null | undefined): string {
     if (!iso) return '';
     const d = new Date(iso);
     if (isNaN(d.getTime())) return '';
-    return `${d.getDate()} ${MONTHS[d.getMonth()]}`;
+    return formatDate(d, 'day-month', { width: 'long' });
 }
 
 /** The credit floor a pause holds: the server's snapshot once paused, the current usable floor before. */

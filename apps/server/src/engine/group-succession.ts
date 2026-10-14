@@ -41,6 +41,7 @@ import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { getGroupLead, isVisitorKey } from '@beanpool/engine';
+import { formatDate } from '@beanpool/core';
 import { postGroupSystemLine, callsignOf, GroupSystemType, loadGroupForThread } from './group-thread.js';
 import type { MessagingCallbacks } from './messaging.js';
 
@@ -107,12 +108,10 @@ function utcDayOf(iso: string | null): string | null {
     return new Date(Math.floor(ms / DAY_MS) * DAY_MS).toISOString();
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
 /** "3 Sep 2026", in UTC, as the apps write a date. */
 function dayText(iso: string): string {
     const d = new Date(iso);
-    return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+    return formatDate(d, 'day-month-year', { utc: true });
 }
 
 /** The lead's last activity, as the silence is measured: last_active_at, or joining the node before any. */

@@ -5,6 +5,8 @@
  * Times travel as ISO UTC and are shown in the phone's local time.
  */
 
+import { formatDate } from '@beanpool/core';
+
 export type EventRsvpStatus = 'going' | 'interested';
 export type EventState = 'scheduled' | 'updated' | 'cancelled';
 
@@ -167,15 +169,12 @@ export function buildEventCopy(post: any, viewerPubkey?: string | null): EventCo
     };
 }
 
-const DAYS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-
 function dayLabel(d: Date): string {
-    return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+    return formatDate(d, 'weekday-day-month').toUpperCase();
 }
 
 function timeLabel(d: Date): string {
-    return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+    return formatDate(d, 'time');
 }
 
 /**
@@ -196,8 +195,7 @@ export function formatEventWhen(startIso: string | null | undefined, endIso?: st
 /** A form row's value: "Sat 27 Sep, 9:00". */
 export function formatPickerValue(d: Date | null): string {
     if (!d) return '';
-    const title = (s: string) => s.charAt(0) + s.slice(1).toLowerCase();
-    return `${title(DAYS[d.getDay()])} ${d.getDate()} ${title(MONTHS[d.getMonth()])}, ${timeLabel(d)}`;
+    return `${formatDate(d, 'weekday-day-month')}, ${timeLabel(d)}`;
 }
 
 export function eventEndMs(post: any): number {

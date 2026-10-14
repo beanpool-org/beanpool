@@ -78,6 +78,9 @@ describe('the lookup is the shared one (no second geocoder, no new host)', () =>
         const screen = src('app/find-community.tsx');
         expect(screen).toMatch(/import \{ AddressSearch \} from '\.\.\/components\/AddressSearch'/);
         expect(screen).toContain('words={FIND_TOWN_SEARCH_WORDS}');
+        // Location off or failed: the note offers the town, and the box opens.
+        expect(screen).toMatch(/setLocationNote\(LOCATION_NOTES\.off\);\s*setTownOpen\(true\);/);
+        expect(screen).toMatch(/setLocationNote\(LOCATION_NOTES\.failed\);\s*setTownOpen\(true\);/);
         for (const file of ['app/find-community.tsx', 'components/home/FindCommunityBody.tsx', 'utils/typed-place.ts']) {
             const s = src(file);
             expect(s, file).not.toMatch(/nominatim|geocod|openstreetmap\.org|mapbox|googleapis/i);

@@ -166,3 +166,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `rekey-code.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` in `rekey-code.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
 **Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-11-15 - [Export ErrorBoundary in auth callback screens]
+**Issue:** `auth/google.tsx`, `auth/facebook.tsx`, `auth/instagram.tsx`, and `auth/tiktok.tsx` lacked exported `ErrorBoundary` components for Expo Router screen error boundary handling.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` in all OAuth callback screens under `apps/native/app/auth/` so unhandled screen errors during SSO callbacks are caught by Expo Router's error boundary UI.
+**Pattern:** Ensure Expo Router route screens (including nested route screens under `app/auth/`) re-export `ErrorBoundary`.

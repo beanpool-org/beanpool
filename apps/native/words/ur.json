@@ -70,5 +70,9 @@
   "Language": "زبان",
   "Same as phone ({language})": "فون کے مطابق ({language})",
   "Language: {language}": "زبان: {language}",
-  "Translated by machine: some words may be wrong.": "مشین سے ترجمہ: کچھ الفاظ غلط ہو سکتے ہیں۔"
+  "Translated by machine: some words may be wrong.": "مشین سے ترجمہ: کچھ الفاظ غلط ہو سکتے ہیں۔",
+  "Your Name": "نام",
+  "Your Photo": "تصویر",
+  "Safety Backup": "بیک اپ",
+  "How it Works": "طریقہ کار"
 }

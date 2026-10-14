@@ -70,5 +70,9 @@
   "Language": "Wika",
   "Same as phone ({language})": "Kapareho ng telepono ({language})",
   "Language: {language}": "Wika: {language}",
-  "Translated by machine: some words may be wrong.": "Isinalin ng makina: maaaring may maling salita."
+  "Translated by machine: some words may be wrong.": "Isinalin ng makina: maaaring may maling salita.",
+  "Your Name": "Pangalan",
+  "Your Photo": "Larawan",
+  "Safety Backup": "Backup",
+  "How it Works": "Paano gumagana"
 }

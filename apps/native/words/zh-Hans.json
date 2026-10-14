@@ -70,5 +70,9 @@
   "Language": "语言",
   "Same as phone ({language})": "与手机相同({language})",
   "Language: {language}": "语言:{language}",
-  "Translated by machine: some words may be wrong.": "机器翻译:部分词语可能有误。"
+  "Translated by machine: some words may be wrong.": "机器翻译:部分词语可能有误。",
+  "Your Name": "你的名字",
+  "Your Photo": "你的照片",
+  "Safety Backup": "安全备份",
+  "How it Works": "运作方式"
 }

@@ -70,5 +70,9 @@
   "Language": "زبان",
   "Same as phone ({language})": "مثل گوشی ({language})",
   "Language: {language}": "زبان: {language}",
-  "Translated by machine: some words may be wrong.": "ترجمه ماشینی است: ممکن است برخی کلمه‌ها غلط باشند."
+  "Translated by machine: some words may be wrong.": "ترجمه ماشینی است: ممکن است برخی کلمه‌ها غلط باشند.",
+  "Your Name": "نام",
+  "Your Photo": "عکس",
+  "Safety Backup": "پشتیبان",
+  "How it Works": "راهنما"
 }

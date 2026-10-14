@@ -70,5 +70,9 @@
   "Language": "Язык",
   "Same as phone ({language})": "Как на телефоне ({language})",
   "Language: {language}": "Язык: {language}",
-  "Translated by machine: some words may be wrong.": "Машинный перевод: некоторые слова могут быть неверными."
+  "Translated by machine: some words may be wrong.": "Машинный перевод: некоторые слова могут быть неверными.",
+  "Your Name": "Ваше имя",
+  "Your Photo": "Ваше фото",
+  "Safety Backup": "Запасная копия",
+  "How it Works": "Как это работает"
 }

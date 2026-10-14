@@ -70,5 +70,9 @@
   "Language": "Γλώσσα",
   "Same as phone ({language})": "Όπως το τηλέφωνο ({language})",
   "Language: {language}": "Γλώσσα: {language}",
-  "Translated by machine: some words may be wrong.": "Μεταφράστηκε αυτόματα: κάποιες λέξεις μπορεί να είναι λάθος."
+  "Translated by machine: some words may be wrong.": "Μεταφράστηκε αυτόματα: κάποιες λέξεις μπορεί να είναι λάθος.",
+  "Your Name": "Όνομα",
+  "Your Photo": "Εικόνα",
+  "Safety Backup": "Ασφάλεια",
+  "How it Works": "Πώς δουλεύει"
 }

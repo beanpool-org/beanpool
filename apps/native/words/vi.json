@@ -70,5 +70,9 @@
   "Language": "Ngôn ngữ",
   "Same as phone ({language})": "Theo điện thoại ({language})",
   "Language: {language}": "Ngôn ngữ: {language}",
-  "Translated by machine: some words may be wrong.": "Dịch bằng máy: một số từ có thể sai."
+  "Translated by machine: some words may be wrong.": "Dịch bằng máy: một số từ có thể sai.",
+  "Your Name": "Tên của bạn",
+  "Your Photo": "Ảnh của bạn",
+  "Safety Backup": "Sao lưu",
+  "How it Works": "Cách hoạt động"
 }

@@ -70,5 +70,9 @@
   "Language": "ഭാഷ",
   "Same as phone ({language})": "ഫോണിലേതു പോലെ ({language})",
   "Language: {language}": "ഭാഷ: {language}",
-  "Translated by machine: some words may be wrong.": "യന്ത്രം വിവർത്തനം ചെയ്തത്: ചില വാക്കുകൾ തെറ്റായിരിക്കാം."
+  "Translated by machine: some words may be wrong.": "യന്ത്രം വിവർത്തനം ചെയ്തത്: ചില വാക്കുകൾ തെറ്റായിരിക്കാം.",
+  "Your Name": "പേര്",
+  "Your Photo": "ഫോട്ടോ",
+  "Safety Backup": "ബാക്കപ്പ്",
+  "How it Works": "വഴികാട്ടി"
 }

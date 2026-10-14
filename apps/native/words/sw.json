@@ -70,5 +70,9 @@
   "Language": "Lugha",
   "Same as phone ({language})": "Sawa na simu ({language})",
   "Language: {language}": "Lugha: {language}",
-  "Translated by machine: some words may be wrong.": "Imetafsiriwa na mashine: baadhi ya maneno yanaweza kuwa na makosa."
+  "Translated by machine: some words may be wrong.": "Imetafsiriwa na mashine: baadhi ya maneno yanaweza kuwa na makosa.",
+  "Your Name": "Jina lako",
+  "Your Photo": "Picha yako",
+  "Safety Backup": "Hifadhi salama",
+  "How it Works": "Mwongozo"
 }

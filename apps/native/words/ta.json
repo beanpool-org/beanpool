@@ -70,5 +70,9 @@
   "Language": "மொழி",
   "Same as phone ({language})": "போனைப் போலவே ({language})",
   "Language: {language}": "மொழி: {language}",
-  "Translated by machine: some words may be wrong.": "இயந்திர மொழிபெயர்ப்பு: சில சொற்கள் தவறாக இருக்கலாம்."
+  "Translated by machine: some words may be wrong.": "இயந்திர மொழிபெயர்ப்பு: சில சொற்கள் தவறாக இருக்கலாம்.",
+  "Your Name": "பெயர்",
+  "Your Photo": "படம்",
+  "Safety Backup": "காப்புப் பிரதி",
+  "How it Works": "வழிகாட்டி"
 }

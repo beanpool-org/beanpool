@@ -70,5 +70,9 @@
   "Language": "اللغة",
   "Same as phone ({language})": "كما في الهاتف ({language})",
   "Language: {language}": "اللغة: {language}",
-  "Translated by machine: some words may be wrong.": "ترجمة آلية: قد تكون بعض الكلمات خاطئة."
+  "Translated by machine: some words may be wrong.": "ترجمة آلية: قد تكون بعض الكلمات خاطئة.",
+  "Your Name": "اسمك",
+  "Your Photo": "صورتك",
+  "Safety Backup": "نسخة احتياطية",
+  "How it Works": "كيف يعمل"
 }

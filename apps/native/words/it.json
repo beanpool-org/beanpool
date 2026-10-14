@@ -70,5 +70,9 @@
   "Language": "Lingua",
   "Same as phone ({language})": "Come il telefono ({language})",
   "Language: {language}": "Lingua: {language}",
-  "Translated by machine: some words may be wrong.": "Tradotto automaticamente: alcune parole potrebbero essere sbagliate."
+  "Translated by machine: some words may be wrong.": "Tradotto automaticamente: alcune parole potrebbero essere sbagliate.",
+  "Your Name": "Il tuo nome",
+  "Your Photo": "La tua foto",
+  "Safety Backup": "Backup sicuro",
+  "How it Works": "Come funziona"
 }

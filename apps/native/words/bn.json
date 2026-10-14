@@ -70,5 +70,9 @@
   "Language": "ভাষা",
   "Same as phone ({language})": "ফোনের মতোই ({language})",
   "Language: {language}": "ভাষা: {language}",
-  "Translated by machine: some words may be wrong.": "মেশিনে অনুবাদ করা: কিছু শব্দ ভুল হতে পারে।"
+  "Translated by machine: some words may be wrong.": "মেশিনে অনুবাদ করা: কিছু শব্দ ভুল হতে পারে।",
+  "Your Name": "আপনার নাম",
+  "Your Photo": "আপনার ছবি",
+  "Safety Backup": "নিরাপদ ব্যাকআপ",
+  "How it Works": "কীভাবে কাজ করে"
 }

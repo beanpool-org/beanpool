@@ -70,5 +70,9 @@
   "Language": "Bahasa",
   "Same as phone ({language})": "Sama seperti ponsel ({language})",
   "Language: {language}": "Bahasa: {language}",
-  "Translated by machine: some words may be wrong.": "Terjemahan mesin: beberapa kata mungkin salah."
+  "Translated by machine: some words may be wrong.": "Terjemahan mesin: beberapa kata mungkin salah.",
+  "Your Name": "Namamu",
+  "Your Photo": "Fotomu",
+  "Safety Backup": "Cadangan aman",
+  "How it Works": "Cara kerja"
 }

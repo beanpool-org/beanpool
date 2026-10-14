@@ -70,5 +70,9 @@
   "Language": "言語",
   "Same as phone ({language})": "端末と同じ（{language}）",
   "Language: {language}": "言語：{language}",
-  "Translated by machine: some words may be wrong.": "機械翻訳です。間違っている言葉があるかもしれません。"
+  "Translated by machine: some words may be wrong.": "機械翻訳です。間違っている言葉があるかもしれません。",
+  "Your Name": "名前",
+  "Your Photo": "写真",
+  "Safety Backup": "バックアップ",
+  "How it Works": "使い方"
 }

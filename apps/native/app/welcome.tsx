@@ -1745,8 +1745,12 @@ export default function WelcomeScreen() {
     }
 
     // --- Onboarding Progress Stepper ---
+    // Four equal quarters of the row, each label up to three centred lines, shrinking to 0.7 at most: at 320dp and 1.3x
+    // text the four English labels need 237dp on one line even at 0.7 against the row's 184dp (measured with real
+    // shaping), so one line cut them off. Two lines hold every language; the third is for the pseudo-locale's +35%
+    // (utils/__tests__/language-switch-render.test.ts).
     function OnboardingStepper({ step }: { step: 1 | 2 | 3 | 4 }) {
-        const steps = ['Your Name', 'Your Photo', 'Safety Backup', 'How it Works'];
+        const steps = [t('Your Name'), t('Your Photo'), t('Safety Backup'), t('How it Works')];
         return (
             <View style={stepperStyles.container}>
                 {steps.map((label, i) => {
@@ -1760,7 +1764,7 @@ export default function WelcomeScreen() {
                                 <View style={[stepperStyles.dot, isActive && stepperStyles.dotActive, isCompleted && stepperStyles.dotCompleted]}>
                                     {isCompleted && <Text style={stepperStyles.dotCheck}>✓</Text>}
                                 </View>
-                                <Text style={[stepperStyles.label, isActive && stepperStyles.labelActive]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
+                                <Text style={[stepperStyles.label, isActive && stepperStyles.labelActive]} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.7}>{label}</Text>
                             </View>
                         </React.Fragment>
                     );
@@ -3530,7 +3534,8 @@ const styles = StyleSheet.create({
 
     // Main welcome buttons
     memberBtn: { backgroundColor: palette.blue600, paddingVertical: 18, paddingHorizontal: 12, borderRadius: 14, alignItems: 'center', width: '100%', marginBottom: 12, shadowColor: palette.blue600, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 14, elevation: 6 },
-    memberBtnText: { color: colors.text.inverse, fontSize: 18, fontWeight: '700' },
+    // Centred: a longer language's label takes a second line (numberOfLines={2}), and both lines sit in the middle.
+    memberBtnText: { color: colors.text.inverse, fontSize: 18, fontWeight: '700', textAlign: 'center' },
     secondaryBtn: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border.strong, padding: 16, borderRadius: 14, alignItems: 'center', width: '100%' },
     secondaryBtnText: { color: dark ? colors.text.secondary : palette.gray600, fontSize: 16, fontWeight: '600' },
 
@@ -3683,7 +3688,7 @@ const stepperStyles = StyleSheet.create({
     },
     stepItem: {
         alignItems: 'center',
-        flexShrink: 1,
+        flex: 1,
         minWidth: 0,
     },
     dot: {
@@ -3717,13 +3722,14 @@ const stepperStyles = StyleSheet.create({
         fontSize: 11,
         color: colors.text.secondary,
         fontWeight: '500',
+        textAlign: 'center',
     },
     labelActive: {
         color: colors.text.heading,
         fontWeight: '700',
     },
     line: {
-        width: 20,
+        width: 12,
         height: 2,
         backgroundColor: colors.border.strong,
         marginBottom: 18,

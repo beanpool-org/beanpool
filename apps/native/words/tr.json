@@ -70,5 +70,9 @@
   "Language": "Dil",
   "Same as phone ({language})": "Telefonla aynı ({language})",
   "Language: {language}": "Dil: {language}",
-  "Translated by machine: some words may be wrong.": "Makine çevirisi: bazı sözcükler yanlış olabilir."
+  "Translated by machine: some words may be wrong.": "Makine çevirisi: bazı sözcükler yanlış olabilir.",
+  "Your Name": "Adın",
+  "Your Photo": "Fotoğraf",
+  "Safety Backup": "Yedek",
+  "How it Works": "Nasıl işler"
 }

@@ -70,5 +70,9 @@
   "Language": "Мова",
   "Same as phone ({language})": "Як на телефоні ({language})",
   "Language: {language}": "Мова: {language}",
-  "Translated by machine: some words may be wrong.": "Машинний переклад: деякі слова можуть бути неточними."
+  "Translated by machine: some words may be wrong.": "Машинний переклад: деякі слова можуть бути неточними.",
+  "Your Name": "Ім’я",
+  "Your Photo": "Фото",
+  "Safety Backup": "Резервна копія",
+  "How it Works": "Як це працює"
 }

@@ -31,7 +31,7 @@
   "✅ I agree": "✅ Ich stimme zu",
   "⬜ I agree": "⬜ Ich stimme zu",
   "Up to you: you join either way. If you don't agree, the admins never see your balance. You can agree later in Settings.": "Du entscheidest: Du kannst so oder so beitreten. Wenn du nicht zustimmst, sehen die Admins nie deinen Kontostand. Du kannst später in den Einstellungen zustimmen.",
-  "🔑 Recover an existing account with seed phrase →": "🔑 Bestehendes Konto mit der Wiederherstellungsphrase wiederherstellen →",
+  "🔑 Recover an existing account with seed phrase →": "🔑 Bestehendes Konto mit den 12 Wörtern wiederherstellen →",
   "Joining network...": "Beitritt zum Netzwerk...",
   "Next": "Weiter",
   "Next →": "Weiter →",
@@ -70,5 +70,9 @@
   "Language": "Sprache",
   "Same as phone ({language})": "Wie das Handy ({language})",
   "Language: {language}": "Sprache: {language}",
-  "Translated by machine: some words may be wrong.": "Maschinell übersetzt: Manche Wörter können falsch sein."
+  "Translated by machine: some words may be wrong.": "Maschinell übersetzt: Manche Wörter können falsch sein.",
+  "Your Name": "Dein Name",
+  "Your Photo": "Dein Foto",
+  "Safety Backup": "Sicheres Backup",
+  "How it Works": "So geht’s"
 }

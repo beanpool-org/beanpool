@@ -24,7 +24,7 @@ export function RecoveryKitButton({ words, print }: { words: readonly string[] |
         <div data-testid="recovery-kit" style={{ marginBottom: '0.75rem' }}>
             {!asking ? (
                 <button type="button" onClick={() => { setFailed(false); setAsking(true); }}
-                    style={{ ...target, border: '1px solid #2563eb', background: 'transparent', color: '#2563eb' }}>
+                    style={{ ...target, border: '1px solid var(--bp-ink-brand)', background: 'transparent', color: 'var(--bp-ink-brand)' }}>
                     <span aria-hidden="true">🖨️ </span>{KIT_WEB_LABEL}
                 </button>
             ) : (
@@ -36,7 +36,7 @@ export function RecoveryKitButton({ words, print }: { words: readonly string[] |
                             Cancel
                         </button>
                         <button type="button" onClick={onContinue}
-                            style={{ ...target, flex: '1 1 8em', width: 'auto', border: 'none', background: '#2563eb', color: '#fff' }}>
+                            style={{ ...target, flex: '1 1 8em', width: 'auto', border: 'none', background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)' }}>
                             Continue
                         </button>
                     </div>

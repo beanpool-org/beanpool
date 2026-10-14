@@ -1592,14 +1592,14 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                 {/* Sticky Marketplace Header */}
                 {activeConv.postId && (
                     <div style={{
-                        background: '#ecfdf5', padding: '0.75rem 1rem', borderBottom: '1px solid #d1fae5',
+                        background: 'var(--bp-chip-ok-tint)', padding: '0.75rem 1rem', borderBottom: '1px solid var(--bp-chip-ok-tint)',
                         display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer',
                     }} onClick={() => {}}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             <span style={{ fontSize: '1.2rem' }}>🛍️</span>
                             <div>
-                                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#065f46' }}>View Attached Listing</div>
-                                <div style={{ fontSize: '0.75rem', color: '#059669' }}>Marketplace Transaction Thread</div>
+                                <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--bp-chip-ok-ink)' }}>View Attached Listing</div>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--bp-chip-ok-ink)' }}>Marketplace Transaction Thread</div>
                             </div>
                         </div>
                     </div>
@@ -1623,7 +1623,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                             gap: '0.75rem'
                         }}>
                             <div>
-                                <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isBuyer ? '#10b981' : '#f59e0b' }}>
+                                <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: isBuyer ? 'var(--bp-ink-success)' : 'var(--bp-ink-warning)' }}>
                                     🔒 Trust Hold: {pendingTx.credits} Beans
                                 </div>
                                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
@@ -1636,8 +1636,8 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         onClick={() => handleReleaseCredits(pendingTx.id, pendingTx.credits)}
                                         disabled={actionLoading}
                                         style={{
-                                            background: '#10b981',
-                                            color: '#fff',
+                                            background: 'var(--bp-commit-fill)',
+                                            color: 'var(--bp-commit-on)',
                                             border: 'none',
                                             borderRadius: '8px',
                                             padding: '0.4rem 0.75rem',
@@ -1800,7 +1800,7 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                         <button
                                             onClick={() => onNavigate?.('marketplace', metaObj.postId)}
                                             style={{
-                                                marginTop: '0.5rem', background: '#fff', color: '#10b981', border: '1px solid #10b981',
+                                                marginTop: '0.5rem', background: 'var(--bp-chip-ok-tint)', color: 'var(--bp-chip-ok-ink)', border: '1px solid var(--bp-chip-ok-ink)',
                                                 padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer'
                                             }}
                                         >
@@ -1816,9 +1816,9 @@ export function MessagesPage({ identity, openConversationId, onConversationOpene
                                             <button
                                                 onClick={() => onNavigate?.('marketplace', metaObj.postId)}
                                                 style={{
-                                                    marginTop: '0.5rem', background: '#fff',
-                                                    color: hasRated ? '#10b981' : '#f59e0b',
-                                                    border: `1px solid ${hasRated ? '#10b981' : '#f59e0b'}`,
+                                                    marginTop: '0.5rem', background: hasRated ? 'var(--bp-chip-ok-tint)' : 'var(--bp-chip-warn-tint)',
+                                                    color: hasRated ? 'var(--bp-chip-ok-ink)' : 'var(--bp-chip-warn-ink)',
+                                                    border: `1px solid ${hasRated ? 'var(--bp-chip-ok-ink)' : 'var(--bp-chip-warn-ink)'}`,
                                                     padding: '4px 12px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
                                                     display: 'flex', alignItems: 'center', gap: '4px'
                                                 }}

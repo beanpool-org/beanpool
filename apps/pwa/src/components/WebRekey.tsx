@@ -38,7 +38,7 @@ interface Props {
 type Phase = 'form' | 'asking' | 'waiting' | 'words' | 'linkAgain';
 
 const box: React.CSSProperties = { width: '100%', padding: '0.75rem', borderRadius: '12px', border: '1px solid var(--border-primary, #333)', background: 'var(--bg-secondary, transparent)', color: 'inherit', fontSize: '1rem', fontFamily: 'monospace', boxSizing: 'border-box' };
-const primary: React.CSSProperties = { width: '100%', padding: '0.9rem 1rem', borderRadius: '14px', border: 'none', background: '#2563eb', color: '#fff', fontSize: '1rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', marginTop: '1rem' };
+const primary: React.CSSProperties = { width: '100%', padding: '0.9rem 1rem', borderRadius: '14px', border: 'none', background: 'var(--bp-commit-fill)', color: 'var(--bp-commit-on)', fontSize: '1rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', marginTop: '1rem' };
 const secondary: React.CSSProperties = { background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '0.85rem', cursor: 'pointer', marginTop: '1rem', fontFamily: 'inherit' };
 
 export function WebRekey({ initialCode, onBound, onBack, deps = defaultDeps }: Props) {

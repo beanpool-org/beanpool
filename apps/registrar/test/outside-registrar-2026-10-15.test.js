@@ -74,14 +74,22 @@ test('T3c: a claim at a label with a bp- tunnel the registrar did not make is re
     } finally { w.restore(); }
 });
 
-test('a gated name with a hand-made record is refused at the claim, before it ever waits for the admin', async () => {
+test('a gated claim at a label with a hand-made record or tunnel: the admin\'s approve is refused (409), Cloudflare untouched', async () => {
     const w = await world();
     try {
         const before = handRecord(w, 'sydney.beanpool.org');
-        const r = await w.claim(await makeKey(), { name: 'sydney' });
+        const tun = handTunnel(w, 'bp-sydney');
+        const key = await makeKey();
+        assert.equal((await w.claim(key, { name: 'sydney' })).body.status, 'pending');   // gated: waits, reaches no Cloudflare
+        assert.equal(w.cf.calls.length, 0);
+        const r = await w.admin('sydney', 'approve');
         assert.equal(r.status, 409, JSON.stringify(r.body));
-        assert.equal(await w.row('sydney'), null);
+        assert.equal(r.body.error, 'name in use outside the registrar');
+        assert.equal((await w.row('sydney')).status, 'pending', 'still waiting; the admin decides');
         assert.deepEqual(w.cf.dns.get(before.id), before);
+        assert.deepEqual(w.cf.tunnels.get(tun.id), tun);
+        assert.ok(!w.cf.calls.some((c) => /^(PATCH|DELETE|POST|PUT) /.test(c)), w.cf.calls.join(', '));
+        assert.match(w.events('sydney').at(-1).detail, /^approve by the admin refused: a A record and 1 bp-sydney tunnel/);
     } finally { w.restore(); }
 });
 

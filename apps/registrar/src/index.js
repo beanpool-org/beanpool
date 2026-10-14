@@ -235,26 +235,28 @@ async function createTunnelFor(env, a, expected) {
     catch (e) { throw cf.tunnelNameTaken(e) ? cleaningUp(a.name) : e; }
 }
 
-// What routes `name` at Cloudflare that the registrar did not make, before another key's new tenure: the record at
-// the hostname and any live bp-<name> tunnel, unless the last tenure's row records it or it is owed (teardown) —
-// those the takeover deletes as its own. Anything else is someone else's: one of our own servers, routed by hand.
-// Null when there is nothing. Throws if Cloudflare can't say: "can't tell" never reads as "nothing there".
-async function outsideRegistrar(env, name, existing) {
+// What routes `name` at Cloudflare that the registrar did not make, before a new tenure's first ensure(): the record
+// at the hostname, unless `row` (the last tenure's, or a pending claim's own) records it or it is owed (teardown) —
+// those the takeover deletes as its own; and, at a name the registrar never held before (`heldBefore` false), any live
+// bp-<name> tunnel. Where it did hold the name, a tunnel nothing records may be its own leftover, and createTunnelFor
+// already deletes one only when provably stale. Anything else is someone else's: one of our own servers, routed by
+// hand. Null when there is nothing. Throws if Cloudflare can't say: "can't tell" never reads as "nothing there".
+async function outsideRegistrar(env, name, row, heldBefore) {
     const owed = await db.listTeardown(env, name);
-    const ours = (kind, id) => id === existing?.[kind === 'dns' ? 'dns_record_id' : 'tunnel_id'] || owed.some((t) => t.kind === kind && t.cf_id === id);
+    const ours = (kind, id) => id === row?.[kind === 'dns' ? 'dns_record_id' : 'tunnel_id'] || owed.some((t) => t.kind === kind && t.cf_id === id);
     const rec = await cf.findDnsRecord(env, `${name}.${env.BASE_DOMAIN}`);
     const dns = rec && !ours('dns', rec.id) ? rec : null;
-    const tunnels = (await cf.listTunnelsNamed(env, `bp-${name}`)).filter((t) => !ours('tunnel', t.id)).length;
+    const tunnels = heldBefore ? 0 : (await cf.listTunnelsNamed(env, `bp-${name}`)).filter((t) => !ours('tunnel', t.id)).length;
     return dns || tunnels ? { dns, tunnels } : null;
 }
 
 // Refuse the claim, change nothing at Cloudflare or in the table but the audit trail, and tell the admin (hostnames
 // and counts only).
-async function refuseOutside(env, name, pubkey, found) {
+async function refuseOutside(env, name, pubkey, found, by = `claim by key ${key16(pubkey)}`) {
     const what = [found.dns && `a ${found.dns.type} record`, found.tunnels && `${found.tunnels} bp-${name} tunnel${found.tunnels === 1 ? '' : 's'}`]
         .filter(Boolean).join(' and ');
-    console.warn('[OUTSIDE_REGISTRAR]', name, `claim by key ${key16(pubkey)} refused: ${what} the registrar did not make`);
-    await logEvent(env, name, 'claim-refused', `claim by key ${key16(pubkey)} refused: ${what} at Cloudflare the registrar did not make; nothing changed. If the name is ours, reserve it (blocked).`);
+    console.warn('[OUTSIDE_REGISTRAR]', name, `${by} refused: ${what} the registrar did not make`);
+    await logEvent(env, name, 'claim-refused', `${by} refused: ${what} at Cloudflare the registrar did not make; nothing changed. If the name is ours, reserve it (blocked).`);
     await tell(env, () => alerts.outsideRegistrar(env, name, what));
     return json({ error: 'name in use outside the registrar' }, 409);
 }
@@ -722,9 +724,10 @@ async function takeName(env, existing, pubkey, b, now) {
     // Another key's new tenure takes over nothing at Cloudflare the registrar did not make (F1 of the 2026-10-15
     // review): ensure() adopts the record it finds at the hostname, and createTunnelFor deletes a bp-<name> tunnel it
     // can't place. A key's own name (a heal, a take-back) skips this and keeps adopting by hostname: how it heals.
-    if (!sameKey) {
+    // A gated claim reaches Cloudflare only at the admin's approve, which checks the same (adminAction).
+    if (!sameKey && approved) {
         let found;
-        try { found = await outsideRegistrar(env, name, existing); } catch (e) { return provisionFailed(e); }
+        try { found = await outsideRegistrar(env, name, existing, !!existing); } catch (e) { return provisionFailed(e); }
         if (found) {
             // A claim that landed meanwhile made it (a racing claim's tunnel): the name is that claim's.
             const still = existing ? await db.isUnchanged(env, name, existing, { withIds: true }) : !(await db.getAllocation(env, name));
@@ -1220,6 +1223,13 @@ async function adminAction(env, a, action, now, { freeNow = false } = {}) {
     switch (action) {
         case 'approve':
             if (a.status !== 'pending') return json({ error: 'not pending' }, 400);
+            {
+                // The claim's first ensure(): it takes over nothing the registrar did not make (takeName says why).
+                let found;
+                try { found = await outsideRegistrar(env, name, a, await db.claimedBefore(env, name, a.requested_at)); }
+                catch (e) { return provisionFailed(e, { admin: true }); }
+                if (found) return refuseOutside(env, name, a.node_pubkey, found, 'approve by the admin');
+            }
             return adminGoLive(env, a, 'approved', 'approved by the admin', { decided_at: now, decided_by: 'admin' });
         case 'pause': {
             // Routing off, name and tunnel kept; its owner can neither heal nor release it — only `resume` (or `release`,

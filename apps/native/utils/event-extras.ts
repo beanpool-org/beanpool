@@ -292,6 +292,11 @@ export interface MyEvent {
     photo: string | null;
     /** `null` means "my default applies". */
     reminderOffsets: number[] | null;
+    /** The host's clock, its zone and online (DESIGN-event-times), from a node that sends them; absent from one that doesn't. */
+    startLocal?: string | null;
+    endLocal?: string | null;
+    tz?: string | null;
+    online?: boolean | null;
 }
 
 /**
@@ -321,6 +326,12 @@ export function myEventAsPost(row: MyEvent): Record<string, unknown> {
         event_start_at: row.startAt,
         event_end_at: row.endAt,
         event_place_name: row.placeName,
+        // So the card reads the place's clock and "Online" here as in the feed (the #1946 review, finding 2). A node that
+        // sends none of them gives NULLs, and the card reads in device time, as before.
+        event_start_local: row.startLocal ?? null,
+        event_end_local: row.endLocal ?? null,
+        event_tz: row.tz ?? null,
+        event_online: row.online === true ? 1 : row.online === false ? 0 : null,
         event_state: 'scheduled',
         status: 'active',
         photos: row.photo ? [row.photo] : null,

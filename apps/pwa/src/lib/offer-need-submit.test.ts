@@ -23,6 +23,13 @@ describe('posting an Offer or Need from the map', () => {
         expect(offerNeedSubmit({ ...filled, photoCount: 0 }).disabled).toBe(true);
     });
 
+    it('where a Need\'s photo is optional (Beans off), a Need with no photo can be posted; left out, the photo is required', () => {
+        const need: OfferNeedForm = { ...filled, type: 'need', photoCount: 0 };
+        expect(offerNeedSubmit({ ...need, photoRequired: false })).toEqual({ disabled: false, label: 'Post Need' });
+        expect(offerNeedSubmit({ ...need, photoRequired: true }).disabled).toBe(true);
+        expect(offerNeedSubmit(need).disabled).toBe(true);
+    });
+
     it('a Need waits for an Offer first, and the button says so', () => {
         expect(offerNeedSubmit({ ...filled, type: 'need', needBlocked: true })).toEqual({ disabled: true, label: '🔵 List an Offer first to post Needs' });
     });

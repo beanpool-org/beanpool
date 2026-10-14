@@ -191,7 +191,7 @@ const ROWS: Record<AlertKey, Row> = {
     /** The child-safety reports past those bounds, counted: one urgent line, told within about 10 minutes. */
     'reports.child-more': { title: 'more child-safety reports waiting', priority: 5, webhook: true, pushEveryMs: EACH, banner: false },
     /** More new members in a day than DOOR_BUSY_NEW_MEMBERS_PER_DAY (engine/door-signal.ts doorBusy): told when it rises. */
-    'door.busy': { title: 'sign-ups busier than usual', priority: 3, webhook: true, pushEveryMs: EACH, banner: false },
+    'door.busy': { title: 'sign-ups busier than usual', priority: 3, webhook: true, pushEveryMs: DAY, banner: false },
 };
 
 /** Told because members reported: urgent ones too are never kept over another line (keepIn), and the same line is counted. */

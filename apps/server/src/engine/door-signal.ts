@@ -13,8 +13,8 @@
 //   - Node-wide: 12-words joins on the whole node in the last 10 minutes, counted in memory (`noteWordsJoin`). A restart
 //     resets it, which only ever lowers the level. The only input that sees someone who uses a new address per account.
 //   - Node-wide, the day: joins through the open door (both doors) on the whole node in the last 24 hours, from
-//     `open_joins`. Past `DOOR_BUSY_NEW_MEMBERS_PER_DAY` (.env, default 300, 0 = off) a 12-words join asks the top
-//     level until the count falls back under it (`doorBusy`, below).
+//     `open_joins`. Past `DOOR_BUSY_NEW_MEMBERS_PER_DAY` (.env, default 300, 0 = off) a 12-words join asks at least
+//     level 3 until the count falls under 90% of it (`doorBusy`, below).
 //   - Removed lately from this network: a member removed within a day of joining keeps their row's address hash for 7
 //     days instead of 1 (`noteRemovedNewcomer`, design §2.4), and a 12-words join from that network starts at the top of
 //     what a network alone reaches. Never a self-deletion. The hash never travels, so a standby or a take-over starts
@@ -159,12 +159,28 @@ export function _resetWordsJoinsForTests(): void {
 //
 // The ceilings below are per address (2,000 12-words joins a day from each), and the node kept no day's count of its
 // own: a launch-day rush, or one person with many addresses, could fill it and nothing would notice. Past the line, a
-// 12-words join asks the top work level (DOOR_WORK_MAX_LEVEL): the person waits longer for the work, and nobody is
-// refused for it (no hard gate, no false success). The level falls back as soon as the count is under the line again.
-// One log line when it rises and one when it falls, and one alert to the owners when it rises: counts, never a name.
+// 12-words join asks at least level 3 (DOOR_BUSY_LEVEL): the person waits longer for the work, and nobody is refused for
+// it (no hard gate, no false success). Level 3, not the top: the design's table (DESIGN-global-two-doors-fable.md §3.5)
+// gives 3 to "the node busy" and keeps 5 for a node-wide surge, which the node steps above still reach; 300 a day is a
+// good launch day on global, and level 5 is minutes on an old phone. The node steps and a removed newcomer's network
+// can still ask more. What the line really gives the owners is the alert: they see the rush.
+//
+// It rises at the line and falls only under 90% of it (DOOR_BUSY_FALL_SHARE), so a day hovering at the line does not
+// rise and fall with every join: at a steady 300 a day the line without that rose 20 times in 3 days (the deciding
+// review of #1950, measured). One log line when it rises and one when it falls, and one alert to the owners when it
+// rises: counts, never a name.
 
 export const DOOR_BUSY_ENV = 'DOOR_BUSY_NEW_MEMBERS_PER_DAY';
 export const DOOR_BUSY_DEFAULT = 300;
+/** The least a 12-words join asks for on a busy day. */
+export const DOOR_BUSY_LEVEL = 3;
+/** Once busy, the day is back to usual only under this share of the line (rounded down, at least 1). */
+export const DOOR_BUSY_FALL_SHARE = 0.9;
+
+/** The count under which a busy day is back to usual. */
+export function doorBusyFallLine(threshold: number): number {
+    return Math.max(1, Math.floor(threshold * DOOR_BUSY_FALL_SHARE));
+}
 
 /** The line from .env: a whole number, 0 = off. Anything else is logged once and the default kept. */
 export function doorBusyThreshold(env: NodeJS.ProcessEnv = process.env): number {
@@ -193,27 +209,33 @@ export interface DoorBusy {
     newMembersToday: number;
     /** 0 = off. */
     threshold: number;
+    /** Once busy, it stays so until the count is under this. */
+    fallLine: number;
 }
 
 let busyLevelOn = false;
 
-/** Whether the node is past its day's line now; logs (and alerts) the change, the first request to see it. */
+/**
+ * Whether the node is past its day's line now: from the line up, and once there until the count is under the fall
+ * line. Logs (and alerts) the change, the first request to see it.
+ */
 export function doorBusy(now = Date.now(), env: NodeJS.ProcessEnv = process.env): DoorBusy {
     const threshold = doorBusyThreshold(env);
+    const fallLine = doorBusyFallLine(threshold);
     const count = threshold === 0 ? 0 : newMembersToday(now);
-    const busy = threshold > 0 && count >= threshold;
+    const busy = threshold > 0 && count >= (busyLevelOn ? fallLine : threshold);
     if (busy !== busyLevelOn) {
         busyLevelOn = busy;
         if (busy) {
-            const detail = `${count} new members joined in the last 24 hours (the line is ${threshold}), so a 12-words join now asks the top work level, ${DOOR_WORK_MAX_LEVEL}. Nobody is refused; it falls back when the count does.`;
+            const detail = `${count} new members joined in the last 24 hours (the line is ${threshold}), so a 12-words join now asks at least work level ${DOOR_BUSY_LEVEL}. Nobody is refused; it falls back when the count is under ${fallLine}.`;
             console.log(`🚪 Sign-ups are busy: ${detail}`);
             // Imported here, not at the top: services/alerts.ts reaches state-engine.ts, which reaches this file.
             void import('../services/alerts.js').then((alerts) => alerts.raiseOnce('door.busy', detail)).catch(() => { });
         } else {
-            console.log(`🚪 Sign-ups are back to usual: ${count} new members in the last 24 hours (the line is ${threshold || 'off'}), so the door's work is as before.`);
+            console.log(`🚪 Sign-ups are back to usual: ${count} new members in the last 24 hours (${threshold ? `under ${fallLine}, 90% of the line ${threshold}` : 'the line is off'}), so the door's work is as before.`);
         }
     }
-    return { busy, newMembersToday: count, threshold };
+    return { busy, newMembersToday: count, threshold, fallLine };
 }
 
 export function _resetDoorBusyForTests(): void {
@@ -264,7 +286,7 @@ export interface DoorLevel {
     networkSteps: number;
     nodeSteps: number;
     removedNetwork: boolean;
-    /** Past the node's day line (`doorBusy`): a 12-words join asks the top level. */
+    /** Past the node's day line (`doorBusy`): a 12-words join asks at least DOOR_BUSY_LEVEL. */
     nodeBusy: boolean;
     joinsThisHour: number;
 }
@@ -288,7 +310,7 @@ export function doorLevel(door: DoorWorkDoor, ipHash: string, now = Date.now(), 
     const nodeBusy = doorBusy(now).busy;
     let level = networkSteps + nodeSteps;
     if (removedNetwork) level = Math.max(level, numbers.removedNetworkLevel);
-    if (nodeBusy) level = DOOR_WORK_MAX_LEVEL;
+    if (nodeBusy) level = Math.max(level, DOOR_BUSY_LEVEL);
     return { level: clamp(level), networkSteps, nodeSteps, removedNetwork, nodeBusy, joinsThisHour: joins.hour };
 }
 

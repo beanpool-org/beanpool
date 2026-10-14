@@ -2345,7 +2345,7 @@ export default function WelcomeScreen() {
                         {/* Card 5: Where to Start */}
                         <View style={guideStyles.card}>
                             <Text style={guideStyles.cardTitle}>🚀 Where to Start?</Text>
-                            <Text style={guideStyles.bulletItem}>📍 Explore the <Text style={{ fontWeight: 'bold' }}>Map</Text> to find offers (blue) and needs (orange) near you.</Text>
+                            <Text style={guideStyles.bulletItem}>📍 Explore the <Text style={{ fontWeight: 'bold' }}>Map</Text> to find offers (green) and needs (orange) near you.</Text>
                             <Text style={guideStyles.bulletItem}>💬 Tap <Text style={{ fontWeight: 'bold' }}>Message</Text> on any post to chat securely (E2E encrypted) with neighbors.</Text>
                             <Text style={guideStyles.bulletItem}>➕ Click <Text style={{ fontWeight: 'bold' }}>Post</Text> to list what you need or what you can offer to the community.</Text>
                             {joinBeansOn && (

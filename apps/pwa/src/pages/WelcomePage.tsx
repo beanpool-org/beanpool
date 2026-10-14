@@ -1995,7 +1995,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50/50 dark:bg-nature-950/50 space-y-2">
                                     <h4 className="font-bold text-sm text-nature-950 dark:text-oat-50">🚀 Where to Start?</h4>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
-                                        📍 Explore the <strong>Map</strong> to find offers (blue) and needs (orange) near you.
+                                        📍 Explore the <strong>Map</strong> to find offers (green) and needs (orange) near you.
                                     </p>
                                     <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">
                                         💬 Tap <strong>Message</strong> on any post to chat securely (E2E encrypted) with neighbors.

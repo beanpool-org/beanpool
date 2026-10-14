@@ -1093,7 +1093,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 className="text-xs font-black uppercase tracking-wider"
                                 style={{ color: isPulsePost ? '#d97706' : typeColor }}
                             >
-                                {isPulsePost ? '🗞️ DAILY PULSE' : `${selectedPost.type === 'offer' ? '🔵 Offer' : '🟠 Need'} · ${cat?.label ?? selectedPost.category}`}
+                                {isPulsePost ? '🗞️ DAILY PULSE' : `${selectedPost.type === 'offer' ? '🟢 Offer' : '🟠 Need'} · ${cat?.label ?? selectedPost.category}`}
                             </span>
                         </div>
                         <span className="text-xs font-semibold text-nature-500 dark:text-nature-400">{ago}</span>
@@ -2125,11 +2125,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             onClick={() => setEditType(t)}
                                             className={`flex-1 py-2.5 rounded-xl border text-sm font-bold capitalize transition-colors ${
                                                 editType === t
-                                                    ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-bp-action-fill border-bp-action-fill text-bp-action-on shadow-sm')
+                                                    ? (t === 'offer' ? 'bg-bp-commit-fill border-bp-commit-fill text-bp-commit-on shadow-sm' : 'bg-bp-action-fill border-bp-action-fill text-bp-action-on shadow-sm')
                                                     : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-500 dark:text-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 dark:hover:text-nature-300'
                                             }`}
                                         >
-                                            {t === 'offer' ? '🔵 Offer' : '🟠 Need'}
+                                            {t === 'offer' ? '🟢 Offer' : '🟠 Need'}
                                         </button>
                                     ))}
                                 </div>

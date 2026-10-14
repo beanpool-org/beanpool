@@ -11,7 +11,8 @@
  *       someone in that DM reading it as theirs: Ben and Ana₃ on their own lists and on the DM by id, Zed on his own list
  *       and on his withheld DM by id (left out there, it would tell him he is blocked). Every other answer names no former
  *       key anywhere in its body. Read auth on: the refusals as before (a guest 401, someone else's list or DM 403).
- *       Read auth off: every answer is a 200, so "none" is never a refusal passing for one.
+ *       Read auth off: every answer is a 200, so "none" is never a refusal passing for one — except someone else's
+ *       conversation list, which is its owner's alone whatever read auth says (#1909): a guest 401, anyone else 403.
  *   B.  a participant who deleted their account (#1871 review NB4): Fay₂'s former keys are served to nobody, while Dan₂'s
  *       in the same DM still are, on the list and by id; a DM in which only Fay re-keyed is served as one nobody re-keyed.
  *       Fay's replaced keys stay refused (their rows are kept).
@@ -151,21 +152,22 @@ async function main(): Promise<void> {
     const sweep = async (phase: string) => {
         console.log(`\n── A. every reader, every route (${phase}) ──`);
         for (const { name, who } of readers) {
-            const routes: { route: string; path: string; conv: string; theirs: boolean; refused: number | null }[] = [];
+            // ownerOnly: refused to anyone else even on an open node (a conversation list, #1909).
+            const routes: { route: string; path: string; conv: string; theirs: boolean; refused: number | null; ownerOnly?: boolean }[] = [];
             const unsigned = who === null;
             if (who) {
                 const conv = who === zed ? dmZed : dmAna;
                 routes.push({ route: 'their own list', path: `/api/messages/conversations/${who.pk}`, conv, theirs: who === ben || who === ana3 || who === zed, refused: null });
             }
             routes.push(
-                { route: 'Ben\'s list', path: `/api/messages/conversations/${ben.pk}`, conv: dmAna, theirs: who === ben, refused: unsigned ? 401 : who === ben ? null : 403 },
+                { route: 'Ben\'s list', path: `/api/messages/conversations/${ben.pk}`, conv: dmAna, theirs: who === ben, refused: unsigned ? 401 : who === ben ? null : 403, ownerOnly: true },
                 { route: 'the DM by id', path: `/api/messages/${dmAna}?limit=1`, conv: dmAna, theirs: who === ben || who === ana3, refused: unsigned ? 401 : who === ben || who === ana3 ? null : 403 },
                 { route: 'Eve\'s DM by id', path: `/api/messages/${dmEve}?limit=1`, conv: dmEve, theirs: false, refused: unsigned ? 401 : who === ben ? null : 403 },
                 { route: 'Zed\'s withheld DM by id', path: `/api/messages/${dmZed}?limit=1`, conv: dmZed, theirs: who === zed, refused: unsigned ? 401 : who === zed ? null : 403 },
             );
             for (const r of routes) {
                 const res = await call('GET', who, r.path);
-                const want = OPEN || r.refused === null ? 200 : r.refused;
+                const want = (OPEN && !r.ownerOnly) || r.refused === null ? 200 : r.refused;
                 const conv = r.route.endsWith('list') ? (res.body?.conversations as any[] | undefined)?.find((c) => c.id === r.conv) : res.body?.conversation;
                 const label = `${phase}: ${name}, ${r.route}: ${want}`;
                 if (r.theirs) {

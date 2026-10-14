@@ -283,6 +283,7 @@ export const SUITES = [
     'test-public-url-callers',
     'test-read-auth-default',
     'test-privacy-defaults',
+    'test-own-reads-any-read-auth',
     'test-activity-feed-members-only',
     'test-members-contact-visibility',
     'test-heavy-read-cap',
@@ -331,6 +332,7 @@ export const SUITES = [
     'test-harvester',
     'test-membership-probe',
     'test-friends-routes',
+    'test-trust-mutuals',
     'test-message-attachment',
     'test-social-ratings',
     'test-app-store-versions',
@@ -533,9 +535,12 @@ export const VARIANTS = [
     { name: 'test-messaging-idor', label: 'read auth ON', env: { ENFORCE_READ_AUTH: 'true' } },
 
     // Member-read IDOR (A2-16 family): one member cannot read another member's invites or notification preferences.
-    // The plain run makes those 403 assertions; this covers the operator opt-out, where they are skipped and the
-    // push-token and preference round-trips must still work.
+    // The plain run makes both 403 assertions; this covers the operator opt-out, where the invites one still holds, the
+    // preferences one is skipped, and the push-token and preference round-trips must still work.
     { name: 'test-push-preferences', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // A member's own invites, conversation list and trades go to them alone with read auth opted out too: anyone, unsigned
+    // included, read every one of them for any key before.
+    { name: 'test-own-reads-any-read-auth', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
     // A member's Home layout and interests (H1) are served to their owner alone whatever ENFORCE_READ_AUTH says: under the
     // opt-out, another member's read and an unsigned one get the push settings without them.
     { name: 'test-home-preferences', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
@@ -544,7 +549,7 @@ export const VARIANTS = [
     // refusal of a distance to an unsigned caller or a key that is not a member is what holds.
     { name: 'test-distance-search', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
     // An invite bound to a names-list entry (community modes slice 3) reaches nobody but its maker under the opt-out too:
-    // /api/invite/mine/:publicKey, open to anyone then, leaves bound invites out for anyone but the maker.
+    // /api/invite/mine/:publicKey is its maker's alone, whatever the flag says (test-own-reads-any-read-auth).
     { name: 'test-invite-bound-name', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
     // A member's friends list is read by its owner alone under the opt-out too: unsigned 401, anyone else's key 403.
     { name: 'test-friends-routes', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },

@@ -44,7 +44,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const isGrid = viewMode === 'grid';
     // How far, as the node measured it (S5): one tag for every layout, nothing without a number.
     const distanceTag = typeof distanceKm === 'number' && Number.isFinite(distanceKm) ? (
-        <span data-testid="card-distance" className="text-[10px] font-black text-nature-500 dark:text-nature-450 inline-flex items-center gap-1 shrink-0">
+        <span data-testid="card-distance" className="text-[10px] font-black text-nature-500 dark:text-nature-400 inline-flex items-center gap-1 shrink-0">
             <span aria-hidden="true">📍</span>
             <span>{formatDistance(distanceKm)}</span>
         </span>
@@ -90,7 +90,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             {post.title}
                         </h3>
                         <span className="text-[10px] text-nature-500 truncate flex items-center gap-1 flex-wrap">
-                            by {post.authorCallsign || 'Anonymous'} {elderCard && '⛰️'} {isOwnPost && <span className="text-blue-600 font-bold">👤 (You)</span>}
+                            by {post.authorCallsign || 'Anonymous'} {elderCard && '⛰️'} {isOwnPost && <span className="text-blue-600 dark:text-blue-400 font-bold">👤 (You)</span>}
                             {distanceTag}
                             {post.authorFoundingNeeded && (
                                 <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300/30 shrink-0">
@@ -191,7 +191,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             {youPill}
                             {pausedPill}
                             {categoryConfig && (
-                                <span className="text-[10px] font-black text-nature-500 dark:text-nature-450 flex items-center gap-1">
+                                <span className="text-[10px] font-black text-nature-500 dark:text-nature-400 flex items-center gap-1">
                                     <span>{categoryConfig.emoji}</span>
                                     <span>{categoryConfig.label}</span>
                                 </span>
@@ -230,7 +230,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                 <span className="font-bold text-base text-nature-950 dark:text-white" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
                                     {post.credits !== undefined ? post.credits : '?'}
                                     <img src="/assets/bean.png" className="mx-0.5" style={{ width: '14px', height: '14px', flexShrink: 0 }} alt="B" />
-                                    <span className="text-[10px] text-nature-500 ml-0.5">
+                                    <span className="text-[10px] text-nature-500 dark:text-nature-400 ml-0.5">
                                         {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
                                     </span>
                                 </span>
@@ -346,7 +346,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             </span>
                         )}
                         {post.authorFoundingNeeded && (
-                            <span className={`font-bold bg-emerald-500/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
+                            <span className={`font-bold bg-emerald-500/90 dark:bg-emerald-700/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
                                 🌱 FOUNDING TRADE
                             </span>
                         )}
@@ -367,7 +367,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
                     {/* Recurring Overlay */}
                     {post.repeatable && (
-                        <div className={`absolute left-2 bg-terra-500/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
+                        <div className={`absolute left-2 bg-terra-500/90 dark:bg-terra-600/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
                             ↻ RECURRING
                         </div>
                     )}
@@ -389,7 +389,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             </span>
                         )}
                         {post.authorFoundingNeeded && (
-                            <span className={`font-bold bg-emerald-500/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
+                            <span className={`font-bold bg-emerald-500/90 dark:bg-emerald-700/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
                                 🌱 FOUNDING TRADE
                             </span>
                         )}
@@ -409,7 +409,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
                     {/* Recurring Overlay */}
                     {post.repeatable && (
-                        <div className={`absolute left-2 bg-terra-500/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
+                        <div className={`absolute left-2 bg-terra-500/90 dark:bg-terra-600/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
                             ↻ RECURRING
                         </div>
                     )}
@@ -429,7 +429,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     isPulse
                         ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-300 border border-amber-400/60 cursor-default'
                         : post.type === 'offer'
-                        ? 'bg-terra-500 text-white hover:bg-terra-600'
+                        ? 'bg-terra-500 dark:bg-terra-700 text-white hover:bg-terra-600'
                         : 'bg-nature-700 text-white dark:bg-nature-800 hover:bg-nature-800'
                 }`}
             >

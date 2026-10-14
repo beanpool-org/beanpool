@@ -462,7 +462,7 @@ export function ActivityWaterfall({ isFullView = false, isMember = true, onOpenP
                                 <div className="flex-1 min-w-0">
                                     {content}
                                 </div>
-                                <span className="text-[11px] font-medium text-zinc-400 dark:text-zinc-500 flex-shrink-0">
+                                <span className="text-[11px] font-medium text-zinc-400 dark:text-zinc-400 flex-shrink-0">
                                     {timeStr}
                                 </span>
                             </div>

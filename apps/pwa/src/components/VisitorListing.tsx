@@ -72,7 +72,7 @@ export function VisitorCard({ post, beans, distanceKm, onOpen }: CardProps) {
                     {visitorPriceText(post, beans)}
                 </span>
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="text-xs font-black uppercase tracking-wide" style={{ color: typeColor }}>{typeLabel(post)}</span>
+                    <span className="text-xs font-black uppercase tracking-wide" style={{ color: `var(--post-type-${post.type}, ${typeColor})` }}>{typeLabel(post)}</span>
                     <span data-testid="visitor-card-category" className="text-xs font-bold px-2 py-0.5 rounded-full bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-200 break-words">
                         {cat ? `${cat.emoji} ${cat.label}` : post.category}
                     </span>
@@ -113,7 +113,7 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pol
             <button
                 type="button"
                 onClick={onBack}
-                className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:text-nature-400 font-bold transition-colors cursor-pointer bg-transparent border-0 p-0"
+                className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:text-nature-400 dark:hover:text-nature-200 font-bold transition-colors cursor-pointer bg-transparent border-0 p-0"
             >
                 <span className="text-xl leading-none" aria-hidden="true">←</span> Back to Market
             </button>

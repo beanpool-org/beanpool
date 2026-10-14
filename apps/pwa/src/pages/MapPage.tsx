@@ -1537,19 +1537,19 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             <div className="flex gap-2 mb-2">
                 <button onClick={() => { useMyLocation(); setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); return n; }); }} className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
                     validationErrors.has('location') ? 'border-red-400 bg-red-50 text-red-600 shadow-md ring-1 ring-red-400' 
-                    : (postLat != null && !pinDropMode) ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-md ring-1 ring-emerald-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700'
+                    : (postLat != null && !pinDropMode) ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-md ring-1 ring-emerald-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                 }`}>
                     <span className="text-xl leading-none">📍</span> My location
                 </button>
                 <button onClick={() => { enterPinDrop(); setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); return n; }); }} className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
                     validationErrors.has('location') ? 'border-red-400 bg-red-50 text-red-600 shadow-md ring-1 ring-red-400' 
-                    : pinDropMode ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md ring-1 ring-blue-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700'
+                    : pinDropMode ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md ring-1 ring-blue-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                 }`}>
                     <span className="text-xl leading-none">📌</span> Drop a pin
                 </button>
             </div>
             {pinDropMode && postLat == null && (
-                <p className="m-0 mb-3 text-blue-600 text-sm font-semibold text-center animate-pulse">
+                <p className="m-0 mb-3 text-blue-600 dark:text-blue-400 text-sm font-semibold text-center animate-pulse">
                     Tap the map to place your pin
                 </p>
             )}
@@ -1579,7 +1579,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         </div>
                     ))}
                     {newPostPhotos.length < 5 && (
-                        <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 flex items-center justify-center cursor-pointer bg-nature-50 text-2xl text-nature-400 hover:text-nature-500 hover:border-nature-400 hover:bg-oat-50 transition-all shadow-sm">
+                        <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 dark:border-nature-600 flex items-center justify-center cursor-pointer bg-nature-50 dark:bg-nature-900 text-2xl text-nature-400 dark:text-nature-300 hover:text-nature-500 dark:hover:text-nature-300 hover:border-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 transition-all shadow-sm">
                             📷
                             <input
                                 type="file"
@@ -1768,7 +1768,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     aria-label="My location"
                     className={`w-12 h-12 flex items-center justify-center transition-colors ${
                         locating 
-                            ? 'text-blue-600 bg-blue-50/80 dark:bg-blue-900/30' 
+                            ? 'text-blue-600 bg-blue-50/80 dark:bg-blue-900/30 dark:text-blue-300' 
                             : 'text-nature-800 dark:text-oat-50 hover:bg-black/5 dark:hover:bg-white/10'
                     }`}
                     title="My location"
@@ -1809,7 +1809,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 <button
                     onClick={tryOpenComposer}
                     aria-label="New Post"
-                    className="fixed bottom-[calc(var(--bottom-nav-offset)+1.5rem)] md:bottom-6 right-3 w-14 h-14 rounded-full bg-terra-500 hover:bg-terra-600 text-white text-3xl font-light z-[101] shadow-[0_8px_30px_rgb(226,114,91,0.4)] flex items-center justify-center transition-transform transform hover:scale-105 border-2 border-white/20"
+                    className="fixed bottom-[calc(var(--bottom-nav-offset)+1.5rem)] md:bottom-6 right-3 w-14 h-14 rounded-full bg-terra-500 dark:bg-terra-600 hover:bg-terra-600 text-white text-3xl font-light z-[101] shadow-[0_8px_30px_rgb(226,114,91,0.4)] flex items-center justify-center transition-transform transform hover:scale-105 border-2 border-white/20"
                     style={{ bottom: 'calc(var(--bottom-nav-offset) + 1.5rem)' }}
                     title="New Post"
                 >
@@ -1874,7 +1874,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         aria-label="Close preview"
                         className="absolute top-1 right-1 min-w-[44px] min-h-[44px] p-0 rounded-full bg-transparent flex items-center justify-center border-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                     >
-                        <span aria-hidden="true" className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center text-xs font-extrabold text-gray-500 dark:text-gray-400">✕</span>
+                        <span aria-hidden="true" className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center text-xs font-extrabold text-gray-500 dark:text-gray-300">✕</span>
                     </button>
                     <div className="w-[72px] h-[72px] rounded-2xl overflow-hidden bg-gray-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
                         {previewPost.photos && previewPost.photos.length > 0
@@ -1885,7 +1885,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         <span data-testid="map-preview-title" className="text-base font-extrabold text-gray-900 dark:text-white leading-tight break-words">
                             {previewPost.title}
                         </span>
-                        <span data-testid="map-preview-near" className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">near here</span>
+                        <span data-testid="map-preview-near" className="text-sm font-medium text-gray-500 dark:text-gray-300 mb-2">near here</span>
                         <button
                             onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
                             className="min-h-[44px] py-2 px-4 rounded-xl border-none font-bold text-white text-sm cursor-pointer bg-indigo-600 hover:bg-indigo-700"
@@ -1902,7 +1902,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     <button 
                         onClick={() => setPreviewPost(null)}
                         aria-label="Close preview"
-                        className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center border-none text-xs font-extrabold text-gray-500 dark:text-gray-400 cursor-pointer hover:bg-black/10 dark:hover:bg-white/20 transition-colors"
+                        className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center border-none text-xs font-extrabold text-gray-500 dark:text-gray-200 cursor-pointer hover:bg-black/10 dark:hover:bg-white/20 transition-colors"
                     >
                         ✕
                     </button>
@@ -1930,7 +1930,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     )}
                     <div className="flex-1 ml-4 flex flex-col justify-center">
                         <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider truncate mr-2 flex-1">
+                            <span className="text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider truncate mr-2 flex-1">
                                 {MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.label || previewPost.category}
                             </span>
                             <span className="text-sm font-extrabold text-emerald-500 dark:text-emerald-400 mr-6">
@@ -1940,7 +1940,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         <span className="text-lg font-extrabold text-gray-900 dark:text-white mb-1 leading-tight line-clamp-1 transition-colors">
                             {previewPost.title}
                         </span>
-                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3 truncate transition-colors">
+                        <span className="text-sm font-medium text-gray-500 dark:text-gray-300 mb-3 truncate transition-colors">
                             {previewPost.authorCallsign} {(previewPost as any)._remoteNode ? '🌐' : ''}{tierForCredit(previewPost.authorEnergyCycled ?? 0).name === 'Elder' ? ' ⛰️ Elder' : ''}
                         </span>
                         <button
@@ -1990,7 +1990,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             pinDropMarkerRef.current.remove();
                             pinDropMarkerRef.current = null;
                         }
-                    }} aria-label="Close new post" className="bg-transparent border-none text-nature-400 hover:text-nature-600 text-2xl cursor-pointer transition-colors leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-nature-50">
+                    }} aria-label="Close new post" className="bg-transparent border-none text-nature-400 hover:text-nature-600 text-2xl cursor-pointer transition-colors leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-nature-50 dark:hover:bg-nature-800 dark:hover:text-nature-200">
                         ✕
                     </button>
                 </div>
@@ -2018,7 +2018,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             className={`flex-1 py-3 rounded-xl border text-[15px] font-bold capitalize transition-all shadow-sm ${
                                 newPostType === t
                                     ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]' : t === 'need' ? 'bg-orange-600 border-orange-600 text-white shadow-md scale-[1.02]' : t === 'event' ? 'bg-violet-700 border-violet-700 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
-                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700'
+                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                             }`}
                         >
                             {t === 'offer' ? '🔵 Offer' : t === 'need' ? '🟠 Need' : t === 'event' ? 'Event' : '🗳️ Poll'}
@@ -2039,7 +2039,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
                                 audienceScope === 'public'
                                     ? 'bg-nature-850 dark:bg-white text-white dark:text-nature-950 border-nature-900 shadow-sm'
-                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50'
+                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                             }`}
                         >
                             🌍 Everyone (Public)
@@ -2058,8 +2058,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 }}
                                 className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                                     audienceScope === 'group'
-                                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
-                                        : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50'
+                                        ? 'bg-emerald-600 dark:bg-emerald-700 border-emerald-600 text-white shadow-sm'
+                                        : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                 }`}
                             >
                                 👥 Group ({userGroups.length})
@@ -2177,7 +2177,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all min-w-0 ${validationErrors.has('event_start') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
                             />
                             {validationErrors.has('event_start') && (
-                                <p className="m-0 mt-1 text-xs font-semibold text-red-600">Pick a start time in the future.</p>
+                                <p className="m-0 mt-1 text-xs font-semibold text-red-600 dark:text-red-300">Pick a start time in the future.</p>
                             )}
                         </div>
 
@@ -2191,7 +2191,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all min-w-0 ${validationErrors.has('event_end') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
                             />
                             {validationErrors.has('event_end') && (
-                                <p className="m-0 mt-1 text-xs font-semibold text-red-600">The end must be after the start.</p>
+                                <p className="m-0 mt-1 text-xs font-semibold text-red-600 dark:text-red-300">The end must be after the start.</p>
                             )}
                         </div>
 
@@ -2310,7 +2310,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             <div className="space-y-2">
                                 {pollOptions.map((opt, idx) => (
                                     <div key={idx} className="flex gap-2 items-center">
-                                        <span className="w-6 text-center text-sm font-bold text-nature-500">{idx + 1}.</span>
+                                        <span className="w-6 text-center text-sm font-bold text-nature-500 dark:text-nature-400">{idx + 1}.</span>
                                         <input
                                             placeholder={`Option ${idx + 1}`}
                                             value={opt}
@@ -2327,7 +2327,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                             <button
                                                 type="button"
                                                 onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
-                                                className="text-nature-400 hover:text-red-500 min-w-[44px] min-h-[44px] flex items-center justify-center text-lg leading-none rounded-lg"
+                                                className="text-nature-400 hover:text-red-500 dark:hover:text-red-300 min-w-[44px] min-h-[44px] flex items-center justify-center text-lg leading-none rounded-lg"
                                                 title="Remove option"
                                                 aria-label={`Remove option ${idx + 1}`}
                                             >
@@ -2341,19 +2341,19 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 <button
                                     type="button"
                                     onClick={() => setPollOptions([...pollOptions, ''])}
-                                    className="mt-2 text-sm text-purple-600 dark:text-purple-400 hover:underline font-semibold flex items-center gap-1 min-h-[44px] py-2 px-1"
+                                    className="mt-2 text-sm text-purple-600 dark:text-purple-300 hover:underline font-semibold flex items-center gap-1 min-h-[44px] py-2 px-1"
                                 >
                                     + Add option
                                 </button>
                             )}
                             {validationErrors.has('options_empty') && (
-                                <p className="text-red-500 text-xs mt-1">Please fill or remove blank options.</p>
+                                <p className="text-red-500 dark:text-red-300 text-xs mt-1">Please fill or remove blank options.</p>
                             )}
                             {validationErrors.has('options_duplicate') && (
-                                <p className="text-red-500 text-xs mt-1">Options must be distinct.</p>
+                                <p className="text-red-500 dark:text-red-300 text-xs mt-1">Options must be distinct.</p>
                             )}
                             {validationErrors.has('options') && (
-                                <p className="text-red-500 text-xs mt-1">Please provide at least 2 non-empty options.</p>
+                                <p className="text-red-500 dark:text-red-300 text-xs mt-1">Please provide at least 2 non-empty options.</p>
                             )}
                         </div>
 
@@ -2482,11 +2482,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 }
                                 return '1.5% transaction fee funds community projects & solvency. ';
                             })()}<span className="text-amber-600 dark:text-amber-500 font-bold underline decoration-dotted underline-offset-2 ml-1">Learn more ⓘ</span>
-                            <span className="text-emerald-600 dark:text-emerald-500 font-bold ml-1">(100% community owned)</span>
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold ml-1">(100% community owned)</span>
                         </p>}
 
                         {/* Repeatable toggle */}
-                        <label className="flex items-center gap-3 text-sm font-medium text-nature-700 cursor-pointer py-2 px-1 mb-1">
+                        <label className="flex items-center gap-3 text-sm font-medium text-nature-700 dark:text-nature-400 cursor-pointer py-2 px-1 mb-1">
                             <input
                                 type="checkbox"
                                 checked={newPostRepeatable}
@@ -2500,7 +2500,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             moment of ticking is where the rule actually lands. No amount field by design:
                             the app can escrow beans, not cash, and a figure would imply it settles money it
                             never touches. */}
-                        <label className="flex items-center gap-3 text-sm font-medium text-nature-700 cursor-pointer py-2 px-1">
+                        <label className="flex items-center gap-3 text-sm font-medium text-nature-700 dark:text-nature-400 cursor-pointer py-2 px-1">
                             <input
                                 type="checkbox"
                                 checked={newPostCashAlsoNeeded}
@@ -2632,7 +2632,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     disabled={submitDisabled}
                     className={`w-full p-3 min-h-[48px] rounded-xl font-semibold transition-all ${
                         submitDisabled
-                            ? 'bg-oat-200 text-oat-500 cursor-not-allowed'
+                            ? 'bg-oat-200 text-oat-500 dark:bg-nature-800 dark:text-nature-400 cursor-not-allowed'
                             : (newPostType === 'poll' ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-md' : newPostType === 'event' ? 'bg-violet-700 hover:bg-violet-800 text-white shadow-md' : 'bg-nature-600 text-white hover:bg-nature-700 shadow-md')
                     }`}
                 >

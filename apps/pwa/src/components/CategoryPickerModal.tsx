@@ -70,7 +70,7 @@ export function CategoryPickerModal({ visible, selected, onSelect, onClose }: Ca
                         type="button"
                         onClick={onClose}
                         aria-label="Close category picker"
-                        className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-nature-500 hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+                        className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-full bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-nature-500 dark:text-nature-200 hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors font-bold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                     >
                         ✕
                     </button>

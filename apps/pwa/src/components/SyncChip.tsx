@@ -21,14 +21,14 @@ const STATUS_CONFIG = {
     },
     guest: {
         borderColor: 'rgba(217, 119, 6, 0.4)',
-        color: '#d97706',
+        color: 'var(--sync-guest, #d97706)',
         dot: '#d97706',
         label: 'Guest',
-        bg: '#fffbeb',
+        bg: 'var(--sync-guest-bg, #fffbeb)',
     },
     offline: {
         borderColor: 'rgba(239, 68, 68, 0.3)',
-        color: '#ef4444',
+        color: 'var(--sync-offline, #ef4444)',
         dot: '#ef4444',
         label: 'Offline',
         bg: 'var(--bg-card)',

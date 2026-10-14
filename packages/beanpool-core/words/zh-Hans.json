@@ -21,5 +21,11 @@
   "Your area": "你的区域",
   "Not set": "未设置",
   "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "全球社区会向你展示附近有什么可以交换:{km} 公里内最近的 {max} 条信息。",
-  "About 10 km around {place}": "{place}周围约 10 公里"
+  "About 10 km around {place}": "{place}周围约 10 公里",
+  "Find your town or suburb": "查找你的城镇或街区",
+  "Town or suburb": "城镇或街区",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "城镇搜索暂时无法使用。请改用“使用我的位置”,或暂时跳过。",
+  "No matches. Try the name of a town or suburb nearby.": "没有找到结果。试试附近城镇或街区的名称。",
+  "Places from OpenStreetMap. What you type here is sent to them.": "地点数据来自 OpenStreetMap。你在这里输入的内容会发送给它。",
+  "Choose {place}": "选择 {place}"
 }

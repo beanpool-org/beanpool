@@ -21,5 +21,11 @@
   "Your area": "Tu zona",
   "Not set": "Sin definir",
   "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "La comunidad mundial te muestra lo que se ofrece cerca de ti: los {max} anuncios más cercanos en un radio de {km} km.",
-  "About 10 km around {place}": "Unos 10 km alrededor de {place}"
+  "About 10 km around {place}": "Unos 10 km alrededor de {place}",
+  "Find your town or suburb": "Busca tu localidad o barrio",
+  "Town or suburb": "Localidad o barrio",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "La búsqueda de localidades no funciona en este momento. Usa tu ubicación o, por ahora, omite este paso.",
+  "No matches. Try the name of a town or suburb nearby.": "Sin resultados. Prueba con el nombre de una localidad o barrio cercano.",
+  "Places from OpenStreetMap. What you type here is sent to them.": "Lugares de OpenStreetMap. Lo que escribas aquí se les envía.",
+  "Choose {place}": "Elegir {place}"
 }

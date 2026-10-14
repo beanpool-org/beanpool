@@ -21,5 +21,11 @@
   "Your area": "உங்கள் பகுதி",
   "Not set": "அமைக்கப்படவில்லை",
   "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "உலகளாவிய சமூகம் உங்களுக்கு அருகில் என்ன கிடைக்கிறது என்பதைக் காட்டுகிறது: {km} கி.மீ-க்குள் மிக அருகிலுள்ள {max} பதிவுகள்.",
-  "About 10 km around {place}": "{place} சுற்றி சுமார் 10 கி.மீ"
+  "About 10 km around {place}": "{place} சுற்றி சுமார் 10 கி.மீ",
+  "Find your town or suburb": "உங்கள் ஊர் அல்லது பகுதியைத் தேடுங்கள்",
+  "Town or suburb": "ஊர் அல்லது பகுதி",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "ஊர் தேடல் இப்போது வேலை செய்யவில்லை. அதற்குப் பதிலாக என் இருப்பிடத்தைப் பயன்படுத்துங்கள், அல்லது இப்போதைக்குத் தவிர்த்துவிடுங்கள்.",
+  "No matches. Try the name of a town or suburb nearby.": "பொருத்தங்கள் இல்லை. அருகிலுள்ள ஒரு ஊர் அல்லது பகுதியின் பெயரை முயன்று பாருங்கள்.",
+  "Places from OpenStreetMap. What you type here is sent to them.": "இடங்கள் OpenStreetMap-இலிருந்து வருகின்றன. இங்கே நீங்கள் உள்ளிடுவது அவர்களுக்கு அனுப்பப்படும்.",
+  "Choose {place}": "{place} என்பதைத் தேர்ந்தெடுங்கள்"
 }

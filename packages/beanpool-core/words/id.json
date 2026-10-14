@@ -21,5 +21,11 @@
   "Your area": "Wilayahmu",
   "Not set": "Belum diatur",
   "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "Komunitas dunia menunjukkan apa yang ditawarkan di dekatmu: {max} tawaran terdekat dalam radius {km} km.",
-  "About 10 km around {place}": "Radius sekitar 10 km dari {place}"
+  "About 10 km around {place}": "Radius sekitar 10 km dari {place}",
+  "Find your town or suburb": "Cari kota atau daerahmu",
+  "Town or suburb": "Kota atau daerah",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "Pencarian kota sedang tidak berfungsi. Pakai lokasimu saja, atau lewati dulu.",
+  "No matches. Try the name of a town or suburb nearby.": "Tidak ada hasil. Coba nama kota atau daerah di sekitarmu.",
+  "Places from OpenStreetMap. What you type here is sent to them.": "Tempat dari OpenStreetMap. Apa yang kamu ketik di sini dikirim ke mereka.",
+  "Choose {place}": "Pilih {place}"
 }

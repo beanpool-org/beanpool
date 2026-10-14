@@ -21,5 +21,11 @@
   "Your area": "내 지역",
   "Not set": "설정 안 됨",
   "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "전 세계 커뮤니티에서는 가까운 곳에 올라온 것을 보여 줘요. {km} km 이내에서 가장 가까운 {max}개예요.",
-  "About 10 km around {place}": "{place} 주변 약 10 km"
+  "About 10 km around {place}": "{place} 주변 약 10 km",
+  "Find your town or suburb": "내 동네나 도시 찾기",
+  "Town or suburb": "동네나 도시",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "지금은 도시 검색이 되지 않아요. 대신 내 위치 사용을 누르거나 일단 건너뛰세요.",
+  "No matches. Try the name of a town or suburb nearby.": "일치하는 곳이 없어요. 가까운 동네나 도시 이름으로 다시 찾아보세요.",
+  "Places from OpenStreetMap. What you type here is sent to them.": "장소 정보는 OpenStreetMap에서 가져와요. 여기에 입력한 내용은 OpenStreetMap으로 전송돼요.",
+  "Choose {place}": "{place} 선택"
 }

@@ -21,5 +21,11 @@
   "Your area": "你的區域",
   "Not set": "未設定",
   "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "全球社群會為你呈現附近有什麼可以交換:{km} 公里內最近的 {max} 則刊登。",
-  "About 10 km around {place}": "{place}周圍約 10 公里"
+  "About 10 km around {place}": "{place}周圍約 10 公里",
+  "Find your town or suburb": "尋找你的城鎮或區域",
+  "Town or suburb": "城鎮或區域",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "城鎮搜尋目前無法使用。請改用「使用我的位置」,或先跳過。",
+  "No matches. Try the name of a town or suburb nearby.": "找不到符合的結果。試試附近城鎮或區域的名稱。",
+  "Places from OpenStreetMap. What you type here is sent to them.": "地點資料來自 OpenStreetMap。你在這裡輸入的內容會傳送給它。",
+  "Choose {place}": "選擇 {place}"
 }

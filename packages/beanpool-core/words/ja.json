@@ -21,5 +21,11 @@
   "Your area": "あなたの地域",
   "Not set": "未設定",
   "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "世界のコミュニティでは、近くで提供されているものが表示されます。{km} km以内の近い順に{max}件までです。",
-  "About 10 km around {place}": "{place}の周辺約10 km"
+  "About 10 km around {place}": "{place}の周辺約10 km",
+  "Find your town or suburb": "町や地区を探す",
+  "Town or suburb": "町や地区",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "町の検索はいま使えません。代わりに現在地を使うか、いまはスキップしてください。",
+  "No matches. Try the name of a town or suburb nearby.": "一致する場所がありません。近くの町や地区の名前を試してください。",
+  "Places from OpenStreetMap. What you type here is sent to them.": "場所は OpenStreetMap から取得しています。ここに入力した内容は OpenStreetMap に送信されます。",
+  "Choose {place}": "{place}を選ぶ"
 }

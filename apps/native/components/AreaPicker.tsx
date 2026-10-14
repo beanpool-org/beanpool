@@ -39,6 +39,15 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
     const { colors, dark } = useOnboardingColors();
     const { t } = useWords();
     const skipLabel = givenSkipLabel ?? t(AREA_WORDS.skip);
+    // The town search's words in the member's language; "Choose {place}" is core's (pickLabel), which follows it too.
+    const townWords = useMemo(() => ({
+        label: t(AREA_TOWN_SEARCH_WORDS.label),
+        placeholder: t(AREA_TOWN_SEARCH_WORDS.placeholder),
+        unavailable: t(AREA_TOWN_SEARCH_WORDS.unavailable),
+        noMatches: t(AREA_TOWN_SEARCH_WORDS.noMatches),
+        source: t(AREA_TOWN_SEARCH_WORDS.source),
+        pickLabel: AREA_TOWN_SEARCH_WORDS.pickLabel,
+    }), [t]);
     const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     const [busy, setBusy] = useState<'location' | 'town' | null>(null);
     const [showTown, setShowTown] = useState(false);
@@ -137,7 +146,7 @@ export function AreaPicker({ url, identity, features, onSaved, onSkip, skipLabel
             </Pressable>
             {showTown && (
                 <View style={styles.townBox} testID="area-town-search">
-                    <AddressSearch onPick={pickTown} accent={palette.blue600} words={AREA_TOWN_SEARCH_WORDS} />
+                    <AddressSearch onPick={pickTown} accent={palette.blue600} words={townWords} />
                     {busy === 'town' && <ActivityIndicator style={styles.townSpinner} color={palette.blue600} accessibilityLabel={t('Saving your area')} />}
                 </View>
             )}

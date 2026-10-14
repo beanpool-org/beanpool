@@ -37,14 +37,15 @@ export interface AddressSearchWords {
  * The area step's town search (deciding review of #1766, N3): there is no map on the step, so no map or pin; it asks for
  * a town or suburb, not a street address, since only a 10 km area is kept and Nominatim gets whatever is typed.
  */
-export const AREA_TOWN_SEARCH_WORDS: AddressSearchWords = {
-    label: 'Find your town or suburb',
-    placeholder: 'Town or suburb',
-    unavailable: "Town search isn't working right now. Use my location instead, or skip for now.",
-    noMatches: 'No matches. Try the name of a town or suburb nearby.',
-    source: 'Places from OpenStreetMap. What you type here is sent to them.',
-    pickLabel: (place) => `Choose ${place}`,
-};
+export const AREA_TOWN_SEARCH_WORDS = {
+    // word() keys, so the phone shows each through t() in the member's language (Your area, translation S1).
+    label: word('Find your town or suburb'),
+    placeholder: word('Town or suburb'),
+    unavailable: word("Town search isn't working right now. Use my location instead, or skip for now."),
+    noMatches: word('No matches. Try the name of a town or suburb nearby.'),
+    source: word('Places from OpenStreetMap. What you type here is sent to them.'),
+    pickLabel: (place: string) => t('Choose {place}', { place }),
+} satisfies AddressSearchWords;
 
 /**
  * "Find your community"'s town search (Marty, 14 Oct: "find your community using your location or enter your location

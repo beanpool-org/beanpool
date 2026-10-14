@@ -21,5 +21,11 @@
   "Your area": "منطقتك",
   "Not set": "غير محددة",
   "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "يعرض لك المجتمع العالمي ما هو متاح بالقرب منك: أقرب {max} من العروض ضمن مسافة {km} كم.",
-  "About 10 km around {place}": "نحو 10 كم حول {place}"
+  "About 10 km around {place}": "نحو 10 كم حول {place}",
+  "Find your town or suburb": "ابحث عن بلدتك أو حيّك",
+  "Town or suburb": "بلدة أو حي",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "البحث عن البلدات لا يعمل حاليًا. استخدم موقعك بدلًا من ذلك، أو تخطَّ هذه الخطوة الآن.",
+  "No matches. Try the name of a town or suburb nearby.": "لا توجد نتائج. جرّب اسم بلدة أو حي قريب.",
+  "Places from OpenStreetMap. What you type here is sent to them.": "الأماكن من OpenStreetMap. ما تكتبه هنا يُرسل إليهم.",
+  "Choose {place}": "اختر {place}"
 }

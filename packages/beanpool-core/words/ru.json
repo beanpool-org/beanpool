@@ -21,5 +21,11 @@
   "Your area": "Ваш район",
   "Not set": "Не указан",
   "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "Всемирное сообщество показывает, что предлагают рядом с вами: ближайшие объявления в радиусе {km} км (не больше {max}).",
-  "About 10 km around {place}": "Около 10 км вокруг: {place}"
+  "About 10 km around {place}": "Около 10 км вокруг: {place}",
+  "Find your town or suburb": "Найдите свой город или район",
+  "Town or suburb": "Город или район",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "Поиск города сейчас не работает. Используйте своё местоположение или пока пропустите этот шаг.",
+  "No matches. Try the name of a town or suburb nearby.": "Ничего не найдено. Попробуйте название ближайшего города или района.",
+  "Places from OpenStreetMap. What you type here is sent to them.": "Места из OpenStreetMap. То, что вы вводите здесь, отправляется им.",
+  "Choose {place}": "Выбрать: {place}"
 }

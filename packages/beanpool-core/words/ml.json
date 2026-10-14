@@ -21,5 +21,11 @@
   "Your area": "നിങ്ങളുടെ പ്രദേശം",
   "Not set": "സജ്ജമാക്കിയിട്ടില്ല",
   "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "ലോകമെമ്പാടുമുള്ള കമ്മ്യൂണിറ്റി നിങ്ങളുടെ അടുത്ത് എന്തൊക്കെ ലഭ്യമാണെന്ന് കാണിക്കുന്നു: {km} കി.മീറ്ററിനുള്ളിലെ ഏറ്റവും അടുത്ത {max} ലിസ്റ്റിംഗുകൾ.",
-  "About 10 km around {place}": "{place} ചുറ്റുമുള്ള ഏകദേശം 10 കി.മീ"
+  "About 10 km around {place}": "{place} ചുറ്റുമുള്ള ഏകദേശം 10 കി.മീ",
+  "Find your town or suburb": "നിങ്ങളുടെ പട്ടണമോ പ്രദേശമോ കണ്ടെത്തൂ",
+  "Town or suburb": "പട്ടണം അല്ലെങ്കിൽ പ്രദേശം",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "പട്ടണം തിരയുന്നത് ഇപ്പോൾ പ്രവർത്തിക്കുന്നില്ല. പകരം എന്റെ ലൊക്കേഷൻ ഉപയോഗിക്കൂ, അല്ലെങ്കിൽ തൽക്കാലം ഒഴിവാക്കൂ.",
+  "No matches. Try the name of a town or suburb nearby.": "ഫലങ്ങളൊന്നുമില്ല. അടുത്തുള്ള ഒരു പട്ടണത്തിന്റെയോ പ്രദേശത്തിന്റെയോ പേര് നൽകി നോക്കൂ.",
+  "Places from OpenStreetMap. What you type here is sent to them.": "OpenStreetMap-ൽ നിന്നുള്ള സ്ഥലങ്ങൾ. ഇവിടെ ടൈപ്പ് ചെയ്യുന്നത് അവർക്ക് അയയ്ക്കും.",
+  "Choose {place}": "{place} തിരഞ്ഞെടുക്കുക"
 }

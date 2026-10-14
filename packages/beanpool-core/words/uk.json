@@ -21,5 +21,11 @@
   "Your area": "Ваша місцевість",
   "Not set": "Не вказано",
   "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "Світова спільнота показує, що пропонують поруч: найближчі {max} оголошень у межах {km} км.",
-  "About 10 km around {place}": "Близько 10 км навколо {place}"
+  "About 10 km around {place}": "Близько 10 км навколо {place}",
+  "Find your town or suburb": "Знайдіть своє місто або район",
+  "Town or suburb": "Місто або район",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "Пошук міста зараз не працює. Скористайтеся своїм місцезнаходженням або поки що пропустіть.",
+  "No matches. Try the name of a town or suburb nearby.": "Нічого не знайдено. Спробуйте назву міста або району поблизу.",
+  "Places from OpenStreetMap. What you type here is sent to them.": "Місця з OpenStreetMap. Те, що ви вводите тут, надсилається до OpenStreetMap.",
+  "Choose {place}": "Обрати {place}"
 }

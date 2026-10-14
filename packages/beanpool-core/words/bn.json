@@ -21,5 +21,11 @@
   "Your area": "আপনার এলাকা",
   "Not set": "ঠিক করা নেই",
   "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "বিশ্বব্যাপী কমিউনিটি আপনাকে দেখায় আপনার কাছে কী কী পাওয়া যাচ্ছে: {km} কিমির মধ্যে সবচেয়ে কাছের {max}টি তালিকা।",
-  "About 10 km around {place}": "{place}-এর চারপাশে প্রায় 10 কিমি"
+  "About 10 km around {place}": "{place}-এর চারপাশে প্রায় 10 কিমি",
+  "Find your town or suburb": "আপনার শহর বা এলাকা খুঁজুন",
+  "Town or suburb": "শহর বা এলাকা",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "শহর খোঁজার সুবিধা এখন কাজ করছে না। এর বদলে আপনার লোকেশন ব্যবহার করুন, অথবা আপাতত বাদ দিন।",
+  "No matches. Try the name of a town or suburb nearby.": "কিছু পাওয়া যায়নি। কাছের কোনো শহর বা এলাকার নাম লিখে দেখুন।",
+  "Places from OpenStreetMap. What you type here is sent to them.": "জায়গাগুলো OpenStreetMap থেকে নেওয়া। আপনি এখানে যা লেখেন তা তাদের কাছে পাঠানো হয়।",
+  "Choose {place}": "{place} বেছে নিন"
 }

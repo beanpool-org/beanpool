@@ -21,5 +21,11 @@
   "Your area": "آپ کا علاقہ",
   "Not set": "طے نہیں",
   "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "عالمی کمیونٹی آپ کو دکھاتی ہے کہ آپ کے قریب کیا پیش کیا جا رہا ہے: {km} کلومیٹر کے اندر قریب ترین {max} پیشکشیں۔",
-  "About 10 km around {place}": "{place} کے گرد تقریباً 10 کلومیٹر"
+  "About 10 km around {place}": "{place} کے گرد تقریباً 10 کلومیٹر",
+  "Find your town or suburb": "اپنا قصبہ یا محلہ تلاش کریں",
+  "Town or suburb": "قصبہ یا محلہ",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "قصبے کی تلاش ابھی کام نہیں کر رہی۔ اس کے بجائے میری لوکیشن استعمال کریں، یا فی الحال چھوڑیں۔",
+  "No matches. Try the name of a town or suburb nearby.": "کوئی نتیجہ نہیں ملا۔ قریبی کسی قصبے یا محلے کا نام آزمائیں۔",
+  "Places from OpenStreetMap. What you type here is sent to them.": "مقامات OpenStreetMap سے لیے گئے ہیں۔ آپ یہاں جو لکھتے ہیں وہ OpenStreetMap کو بھیجا جاتا ہے۔",
+  "Choose {place}": "{place} منتخب کریں"
 }

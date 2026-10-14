@@ -21,5 +21,11 @@
   "Your area": "Iyong lugar",
   "Not set": "Hindi pa naitatakda",
   "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "Ipinapakita ng pandaigdigang komunidad kung ano ang alok malapit sa iyo: ang pinakamalapit na {max} listing sa loob ng {km} km.",
-  "About 10 km around {place}": "Humigit-kumulang 10 km sa palibot ng {place}"
+  "About 10 km around {place}": "Humigit-kumulang 10 km sa palibot ng {place}",
+  "Find your town or suburb": "Hanapin ang iyong bayan o lugar",
+  "Town or suburb": "Bayan o lugar",
+  "Town search isn't working right now. Use my location instead, or skip for now.": "Hindi gumagana ang paghahanap ng bayan ngayon. Gamitin ang location ko sa halip, o laktawan muna.",
+  "No matches. Try the name of a town or suburb nearby.": "Walang tugma. Subukan ang pangalan ng malapit na bayan o lugar.",
+  "Places from OpenStreetMap. What you type here is sent to them.": "Ang mga lugar ay mula sa OpenStreetMap. Ipinapadala sa OpenStreetMap ang isinusulat mo rito.",
+  "Choose {place}": "Piliin ang {place}"
 }

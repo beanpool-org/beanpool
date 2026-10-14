@@ -12,6 +12,7 @@
  * Run:  pnpm --filter @beanpool/pwa words-chunks-check   (needs @beanpool/core built; it builds nothing else)
  *   WORDS_CHUNKS_DIR=<dir>  read an existing build output instead of building (a fail-first on another commit)
  */
+/* global console, process -- Node */
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

@@ -19,7 +19,7 @@
  * Run: pnpm --filter @beanpool/pwa words-screens-check [out-dir]
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
-/* global Buffer, URL, console, process, document, window, getComputedStyle, Node, NodeFilter -- Node, and the page's side of evaluate() */
+/* global Buffer, URL, console, process, document, window, localStorage, getComputedStyle, Node, NodeFilter -- Node, and the page's side of evaluate() */
 import { build, preview, transformWithEsbuild } from 'vite';
 import { chromium } from 'playwright';
 import { fileURLToPath } from 'node:url';

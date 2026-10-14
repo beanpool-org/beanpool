@@ -29,8 +29,8 @@
  * `openRestoredAccount` builds the key from the seed, and keeps the words only when this app's own derivation of them
  * (lib/mnemonic.ts, as a 12-words restore would run it) makes that same key. Then the key must equal the public key the
  * lookup named for the account the member picked. Anything else (another account's copy, a node answering for someone
- * else) is refused and nothing is written: the phone's restore has no such check (memory `recovery-model`), this one
- * does. What is saved goes through the identity store's guarded write (identity.ts importIdentity: one browser, one
+ * else) is refused and nothing is written. The phone's restore at a community makes the same check (apps/native/utils/
+ * sso-recovery.ts `recoverAccountWithSso`, #1951). What is saved goes through the identity store's guarded write (identity.ts importIdentity: one browser, one
  * account), from WelcomePage, which also settles a join this browser sent first.
  *
  * ## What is not done here

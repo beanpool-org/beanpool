@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, Image, TextInput, Modal } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, TextInput, Modal } from 'react-native';
 import { KeyboardAvoidingView, KeyboardController } from 'react-native-keyboard-controller';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams, useFocusEffect, ErrorBoundary } from 'expo-router';
@@ -24,16 +24,20 @@ import {
 } from '../utils/enterprise-season';
 import {
     timeLeftText, keeperChangeTitle, keeperChangeBody, canObjectToChange, canRemoveKeeper, canStepDown,
-    stepDownConfirmText, removeKeeperConfirmText, approvedApplicantText, successionTallyText,
+    stepDownConfirmText, removeKeeperConfirmText, approvedApplicantText, applicantBackingText, successionTallyText,
     successionDeadlineText, myChoice, successionHeading, successionExplainer, type KeeperChangeLite,
 } from '../utils/keeper-governance';
 import { decodeBase64, decodeUtf8 } from '../utils/crypto';
+import { groupKindLine, keeperWords } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
+import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
+import { ReportReasonBox } from '../components/ReportReasonBox';
+import { pledgeClosedLine } from '../utils/enterprise-pledge';
 import { useTheme, useStyles } from './ThemeContext';
 
-function decodeThreadMessage(ciphertext: string, type: string): string {
-    if (type === 'removed') return 'removed by a keeper';
+function decodeThreadMessage(ciphertext: string, type: string, keeper = 'keeper'): string {
+    if (type === 'removed') return `removed by a ${keeper}`;
     try {
         return decodeUtf8(decodeBase64(ciphertext));
     } catch {
@@ -61,6 +65,8 @@ export default function TreasuryDetailScreen() {
     const [detail, setDetail] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [isKeeperOfThis, setIsKeeperOfThis] = useState(false);
+    // Bumped on each focus, so the Decisions block reads its votes again (a tap on a Needs-you vote line lands here).
+    const [decisionsRefresh, setDecisionsRefresh] = useState(0);
     const [sweepAmount, setSweepAmount] = useState('');
     const [sweeping, setSweeping] = useState(false);
     const [actionState, setActionState] = useState<{ id: string; type: 'approve' | 'reject' | 'complete' } | null>(null);
@@ -71,8 +77,6 @@ export default function TreasuryDetailScreen() {
     const [pledging, setPledging] = useState(false);
     const [cancelling, setCancelling] = useState(false);
     const [showReportForm, setShowReportForm] = useState(false);
-    const [reportReason, setReportReason] = useState('');
-    const [reporting, setReporting] = useState(false);
     const [identity, setIdentity] = useState<any>(null);
 
     // Keeper Join Request State
@@ -131,15 +135,16 @@ export default function TreasuryDetailScreen() {
         progressLabel: { fontSize: 13, fontWeight: 'normal', color: colors.text.secondary },
         goalAmt: { fontSize: 13, fontWeight: '600', color: colors.text.secondary },
         deadlineBadge: { fontSize: 12, fontWeight: '700', color: colors.brand.primary, backgroundColor: colors.brand.tint, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, overflow: 'hidden' },
-        deadlineExpired: { color: colors.feedback.danger.solid, backgroundColor: colors.surface.subtle },
+        deadlineExpired: { color: colors.feedback.danger.fg, backgroundColor: colors.surface.subtle },
         progressBarBg: { height: 8, backgroundColor: colors.surface.subtle, borderRadius: 4, overflow: 'hidden', marginBottom: 10 },
         progressBarFill: { height: '100%', borderRadius: 4 },
         escrowNotice: { fontSize: 12, color: colors.text.secondary, lineHeight: 17, marginBottom: 14 },
         pledgeBox: { backgroundColor: colors.surface.app, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border.default },
+        pledgeClosedText: { fontSize: 14, fontWeight: '600', color: colors.text.body, lineHeight: 20 },
         pledgeInputRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
         pledgeAmountInput: { flex: 1, height: 44, backgroundColor: colors.surface.card, borderRadius: 10, paddingHorizontal: 12, fontSize: 15, fontWeight: '700', color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
         pledgeMemoInput: { flex: 2, height: 44, backgroundColor: colors.surface.card, borderRadius: 10, paddingHorizontal: 12, fontSize: 14, color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
-        pledgeButton: { backgroundColor: colors.brand.primary, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+        pledgeButton: { backgroundColor: colors.brand.fill, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
         pledgeButtonText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13, letterSpacing: 0.5 },
 
         keepersCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
@@ -159,7 +164,7 @@ export default function TreasuryDetailScreen() {
         joinInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
         joinInput: { width: 80, height: 44, backgroundColor: colors.surface.app, borderRadius: 10, paddingHorizontal: 12, fontSize: 15, fontWeight: '700', color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
         joinAvailableText: { fontSize: 12, fontWeight: '700', color: colors.text.secondary, flex: 1 },
-        joinButton: { backgroundColor: colors.brand.primary, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+        joinButton: { backgroundColor: colors.brand.fill, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
         joinButtonDisabled: { opacity: 0.5 },
         joinButtonText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },
         pendingRequestBanner: { backgroundColor: colors.brand.tint, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.brand.primary, marginBottom: 16 },
@@ -175,8 +180,10 @@ export default function TreasuryDetailScreen() {
         requestInfo: { marginBottom: 10 },
         requestCallsign: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
         requestBacking: { fontSize: 12, color: colors.brand.primary, fontWeight: '600', marginTop: 2 },
+        requestStanding: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
+        requestStandingShort: { color: colors.feedback.warning.fg, fontWeight: '600' },
         requestBtnRow: { flexDirection: 'row', gap: 8 },
-        approveBtn: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand.primary, paddingHorizontal: 12, borderRadius: 8 },
+        approveBtn: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand.fill, paddingHorizontal: 12, borderRadius: 8 },
         approveBtnText: { color: colors.text.inverse, fontWeight: '700', fontSize: 13 },
         declineBtn: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.subtle, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default },
         declineBtnText: { color: colors.text.secondary, fontWeight: '600', fontSize: 13 },
@@ -184,15 +191,15 @@ export default function TreasuryDetailScreen() {
         // Lead Succession
         successionCard: { backgroundColor: colors.feedback.warning.bg, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.feedback.warning.border, marginBottom: 16 },
         successionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-        successionTitle: { fontSize: 13, fontWeight: '800', color: colors.feedback.warning.solid },
+        successionTitle: { fontSize: 13, fontWeight: '800', color: colors.feedback.warning.fg },
         successionText: { fontSize: 12, color: colors.text.body, lineHeight: 18, marginBottom: 12 },
         successionVoteBox: { backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 8 },
         successionCandidateText: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
         successionVotesText: { fontSize: 12, color: colors.text.secondary, marginTop: 2, marginBottom: 8 },
         voteBtn: { backgroundColor: colors.feedback.warning.solid, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
-        voteBtnText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },
+        voteBtnText: { color: colors.text.onGold, fontWeight: '800', fontSize: 13 },
         votedBadge: { fontSize: 12, fontWeight: '700', color: colors.brand.primary, marginTop: 4 },
-        proposeBtn: { backgroundColor: colors.brand.primary, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+        proposeBtn: { backgroundColor: colors.brand.fill, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
         proposeBtnText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },
         changeBody: { fontSize: 12, color: colors.text.body, lineHeight: 18, marginTop: 4 },
         keeperActionBtn: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.subtle },
@@ -205,7 +212,7 @@ export default function TreasuryDetailScreen() {
         balanceLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
         balanceValue: { fontSize: 34, fontWeight: '900', letterSpacing: -1, marginTop: 4 },
         balancePos: { color: colors.brand.primary },
-        balanceNeg: { color: colors.feedback.warning.solid },
+        balanceNeg: { color: colors.feedback.warning.fg },
         balanceMetaRow: { flexDirection: 'row', marginTop: 14, gap: 12 },
         metaBox: { flex: 1, backgroundColor: colors.surface.app, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: colors.border.default },
         metaLabel: { fontSize: 10, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
@@ -217,7 +224,7 @@ export default function TreasuryDetailScreen() {
         opTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
         opTitle: { fontSize: 13, fontWeight: '800', color: colors.brand.primary, letterSpacing: 0.3 },
         opBtnRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-        opBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.brand.primary, paddingVertical: 12, borderRadius: 12 },
+        opBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.brand.fill, paddingVertical: 12, borderRadius: 12 },
         opBtnText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },
         opBtnDisabled: { opacity: 0.45 },
         opNotice: { fontSize: 12, fontWeight: '600', color: colors.feedback.warning.fg, backgroundColor: colors.feedback.warning.bg, borderRadius: 8, padding: 8, marginTop: -4, marginBottom: 12, textAlign: 'center', overflow: 'hidden' },
@@ -264,7 +271,7 @@ export default function TreasuryDetailScreen() {
         threadMsgRemoved: { fontSize: 13, fontStyle: 'italic', color: colors.text.muted },
         threadInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border.default },
         threadInput: { flex: 1, backgroundColor: colors.surface.app, height: 48, borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border.default, color: colors.text.body, fontSize: 13 },
-        threadSendBtn: { height: 48, flexShrink: 0, paddingHorizontal: 16, borderRadius: 8, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center' },
+        threadSendBtn: { height: 48, flexShrink: 0, paddingHorizontal: 16, borderRadius: 8, backgroundColor: colors.brand.fill, alignItems: 'center', justifyContent: 'center' },
         threadSendBtnText: { color: colors.text.inverse, fontWeight: '700', fontSize: 13 },
         // A real 48x48dp target (was ~22x23). hitSlop cannot stand in: Android drops touches outside the parent row.
         threadRemoveBtn: { width: 48, height: 48, flexShrink: 0, alignItems: 'center', justifyContent: 'center' },
@@ -391,7 +398,7 @@ export default function TreasuryDetailScreen() {
         await KeyboardController.dismiss();
         Alert.alert(
             'Remove Message',
-            'Are you sure you want to remove this message? It will show as "removed by a keeper".',
+            `Are you sure you want to remove this message? It will show as "removed by a ${keeperWords(detail?.lifecycle).keeper}".`,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
@@ -415,6 +422,7 @@ export default function TreasuryDetailScreen() {
     };
 
     useFocusEffect(load);
+    useFocusEffect(useCallback(() => { setDecisionsRefresh(n => n + 1); }, []));
 
     const loadLedger = useCallback(async (period: LedgerPeriod) => {
         if (!treasuryKey) return;
@@ -429,7 +437,7 @@ export default function TreasuryDetailScreen() {
             setLedgerShown(LEDGER_PAGE);
         } catch (e: any) {
             if (request !== ledgerRequest.current) return;
-            setLedgerError(e?.message || 'Could not load enterprise ledger');
+            setLedgerError(e?.message || 'Could not load the ledger');
         } finally {
             if (request === ledgerRequest.current) setLedgerLoading(false);
         }
@@ -447,11 +455,11 @@ export default function TreasuryDetailScreen() {
             if (action === 'pause') {
                 await pauseEnterprise(treasuryKey);
                 title = 'Paused for the season ❄️';
-                message = 'Enterprise paused for the season. Credit held at snapshot.';
+                message = `${keeperWords(detail?.lifecycle).Kind} paused for the season. Credit held at snapshot.`;
             } else if (action === 'resume') {
                 await resumeEnterprise(treasuryKey);
-                title = 'Enterprise resumed ▶️';
-                message = 'Enterprise resumed! Active listings are now buyable again.';
+                title = `${keeperWords(detail?.lifecycle).Kind} resumed ▶️`;
+                message = `${keeperWords(detail?.lifecycle).Kind} resumed! Active listings are now buyable again.`;
             } else if (action === 'windUp') {
                 await initiateWindUp(treasuryKey);
                 title = 'Wind-up started';
@@ -459,17 +467,17 @@ export default function TreasuryDetailScreen() {
             } else if (action === 'cancelWindUp') {
                 await cancelWindUp(treasuryKey);
                 title = 'Wind-up stopped';
-                message = 'Wind-up cancelled. Enterprise restored to active status.';
+                message = `Wind-up cancelled. ${keeperWords(detail?.lifecycle).Kind} restored to active status.`;
             } else {
                 const res = await finaliseWindUp(treasuryKey);
                 title = 'Wind-up finalised 🏁';
-                message = `Wind-up finalised. Swept ${res?.sweptAmount ?? 0} 🫘 to Commons and released keepers.`;
+                message = `Wind-up finalised. Swept ${res?.sweptAmount ?? 0} 🫘 to Commons and released ${keeperWords(detail?.lifecycle).keepers}.`;
             }
             setConfirmingLifecycle(null);
         } catch (e: any) {
             const fallback = {
-                pause: 'Failed to pause enterprise',
-                resume: 'Failed to resume enterprise',
+                pause: `Failed to pause ${keeperWords(detail?.lifecycle).kind}`,
+                resume: `Failed to resume ${keeperWords(detail?.lifecycle).kind}`,
                 windUp: 'Failed to initiate wind-up',
                 cancelWindUp: 'Failed to cancel wind-up',
                 finaliseWindUp: 'Failed to finalise wind-up',
@@ -505,6 +513,8 @@ export default function TreasuryDetailScreen() {
     const keeperChanges: KeeperChangeLite[] = detail?.keeperChanges || [];
     const myPubkey: string | null = identity?.publicKey ?? null;
     const iAmLead = keeperList.some(k => k.publicKey === myPubkey && k.role === 'lead');
+    /** A project has a leader and collaborators; an enterprise a lead keeper and keepers (pick 8). */
+    const kw = keeperWords(detail?.lifecycle);
     const removableKeepers = keeperList.filter(k => canRemoveKeeper(k, myPubkey, iAmLead, keeperChanges));
     const isEligibleSuccessor = isKeeperOfThis && !!identity?.publicKey && !!leadInactivity?.leadPubkey && identity.publicKey !== leadInactivity.leadPubkey;
 
@@ -513,7 +523,7 @@ export default function TreasuryDetailScreen() {
         if (!treasuryKey || sweeping) return;
         const amt = Number(sweepAmount);
         if (isNaN(amt) || amt <= 0) { Alert.alert('Enter an amount', 'Type a positive number of Beans to sweep into the Commons.'); return; }
-        if (amt > balance) { Alert.alert('Not enough surplus', `This enterprise only holds ${balance} 🫘.`); return; }
+        if (amt > balance) { Alert.alert('Not enough surplus', `This ${kw.kind} only holds ${balance} 🫘.`); return; }
         setSweeping(true);
         try {
             await treasurySweep(treasuryKey, amt);
@@ -536,16 +546,16 @@ export default function TreasuryDetailScreen() {
             return;
         }
         if (amt > available) {
-            Alert.alert('Exceeds Available Standing', `You have ${available} Beans of standing available to back this enterprise.`);
+            Alert.alert('Exceeds Available Standing', `You have ${available} Beans of standing available to back this ${kw.kind}.`);
             return;
         }
         setSubmittingJoin(true);
         try {
             await requestToJoinEnterprise(treasuryKey, amt);
-            Alert.alert('Request Submitted 🌱', `Your request to join as a keeper with ${amt} 🫘 backing has been submitted for review.`);
+            Alert.alert('Request Submitted 🌱', `Your request to join as a ${kw.keeper} with ${amt} 🫘 backing has been submitted for review.`);
             load();
         } catch (e: any) {
-            Alert.alert('Request Failed', e.message || 'Could not submit keeper request.');
+            Alert.alert('Request Failed', e.message || `Could not submit ${kw.keeper} request.`);
         } finally {
             setSubmittingJoin(false);
         }
@@ -557,13 +567,13 @@ export default function TreasuryDetailScreen() {
         try {
             const res: any = await approveKeeperRequest(treasuryKey, requestId);
             if (res?.applied === false) {
-                Alert.alert('Approved 🌱', 'They become a keeper in 3 days, unless another keeper objects first.');
+                Alert.alert('Approved 🌱', `They become a ${kw.keeper} in 3 days, unless another ${kw.keeper} objects first.`);
             } else {
-                Alert.alert('Request Approved 🌱', 'Member is now a keeper of this enterprise.');
+                Alert.alert('Request Approved 🌱', `Member is now a ${kw.keeper} of this ${kw.kind}.`);
             }
             load();
         } catch (e: any) {
-            Alert.alert('Approval Failed', e.message || 'Could not approve keeper request.');
+            Alert.alert('Approval Failed', e.message || `Could not approve ${kw.keeper} request.`);
         } finally {
             setProcessingRequestId(null);
         }
@@ -574,10 +584,10 @@ export default function TreasuryDetailScreen() {
         setProcessingRequestId(requestId);
         try {
             await declineKeeperRequest(treasuryKey, requestId);
-            Alert.alert('Request Declined', 'Keeper request has been declined.');
+            Alert.alert('Request Declined', `${kw.Keeper} request has been declined.`);
             load();
         } catch (e: any) {
-            Alert.alert('Decline Failed', e.message || 'Could not decline keeper request.');
+            Alert.alert('Decline Failed', e.message || `Could not decline ${kw.keeper} request.`);
         } finally {
             setProcessingRequestId(null);
         }
@@ -592,7 +602,7 @@ export default function TreasuryDetailScreen() {
             const votesCount = res?.proposal?.votesCount ?? res?.votesCount ?? 1;
             const votesRequired = res?.proposal?.requiredVotes ?? res?.votesRequired ?? 2;
             if (leadMoved) {
-                Alert.alert('Succession Passed 🌱', 'Lead keeper role has been transferred.');
+                Alert.alert('Succession Passed 🌱', `${kw.Lead} role has been transferred.`);
             } else {
                 Alert.alert('Succession Proposed 🌱', `Proposal submitted (${votesCount} of ${votesRequired} votes recorded).`);
             }
@@ -621,7 +631,7 @@ export default function TreasuryDetailScreen() {
 
     const handleRemoveKeeper = (k: any) => {
         if (!treasuryKey || processingChangeId) return;
-        Alert.alert(`Remove ${k.callsign}?`, removeKeeperConfirmText(k), [
+        Alert.alert(`Remove ${k.callsign}?`, removeKeeperConfirmText(k, kw), [
             { text: 'Cancel', style: 'cancel' },
             {
                 text: 'Remove', style: 'destructive', onPress: async () => {
@@ -641,7 +651,7 @@ export default function TreasuryDetailScreen() {
 
     const handleStepDown = () => {
         if (!treasuryKey || !myPubkey || steppingDown) return;
-        Alert.alert('Step down as keeper?', stepDownConfirmText(myPubkey, keeperList), [
+        Alert.alert(`Step down as a ${kw.keeper}?`, stepDownConfirmText(myPubkey, keeperList, kw), [
             { text: 'Cancel', style: 'cancel' },
             {
                 text: 'Step down', style: 'destructive', onPress: async () => {
@@ -669,9 +679,9 @@ export default function TreasuryDetailScreen() {
             const votesCount = res?.proposal?.votesCount ?? res?.votesCount ?? 1;
             const votesRequired = res?.proposal?.requiredVotes ?? res?.votesRequired ?? 2;
             if (leadMoved) {
-                Alert.alert('Succession Passed 🌱', 'Your vote was recorded and the lead keeper role has been transferred!');
+                Alert.alert('Succession Passed 🌱', `Your vote was recorded and the ${kw.lead} role has been transferred!`);
             } else if (res?.proposal?.closedReason === 'rejected') {
-                Alert.alert('Vote Registered', 'Not enough keepers can now say yes, so the lead stays.');
+                Alert.alert('Vote Registered', `Not enough ${kw.keepers} can now say yes, so the ${kw.kind === 'project' ? 'leader' : 'lead'} stays.`);
             } else {
                 Alert.alert('Vote Registered 🌱', `Vote recorded (${votesCount} yes of ${votesRequired} needed).`);
             }
@@ -842,7 +852,7 @@ export default function TreasuryDetailScreen() {
                 <View style={styles.centerFill}><ActivityIndicator color={colors.brand.primary} /></View>
             ) : !detail ? (
                 <View style={styles.centerFill}>
-                    <Text style={styles.emptyNote}>Couldn't load this enterprise. Check your connection.</Text>
+                    <Text style={styles.emptyNote}>Couldn't load this group. Check your connection.</Text>
                 </View>
             ) : (
                 <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
@@ -852,13 +862,14 @@ export default function TreasuryDetailScreen() {
                         {/* Identity */}
                         <View style={styles.identityRow}>
                             {avatar ? (
-                                <Image source={{ uri: avatar }} style={styles.avatar} accessibilityLabel="Enterprise avatar" />
+                                // The node's URL for the photo, relative to it, or a shipped picture (MemberAvatar resolves both).
+                                <MemberAvatar avatarUrl={avatar} pubkey={treasuryKey ?? ''} callsign={name} size={56} />
                             ) : (
                                 <View style={[styles.avatar, styles.avatarPlaceholder]}><Text style={{ fontSize: 28 }}>{detail?.lifecycle === 'bounded' ? '🌱' : '🏛️'}</Text></View>
                             )}
                             <View style={{ marginLeft: 12, flex: 1, minWidth: 0 }}>
                                 <Text style={styles.name} numberOfLines={1}>{name}</Text>
-                                <Text style={styles.subtitle}>{detail?.lifecycle === 'bounded' ? 'Bounded enterprise · Community project' : 'Community enterprise · Run by the Commons'}</Text>
+                                <Text style={styles.subtitle}>{groupKindLine(detail?.lifecycle)}</Text>
                             </View>
                         </View>
 
@@ -908,6 +919,8 @@ export default function TreasuryDetailScreen() {
                             const progress = Math.min(100, (current / goal) * 100);
                             const isFunded = current >= goal || detail?.status === 'funded' || detail?.status === 'completed';
                             const daysRemaining = getDaysRemaining(detail.deadlineAt);
+                            // The node takes a pledge only while the enterprise is active: otherwise a sentence, not a box.
+                            const pledgesClosed = pledgeClosedLine(detail?.status, detail?.lifecycle);
                             return (
                                 <View style={styles.progressCard}>
                                     <View style={styles.progressHeader}>
@@ -924,15 +937,20 @@ export default function TreasuryDetailScreen() {
                                         )}
                                     </View>
                                     <View style={styles.progressBarBg}>
-                                        <View style={[styles.progressBarFill, { width: `${progress}%`, backgroundColor: isFunded ? colors.brand.primary : colors.accent.primary }]} />
+                                        <View style={[styles.progressBarFill, { width: `${progress}%`, backgroundColor: isFunded ? colors.brand.fill : colors.accent.fill }]} />
                                     </View>
                                     <Text style={styles.escrowNotice}>
                                         {isFunded 
-                                            ? "🎉 This enterprise reached its funding goal! Pledged funds are held securely in the enterprise account."
-                                            : "🔒 Pledges are held securely in the enterprise account, spendable only on transparent offers and needs that the whole community can see."}
+                                            ? `🎉 This ${kw.kind} reached its funding goal! Pledged funds are held securely in the ${kw.kind}'s account.`
+                                            : `🔒 Pledges are held securely in the ${kw.kind}'s account, spendable only on transparent offers and needs that the whole community can see.`}
                                     </Text>
 
                                     {/* Inline Pledge Beans Input */}
+                                    {pledgesClosed ? (
+                                    <View style={styles.pledgeBox} testID="pledges-closed">
+                                        <Text style={styles.pledgeClosedText}>{pledgesClosed}</Text>
+                                    </View>
+                                    ) : (
                                     <View style={styles.pledgeBox}>
                                         <View style={styles.pledgeInputRow}>
                                             <TextInput
@@ -968,6 +986,7 @@ export default function TreasuryDetailScreen() {
                                             )}
                                         </Pressable>
                                     </View>
+                                    )}
                                 </View>
                             );
                         })()}
@@ -975,7 +994,7 @@ export default function TreasuryDetailScreen() {
                         {/* Pending Keeper Requests (for Lead / Sole Keeper / Admin) */}
                         {isLeadOrSoleKeeperOrAdmin && keeperRequests.length > 0 && (
                             <View style={styles.requestsCard}>
-                                <Text style={styles.requestsTitle}>PENDING KEEPER REQUESTS ({keeperRequests.length})</Text>
+                                <Text style={styles.requestsTitle}>PENDING {kw.Keeper.toUpperCase()} REQUESTS ({keeperRequests.length})</Text>
                                 {keeperRequests.map((req: any) => (
                                     <View key={req.id} style={styles.requestRow}>
                                         <View style={styles.requestInfo}>
@@ -983,6 +1002,11 @@ export default function TreasuryDetailScreen() {
                                             <Text style={styles.requestBacking} numberOfLines={1}>
                                                 Backing pledge: {req.pledgedBacking} 🫘
                                             </Text>
+                                            {applicantBackingText(req.canBackPledge) ? (
+                                                <Text style={[styles.requestStanding, req.canBackPledge === false && styles.requestStandingShort]}>
+                                                    {applicantBackingText(req.canBackPledge)}
+                                                </Text>
+                                            ) : null}
                                         </View>
                                         {req.pendingChange ? (
                                             <Text style={styles.requestBacking}>
@@ -995,7 +1019,7 @@ export default function TreasuryDetailScreen() {
                                                 disabled={processingRequestId === req.id}
                                                 onPress={() => handleApproveRequest(req.id)}
                                                 accessibilityRole="button"
-                                                accessibilityLabel="Approve keeper request"
+                                                accessibilityLabel={`Approve ${kw.keeper} request`}
                                             >
                                                 {processingRequestId === req.id ? (
                                                     <ActivityIndicator size="small" color={colors.text.inverse} />
@@ -1008,7 +1032,7 @@ export default function TreasuryDetailScreen() {
                                                 disabled={processingRequestId === req.id}
                                                 onPress={() => handleDeclineRequest(req.id)}
                                                 accessibilityRole="button"
-                                                accessibilityLabel="Decline keeper request"
+                                                accessibilityLabel={`Decline ${kw.keeper} request`}
                                             >
                                                 <Text style={styles.declineBtnText} numberOfLines={1}>Decline</Text>
                                             </Pressable>
@@ -1022,12 +1046,12 @@ export default function TreasuryDetailScreen() {
                         {/* Keeper changes waiting out the other keepers' 3-day objection window (answers A, M) */}
                         {keeperChanges.length > 0 && (
                             <View style={styles.requestsCard}>
-                                <Text style={styles.requestsTitle}>KEEPER CHANGES WAITING ({keeperChanges.length})</Text>
+                                <Text style={styles.requestsTitle}>{kw.Keeper.toUpperCase()} CHANGES WAITING ({keeperChanges.length})</Text>
                                 {keeperChanges.map((c) => (
                                     <View key={c.id} style={styles.requestRow}>
                                         <View style={styles.requestInfo}>
-                                            <Text style={styles.requestCallsign}>{keeperChangeTitle(c)}</Text>
-                                            <Text style={styles.changeBody}>{keeperChangeBody(c)}</Text>
+                                            <Text style={styles.requestCallsign}>{keeperChangeTitle(c, kw)}</Text>
+                                            <Text style={styles.changeBody}>{keeperChangeBody(c, kw)}</Text>
                                             <Text style={styles.requestBacking}>⏳ Objection window: {timeLeftText(c.appliesAt)}</Text>
                                         </View>
                                         {canObjectToChange(c, myPubkey, keeperList) && (
@@ -1036,7 +1060,7 @@ export default function TreasuryDetailScreen() {
                                                 disabled={processingChangeId === c.id}
                                                 onPress={() => handleObjectToChange(c.id)}
                                                 accessibilityRole="button"
-                                                accessibilityLabel={`Object: ${keeperChangeTitle(c)}`}
+                                                accessibilityLabel={`Object: ${keeperChangeTitle(c, kw)}`}
                                             >
                                                 {processingChangeId === c.id ? (
                                                     <ActivityIndicator size="small" color={colors.text.secondary} />
@@ -1054,17 +1078,17 @@ export default function TreasuryDetailScreen() {
                         {Boolean(leadInactivity?.isEligible ?? leadInactivity?.isEligibleForSuccession) && (
                             <View style={styles.successionCard}>
                                 <View style={styles.successionHeader}>
-                                    <MaterialCommunityIcons name="alert-circle" size={18} color={colors.feedback.warning.solid} />
-                                    <Text style={styles.successionTitle}>{successionHeading(leadInactivity)}</Text>
+                                    <MaterialCommunityIcons name="alert-circle" size={18} color={colors.feedback.warning.fg} />
+                                    <Text style={styles.successionTitle}>{successionHeading(leadInactivity, kw)}</Text>
                                 </View>
-                                <Text style={styles.successionText}>{successionExplainer(leadInactivity)}</Text>
+                                <Text style={styles.successionText}>{successionExplainer(leadInactivity, kw)}</Text>
 
                                 {activeProposal ? (
                                     <View style={styles.successionVoteBox}>
                                         <Text style={styles.successionCandidateText}>
-                                            Succession Proposal: Elect {activeProposal.candidateCallsign} as lead keeper
+                                            Succession Proposal: Elect {activeProposal.candidateCallsign} as {kw.lead}
                                         </Text>
-                                        <Text style={styles.successionVotesText}>{successionTallyText(activeProposal)}</Text>
+                                        <Text style={styles.successionVotesText}>{successionTallyText(activeProposal, kw)}</Text>
                                         {successionDeadlineText(activeProposal) && (
                                             <Text style={styles.successionVotesText}>⏳ {successionDeadlineText(activeProposal)}</Text>
                                         )}
@@ -1080,7 +1104,7 @@ export default function TreasuryDetailScreen() {
                                                         disabled={submittingSuccession}
                                                         onPress={() => handleVoteSuccession(activeProposal.id, 'yes')}
                                                         accessibilityRole="button"
-                                                        accessibilityLabel={`Yes, make ${activeProposal.candidateCallsign} lead keeper`}
+                                                        accessibilityLabel={`Yes, make ${activeProposal.candidateCallsign} ${kw.lead}`}
                                                     >
                                                         {submittingSuccession ? (
                                                             <ActivityIndicator size="small" color={colors.text.inverse} />
@@ -1093,7 +1117,7 @@ export default function TreasuryDetailScreen() {
                                                         disabled={submittingSuccession}
                                                         onPress={() => handleVoteSuccession(activeProposal.id, 'no')}
                                                         accessibilityRole="button"
-                                                        accessibilityLabel={`No, do not make ${activeProposal.candidateCallsign} lead keeper`}
+                                                        accessibilityLabel={`No, do not make ${activeProposal.candidateCallsign} ${kw.lead}`}
                                                     >
                                                         <Text style={styles.declineBtnText}>No</Text>
                                                     </Pressable>
@@ -1107,9 +1131,9 @@ export default function TreasuryDetailScreen() {
                                         disabled={submittingSuccession}
                                         onPress={() => setShowCandidatePicker(true)}
                                         accessibilityRole="button"
-                                        accessibilityLabel="Propose Active Keeper as Lead"
+                                        accessibilityLabel={`Propose Active ${kw.Keeper} as ${kw.kind === 'project' ? 'Leader' : 'Lead'}`}
                                     >
-                                        <Text style={styles.proposeBtnText}>Propose Active Keeper as Lead</Text>
+                                        <Text style={styles.proposeBtnText}>Propose Active {kw.Keeper} as {kw.kind === 'project' ? 'Leader' : 'Lead'}</Text>
                                     </Pressable>
                                 ) : null}
                             </View>
@@ -1119,22 +1143,22 @@ export default function TreasuryDetailScreen() {
                         {identity && !isKeeperOfThis && detail?.status !== 'completed' && (
                             myPendingRequest ? (
                                 <View style={styles.pendingRequestBanner}>
-                                    <Text style={styles.pendingRequestTitle}>⏳ KEEPER REQUEST PENDING</Text>
+                                    <Text style={styles.pendingRequestTitle}>⏳ {kw.Keeper.toUpperCase()} REQUEST PENDING</Text>
                                     <Text style={styles.pendingRequestText}>
                                         {myPendingRequest.pendingChange
-                                            ? approvedApplicantText(myPendingRequest.pendingChange.appliesAt)
-                                            : `You asked to join this enterprise with ${myPendingRequest.pledgedBacking} 🫘 of backing standing. Awaiting review by the lead keeper.`}
+                                            ? approvedApplicantText(myPendingRequest.pendingChange.appliesAt, undefined, kw)
+                                            : `You asked to join this ${kw.kind} with ${myPendingRequest.pledgedBacking} 🫘 of backing standing. Awaiting review by the ${kw.lead}.`}
                                     </Text>
                                 </View>
                             ) : (
                                 <View style={styles.joinCard}>
-                                    <Text style={styles.joinTitle}>🤝 ASK TO JOIN AS A KEEPER</Text>
+                                    <Text style={styles.joinTitle}>🤝 ASK TO JOIN AS A {kw.Keeper.toUpperCase()}</Text>
                                     <Text style={styles.joinDesc}>
-                                        Help run this enterprise. You can back it with your earned trading standing to expand its credit floor.
+                                        Help run this {kw.kind}. You can back it with your earned trading standing to expand its credit floor.
                                     </Text>
 
                                     <Text style={[styles.sectionLabel, { marginBottom: 6 }]}>
-                                        Back this enterprise with your standing: 0 … {availableToBack}
+                                        Back this {kw.kind} with your standing: 0 … {availableToBack}
                                     </Text>
                                     <View style={styles.joinInputRow}>
                                         <TextInput
@@ -1146,14 +1170,14 @@ export default function TreasuryDetailScreen() {
                                                 setJoinBackingPledge(isNaN(raw) ? '0' : String(clamped));
                                             }}
                                             keyboardType="numeric"
-                                            accessibilityLabel={`Back this enterprise with your standing: 0 to ${availableToBack}`}
+                                            accessibilityLabel={`Back this ${kw.kind} with your standing: 0 to ${availableToBack}`}
                                         />
                                         <Text style={styles.joinAvailableText}>
                                             / {availableToBack} 🫘 available
                                         </Text>
                                     </View>
                                     <Text style={{ fontSize: 11, color: colors.text.muted, marginBottom: 12 }}>
-                                        A pledge of 0 is valid: someone who helps run it without pledging standing can still be a keeper.
+                                        A pledge of 0 is valid: someone who helps run it without pledging standing can still be a {kw.keeper}.
                                     </Text>
 
                                     <Pressable
@@ -1161,12 +1185,12 @@ export default function TreasuryDetailScreen() {
                                         disabled={submittingJoin || Number(joinBackingPledge) > availableToBack}
                                         onPress={handleJoinRequest}
                                         accessibilityRole="button"
-                                        accessibilityLabel="Request to join as keeper"
+                                        accessibilityLabel={`Request to join as a ${kw.keeper}`}
                                     >
                                         {submittingJoin ? (
                                             <ActivityIndicator size="small" color={colors.text.inverse} />
                                         ) : (
-                                            <Text style={styles.joinButtonText}>Request to join as keeper</Text>
+                                            <Text style={styles.joinButtonText}>Request to join as a {kw.keeper}</Text>
                                         )}
                                     </Pressable>
                                 </View>
@@ -1176,7 +1200,7 @@ export default function TreasuryDetailScreen() {
                         {/* Accountable Keepers */}
                         {detail?.keepers && detail.keepers.length > 0 && (
                             <View style={styles.keepersCard}>
-                                <Text style={styles.keepersLabel}>ACCOUNTABLE KEEPERS ({detail.keepers.length})</Text>
+                                <Text style={styles.keepersLabel}>{kw.Keepers.toUpperCase()} ({detail.keepers.length})</Text>
                                 <View style={styles.keepersList}>
                                     {detail.keepers.map((k: any) => {
                                         const isLead = k.role === 'lead';
@@ -1188,13 +1212,13 @@ export default function TreasuryDetailScreen() {
                                             <View
                                                 key={pk}
                                                 style={[styles.keeperChip, isSuspended && styles.keeperChipSuspended]}
-                                                accessibilityLabel={isSuspended ? `${k.callsign}, ${isLead ? 'lead keeper' : 'keeper'}, suspended` : undefined}
+                                                accessibilityLabel={isSuspended ? `${k.callsign}, ${isLead ? kw.lead : kw.keeper}, suspended` : undefined}
                                             >
                                                 <MaterialCommunityIcons name="shield-account" size={14} color={isSuspended ? colors.text.secondary : colors.brand.primary} />
                                                 <Text style={styles.keeperCallsign}>{k.callsign}</Text>
                                                 {isSuspended && <Text style={styles.keeperBadge}>Suspended</Text>}
                                                 <Text style={isLead ? styles.leadKeeperBadge : styles.keeperBadge}>
-                                                    {isLead ? 'Lead keeper' : 'Keeper'}
+                                                    {isLead ? kw.Lead : kw.Keeper}
                                                 </Text>
                                                 {Number(k.backing) > 0 && (
                                                     <Text style={styles.backingText}>+{k.backing} 🫘</Text>
@@ -1210,7 +1234,7 @@ export default function TreasuryDetailScreen() {
                                         disabled={processingChangeId === k.publicKey}
                                         onPress={() => handleRemoveKeeper(k)}
                                         accessibilityRole="button"
-                                        accessibilityLabel={`Remove ${k.callsign} as a keeper`}
+                                        accessibilityLabel={`Remove ${k.callsign} as a ${kw.keeper}`}
                                     >
                                         <Text style={styles.keeperActionText}>Remove {k.callsign}</Text>
                                     </Pressable>
@@ -1221,12 +1245,12 @@ export default function TreasuryDetailScreen() {
                                         disabled={steppingDown}
                                         onPress={handleStepDown}
                                         accessibilityRole="button"
-                                        accessibilityLabel="Step down as a keeper"
+                                        accessibilityLabel={`Step down as a ${kw.keeper}`}
                                     >
                                         {steppingDown ? (
                                             <ActivityIndicator size="small" color={colors.text.secondary} />
                                         ) : (
-                                            <Text style={styles.keeperActionText}>Step down as keeper</Text>
+                                            <Text style={styles.keeperActionText}>Step down as a {kw.keeper}</Text>
                                         )}
                                     </Pressable>
                                 )}
@@ -1261,11 +1285,11 @@ export default function TreasuryDetailScreen() {
                                 <View
                                     accessible={true}
                                     accessibilityRole="alert"
-                                    accessibilityLabel={`Warning: Operator eats last. This enterprise is currently in deficit with ${balance} beans. Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.`}
+                                    accessibilityLabel={`Warning: Operator eats last. This ${kw.kind} is currently in deficit with ${balance} beans. Credit buys inputs and supplies, but ${kw.keepers} can only be paid from profit. ${kw.Keepers} cannot be paid while the ${kw.kind} is in deficit.`}
                                     style={{ marginTop: 12, padding: 10, backgroundColor: colors.surface.app, borderRadius: 10, borderWidth: 1, borderColor: colors.feedback.warning.solid }}
                                 >
-                                    <Text style={{ fontSize: 11, color: colors.feedback.warning.solid, fontWeight: '700', lineHeight: 16 }}>
-                                        ⚠️ OPERATOR EATS LAST: This enterprise is currently in deficit ({balance} 🫘). Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.
+                                    <Text style={{ fontSize: 11, color: colors.feedback.warning.fg, fontWeight: '700', lineHeight: 16 }}>
+                                        ⚠️ OPERATOR EATS LAST: This {kw.kind} is currently in deficit ({balance} 🫘). Credit buys inputs and supplies, but {kw.keepers} can only be paid from profit. {kw.Keepers} cannot be paid while the {kw.kind} is in deficit.
                                     </Text>
                                 </View>
                             )}
@@ -1275,16 +1299,25 @@ export default function TreasuryDetailScreen() {
                                         <Text style={{ fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 }}>
                                             Pending Wage Claims ({pendingClaims.length})
                                         </Text>
-                                        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.feedback.warning.solid }}>
+                                        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.feedback.warning.fg }}>
                                             {pendingClaimsTotal} 🫘
                                         </Text>
                                     </View>
                                     <Text style={{ fontSize: 11, color: colors.text.secondary, marginTop: 4, lineHeight: 15 }}>
-                                        Deferred until enterprise earns sufficient trading profit. Paid automatically from future sales.
+                                        Deferred until the {kw.kind} earns sufficient trading profit. Paid automatically from future sales.
                                     </Text>
                                 </View>
                             )}
                         </View>
+
+                        {/* The keepers' votes (DESIGN-group-decisions S2): drawn only for those the node answers */}
+                        {treasuryKey && (
+                            <EnterpriseDecisions
+                                treasuryKey={treasuryKey} myPubkey={myPubkey} keepers={keeperList} balance={balance}
+                                earnedSurplus={typeof detail?.earnedSurplus === 'number' ? detail.earnedSurplus : null}
+                                lifecycle={detail?.lifecycle} refreshKey={decisionsRefresh}
+                            />
+                        )}
 
                         {/* Operator controls */}
                         {isKeeperOfThis && (
@@ -1371,9 +1404,9 @@ export default function TreasuryDetailScreen() {
                                                         accessibilityRole="button"
                                                     >
                                                         {actionState?.id === b.id && actionState?.type === 'reject' ? (
-                                                            <ActivityIndicator size="small" color={colors.feedback.warning.solid} />
+                                                            <ActivityIndicator size="small" color={colors.feedback.warning.fg} />
                                                         ) : (
-                                                            <Text style={[styles.sweepBtnText, { color: colors.feedback.warning.solid }]}>Decline</Text>
+                                                            <Text style={[styles.sweepBtnText, { color: colors.feedback.warning.fg }]}>Decline</Text>
                                                         )}
                                                     </Pressable>
                                                 </View>
@@ -1423,7 +1456,7 @@ export default function TreasuryDetailScreen() {
                                 )}
 
                                 <Text style={styles.opHint}>
-                                    Post the enterprise's recurring Offer (what it sells) and its Needs (tenders it pays for). Surplus can be swept into the shared Commons pool.
+                                    Post the {kw.kind}'s recurring Offer (what it sells) and its Needs (tenders it pays for). Surplus can be swept into the shared Commons pool.
                                 </Text>
 
                                 {detail?.lifecycle === 'bounded' && detail?.status !== 'funded' && (
@@ -1436,11 +1469,11 @@ export default function TreasuryDetailScreen() {
                                             accessibilityLabel="Cancel initiative and refund escrow"
                                         >
                                             {cancelling ? (
-                                                <ActivityIndicator size="small" color={colors.feedback.danger.solid} />
+                                                <ActivityIndicator size="small" color={colors.feedback.danger.fg} />
                                             ) : (
                                                 <>
-                                                    <MaterialCommunityIcons name="cancel" size={16} color={colors.feedback.danger.solid} />
-                                                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.feedback.danger.solid }}>
+                                                    <MaterialCommunityIcons name="cancel" size={16} color={colors.feedback.danger.fg} />
+                                                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.feedback.danger.fg }}>
                                                         Cancel Initiative & Refund Escrow
                                                     </Text>
                                                 </>
@@ -1467,16 +1500,16 @@ export default function TreasuryDetailScreen() {
                                 icon: '❄️', title: 'Confirm Pause for Season', text: pauseConfirmText(detail), tone: warning,
                                 confirm: 'Confirm Season Pause', busy: 'Pausing…', cancel: 'Cancel', blocked: null as string | null,
                             } : open === 'resume' ? {
-                                icon: '▶️', title: 'Confirm Resume Enterprise', text: RESUME_CONFIRM_TEXT, tone: success,
+                                icon: '▶️', title: `Confirm Resume ${kw.Kind}`, text: RESUME_CONFIRM_TEXT, tone: success,
                                 confirm: 'Confirm Resume', busy: 'Resuming…', cancel: 'Cancel', blocked: null,
                             } : open === 'windUp' ? {
-                                icon: '⚠️', title: 'Start Enterprise Wind-Up', text: windUpConfirmText(detail, name), tone: danger,
+                                icon: '⚠️', title: `Start ${kw.Kind} Wind-Up`, text: windUpConfirmText(detail, name), tone: danger,
                                 confirm: 'Confirm Start Wind-Up', busy: 'Starting Wind-Up…', cancel: 'Cancel', blocked: deficit,
                             } : open === 'cancelWindUp' ? {
-                                icon: '🛑', title: 'Stop Enterprise Wind-Up', text: cancelWindUpConfirmText(name), tone: success,
+                                icon: '🛑', title: `Stop ${kw.Kind} Wind-Up`, text: cancelWindUpConfirmText(name, detail?.lifecycle), tone: success,
                                 confirm: 'Confirm Stop Wind-Up', busy: 'Stopping Wind-Up…', cancel: 'Keep Winding Up', blocked: null,
                             } : open === 'finaliseWindUp' ? {
-                                icon: '🏁', title: 'Finalise Enterprise Wind-Up', text: finaliseWindUpConfirmText(detail, name), tone: danger,
+                                icon: '🏁', title: `Finalise ${kw.Kind} Wind-Up`, text: finaliseWindUpConfirmText(detail, name), tone: danger,
                                 confirm: 'Finalise Wind-Up', busy: 'Finalising…', cancel: 'Cancel', blocked: null,
                             } : null;
 
@@ -1529,7 +1562,7 @@ export default function TreasuryDetailScreen() {
                                         </View>
                                     ) : (
                                         <View>
-                                            {controls.resume && actionButton('resume', 'play', 'Resume Enterprise', success)}
+                                            {controls.resume && actionButton('resume', 'play', `Resume ${kw.Kind}`, success)}
                                             {controls.pause && actionButton('pause', 'snowflake', 'Pause for Season', warning)}
                                             {controls.cancelWindUp && actionButton('cancelWindUp', 'stop-circle-outline', 'Stop Wind-Up', success)}
                                             {controls.finaliseWindUp && actionButton('finaliseWindUp', 'flag-checkered', 'Finalise Wind-Up', danger)}
@@ -1690,7 +1723,7 @@ export default function TreasuryDetailScreen() {
                                     <Text style={styles.flowMemo} numberOfLines={1}>{f.memo || (f.incoming ? 'Received' : 'Sent')}</Text>
                                     <Text style={styles.flowTime}>{formatTime(f.timestamp)}</Text>
                                 </View>
-                                <Text style={[styles.flowAmount, { color: f.incoming ? colors.brand.primary : colors.feedback.warning.solid }]}>
+                                <Text style={[styles.flowAmount, { color: f.incoming ? colors.brand.primary : colors.feedback.warning.fg }]}>
                                     {f.incoming ? '+' : '−'}{Math.abs(f.amount)} 🫘
                                 </Text>
                             </View>
@@ -1701,7 +1734,7 @@ export default function TreasuryDetailScreen() {
                             <View style={styles.threadHeader}>
                                 <View style={{ flex: 1 }}>
                                     <Text style={styles.threadTitle}>Discussion</Text>
-                                    <Text style={styles.threadSubtitle}>Public coordination for this enterprise</Text>
+                                    <Text style={styles.threadSubtitle}>Public coordination for this {kw.kind}</Text>
                                 </View>
                                 <MaterialCommunityIcons name="forum-outline" size={22} color={colors.brand.primary} />
                             </View>
@@ -1709,7 +1742,7 @@ export default function TreasuryDetailScreen() {
                             {threadReadOnly && (
                                 <View style={styles.threadReadOnlyBanner}>
                                     <Text style={styles.threadReadOnlyText}>
-                                        Enterprise has wound up — discussion thread is read-only.
+                                        {kw.Kind} has wound up — discussion thread is read-only.
                                     </Text>
                                 </View>
                             )}
@@ -1721,7 +1754,7 @@ export default function TreasuryDetailScreen() {
                                     const isRemoved = m.type === 'removed';
                                     const authorName = m.authorCallsign || (m.authorPubkey ? m.authorPubkey.slice(0, 8) : 'Member');
                                     const authorAvatar = m.authorAvatar;
-                                    const textContent = decodeThreadMessage(m.ciphertext, m.type);
+                                    const textContent = decodeThreadMessage(m.ciphertext, m.type, kw.keeper);
                                     return (
                                         <View key={m.id} style={[styles.threadMsgRow, idx === threadMessages.length - 1 && { borderBottomWidth: 0 }]}>
                                             <MemberAvatar
@@ -1745,9 +1778,9 @@ export default function TreasuryDetailScreen() {
                                                                 accessibilityState={{ disabled: threadRemovingId === m.id, busy: threadRemovingId === m.id }}
                                                             >
                                                                 {threadRemovingId === m.id ? (
-                                                                    <ActivityIndicator size="small" color={colors.feedback.danger.solid} />
+                                                                    <ActivityIndicator size="small" color={colors.feedback.danger.fg} />
                                                                 ) : (
-                                                                    <MaterialCommunityIcons name="trash-can-outline" size={18} color={colors.feedback.danger.solid} />
+                                                                    <MaterialCommunityIcons name="trash-can-outline" size={18} color={colors.feedback.danger.fg} />
                                                                 )}
                                                             </Pressable>
                                                         )}
@@ -1766,7 +1799,7 @@ export default function TreasuryDetailScreen() {
                                 <View style={styles.threadInputRow}>
                                     <TextInput
                                         style={[styles.threadInput, threadPosting && { opacity: 0.6 }]}
-                                        placeholder="Message the enterprise..."
+                                        placeholder={`Message the ${kw.kind}...`}
                                         placeholderTextColor={colors.text.muted}
                                         value={threadInput}
                                         onChangeText={setThreadInput}
@@ -1774,7 +1807,7 @@ export default function TreasuryDetailScreen() {
                                         returnKeyType="send"
                                         onSubmitEditing={handlePostThreadMessage}
                                         editable={!threadPosting}
-                                        accessibilityLabel="Message the enterprise"
+                                        accessibilityLabel={`Message the ${kw.kind}`}
                                     />
                                     <Pressable
                                         style={[
@@ -1798,43 +1831,26 @@ export default function TreasuryDetailScreen() {
 
                         {/* Report Enterprise Action */}
                         <View style={{ marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.border.default, marginBottom: 20 }}>
-                            <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => setShowReportForm(!showReportForm)} accessibilityRole="button" accessibilityLabel="Report Enterprise">
-                                <MaterialCommunityIcons name="shield-alert-outline" size={18} color={colors.feedback.danger.solid} />
-                                <Text style={{ color: colors.feedback.danger.solid, fontSize: 14, fontWeight: '600' }}>Report Enterprise</Text>
+                            <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => setShowReportForm(!showReportForm)} accessibilityRole="button" accessibilityLabel={`Report ${kw.Kind}`}>
+                                <MaterialCommunityIcons name="shield-alert-outline" size={18} color={colors.feedback.danger.fg} />
+                                <Text style={{ color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '600' }}>Report {kw.Kind}</Text>
                             </Pressable>
                             {showReportForm && (
-                                <View style={{ marginTop: 12, backgroundColor: colors.feedback.danger.bg, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.feedback.danger.border }}>
-                                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.feedback.danger.solid, marginBottom: 8, letterSpacing: 0.5 }}>REPORT REASON</Text>
-                                    <TextInput
-                                        accessibilityLabel="Report reason"
-                                        style={{ backgroundColor: colors.surface.card, height: 40, borderRadius: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.border.default, marginBottom: 10, color: colors.text.body }}
-                                        placeholder="Why are you reporting this enterprise?"
-                                        placeholderTextColor={colors.text.muted}
-                                        value={reportReason}
-                                        onChangeText={setReportReason}
-                                    />
-                                    <Pressable
-                                        accessibilityRole="button"
-                                        style={{ backgroundColor: reportReason ? colors.feedback.danger.solid : colors.surface.subtle, height: 40, borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}
-                                        disabled={!reportReason || reporting}
-                                        onPress={async () => {
-                                            if (!identity?.publicKey || !treasuryKey) return;
-                                            setReporting(true);
-                                            try {
-                                                await reportAbuse(identity.publicKey, treasuryKey, reportReason, treasuryKey);
-                                                setShowReportForm(false);
-                                                setReportReason('');
-                                                Alert.alert('Reported', 'This enterprise has been flagged for review.');
-                                            } catch (e: any) {
-                                                Alert.alert('Error', e.message || 'Could not submit report.');
-                                            } finally {
-                                                setReporting(false);
-                                            }
-                                        }}
-                                    >
-                                        <Text style={{ color: colors.text.inverse, fontWeight: 'bold' }}>{reporting ? 'Reporting...' : 'Submit Report'}</Text>
-                                    </Pressable>
-                                </View>
+                                // The same short reason list as a post (ReportReasonBox): "Child safety" is told to the owners at once.
+                                <ReportReasonBox
+                                    onCancel={() => setShowReportForm(false)}
+                                    onSubmit={async (reason) => {
+                                        if (!identity?.publicKey || !treasuryKey) return;
+                                        try {
+                                            await reportAbuse(identity.publicKey, treasuryKey, reason, treasuryKey);
+                                            setShowReportForm(false);
+                                            Alert.alert('Reported', `This ${kw.kind} has been flagged for review.`);
+                                        } catch (e: any) {
+                                            Alert.alert('Error', e.message || 'Could not submit report.');
+                                            throw e; // the box keeps the choice and the words
+                                        }
+                                    }}
+                                />
                             )}
                         </View>
                     </ScrollView>
@@ -1905,10 +1921,10 @@ export default function TreasuryDetailScreen() {
                     <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
                         <View style={{ backgroundColor: colors.surface.card, borderRadius: 16, padding: 20, width: '100%', maxWidth: 400, borderWidth: 1, borderColor: colors.border.default }}>
                             <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text.heading, marginBottom: 6 }}>
-                                Propose Lead Keeper
+                                Propose {kw.kind === 'project' ? 'Leader' : 'Lead Keeper'}
                             </Text>
                             <Text style={{ fontSize: 13, color: colors.text.secondary, marginBottom: 14 }}>
-                                Select an active keeper to move the lead role to:
+                                Select an active {kw.keeper} to move the {kw.kind === 'project' ? 'leader' : 'lead'} role to:
                             </Text>
                             <ScrollView style={{ maxHeight: 240, marginBottom: 16 }}>
                                 {(detail?.keepers || [])
@@ -1921,7 +1937,7 @@ export default function TreasuryDetailScreen() {
                                                 style={styles.candidateOption}
                                                 onPress={() => handleProposeSuccession(pk)}
                                                 accessibilityRole="button"
-                                                accessibilityLabel={`Propose ${k.callsign} as lead keeper`}
+                                                accessibilityLabel={`Propose ${k.callsign} as ${kw.lead}`}
                                             >
                                                 <Text style={styles.candidateOptionText}>
                                                     {k.callsign} {pk === identity?.publicKey ? '(yourself)' : ''}

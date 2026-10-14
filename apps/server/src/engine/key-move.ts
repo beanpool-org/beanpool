@@ -1,9 +1,11 @@
 // A member's key replaced by a re-key (engine/member-wizards.ts completeRekey): every row that names the old key names the
 // new one, on the main server when the re-key completes, and on its standby when the copy that carries it arrives.
 //
-// A leaf module (the database and nothing else), so the standby's import (engine/sync.ts) and the re-key share one list.
+// A leaf module (the database and the listing pushes' area map, nothing else), so the standby's import (engine/sync.ts)
+// and the re-key share one list.
 
-import { db } from '../db/db.js';
+import { db, deletePlainRows } from '../db/db.js';
+import { refreshMemberAreas } from './member-area.js';
 
 // ── both ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -64,6 +66,13 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     } else {
         db.prepare("UPDATE members SET public_key = ?, status = CASE WHEN status = 'disabled' THEN 'disabled' ELSE 'active' END, updated_at = ? WHERE public_key = ?").run(newKey, at, oldKey);
     }
+    // The member's area went with the row: once the transaction commits, the listing pushes' map (member-area.ts) has
+    // it on the new key and nothing on the old, so the new phone hears the listings near it before any restart.
+    refreshMemberAreas([oldKey, newKey]);
+
+    // (a2) their avatar, out of the row (member_photos): it goes where the row goes. The row's avatar_ref names it, and
+    // its URL is made under the new key.
+    move('member_photos', 'public_key');
 
     // (b) members foreign keys (referrals & vouches)
     move('members', 'invited_by');
@@ -99,8 +108,15 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('conversations', 'created_by');
     move('conversation_participants', 'public_key');
 
-    // (i) messages
+    // (i) messages, and what the member sent to someone who had blocked them, kept for them alone (engine/withheld-lines.ts;
+    // never copied, so on a standby there are none). A conversation of theirs that would name the same two people as one
+    // already there (it can't, as the new key is new) is left to go with the old key.
     move('messages', 'author_pubkey');
+    move('withheld_lines', 'author_pubkey');
+    move('withheld_overlays', 'author_pubkey');
+    db.prepare('UPDATE OR IGNORE withheld_conversations SET owner_pubkey = ? WHERE owner_pubkey = ?').run(newKey, oldKey);
+    db.prepare('UPDATE OR IGNORE withheld_conversations SET other_pubkey = ? WHERE other_pubkey = ?').run(newKey, oldKey);
+    db.prepare('DELETE FROM withheld_conversations WHERE owner_pubkey = ? OR other_pubkey = ?').run(oldKey, oldKey);
 
     // (j) friends & ratings
     move('friends', 'owner_pubkey');
@@ -120,8 +136,10 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('invite_codes', 'created_by');
     move('invite_codes', 'used_by');
 
-    // (n) push_tokens (Purge old device tokens as device was lost)
+    // (n) push_tokens (Purge old device tokens as device was lost), and the details of the pushes sent to them, each
+    // signed for the old key (engine/push-notices.ts: this server's own, never copied)
     db.prepare('DELETE FROM push_tokens WHERE public_key = ?').run(oldKey);
+    db.prepare('DELETE FROM push_notices WHERE recipient = ?').run(oldKey);
 
     // (o) member_preferences
     move('member_preferences', 'public_key');
@@ -138,6 +156,10 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('groups', 'created_by');
     move('group_members', 'member_pubkey');
     move('group_members', 'invited_by');
+    // A group chat's wraps for the old key stay (DESIGN-group-history-after-rekey-fable.md §3, Marty's pick 3 of 13 Oct):
+    // only the old key's seed opens them, so the member's phone can bring the history back with their old 12 words
+    // (GET …/keys/former). The old key has no group_members row now, so it is never listed or topped up; the member
+    // shows in …/keys/missing under the new key, from their unchanged from_epoch.
     move('group_convenor_proposals', 'convenor_pubkey');
     move('group_convenor_proposals', 'candidate_pubkey');
     move('group_convenor_proposals', 'proposer_pubkey');
@@ -147,6 +169,7 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // dropMovedRecoveryCopies)
     move('recovery_collections', 'owner_pubkey');
     move('recovery_releases', 'released_by');
+    move('recovery_releases', 'owner_pubkey');
     // The sign-in account the member joined with through the open door (engine/open-join.ts). Left on the
     // invalidated key, deleting the account would free nothing and a removal would read as still joined.
     // Stamped on the main server, so the move replicates (engine/open-join.ts).
@@ -184,6 +207,7 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     // cross-village trust validation and settlements will fail verification against the new key.
     // Trades with other villages will need re-linking on peer nodes.
     move('federation_links', 'treasury_pubkey');
+    move('federation_link_treasuries', 'treasury_pubkey');
 
     // (v) activity_feed
     move('activity_feed', 'actor_pubkey');
@@ -196,11 +220,13 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('creator_channels', 'owner_pubkey');
     move('pulse_items', 'owner_pubkey');
 
-    // (y) decisions & votes - update subject for member proposals and pool hardship grants
+    // (y) decisions & votes - update subject for member proposals, pool hardship grants and a scoped vote's subject (a
+    //     keeper, or a pay-out's recipient)
     move('decisions', 'author_pubkey');
     move('decisions', 'admin_halted_by');
-    move('decisions', 'subject', "touches = 'member' OR touches = 'pool'");
+    move('decisions', 'subject', "touches = 'member' OR touches = 'pool' OR touches = 'scope'");
     move('decision_votes', 'voter_pubkey');
+    move('decision_electors', 'member_pubkey');
 
     // (z) enterprise_pledges
     move('enterprise_pledges', 'keeper');
@@ -221,6 +247,38 @@ export function moveMemberKeyRows(oldKey: string, newKey: string, at: string, op
     move('enterprise_keeper_changes', 'member_pubkey');
     move('enterprise_keeper_changes', 'proposed_by');
     move('enterprise_keeper_changes', 'resolved_by');
+
+    // (z3) the names list (engine/names-list.ts): a member's confirmation moves with them (design §4.1, "Re-key"), and so do
+    // the admins named on entries, confirmations and the access log. Not the key history or a share
+    // (`names_generations.maker`, `names_shares` from and to): each is signed by, or sealed to, the old key, and the
+    // phones check it against that key (@beanpool/core names-list-trust.ts). The old key stops being an admin here, so the
+    // main server marks it as no longer holding the current key at its next names-list request (reconcileHolders), and
+    // the list takes a new key without it, since a lost phone may still hold the old one. The new key is checked in
+    // person once before any phone sends it the keys.
+    move('confirmations', 'member_pubkey');
+    move('confirmations', 'confirmed_by');
+    move('confirmations', 'seconded_by');
+    move('confirmations', 'revoked_by');
+    move('names_entries', 'created_by');
+    move('names_entries', 'updated_by');
+    move('names_access_log', 'actor_pubkey');
+    move('names_access_log', 'subject_pubkey');
+    move('known_floor_exceptions', 'member_pubkey');
+    move('known_floor_exceptions', 'set_by');
+    move('names_debts', 'repaying_pubkey');
+    move('health_access_log', 'actor_pubkey');
+    move('health_access_log', 'subject_pubkey');
+    move('known_consents', 'member_pubkey');
+    move('known_consent_log', 'member_pubkey');
+    move('names_debts', 'settled_by');
+    move('names_debt_payments', 'payer_pubkey');
+    move('money_requests', 'payer_pubkey');
+    move('known_floor_log', 'actor_pubkey');
+    move('known_floor_log', 'member_pubkey');
+    // The old key's locked copy of its names-list record (engine/names-list.ts): sealed to the old key, so the new one
+    // can't open it; it goes, never moves. On the main server with a tombstone; a standby drops it here as well.
+    if (keepStamps) db.prepare('DELETE FROM names_copies WHERE owner_pubkey = ?').run(oldKey);
+    else deletePlainRows('names_copies', 'owner_pubkey = ?', oldKey);
 }
 
 // ── on a standby ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -252,8 +310,13 @@ export function mergeReplicatedInvalidatedKeys(rows: unknown): ReplacedKeyMerge 
     const upsert = db.prepare(`INSERT INTO invalidated_keys (public_key, reason, invalidated_at, rekeyed_to) VALUES (?, ?, ?, ?)
                                ON CONFLICT(public_key) DO UPDATE SET
                                    reason = excluded.reason, invalidated_at = excluded.invalidated_at, rekeyed_to = excluded.rekeyed_to`);
+    // The succession statement (line-display design §5) is set once and never cleared: a row that carries one sets it here
+    // when this row has none and names the same new key it was signed for; a row without one leaves this row's alone.
+    const attest = db.prepare(`UPDATE invalidated_keys SET succession_sig = ?, succession_at = ?, succession_stored_at = ?
+                               WHERE public_key = ? AND succession_sig IS NULL AND rekeyed_to = ?`);
     for (const raw of rows) {
-        const r = raw as { publicKey?: unknown; reason?: unknown; invalidatedAt?: unknown; rekeyedTo?: unknown } | null;
+        const r = raw as { publicKey?: unknown; reason?: unknown; invalidatedAt?: unknown; rekeyedTo?: unknown;
+                           successionSig?: unknown; successionAt?: unknown; successionStoredAt?: unknown } | null;
         const key = isText(r?.publicKey, 128) ? r.publicKey.toLowerCase() : null;
         const rekeyedTo = typeof r?.rekeyedTo === 'string' ? r.rekeyedTo.toLowerCase() : r?.rekeyedTo ?? null;
         if (!r || !key || /\s/.test(key) || !isText(r.reason, 64) || !isText(r.invalidatedAt, 40)
@@ -267,10 +330,14 @@ export function mergeReplicatedInvalidatedKeys(rows: unknown): ReplacedKeyMerge 
         if (here && (here.invalidated_at > r.invalidatedAt
             || (here.invalidated_at === r.invalidatedAt && (here.reason === 'rekeyed' || r.reason !== 'rekeyed')))) {
             merge.kept++;
-            continue;
+        } else {
+            upsert.run(key, r.reason, r.invalidatedAt, rekeyedTo);
+            merge.written++;
         }
-        upsert.run(key, r.reason, r.invalidatedAt, rekeyedTo);
-        merge.written++;
+        if (r.reason === 'rekeyed' && typeof rekeyedTo === 'string' && isText(r.successionSig, 128) && isText(r.successionAt, 40)
+            && Number.isFinite(Date.parse(r.successionAt))) {
+            attest.run(r.successionSig, r.successionAt, isText(r.successionStoredAt, 40) ? r.successionStoredAt : r.invalidatedAt, key, rekeyedTo);
+        }
     }
     merge.rekeys.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
     return merge;
@@ -323,9 +390,11 @@ export function followReplicatedRekeys(rekeys: ReplicatedRekey[], beforeMove?: (
 
 /**
  * The recovery copies of a re-key this standby followed: the ones the main server moved to the new key go from the old
- * one here. The main server wraps each copy the member owns again for the new key (engine/recovery-shares.ts
- * moveRecoverySharesToNewKey), which this standby cannot (it holds no seal key), and stamps it, so the copy brings the
- * moved rows; the rows under the old key would stay beside them, a second copy of a replaced key's recovery. So a row
+ * one here. The main server renames the copies the member keeps for someone else (engine/recovery-shares.ts
+ * moveKeeperCopiesToNewKey) and stamps them, so the copy brings the moved rows; the rows under the old key would stay
+ * beside them, a second copy of a replaced key's recovery. The copies the member owns, it deletes with a tombstone
+ * (completeRekey), which the import applies; an older main server re-wrapped them for the new key instead, and this
+ * still drops the old rows of such a move. So a row
  * here goes once the copy has brought its moved counterpart, by the key the table is unique on, with the owner and a
  * keeper ref that named the old key naming the new one. One the main server left under the old key (locked with another
  * key, which it could not open) has no counterpart, and stays here as it stays there. After the copy's recovery rows,

@@ -20,7 +20,7 @@ interface BannerProps {
     onCancel: () => void;
 }
 
-export function ChatReplyBanner({ styles, author, text, onCancel }: BannerProps) {
+export function ChatReplyBanner({ styles, author, text, note, onCancel }: BannerProps & { note?: string | null }) {
     const { colors } = useTheme();
     return (
         <View style={styles.replyPreviewContainer}>
@@ -28,6 +28,7 @@ export function ChatReplyBanner({ styles, author, text, onCancel }: BannerProps)
                 <View style={{ flex: 1, borderLeftWidth: 3, borderLeftColor: colors.accent.primary, paddingLeft: 8 }}>
                     <Text style={styles.replyPreviewAuthor}>Replying to {author}</Text>
                     <Text style={styles.replyPreviewText} numberOfLines={1}>{text}</Text>
+                    {note ? <Text style={[styles.replyPreviewText, { fontStyle: 'italic', fontSize: 11 }]}>⚠️ {note}</Text> : null}
                 </View>
                 <Pressable accessibilityRole="button" accessibilityLabel="Cancel reply" onPress={onCancel} style={styles.replyPreviewClose}>
                     <MaterialCommunityIcons name="close" size={20} color={colors.text.secondary} />

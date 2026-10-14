@@ -9,6 +9,8 @@
  *  - User location marker (pulsing purple dot)
  */
 
+import { placelessListingNote } from '@beanpool/core';
+import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
 import L from 'leaflet';
@@ -20,9 +22,10 @@ import {
     getMarketplacePosts, createMarketplacePost, updateMarketplacePost, treasuryPostEvent, getNodeInfo, getRemotePosts,
     getNodeConfig, getBalance, getReachablePeers, getTreasuries, getEnterpriseStatuses,
     getEnterpriseMapPins, type EnterpriseMapPin,
-    getGroups, type MarketplacePost, type PostReach, type ReachablePeer, type Group
+    getGroups, getCommunityMe, type MarketplacePost, type PostReach, type ReachablePeer, type Group
 } from '../lib/api';
-import { haversineDistance } from '../lib/geo';
+import { haversineDistance, loadRadiusSettings } from '../lib/geo';
+import { nearRead, nearParams, listingDistanceKm } from '../lib/listings-near';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
 import { loadEnabledPeers } from '../lib/peer-prefs';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
@@ -36,20 +39,27 @@ import {
 } from '../lib/live-posts';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { EventCard } from '../components/EventCard';
-import { approximateLocation, tierForCredit, type AddressResult } from '@beanpool/core';
+import { approximateLocation, listPhotoUrl, tierForCredit, type AddressResult } from '@beanpool/core';
 import { AddressSearch } from '../components/AddressSearch';
 import { NewAccountCard } from '../components/NewAccountCard';
 import { nodeRefusal, PROBATION_LIMIT, type NodeRefusal } from '../lib/node-refusal';
 import { composerVisitorNote, visitorsSeeListings } from '../lib/visitor-lobby';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+import { marked, useFeatureMode } from '../lib/features';
+import { LocalCommunityLine } from '../components/LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 import {
-    CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload,
+    CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
     eventInWindow, isEventHostView, isEventOpen, localInputToIso, type EventEditForm, type EventWindow,
 } from '../lib/events';
 
 // The map's list read, and whether a listing pushed over the live feed belongs on it (lib/live-posts).
 const MAP_LIST_FILTER = { types: CLIENT_POST_TYPES };
 const fitsMapList = (p: MarketplacePost) => postFitsList(p, MAP_LIST_FILTER);
+/** The most pins one read asks for where the node reads by area (DESIGN-global-sync-by-area §5): the node's page cap. */
+const MAP_NEAR_LIMIT = 200;
+/** How long the first read waits to learn whether this node reads by area, before it reads as before. */
+const NEAR_WAIT_MS = 1500;
 
 // Simple deterministic hash for consistent pin placement
 function simpleHash(str: string): number {
@@ -172,10 +182,20 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
     const [pollOptions, setPollOptions] = useState<string[]>(['', '']);
     const [pollDurationDays, setPollDurationDays] = useState<3 | 7 | 14>(7);
+    // Polls are anonymous unless their creator makes them an open vote, fixed once someone votes (2026-09-28).
+    const [pollOpenVote, setPollOpenVote] = useState(false);
+    // A poll has no place. On a community that syncs by area it takes its author's area (design §3.4): the form says the
+    // poll is shown there, or, to an author with none, that members nearby won't see it in their list.
+    const nearbyLimits = useNearbyLimits(!!identity && showNewPost && newPostType === 'poll');
+    const pollAuthorArea = useMyArea(showNewPost && newPostType === 'poll' && nearbyLimits !== null);
+    const pollPlacelessNote = placelessListingNote(nearbyLimits !== null, pollAuthorArea);
     const [newPostCategory, setNewPostCategory] = useState('general');
     const [newPostTitle, setNewPostTitle] = useState('');
     const [newPostDescription, setNewPostDescription] = useState('');
     const [newPostCredits, setNewPostCredits] = useState('');
+    // Beans live in a local community here (preview or read-only, lib/features.ts): no price field, the line in its slot,
+    // and the listing goes up free with its terms in the description (design §1 row 2). Live and hidden: as before.
+    const priceMarked = marked(useFeatureMode('beans', !visitor));
     const [newPostPriceType, setNewPostPriceType] = useState<'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
     const [newPostRepeatable, setNewPostRepeatable] = useState(false);
     const [newPostCashAlsoNeeded, setNewPostCashAlsoNeeded] = useState(false);  // #108
@@ -301,6 +321,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             .catch(() => {});
         return () => { cancelled = true; };
     }, [newPostType, keeperOf, keeperNames]);
+    // ⚡ Bolt: O(1) Map lookup for user groups by ID instead of O(G) .find() scans on render
+    const userGroupsById = useMemo(() => new Map(userGroups.map(g => [g.id, g])), [userGroups]);
     const convenorGroups = userGroups.filter(g => g.viewerRole === 'convenor');
     // An enterprise is hosting this event, so its audience is the whole community and nothing else (#1054).
     const enterpriseHostsEvent = newPostType === 'event' && !eventEdit && eventHost.startsWith('ent:');
@@ -536,8 +558,60 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const lastRefreshTimeRef = useRef<number>(0);
     const refreshPromiseRef = useRef<Promise<void> | null>(null);
 
+    // Where the pins are read from on a node that keeps each member to the listings near their area (lib/listings-near,
+    // DESIGN-global-sync-by-area §5): the nearest MAP_NEAR_LIMIT within the Market's distance setting, else within the
+    // node's radius of the member's stored area. The first read waits until that is known (NEAR_WAIT_MS at most); a
+    // node without the switch, a visitor, and a read that fails all read as before.
+    const [nearbyListings, setNearbyListings] = useState<{ radiusKm: number } | null>(null);
+    const [memberArea, setMemberArea] = useState<{ lat: number; lng: number } | null>(null);
+    const [nearKnown, setNearKnown] = useState(false);
+    const [everywhere, setEverywhere] = useState(false);
+    const [radiusSetting] = useState(() => loadRadiusSettings());
+    // The member's area could not be read (the node busy or down): a note says so, with Try again, as the Market's line
+    // does, rather than reading from everywhere with no word.
+    const [areaFailed, setAreaFailed] = useState(false);
+    const [areaTry, setAreaTry] = useState(0);
+    useEffect(() => {
+        // A visitor reads the lobby's list as before, and asks nothing more for it.
+        if (visitor) { setNearKnown(true); return; }
+        let cancelled = false;
+        const known = () => { if (!cancelled) setNearKnown(true); };
+        const timer = setTimeout(known, NEAR_WAIT_MS);
+        communityInfoOnce()
+            .then(async info => {
+                if (cancelled) return;
+                const nearby = info?.features?.nearbyListings ?? null;
+                setNearbyListings(nearby);
+                if (nearby && identity?.publicKey) {
+                    let failed = false;
+                    const me = await getCommunityMe().catch(() => { failed = true; return null; });
+                    if (!cancelled) {
+                        setAreaFailed(failed);
+                        setMemberArea(me?.area ? { lat: me.area.lat, lng: me.area.lng } : null);
+                    }
+                }
+            })
+            .catch(() => {})
+            .finally(() => { clearTimeout(timer); known(); });
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [identity?.publicKey, visitor, areaTry]);
+    const near = useMemo(
+        () => nearKnown ? nearRead({ nearbyListings, setting: radiusSetting, area: memberArea, visitor: !!visitor, everywhere }) : null,
+        [nearKnown, nearbyListings, radiusSetting, memberArea, visitor, everywhere],
+    );
+    // After Show everywhere, where the map would read from again: Near your area (or the place picked) brings it back.
+    const nearAgain = useMemo(
+        () => everywhere ? nearRead({ nearbyListings, setting: radiusSetting, area: memberArea, visitor: !!visitor }) : null,
+        [everywhere, nearbyListings, radiusSetting, memberArea, visitor],
+    );
+    // A pin pushed over the live feed joins the map only inside the radius the map was read with.
+    const fitsMap = useCallback((p: MarketplacePost): boolean => fitsMapList(p) && (!near
+        || (p.lat != null && p.lng != null && haversineDistance(near.lat, near.lng, p.lat, p.lng) <= near.radiusKm)), [near]);
+
     // Load marketplace posts (home + enabled peers from localStorage)
     const refreshPosts = useCallback(async () => {
+        // Not before this node's way of reading is known, so the first read is made once, from the right place.
+        if (!nearKnown) return;
         if (refreshPromiseRef.current) return refreshPromiseRef.current;
         const p = (async () => {
             // Listings pushed while this read is in flight are replayed over it: it left before them.
@@ -561,13 +635,16 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         setInactiveEnterpriseKeys(inactiveKeys);
                     }).catch(() => {});
                 });
-                const [pinsRes, localData] = await Promise.all([
+                const [pinsRes, localData, ownData] = await Promise.all([
                     visitor ? Promise.resolve({ enterprises: [] }) : getEnterpriseMapPins().catch(() => ({ enterprises: [] })),
-                    // Events are opt-in on the node (docs/events-on-the-map.md §2.6); this page pins them.
-                    getMarketplacePosts({ ...MAP_LIST_FILTER }),
+                    // Events are opt-in on the node (docs/events-on-the-map.md §2.6); this page pins them. Where the node
+                    // reads by area, the nearest within the radius, and the viewer's own pins wherever they are.
+                    getMarketplacePosts(near ? { ...MAP_LIST_FILTER, ...nearParams(near), limit: MAP_NEAR_LIMIT } : { ...MAP_LIST_FILTER }),
+                    near && identity ? getMarketplacePosts({ ...MAP_LIST_FILTER, author: identity.publicKey, limit: MAP_NEAR_LIMIT }).catch(() => []) : Promise.resolve([]),
                 ]);
                 setEnterprises(pinsRes?.enterprises || []);
-                let allPosts: MarketplacePost[] = [...localData];
+                const ownIds = new Set(localData.map(p => p.id));
+                let allPosts: MarketplacePost[] = [...localData, ...ownData.filter(p => !ownIds.has(p.id))];
 
                 // Only fetch from peers the user has toggled on; never for a visitor, whose lobby reads this node's
                 // guest list and no other community's (G9a §7).
@@ -590,7 +667,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         }
                     }
                 }
-                setPosts(replayLiveChanges(liveMark, allPosts, fitsMapList));
+                setPosts(replayLiveChanges(liveMark, allPosts, fitsMap));
                 setPinsLoaded(true);
                 // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
                 // so the cooldown then suppressed the retry — a blip could leave the view stale
@@ -602,7 +679,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         })();
         refreshPromiseRef.current = p;
         return p;
-    }, [visitor]);
+    }, [visitor, nearKnown, near, fitsMap, identity]);
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
@@ -661,10 +738,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const postsRef = useRef<MarketplacePost[]>(posts);
     useLayoutEffect(() => { postsRef.current = posts; }, [posts]);
     useEffect(() => {
-        const offView = onLivePostChange(change => setPosts(prev => applyLivePostChange(prev, change, fitsMapList)));
+        const offView = onLivePostChange(change => setPosts(prev => applyLivePostChange(prev, change, fitsMap)));
         const offTie = registerLivePostTie(heldPostTie(() => postsRef.current, identity?.publicKey));
         return () => { offView(); offTie(); };
-    }, [identity?.publicKey]);
+    }, [identity?.publicKey, fitsMap]);
 
     // Create a new post from the map
     function resetEventForm() {
@@ -853,6 +930,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     repeatable: false,
                     pollOptions: validOptions.map((text, idx) => ({ id: `opt_${idx + 1}`, text })),
                     durationDays: pollDurationDays,
+                    pollOpenVote,
                     audienceScope,
                     ...(audienceScope === 'group' && targetGroupId ? { targetGroupId } : {}),
                 });
@@ -860,6 +938,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 setNewPostDescription('');
                 setPollOptions(['', '']);
                 setPollDurationDays(7);
+                setPollOpenVote(false);
                 setAudienceScope('public');
                 setTargetGroupId('');
                 setShowNewPost(false);
@@ -875,7 +954,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         // Validate all fields
         const errors = new Set<string>();
         if (!newPostTitle.trim()) errors.add('title');
-        if (newPostCredits.trim() === '' || isNaN(Number(newPostCredits)) || Number(newPostCredits) < 0) errors.add('credits');
+        if (!priceMarked && (newPostCredits.trim() === '' || isNaN(Number(newPostCredits)) || Number(newPostCredits) < 0)) errors.add('credits');
         if (!newPostDescription.trim()) errors.add('description');
         if (postLat == null || postLng == null) errors.add('location');
         if (newPostPhotos.length < 1) errors.add('photos');
@@ -897,8 +976,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 category: newPostCategory,
                 title: newPostTitle.trim(),
                 description: newPostDescription.trim(),
-                credits: Number(newPostCredits) || 0,
-                priceType: newPostPriceType,
+                credits: priceMarked ? 0 : Number(newPostCredits) || 0,
+                priceType: priceMarked ? 'fixed' : newPostPriceType,
                 authorPublicKey: identity?.publicKey || '',
                 repeatable: newPostRepeatable,
                 cashAlsoNeeded: newPostCashAlsoNeeded,
@@ -1308,7 +1387,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             .filter(e => e.lat != null && e.lng != null && e.status !== 'completed')
             .map(e => [e.lat!, e.lng!] as [number, number]),
     ], [posts, enterprises, blockedSet]);
-    const showLocationHint = nodeLocation === 'unset' && pinsLoaded && ownPinPoints.length === 0;
+    // Read by area and nothing near (lib/listings-near): its own line, never a dead end (DESIGN-global-sync-by-area §5).
+    const nearEmpty = !!near && pinsLoaded && posts.length === 0;
+    const showLocationHint = nodeLocation === 'unset' && pinsLoaded && ownPinPoints.length === 0 && !nearEmpty;
     useEffect(() => {
         if (centredRef.current || !mapRef.current) return;
         if (nodeLocation !== 'unset' && nodeLocation !== 'unknown') return;
@@ -1445,6 +1526,9 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     }, [focusPostId, posts, onFocusPostHandled]);
 
     const hasOpenEvents = posts.some(p => p.type === 'event' && isEventOpen(p) && !(p as any)._remoteNode);
+    // The notes about where the pins were read from take the event chips' spot, so while the chips show they sit under
+    // them (#1770): the chips' row is its 48px buttons with 0.25rem above and below, then a 0.25rem gap.
+    const nearNoteTop = hasOpenEvents ? 'top-[calc(5rem+48px)] md:top-[calc(1.5rem+48px)]' : 'top-[4.25rem] md:top-3';
 
     // Shared by the offer/need and event forms.
     function renderLocationPicker() {
@@ -1453,19 +1537,19 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
             <div className="flex gap-2 mb-2">
                 <button onClick={() => { useMyLocation(); setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); return n; }); }} className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
                     validationErrors.has('location') ? 'border-red-400 bg-red-50 text-red-600 shadow-md ring-1 ring-red-400' 
-                    : (postLat != null && !pinDropMode) ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-md ring-1 ring-emerald-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700'
+                    : (postLat != null && !pinDropMode) ? 'border-emerald-500 bg-emerald-50 text-emerald-700 shadow-md ring-1 ring-emerald-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                 }`}>
                     <span className="text-xl leading-none">📍</span> My location
                 </button>
                 <button onClick={() => { enterPinDrop(); setValidationErrors(prev => { const n = new Set(prev); n.delete('location'); return n; }); }} className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 rounded-xl border transition-all text-sm font-bold shadow-sm ${
                     validationErrors.has('location') ? 'border-red-400 bg-red-50 text-red-600 shadow-md ring-1 ring-red-400' 
-                    : pinDropMode ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md ring-1 ring-blue-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700'
+                    : pinDropMode ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md ring-1 ring-blue-500' : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-600 dark:text-nature-300 hover:bg-nature-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                 }`}>
                     <span className="text-xl leading-none">📌</span> Drop a pin
                 </button>
             </div>
             {pinDropMode && postLat == null && (
-                <p className="m-0 mb-3 text-blue-600 text-sm font-semibold text-center animate-pulse">
+                <p className="m-0 mb-3 text-blue-600 dark:text-blue-400 text-sm font-semibold text-center animate-pulse">
                     Tap the map to place your pin
                 </p>
             )}
@@ -1495,7 +1579,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         </div>
                     ))}
                     {newPostPhotos.length < 5 && (
-                        <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 flex items-center justify-center cursor-pointer bg-nature-50 text-2xl text-nature-400 hover:text-nature-500 hover:border-nature-400 hover:bg-oat-50 transition-all shadow-sm">
+                        <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 dark:border-nature-600 flex items-center justify-center cursor-pointer bg-nature-50 dark:bg-nature-900 text-2xl text-nature-400 dark:text-nature-300 hover:text-nature-500 dark:hover:text-nature-300 hover:border-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 transition-all shadow-sm">
                             📷
                             <input
                                 type="file"
@@ -1612,6 +1696,40 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 </p>
             )}
 
+            {near && nearEmpty && !showNewPost && (
+                <p
+                    role="status"
+                    data-testid="map-near-empty"
+                    className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
+                >
+                    <span>{`Nothing within ${formatDistance(near.radiusKm)} ${near.from === 'area' ? 'of your area' : 'of the place you picked'} yet.`}</span>
+                    <button type="button" onClick={() => setEverywhere(true)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">Show everywhere</button>
+                </p>
+            )}
+
+            {areaFailed && !near && !everywhere && nearKnown && !showLocationHint && !showNewPost && (
+                <p
+                    role="status"
+                    data-testid="map-area-failed"
+                    className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
+                >
+                    <span>Couldn't check your area just now, so this is the newest from everywhere.</span>
+                    <button type="button" onClick={() => setAreaTry(n => n + 1)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">Try again</button>
+                </p>
+            )}
+
+            {nearAgain && !showLocationHint && !showNewPost && (
+                <p
+                    data-testid="map-near-again"
+                    className={`absolute ${nearNoteTop} left-3 right-3 z-[100] m-0 mx-auto w-fit max-w-[calc(100%-1.5rem)] px-3.5 py-1 rounded-3xl bg-white/95 dark:bg-nature-900/95 border border-nature-200 dark:border-nature-700 shadow-md text-sm font-semibold text-center text-nature-800 dark:text-oat-50 flex flex-wrap items-center justify-center gap-x-2`}
+                >
+                    <span>Newest from everywhere.</span>
+                    <button type="button" onClick={() => setEverywhere(false)} className="min-h-[44px] px-2 font-bold underline cursor-pointer">
+                        {nearAgain.from === 'area' ? 'Near your area' : 'Near the place you picked'}
+                    </button>
+                </p>
+            )}
+
             {/* Event chips (docs/events-on-the-map.md §3). They filter event pins only, by start time. One row
                 that scrolls sideways rather than wraps, so it holds at 320px with large text, and only as wide as its chips so the rest of the map still pans. Shown once this
                 community has an upcoming event. */}
@@ -1650,7 +1768,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     aria-label="My location"
                     className={`w-12 h-12 flex items-center justify-center transition-colors ${
                         locating 
-                            ? 'text-blue-600 bg-blue-50/80 dark:bg-blue-900/30' 
+                            ? 'text-blue-600 bg-blue-50/80 dark:bg-blue-900/30 dark:text-blue-300' 
                             : 'text-nature-800 dark:text-oat-50 hover:bg-black/5 dark:hover:bg-white/10'
                     }`}
                     title="My location"
@@ -1691,7 +1809,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 <button
                     onClick={tryOpenComposer}
                     aria-label="New Post"
-                    className="fixed bottom-[calc(var(--bottom-nav-offset)+1.5rem)] md:bottom-6 right-3 w-14 h-14 rounded-full bg-terra-500 hover:bg-terra-600 text-white text-3xl font-light z-[101] shadow-[0_8px_30px_rgb(226,114,91,0.4)] flex items-center justify-center transition-transform transform hover:scale-105 border-2 border-white/20"
+                    className="fixed bottom-[calc(var(--bottom-nav-offset)+1.5rem)] md:bottom-6 right-3 w-14 h-14 rounded-full bg-terra-500 dark:bg-terra-600 hover:bg-terra-600 text-white text-3xl font-light z-[101] shadow-[0_8px_30px_rgb(226,114,91,0.4)] flex items-center justify-center transition-transform transform hover:scale-105 border-2 border-white/20"
                     style={{ bottom: 'calc(var(--bottom-nav-offset) + 1.5rem)' }}
                     title="New Post"
                 >
@@ -1716,9 +1834,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         post={previewPost}
                         identity={identity}
                         visitor={visitor}
+                        // From where the member is, once they tapped the target (as before); else the node's number,
+                        // from their area or the place they picked.
                         distanceKm={userLocation && previewPost.lat != null && previewPost.lng != null
                             ? haversineDistance(userLocation.lat, userLocation.lng, previewPost.lat, previewPost.lng)
-                            : null}
+                            : listingDistanceKm(previewPost, null)}
                         onOpen={() => onNavigate && onNavigate('marketplace', previewPost.id)}
                         onRsvpChange={(p) => { setPreviewPost(p); refreshPosts().catch(() => {}); }}
                     />
@@ -1754,18 +1874,18 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         aria-label="Close preview"
                         className="absolute top-1 right-1 min-w-[44px] min-h-[44px] p-0 rounded-full bg-transparent flex items-center justify-center border-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
                     >
-                        <span aria-hidden="true" className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center text-xs font-extrabold text-gray-500 dark:text-gray-400">✕</span>
+                        <span aria-hidden="true" className="w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center text-xs font-extrabold text-gray-500 dark:text-gray-300">✕</span>
                     </button>
                     <div className="w-[72px] h-[72px] rounded-2xl overflow-hidden bg-gray-100 dark:bg-nature-800 flex items-center justify-center shrink-0">
                         {previewPost.photos && previewPost.photos.length > 0
-                            ? <img src={previewPost.photos[0]} alt="" className="w-full h-full object-cover" />
+                            ? <img src={listPhotoUrl(previewPost.photos[0])} alt="" className="w-full h-full object-cover" />
                             : <span className="text-3xl" aria-hidden="true">{MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.emoji || '📦'}</span>}
                     </div>
                     <div className="flex-1 min-w-0 flex flex-col justify-center pr-6">
                         <span data-testid="map-preview-title" className="text-base font-extrabold text-gray-900 dark:text-white leading-tight break-words">
                             {previewPost.title}
                         </span>
-                        <span data-testid="map-preview-near" className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">near here</span>
+                        <span data-testid="map-preview-near" className="text-sm font-medium text-gray-500 dark:text-gray-300 mb-2">near here</span>
                         <button
                             onClick={() => onNavigate && onNavigate('marketplace', previewPost.id)}
                             className="min-h-[44px] py-2 px-4 rounded-xl border-none font-bold text-white text-sm cursor-pointer bg-indigo-600 hover:bg-indigo-700"
@@ -1782,7 +1902,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     <button 
                         onClick={() => setPreviewPost(null)}
                         aria-label="Close preview"
-                        className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center border-none text-xs font-extrabold text-gray-500 dark:text-gray-400 cursor-pointer hover:bg-black/10 dark:hover:bg-white/20 transition-colors"
+                        className="absolute top-3 right-3 w-7 h-7 rounded-full bg-black/5 dark:bg-white/10 flex items-center justify-center border-none text-xs font-extrabold text-gray-500 dark:text-gray-200 cursor-pointer hover:bg-black/10 dark:hover:bg-white/20 transition-colors"
                     >
                         ✕
                     </button>
@@ -1801,7 +1921,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             aria-label={`View enlarged photo: ${previewPost.title}`}
                             className="w-[90px] h-[90px] rounded-2xl overflow-hidden cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500 shrink-0"
                         >
-                            <img src={previewPost.photos[0]} alt="thumb" className="w-full h-full object-cover bg-gray-100 dark:bg-nature-800" />
+                            <img src={listPhotoUrl(previewPost.photos[0])} alt="thumb" className="w-full h-full object-cover bg-gray-100 dark:bg-nature-800" />
                         </button>
                     ) : (
                         <div className="w-[90px] h-[90px] rounded-2xl bg-gray-100 dark:bg-nature-800 flex items-center justify-center transition-colors">
@@ -1810,7 +1930,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     )}
                     <div className="flex-1 ml-4 flex flex-col justify-center">
                         <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider truncate mr-2 flex-1">
+                            <span className="text-xs font-bold text-gray-500 dark:text-gray-300 uppercase tracking-wider truncate mr-2 flex-1">
                                 {MARKETPLACE_CATEGORIES_BY_ID.get(previewPost.category)?.label || previewPost.category}
                             </span>
                             <span className="text-sm font-extrabold text-emerald-500 dark:text-emerald-400 mr-6">
@@ -1820,7 +1940,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         <span className="text-lg font-extrabold text-gray-900 dark:text-white mb-1 leading-tight line-clamp-1 transition-colors">
                             {previewPost.title}
                         </span>
-                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-3 truncate transition-colors">
+                        <span className="text-sm font-medium text-gray-500 dark:text-gray-300 mb-3 truncate transition-colors">
                             {previewPost.authorCallsign} {(previewPost as any)._remoteNode ? '🌐' : ''}{tierForCredit(previewPost.authorEnergyCycled ?? 0).name === 'Elder' ? ' ⛰️ Elder' : ''}
                         </span>
                         <button
@@ -1845,7 +1965,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         {showNewPost && (
             <div
                 data-testid="map-new-post-panel"
-                className="fixed bottom-[calc(var(--bottom-nav-offset)+0.5rem)] md:bottom-4 left-3 right-3 md:left-[16.75rem] md:right-auto md:w-[30rem] md:max-w-[calc(100vw-17.5rem)] max-h-[60vh] overflow-y-auto bg-white/95 dark:bg-nature-900/95 backdrop-blur-xl rounded-3xl p-5 z-[1000] shadow-soft border border-nature-200 dark:border-nature-800 overscroll-contain"
+                className="fixed bottom-[calc(var(--bottom-nav-offset)+0.5rem)] md:bottom-4 left-3 right-3 md:left-[16.75rem] md:right-auto md:w-[30rem] md:max-w-[calc(100vw-17.5rem)] max-h-[60vh] supports-[height:100dvh]:max-h-[min(60vh,calc(100dvh_-_var(--bottom-nav-offset)_-_4.5rem))] overflow-y-auto bg-white/95 dark:bg-nature-900/95 backdrop-blur-xl rounded-3xl p-5 z-[1000] shadow-soft border border-nature-200 dark:border-nature-800 overscroll-contain"
                 style={{ bottom: 'calc(var(--bottom-nav-offset) + 0.5rem)', ...(covered ? { display: 'none' } : {}) }}
             >
                 <div className="flex justify-between items-center mb-4">
@@ -1870,7 +1990,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             pinDropMarkerRef.current.remove();
                             pinDropMarkerRef.current = null;
                         }
-                    }} aria-label="Close new post" className="bg-transparent border-none text-nature-400 hover:text-nature-600 text-2xl cursor-pointer transition-colors leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-nature-50">
+                    }} aria-label="Close new post" className="bg-transparent border-none text-nature-400 hover:text-nature-600 text-2xl cursor-pointer transition-colors leading-none w-8 h-8 flex items-center justify-center rounded-full hover:bg-nature-50 dark:hover:bg-nature-800 dark:hover:text-nature-200">
                         ✕
                     </button>
                 </div>
@@ -1880,7 +2000,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                 {eventEdit && (
                     <p data-testid="event-edit-fixed" className="m-0 mb-4 p-3 rounded-xl bg-violet-50 dark:bg-violet-950/40 border border-violet-200 dark:border-violet-800 text-sm text-nature-800 dark:text-nature-200">
                         {audienceScope === 'group'
-                            ? `For ${userGroups.find(g => g.id === targetGroupId)?.name || 'the group'} only. `
+                            ? `For ${userGroupsById.get(targetGroupId)?.name || 'the group'} only. `
                             : 'For this community. '}
                         Who can see it and who hosts it stay as they are.
                     </p>
@@ -1898,7 +2018,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             className={`flex-1 py-3 rounded-xl border text-[15px] font-bold capitalize transition-all shadow-sm ${
                                 newPostType === t
                                     ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]' : t === 'need' ? 'bg-orange-600 border-orange-600 text-white shadow-md scale-[1.02]' : t === 'event' ? 'bg-violet-700 border-violet-700 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
-                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700'
+                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                             }`}
                         >
                             {t === 'offer' ? '🔵 Offer' : t === 'need' ? '🟠 Need' : t === 'event' ? 'Event' : '🗳️ Poll'}
@@ -1919,7 +2039,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
                                 audienceScope === 'public'
                                     ? 'bg-nature-850 dark:bg-white text-white dark:text-nature-950 border-nature-900 shadow-sm'
-                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50'
+                                    : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                             }`}
                         >
                             🌍 Everyone (Public)
@@ -1938,8 +2058,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 }}
                                 className={`flex-1 py-2 px-3 rounded-xl border text-xs font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                                     audienceScope === 'group'
-                                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
-                                        : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50'
+                                        ? 'bg-emerald-600 dark:bg-emerald-700 border-emerald-600 text-white shadow-sm'
+                                        : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                 }`}
                             >
                                 👥 Group ({userGroups.length})
@@ -1984,10 +2104,10 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                         <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 border-2 border-emerald-500 rounded-xl text-xs text-emerald-950 dark:text-emerald-200">
                             <p className="font-black text-sm flex items-center gap-1.5 mb-1 text-emerald-800 dark:text-emerald-300">
                                 <span>🔒</span>
-                                <span>Only {userGroups.find(g => g.id === targetGroupId)?.name || 'Group'} can see this</span>
+                                <span>Only {userGroupsById.get(targetGroupId)?.name || 'Group'} can see this</span>
                             </p>
                             <p className="m-0 leading-relaxed text-[11px]">
-                                This post will be visible <strong>only to active members of {userGroups.find(g => g.id === targetGroupId)?.name || 'this group'}</strong>. It will not appear in the public marketplace feed or on the public map.
+                                This post will be visible <strong>only to active members of {userGroupsById.get(targetGroupId)?.name || 'this group'}</strong>. It will not appear in the public marketplace feed or on the public map.
                             </p>
                         </div>
                     )}
@@ -2057,7 +2177,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all min-w-0 ${validationErrors.has('event_start') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
                             />
                             {validationErrors.has('event_start') && (
-                                <p className="m-0 mt-1 text-xs font-semibold text-red-600">Pick a start time in the future.</p>
+                                <p className="m-0 mt-1 text-xs font-semibold text-red-600 dark:text-red-300">Pick a start time in the future.</p>
                             )}
                         </div>
 
@@ -2071,7 +2191,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 className={`w-full py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 shadow-sm transition-all min-w-0 ${validationErrors.has('event_end') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'}`}
                             />
                             {validationErrors.has('event_end') && (
-                                <p className="m-0 mt-1 text-xs font-semibold text-red-600">The end must be after the start.</p>
+                                <p className="m-0 mt-1 text-xs font-semibold text-red-600 dark:text-red-300">The end must be after the start.</p>
                             )}
                         </div>
 
@@ -2190,7 +2310,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             <div className="space-y-2">
                                 {pollOptions.map((opt, idx) => (
                                     <div key={idx} className="flex gap-2 items-center">
-                                        <span className="w-6 text-center text-sm font-bold text-nature-500">{idx + 1}.</span>
+                                        <span className="w-6 text-center text-sm font-bold text-nature-500 dark:text-nature-400">{idx + 1}.</span>
                                         <input
                                             placeholder={`Option ${idx + 1}`}
                                             value={opt}
@@ -2207,7 +2327,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                             <button
                                                 type="button"
                                                 onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
-                                                className="text-nature-400 hover:text-red-500 min-w-[44px] min-h-[44px] flex items-center justify-center text-lg leading-none rounded-lg"
+                                                className="text-nature-400 hover:text-red-500 dark:hover:text-red-300 min-w-[44px] min-h-[44px] flex items-center justify-center text-lg leading-none rounded-lg"
                                                 title="Remove option"
                                                 aria-label={`Remove option ${idx + 1}`}
                                             >
@@ -2221,19 +2341,19 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 <button
                                     type="button"
                                     onClick={() => setPollOptions([...pollOptions, ''])}
-                                    className="mt-2 text-sm text-purple-600 dark:text-purple-400 hover:underline font-semibold flex items-center gap-1 min-h-[44px] py-2 px-1"
+                                    className="mt-2 text-sm text-purple-600 dark:text-purple-300 hover:underline font-semibold flex items-center gap-1 min-h-[44px] py-2 px-1"
                                 >
                                     + Add option
                                 </button>
                             )}
                             {validationErrors.has('options_empty') && (
-                                <p className="text-red-500 text-xs mt-1">Please fill or remove blank options.</p>
+                                <p className="text-red-500 dark:text-red-300 text-xs mt-1">Please fill or remove blank options.</p>
                             )}
                             {validationErrors.has('options_duplicate') && (
-                                <p className="text-red-500 text-xs mt-1">Options must be distinct.</p>
+                                <p className="text-red-500 dark:text-red-300 text-xs mt-1">Options must be distinct.</p>
                             )}
                             {validationErrors.has('options') && (
-                                <p className="text-red-500 text-xs mt-1">Please provide at least 2 non-empty options.</p>
+                                <p className="text-red-500 dark:text-red-300 text-xs mt-1">Please provide at least 2 non-empty options.</p>
                             )}
                         </div>
 
@@ -2260,12 +2380,28 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             </div>
                         </div>
 
-                        <div className="p-3 bg-purple-50 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-800 text-xs text-purple-800 dark:text-purple-300">
-                            <p className="font-bold mb-0.5">🗳️ Transparent Village Polling</p>
-                            <p className="m-0 leading-relaxed">
-                                Votes are signed and publicly visible to all community members. Open accountability creates trust.
+                        <label className="flex items-start gap-3 p-3 bg-purple-50 dark:bg-purple-950/20 rounded-xl border border-purple-200 dark:border-purple-800 text-xs text-purple-800 dark:text-purple-300 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                checked={pollOpenVote}
+                                onChange={(e) => setPollOpenVote(e.target.checked)}
+                                className="mt-0.5 w-5 h-5 shrink-0 accent-purple-600"
+                                data-testid="poll-open-vote"
+                            />
+                            <span className="min-w-0" style={{ overflowWrap: 'anywhere' }}>
+                                <span className="block font-bold mb-0.5">👁️ Open vote</span>
+                                <span className="block leading-relaxed">
+                                    {pollOpenVote
+                                        ? 'Members will see who chose what. You can\'t change this once someone has voted.'
+                                        : 'Off: the vote is anonymous. Everyone sees only the totals. Tick it to let members see who chose what; you can\'t change it once someone has voted.'}
+                                </span>
+                            </span>
+                        </label>
+                        {pollPlacelessNote && (
+                            <p data-testid="poll-placeless-note" role="status" className="text-xs leading-relaxed text-nature-700 dark:text-nature-300" style={{ overflowWrap: 'anywhere' }}>
+                                📍 {pollPlacelessNote}
                             </p>
-                        </div>
+                        )}
                     </div>
                 ) : (
                     <>
@@ -2301,6 +2437,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                     validationErrors.has('title') ? 'border-red-400 bg-red-50 ring-1 ring-red-400' : 'border-nature-200 dark:border-nature-700'
                                 }`}
                             />
+                            {!priceMarked && (<>
                             <input
                                 placeholder="B"
                                 type="number"
@@ -2323,9 +2460,17 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 <option value="weekly">/ Wk</option>
                                 <option value="monthly">/ Mo</option>
                             </select>
+                            </>)}
                         </div>
 
-                        <p 
+                        {priceMarked && (
+                            <div className="mt-1 mb-3" data-testid="composer-price-line">
+                                <LocalCommunityLine feature="beans" text={LOCAL_COMMUNITY_LINES.price}
+                                    onNearYou={onNavigate ? () => onNavigate('home') : undefined}
+                                    onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
+                            </div>
+                        )}
+                        {!priceMarked && <p 
                             onClick={() => setShowCommonsInfo(true)}
                             className="text-[13.5px] text-nature-700 dark:text-nature-300 mt-1 mb-3 font-semibold cursor-pointer hover:text-nature-900 dark:hover:text-white transition-colors"
                         >
@@ -2337,11 +2482,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 }
                                 return '1.5% transaction fee funds community projects & solvency. ';
                             })()}<span className="text-amber-600 dark:text-amber-500 font-bold underline decoration-dotted underline-offset-2 ml-1">Learn more ⓘ</span>
-                            <span className="text-emerald-600 dark:text-emerald-500 font-bold ml-1">(100% community owned)</span>
-                        </p>
+                            <span className="text-emerald-600 dark:text-emerald-400 font-bold ml-1">(100% community owned)</span>
+                        </p>}
 
                         {/* Repeatable toggle */}
-                        <label className="flex items-center gap-3 text-sm font-medium text-nature-700 cursor-pointer py-2 px-1 mb-1">
+                        <label className="flex items-center gap-3 text-sm font-medium text-nature-700 dark:text-nature-400 cursor-pointer py-2 px-1 mb-1">
                             <input
                                 type="checkbox"
                                 checked={newPostRepeatable}
@@ -2355,7 +2500,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             moment of ticking is where the rule actually lands. No amount field by design:
                             the app can escrow beans, not cash, and a figure would imply it settles money it
                             never touches. */}
-                        <label className="flex items-center gap-3 text-sm font-medium text-nature-700 cursor-pointer py-2 px-1">
+                        <label className="flex items-center gap-3 text-sm font-medium text-nature-700 dark:text-nature-400 cursor-pointer py-2 px-1">
                             <input
                                 type="checkbox"
                                 checked={newPostCashAlsoNeeded}
@@ -2487,7 +2632,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     disabled={submitDisabled}
                     className={`w-full p-3 min-h-[48px] rounded-xl font-semibold transition-all ${
                         submitDisabled
-                            ? 'bg-oat-200 text-oat-500 cursor-not-allowed'
+                            ? 'bg-oat-200 text-oat-500 dark:bg-nature-800 dark:text-nature-400 cursor-not-allowed'
                             : (newPostType === 'poll' ? 'bg-purple-600 hover:bg-purple-700 text-white shadow-md' : newPostType === 'event' ? 'bg-violet-700 hover:bg-violet-800 text-white shadow-md' : 'bg-nature-600 text-white hover:bg-nature-700 shadow-md')
                     }`}
                 >

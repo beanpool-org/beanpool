@@ -10,7 +10,7 @@ import { updateMemberProfile, getMemberProfile, type MemberProfile } from '../li
 import { updateCallsign, type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, ARCHETYPES, type QuizResult } from '@beanpool/core';
+import { parseArchetype, ARCHETYPES, CONTACT_VALUE_LIMIT, type QuizResult } from '@beanpool/core';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -192,7 +192,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                 {avatar && (
                     <button
                         onClick={() => setAvatar(null)}
-                        className="bg-transparent mt-3 border-none text-red-500 hover:text-red-700 text-xs font-semibold cursor-pointer transition-colors px-2 py-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30"
+                        className="bg-transparent mt-3 border-none text-red-500 dark:text-red-300 hover:text-red-700 text-xs font-semibold cursor-pointer transition-colors px-2 py-1 rounded-md hover:bg-red-50 dark:hover:bg-red-950/30 dark:hover:text-red-300"
                     >
                         Remove photo
                     </button>
@@ -226,7 +226,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                     maxLength={200}
                     className="w-full py-3 px-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50 text-nature-900 dark:text-white text-base focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-h-[90px] resize-none transition-all placeholder:text-nature-400"
                 />
-                <p className="text-nature-400 dark:text-nature-500 text-xs text-right mt-1 font-medium">
+                <p className="text-nature-400 dark:text-nature-400 text-xs text-right mt-1 font-medium">
                     {bio.length}/200
                 </p>
             </div>
@@ -239,6 +239,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                     type="text"
                     value={contactValue}
                     onChange={(e) => setContactValue(e.target.value)}
+                    maxLength={CONTACT_VALUE_LIMIT.chars}
                     placeholder="Phone, email, or WhatsApp"
                     className="w-full py-3 px-4 mb-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-base focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all placeholder:text-nature-400"
                 />
@@ -272,7 +273,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                                         </div>
                                     </div>
                                     {contactVisibility === opt.value && (
-                                        <div className="text-terra-500 text-lg font-bold">✓</div>
+                                        <div className="text-terra-500 dark:text-terra-400 text-lg font-bold">✓</div>
                                     )}
                                 </button>
                             ))}
@@ -334,7 +335,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                                             setQuizInitialMode('deep');
                                             setShowQuizModal(true);
                                         }}
-                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
+                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
                                     >
                                         🧭 More accurate
                                     </button>
@@ -375,7 +376,7 @@ export function ProfilePage({ identity, onBack, onIdentityUpdated }: Props) {
                                 setQuizInitialMode('quick');
                                 setShowQuizModal(true);
                             }}
-                            className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm"
+                            className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm"
                         >
                             ⚡ Take 60s Quiz
                         </button>

@@ -17,9 +17,9 @@
  *  4. More, then a whole copy: the vouch at 25 withdrawn, the group of one left by its lead, a project pot, a winding-up enterprise, an unused invite and re-key code, a cached peer
  *     listing, the community's name, place, contacts, directory switches and thresholds, a Decision open and one about
  *     to pass. Then the last writes (the removal passes into its grace period, a chat photo, a message with empty
- *     metadata, a pending request, a rating with no comment, an empty bio and archetype, a group renamed) and a last
- *     delta, and the pricing guide's hourly cycle on M (the nodes' own timer for it is off: it fired or not by the
- *     runner's speed).
+ *     metadata, a pending request, a rating with no comment, an empty bio and archetype, a group renamed), the pricing
+ *     guide's hourly cycle on M (the nodes' own timer for it is off: it fired or not by the runner's speed), and a last
+ *     delta.
  *  5. M is killed; T, a copy of M's data directory at S's last copy, starts on its own port.
  *  6. S takes over with the recovery code (the preview, the confirm, the restart).
  *  7. Database parity: every table the manifest (engine/replication-manifest.ts) says a standby copies, or should
@@ -46,6 +46,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, post, copyDir, runNodeChild, serveCommands, type NodeProc } from './takeover-test-harness.js';
+import { lockedDm } from './dm-test-payload.js';
+import { makeGroupEpochRecord, makeGroupTopUp, makeKeySuccession, sealGroupLine } from '@beanpool/core';
 import {
     diffDatabases, diffSettings, normaliseAnswer, idsIn, firstDifferences, checkKnownGaps,
     type DbDump, type SettingsDump, type Differences, type KnownGap,
@@ -67,8 +69,13 @@ const NEIGHBOUR_URL = 'https://neighbours.example';
  * and the last one deletes the line, which the suite then requires.
  *
  * G0 (the ledger), G1 (listings another community's), G2 (a member's and an enterprise's standing: the members row,
- * preferences, keepers and pledges), G5 (the community's own settings) and G9 (a new standby's first pull, which this suite
- * found) are closed, and so are G1b's listing, deal, photo and project columns: a difference in any of them is new.
+ * preferences, keepers and pledges), G5 (the community's own settings) and G9 (a new standby's first pull, which this
+ * suite found) are closed, and so are G1b's listing, deal, photo and project columns, G3's tables (in-flight money and
+ * governance, on the plain-table path) and G4's but chat photos (members' phones, mutes, read marks, reminders sent, the
+ * activity list and the pricing guide, on the same path): a difference in any of them is new. G3 is not closed whole: its one setting, the
+ * Commons project proposals still waiting for a decision (node_config `commons_projects`, a `community` gap in
+ * engine/replication-manifest.ts NODE_CONFIG_KEYS), stays behind on a take-over, and the preview names it. This scenario
+ * makes no such proposal, so nothing here differs by it; one that did would need its line here.
  */
 const KNOWN_GAPS: KnownGap[] = [
     // G1b: columns dropped inside tables that do replicate (the groups, chat and ratings ones this net found).
@@ -77,23 +84,9 @@ const KNOWN_GAPS: KnownGap[] = [
     { key: 'db:messages.metadata', gap: 'G1b', why: "a message sent with empty metadata is null on the standby where the main server holds '' (the import writes `|| null`)" },
     { key: 'db:ratings.comment', gap: 'G1b', why: "a rating with no comment is null on the standby where the main server holds '' (the import writes `|| null`); both apps read either as none" },
 
-    // G3: in-flight money and governance.
-    { key: 'db:deferred_wage_claims (not copied)', gap: 'G3', why: "a keeper's unpaid wage vanishes" },
-    { key: 'db:decisions (not copied)', gap: 'G3', why: 'an open Decision and one in its grace period vanish' },
-    { key: 'db:decision_votes (not copied)', gap: 'G3', why: 'their votes' },
-    { key: 'db:invite_codes (not copied)', gap: 'G3', why: 'every invite already sent fails' },
-    { key: 'db:rekey_requests (not copied)', gap: 'G3', why: 'an unused re-key code is refused' },
-    { key: 'http:redeem the unused invite', gap: 'G3', why: '"Invalid invite code"' },
-    { key: 'http:the Decision sweep, eight days on', gap: 'G3', why: 'the removal never completes and the open Decision never closes' },
-    { key: "http:the enterprise's page", gap: 'G3', why: "a keeper's unpaid wage is not on it (before G2's fix, 404 \"Not a treasury\")" },
-
-    // G4: members' devices and conveniences.
-    { key: 'db:push_tokens (not copied)', gap: 'G4', why: 'no push reaches anyone' },
+    // G4: chat photos (PR 8). The phones, mutes, read marks, reminders sent, the activity list and the pricing guide are
+    // copied on the plain-table path.
     { key: 'db:message_attachments (not copied)', gap: 'G4', why: 'every chat photo from before is gone' },
-    { key: 'db:activity_feed (not copied)', gap: 'G4', why: 'the activity waterfall starts empty' },
-    { key: 'db:pricing_guide_items (not copied)', gap: 'G4', why: 'each server seeds its own guide at its first boot' },
-    { key: 'http:the pricing guide', gap: 'G4', why: "the guide main priced is not copied, so each server's hourly cycle starts from its own prices" },
-    { key: 'http:a push of each category', gap: 'G4', why: 'no phone to push to' },
 ];
 
 // ── The node processes' commands ───────────────────────────────────────────────────────────
@@ -122,6 +115,13 @@ async function child(): Promise<void> {
     const fetches = guardFetch();
     await runNodeChild({
         ...serveCommands,
+        'backdate-members': async (a: { publicKeys: string[]; days: number }) => {
+            const { db } = await import('./db/db.js');
+            const at = new Date(Date.now() - a.days * 86_400_000).toISOString();
+            for (const pk of a.publicKeys) db.prepare('UPDATE members SET joined_at = ? WHERE public_key = ?').run(at, pk);
+            return (db.prepare(`SELECT COUNT(*) AS c FROM members WHERE joined_at = ? AND public_key IN (SELECT value FROM json_each(?))`)
+                .get(at, JSON.stringify(a.publicKeys)) as { c: number }).c;
+        },
         /**
          * The real server, without the pricing guide's own timer (pricing-aggregator.ts: a first cycle 5 s after boot, then
          * hourly). Whether it had fired by the read was the runner's speed; the scenario runs the cycle itself instead.
@@ -165,10 +165,10 @@ async function child(): Promise<void> {
             const envelope = await pullTakeoverEnvelopeNow();
             return { ...result, whole: getBackupStatus().lastFullReconcileAt !== before, envelope };
         },
-        /** Every table the manifest compares, in its compared columns, ordered by its key. */
+        /** Every table the manifest compares, in its compared columns, ordered by its key: the rows that travel (RowRule). */
         dump: async () => {
             const { db } = await import('./db/db.js');
-            const { TABLES, BOOT_STAMPED, comparedColumns } = await import('./engine/replication-manifest.js');
+            const { TABLES, BOOT_STAMPED, comparedColumns, travellingRows } = await import('./engine/replication-manifest.js');
             const q = (n: string) => `"${n.replace(/"/g, '""')}"`;
             const out: DbDump = {};
             for (const table of Object.keys(TABLES)) {
@@ -184,7 +184,9 @@ async function child(): Promise<void> {
                     return stamped.length === 0 ? q(c)
                         : `CASE WHEN ${stamped.map((b) => `(${b.where})`).join(' OR ')} THEN '<stamped at boot>' ELSE ${q(c)} END AS ${q(c)}`;
                 }).join(', ');
-                const rows = db.prepare(`SELECT ${select} FROM ${q(table)} ORDER BY ${key.map(q).join(', ')}`).all() as Record<string, unknown>[];
+                // A row the manifest's RowRule doesn't hold (a phone of a key that isn't a member's) is the server's own.
+                const held = travellingRows(table);
+                const rows = db.prepare(`SELECT ${select} FROM ${q(table)}${held ? ` WHERE (${held})` : ''} ORDER BY ${key.map(q).join(', ')}`).all() as Record<string, unknown>[];
                 out[table] = { key, columns, rows, ...(entry.kind === 'local' && entry.gap ? { notCopied: entry.gap } : {}) };
             }
             return out;
@@ -212,7 +214,7 @@ async function child(): Promise<void> {
                 .map((r) => r.public_key);
             const counts: Record<string, number> = {};
             for (const category of ['chat', 'marketplace', 'escrow', 'recovery'] as const) {
-                counts[category] = dispatchPushNotification(everyone, 'SYSTEM', 'Parity', 'A push of each category', {}, category);
+                counts[category] = dispatchPushNotification(everyone, 'SYSTEM', 'Parity', 'A push of each category', {}, category, 'community.notice');
             }
             return counts;
         },
@@ -227,6 +229,12 @@ async function child(): Promise<void> {
             return promotionSanityCheck();
         },
         /** A peer's listing in the cache, as the federation pull writes it (no route: the libp2p pull loop). */
+        /** A re-key, as the admin's wizard completes one (engine/member-wizards.ts): the old key's group wraps stay. */
+        rekey: async (a: { old: string; next: string; admin: string }) => {
+            const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
+            completeRekey(a.old, a.next, issueRekeyCode(a.old, a.admin).code, a.admin);
+            return true;
+        },
         'cache-peer-listing': async (a: { peerId: string; listing: Record<string, unknown> }) => {
             const { cacheRemoteListings } = await import('./federation-listings.js');
             return cacheRemoteListings(a.peerId, NEIGHBOUR_URL, [a.listing]);
@@ -286,7 +294,7 @@ interface Answer { status: number; body: any }
  * A call to a node's real HTTPS server: signed by `as` (the format before request binding, which every node still takes;
  * the signature covers the path, never the query), with the admin password in `admin`, or neither.
  */
-async function api(base: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', route: string, opts: { as?: Id; admin?: string; body?: unknown } = {}): Promise<Answer> {
+async function api(base: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
     const headers: Record<string, string> = {};
     if (opts.as) {
@@ -298,7 +306,7 @@ async function api(base: string, method: 'GET' | 'POST' | 'PATCH' | 'DELETE', ro
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    if (opts.admin) headers['X-Admin-Password'] = opts.admin;
+    if (opts.admin) Object.assign(headers, opts.admin);
     if (method !== 'GET') headers['Content-Type'] = 'application/json';
     const res = await fetch(`${base}${route}`, { method, headers, body: method === 'GET' ? undefined : raw });
     const text = await res.text();
@@ -328,6 +336,7 @@ async function main(): Promise<void> {
     const [ann, bo, cy, dee, kip, rex] = ['Ann', 'Bo', 'Cy', 'Dee', 'Kip', 'Rex'].map(newId);
     const [eve, fay] = ['Eve', 'Fay'].map(newId);
     const [hal, lou] = ['Hal', 'Lou'].map(newId);
+    const [ida, ida2] = ['Ida', 'Ida₂'].map(newId);
     const pulls: { phase: string; ok: boolean; whole: boolean; error?: string }[] = [];
     // Every difference found, by key (takeover-parity-compare.ts), with a few examples of each.
     const differences: Differences = new Map();
@@ -339,18 +348,27 @@ async function main(): Promise<void> {
         nodes.push(main);
         const setup = await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
         const m = `https://localhost:${await main.send('serve')}`;
-        const A = (path_: string, body: unknown) => api(m, 'POST', path_, { admin: PW_MAIN, body });
+        // Step 7c: the password alone opens no admin route with 2FA off: the admin calls go under Gwen's key session (the
+        // genesis owner), which the main server makes (takeover-test-harness.ts owner-session).
+        const mainOwner: Record<string, string> = await main.send('owner-session');
+        const A = (path_: string, body: unknown) => api(m, 'POST', path_, { admin: mainOwner, body });
         const S_ = (who: Id, path_: string, body: unknown = {}) => api(m, 'POST', path_, { as: who, body });
 
         const join = async (who: Id) => {
             const inv = built(`Gwen makes an invite for ${who.name}`, await S_(gwen, '/api/invite/generate', { publicKey: gwen.pk }));
             const code = inv.invite?.code ?? inv.code;
-            built(`${who.name} joins with it`, await api(m, 'POST', '/api/invite/redeem', { body: { code, publicKey: who.pk, callsign: who.name } }));
+            built(`${who.name} joins with it`, await api(m, 'POST', '/api/invite/redeem', { as: who, body: { code, publicKey: who.pk, callsign: who.name } }));
             built(`${who.name} sets a profile photo`, await S_(who, '/api/profile/update', { avatar: TINY_PNG }));
         };
         built('Gwen sets a profile photo', await S_(gwen, '/api/profile/update', { avatar: TINY_PNG }));
         for (const who of [ann, bo, cy, dee, kip, rex]) await join(who);
 
+        // The members are backdated before any trade. A community of members who joined minutes ago and trade only with each other is what
+        // the wash-trading check (engine/trust.ts runWashTradingAnalysis: insular cluster, half or more under 14 days old) flags, and a flagged
+        // member's trades earn no credit, so their first direct send is refused ("only after your first completed trade"). That check is
+        // memoised for 10 s, so the suite passed whenever the memo still predated its first trade and failed when a slow run let it expire.
+        // The check is right; these fixture members are older than a fortnight, as the members of a real community who trade are.
+        require_(await main.send('backdate-members', { publicKeys: [gwen, ann, bo, cy, dee, kip, rex].map((w) => w.pk), days: 20 }) === 7, 'M: the seven members joined twenty days ago');
         const offer = async (who: Id, title: string, credits: number, extra: Record<string, unknown> = {}) =>
             built(`${who.name} offers ${title}`, await S_(who, '/api/marketplace/posts', {
                 type: 'offer', category: 'food', title, description: `${title}, from ${who.name}`, credits, priceType: 'fixed',
@@ -378,6 +396,15 @@ async function main(): Promise<void> {
         const group = built('Ann starts a group', await S_(ann, '/api/groups', { name: 'Gardeners', description: 'People who grow things' }));
         const groupId = group.group?.id ?? group.id;
         built('Bo joins it', await S_(bo, `/api/groups/${groupId}/join`));
+        // The group chat's keys (group chats step 2): an epoch and its wraps, then a sealed line under it, all copied as rows.
+        const pkcs8 = (who: Id) => (who.priv.export({ format: 'der', type: 'pkcs8' }) as Buffer).toString('hex');
+        const gardenEpoch = makeGroupEpochRecord({ myEdPrivHex: pkcs8(ann), groupId, epoch: 1, reason: 'start', createdAt: new Date().toISOString(), recipients: [ann.pk, bo.pk] });
+        built("Ann makes the Gardeners chat's first epoch, wrapped to her and Bo", await S_(ann, `/api/groups/${groupId}/keys/epoch`, { epoch: gardenEpoch.record }));
+        const gardenLineId = crypto.randomUUID();
+        built('Bo sends a sealed line under it', await S_(bo, `/api/groups/${groupId}/chat/message`, {
+            ...sealGroupLine('Seedlings by the gate', { myEdPrivHex: pkcs8(bo), groupKey: gardenEpoch.groupKey, groupId, epoch: 1, messageId: gardenLineId }),
+            metadata: { epoch: 1 }, clientId: gardenLineId,
+        }));
         const start = new Date(Date.now() + 3 * 86400_000);
         const event = built('Cy hosts an event', await S_(cy, '/api/marketplace/posts', {
             type: 'event', title: 'Street picnic', description: 'Bring a plate', authorPublicKey: cy.pk, lat: -28.55, lng: 153.5,
@@ -453,6 +480,15 @@ async function main(): Promise<void> {
             `M: Cy approves it for Probe Co, which holds nothing: refused, and Kip's wage is owed (${brief(wage)})`);
         built('Cy pauses Probe Co', await S_(cy, `/api/treasury/${probe.publicKey}/pause`));
         const seed = built('Eve starts a project with a goal', await S_(eve, '/api/treasury', { name: 'Seed Fund', purpose: 'A seed library', lifecycle: 'bounded', goalAmount: 100 }));
+        // Group chats 2b: where a membership's keys begin (group_members.from_epoch) and a refused wrap beside the one that
+        // replaced it (group_key_wraps.rejected_at), each travelling in a delta.
+        built('Cy joins the Gardeners with no epoch (an old app): his keys begin at epoch 2', await S_(cy, `/api/groups/${groupId}/join`));
+        const gardenEpoch2 = makeGroupEpochRecord({ myEdPrivHex: pkcs8(ann), groupId, epoch: 2, reason: 'rotate', createdAt: new Date().toISOString(), recipients: [ann.pk, bo.pk, cy.pk] });
+        built('Ann rotates the Gardeners chat to epoch 2', await S_(ann, `/api/groups/${groupId}/keys/epoch`, { epoch: gardenEpoch2.record }));
+        const cyWrap2 = gardenEpoch2.record.wraps!.find((w) => w.recipient === cy.pk)!;
+        built("Cy says Ann's wrap of epoch 2 does not open", await S_(cy, `/api/groups/${groupId}/keys/2/reject`, { wrapper: ann.pk, ephPub: cyWrap2.ephPub }));
+        built('and Bo hands him epoch 2', await S_(bo, `/api/groups/${groupId}/keys/wrap`,
+            makeGroupTopUp(gardenEpoch2.groupKey, { myEdPrivHex: pkcs8(bo), groupId, epoch: 2, recipientPubHex: cy.pk })));
         await pull('the escrow, the dispute, standing');
 
         // ── 4. More, then a whole copy ──
@@ -473,8 +509,8 @@ async function main(): Promise<void> {
         built('the community names itself and its place', await A('/api/local/update-identity', {
             callsign: 'parityville', communityName: 'Parityville', lat: -28.55, lng: 153.5, contactEmail: 'hello@parityville.example', contactPhone: '+61 2 5550 1234',
         }));
-        built('it keeps its contacts and members out of the directory', await A('/api/local/admin/node/config', {
-            publishContacts: false, publishMembers: false, serviceRadius: { lat: -28.55, lng: 153.5, radiusKm: 12 },
+        built('it publishes its contact email but not its phone, and keeps its members out of the directory', await A('/api/local/admin/node/config', {
+            publishContactEmail: true, publishContactPhone: false, publishMembers: false, serviceRadius: { lat: -28.55, lng: 153.5, radiusKm: 12 },
         }));
         built('and sets its own thresholds', await A('/api/admin/thresholds', { circulationEpochDays: 45 }));
         built('Gwen proposes a Decision', await S_(gwen, '/api/commons/decisions', {
@@ -497,22 +533,35 @@ async function main(): Promise<void> {
             `M: the removal passed and waits out its grace period (${graced.body?.decision?.status}; sweep ${JSON.stringify(tick)})`);
         const convo = built('Ann starts a chat with Bo', await S_(ann, '/api/messages/conversation', { type: 'dm', participants: [ann.pk, bo.pk], createdBy: ann.pk }));
         const convoId = convo.conversation?.id ?? convo.id;
+        const jpeg = lockedDm(64); // a DM photo goes in encrypted, its caption and its bytes alike
         built('and sends a photo', await S_(ann, '/api/messages/send', {
-            conversationId: convoId, authorPubkey: ann.pk, ciphertext: Buffer.from('a photo').toString('base64'), nonce: crypto.randomBytes(24).toString('base64'),
-            type: 'image', attachment: { data: Buffer.from('encrypted jpeg bytes').toString('base64'), nonce: crypto.randomBytes(24).toString('base64'), mime: 'image/jpeg' },
+            conversationId: convoId, authorPubkey: ann.pk, ...lockedDm(),
+            type: 'image', attachment: { data: jpeg.ciphertext, nonce: jpeg.nonce, mime: 'image/jpeg' },
         }));
         built('Bo answers, with the empty metadata a hand-made request can send', await S_(bo, '/api/messages/send', {
-            conversationId: convoId, authorPubkey: bo.pk, ciphertext: Buffer.from('thanks').toString('base64'), nonce: crypto.randomBytes(24).toString('base64'), metadata: '',
+            conversationId: convoId, authorPubkey: bo.pk, ...lockedDm(), metadata: '',
         }));
         await offer(hal, 'Dog walking', 2);
         const pending = built('Hal asks for Dee\'s firewood (not approved yet)', await S_(hal, '/api/marketplace/posts/request', { postId: (await offer(dee, 'Kindling bundle', 1)).id, buyerPublicKey: hal.pk })).transaction;
         built('Cy rates Kip for the tune-up, with no comment', await S_(cy, '/api/ratings', { targetPubkey: kip.pk, stars: 5, transactionId: tuneUpDeal }));
         built('Eve saves an empty bio and archetype', await S_(eve, '/api/profile/update', { bio: '', archetype: '' }));
         built('Ann renames Gardeners, which the whole copy copied', await api(m, 'PATCH', `/api/groups/${groupId}`, { as: ann, body: { name: 'Growers' } }));
-        await pull('the last delta');
-        // A main server that has been up an hour has priced its guide from its community's listings.
+        // A re-keyed member's group wraps stay, served to her new key at …/keys/former (DESIGN-group-history-after-rekey §3):
+        // Ida's wrap of the Menders' first epoch, kept under her old key after the admin re-keys her to a new phone.
+        await join(ida);
+        const menders = built('Fay starts a group, Menders', await S_(fay, '/api/groups', { name: 'Menders', description: 'Fix it, do not bin it' }));
+        const mendersId = menders.group?.id ?? menders.id;
+        built('Ida joins it', await S_(ida, `/api/groups/${mendersId}/join`));
+        const mendEpoch = makeGroupEpochRecord({ myEdPrivHex: pkcs8(fay), groupId: mendersId, epoch: 1, reason: 'start', createdAt: new Date().toISOString(), recipients: [fay.pk, ida.pk] });
+        built("Fay makes the Menders chat's first epoch, wrapped to her and Ida", await S_(fay, `/api/groups/${mendersId}/keys/epoch`, { epoch: mendEpoch.record }));
+        require_(await main.send('rekey', { old: ida.pk, next: ida2.pk, admin: gwen.pk }) === true, 'M: the admin re-keys Ida to a new phone');
+        const idaSaid = makeKeySuccession({ newEdPrivHex: pkcs8(ida2), oldPubHex: ida.pk, at: new Date().toISOString() });
+        built("Ida's new phone signs that her old key was hers", await S_(ida2, '/api/community/me/key-succession', { oldPubkey: idaSaid.pubkey, at: idaSaid.at, sig: idaSaid.sig }));
+        // A main server that has been up an hour has priced its guide from its community's listings. Before the last
+        // delta, as every write here is: the twin is M as it was at S's last copy, and the guide is copied (G4).
         const priced = await main.send('pricing-cycle');
         require_(priced.updatedCount > 0, `M: the pricing guide's hourly cycle prices items from the community's listings (${JSON.stringify(priced)})`);
+        await pull('the last delta');
 
         // ── 6. M dies; its twin T starts from its data directory ──
         console.log('\n— 6. the main server is killed; its twin starts from a copy of its data —');
@@ -525,10 +574,11 @@ async function main(): Promise<void> {
 
         // ── 7. The take-over ──
         console.log('\n— 7. the standby takes over with the recovery code —');
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY });
+        const standbyOwner: Record<string, string> = await standby.send('owner-session'); // step 7c, as above
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
         const fetchesS0 = await standby.send('fetches'); // what it refused while it copied, before it restarts itself
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         require_(confirmed.status === 200, `confirm (${confirmed.status})`);
         require_(await standby.exited === 0, 'the standby restarts itself');
         standby = await spawnNode(SCRIPT, dirs.standby, env(PW_STANDBY, 'backup'));
@@ -543,6 +593,35 @@ async function main(): Promise<void> {
         const dumpT = await twin.send('dump') as DbDump;
         const dumpS = await standby.send('dump') as DbDump;
         diffDatabases(dumpT, dumpS, differences);
+        // messages.metadata is a known gap ('' against null), so the dump leaves it out; but a group line's epoch is its
+        // metadata, and an app opens the line by it. Compared here, as each server serves it (review of #1762, finding 7).
+        const gardenEpochOn = async (base: string): Promise<unknown> => {
+            const line = ((await api(base, 'GET', `/api/groups/${groupId}/chat`, { as: bo })).body?.messages ?? []).find((x: any) => x.id === gardenLineId);
+            const meta = typeof line?.metadata === 'string' ? JSON.parse(line.metadata) : line?.metadata;
+            return meta?.epoch;
+        };
+        const [epochT, epochS] = [await gardenEpochOn(t), await gardenEpochOn(s)];
+        assert(epochT === 1 && epochS === 1, `the sealed group line's epoch (its metadata) is the same on the promoted standby (${epochT} on the twin, ${epochS} on the standby)`);
+        // And its sender, which an app opens a re-keyed author's line by (group chats 2b).
+        const gardenSenderOn = async (base: string): Promise<unknown> => {
+            const line = ((await api(base, 'GET', `/api/groups/${groupId}/chat`, { as: bo })).body?.messages ?? []).find((x: any) => x.id === gardenLineId);
+            return (typeof line?.metadata === 'string' ? JSON.parse(line.metadata) : line?.metadata)?.sender;
+        };
+        const [senderT, senderS] = [await gardenSenderOn(t), await gardenSenderOn(s)];
+        assert(senderT === bo.pk && senderS === bo.pk, `and its metadata.sender, Bo's key, on both (${senderT === bo.pk}, ${senderS === bo.pk})`);
+        // A promoted standby answers the same fromEpoch, by number, and serves Cy the live wrap, not the one he refused.
+        const cyKeysOn = async (base: string) => (await api(base, 'GET', `/api/groups/${groupId}/keys`, { as: cy })).body;
+        const [cyT, cyS] = [await cyKeysOn(t), await cyKeysOn(s)];
+        assert(cyT?.fromEpoch === 2 && cyS?.fromEpoch === 2 && JSON.stringify(cyT.myWraps) === JSON.stringify(cyS.myWraps)
+            && cyS.myWraps.length === 1 && cyS.myWraps[0].wrapper === bo.pk,
+            `Cy's fromEpoch (2) and his one live wrap, Bo's, are the same on the promoted standby (${cyT?.fromEpoch}/${cyS?.fromEpoch}, ${cyS?.myWraps?.length} wraps)`);
+        // And a re-keyed member's kept wraps came across: the promoted standby serves Ida's new key her old key's wrap of the
+        // Menders' first epoch at …/keys/former, as the twin does (DESIGN-group-history-after-rekey §8 S1).
+        const idaFormerOn = async (base: string) => (await api(base, 'GET', `/api/groups/${mendersId}/keys/former`, { as: ida2 })).body;
+        const [idaT, idaS] = [await idaFormerOn(t), await idaFormerOn(s)];
+        assert(JSON.stringify(idaT) === JSON.stringify(idaS) && idaS?.wraps?.length === 1 && idaS.wraps[0].recipient === ida.pk && idaS.wraps[0].epoch === 1
+            && JSON.stringify(idaS.formerKeys) === JSON.stringify([ida.pk]),
+            `Ida's new key is served her old key's kept wrap the same on the promoted standby (${idaT?.wraps?.length} on the twin, ${idaS?.wraps?.length} on the standby)`);
         const manifest = await import('./engine/replication-manifest.js');
         diffSettings(await twin.send('settings'), await standby.send('settings'), {
             localConfig: (f) => manifest.LOCAL_CONFIG_FIELDS[f],
@@ -606,7 +685,7 @@ async function main(): Promise<void> {
         await both('approve the pending request', postAs(dee, '/api/marketplace/transactions/approve', { transactionId: pending.id, authorPublicKey: dee.pk }));
         const joiner = newId('Ivy');
         await both('redeem the unused invite', (base) => api(base, 'POST', '/api/invite/redeem', {
-            body: { code: unusedInvite.invite?.code ?? unusedInvite.code, publicKey: joiner.pk, callsign: 'Ivy' },
+            as: joiner, body: { code: unusedInvite.invite?.code ?? unusedInvite.code, publicKey: joiner.pk, callsign: 'Ivy' },
         }));
         // As the minute tick would run it eight days on: the removal's grace period is over, the open Decision closed.
         const eightDaysOn = Date.now() + 8 * 86400_000;

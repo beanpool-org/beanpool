@@ -1,5 +1,4 @@
 {
-  "version": 70,
   "sections": [
     {
       "id": "about",
@@ -10,8 +9,8 @@
     {
       "id": "getting-started",
       "title": "Getting started",
-      "summary": "Joining, finding a community near you, your 12 words, your profile, the top bar, this guide, and getting help.",
-      "pages": ["joining", "finding-a-community", "your-12-words", "your-profile", "the-top-bar", "the-bean", "getting-help", "communities", "web-app"]
+      "summary": "Home, joining, finding a community near you, Beans and the global community, your 12 words, your profile, the top bar, this guide, and getting help.",
+      "pages": ["home", "joining", "finding-a-community", "beans-and-the-global-community", "your-12-words", "your-profile", "the-top-bar", "the-bean", "getting-help", "communities", "web-app"]
     },
     {
       "id": "market",
@@ -52,8 +51,8 @@
     {
       "id": "settings",
       "title": "Settings and safety",
-      "summary": "Privacy, blocking and reporting, alerts, light and dark, going away, leaving, getting your account back, and checking your 12 words as an owner.",
-      "pages": ["privacy", "blocking", "reporting", "notifications", "appearance", "holiday-mode", "leaving-or-deleting", "recovery", "check-your-12-words"]
+      "summary": "Privacy, your area, blocking and reporting, alerts, light and dark, going away, leaving, getting your account back, and checking your 12 words as an owner.",
+      "pages": ["privacy", "your-area", "what-the-admins-can-see", "admins-ai-assistants", "blocking", "reporting", "notifications", "appearance", "holiday-mode", "leaving-or-deleting", "recovery", "check-your-12-words"]
     }
   ]
 }

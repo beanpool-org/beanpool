@@ -6,6 +6,13 @@ vi.mock('expo-local-authentication', () => ({
     authenticateAsync: vi.fn(),
 }));
 
+// The phone's prompt opens through LocalAuth.ts (phoneLockPrompt), whose module reads these.
+vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
+vi.mock('expo-secure-store', () => ({ getItemAsync: vi.fn(async () => null), setItemAsync: vi.fn(async () => undefined) }));
+vi.mock('@react-native-async-storage/async-storage', () => ({
+    default: { getItem: vi.fn(async () => null), setItem: vi.fn(async () => undefined), removeItem: vi.fn(async () => undefined) },
+}));
+
 vi.mock('../crypto', () => ({
     buildSignedHeaders: vi.fn(async (method: string, url: string) => ({
         'Content-Type': 'application/json', 'X-Public-Key': 'pk', 'X-Signature': `sig:${method}:${url}`, 'X-Timestamp': '1', 'X-Nonce': 'n',
@@ -29,6 +36,10 @@ import {
     readUnlockScan, unlockTextFromParams, isUnlockLink, scanProblemMessage, lookupUnlock, buildUnlockRequest, approveUnlock,
     runLockOpenCheck, readLockPin, lockPinKey, resetLockOpenCheckForTests, unlockRefusalMessage, openedFromLinkWarning, type CommunityLockPin,
 } from '../takeover-unlock';
+
+// The phone's since-boot clock (modules/boot-clock), as every phone build has it: a door acts only on a pass it can time
+// (LocalAuth.timeDoorPrompt, doors-held-pass.test.ts), so with no clock it would act on none.
+(globalThis as { expo?: unknown }).expo = { modules: { BeanPoolBootClock: { elapsedMs: () => performance.now() } } };
 
 // A real Ed25519 PeerId for a real node key, so the header's signature checks out as it does on a device.
 const B58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';

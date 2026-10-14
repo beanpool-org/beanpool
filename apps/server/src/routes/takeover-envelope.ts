@@ -41,7 +41,7 @@ import { getHeldEnvelopesStatus } from '../services/standby-envelopes.js';
 import { getNodeRole } from '../state-engine.js';
 import {
     TakeoverError, takeoverPreconditions, parseTypedCode, pickEnvelope, codeMatches, openTakeoverSession,
-    confirmTakeover, discardTakeoverSession, getTakeoverProgress, progressTokenMatches,
+    confirmTakeoverAfterCheck, discardTakeoverSession, getTakeoverProgress, progressTokenMatches,
 } from '../services/takeover.js';
 import { currentSignedEpoch, IDENTITY_EPOCH_PATH } from '../services/identity-epoch.js';
 import type { RouteDeps } from './types.js';
@@ -292,7 +292,8 @@ export function createTakeoverEnvelopeRoutes(deps: RouteDeps): Router {
     });
 
     // Step two: the confirm. The standby's own admin password stops working part-way (the community's is installed),
-    // so the answer carries a progress token the screen uses to follow the steps across the restart.
+    // so the answer carries a progress token the screen uses to follow the steps across the restart. First, it asks again
+    // whether another server took over with these keys since the preview (two standbys, one set of keys).
     router.post('/api/local/admin/takeover/confirm', async (ctx) => {
         if (!(await checkAdminAuth(ctx as any))) return;
         if (!requireAdminRole(ctx, ['owner'], TAKEOVER_OWNER_ONLY)) return;
@@ -304,7 +305,7 @@ export function createTakeoverEnvelopeRoutes(deps: RouteDeps): Router {
             return;
         }
         try {
-            const { progressToken, journalId } = confirmTakeover(body.sessionId);
+            const { progressToken, journalId } = await confirmTakeoverAfterCheck(body.sessionId);
             ctx.body = { success: true, progressToken, journalId, progress: getTakeoverProgress() };
         } catch (e) {
             answerTakeoverError(ctx, e);

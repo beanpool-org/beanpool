@@ -26,6 +26,7 @@
 import net from 'node:net';
 import os from 'node:os';
 import type Koa from 'koa';
+import { logAddressTag } from './log-address.js';
 
 // https://www.cloudflare.com/ips-v4 and /ips-v6, fetched 2026-09-19.
 const CLOUDFLARE_V4 = [
@@ -170,7 +171,8 @@ function noteUntrustedForwarder(ip: string): void {
     if (!entry.warned && now - lastForwarderWarning > 10 * 60_000) {
         lastForwarderWarning = now;
         entry.warned = true;
-        console.warn(`[client-ip] ${ip} sent forwarding headers (X-Forwarded-For or similar) but is not a trusted proxy, so they are ignored and every request through it counts as coming from ${ip}. If that is your reverse proxy, add its address to TRUSTED_PROXIES in the node's .env and restart; until then the members behind it share one set of rate limits and one admin-password brake.`);
+        // Named by its daily keyed hash, never its address: this goes to stdout, which is Docker's log (log-address.ts).
+        console.warn(`[client-ip] A peer (${logAddressTag(key)}: its address, hashed with a key that changes daily) sent forwarding headers (X-Forwarded-For or similar) but is not a trusted proxy, so they are ignored and every request through it counts as coming from that one address. If that is your reverse proxy, add its address to TRUSTED_PROXIES in the node's .env and restart; until then the members behind it share one set of rate limits and one admin-password brake.`);
     }
 }
 
@@ -181,6 +183,23 @@ function noteUntrustedForwarder(ip: string): void {
 export function isSharedSourceKey(key: string, now = Date.now()): boolean {
     const seen = untrustedForwarders.get(key)?.seen;
     return seen !== undefined && now - seen <= FORWARDER_MEMORY_MS;
+}
+
+/**
+ * Whether `addr` may stand for many people rather than one client: not an address, loopback, private or link-local,
+ * one of our trusted proxies (one that sent no forwarding header), or a peer that has recently forwarded for others
+ * without being trusted (isSharedSourceKey). Two requests from such an address say nothing about one network.
+ */
+export function standsForMany(addr: string | undefined | null): boolean {
+    const ip = normalizeIp(addr);
+    if (!net.isIP(ip)) return true;
+    if (net.isIPv4(ip)) {
+        const [o1, o2] = ip.split('.').map(Number);
+        if (o1 === 127 || (o1 === 169 && o2 === 254)) return true;
+    } else if (ip === '::1' || /^fe[89ab][0-9a-f]:/i.test(ip)) {
+        return true;
+    }
+    return isPrivate(ip) || isTrustedProxy(ip) || isSharedSourceKey(limiterKeyForIp(ip));
 }
 
 /** Tests only. */
@@ -240,8 +259,8 @@ function ipv6Groups(ip: string): number[] | null {
  * /128, each request lands in an empty bucket and no per-address limiter ever says no. One /64 is one
  * subscriber, so that is the unit counted.
  *
- * Only bucket keys go through here. The address that is logged, shown, or matched against an allowlist stays
- * the full address from clientIp().
+ * Only bucket keys go through here. The address that is shown to an owner, or matched against an allowlist, stays
+ * the full address from clientIp(). A log line carries neither, only a daily keyed hash of the key (log-address.ts).
  */
 export function limiterKeyForIp(addr: string | undefined | null): string {
     const ip = normalizeIp(addr);

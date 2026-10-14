@@ -2,15 +2,17 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount } from '@beanpool/core';
-import { db } from '../db/db.js';
+import { isSyntheticAccount, isBeanAmount, type PushNoticeKind } from '@beanpool/core';
+import { db, memberHasPhoto } from '../db/db.js';
 import { isNodeOwner } from './node-roles.js';
-import { isServableAvatarValue } from '@beanpool/core';
 import { recordActivity } from '../db/activity-feed-db.js';
 import { adminActorName } from './admin-actor-name.js';
 import { assertLocalSettlement, assertTradableHere } from '../federation-settlement.js';
 import { assertFeatureOn } from '../config/node-profile.js';
 import { assertNodeMember } from './members.js';
+import { postOutOfSight, marketplacePostOutOfSight } from './post-sight.js';
+import { isDealQuantity, DEAL_QUANTITY_ERROR } from './post-fields.js';
+import { hasBlocked } from './member-blocks.js';
 import crypto from 'node:crypto';
 import {
     getMember,
@@ -26,7 +28,7 @@ type BroadcastFn = (event: any, recipients?: string[], opts?: { othersGetDoorbel
 type TransferFn = (from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt?: boolean, auth?: { signer: string; signature?: string; payload?: string }) => any;
 type EnsureConvFn = (postId: string, buyerPubkey: string, sellerPubkey: string) => string;
 type SystemMsgFn = (postId: string, type: any, payload: any, senderPubkey: string, recipientPubkey: string) => any;
-type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow') => void;
+type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow', kind: PushNoticeKind) => void;
 
 export interface EscrowCallbacks {
     broadcast: BroadcastFn;
@@ -115,10 +117,10 @@ function assertAccountOpen(publicKey: string): void {
 }
 
 function assertProfileComplete(publicKey: string): void {
-    const member = db.prepare("SELECT avatar_url, callsign FROM members WHERE public_key = ?").get(publicKey) as any;
+    const member = db.prepare("SELECT callsign FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) return;
-    // See the identical gate in engine/posts.ts: a stored /api/avatar/ URL is not a photo.
-    if (!isServableAvatarValue(member.avatar_url)) {
+    // See the identical gate in engine/posts.ts: an avatar the node serves, moved or still inline (db.ts memberHasPhoto).
+    if (!memberHasPhoto(publicKey)) {
         throw new Error('Please set a profile photo before using the marketplace. Tap your profile to add one.');
     }
     if (!member.callsign || member.callsign.trim().length < 2) {
@@ -136,22 +138,36 @@ function assertNotOnHoliday(publicKey: string): void {
 }
 
 /**
- * A group post this caller cannot see in any feed (getPosts: only its author and the group's active members), so the
- * trade routes must answer exactly as for an id nobody has. The old "Must be an active member of the group" told
- * a non-member holding the id that it was a group post, and of which group — an invite-only one included.
- */
-function cannotSeeGroupPost(scope: string | null | undefined, groupId: string | null | undefined, authorPubkey: string, caller: string): boolean {
-    if (scope !== 'group' || !groupId || authorPubkey === caller) return false;
-    return !db.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'").get(groupId, caller);
-}
-
-/**
  * A post hidden by reports (G3) is not there for anyone but its author, here as when read by id (getPosts): a
  * request or an accept would start a deal, and put Beans in escrow, on a post waiting for a moderator (most likely
  * one reported as a scam), and its answer would name the post. So the trade routes answer as for an id nobody has.
  */
 function hiddenFromCaller(hiddenAt: string | null | undefined, authorPubkey: string, caller: string): boolean {
     return !!hiddenAt && authorPubkey !== caller;
+}
+
+/**
+ * A deal's price is a finite number of Beans, 0 or more, or no Beans move for it (review F1/F6, 2026-10-01). A listing
+ * row whose price was stored as text ("abc", before the edit route checked it) or a quantity of Infinity made NaN, and
+ * every `<` guard reads NaN as "fine". Asked at every door before a conservingTransaction opens, so it is a plain
+ * refusal and not a rollback; core's ledger refuses it again.
+ */
+function assertDealAmount(credits: unknown): asserts credits is number {
+    if (!isBeanAmount(credits)) throw new Error('This listing has no valid price — ask the seller to edit it');
+}
+
+/**
+ * The same check on a deal row that already holds an amount that is not a number of Beans (one struck from a text
+ * price before this fix). Editing the listing can't mend it: an open deal keeps the price it was struck at (#1374).
+ * The message names what does clear it. A request: the listing's author declines it, the requester withdraws it, or
+ * the listing is removed. A deal in escrow: it can't be completed, cancelled or disputed, and the seller can't remove
+ * a listing with a deal in escrow, so only a moderator removing the listing closes it (adminDeletePost).
+ */
+function assertDealRowAmount(credits: unknown, stage: 'requested' | 'pending'): asserts credits is number {
+    if (isBeanAmount(credits)) return;
+    throw new Error(stage === 'requested'
+        ? "This request holds an amount that isn't a valid number of Beans, so it can't be approved. Decline it, or remove the listing, to clear it."
+        : "This deal holds an amount that isn't a valid number of Beans, so it can't be completed, cancelled or disputed. Ask a moderator to remove the listing to clear it.");
 }
 
 /**
@@ -181,7 +197,10 @@ export function requestPost(
     assertProfileComplete(requesterPublicKey);
     assertNotOnHoliday(requesterPublicKey);
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(postId) as any;
-    if (!post || cannotSeeGroupPost(post.audience_scope, post.target_group_id, post.author_pubkey, requesterPublicKey)
+    // A group or direct post this caller can't see in any feed is an id nobody has (engine/post-sight.ts): "Must be an
+    // active member of the group" told a non-member holding the id that it was a group's, an invite-only one included,
+    // and "This direct post is not addressed to you" that it was someone's direct post.
+    if (!post || postOutOfSight(post, requesterPublicKey)
         || hiddenFromCaller(post.hidden_by_reports_at, post.author_pubkey, requesterPublicKey)) {
         throw new Error('Post not found');
     }
@@ -238,12 +257,18 @@ export function requestPost(
         if (!hasListedOffer(db, requesterPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
     }
 
-    if (post.price_type !== 'fixed' && (typeof hours !== 'number' || hours <= 0)) {
+    // Finite and in range (F6): `hours > 0` alone passed Infinity, and 0 × Infinity is NaN. A fixed price ignores the
+    // quantity, but one that is given and isn't one (Infinity, a negative, text) is refused there too, not ignored (F3).
+    // A quantity given and out of range (below POST_HOURS_MIN too: 5e-324 hours rounded the deal's rate) gets the
+    // quantity's own words, on a priced-per-unit listing as on a fixed one.
+    if (hours != null && !isDealQuantity(hours)) throw new Error(DEAL_QUANTITY_ERROR);
+    if (post.price_type !== 'fixed' && !isDealQuantity(hours)) {
         throw new Error(`Must provide a valid quantity for a ${post.price_type} post`);
     }
 
     const requester = getMember(db, requesterPublicKey);
     const finalCredits = post.price_type !== 'fixed' ? post.credits * hours! : post.credits;
+    assertDealAmount(finalCredits);
 
     const payerPubkey = isOffer ? requesterPublicKey : post.author_pubkey;
     // #102: on a Need the payer is the post's author, NOT the requester — which is exactly why this
@@ -285,13 +310,16 @@ export function requestPost(
 
     cb.broadcast({ type: 'transaction_requested', transaction: tx }, tradeRecipients(cb, tx));
 
+    // A request from someone the listing's author has blocked (engine/member-blocks.ts) waits in their deals with no push:
+    // it holds no Beans and carries no words of the requester's, and refusing it would tell the requester they are blocked.
     cb.dispatchPushNotification(
-        [post.author_pubkey],
+        hasBlocked(post.author_pubkey, requesterPublicKey) ? [] : [post.author_pubkey],
         requesterPublicKey,
         isOffer ? '📩 New Request' : '🤝 Help Offered',
         `${requester?.callsign || 'A member'} ${isOffer ? 'requested' : 'offered to help with'} "${post.title}"`,
         { screen: 'post', postId: post.id },
-        'marketplace'
+        'marketplace',
+        'market.request'
     );
 
     return tx;
@@ -314,6 +342,7 @@ export function approvePostRequest(
     const expectedAuthorRole = isOffer ? row.seller_pubkey : row.buyer_pubkey;
     if (expectedAuthorRole !== authorPublicKey) return null;
     if (post.hidden_by_reports_at) throw postHiddenNoNewDeal();
+    assertDealRowAmount(row.credits, 'requested');
 
     // Two-person rule (docs/the-commons.md §2.3 and docs/admin-surface.md §6):
     // When an enterprise authors a Need, the acting operator approving the bid
@@ -356,6 +385,27 @@ export function approvePostRequest(
     // through THIS function. The escrow is funded below either way, so this is a draw point in its own right.
     const originRow = db.prepare('SELECT origin_node FROM posts WHERE id = ?').get(row.post_id) as any;
     assertTradableHere({ originNode: originRow?.origin_node }, row.seller_pubkey);
+
+    // Enterprise needs require an authenticated keeper signature (docs/admin-surface.md §6). Before the funding checks
+    // below, not after: a keeper's pay the enterprise can't afford yet is RECORDED there as a deferred wage claim, and paid
+    // later with no further step (state-engine.ts processDeferredWageClaims), so it may only be recorded on a keeper's
+    // say-so. Both routes check the keeper before calling this; now the engine refuses any other caller the same way
+    // (FABLE-sec-money LOW 3).
+    if (isEnterpriseNeed) {
+        if (!opts?.authSigner) {
+            const err: any = new Error('Enterprise approval requires an authenticated keeper signature.');
+            err.status = 401;
+            err.statusCode = 401;
+            throw err;
+        }
+        const isKeeper = signerKeepsEnterprise(cb, opts.authSigner, row.buyer_pubkey);
+        if (!isKeeper) {
+            const err: any = new Error('Signer is not an authorized keeper of this enterprise.');
+            err.status = 403;
+            err.statusCode = 403;
+            throw err;
+        }
+    }
 
     const isEnterprisePayer = Boolean(buyerMember?.is_treasury);
     const isPayeeKeeper = isEnterprisePayer && Boolean(
@@ -401,23 +451,6 @@ export function approvePostRequest(
         if (balance - row.credits < uFloor) throw cb.floorLockedError(row.buyer_pubkey, balance - row.credits);
     }
 
-    // Enterprise needs require an authenticated keeper signature (docs/admin-surface.md §6).
-    if (isEnterpriseNeed) {
-        if (!opts?.authSigner) {
-            const err: any = new Error('Enterprise approval requires an authenticated keeper signature.');
-            err.status = 401;
-            err.statusCode = 401;
-            throw err;
-        }
-        const isKeeper = signerKeepsEnterprise(cb, opts.authSigner, row.buyer_pubkey);
-        if (!isKeeper) {
-            const err: any = new Error('Signer is not an authorized keeper of this enterprise.');
-            err.status = 403;
-            err.statusCode = 403;
-            throw err;
-        }
-    }
-
     cb.ensureTransactionConversation(row.post_id, row.buyer_pubkey, row.seller_pubkey);
 
     cb.conservingTransaction(() => {
@@ -460,6 +493,7 @@ export function approvePostRequest(
         cb.injectSystemMessage(post.id, cb.SystemMessageType.ESCROW_FUNDED, {
             amount: row.credits,
             postId: post.id,
+            transactionId: row.id,
             actorPubkey: authorPublicKey,
             buyerPubkey: row.buyer_pubkey,
             sellerPubkey: row.seller_pubkey
@@ -475,7 +509,8 @@ export function approvePostRequest(
         '✅ Request Approved',
         `Your request for "${post.title}" was approved!`,
         { screen: 'post', postId: row.post_id },
-        'marketplace'
+        'marketplace',
+        'market.answer'
     );
 
     return tx;
@@ -512,7 +547,8 @@ export function rejectPostRequest(
         '❌ Request Declined',
         `Your request for "${post.title}" was declined`,
         { screen: 'post', postId: row.post_id },
-        'marketplace'
+        'marketplace',
+        'market.answer'
     );
 
     return tx;
@@ -554,7 +590,8 @@ export function acceptPost(
     assertNodeMember(buyerPublicKey);
     assertNotOnHoliday(buyerPublicKey);
     const post = getPosts(db, { id: postId, status: 'active', includeAllScopes: true })[0];
-    if (!post || cannotSeeGroupPost(post.audienceScope, post.targetGroupId, post.authorPublicKey, buyerPublicKey)
+    // As requestPost: a group or direct post this caller can't see is an id nobody has.
+    if (!post || marketplacePostOutOfSight(post, buyerPublicKey)
         || hiddenFromCaller(post.hiddenByReportsAt, post.authorPublicKey, buyerPublicKey)) {
         throw new Error('Post not found or not active');
     }
@@ -610,12 +647,14 @@ export function acceptPost(
 
     if (!hasListedOffer(db, buyerPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
 
-    if (post.priceType !== 'fixed' && (typeof hours !== 'number' || hours <= 0)) {
+    if (hours != null && !isDealQuantity(hours)) throw new Error(DEAL_QUANTITY_ERROR);   // as in requestPost (F3)
+    if (post.priceType !== 'fixed' && !isDealQuantity(hours)) {
         throw new Error(`Must provide a valid quantity for a ${post.priceType} post`);
     }
 
     const buyer = getMember(db, buyerPublicKey);
     const finalCredits = post.priceType !== 'fixed' ? post.credits * hours! : post.credits;
+    assertDealAmount(finalCredits);
 
     // #102: a visitor's beans live on their home ledger, so this node cannot fund escrow for them.
     // Guarded here rather than only at the route because the PAYER is not always the actor.
@@ -726,6 +765,7 @@ export function acceptPost(
         cb.injectSystemMessage(post.id, cb.SystemMessageType.ESCROW_FUNDED, {
             amount: finalCredits,
             postId: post.id,
+            transactionId: tx.id,
             actorPubkey: buyerPublicKey,
             buyerPubkey: buyerPublicKey,
             sellerPubkey: post.authorPublicKey
@@ -734,13 +774,17 @@ export function acceptPost(
         console.warn('[Marketplace] ESCROW_FUNDED system message failed:', e);
     }
 
+    // A 1-step accept by someone the seller has blocked (engine/member-blocks.ts) comes with no push, as their request
+    // does: with the buyer's own cancel it could be repeated at will to push the seller (#1403 review). The deal itself,
+    // its escrow and its SYSTEM lines are as for anyone, and the seller sees it in their deals.
     cb.dispatchPushNotification(
-        [post.authorPublicKey],
+        hasBlocked(post.authorPublicKey, buyerPublicKey) ? [] : [post.authorPublicKey],
         buyerPublicKey,
         '🛒 Offer Accepted',
         `${buyer?.callsign || 'A member'} accepted "${post.title}" — ${finalCredits} Beans are now in escrow.`,
         { screen: 'post', postId: post.id },
-        'marketplace'
+        'marketplace',
+        'market.request'
     );
 
     return tx;
@@ -813,11 +857,48 @@ export function completePostTransaction(
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
     if (post && (post.type === 'poll' || post.type === 'event')) return null;
-    const isHourly = post && post.price_type !== 'fixed';
-    
+    // The rate is the one the deal was struck at: this row's own credits for its own hours, both written when the deal
+    // was asked for or accepted (requestPost, acceptPost), and nowhere else. Never the listing's live price: its author
+    // could change that after the escrow was funded, and the buyer was then topped up at the new rate, or the helper paid
+    // at it (FABLE-sec-money MEDIUM 2). A row with no hours (a fixed price, or an old row that never stored them) pays
+    // what it holds, whatever hours are confirmed.
+    const bookedHours = Number(row.hours);
+    const isHourly = Number.isFinite(bookedHours) && bookedHours > 0;
+
+    // A final quantity that is given and isn't a finite one in range is refused, not ignored, on a fixed deal as on an
+    // hourly one: Infinity (F6), and a negative, 0 or text, which used to pay the booked hours (F3). None given pays them.
+    if (finalHours != null && !isDealQuantity(finalHours)) {
+        throw new Error(DEAL_QUANTITY_ERROR.replace(/^The quantity/, 'The final quantity'));
+    }
+    assertDealRowAmount(row.credits, 'pending');
+    const units = ({ hourly: 'hours', daily: 'days', weekly: 'weeks', monthly: 'months' } as Record<string, string>)[post?.price_type] ?? 'units';
+    // Each refusal below names the way out that works in the only states that reach it (#1445 re-review, measured):
+    // a booked quantity outside 0.01–10000 is itself refused as a final quantity, and neither app can confirm a per-unit
+    // deal with none, so only the cancel works there; a row whose credits were set near the largest number by hand can't
+    // be completed or cancelled (its escrow holds what was really paid), and only a moderator's removal clears it.
     let releaseCredits = row.credits;
-    if (isHourly && typeof finalHours === 'number' && finalHours > 0) {
-        releaseCredits = post.credits * finalHours;
+    if (isHourly && typeof finalHours === 'number' && Number.isFinite(finalHours) && finalHours > 0 && finalHours !== bookedHours) {
+        // The rate must be one the row really holds (#1445 review, BLOCKING 2): its booked quantity a real one (a row from
+        // before POST_HOURS_MIN, or written by hand, may hold 5e-324, and then credits / hours had rounded to a whole
+        // number of Beans, or to 0), the rate finite, and the rate times the booked quantity the credits again. Otherwise
+        // nothing is paid at it: a wrong amount would move for good.
+        const rate = row.credits / bookedHours;
+        const roundTrips = Number.isFinite(rate) && Math.abs(rate * bookedHours - row.credits) <= 1e-9 * Math.max(1, row.credits);
+        if (!isDealQuantity(bookedHours) || !roundTrips) {
+            throw new Error(`This deal's rate per ${units.replace(/s$/, '')} can't be worked out from what it holds, so nothing has moved. `
+                + 'Cancel the deal, and the Beans held for it go back.');
+        }
+        releaseCredits = rate * finalHours;
+    }
+    // A row whose rate times the confirmed hours is more than any number can hold (a hand-edited row's credits near the
+    // largest number). Its escrow holds what was really paid, which can't cover what the row says, so a cancel is refused
+    // as well (measured in test-money-followups, #1445 re-review): the words say it can be neither completed nor cancelled,
+    // and that a moderator's removal of the listing clears it and the Beans held go back to whoever paid them (sync check
+    // F2). Nothing moves here.
+    if (!isBeanAmount(releaseCredits)) {
+        throw new Error(`Paying for ${finalHours} ${units} at this deal's rate comes to more Beans than one payment can carry, so nothing has moved. `
+            + "This deal holds an amount the Beans held for it can't cover, so it can't be completed or cancelled. "
+            + 'Ask a moderator to remove the listing to clear it: the Beans held for it go back to whoever paid them.');
     }
 
     const completedAt = new Date().toISOString();
@@ -943,6 +1024,7 @@ export function completePostTransaction(
             grossAmount: releaseCredits,
             fee: releaseResult?.taxFee ?? 0,
             postId: row.post_id,
+            transactionId: row.id,
             actorPubkey: confirmerPublicKey,
             buyerPubkey: row.buyer_pubkey,
             sellerPubkey: row.seller_pubkey,
@@ -958,7 +1040,8 @@ export function completePostTransaction(
         '🎉 Deal Completed!',
         `Payment of ${netPayout} Beans was released for "${post?.title || 'your post'}"`,
         { screen: 'post', postId: row.post_id },
-        'escrow'
+        'escrow',
+        'trade.update'
     );
 
     return tx;
@@ -973,6 +1056,7 @@ export function cancelPostTransaction(
     if (!row) return null;
     if (row.buyer_pubkey !== cancellerPublicKey && row.seller_pubkey !== cancellerPublicKey) return null;
     assertNodeMember(cancellerPublicKey);
+    assertDealRowAmount(row.credits, 'pending');
 
     const post = db.prepare(`SELECT * FROM posts WHERE id=?`).get(row.post_id) as any;
     if (post && (post.type === 'poll' || post.type === 'event')) return null;
@@ -1015,6 +1099,7 @@ export function cancelPostTransaction(
         cb.injectSystemMessage(row.post_id, cb.SystemMessageType.ESCROW_CANCELLED, {
             amount: row.credits,
             postId: row.post_id,
+            transactionId: row.id,
             actorPubkey: cancellerPublicKey,
             buyerPubkey: row.buyer_pubkey,
             sellerPubkey: row.seller_pubkey
@@ -1024,13 +1109,17 @@ export function cancelPostTransaction(
     }
 
     const otherParty = cancellerPublicKey === row.buyer_pubkey ? row.seller_pubkey : row.buyer_pubkey;
+    // The buyer's cancel tells a seller who has blocked them nothing, as their accept didn't (#1403 review): the deal is
+    // back on the seller's board, refunded, with its SYSTEM line in their chat. A seller's cancel always tells the buyer.
+    const silenced = cancellerPublicKey === row.buyer_pubkey && hasBlocked(row.seller_pubkey, row.buyer_pubkey);
     cb.dispatchPushNotification(
-        [otherParty],
+        silenced ? [] : [otherParty],
         cancellerPublicKey,
         '🚫 Deal Cancelled',
         `Deal for "${post?.title || 'the post'}" was cancelled — escrow funds refunded.`,
         { screen: 'post', postId: row.post_id },
-        'escrow'
+        'escrow',
+        'trade.update'
     );
 
     return tx;
@@ -1081,6 +1170,7 @@ export function resolveEscrowDispute(
     if (!row) {
         throw new Error('Transaction not found or not in pending escrow');
     }
+    assertDealRowAmount(row.credits, 'pending');
 
     assertNotPartyToDispute(row, adminSigner.trim());
 
@@ -1320,7 +1410,8 @@ export function resolveEscrowDispute(
         '⚖️ Escrow Dispute Resolved',
         `Dispute arbitrated by ${resolverName}: ${actionLabel} for "${post?.title || 'deal'}"`,
         { screen: 'post', postId: row.post_id },
-        'escrow'
+        'escrow',
+        'trade.update'
     );
 
     return tx;

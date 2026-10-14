@@ -8,6 +8,7 @@
  *
  * No React and no device modules here on purpose: utils/__tests__ runs in plain node.
  */
+import { dmQuoteLabel, type DmQuoteFrom } from './e2e-crypto';
 
 /** Authors may edit a text message for this long after sending (mirrors the node's window). */
 export const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -73,6 +74,39 @@ export interface ChatMessage {
     timestamp?: string;
     /** Who said it, when the chat shows names (group, enterprise, event). */
     authorName?: string | null;
+    /**
+     * A short mark on its own line under the name ("(key changed)", name-key-memory.ts): never in the name's one line,
+     * where 320dp with 1.3× text would cut it (review of #1826, NB9).
+     */
+    authorHint?: string | null;
+    /** A DM line the node moved or reordered, or an old-format line: the one line shown under it. */
+    integrityNote?: string | null;
+    /** A DM row shown as nobody's (e2e-crypto dmLineIsUnattributed). */
+    unattributed?: boolean;
+    /** Who a reply quoting this DM line shows it as from (e2e-crypto dmQuoteFrom); absent: its named author. */
+    quoteFrom?: DmQuoteFrom;
+}
+
+/** A quoted message, as a reply's bubble and the "Replying to" box show it. */
+export interface DmQuoteView {
+    author: string;
+    text: string;
+    /** The quoted line's own mark (an old-format line, a moved or reordered one), carried with the quote. */
+    note: string | null;
+}
+
+/**
+ * The quote of the message a DM reply answers, from that message as the thread judged it: its words only if they opened,
+ * its named author only if the line is theirs, with its mark. The node can rewrite the row a verified reply answers while
+ * keeping its id (as a notice, as the admin page's message, or as another old-format line): the quote then says what
+ * the row is, never "You" or the other person's name over words it can't confirm.
+ */
+export function dmQuoteFor(parent: ChatMessage | null | undefined, myPubkey: string | null | undefined, peerName: string | null | undefined): DmQuoteView {
+    if (!parent) return { author: 'Someone', text: 'Message not found', note: null };
+    const from = parent.quoteFrom ?? ((parent.type === 'system' || parent.senderId === 'SYSTEM') ? 'notice' : parent.unattributed ? 'nobody' : 'author');
+    if (from !== 'author') return { author: dmQuoteLabel(from), text: parent.text, note: null };
+    const text = isTombstone(parent) ? tombstoneText(parent, 'dm') : parent.type === 'image' ? '🔒 Photo' : parent.text;
+    return { author: parent.senderId === myPubkey ? 'You' : (peerName || 'Someone'), text, note: parent.integrityNote ?? null };
 }
 
 /** Who the viewer is in this chat, for the action rules below. */
@@ -124,11 +158,16 @@ export function isTombstone(m: { type?: string; metadata?: any } | null | undefi
  *    including of the keeper's own line, which must not read as that keeper deleting it;
  *  - a group chat has both, told apart by `removedBy`;
  *  - a DM has no moderator at all, so every tombstone in one is the author's own delete.
+ *
+ * Every chat has one more: the author deleted their account, and the node blanked every line they wrote
+ * (`metadata.accountDeleted`, apps/server/src/engine/message-tombstone.ts). That one is their own delete,
+ * in an event or an enterprise chat too, and must not read as a host's or a keeper's removal.
  */
 export function tombstoneText(
     m: { senderId?: string; metadata?: any } | null | undefined,
     kind?: ChatKind,
 ): string {
+    if (m?.metadata?.accountDeleted === true) return DELETED_BY_AUTHOR_TEXT;
     if (kind === 'event') return REMOVED_BY_HOST_TEXT;
     if (kind === 'enterprise') return REMOVED_BY_KEEPER_TEXT;
     if (kind === 'dm') return DELETED_BY_AUTHOR_TEXT;

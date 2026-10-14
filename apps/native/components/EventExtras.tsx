@@ -207,8 +207,8 @@ export function EventReminder({ post, myRsvp, viewerPublicKey }: ReminderProps) 
                         disabled={saving}
                         style={styles.saveBtn}
                         accessibilityRole="button"
-                        accessibilityLabel="Save this reminder for this event"
-                        accessibilityState={{ busy: saving }}
+                        accessibilityLabel={saving ? "Saving reminder for this event..." : "Save for this event"}
+                        accessibilityState={{ busy: saving, disabled: saving }}
                     >
                         {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveBtnText} numberOfLines={1}>Save for this event</Text>}
                     </Pressable>

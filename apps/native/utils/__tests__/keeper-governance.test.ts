@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
     timeLeftText, keeperChangeTitle, keeperChangeBody, canObjectToChange, canRemoveKeeper, canStepDown, nextLead,
     stepDownConfirmText, approvedApplicantText, successionTallyText, successionDeadlineText, myChoice,
-    successionClosedText, successionHeading, successionExplainer, removeKeeperConfirmText,
+    successionClosedText, successionHeading, successionExplainer, removeKeeperConfirmText, applicantBackingText,
 } from '../keeper-governance';
+import { keeperWords } from '@beanpool/core';
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -56,6 +57,15 @@ describe('pending keeper changes (answers A and M)', () => {
     it('the applicant is told the window is running', () => {
         expect(approvedApplicantText(ADD.appliesAt, NOW)).toContain('(2 days 5 hours left)');
     });
+
+    it('the lead keeper is told in words whether the applicant can back the pledge, never a figure', () => {
+        expect(applicantBackingText(true)).toBe('Their standing covers this pledge.');
+        expect(applicantBackingText(false)).toBe("Their standing doesn't cover this pledge right now, so it can't be approved yet.");
+        for (const v of [true, false]) expect(applicantBackingText(v)).not.toMatch(/\d|undefined|NaN/);
+        // A node too old to send canBackPledge: no line at all rather than a guess.
+        expect(applicantBackingText(undefined)).toBeNull();
+        expect(applicantBackingText(null)).toBeNull();
+    });
 });
 
 describe('stepping down (answers G and M)', () => {
@@ -94,5 +104,24 @@ describe('succession (answers G and M)', () => {
         expect(successionHeading({ autoPromoted: true })).toBe('NEW LEAD CHOSEN AUTOMATICALLY');
         expect(successionHeading({ daysInactive: 41.7 })).toBe('LEAD KEEPER INACTIVE (41 DAYS)');
         expect(successionExplainer({ autoPromoted: true, leadCallsign: 'Tomas' })).toContain('can choose someone else now');
+    });
+});
+
+describe('a project says leader and collaborators, never keeper (group decisions pick 8)', () => {
+    const P = keeperWords('bounded');
+    it('confirmations, objection window and succession', () => {
+        const texts = [
+            keeperChangeTitle(ADD, P), keeperChangeBody(ADD, P), keeperChangeTitle(REMOVE, P), keeperChangeBody(REMOVE, P),
+            stepDownConfirmText('jun', KEEPERS, P), removeKeeperConfirmText(JUNIOR, P),
+            approvedApplicantText(ADD.appliesAt, NOW, P),
+            successionTallyText({ votesCount: 1, noVotesCount: 0, requiredVotes: 2, totalEligible: 3 } as any, P),
+            successionClosedText('rejected', P) ?? '', successionClosedText('lead_returned', P) ?? '',
+            successionClosedText('candidate_gone', P) ?? '',
+            successionHeading({ autoPromoted: true }, P), successionHeading({ daysInactive: 41.7 }, P),
+            successionExplainer({ autoPromoted: true, leadCallsign: 'Tomas' }, P), successionExplainer({}, P),
+        ];
+        for (const t of texts) expect(t).not.toMatch(/keeper|enterprise/i);
+        expect(successionHeading({ daysInactive: 41.7 }, P)).toBe('LEADER INACTIVE (41 DAYS)');
+        expect(successionClosedText('rejected', P)).toBe('Not enough collaborators said yes, so the leader stays.');
     });
 });

@@ -25,11 +25,13 @@
  */
 
 import fs from 'node:fs';
+import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import { peerIdFromString } from '@libp2p/peer-id';
 import { readSealedHeader, verifySealedHeader, type SealedEnvelopeHeader } from '@beanpool/core';
 import { getConnectorsByLevel } from '../connector-manager.js';
 import { logger } from '../logger.js';
+import { redirectRefusal } from './credential-redirect.js';
 
 export const HELD_ENVELOPES_DIR = 'held-takeover-envelopes';
 export const HELD_ENVELOPES_KEEP = 5;
@@ -120,9 +122,7 @@ function keep(bytes: Uint8Array, header: SealedEnvelopeHeader): void {
     const newest = listHeldEnvelopes().at(-1);
     const at = Math.max(Date.now(), (newest?.receivedAt ?? 0) + 1);
     const name = `${String(at).padStart(13, '0')}-${header.envelopeId}.bpseal`;
-    const tmp = path.join(dir, `.${name}.tmp-${process.pid}`);
-    fs.writeFileSync(tmp, bytes, { mode: 0o600 });
-    fs.renameSync(tmp, path.join(dir, name));
+    writeFileAtomic(path.join(dir, name), bytes, { mode: 0o600 });
     const all = fs.readdirSync(dir).filter((n) => FILE_RE.test(n)).sort();
     for (const old of all.slice(0, Math.max(0, all.length - HELD_ENVELOPES_KEEP))) {
         fs.unlinkSync(path.join(dir, old));
@@ -235,7 +235,14 @@ export async function pullTakeoverEnvelope(opts: { primaryUrl: string; replicati
         const newest = listHeldEnvelopes().at(-1);
         const headers: Record<string, string> = { 'X-Replication-Token': opts.replicationToken };
         if (newest) headers['If-None-Match'] = `"${newest.envelopeId}"`;
-        const res = await fetch(opts.primaryUrl.replace(/\/$/, '') + TAKEOVER_ENVELOPE_PATH, { method: 'GET', headers, signal: controller.signal });
+        const url = opts.primaryUrl.replace(/\/$/, '') + TAKEOVER_ENVELOPE_PATH;
+        // Never followed: a redirect would carry the replication token elsewhere (credential-redirect.ts).
+        const res = await fetch(url, { method: 'GET', headers, redirect: 'manual', signal: controller.signal });
+        const refused = redirectRefusal(res, url);
+        if (refused) {
+            await res.body?.cancel().catch(() => {});
+            return done('failed', `the main server at ${refused.message}`);
+        }
 
         if (res.status === 304) {
             await res.body?.cancel().catch(() => {});

@@ -11,6 +11,7 @@ import {
 } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { nodeCredential } from '../../lib/profiles';
 
 export interface ReplicationAccessPanelProps {
     activeNode: NodeProfile;
@@ -66,7 +67,7 @@ export function ReplicationAccessPanel({
             const tfa = getTfaSessionToken(activeNode.id);
             const data = await getReplicationAccess(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 tfa
             );
             setAccessData(data);
@@ -75,7 +76,7 @@ export function ReplicationAccessPanel({
         } finally {
             setLoading(false);
         }
-    }, [activeNode.id, activeNode.url, activeNode.adminPassword, initialData]);
+    }, [activeNode.id, activeNode.url, nodeCredential(activeNode), initialData]);
 
     useEffect(() => {
         if (initialData) {
@@ -92,7 +93,7 @@ export function ReplicationAccessPanel({
             const tfa = getTfaSessionToken(activeNode.id);
             const res = await generateReplicationToken(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 tfa
             );
             if (res.token) {
@@ -126,7 +127,7 @@ export function ReplicationAccessPanel({
             const tfa = getTfaSessionToken(activeNode.id);
             await clearReplicationToken(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 tfa
             );
             setShowClearConfirm(false);
@@ -169,7 +170,7 @@ export function ReplicationAccessPanel({
             await setReplicationTokenMode(
                 activeNode.url,
                 nextTokenOnly,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 tfa
             );
             setAccessData((prev) => ({
@@ -245,12 +246,14 @@ export function ReplicationAccessPanel({
             ? '⚠️ A standby last copied with the admin password, so it keeps that password in plain text on its disk. Make a token here, paste it into that standby under Live Backup Server, then tick "Require token".'
             : 'Standbys can still copy with the admin password. Once every standby uses a token, tick "Require token".';
 
-    // Compute last pull text safely
-    const lastPullAtStr = typeof accessData?.lastPullAt === 'string' ? accessData.lastPullAt : null;
+    // Compute last pull text safely. The node sends times as epoch milliseconds, and an address only for 7 days: after
+    // that it sends null (server services/address-retention.ts).
+    const timeOf = (v: unknown): string | number | null => (typeof v === 'string' || typeof v === 'number' ? v : null);
+    const lastPullAtStr = timeOf(accessData?.lastPullAt);
     const lastPullIpStr = typeof accessData?.lastPullIp === 'string' ? accessData.lastPullIp : null;
     const lastPullAuthStr = typeof accessData?.lastPullAuth === 'string' ? accessData.lastPullAuth : null;
     const lastPullDisplay = lastPullAtStr
-        ? `${formatRelativeTime(lastPullAtStr)}${lastPullIpStr ? ' · ' + lastPullIpStr : ''}${lastPullAuthStr ? ' · ' + lastPullAuthStr : ''}`
+        ? `${formatRelativeTime(lastPullAtStr)} · ${lastPullIpStr || 'address no longer kept'}${lastPullAuthStr ? ' · ' + lastPullAuthStr : ''}`
         : 'never';
 
     // Compute total pulls safely
@@ -260,7 +263,7 @@ export function ReplicationAccessPanel({
 
     // Compute rejected count safely
     const totalRejected = typeof accessData?.totalRejected === 'number' ? accessData.totalRejected : 0;
-    const lastRejectedAtStr = typeof accessData?.lastRejectedAt === 'string' ? accessData.lastRejectedAt : null;
+    const lastRejectedAtStr = timeOf(accessData?.lastRejectedAt);
     const rejectedDisplay = totalRejected > 0
         ? `${totalRejected}${lastRejectedAtStr ? ' · last ' + formatRelativeTime(lastRejectedAtStr) : ''}`
         : '0';
@@ -322,6 +325,16 @@ export function ReplicationAccessPanel({
                 </div>
             )}
 
+            {loading && !accessData ? (
+                <div
+                    id="rep-access-loading"
+                    className="p-8 text-center text-nature-400 text-xs font-mono flex items-center justify-center gap-2 bg-nature-950/70 rounded-xl border border-nature-800"
+                >
+                    <span className="animate-spin">🔄</span>
+                    <span>Loading replication access settings...</span>
+                </div>
+            ) : (
+                <>
             {/* Token Management Card */}
             <div className="bg-nature-950/70 p-4 sm:p-5 rounded-xl border border-nature-800 space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 flex-wrap">
@@ -496,7 +509,7 @@ export function ReplicationAccessPanel({
                                                     : `rejected${ev.reason ? ` (${ev.reason})` : ''}`}
                                             </span>
                                             <span className="text-nature-400 text-[11px]">
-                                                {ev.ip || '—'} · {formatRelativeTime(ev.at)}
+                                                {ev.ip || 'address no longer kept'} · {formatRelativeTime(ev.at)}
                                             </span>
                                         </div>
                                     );
@@ -507,9 +520,11 @@ export function ReplicationAccessPanel({
                 </div>
 
                 <p className="text-[11px] text-nature-400 m-0 pt-1 leading-relaxed">
-                    Rejected attempts are pulls with a bad/missing credential. A nonzero count from an unexpected source is worth investigating.
+                    Rejected attempts are pulls with a bad/missing credential. A nonzero count from an unexpected source is worth investigating. Each address is kept for 7 days, then shown as &quot;address no longer kept&quot;.
                 </p>
             </div>
+                </>
+            )}
 
             {/* Confirmation Modal: Generate Token */}
             {showGenConfirm && (

@@ -39,9 +39,10 @@ import { createDecision, castDecisionVote, tickDecisions, getDecision, tallyDeci
 import { startHttpsServer } from './https-server.js';
 import { db, initSchema, createCrowdfundProject, raiseCreatorOperatorSwitch } from './db/db.js';
 import { recordActivity } from './engine/members.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
-const PORT = 8626;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -71,7 +72,8 @@ function giveEarnedCredit(pubkey: string, targetEarned: number) {
         const tradeAmount = Math.min(vNeeded, 400);
         const peerKey = `peer-${pubkey.slice(0, 8)}-${peerIndex++}`;
         const now = new Date().toISOString();
-        db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, avatar_url, joined_at, status) VALUES (?, ?, 'avatar', ?, 'active')`).run(peerKey, `Peer${peerIndex}`, now);
+        db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status) VALUES (?, ?, ?, 'active')`).run(peerKey, `Peer${peerIndex}`, now);
+        setMemberPhoto(db, peerKey, 'avatar');
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(peerKey);
         const pid = `post-ec-${crypto.randomUUID()}`;
         db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'goods', 'description', ?, ?, 'completed')`).run(pid, tradeAmount, peerKey);
@@ -85,9 +87,10 @@ function makeIdentity(callsign: string, earnedCredit = 0) {
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     const now = new Date().toISOString();
     db.prepare(`
-        INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, joined_at, status, can_operate, last_active_at)
-        VALUES (?, ?, 'data:image/png;base64,iVBORw0KGgo=', ?, 'active', 1, ?)
+        INSERT OR REPLACE INTO members (public_key, callsign, joined_at, status, can_operate, last_active_at)
+        VALUES (?, ?, ?, 'active', 1, ?)
     `).run(pubKeyHex, callsign, now, now);
+    setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(pubKeyHex);
     if (earnedCredit > 0) {
         giveEarnedCredit(pubKeyHex, earnedCredit);
@@ -264,7 +267,7 @@ async function main() {
         approveKeeperRequest(reqValidAtStart.id, lead1.pubKeyHex);
     } catch (e: any) {
         approveOverpledgeThrew = true;
-        assert(e.message.includes('exceeds available earned credit at approval'), 'Approval rejected when pledge exceeds available at approval');
+        assert(e.message.includes("standing doesn't cover this pledge") && !/\d/.test(e.message), 'Approval rejected when pledge exceeds available at approval');
     }
     assert(approveOverpledgeThrew, 'Re-validation at approval threw when standing dropped');
 
@@ -635,7 +638,8 @@ async function main() {
     // HTTP ROUTE LEVEL VERIFICATION
     // =========================================================================
     console.log('\n── HTTP Route Level Verification ──');
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const httpLead = makeIdentity('HTTPLead', 100);
     const httpApplicant = makeIdentity('HTTPApplicant', 70);

@@ -10,6 +10,8 @@
  * Pure: no React Native imports, so it runs under the node test runner.
  */
 
+import { keeperWords, type KeeperWords } from '@beanpool/core';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PAUSE_DAYS = 90;
 const GRACE_DAYS = 7;
@@ -23,6 +25,9 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 const keeperKey = (k: any): string | undefined => k?.publicKey || k?.pubkey || k?.memberPubkey;
+/** A project says leader / collaborators, an enterprise lead keeper / keepers (group decisions pick 8). */
+const wordsOf = (detail: any): KeeperWords => keeperWords(detail?.lifecycle);
+const aKind = (w: KeeperWords): string => (w.kind === 'project' ? 'a project' : 'an enterprise');
 
 /** "17 December" — what the web's toLocaleDateString('en-GB', { day, month: 'long' }) prints, without relying on Intl. */
 export function formatPauseDate(iso: string | null | undefined): string {
@@ -59,13 +64,14 @@ export type SeasonBanner =
 export function seasonBanner(detail: any, now: number = Date.now()): SeasonBanner | null {
     if (!detail) return null;
     const status = detail.status;
+    const w = wordsOf(detail);
 
     if (status === 'completed') {
         return {
             kind: 'completed',
             label: 'Completed',
             headline: 'Completed · Wound up',
-            body: 'This enterprise has completed its purpose and wound up permanently. Surplus was returned to the Commons, keepers were released, and listings are closed.',
+            body: `This ${w.kind} has completed its purpose and wound up permanently. Surplus was returned to the Commons, ${w.keepers} were released, and listings are closed.`,
         };
     }
 
@@ -78,12 +84,12 @@ export function seasonBanner(detail: any, now: number = Date.now()): SeasonBanne
         const graceEnded = !isNaN(endsMs) && now >= endsMs;
         const by = detail.windUpInitiatedBy as string | null | undefined;
         const initiator = Array.isArray(detail.keepers) ? detail.keepers.find((k: any) => keeperKey(k) === by) : undefined;
-        const initiatorName = initiator?.callsign || (by ? `${by.slice(0, 8)}…` : 'a keeper');
+        const initiatorName = initiator?.callsign || (by ? `${by.slice(0, 8)}…` : `a ${w.keeper}`);
         return {
             kind: 'winding_up',
             label: 'Winding Up',
             headline: `Winding up (${plural(daysLeft, 'day')} left · started by ${initiatorName})`,
-            body: 'This enterprise is winding down. Listings are inactive and cannot be bought. Any keeper can stop this during the 7-day grace period.',
+            body: `This ${w.kind} is winding down. Listings are inactive and cannot be bought. Any ${w.keeper} can stop this during the 7-day grace period.`,
             graceEndedNote: graceEnded ? 'The 7-day grace period has elapsed. Ready to be finalised.' : null,
         };
     }
@@ -157,7 +163,7 @@ export function seasonControls(detail: any, myPublicKey: string | null | undefin
 /** Plain-words consequences, shown before the confirming tap. */
 export function pauseConfirmText(detail: any): string {
     const until = formatPauseDate(pauseExpiresAt(detail));
-    return `Pausing for the season holds your credit floor at ${heldCredit(detail)} beans${until ? ` until ${until}` : ' for up to 90 days'} and pauses active listings so members cannot buy. Any keeper can resume at any time.`;
+    return `Pausing for the season holds your credit floor at ${heldCredit(detail)} beans${until ? ` until ${until}` : ' for up to 90 days'} and pauses active listings so members cannot buy. Any ${wordsOf(detail).keeper} can resume at any time.`;
 }
 
 export const RESUME_CONFIRM_TEXT = 'Resuming reactivates all listings and restores the credit floor to normal daily calculation.';
@@ -168,28 +174,29 @@ function keeperCount(detail: any): number {
 
 export function windUpConfirmText(detail: any, name: string): string {
     const back = Math.max(0, Number(detail?.balance) || 0).toFixed(2);
-    return `Winding up returns ${back} beans to the Commons, releases ${plural(keeperCount(detail), 'keeper')}, and closes ${name} for good. Any keeper can stop this for the next 7 days.`;
+    const w = wordsOf(detail);
+    return `Winding up returns ${back} beans to the Commons, releases ${plural(keeperCount(detail), w.keeper)}, and closes ${name} for good. Any ${w.keeper} can stop this for the next 7 days.`;
 }
 
 /** Set when wind-up cannot start: the server refuses an enterprise in deficit. */
 export function windUpDeficitText(detail: any): string | null {
     const balance = Number(detail?.balance) || 0;
-    return balance < 0 ? `Cannot wind up an enterprise in deficit (${balance} 🫘). Debt must be resolved or written off first.` : null;
+    return balance < 0 ? `Cannot wind up ${aKind(wordsOf(detail))} in deficit (${balance} 🫘). Debt must be resolved or written off first.` : null;
 }
 
-export function cancelWindUpConfirmText(name: string): string {
-    return `Cancelling wind-up restores ${name} to active status immediately. Keepers remain appointed and listings can resume.`;
+export function cancelWindUpConfirmText(name: string, lifecycle?: string | null): string {
+    return `Cancelling wind-up restores ${name} to active status immediately. ${keeperWords(lifecycle).Keepers} remain appointed and listings can resume.`;
 }
 
 export function finaliseWindUpConfirmText(detail: any, name: string): string {
     const back = Math.max(0, Number(detail?.balance) || 0).toFixed(2);
-    return `The 7-day grace period has elapsed. Finalising sweeps ${back} beans to the Commons, releases all keepers, and closes ${name} for good.`;
+    return `The 7-day grace period has elapsed. Finalising sweeps ${back} beans to the Commons, releases all ${wordsOf(detail).keepers}, and closes ${name} for good.`;
 }
 
 /** Posting new listings is refused while paused, winding up or completed; null when posting is open. */
 export function postingBlockedText(detail: any): string | null {
     if (!detail) return null;
-    if (detail.status === 'completed') return 'Enterprise closed permanently.';
+    if (detail.status === 'completed') return `${wordsOf(detail).Kind} closed permanently.`;
     if (detail.status === 'winding_up') return 'Winding up — posting new listings is disabled.';
     if (detail.paused) return 'Paused for the season — posting new listings is disabled.';
     return null;

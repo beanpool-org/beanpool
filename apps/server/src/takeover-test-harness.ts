@@ -2,14 +2,17 @@
  * Shared by test-takeover-by-code.ts, test-takeover-crash-resume.ts and test-takeover-by-phone.ts (not a suite itself).
  *
  * Each BeanPool node in those suites is its OWN PROCESS with its own data dir, booted in the order index.ts boots:
- * genesis, admin password, database, the snapshot scheduler (only when BEANPOOL_TEST_SNAPSHOT_SCHEDULER=1), the
- * take-over resume at boot (which may finish steps and run the audit),
+ * genesis, admin password, a take-over stopped after `role` decided, database, the take-over resume at boot (which may
+ * finish steps and run the audit), the snapshot scheduler (only when BEANPOOL_TEST_SNAPSHOT_SCHEDULER=1),
  * libp2p (on port 0), the envelope service in the node's role, the take-over's after-boot steps; then the real
  * backup and take-over routes over HTTP with the real admin auth. A take-over's restart is the real
  * `process.exit(0)`, and the orchestrator starts the process again on the same data dir, as Docker would.
  *
  * The orchestrator talks to a node over HTTP like Settings does, and over stdin for what only a test does (set up
  * members, pull now, look inside). Replies are `@@ {json}` lines on stdout.
+ *
+ * Every node's tunnel runs the fake cloudflared (tunnel-test-fake.ts), controlled from `<data dir>.cloudflared`: no suite
+ * starts the real one.
  */
 
 import fs from 'node:fs';
@@ -26,11 +29,13 @@ export interface NodeProc {
     port: number;
     base: string;
     ready: any;
-    /** Everything the process printed, stdout and stderr. */
+    /** Everything the process printed, stdout and stderr, every start of it. */
     output: () => string;
     send: (cmd: string, args?: Record<string, unknown>) => Promise<any>;
     exited: Promise<number | null>;
     kill: (signal?: NodeJS.Signals) => Promise<void>;
+    /** How many times the node restarted by itself to swap in a whole copy (services/stager.ts); each started again here. */
+    swaps: () => number;
 }
 
 let seq = 0;
@@ -38,48 +43,111 @@ let seq = 0;
 /**
  * Start a node process on `dataDir`. Resolves when it prints `ready`, or rejects with its output when it exits
  * first (a crash injected at a boot-time step exits before ready).
+ *
+ * A standby that made a whole copy ready restarts to swap it in (services/backup-puller.ts, db/swap-at-boot.ts), as Docker
+ * starts it again: it prints `restarting` and exits, and this starts it again on the same data dir, environment and HTTP
+ * port. The NodeProc follows it: `send` waits for the new start, and `proc`, `ready` and `exited` are the current one's.
+ *
+ * `maxFileBytes`: no file the process writes may grow past it (RLIMIT_FSIZE, set by bash's `ulimit -f`, in 1024-byte
+ * blocks, before the node starts), as a disk that is full or failing stops it. Node ignores SIGXFSZ, so such a write fails
+ * (EFBIG, which SQLite reports as SQLITE_IOERR) and the process carries on.
  */
-export function spawnNode(script: string, dataDir: string, env: Record<string, string | undefined>): Promise<NodeProc> {
-    const proc = spawn(process.execPath, [...process.execArgv, script, '--child'], {
-        env: { ...process.env, BEANPOOL_DATA_DIR: dataDir, TAKEOVER_RESEAL_DEBOUNCE_MS: '40', ...env } as NodeJS.ProcessEnv,
-        stdio: ['pipe', 'pipe', 'pipe'],
-    });
+export function spawnNode(
+    script: string, dataDir: string, env: Record<string, string | undefined>, opts: { maxFileBytes?: number } = {},
+): Promise<NodeProc> {
     let out = '';
+    let swaps = 0;
+    interface Run { proc: ChildProcess; ready: Promise<any>; readyMsg: any; exited: Promise<number | null>; restarting: boolean; killed: boolean }
     const waiting = new Map<number, (v: any) => void>();
-    let readyResolve: (v: any) => void;
-    const readyP = new Promise<any>((r) => { readyResolve = r; });
-    const rl = readline.createInterface({ input: proc.stdout! });
-    rl.on('line', (line) => {
-        out += line + '\n';
-        if (!line.startsWith('@@ ')) return;
-        const msg = JSON.parse(line.slice(3));
-        if (msg.ready) readyResolve(msg);
-        else if (typeof msg.reply === 'number') waiting.get(msg.reply)?.(msg);
-    });
-    proc.stderr!.on('data', (d) => { out += d.toString(); });
-    const exited = new Promise<number | null>((resolve) => proc.on('exit', (code, signal) => resolve(code ?? (signal ? -1 : null))));
-    return new Promise((resolve, reject) => {
-        exited.then((code) => reject(Object.assign(new Error(`node exited (${code}) before it was ready`), { output: out, code })));
-        readyP.then((ready) => {
-            const base = `http://127.0.0.1:${ready.port}`;
-            resolve({
-                proc, port: ready.port, base, ready, exited,
-                output: () => out,
-                send: (cmd, args = {}) => new Promise((res, rej) => {
+    let run!: Run;
+    let current!: Promise<Run>;
+    const launch = (port: number): Promise<Run> => {
+        const argv = [...process.execArgv, script, '--child'];
+        const options = {
+            env: {
+                ...process.env, BEANPOOL_DATA_DIR: dataDir, TAKEOVER_RESEAL_DEBOUNCE_MS: '40', ...env,
+                ...(port ? { BEANPOOL_TEST_HTTP_PORT: String(port) } : {}),
+            } as NodeJS.ProcessEnv,
+            stdio: ['pipe', 'pipe', 'pipe'] as ('pipe')[],
+        };
+        const proc = opts.maxFileBytes
+            ? spawn('/bin/bash', ['-c', `ulimit -f ${Math.ceil(opts.maxFileBytes / 1024)} && exec "$0" "$@"`, process.execPath, ...argv], options)
+            : spawn(process.execPath, argv, options);
+        let readyResolve: (v: any) => void;
+        const ready = new Promise<any>((r) => { readyResolve = r; });
+        const exited = new Promise<number | null>((resolve) => proc.on('exit', (code, signal) => resolve(code ?? (signal ? -1 : null))));
+        const r: Run = { proc, ready, readyMsg: null, exited, restarting: false, killed: false };
+        const rl = readline.createInterface({ input: proc.stdout! });
+        rl.on('line', (line) => {
+            out += line + '\n';
+            if (!line.startsWith('@@ ')) return;
+            const msg = JSON.parse(line.slice(3));
+            if (msg.ready) { r.readyMsg = msg; readyResolve(msg); } else if (msg.restarting) r.restarting = true;
+            else if (typeof msg.reply === 'number') waiting.get(msg.reply)?.(msg);
+        });
+        proc.stderr!.on('data', (d) => { out += d.toString(); });
+        return new Promise((resolve, reject) => {
+            exited.then((code) => {
+                if (r.readyMsg === null) {
+                    // Its own last lines in the message: a suite that prints only the message still says why.
+                    reject(Object.assign(new Error(`node exited (${code}) before it was ready\n${out.slice(-3000)}`), { output: out, code }));
+                    return;
+                }
+                // Restarted by itself to swap in a whole copy: started again here, as Docker does.
+                if (r.restarting && !r.killed) {
+                    swaps++;
+                    current = launch(r.readyMsg.port);
+                    current.then((next) => { run = next; }, () => {});
+                }
+            });
+            ready.then(() => resolve(r));
+        });
+    };
+    current = launch(0);
+    return current.then((first) => {
+        run = first;
+        const node: NodeProc = {
+            get proc() { return run.proc; },
+            get port() { return run.readyMsg.port; },
+            get base() { return `http://127.0.0.1:${run.readyMsg.port}`; },
+            get ready() { return run.readyMsg; },
+            get exited() { return run.exited; },
+            output: () => out,
+            swaps: () => swaps,
+            send: async (cmd, args = {}) => {
+                // A start under way (a swap's restart): this command waits for it.
+                let r = await current;
+                while (r.restarting && !r.killed) {
+                    await r.exited;
+                    const next = await current;
+                    if (next === r) break;
+                    r = next;
+                }
+                return new Promise((res, rej) => {
                     const id = ++seq;
                     waiting.set(id, (m) => {
                         waiting.delete(id);
-                        if (m.error) rej(new Error(`${cmd}: ${m.error}`));
-                        else res(m.result);
+                        // A command after which the node restarts to swap a whole copy in answers once the new start is
+                        // up, so whatever the suite does next (an HTTP call, too) reaches it.
+                        const settle = r.restarting && !r.killed
+                            ? r.exited.then(() => current).then(() => undefined, () => undefined)
+                            : Promise.resolve();
+                        void settle.then(() => {
+                            if (m.error) rej(new Error(`${cmd}: ${m.error}`));
+                            else res(m.result);
+                        });
                     });
-                    proc.stdin!.write(JSON.stringify({ id, cmd, args }) + '\n');
-                }),
-                kill: async (signal = 'SIGKILL') => {
-                    if (proc.exitCode === null && proc.signalCode === null) proc.kill(signal);
-                    await exited;
-                },
-            });
-        });
+                    r.proc.stdin!.write(JSON.stringify({ id, cmd, args }) + '\n');
+                });
+            },
+            kill: async (signal = 'SIGKILL') => {
+                const r = run;
+                r.killed = true;
+                if (r.proc.exitCode === null && r.proc.signalCode === null) r.proc.kill(signal);
+                await r.exited;
+            },
+        };
+        return node;
     });
 }
 
@@ -114,11 +182,18 @@ function reply(msg: Record<string, unknown>): void {
 export async function runNodeChild(commands: Record<string, (args: any) => Promise<unknown>> = {}): Promise<void> {
     const dataDir = process.env.BEANPOOL_DATA_DIR!;
     fs.mkdirSync(dataDir, { recursive: true });
+    // As index.ts: a whole copy made ready before the last restart is swapped in before anything opens the database. (A
+    // tree from before the swap has none: a suite run there to show what fails still starts.)
+    await import('./db/swap-at-boot.js').catch(() => null);
+    // The tunnel inside the server (services/tunnel-connector.ts) runs the fake, from before anything can start it.
+    const { useFakeCloudflared } = await import('./tunnel-test-fake.js');
+    await useFakeCloudflared(`${dataDir}.cloudflared`);
     const Koa = (await import('koa')).default;
     const { ensureGenesis } = await import('./genesis.js');
     const { initAdminPassword } = await import('./config/local-config.js');
     const { initStateEngine, getNodeRole } = await import('./state-engine.js');
-    const { resumeTakeoverAtBoot, finishTakeoverAfterBoot } = await import('./services/takeover.js');
+    const takeover: { settleTakeoverBeforeDatabaseBoot?: () => void } & typeof import('./services/takeover.js') = await import('./services/takeover.js');
+    const { resumeTakeoverAtBoot, finishTakeoverAfterBoot } = takeover;
     const { startP2P } = await import('./p2p.js');
     const { loadConnectors } = await import('./connector-manager.js');
     const { startTakeoverEnvelopeService } = await import('./services/takeover-envelope.js');
@@ -126,32 +201,55 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     const { createTakeoverEnvelopeRoutes } = await import('./routes/takeover-envelope.js');
     const { createOwnerUnlockRoutes } = await import('./routes/owner-unlock.js');
     const { checkAdminAuth } = await import('./admin-auth.js');
-    const { identityReadOnlyGuard, startIdentityEpochWatch } = await import('./services/identity-epoch.js');
+    const epochModule: { identityReadOnlyGuard: any; startIdentityEpochWatch: any; neverAskCommunityAddressForTests?: () => void } = await import('./services/identity-epoch.js');
+    const { identityReadOnlyGuard, startIdentityEpochWatch } = epochModule;
+    // Before a take-over a standby asks the community's web address whether another server took over already: a suite's
+    // main servers have real-looking hostnames, so it asks only BEANPOOL_TEST_IDENTITY_EPOCH_URL, when a suite gives one,
+    // and the main server's URL (this machine). Optional: a tree from before it still starts.
+    epochModule.neverAskCommunityAddressForTests?.();
 
     const { installRecoverySealAtBoot } = await import('./services/recovery-seal-key.js');
+    const { installPushTokenSealAtBoot } = await import('./services/push-token-seal.js');
+    const { installOpenJoinKeyAtBoot } = await import('./services/open-join-key.js');
+    const { announceVaultTicketKeysAtBoot } = await import('./services/vault-ticket-keys.js');
+    const { removeGithubSignInsAtBoot } = await import('./engine/github-sign-in-removal.js');
 
     await ensureGenesis();
     initAdminPassword();
+    // index.ts step 2.4: a take-over stopped after `role` decided before the database's boot reads the role. Optional: a tree
+    // from before it still starts.
+    takeover.settleTakeoverBeforeDatabaseBoot?.();
     initStateEngine();
-    // index.ts step 2.55: the snapshot scheduler, armed from the schedule row before the take-over resumes. Only for a
-    // suite that asks (BEANPOOL_TEST_SNAPSHOT_SCHEDULER=1): every other suite's nodes would each arm a timer.
+    const boot = resumeTakeoverAtBoot();
+    // index.ts step 2.61: the snapshot scheduler, armed from the schedule row once the take-over has resumed, for the role
+    // as it now stands. Only for a suite that asks (BEANPOOL_TEST_SNAPSHOT_SCHEDULER=1): every other suite's nodes would
+    // each arm a timer.
     if (process.env.BEANPOOL_TEST_SNAPSHOT_SCHEDULER === '1') {
         const { initSnapshotScheduler } = await import('./services/snapshot-scheduler.js');
         initSnapshotScheduler();
     }
-    const boot = resumeTakeoverAtBoot();
-    // index.ts step 2.65: the recovery seal for the role as it now stands (a take-over finished at this boot).
+    // index.ts step 2.65: the recovery seal, members' push tokens and the open door's key for the role as it now stands (a
+    // take-over finished at this boot), which key vault tickets the door takes, and GitHub's rows.
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
+    installPushTokenSealAtBoot({ standby: getNodeRole() === 'backup' });
+    installOpenJoinKeyAtBoot({ standby: getNodeRole() === 'backup' });
+    announceVaultTicketKeysAtBoot();
+    removeGithubSignInsAtBoot({ standby: getNodeRole() === 'backup' });
     const node = await startP2P(0, 0);
     loadConnectors();
     await startTakeoverEnvelopeService({ standby: getNodeRole() === 'backup', checkIntervalMs: 3_600_000 });
     await finishTakeoverAfterBoot();
+    // index.ts step 10.4: the tunnel inside the server, on a main server with a tunnel address (a take-over's own step
+    // started it above when this start finished one).
+    const { initTunnelConnector } = await import('./services/tunnel-connector.js');
+    await initTunnelConnector();
     // As index.ts does, but awaited so a suite can see the first answer, and only when the suite says where this
     // node's "public address" is: the suites' main servers have real-looking hostnames that must never be asked.
     const epochCheck = process.env.BEANPOOL_TEST_IDENTITY_EPOCH_URL ? await startIdentityEpochWatch() : null;
 
     const deps: any = {
-        checkAdminAuth: async (ctx: any) => checkAdminAuth(ctx),
+        // The options too, as https-server.ts passes checkAdminAuth itself: a copy route's `legacyCopy` (step 7c) is one.
+        checkAdminAuth: async (ctx: any, opts?: Parameters<typeof checkAdminAuth>[1]) => checkAdminAuth(ctx, opts),
         rateLimit: () => true, clampLimit: (_v: unknown, d = 20) => d, clampOffset: () => 0,
         activeConnections: new Map(), calculateAnalytics: () => ({}), enforceReadAuth: false, broadcast: () => {},
     };
@@ -181,20 +279,66 @@ export async function runNodeChild(commands: Record<string, (args: any) => Promi
     app.use(createTakeoverEnvelopeRoutes(deps).routes());
     app.use(createOwnerUnlockRoutes(deps).routes());
     const server = http.createServer(app.callback());
-    await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
+    // The port it had before a swap's restart, so the orchestrator's address for it stays good (spawnNode).
+    // A port another socket on this machine took in the moment between the two starts: a moment's retries, then any port,
+    // said on stderr; the NodeProc follows the port each start reports.
+    let port = Number(process.env.BEANPOOL_TEST_HTTP_PORT) || 0;
+    for (let tries = 0; ; tries++) {
+        try {
+            await new Promise<void>((resolve, reject) => {
+                const failed = (e: Error) => { server.off('listening', listening); reject(e); };
+                const listening = () => { server.off('error', failed); resolve(); };
+                server.once('error', failed);
+                server.once('listening', listening);
+                server.listen(port, '127.0.0.1');
+            });
+            break;
+        } catch (e: any) {
+            if (e?.code !== 'EADDRINUSE' || port === 0) throw e;
+            if (tries >= 20) {
+                console.error(`[harness] port ${port}, this node's before its restart, is taken: listening on another`);
+                port = 0;
+            } else {
+                await new Promise((r) => setTimeout(r, 100));
+            }
+        }
+    }
+
+    // A whole copy made ready (services/backup-puller.ts): the node restarts to swap it in, as it does in production, once the
+    // command that made it has answered (or at once, when the pull loop made it). The orchestrator starts it again.
+    // `restarting` goes out before the command's own answer, so the orchestrator sends nothing more to this process.
+    let running = 0;
+    let swapPending = false;
+    const announceRestart = () => process.stdout.write('@@ ' + JSON.stringify({ restarting: true }) + '\n');
+    const exitForSwap = () => process.stdout.write('', () => process.exit(0));
+    const puller: { setSwapRestartForTests?: (fn: (() => void) | null) => void } = await import('./services/backup-puller.js');
+    puller.setSwapRestartForTests?.(() => {
+        swapPending = true;
+        if (running === 0) {
+            announceRestart();
+            exitForSwap();
+        }
+    });
 
     const rl = readline.createInterface({ input: process.stdin });
     rl.on('line', async (line) => {
         let id = 0;
+        running++;
+        let answer: Record<string, unknown>;
         try {
             const msg = JSON.parse(line);
             id = msg.id;
-            const fn = commands[msg.cmd];
+            const fn = commands[msg.cmd] ?? adminCredentialCommands[msg.cmd];
             if (!fn) throw new Error(`no such command ${msg.cmd}`);
-            reply({ reply: id, result: await fn(msg.args || {}) });
+            answer = { reply: id, result: await fn(msg.args || {}) };
         } catch (e: any) {
-            reply({ reply: id, error: e?.message || String(e) });
+            answer = { reply: id, error: e?.message || String(e) };
         }
+        running--;
+        const restart = swapPending && running === 0;
+        if (restart) announceRestart();
+        reply(answer);
+        if (restart) exitForSwap();
     });
     rl.on('close', () => process.exit(0));
 
@@ -259,6 +403,38 @@ export const recoverySealCommands: Record<string, (args: any) => Promise<unknown
  * test-member-blocks-standby.ts serves it. Spread into a suite's commands; `serve` answers the port. Run inside the node's
  * process, once per start.
  */
+/**
+ * Step 7c: with the node's 2FA off the admin password alone opens no admin route. An owner's credentials, made inside the
+ * node's process (admin-auth-test-harness.ts) and answered as headers for the orchestrator to send. Every node answers
+ * them (runNodeChild); a suite's own command of the same name wins.
+ *   - owner-token { scope?, owner? }: an automation token (it lives in local-config.json, so it outlives a restart); no
+ *     token makes an owner-only change.
+ *   - owner-session { owner? }: an owner's key session, for owner-only routes (in memory: ask again after a restart).
+ * The owner is `owner`, else the first member holding the owner role, else one seeded for it.
+ */
+export const adminCredentialCommands: Record<string, (args: any) => Promise<unknown>> = {
+    'owner-token': async (a: { scope?: 'read' | 'backups' | 'admin'; owner?: string }) => {
+        const { ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
+        return ownerTokenHeaders(a.scope ?? 'admin', a.owner ?? await firstOwner());
+    },
+    'owner-session': async (a: { owner?: string }) => {
+        const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
+        return ownerSessionHeaders(a.owner ?? await firstOwner());
+    },
+    /** 2FA on, and the password with a fresh code: for a suite whose check is the password itself. */
+    'password-and-code': async (a: { password: string }) => {
+        const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+        return turnOn2faForTests(a.password).headers();
+    },
+};
+
+async function firstOwner(): Promise<string | undefined> {
+    const { db } = await import('./db/db.js');
+    const row = db.prepare(`SELECT nr.member_pubkey FROM node_roles nr JOIN members m ON m.public_key = nr.member_pubkey
+                            WHERE nr.role = 'owner' ORDER BY nr.rowid LIMIT 1`).get() as { member_pubkey: string } | undefined;
+    return row?.member_pubkey;
+}
+
 export const serveCommands: Record<string, (args: any) => Promise<unknown>> = {
     serve: async () => {
         delete process.env.CF_RECORD_NAME;
@@ -302,6 +478,20 @@ export async function inspectNode(args: { ownerSeedHex?: string }): Promise<Reco
     const config = getLocalConfig();
     const status = await getTakeoverStatus();
     const tokenFile = path.join(dataDir, 'tunnel-token');
+    // The tunnel inside the server: what it wants, what it runs, and the token its child (the fake) was started with.
+    const { tunnelConnectorForTests } = await import('./services/tunnel-connector.js');
+    const t = tunnelConnectorForTests();
+    const runsFile = path.join(`${dataDir}.cloudflared`, 'runs.jsonl');
+    const childRun = async () => {
+        for (let i = 0; i < 150 && t.pid !== null; i++) {
+            const runs = fs.existsSync(runsFile) ? fs.readFileSync(runsFile, 'utf-8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [];
+            const mine = runs.find((r: any) => r.pid === t.pid);
+            if (mine) return mine;
+            await new Promise((r) => setTimeout(r, 20));
+        }
+        return null;
+    };
+    const run = await childRun();
     return {
         role: getNodeRole(),
         peerId: peerIdFromPrivateKey(getPrivateKey()).toString(),
@@ -315,6 +505,7 @@ export async function inspectNode(args: { ownerSeedHex?: string }): Promise<Reco
         backupReplicationToken: config.backupReplicationToken ? 'set' : null,
         publicAddress: (getNodeConfig() as any).publicAddress ?? null,
         tunnelTokenFile: fs.existsSync(tokenFile) ? fs.readFileSync(tokenFile, 'utf-8') : null,
+        tunnel: { wantedToken: t.wantedToken, runningToken: t.runningToken, state: t.status.state, childToken: run?.env?.TUNNEL_TOKEN ?? null },
         heldDirExists: fs.existsSync(path.join(dataDir, 'held-takeover-envelopes')),
         bundleFileExists: fs.existsSync(path.join(dataDir, 'takeover-bundle.json')),
         preTakeoverDirs: fs.readdirSync(dataDir).filter((n) => n.startsWith('pre-takeover-')),

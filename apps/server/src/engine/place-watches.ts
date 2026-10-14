@@ -46,9 +46,10 @@
  * community the old main server first saw after the standby's last copy (a pull a minute) is new again to the new one,
  * so a watcher it reaches can hear about it a second time, once.
  *
- * Push tokens don't travel (each server holds its own), and a take-over restarts the server, so its first mirror run,
- * 10 s after boot, finds no phone registered and usually no socket open: it tells nobody and stamps nothing. Each
- * watcher is told when their phone registers its token here (the app does when it starts), or at the first run after.
+ * Members' phones travel too (push_tokens, design G4), and a take-over restarts the server, so its first mirror run, 10 s
+ * after boot, reaches every watcher whose phone the old main server had and tells them what they are owed (tellOwed),
+ * stamping each notice it sends. A watcher with no phone there is told when their phone registers its token here (the
+ * app does when it starts), or at the first run after.
  *
  * ## The registry is open, so a notice is plain and rare
  *
@@ -63,8 +64,9 @@
  * Verified listings (the registrar vouching for an address) would let a notice name the community; not built here.
  */
 import crypto from 'node:crypto';
-import { db, writeTombstone } from '../db/db.js';
+import { db, writeTombstone, rethrowUnlessRowRefused } from '../db/db.js';
 import { EARTH_RADIUS_KM, haversineKm, type SyncPlaceWatch } from '@beanpool/engine';
+import type { PushNoticeKind } from '@beanpool/core';
 import { roundToArea } from './member-area.js';
 import { firstSightings, type DirectoryRow, type FirstSighting } from './directory-cache.js';
 
@@ -218,6 +220,7 @@ export function mergeReplicatedWatches(watches: unknown): WatchMerge {
                 upsert.run(w.id, w.pubkey, lat, lng, w.radiusKm, w.createdAt, w.lastNotifiedAt ?? null, w.updatedAt);
                 merge.written++;
             } catch (e: any) {
+                rethrowUnlessRowRefused(e);
                 console.warn(`[Place watches] A copied watch could not be stored here, left out: ${e?.message || e}`);
                 merge.invalid++;
             }
@@ -231,7 +234,7 @@ export function mergeReplicatedWatches(watches: unknown): WatchMerge {
 /** Returns how many open sockets it was written to. */
 type BroadcastFn = (event: any, recipients?: string[]) => number;
 /** Returns how many notifications it handed to the push service. */
-type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery') => number;
+type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery', kind: PushNoticeKind) => number;
 
 export interface PlaceWatchNoticeCallbacks {
     broadcast: BroadcastFn;
@@ -442,7 +445,7 @@ function tellOwed(cb: PlaceWatchNoticeCallbacks, now: string, fresh: ReadonlySet
             console.warn('[Place watches] Live notice failed:', e?.message || e);
         }
         try {
-            sent = cb.dispatchPushNotification([member], 'SYSTEM', title, body, data, 'marketplace') > 0 || sent;
+            sent = cb.dispatchPushNotification([member], 'SYSTEM', title, body, data, 'marketplace', 'community.near') > 0 || sent;
         } catch (e: any) {
             console.warn('[Place watches] Push failed:', e?.message || e);
         }

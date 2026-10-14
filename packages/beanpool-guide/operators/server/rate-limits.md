@@ -5,19 +5,68 @@ summary: The limits that protect your server, what members see when they hit one
 related: troubleshooting, address-and-peers, signing-in, updates-and-health
 ---
 
-When someone goes over a limit the server answers "too many requests" (HTTP 429) and says how long to wait. The counts are kept in memory, so a restart clears them all.
+When someone goes over a limit the server answers "too many requests" (HTTP 429) and says how long to wait. The per-minute counts and the day's changes are kept in memory, so a restart clears them. What one member can make in a day is counted from what they have made, and the money limits from a record the server keeps for a day, so a restart does not clear those.
 
 ## The limits
 
-- **The gateway**: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance & Data, then Gateway & Peers. Community and federation traffic, and Settings itself, are not counted.
+- **The gateway**: 120 requests a minute. A signed-in member has their own allowance; requests from someone not signed in share one allowance per internet address. Change the number, or switch it off, under Appliance & Data, then Gateway & Peers. On the global community, where anyone may join, everyone who is not a member yet, joiners included, shares 600 a minute per internet address. Settings itself is not counted here (it has its own limit, below). The two public reads other servers make (/api/community/info and /api/community/health) do not use this allowance either: each internet address has a separate one for them, five times the gateway number (600 a minute at the default). A member's own requests are counted wherever they go, buying from another community included.
 - **Sign-in and recovery attempts**: 15 a minute per internet address. This covers the admin password, recovering an account, pairing a device, checking names and a phone approving a computer's sign-in.
+- **The open door**, where it is open: 20 requests a minute from each new account's key, and 600 a minute per internet address, for joining and for checking a name while joining. It does not turn a busy network away: it asks each new account there for a little more setting up instead, and refuses a join only past ceilings no ordinary network reaches. See The open door's numbers, below.
 - **New sign-in codes** (Sign in with your phone, on the Settings sign-in page): 10 a minute per internet address, and at most 200 waiting on the whole server.
 - **Settings**: 300 requests a minute per internet address.
-- **Group and event chats**: 30 lines a minute per member.
+- **Chats**: 30 lines a minute per member, in direct messages as well as group and event chats and an enterprise's discussion.
 - **Checking an invite code** before joining: 30 a minute per internet address.
 - **Reports**: 10 an hour per member.
 
 ![Gateway switches and rate limits under Gateway & Peers](images/appliance-gateway.webp)
+
+## The open door's numbers
+
+On a community whose door is open (the global community), a 12-words join asks the person's phone or browser for a moment of setting-up work. It runs while they type their name, so at ordinary times nobody waits. The work has levels from 0 to 5, and each level doubles it. In tests on a phone emulator, levels 0 to 2 took under a second, level 3 about 3 to 6 seconds and level 5 about 6 to 26 seconds; an old phone takes longer, and none has been measured yet. From level 3 the app tells the person about how long it will take on their phone, with the sign-in way beside it. A sign-in join asks no work at all until a connection is very busy. The work never decides who gets in: anyone with a computer can do it quickly. It turns a crowd's wait into seconds instead of a refusal, and makes a flood of joins cost whoever makes them.
+
+How the level is set:
+
+- **A 12-words join**: how many of the connection's steps it has reached, plus how many of the community's, at most 5. From a connection where a newcomer joined in the last 7 days and was removed within a day of joining (see Members and invites), at least removedNetworkLevel.
+- **A sign-in join**: no work before the connection's signInWorkFrom-th join in the hour. From there, the connection's steps less signInDiscount, never below 0.
+
+The numbers, by name, with their defaults:
+
+- **networkSteps**, 10,30,100,200: the joins from one connection in the last hour, both ways in and this one included, at which each of the connection's steps starts.
+- **nodeSteps**, 500,2000,5000: the 12-words joins on the whole community in the last 10 minutes, this one included, at which each of the community's steps starts. Counted in memory, so a restart starts it again at 0.
+- **signInWorkFrom**, 30: the join from one connection in an hour from which a sign-in join asks for any work.
+- **signInDiscount**, 2: how many steps less a sign-in join asks for.
+- **removedNetworkLevel**, 4: the least a 12-words join asks for from a connection where a newcomer joined in the last 7 days and was removed within a day of joining.
+- **wordsPerHour**, 500, and **wordsPerDay**, 2000: past these many 12-words accounts from one connection, a 12-words join from it is refused, with how long to wait. The sign-in way stays open there.
+- **signInPerHour**, 1000, and **signInPerDay**, 5000: the same for sign-ins. Each way counts only its own joins.
+
+To change one, add a row to the server's node_config named doorNumbers. and the name, with a whole number; for networkSteps and nodeSteps, the same number of rising whole numbers, separated by commas. For example, to let up to 1,000 12-words accounts an hour come from one connection, run on the server: docker compose exec -u node beanpool-node node -e "require('better-sqlite3')('/data/state.db').prepare(\"INSERT INTO node_config (key, value) VALUES ('doorNumbers.wordsPerHour', '1000') ON CONFLICT(key) DO UPDATE SET value = excluded.value\").run()"
+
+The server reads them at each join, so there is nothing to restart. To go back to the default, delete the row: docker compose exec -u node beanpool-node node -e "require('better-sqlite3')('/data/state.db').prepare(\"DELETE FROM node_config WHERE key = 'doorNumbers.wordsPerHour'\").run()"
+
+A value that isn't right (not a whole number, a list of the wrong length or not rising, a name that isn't one of these) is ignored and the default kept, and the log says so once. There is no Settings screen for them. The rows are this server's own: a standby does not copy them and a take-over does not carry them, so after a take-over the door runs on the defaults until you add them again.
+
+## What one member can make in a day
+
+These stop one account filling your server, and its standby copies, with rows. Each is set well above what the busiest real member does, and a day means any 24 hours. They are the same on every server and Settings can't change them (they are in the server's code, config/writer-limits.ts, in one place).
+
+- **Changes**: 5,000 a day per member (posts, messages, edits and the like), even with the gateway switched off. Settings is not counted, and neither is marking a chat read or a notice seen: the apps do that on their own while a chat is open, and it adds nothing to your server. What a keeper does for an enterprise counts against the enterprise's own 50,000, not the keeper's, and against a second 50,000 for everything that keeper does for all the enterprises they keep. Once the enterprise's 50,000 are used up, a keeper's further changes for it count against their own 5,000 instead, and not the second 50,000: so one keeper who uses up an enterprise's day can only stop themselves, and every other keeper keeps their own 5,000 for it. Running the enterprise (taking on, removing or replacing keepers, stepping down, pausing, resuming, winding up, and completing or turning down its deals) always counts against the keeper's own 5,000. Its lead can remove a keeper who misuses it (the removal waits out the usual 3-day objection window; you can remove a keeper at once in Settings).
+- **Posts**: 100 new ones a day of their own. What they put up for an enterprise they keep counts against the enterprise, 1,000 a day, and against 1,000 a day for all the enterprises they keep together. Once the enterprise's 1,000 are up, what they put up for it counts against their own 100 instead.
+- **Groups**: 5 new ones a day. **Enterprises**: 3 new ones a day, and 20 of theirs still running.
+- **Invites**: 20 a day, and 50 that nobody has used yet. An offline ticket counts when someone joins with it. Invites made in Settings don't count. An invite nobody used is deleted 30 days after it was made, when it has stopped working.
+- **New people**: conversations with 20 people from outside the community a day. A new account on the global community is held to 10 new people for its first days.
+- **The Pulse**: 50 links added by hand a day, and 300 items synced from connected accounts (the rest come with a later sync). Your server also collects new items from members' websites, blogs, YouTube and SoundCloud channels itself: 400 a day per member, all their channels together. Past that, the rest wait until the next day.
+- **A message's words**: up to 64 KB. Photos are attachments and don't count.
+
+## Payments and deals
+
+These stop one account, or a stolen phone, spraying Beans or flooding your ledger. A member's are the first number, an enterprise's or project's the second: ten times as many, counted against the enterprise whichever keeper acts, not against the keeper's own. Once an enterprise has used up one of them for the day, a keeper's further payments, new people or deals for it count against the keeper's own numbers instead (a payment to someone new to the enterprise does so once its new people are used up). Like the limits above they are in config/writer-limits.ts (MONEY_LIMITS), and Settings can't change them. Receiving is never limited, and neither are releasing held beans, cancelling a deal, or Settings' own tools.
+
+- **Payments**: 100 a day, 1,000 for an enterprise. A send, buying an Offer, asking to buy one, approving help on your own Need, an enterprise's payments and sweeps to the Commons, a pledge of beans, and buying or commissioning from another community all count.
+- **New people paid**: 30 a day, 300 for an enterprise: people the account has never paid before. Paying someone it has paid before is not counted.
+- **Deals**: 100 a day asked for, accepted or approved, 1,000 approved for an enterprise.
+- **Pledges**: 20 a day made, changed or released, a keeper's backing and a crowdfund pledge alike, and asking to become a keeper with a pledge. Pledges are a member's act, so an enterprise has no number of its own.
+
+What a keeper does for an enterprise also counts against what they do for all the enterprises they keep together, at the enterprise's numbers: 50,000 changes, 1,000 posts, 1,000 payments, 300 new people and 1,000 deals a day, on top of their own limits. Any member can start 3 enterprises a day, so without this one person could multiply their day by starting enterprises. An enterprise with several keepers still gets all of its own limits, as each keeper's share counts to their own. What a keeper does for an enterprise past its own limits counts against their own limits, not this. So one person does at most one enterprise's worth a day for their enterprises, and their own limits beside it, however many they keep. There is no smallest payment: a sweep of a fraction of a bean is a payment, and these limits bound how many there can be.
 
 ## The admin password brake
 
@@ -32,25 +81,33 @@ This one slows down anyone guessing the admin password, without ever letting the
 - Someone on your own /24 or /48 can take the kept check away with 3 wrong passwords. Then, and after three or more mistypes of your own, nothing is kept for you. The way out is another network, or signing in from the app.
 - Many wrong passwords (20 in a day) from one neighbourhood of addresses take away the "straight away" promise for the rest of that neighbourhood.
 
-Signing in from the app's Manage button never goes through the brake, and neither does a break-glass code. The two-factor code asked for when switching it off or moving it does, even when you are signed in from the app.
+Signing in from the app's Manage button never goes through the brake. The two-factor code asked for when switching it off or moving it does, even when you are signed in from the app. A break-glass code is checked only when adding an admin key, even from an address that is waiting (at most once every 10 seconds from one address); anywhere else it counts as a wrong password.
 
-If it keeps happening, someone is guessing your password. The logs say which address. Sign in from the app meanwhile, and make sure the password is long and not used anywhere else.
+The two-factor code typed at the Manage button, or when approving a computer's sign-in from the phone, has a brake of its own. It counts wrong codes for each person's key and for each internet address: 5 are free, then each further try waits 2 seconds, then 4, 8 and so on, up to an hour. A right code clears both, and so does a day with no wrong code. Wrong passwords never slow this down, and wrong codes here never slow down the password.
+
+If it keeps happening, someone is guessing your password. The logs name the address by a code, such as ip#k3Jx9QaB7d, never the address itself: the same code means the same address, until the code changes the next day. Sign in from the app meanwhile, and make sure the password is long and not used anywhere else.
 
 ## Many people on one connection
 
-A school, a village hall's wifi or a mobile network can put many people behind one internet address. Signed-in members each get their own gateway allowance, but sign-in and recovery attempts are counted per address, so a crowd all joining at once can hit the 15-a-minute limit. Ask them to wait a minute and try again.
+A school, a village hall's wifi or a mobile network can put many people behind one internet address. Signed-in members each get their own gateway allowance, but sign-in and recovery attempts are counted per address, so a crowd all joining with invites at once can hit the 15-a-minute limit. Ask them to wait a minute and try again. Joining through the open door has its own limits instead (see The open door's numbers): there, a crowd is asked for a little more setting up, not turned away by the join limits. A very large crowd on one address can still meet the open door's own 600 requests a minute per address, or the gateway's allowance for people who are not members yet (on the global community, 600 a minute per address), and both answer with a refusal.
 
-If your server sits behind a proxy on another machine, list that proxy in TRUSTED_PROXIES in .env. Otherwise every member looks like the proxy's address and shares one allowance. That goes for the password brake too: everyone is one address, so a few wrong passwords from anyone make everyone wait, for up to 10 minutes. The log says so and names TRUSTED_PROXIES. Add the proxy's address there and restart the server; the restart also clears the brake.
+If your server sits behind a proxy on another machine, list that proxy in TRUSTED_PROXIES in .env. Otherwise every member looks like the proxy's address and shares one allowance. That goes for the password brake too: everyone is one address, so a few wrong passwords from anyone make everyone wait, for up to 10 minutes. The log says so and names TRUSTED_PROXIES, with the proxy's code rather than its address. Add your proxy's address there and restart the server; the restart also clears the brake.
 
 ## Finding out which limit
 
 The message says which:
 
 - "Gateway rate limit exceeded": the gateway.
-- "Too many attempts": sign-in and recovery attempts, or checking invite codes.
+- "Too many attempts": sign-in and recovery attempts, checking invite codes, or the open door's 600 requests a minute from one address.
+- "A very large number of 12-words accounts were made from your network", or "Too many new accounts have joined from your network": the open door's ceilings, for 12 words and for sign-ins.
 - "Too many administrative requests": Settings, 300 a minute.
-- "You're sending messages too fast": group and event chats.
+- "You're sending messages too fast": chats, direct messages included.
+- "You have made 5,000 changes today": the member's changes for the day. "You have made 50,000 changes today for the enterprises you keep": one keeper's, for all their enterprises.
+- "You can put up 100 new posts", "You can start 5 groups", "You can start 3 enterprises", "You have started 20 enterprises", "You can make 20 invites", "You have 50 invites nobody has used yet", "You can add 50 links to the Pulse", "You can start conversations with 20 people": what one member can make in a day. "… for the enterprises you keep, all of them together": one keeper's posts, payments, new people or deals for all their enterprises.
+- "You can make 100 payments", "You can pay 30 people you have never paid before", "You can ask for, accept or approve 100 deals", "You can make or change 20 pledges": payments and deals.
+- One of the member's own messages above, then "… has reached its own limit for today, so what you do for it counts against yours": the member's own limit, reached doing something for an enterprise that had used up its own. An enterprise's own limits never refuse anything themselves: past them, its keepers' own limits count.
+- "This message is too long to send" (HTTP 413): a message's words.
 - "You have sent a lot of reports recently": reports, 10 an hour.
 - "Too many wrong admin passwords from your network", or "This node is getting a lot of wrong admin passwords from elsewhere": the password brake.
 
-The gateway and the password brake also write a line in the logs.
+The gateway, the day's changes and the password brake also write a line in the logs.

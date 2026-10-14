@@ -43,6 +43,8 @@ import zlib from 'node:zlib';
 import { spawnSync, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { startFakeS3, type FakeS3 } from './fake-s3-test-harness.js';
+import { lockedDm } from './dm-test-payload.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -116,6 +118,10 @@ async function child(): Promise<void> {
     updateLocalConfig({ adminHash: hash, salt });
     const boot = await checkImageStoreAtBoot({ role: 'primary', dataDir });
     const membersBefore = (db.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c;
+    // Step 7c: with 2FA off the password alone opens no admin route. This fresh server's owner has an authenticator,
+    // so the restore carries the password with a code (no member is seeded: membersBefore stays exact).
+    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const twoFa = turnOn2faForTests(pw);
 
     const { initTls } = await import('./services/tls.js');
     const { startHttpsServer } = await import('./https-server.js');
@@ -126,7 +132,7 @@ async function child(): Promise<void> {
     resetAdminAuthTarpit();
     const res = await fetch(`https://localhost:${port}/api/local/admin/restore`, {
         method: 'POST',
-        headers: { 'X-Admin-Password': pw, 'Content-Type': 'application/octet-stream' },
+        headers: { ...twoFa.headers(), 'Content-Type': 'application/octet-stream' },
         body: new Uint8Array(fs.readFileSync(file)),
     });
     const body = await res.json();
@@ -194,6 +200,7 @@ async function main(): Promise<void> {
     const { getStorageCleanPreview, sweepOrphanedImageObjects } = await import('./engine/storage-health.js');
     const { createSnapshot, snapshotImagesDir, SNAPSHOTS_DIR } = await import('./services/snapshot-scheduler.js');
     const { pullBackupForNode, inBucketLabelFor, imagesDirFor } = await import('./services/harvester.js');
+    const { readInBucketMember } = await import('./services/sealed-backup.js');
     const { writeDbSnapshot } = await import('./services/snapshot-scheduler.js');
 
     await initTls();
@@ -211,16 +218,20 @@ async function main(): Promise<void> {
     assert(store.kind === 's3', 'the node\'s image store is the S3 store');
     const port = await startHttpsServer(0);
     const BASE = `https://localhost:${port}`;
+    // Step 7c: the password opens admin routes only with 2FA on and a code beside it.
+    const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+    const twoFa = turnOn2faForTests(pw);
     const adminFetch = async (p: string, init: RequestInit = {}) => {
         resetAdminAuthTarpit();
-        return fetch(`${BASE}${p}`, { ...init, headers: { 'X-Admin-Password': pw, ...(init.headers as any || {}) } });
+        return fetch(`${BASE}${p}`, { ...init, headers: { ...twoFa.headers(), ...(init.headers as any || {}) } });
     };
 
     // ── 2. a photo in, and out ─────────────────────────────────────────────────────────────────
     console.log('\n--- 2. A photo goes to the bucket and is served from it ---');
     const author = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_url) VALUES (?, 'S3RoundTripMarker', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`)
-        .run(author, dataUrl(makePhoto('avatar')));
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'S3RoundTripMarker', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+        .run(author);
+    setMemberPhoto(db, author, dataUrl(makePhoto('avatar')));
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(author);
     const photoA = makePhoto('a');
     const photoB = makePhoto('b');
@@ -236,7 +247,15 @@ async function main(): Promise<void> {
         'the bucket holds exactly the photo bytes');
     assert(listFiles(imagesDir(dataDir)).length === 0, 'and nothing was written to the node\'s own disk');
 
-    const urlA = `${BASE}/api/marketplace/posts/${post.id}/photos/0`;
+    // A photo's URL is the one a read of its listing hands out, its key included where its listing's photos are keyed
+    // (engine/photo-keys.ts): the URL of the photo as its row is now.
+    const { postPhotoUrl } = await import('@beanpool/engine');
+    const photoUrlOf = (postId: string, orderNum: number): string => {
+        const row = db.prepare(`SELECT pp.updated_at, p.audience_scope FROM post_photos pp LEFT JOIN posts p ON p.id = pp.post_id
+                                WHERE pp.post_id = ? AND pp.order_num = ?`).get(postId, orderNum) as { updated_at: string | null; audience_scope: string | null } | undefined;
+        return `${BASE}${postPhotoUrl(postId, orderNum, row?.updated_at, row?.audience_scope)}`;
+    };
+    const urlA = photoUrlOf(post.id, 0);
     const resA = await fetch(urlA);
     const servedA = Buffer.from(await resA.arrayBuffer());
     assert(resA.status === 200 && servedA.equals(photoA), 'the photo URL serves the exact bytes, streamed from the bucket');
@@ -263,17 +282,20 @@ async function main(): Promise<void> {
     const photoD = makePhoto('d');
     const post2 = createPost('offer', 'food', 'Jam', 'Plum', 2, 'fixed', author, undefined, undefined, [dataUrl(photoD)], true)!;
     const rowD = db.prepare('SELECT * FROM post_photos WHERE post_id = ? AND order_num = 0').get(post2.id) as any;
+    const urlD = photoUrlOf(post2.id, 0);
+    assert((await fetch(urlD)).status === 200, 'setup: the photo about to be removed serves at its URL');
     updatePost(post2.id, author, { photos: [] } as any);
     assert(!(await fake.objects()).has(rowD.storage_key), 'removing a post\'s last photo removes its object from the bucket');
-    assert((await fetch(`${BASE}/api/marketplace/posts/${post2.id}/photos/0`)).status === 404, 'and its URL is a 404');
+    assert((await fetch(urlD)).status === 404, 'and its URL is a 404');
 
     // The row decides, never the bucket: a row gone while its object lingers is never served.
     const photoE = makePhoto('e');
     const post3 = createPost('offer', 'food', 'Eggs', 'A dozen', 2, 'fixed', author, undefined, undefined, [dataUrl(photoE)], true)!;
     const rowE = db.prepare('SELECT * FROM post_photos WHERE post_id = ? AND order_num = 0').get(post3.id) as any;
+    const urlE = photoUrlOf(post3.id, 0);
     db.prepare('DELETE FROM post_photos WHERE post_id = ?').run(post3.id);
     assert((await fake.objects()).has(rowE.storage_key), 'setup: the object is still in the bucket with its row gone');
-    assert((await fetch(`${BASE}/api/marketplace/posts/${post3.id}/photos/0`)).status === 404,
+    assert((await fetch(urlE)).status === 404,
         'a photo whose row is gone is a 404 even though the bucket still has it');
 
     // Replaced WHILE it is being read. The read is async; an edit writes a new row at the same (post, order)
@@ -284,12 +306,14 @@ async function main(): Promise<void> {
     const rowF = db.prepare('SELECT * FROM post_photos WHERE post_id = ? AND order_num = 0').get(post4.id) as any;
     await fake.clearLog();
     await fake.fault({ method: 'GET', prefix: `/${fake.bucket}/${rowF.storage_key}`, delayMs: 1_500, count: 1 });
-    const raced = fetch(`${BASE}/api/marketplace/posts/${post4.id}/photos/0`);
+    const raced = fetch(photoUrlOf(post4.id, 0));
     // The bucket has the read (and is holding it) before the photo is replaced under it.
+    let bucketHoldsRead = false;
     for (let i = 0; i < 200; i++) {
-        if ((await fake.log()).some((e) => e.method === 'GET' && e.path.endsWith(rowF.storage_key))) break;
+        if ((await fake.log()).some((e) => e.method === 'GET' && e.path.endsWith(rowF.storage_key))) { bucketHoldsRead = true; break; }
         await new Promise((r) => setTimeout(r, 10));
     }
+    assert(bucketHoldsRead, 'setup: the request passed the row and its key, and the bucket is holding its read');
     updatePost(post4.id, author, { photos: [dataUrl(makePhoto('g'))] } as any);
     const rowG = db.prepare('SELECT * FROM post_photos WHERE post_id = ? AND order_num = 0').get(post4.id) as any;
     assert(rowG.storage_key !== rowF.storage_key && !(await fake.objects()).has(rowF.storage_key),
@@ -305,21 +329,26 @@ async function main(): Promise<void> {
     const conv = createConversation('dm', [author, bob], author);
     if (!conv) throw new Error('setup: no conversation');
     const { sendMessage, deleteOwnMessage } = await import('./state-engine.js');
-    const cipher = crypto.randomBytes(900).toString('base64');
-    const msg = sendMessage(conv.id, author, 'encrypted-text', 'text-nonce', 'image', { data: cipher, nonce: 'att-nonce', mime: 'image/png' })!;
+    // A DM photo goes in encrypted: the caption and the photo each in the v2 form.
+    const caption = lockedDm();
+    const att = lockedDm(900);
+    const cipher = att.ciphertext;
+    const msg = sendMessage(conv.id, author, caption.ciphertext, caption.nonce, 'image', { data: cipher, nonce: att.nonce, mime: 'image/png' })!;
     const attRow = db.prepare('SELECT * FROM message_attachments WHERE message_id = ?').get(msg?.id) as any;
     assert(!!attRow && attRow.data === null && attRow.storage_key === `attachments/${msg.id}.bin`,
         'an attachment\'s ciphertext leaves the row for the bucket');
     assert((await fake.objects()).get(attRow.storage_key)?.bytes.toString('base64') === cipher, 'the bucket holds the ciphertext exactly');
     const attRes = await fetch(`${BASE}/api/messages/${msg.id}/attachment`);
     const attJson = await attRes.json() as any;
-    assert(attRes.status === 200 && attJson.data === cipher && attJson.nonce === 'att-nonce' && attJson.mime === 'image/png',
+    assert(attRes.status === 200 && attJson.data === cipher && attJson.nonce === att.nonce && attJson.mime === 'image/png',
         'the attachment route returns the ciphertext, nonce and mime unchanged');
 
     // Deleted for everyone WHILE it is being read. The read is async; the tombstone removes the row, then the
     // object after its commit. An attachment that no longer exists is a 404, not an outage.
-    const msg2 = sendMessage(conv.id, author, 'encrypted-text-2', 'text-nonce-2', 'image',
-        { data: crypto.randomBytes(900).toString('base64'), nonce: 'att-nonce-2', mime: 'image/png' })!;
+    const caption2 = lockedDm();
+    const att2 = lockedDm(900);
+    const msg2 = sendMessage(conv.id, author, caption2.ciphertext, caption2.nonce, 'image',
+        { data: att2.ciphertext, nonce: att2.nonce, mime: 'image/png' })!;
     const att2Row = db.prepare('SELECT * FROM message_attachments WHERE message_id = ?').get(msg2.id) as any;
     await fake.clearLog();
     await fake.fault({ method: 'GET', prefix: `/${fake.bucket}/${att2Row.storage_key}`, delayMs: 1_500, count: 1 });
@@ -352,7 +381,7 @@ async function main(): Promise<void> {
         assert(!degraded.photos.some((p: any) => p.post_id === post.id && p.order_num === 1)
             && degraded.photosOmitted?.includes(`${post.id}|1`),
             'a photo the bucket no longer has is omitted and named, so a replica keeps its own copy');
-        assert((await fetch(keptUrl)).status === 503, 'and its URL is a 503 — the row says it exists and the bucket does not have it');
+        assert((await fetch(photoUrlOf(post.id, 1))).status === 503, 'and its URL is a 503 — the row says it exists and the bucket does not have it');
     }
 
     // ── 6. the orphan sweep, on the bucket ─────────────────────────────────────────────────────
@@ -449,41 +478,36 @@ async function main(): Promise<void> {
             'its download carries the in-bucket label and the bucket\'s shortfall');
     }
 
-    // ── 9. the harvester and the manager ───────────────────────────────────────────────────────
-    console.log('\n--- 9. The harvester\'s kept copy and the manager\'s download of it ---');
+    // ── 9. the harvester ───────────────────────────────────────────────────────────────────────
+    // (The fleet manager's download of this kept copy went with its routes, 2026-10-02: what it said on the wire is what
+    // the kept label says, checked here where it is kept.)
+    console.log('\n--- 9. The harvester\'s kept copy ---');
     {
-        const node = { id: 'local-node', name: 'S3 node', url: BASE, adminPassword: pw };
-        resetAdminAuthTarpit();
-        const pulled = await pullBackupForNode(node as any);
-        assert(pulled.kind === 'plain', 'the harvester pulled a readable backup from the s3 node');
+        // Step 7c: the harvester's legacy entry sends the admin password alone, with no code, and this node's 2FA is on:
+        // refused, nothing kept (with 2FA off it is 403 password_needs_2fa, checked in test-harvester). The fleet holds an
+        // owner's automation token with the backups scope instead (#1550), sent as a bearer and nothing beside it.
         const kept = path.join(dataDir, 'backups', 'local-node', 'state.db');
+        const keptBeforePw = fs.existsSync(kept);
+        resetAdminAuthTarpit();
+        let pwError = '';
+        try { await pullBackupForNode({ id: 'local-node', name: 'S3 node', url: BASE, adminPassword: pw } as any); } catch (e) { pwError = (e as Error).message; }
+        assert(/HTTP 401/.test(pwError) && fs.existsSync(kept) === keptBeforePw, `the password alone, no code: refused, nothing kept (${pwError || 'pulled'})`);
+        const { seedOwnerForTests } = await import('./admin-auth-test-harness.js');
+        const { issueAutomationToken } = await import('./automation-tokens.js');
+        const fleetTok = issueAutomationToken({ name: 'fleet harvester', scope: 'backups', createdBy: seedOwnerForTests('fleetOwner') });
+        if (!fleetTok.ok) throw new Error(`the fleet owner's backups token was not made: ${fleetTok.error}`);
+        const node = { id: 'local-node', name: 'S3 node', url: BASE, automationToken: fleetTok.token };
+        resetAdminAuthTarpit();
+        let pulled: Awaited<ReturnType<typeof pullBackupForNode>> | null = null;
+        let pullError = '';
+        try { pulled = await pullBackupForNode(node as any); } catch (e) { pullError = (e as Error).message; }
+        assert(pulled?.kind === 'plain', `the harvester pulled a readable backup from the s3 node with the backups token${pullError ? ` (${pullError})` : ''}`);
         assert(fs.existsSync(kept) && fs.existsSync(inBucketLabelFor(kept)), 'it kept the database AND the in-bucket label beside it');
         assert(listFiles(imagesDirFor(kept)).length === 0, 'with no images beside it, by design');
-        const res = await adminFetch('/api/manager/backups/download-db?nodeId=local-node');
-        const file = path.join(work, 'manager-copy.tar.gz');
-        fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
-        assert(res.status === 200 && res.headers.get('x-backup-images') === 'in-bucket'
-            && res.headers.get('x-backup-contents') === 'database+images-in-bucket',
-            'the manager\'s download of the kept copy says the photos are in the bucket — not "short by every photo"');
-        const x = untar(file);
-        assert(fs.existsSync(path.join(x, 'images-in-bucket.json')), 'and the archive it serves carries the label');
-        fs.rmSync(x, { recursive: true, force: true });
-        // The same headers the node's own download sends, so the manager's notice names the bucket, counts
-        // against what the database references, and never drops "the bucket could not be checked".
-        const h = res.headers;
-        assert(h.get('x-backup-images-bucket') === fake.bucket && h.get('x-backup-images-referenced') === String(referenced)
-            && h.get('x-backup-images-checked') === 'yes' && h.get('x-backup-missing-images') === '1',
-            `the manager's download names the bucket, the ${referenced} referenced object(s), that it was checked, and the 1 missing`);
-        const labelPath = inBucketLabelFor(kept);
-        const keptLabel = JSON.parse(fs.readFileSync(labelPath, 'utf8'));
-        fs.writeFileSync(labelPath, JSON.stringify({ ...keptLabel, checked: false, missingFromBucket: null, bucket: 'not a bucket\r\nX-Injected: 1' }));
-        const unchecked = await adminFetch('/api/manager/backups/download-db?nodeId=local-node');
-        await unchecked.arrayBuffer();
-        assert(unchecked.status === 200 && unchecked.headers.get('x-backup-images-checked') === 'no',
-            'a copy whose bucket could not be listed when it was taken says so: X-Backup-Images-Checked: no');
-        assert(!unchecked.headers.get('x-backup-images-bucket') && !unchecked.headers.get('x-injected'),
-            'and a label naming something that is not a bucket name puts no bucket (and nothing else) in the headers');
-        fs.writeFileSync(labelPath, JSON.stringify(keptLabel));
+        let label: ReturnType<typeof readInBucketMember> | null = null;
+        try { label = readInBucketMember(path.dirname(kept), path.basename(inBucketLabelFor(kept))); } catch { label = null; }
+        assert(label?.bucket === fake.bucket && label.referenced === referenced && label.checked === true && label.missingFromBucket === 1,
+            `the kept label names the bucket, the ${referenced} referenced object(s), that it was checked, and the 1 missing (${JSON.stringify(label)})`);
     }
 
     // ── 10. restore ────────────────────────────────────────────────────────────────────────────

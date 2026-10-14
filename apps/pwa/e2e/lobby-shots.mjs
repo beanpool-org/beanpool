@@ -49,7 +49,7 @@ async function loadPolicy() {
 }
 
 // What the global node lets a visitor read (apps/server/src/https-server.ts PUBLIC_READ_EXACT / PUBLIC_READ_PATTERNS,
-// less MEMBERS_ONLY_ON_GUEST_LISTINGS_*). The lobby needs far fewer.
+// less MEMBERS_ONLY_READS_* and MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT). The lobby needs far fewer.
 const VISITOR_READS_EXACT = new Set([
     '/api/version', '/api/community/info', '/api/community/health', '/api/node/config', '/api/directory/info',
     '/api/invite/check', '/api/attest', '/api/marketplace/posts', '/api/federation/reachable-peers', '/api/pricing-guide',
@@ -202,6 +202,8 @@ async function main() {
 
             try {
                 await page.goto(`${origin}/app`, { waitUntil: 'load' });
+                // A visitor lands on their Home (DESIGN-home-dashboard-fable.md H3); these pictures are of the Market, one tap away.
+                await page.locator('button:visible').filter({ hasText: /^\S*Market$/ }).first().click();
                 await page.waitForSelector('[data-testid="visitor-list"]');
                 await page.waitForSelector('[data-testid="visitor-card"] img');
                 // On a phone the list starts at the Join card: bring the first card and the line under it into view.

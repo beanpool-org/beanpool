@@ -78,7 +78,7 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             />
         );
 
-        expect(await screen.findByText(/Accountable Keepers \(2\)/i)).toBeInTheDocument();
+        expect(await screen.findByText(/^Keepers \(2\)/i)).toBeInTheDocument();
         expect(screen.getByText('Alice')).toBeInTheDocument();
         expect(screen.getByText('Bob')).toBeInTheDocument();
         expect(screen.getByText('Lead keeper')).toBeInTheDocument();
@@ -87,6 +87,24 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
         // Vocabulary check: never owner, never steward
         expect(screen.queryByText(/owner/i)).not.toBeInTheDocument();
         expect(screen.queryByText(/steward/i)).not.toBeInTheDocument();
+    });
+
+    it('a project says Leader and Collaborators, never keeper, bounded or treasury (group decisions pick 8)', async () => {
+        vi.spyOn(api, 'getTreasury').mockResolvedValue({
+            publicKey: 'project-roof-pubkey', name: 'New Roof', status: 'active', paused: false, balance: 100, lifecycle: 'bounded', goalAmount: 500,
+            keepers: [
+                { publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing: 50 },
+                { publicKey: 'keeper-bob-pubkey', callsign: 'Bob', role: 'keeper', backing: 0 },
+            ],
+            posts: [], flow: [],
+        } as any);
+        render(<TreasuryDetailPage identity={mockApplicantIdentity} pubkey="project-roof-pubkey" onBack={vi.fn()} />);
+        expect(await screen.findByText(/^Collaborators \(2\)/)).toBeInTheDocument();
+        expect(screen.getByText('Leader')).toBeInTheDocument();
+        expect(screen.getByText('Collaborator')).toBeInTheDocument();
+        expect(screen.getByText('Project · A leader, a goal, an end date')).toBeInTheDocument();
+        expect(screen.queryByText(/Bounded|Treasur/)).toBeNull();
+        expect(screen.queryByText('Lead keeper')).toBeNull();
     });
 
     it('opens a keeper profile when a keeper row is tapped, with a 48px target', async () => {
@@ -167,7 +185,7 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             />
         );
 
-        expect(await screen.findByText(/Accountable Keepers \(2\)/i)).toBeInTheDocument();
+        expect(await screen.findByText(/^Keepers \(2\)/i)).toBeInTheDocument();
         expect(screen.getByText('Alice')).toBeInTheDocument();
         expect(screen.getAllByText('Suspended')).toHaveLength(1);
     });
@@ -207,14 +225,14 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             />
         );
 
-        expect(await screen.findByText('Ask to Join as a Keeper')).toBeInTheDocument();
+        expect(await screen.findByText('Ask to join as a keeper')).toBeInTheDocument();
         expect(screen.getByText(/Back this enterprise with your standing: 0 … 80/i)).toBeInTheDocument();
 
         // Change backing pledge to 30
         const input = screen.getByLabelText(/Back this enterprise with your standing: 0 … 80/i);
         fireEvent.change(input, { target: { value: '30' } });
 
-        const submitBtn = screen.getByRole('button', { name: /request to join as keeper/i });
+        const submitBtn = screen.getByRole('button', { name: /request to join as a keeper/i });
         fireEvent.click(submitBtn);
 
         await waitFor(() => {
@@ -271,7 +289,7 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
             />
         );
 
-        expect(await screen.findByText(/Pending Keeper Requests \(1\)/i)).toBeInTheDocument();
+        expect(await screen.findByText(/Asking to join as keepers \(1\)/i)).toBeInTheDocument();
         expect(screen.getByText('Charlie')).toBeInTheDocument();
         expect(screen.getByText('25 🫘')).toBeInTheDocument();
 
@@ -297,6 +315,40 @@ describe('Enterprise Keepers & Succession (Slice 6)', () => {
         await waitFor(() => {
             expect(declineSpy).toHaveBeenCalledWith('enterprise-eggs-pubkey', 'req-charlie');
         });
+    });
+
+    it('tells the lead keeper in words whether each applicant can back their pledge, with no figure of their standing', async () => {
+        const row = (id: string, callsign: string, canBackPledge?: boolean) => ({
+            id, enterprisePubkey: 'enterprise-eggs-pubkey', memberPubkey: `${id}-pubkey`, callsign,
+            pledgedBacking: 25, status: 'pending' as const, createdAt: new Date().toISOString(),
+            ...(canBackPledge === undefined ? {} : { canBackPledge }),
+        });
+        vi.spyOn(api, 'getTreasury').mockResolvedValue({
+            publicKey: 'enterprise-eggs-pubkey',
+            name: 'Community Eggs',
+            status: 'active',
+            paused: false,
+            balance: 100,
+            isLeadOrSoleKeeperOrAdmin: true,
+            keepers: [{ publicKey: 'lead-alice-pubkey', callsign: 'Alice', role: 'lead', backing: 50 }],
+            // Dana's row is from a node too old to send canBackPledge: no line, never "undefined".
+            keeperRequests: [row('req-charlie', 'Charlie', true), row('req-erin', 'Erin', false), row('req-dana', 'Dana')],
+            posts: [],
+            flow: [],
+        });
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 100, keeperOf: ['enterprise-eggs-pubkey'] } as any);
+
+        const { container } = render(
+            <TreasuryDetailPage identity={mockLeadIdentity} pubkey="enterprise-eggs-pubkey" onBack={vi.fn()} />
+        );
+
+        expect(await screen.findByText(/Asking to join as keepers \(3\)/i)).toBeInTheDocument();
+        expect(screen.getByText('Their standing covers this pledge.')).toBeInTheDocument();
+        expect(screen.getByText("Their standing doesn't cover this pledge right now, so it can't be approved yet.")).toBeInTheDocument();
+        expect(screen.getAllByText(/Their standing/)).toHaveLength(2);
+        const panel = screen.getByText(/Asking to join as keepers/i).closest('div.rounded-2xl') as HTMLElement;
+        expect(panel.textContent).not.toMatch(/undefined|NaN|available/i);
+        expect(container.textContent).not.toMatch(/undefined|NaN/);
     });
 
     it('renders lead succession section when lead is inactive >= 30 days and allows keeper to propose or vote', async () => {
@@ -462,7 +514,7 @@ describe('Enterprise map pin (keeper control)', () => {
 
         render(<TreasuryDetailPage identity={bob} pubkey={ENTERPRISE} onBack={vi.fn()} />);
 
-        expect(await screen.findByText(/Accountable Keepers \(1\)/i)).toBeInTheDocument();
+        expect(await screen.findByText(/^Keepers \(1\)/i)).toBeInTheDocument();
         expect(screen.queryByTestId('enterprise-map-pin-control')).not.toBeInTheDocument();
         expect(screen.queryByTestId('enterprise-location-visibility')).not.toBeInTheDocument();
     });
@@ -478,7 +530,7 @@ describe('Enterprise map pin (keeper control)', () => {
 
         render(<TreasuryDetailPage identity={bob} pubkey={ENTERPRISE} onBack={vi.fn()} />);
 
-        expect(await screen.findByText(/Accountable Keepers \(2\)/i)).toBeInTheDocument();
+        expect(await screen.findByText(/^Keepers \(2\)/i)).toBeInTheDocument();
         expect(screen.queryByTestId('enterprise-map-pin-control')).not.toBeInTheDocument();
     });
 
@@ -487,7 +539,7 @@ describe('Enterprise map pin (keeper control)', () => {
 
         render(<TreasuryDetailPage identity={bob} pubkey={ENTERPRISE} onBack={vi.fn()} />);
 
-        expect(await screen.findByText(/Accountable Keepers \(2\)/i)).toBeInTheDocument();
+        expect(await screen.findByText(/^Keepers \(2\)/i)).toBeInTheDocument();
         expect(screen.queryByTestId('enterprise-map-pin-control')).not.toBeInTheDocument();
     });
 

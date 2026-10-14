@@ -30,9 +30,9 @@ export interface ColumnException {
  */
 export type TableEntry =
     /** Every column copied with the main server's value. `columns` names them all. `payload`: its SyncPayload key. */
-    | { kind: 'replicated'; payload: string; watermark: string; columns: string[]; key?: string[]; clearedByTombstone?: Record<string, TombstoneClear> } & Carried
+    | { kind: 'replicated'; payload: string; watermark: string; columns: string[]; key?: string[]; clearedByTombstone?: Record<string, TombstoneClear>; plain?: true; rows?: RowRule; agedOut?: AgedOut } & Carried
     /** `columns` copied, and the `except` ones not. Between them they name every column. */
-    | { kind: 'replicated-except'; payload: string; watermark: string; columns: string[]; key?: string[]; except: Record<string, ColumnException>; clearedByTombstone?: Record<string, TombstoneClear> } & Carried
+    | { kind: 'replicated-except'; payload: string; watermark: string; columns: string[]; key?: string[]; except: Record<string, ColumnException>; clearedByTombstone?: Record<string, TombstoneClear>; plain?: true; rows?: RowRule; agedOut?: AgedOut } & Carried
     /** Never copied. With `gap`, main doesn't copy it although the design says it should, and the twin suite compares it. */
     | { kind: 'local'; reason: string; gap?: GapId; key?: string[]; except?: Record<string, ColumnException> }
     /** Not in the sync payload; the take-over bundle brings it (services/takeover-envelope.ts). `bySetting`: a
@@ -65,11 +65,89 @@ export interface TombstoneClear {
     reason: string;
 }
 
+/**
+ * Which rows of a plain table travel, when not every row does: an SQL condition on the row, its own columns named bare,
+ * written here and never taken from a copy. A row it doesn't hold is this server's own. The export never sends one
+ * (engine sync.ts exportPlainTables), a whole copy neither sends nor deletes one (engine/plain-tables.ts), the whole-copy
+ * check neither counts nor hashes one on either server (engine audit.ts getReplicaConsistency, engine/replica-hashes.ts),
+ * and its delete writes no tombstone (db.ts deletePlainRows). A row starts travelling once the condition holds for it,
+ * at its next write or the next whole copy.
+ */
+export interface RowRule {
+    where: string;
+    reason: string;
+}
+
+/**
+ * The rows of a key with a member's row here (members.is_visitor 0, whatever its status): the phones and leave
+ * statements of this community's members. A key with no row, or a visitor's row, keeps its rows on the server it
+ * wrote them to, with a cap on what a key with no row stores (state-engine.ts STRANGER_PUSH_RULES,
+ * STRANGER_LEAVE_RULES). Anyone can make a key and register with it, so without this every stranger's rows would go
+ * into every copy (#1295 review 4126286269). A member's own are capped per key (state-engine.ts KEY_PUSH_RULES, review
+ * 4126900225). A visitor's row is made by a member's message or payment or by a linked community, never by the key
+ * itself, but a visitor is no member: after a take-over its phone is reached once the app registers again, as every
+ * phone was before G4.
+ */
+const MEMBERS_OWN: RowRule = {
+    where: 'public_key IN (SELECT m.public_key FROM members m WHERE m.is_visitor = 0)',
+    reason: "a member's own: anyone can make a key and register with it (review 4126286269)",
+};
+
+/**
+ * The price reports a member sent, signed (the reporter's key, members.is_visitor 0). A report may be anonymous, or signed
+ * by any key (routes/pricing-guide.ts), so without this anyone could fill every copy with them (#1295 review
+ * 4126894855). The rest stay on the server they were sent to, capped by address and for the node and pruned after a
+ * month (db/pricing-guide-db.ts PRICE_REPORT_RULES), and a server that takes over doesn't have them
+ * (services/takeover.ts WHAT_WILL_BE_MISSING): the admin's review queue, which nothing else reads. Never NULL: an
+ * anonymous report (no reporter) is simply not one that travels. A report signed by a key that wasn't a member's when
+ * it was sent is kept with no reporter (db/pricing-guide-db.ts submitPricingReport), so it stays too once the key joins
+ * (review 4128175868).
+ */
+const MEMBERS_REPORTS: RowRule = {
+    where: 'reporter_pubkey IS NOT NULL AND reporter_pubkey IN (SELECT m.public_key FROM members m WHERE m.is_visitor = 0)',
+    reason: "a member's own: a report may be anonymous, or signed by any key (review 4126894855)",
+};
+
+/**
+ * A plain table's age rule: its rows whose `column` (a stamp the main server wrote, the copy's) is more than `days` days
+ * old go, on each server, with no tombstone (design scratch/global-node/DESIGN-replica-flood-bounds-opus.md §6.3 T2). The
+ * main server deletes them on its own schedule (the table's own prune) and before each whole copy it serves
+ * (routes/backup.ts; engine/plain-tables.ts pruneAgedOut), so a whole copy never names one; a standby deletes them
+ * after each copy it imports, by the copy's own time (engine/plain-tables.ts importPlainTables), since no tombstone tells
+ * it. Without a tombstone per row, a table a flood fills comes back as no flood of tombstones when it is pruned.
+ */
+export interface AgedOut {
+    column: string;
+    days: number;
+}
+
 /** Every payload carries the whole table, so a delta needs no watermark. */
 export const WHOLE_SET = 'whole set';
 
 /** Column names, from a space-separated list. */
 const cols = (names: string): string[] => names.trim().split(/\s+/);
+
+/**
+ * The SyncPayload key of the plain tables (`plain: true`, design G3, G4 and §4.2): one generic path carries each, under its
+ * own name. The main server exports its rows `SELECT *` by the watermark, in the watermark's order (engine sync.ts
+ * exportPlainTables; a whole copy: every row; never an `except` column); a standby writes each row as it is, the main
+ * server's stamp included, checked against its own columns and rules, and a whole copy deletes the rows it doesn't name
+ * (engine/plain-tables.ts). A standby writes none of their rows itself (config/node-role.ts assertPlainTablesWritable). The
+ * next table is one line here, its `updated_at` in schema.sql with its ALTER in db.ts (which stamps every write,
+ * stampPlainTables), and a tombstone wherever a writer deletes one of its rows.
+ */
+export const PLAIN_TABLES_PAYLOAD = 'plainTables';
+
+/**
+ * A plain table: its columns copied, verbatim, by the generic path (PLAIN_TABLES_PAYLOAD), all but the `except` ones;
+ * every row, or the ones `rows` holds.
+ */
+const plain = (columns: string, opts: { except?: Record<string, ColumnException>; rows?: RowRule; agedOut?: AgedOut } = {}): TableEntry => {
+    const rows = { ...(opts.rows ? { rows: opts.rows } : {}), ...(opts.agedOut ? { agedOut: opts.agedOut } : {}) };
+    return opts.except
+        ? { kind: 'replicated-except', payload: PLAIN_TABLES_PAYLOAD, watermark: 'updated_at', columns: cols(columns), except: opts.except, plain: true, ...rows }
+        : { kind: 'replicated', payload: PLAIN_TABLES_PAYLOAD, watermark: 'updated_at', columns: cols(columns), plain: true, ...rows };
+};
 
 const STAMPED_BY_STANDBY = "the import doesn't write it, so the standby's own clock stamps it";
 
@@ -80,7 +158,7 @@ export const TABLES: Record<string, TableEntry> = {
     // members' touch triggers aside while it writes them).
     members: {
         kind: 'replicated-except', payload: 'members', watermark: 'updated_at',
-        columns: cols(`public_key callsign joined_at invited_by invite_code home_node_url avatar_url bio contact_value contact_visibility status
+        columns: cols(`public_key callsign joined_at invited_by invite_code home_node_url avatar_ref avatar_bytes bio contact_value contact_visibility status
             elder_vouched_by can_vouch vouch_credit credit_frozen is_treasury can_operate earned_credit earned_surplus working_capital_ceiling
             legacy_credit_floor profile_updated_at archetype purpose goal_amount deadline_at lifecycle paused paused_at paused_by
             paused_floor_snapshot wind_up_initiated_at wind_up_initiated_by wind_up_finalised_at lat lng location_auth_signer auth_signer
@@ -96,6 +174,15 @@ export const TABLES: Record<string, TableEntry> = {
     member_preferences: {
         kind: 'replicated', payload: 'members', watermark: 'updated_at', inRowOf: { table: 'members', field: 'preferences' },
         columns: cols('public_key pref_key pref_value'),
+    },
+    // A member's avatar, out of their row so no scan of members reads it (schema.sql member_photos), in each member's row
+    // as `avatar_url`, where a standby of any version reads it (@beanpool/engine sync.ts withPhoto, engine/sync.ts
+    // importMemberPhoto). Its one writer (@beanpool/engine members.ts setMemberPhoto) writes the row's avatar_ref and
+    // avatar_bytes with it, which the touch trigger names, so a change moves the member's updated_at; the standby makes
+    // those two from the photo by the same rule.
+    member_photos: {
+        kind: 'replicated', payload: 'members', watermark: 'updated_at', inRowOf: { table: 'members', field: 'standing.avatar_url' },
+        columns: cols('public_key photo'),
     },
     // Who keeps each enterprise (G2c): the whole set in every payload, applied as a diff, so an unbound keeper needs no
     // tombstone.
@@ -114,7 +201,7 @@ export const TABLES: Record<string, TableEntry> = {
     // by each server's boot backfill alike, from the same words (state-engine.ts backfillSearchKeywords).
     posts: {
         kind: 'replicated-except', payload: 'posts', watermark: 'updated_at',
-        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_state hidden_by_reports_at removed_by_moderator_at'),
+        columns: cols('id type category title description credits author_pubkey created_at active status price_type repeatable accepted_by accepted_at pending_transaction_id completed_at lat lng origin_node updated_at search_keywords cash_also_needed reach reach_peers created_by poll_options poll_closes_at poll_open_vote audience_scope target_group_id target_pubkey assigned_to event_start_at event_end_at event_place_name event_private_note event_state hidden_by_reports_at removed_by_moderator_at'),
         except: {
             target_archetypes: { reason: 'dormant: nothing reads or writes it (db.ts; archetypes gate nothing)' },
             event_conversation_id: { reason: 'dormant: nothing reads or writes it (only db.ts adds the column)' },
@@ -172,7 +259,7 @@ export const TABLES: Record<string, TableEntry> = {
         kind: 'replicated-except', payload: 'conversations', watermark: 'created_at',
         columns: cols('id type post_id created_by created_at'),
         except: {
-            name: { reason: "a group rename writes it with no stamp (state-engine.ts updateGroup) and a delta picks conversations by created_at, so a new name arrives only in a whole copy (not in the design; found by this net)", gap: 'G1b' },
+            name: { reason: "a group rename writes it with no stamp (state-engine.ts updateGroup) and a delta picks conversations by created_at, so a new name arrives only in a whole copy (not in the design; found by this net). An event chat's travels with its event (engine/post-scrub.ts)", gap: 'G1b' },
         },
     },
     conversation_participants: {
@@ -187,12 +274,15 @@ export const TABLES: Record<string, TableEntry> = {
         },
     },
     abuse_reports: {
-        kind: 'replicated', payload: 'abuseReports', watermark: 'updated_at',
+        kind: 'replicated-except', payload: 'abuseReports', watermark: 'updated_at',
         columns: cols('id reporter_pubkey target_pubkey target_post_id target_pulse_item_id reason status created_at updated_at'),
+        except: {
+            suspended_member: { reason: "read only by a cancel of a re-key code made before codes kept the member's earlier status (member-wizards.ts cancelRekeyCode); a server that took over reads it as not known, which keeps the member suspended, and Lift suspension lifts it" },
+        },
     },
     creator_channels: {
         kind: 'replicated-except', payload: 'creatorChannels', watermark: 'updated_at',
-        columns: cols('id owner_pubkey platform url handle category is_primary_video supports_autolist oauth_verified_at post_count_seen autopublish syndicate_to_node created_at updated_at deleted_at'),
+        columns: cols('id owner_pubkey platform url handle category is_primary_video supports_autolist oauth_verified_at platform_account_id verified_handle post_count_seen autopublish syndicate_to_node created_at updated_at deleted_at'),
         except: {
             fail_count: { reason: "the harvester's own record of failed fetches on this server; a promoted server's harvester starts afresh" },
             last_error: { reason: "the harvester's own record of failed fetches on this server" },
@@ -215,7 +305,7 @@ export const TABLES: Record<string, TableEntry> = {
     },
     poll_votes: {
         kind: 'replicated', payload: 'pollVotes', watermark: 'created_at',
-        columns: cols('post_id voter_pubkey option_id signature created_at'),
+        columns: cols('post_id voter_pubkey option_id signature created_at voter_new_or_words'),
     },
     event_rsvps: {
         kind: 'replicated', payload: 'eventRsvps', watermark: 'updated_at',
@@ -223,19 +313,31 @@ export const TABLES: Record<string, TableEntry> = {
     },
     groups: {
         kind: 'replicated-except', payload: 'groups', watermark: 'updated_at',
-        columns: cols('id name slug description avatar_url category created_by join_policy created_at updated_at'),
+        columns: cols('id name slug description avatar_ref avatar_bytes category created_by join_policy created_at updated_at'),
         except: {
             lead_pubkey: { reason: "the import keeps the lead it has over the main server's null (COALESCE): a group whose last convenor left has no lead there and keeps the old one on the standby (not in the design; found by this net)", gap: 'G1b' },
         },
     },
+    // A group's own picture, out of its row so no read of groups reads it (schema.sql group_pictures, #1486), in each
+    // group's row as `avatarUrl`, where a standby of any version reads it (@beanpool/engine sync.ts groupsWithPictures,
+    // engine/sync.ts importGroupPicture). Its one writer (@beanpool/engine groups.ts setGroupPicture) writes the row's
+    // avatar_ref and avatar_bytes with it, which groups_touch_updated_at stamps, so a change moves the group's updated_at;
+    // the standby makes those two from the picture by the same rule.
+    group_pictures: {
+        kind: 'replicated', payload: 'groups', watermark: 'updated_at', inRowOf: { table: 'groups', field: 'avatarUrl' },
+        columns: cols('group_id picture'),
+    },
     group_members: {
         kind: 'replicated', payload: 'groupMembers', watermark: 'updated_at',
-        columns: cols('group_id member_pubkey role status joined_at invited_by updated_at role_since'),
+        columns: cols('group_id member_pubkey role status joined_at invited_by updated_at role_since from_epoch'),
     },
     open_joins: {
         kind: 'replicated-except', payload: 'openJoins', watermark: 'updated_at',
-        columns: cols('member_pubkey provider join_hash joined_at updated_at'),
-        except: { ip_hash: { reason: 'the address hash is never sent (engine/open-join.ts)' } },
+        columns: cols('member_pubkey provider join_hash joined_at updated_at join_cohort'),
+        except: {
+            ip_hash: { reason: 'the address hash is never sent (engine/open-join.ts)' },
+            ip_kept_until: { reason: "how long a removed newcomer's address hash is kept here; the hash is never sent (engine/door-signal.ts)" },
+        },
     },
     place_watches: {
         kind: 'replicated', payload: 'placeWatches', watermark: 'updated_at',
@@ -259,8 +361,8 @@ export const TABLES: Record<string, TableEntry> = {
         columns: cols('owner_pubkey blocked_pubkey created_at updated_at'),
     },
     invalidated_keys: {
-        kind: 'replicated', payload: 'invalidatedKeys', watermark: 'invalidated_at',
-        columns: cols('public_key reason invalidated_at rekeyed_to'),
+        kind: 'replicated', payload: 'invalidatedKeys', watermark: 'invalidated_at', orWatermark: 'succession_stored_at',
+        columns: cols('public_key reason invalidated_at rekeyed_to succession_sig succession_at succession_stored_at'),
     },
     tombstones: {
         kind: 'replicated', payload: 'tombstones', watermark: 'deleted_at',
@@ -274,49 +376,179 @@ export const TABLES: Record<string, TableEntry> = {
         reason: 'a key-value store: parts travel in the sync payload, parts in the bundle, the rest is per server or lost today; each key is classified in NODE_CONFIG_KEYS',
     },
 
+    // ── In-flight money and governance, on the generic path (design G3; PLAIN_TABLES_PAYLOAD) ──
+    // A keeper's wage owed and not yet paid: paid once after a take-over, since one the main server paid arrives paid.
+    deferred_wage_claims: plain('id enterprise_pubkey keeper_pubkey post_id transaction_id amount status created_at paid_at updated_at'),
+    // Decisions and their ballots, open or in their grace period. The ballots go to a standby only, as the main server
+    // holds them: this payload is served to a standby's replication token alone (routes/backup.ts).
+    decisions: plain('id author_pubkey title description touches effect subject params franchise status opens_at closes_at grace_period_ends_at created_at executed_at execution_error execution_reason admin_halted_at admin_halted_by admin_halt_reason updated_at scope_kind scope_id'),
+    decision_votes: plain('decision_id voter_pubkey support weight credits_used signature created_at updated_at'),
+    // The frozen roll of a scoped Decision (decisions-engine.ts, DESIGN-group-decisions §2.2).
+    decision_electors: plain('decision_id member_pubkey role_at_open status created_at updated_at'),
+    // A chat group closed by its members' Decision (decisions-engine.ts closeGroupByVote, DESIGN-group-decisions §2.3).
+    group_closures: plain('group_id decision_id closed_at created_at updated_at'),
+    // A role held aside by a suspension or by a removal in its grace period (decisions-engine.ts). A row whose Decision
+    // closes is deleted, with a tombstone.
+    suspended_node_roles: plain('decision_id member_pubkey role granted_at granted_by session_epoch updated_at', { except: {
+        break_glass_hash: {
+            reason: "an owner's break-glass code, hashed: the take-over bundle carries the roles sealed, and this would travel "
+                + 'unsealed in every copy. An owner a promoted server gives the role back to makes a new code',
+        },
+    } }),
+    enterprise_keeper_requests: plain('id enterprise_pubkey member_pubkey pledged_backing status created_at decided_at decided_by updated_at'),
+    enterprise_keeper_changes: plain('id enterprise_pubkey kind member_pubkey request_id pledged_backing proposed_by status created_at applies_at resolved_at resolved_by reason updated_at'),
+    enterprise_succession_proposals: plain('id enterprise_pubkey lead_pubkey candidate_pubkey proposer_pubkey status created_at executed_at deadline_at closed_reason updated_at'),
+    enterprise_succession_votes: plain('proposal_id voter_pubkey voted_at choice updated_at'),
+    group_convenor_proposals: plain('id group_id convenor_pubkey candidate_pubkey proposer_pubkey status created_at deadline_at executed_at closed_reason updated_at'),
+    group_convenor_votes: plain('proposal_id voter_pubkey choice voted_at updated_at'),
+    // Every invite already sent, and who used which.
+    invite_codes: plain('code created_by created_at used_by used_at intended_for genesis_type issued_by names_entry_id names_bind_outcome updated_at'),
+    // A replacement phone's code an operator issued.
+    rekey_requests: plain('id code old_pubkey new_pubkey operator_pubkey status created_at expires_at completed_at updated_at prior_status wrong_matches'),
+    // The phones that asked for a code, and the digits each shows (engine/rekey-redeem.ts): a promoted standby shows the admin
+    // the same phones, so the one they bind is the one they saw.
+    rekey_proposals: plain('code new_pubkey match proposed_at declined_at updated_at'),
+    // The log of which recovery fragments left the node. Its sessions (recovery_collections) stay each server's own, so
+    // each row names its owner (owner_pubkey), and a member's own delete deletes theirs by it, with tombstones, on the
+    // server that made them and on one that took over.
+    recovery_releases: plain('id collection_id share_id holder_type share_index payload payload_iv payload_tag ephemeral_pubkey kdf_params released_by released_at updated_at owner_pubkey'),
+    // Which enterprise is the link with each linked community, so a promoted server makes no second one (federation-link.ts).
+    federation_links: plain('peer_id treasury_pubkey commission_ceiling created_at updated_at'),
+    // Which treasury was made as the link for which peer (federation-link.ts): the one thing that lets a lost link row find
+    // its treasury again, never a member's enterprise of the same name.
+    federation_link_treasuries: plain('treasury_pubkey peer_id created_at updated_at'),
+
+    // ── The names list (community modes slice 2, engine/names-list.ts), on the generic path ──
+    // Sealed entries, the signed key history, the sealed shares: a standby holds what the main server holds, text it can't
+    // open, and a server that takes over serves it to the same admins' phones, whose pins carry on unchanged (the
+    // statements carry the community's id, so they check out anywhere). A delete writes a tombstone.
+    names_entries: plain('id ciphertext key_id created_by created_at updated_by updated_at'),
+    names_generations: plain('id n parent_id maker drops statement signature created_at updated_at'),
+    names_shares: plain('from_pubkey to_pubkey head_id key_ids trusts sealed_ring ring_iv ring_tag ephemeral_pubkey kdf_params box_digest header signature created_at updated_at'),
+    // Each admin's locked copy of their own record, sealed to their key: a take-over serves it to the phone that lost its own.
+    names_copies: plain('owner_pubkey seq head_n head_id saved_at sealed_copy copy_iv copy_tag ephemeral_pubkey kdf_params box_digest header signature created_at updated_at'),
+    // Who stopped holding a key by stopping being an admin: the write freeze travels with the copy.
+    names_dropped_holders: plain('holder_pubkey key_id dropped_at updated_at'),
+    // A confirmation names a key, an entry and the admins, never a name.
+    confirmations: plain('id member_pubkey entry_id confirmed_by confirmed_at needs_second seconded_by seconded_at revoked_by revoked_at revoke_reason updated_at'),
+    // Who opened, exported or changed the list: it outlives a take-over, as the admins' accountability should.
+    names_access_log: plain('id actor_pubkey action entry_id subject_pubkey at updated_at'),
+    known_floor_exceptions: plain('member_pubkey amount frozen set_by set_at updated_at'),
+    known_floor_log: plain('id actor_pubkey action member_pubkey old_value new_value at updated_at'),
+    health_access_log: plain('id actor_pubkey action subject_pubkey detail token_id token_name at updated_at'),
+    known_consents: plain('member_pubkey version consented_at updated_at'),
+    known_consent_log: plain('id member_pubkey action version at updated_at'),
+    names_debts: plain('id entry_id amount reason removed_at status repaying_pubkey repaid settled_how settled_by settled_at settle_ref note work_off_confirmation_id work_off_floor_before work_off_floor_set_at updated_at'),
+    names_debt_payments: plain('transaction_id debt_id payer_pubkey amount paid_at updated_at'),
+    // A member's retried payment gets its first answer (engine/money-requests.ts), on a standby that took over too. Its
+    // week-old ids go without tombstones, on each server (engine/money-requests.ts pruneMoneyRequests; the age rule).
+    money_requests: plain('payer_pubkey request_id route fingerprint answer created_at updated_at', { agedOut: { column: 'created_at', days: 7 } }),
+
+    // ── Members' devices and conveniences, on the generic path (design G4; PLAIN_TABLES_PAYLOAD) ──
+    // A standby writes none of their rows (config/node-role.ts assertPlainTablesWritable) and sends no push
+    // (state-engine.ts dispatchPushNotification). A re-key's moves and deletes of these rows are followed on the standby
+    // itself (engine/key-move.ts moveMemberKeyRows), as for G3's tables; every other delete writes a tombstone
+    // (db.ts deletePlainRows).
+    // Every phone a member registered, as the main server holds it, so a server that takes over reaches them at once. The
+    // rows are the main server's verbatim: a key registers and removes only its own (#1184), and `registered_at` is the
+    // phone's stamp a leave statement is judged by (#1258). Tokens go to a standby only: this payload is served to a
+    // standby's replication token, or the community's own admin password, and nothing else (routes/backup.ts), with the
+    // messages and recovery copies a standby already holds. Only members' (MEMBERS_OWN). Locked (services/push-token-seal.ts):
+    // a token's id and its box, never the token, which a standby opens only once a take-over brings the key.
+    push_tokens: plain('public_key token_id token_box platform created_at registered_at updated_at', { rows: MEMBERS_OWN }),
+    // A day's leave statements applied, so a registration the phone sent before one, delivered late to a server that took
+    // over, is refused there too (state-engine.ts registerPushToken). Its day-old rows go without tombstones, on each
+    // server (state-engine.ts PUSH_LEAVE_PRUNE_SQL; the age rule). Only members' (MEMBERS_OWN).
+    push_token_leaves: plain('public_key token_id left_at applied_at updated_at', { rows: MEMBERS_OWN, agedOut: { column: 'applied_at', days: 1 } }),
+    chat_mutes: plain('conversation_id member_pubkey muted_until created_at updated_at'),
+    // What each keeper has read of their enterprise's thread (engine/enterprise-thread.ts).
+    thread_read_cursors: plain('conversation_id member_pubkey last_read_at created_at updated_at'),
+    // A group chat's keys (engine/group-keys.ts): each epoch's signed record and one wrap per member, none of which the
+    // node can open, so a server that takes over serves members the keys their phones made. A re-key's delete of the old
+    // key's wraps is followed on the standby itself (engine/key-move.ts), as push_tokens' is.
+    group_key_epochs: plain('group_id epoch created_by reason subject_pubkey created_at key_commit members_digest wraps_digest sig stored_at stale_since updated_at'),
+    group_key_wraps: plain('group_id epoch recipient_pubkey wrapper_pubkey eph_pub nonce wrapped sig created_at updated_at rejected_at'),
+    // Every event reminder the main server sent, so one is never sent twice (engine/event-reminders.ts).
+    event_reminders_sent: plain('post_id member_pubkey offset_min sent_at updated_at'),
+    // The activity list, ids included: a server that takes over numbers its next line after the last one it copied. Its
+    // lines a month old go without tombstones, on each server (db/activity-feed-db.ts pruneOldActivity; the age rule).
+    activity_feed: plain('id event_type actor_pubkey target_pubkey metadata created_at updated_at', { agedOut: { column: 'created_at', days: 30 } }),
+    // The pricing guide as the main server priced and edited it; a standby seeds none of its own (db.ts).
+    pricing_guide_items: plain('id category emoji name description price_beans unit is_pinned confidence_count trend seasonality_hint thumbnail_url updated_at'),
+    // Only members' reports (MEMBERS_REPORTS).
+    pricing_reports: plain('id item_id reporter_pubkey report_type comment status created_at updated_at', { rows: MEMBERS_REPORTS }),
+
     // ── Not copied today, and the design says they should be ──
-    deferred_wage_claims: { kind: 'local', gap: 'G3', reason: "not in the payload: keepers' unpaid wages" },
-    decisions: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
-    decision_votes: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
-    suspended_node_roles: { kind: 'local', gap: 'G3', reason: 'not in the payload nor the bundle: an owner parked by a Decision' },
-    enterprise_keeper_requests: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
-    enterprise_keeper_changes: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
-    enterprise_succession_proposals: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
-    enterprise_succession_votes: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
-    group_convenor_proposals: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
-    group_convenor_votes: { kind: 'local', gap: 'G3', reason: 'not in the payload' },
-    invite_codes: { kind: 'local', gap: 'G3', reason: 'not in the payload: every invite already sent fails after a take-over' },
-    rekey_requests: { kind: 'local', gap: 'G3', reason: 'not in the payload: an unused re-key code is refused after a take-over' },
-    recovery_releases: { kind: 'local', gap: 'G3', reason: 'not in the payload: the log of which recovery fragments left the node' },
-    federation_links: { kind: 'local', gap: 'G3', reason: 'not in the payload: a promoted server would make a second link treasury per peer' },
-    push_tokens: { kind: 'local', gap: 'G4', reason: "not in the payload: no push reaches anyone until their phone reopens the app" },
     message_attachments: { kind: 'local', gap: 'G4', reason: 'not in the payload: chat photos (they need the image-store path post_photos has)' },
-    chat_mutes: { kind: 'local', gap: 'G4', reason: 'not in the payload' },
-    thread_read_cursors: { kind: 'local', gap: 'G4', reason: 'not in the payload' },
-    event_reminders_sent: { kind: 'local', gap: 'G4', reason: 'not in the payload: a reminder can be sent twice' },
-    activity_feed: { kind: 'local', gap: 'G4', reason: 'not in the payload' },
-    pricing_guide_items: { kind: 'local', gap: 'G4', reason: "not in the payload: each server seeds its own at boot, and the admin's edits are lost" },
-    pricing_reports: { kind: 'local', gap: 'G4', reason: "not in the payload: members' price reports" },
 
     // ── Local by design ──
     sync_cursors: { kind: 'local', reason: "this server's own pull cursors" },
-    push_token_leaves: {
-        kind: 'local',
-        reason: "a day's record of leave statements applied here, only for a registration delivered late; the fix for G4 carries it with push_tokens",
-    },
     sync_audit_log: { kind: 'local', reason: "this server's own record of what it imported" },
     system_logs: { kind: 'local', reason: "this server's logs" },
     system_metrics: { kind: 'local', reason: "this server's metrics" },
     signature_audiences: { kind: 'local', reason: 'counts of which addresses signatures named, shown and never deciding' },
     onboarding_funnel: { kind: 'local', reason: "this server's funnel counters" },
+    web_visit_days: { kind: 'local', reason: 'the page loads this server served, a day at a time: a standby counts its own' },
     pulse_thumbnail_backoff: { kind: 'local', reason: "this server's thumbnail fetch backoff" },
     owner_words_checks: { kind: 'local', reason: 'shown, never deciding' },
     owner_lock_opens: { kind: 'local', reason: 'shown, never deciding' },
     rekey_audit_log: { kind: 'local', reason: "this server's audit trail of re-keys it performed" },
+    writes_by_address: { kind: 'local', reason: "where this server's writes a day cap by address bounds came from, a day's, as keyed hashes: its own limiter" },
+    money_acts: { kind: 'local', reason: "this server's own count of each account's money acts in the day (engine/money-limits.ts), a day's: a promoted server starts its day afresh" },
+    keeper_own_posts: { kind: 'local', reason: "which of the day's enterprise posts this server counted against their keeper's own (engine/writer-bounds.ts), a day's: a promoted server starts its day afresh" },
     recovery_collections: { kind: 'local', reason: 'a 72-hour recovery session; the member starts again' },
-    invite_links: { kind: 'local', reason: 'nothing reads or writes it (the design: delete it, day zero)' },
+    push_notices: { kind: 'local', reason: "the details of the pushes this server sent, for a week (engine/push-notices.ts): a standby sends none, and after a take-over a tap on an older notice opens its kind's tab" },
     posts_fts: { kind: 'local', reason: 'the search index, rebuilt from posts by its triggers on each server' },
+    photo_url_heals: { kind: 'local', reason: "where each phone's heal of its listing-photo URLs is on this server, for this server's own URL shape (engine/photo-keys.ts)" },
+    message_old_conversation_ids: { kind: 'local', reason: "the old conversation ids chat lines name, kept from messages' metadata by its triggers on each server" },
+    // A direct line to someone who had blocked its sender, and a conversation such a sender opened, kept for the sender
+    // alone (engine/withheld-lines.ts). Never in a copy: no standby can then deliver one to the person who blocked them.
+    withheld_lines: { kind: 'local', reason: 'lines kept for their sender alone, because the person they were sent to had blocked them: never in a copy, so no standby can deliver one (engine/withheld-lines.ts)' },
+    withheld_conversations: { kind: 'local', reason: 'conversations kept for their opener alone, because the other had blocked them: never in a copy (engine/withheld-lines.ts)' },
+    withheld_overlays: { kind: 'local', reason: "a blocked member's reaction or edit on a line, kept for them alone and laid over their own reads: never in a copy (engine/withheld-lines.ts)" },
+    // A burst action's undo (engine/burst-cleanup.ts). The posts it hid travel hidden (posts.hidden_by_reports_at), so a
+    // server that takes over keeps them hidden, and its moderators restore them one at a time.
+    burst_actions: { kind: 'local', reason: "this server's record of the moderators' burst actions, for their undo, 30 days: the posts a hide hid travel hidden in posts, and after a take-over are restored one at a time (engine/burst-cleanup.ts)" },
+    burst_action_posts: { kind: 'local', reason: "the posts each burst hide hid, for its undo on this server (engine/burst-cleanup.ts)" },
+    // The note on Beans sent to someone who had blocked its sender, kept for the sender alone; the ledger row, which is
+    // copied, stores none (engine/withheld-notes.ts).
+    withheld_notes: { kind: 'local', reason: 'the note on Beans sent to someone who had blocked its sender, kept for the sender alone: never in a copy, so no standby can show it to them (engine/withheld-notes.ts)' },
 };
+
+/**
+ * A plain table as the generic path reads it: its name, its watermark, the columns it never carries, when not every row
+ * travels the condition on the ones that do (its RowRule's `where`), and its age rule, if it has one.
+ */
+export interface PlainTable {
+    table: string;
+    watermark: string;
+    except: string[];
+    where?: string;
+    agedOut?: AgedOut;
+}
+
+/** Every plain table (PLAIN_TABLES_PAYLOAD), in the manifest's order: what the export sends and the import writes. */
+export const PLAIN_TABLES: readonly PlainTable[] = Object.entries(TABLES).flatMap(([table, e]) =>
+    ((e.kind === 'replicated' || e.kind === 'replicated-except') && e.plain
+        ? [{
+            table, watermark: e.watermark, except: e.kind === 'replicated-except' ? Object.keys(e.except) : [],
+            ...(e.rows ? { where: e.rows.where } : {}), ...(e.agedOut ? { agedOut: e.agedOut } : {}),
+        }]
+        : []));
+
+/** The condition on the rows of `table` that travel (its RowRule), or null when every row does or it is no copied table. */
+export function travellingRows(table: string): string | null {
+    const e = TABLES[table];
+    return e && (e.kind === 'replicated' || e.kind === 'replicated-except') && e.rows ? e.rows.where : null;
+}
+
+/**
+ * The two triggers that stamp a plain table's watermark on every write (db.ts stampPlainTables makes them), which a
+ * standby's import sets aside while it writes its main server's rows (engine/sync.ts IMPORT_KEEPS_STAMPS).
+ */
+export function plainTableTriggers({ table, watermark }: PlainTable): { insert: string; touch: string } {
+    return { insert: `${table}_set_${watermark}_on_insert`, touch: `${table}_touch_${watermark}` };
+}
 
 /**
  * Rows a server writes again at every boot of its own, stamped with its own clock: system-managed rows whose canonical
@@ -385,18 +617,29 @@ export const LOCAL_CONFIG_FIELDS: Record<string, SettingEntry> = {
     totpSecret: { kind: 'takeover-bundle', reason: 'two-factor sign-in' },
     totpBackupCodesHashes: { kind: 'takeover-bundle', reason: 'two-factor sign-in' },
     breakGlassMode: { kind: 'takeover-bundle', reason: 'break-glass sign-in' },
+    passwordRetired: {
+        kind: 'takeover-bundle',
+        reason: 'the admin password retired for good; merged sticky, so an older bundle never brings the password back',
+    },
     recoveryCode: { kind: 'takeover-bundle', reason: "the public record of the community's recovery code" },
     identityEpoch: { kind: 'takeover-bundle', reason: 'how many take-overs this identity has been through', differsByDesign: 'a take-over writes the bundle\'s epoch + 1' },
     isLocked: { kind: 'per-server', reason: "whether this server's admin password has been set" },
     joinedAt: { kind: 'per-server', reason: "when this server's admin password was set" },
     totpPendingSecret: { kind: 'per-server', reason: 'a two-factor enrolment in progress on this server' },
     totpPendingBackupCodesHashes: { kind: 'per-server', reason: 'a two-factor enrolment in progress on this server' },
+    claim: { kind: 'per-server', reason: "this server's one-time claim code (its scrypt hash, id, who used it); never copied" },
+    addressRequest: { kind: 'per-server', reason: "a name this server was asked to claim at install (beanpool claim); a standby never claims one; never copied" },
+    endedAddressRequest: { kind: 'per-server', reason: "the last install name request this server ended, so a late registrar answer never revives it (#1579); per-server like addressRequest; never copied" },
+    turnedAwayNames: { kind: 'per-server', reason: "the latest names this server turned away (ended install requests, replaced or timed-out Settings claims, names taken offline), so a late registrar answer never revives one (#1579 review); per-server like addressRequest; never copied" },
     backupPrimaryUrl: { kind: 'per-server', reason: "a standby's main server" },
     backupAdminPassword: { kind: 'per-server', reason: "a standby's legacy pull password" },
     replicationTokenHash: { kind: 'per-server', reason: "the token this server's standbys pull with; never in the bundle" },
     replicationTokenSalt: { kind: 'per-server', reason: "the token this server's standbys pull with" },
     replicationTokenCreatedAt: { kind: 'per-server', reason: "the token this server's standbys pull with" },
     replicationTokenOnly: { kind: 'per-server', reason: "the token this server's standbys pull with" },
+    aiAssistantsAllowed: { kind: 'per-server', reason: "the owner switch for this server's AI assistant endpoint (/mcp), beside its agent tokens" },
+    agentOAuthGrants: { kind: 'per-server', reason: "AI assistants connected to this server through OAuth (refresh-token hashes); a standby's copy holds none" },
+    automationTokens: { kind: 'per-server', reason: "owners' automation tokens (hashes) for this server; never in a backup file, the stager's copy or the bundle" },
     backupReplicationToken: { kind: 'per-server', reason: "a standby's token for its main server" },
     backupPullSeconds: { kind: 'per-server', reason: "a standby's pull interval" },
     backupReconcileMinutes: { kind: 'per-server', reason: "a standby's whole-copy interval" },
@@ -417,7 +660,12 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     node_config: { kind: 'per-server', reason: 'a JSON object; each field is classified in NODE_CONFIG_BLOB_FIELDS' },
     nodeProfile: { kind: 'payload', reason: 'the node profile record (payload.nodeProfile)' },
     'nodeProfile.*': { kind: 'payload', reason: "the operator's switch overrides (payload.nodeProfile)" },
-    openJoinSalt: { kind: 'payload', reason: "the key the open door's hashes are made with (payload.openJoinSalt)" },
+    // The key itself is a file (data/open-join.key, services/open-join-key.ts), in the take-over bundle only.
+    openJoinKeyId: { kind: 'payload', reason: "which key the open door's hashes are made with, a hash of it, never the key (payload.openJoinKeyId)" },
+    openJoinSalt: {
+        kind: 'per-server',
+        reason: "the door's key as an older version kept it: written only by the rollback command (services/open-join-key.ts --write-key-row) for an older image to read; this version moves it to data/open-join.key at boot, and no copy carries it",
+    },
     migration_mark_visitors_v1: {
         kind: 'payload', reason: "whether visitors' rows are marked (payload.visitorsMarked)",
         differsByDesign: "a standby records 'copied': the marks in its copy are its main server's (db.ts noteVisitorsMarkedByMainServer)",
@@ -428,15 +676,31 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     pricing_data_source: { kind: 'community-settings', reason: "the pricing guide's source" },
     pricing_show_seasonality: { kind: 'community-settings', reason: "the pricing guide's seasonality display" },
     autosnapshot_config: { kind: 'community-settings', reason: 'the snapshot schedule' },
+    door: { kind: 'community-settings', reason: 'who may invite: any member, or only admins (config/door.ts)' },
+    names_two_admins: { kind: 'community-settings', reason: 'whether a confirmation against the names list needs a second admin (engine/names-list.ts)' },
+    confirmation: { kind: 'community-settings', reason: 'the confirmation dial: whether a confirmed member holds the known floor (config/known-floor.ts)' },
+    known_floor: { kind: 'community-settings', reason: "the community's known floor in Beans (config/known-floor.ts)" },
+    credit_cap: { kind: 'community-settings', reason: "the community's credit cap in Beans (config/known-floor.ts)" },
+    health_debt_line_pct: { kind: 'community-settings', reason: "the Community health panel's debt line, a % of the credit line (engine/community-health.ts)" },
+    health_quiet_days: { kind: 'community-settings', reason: "the Community health panel's days in debit without a sale (engine/community-health.ts)" },
+    startCommunityUrl: { kind: 'community-settings', reason: "where the Local community sheet's Start a community leads (config/start-community.ts)" },
     commons_projects: {
         kind: 'community', gap: 'G3',
         reason: 'pending Commons proposals kept as one JSON value; still written (POST /api/commons/projects, state-engine.ts createProject), '
             + 'so in-flight governance, not a setting',
     },
     avatarKeySecret: { kind: 'per-server', reason: "the key behind members' avatar URLs, made at boot (engine/avatar-keys.ts)" },
+    avatarKeysShape: { kind: 'per-server', reason: "what this server's face URLs look like (keyed by its own secret, or not), recorded at boot (engine/avatar-keys.ts)" },
+    avatarKeysSince: { kind: 'per-server', reason: "when this server's face URLs last changed shape; a phone's members delta from before it is answered whole (engine/avatar-keys.ts)" },
+    photoKeySecret: { kind: 'per-server', reason: "the key behind listings' photo URLs, made at boot (engine/photo-keys.ts)" },
+    photoKeysShape: { kind: 'per-server', reason: "what this server's listing-photo URLs look like (keyed by its own secret, or not), recorded at boot (engine/photo-keys.ts)" },
+    photoKeysSince: { kind: 'per-server', reason: "when this server's listing-photo URLs last changed shape; a phone's sync from before it is answered whole (engine/photo-keys.ts)" },
     appAddressStaffSeen: { kind: 'per-server', reason: 'which app addresses staff have seen signatures name' },
     registrarNameWatch: { kind: 'per-server', reason: "the name watch's evidence; each main server gathers its own (services/registrar-name-watch.ts)" },
     directoryMirror: { kind: 'per-server', reason: "this server's directory mirror status" },
+    friendsAddedYouSince: { kind: 'per-server', reason: "when this server began telling members who added them; an add from before it is never news (engine/friends-added-you.ts)" },
+    // These two and standby_health hold internet addresses: 7 days at most, and none in any copy of the database
+    // (services/address-retention.ts).
     takeover_envelope_holders: { kind: 'per-server', reason: 'which standbys hold this server\'s take-over envelope' },
     replication_access: { kind: 'per-server', reason: "this server's replication access log" },
     replicated_member_blocks_v1: { kind: 'per-server', reason: "a standby's own marker" },
@@ -444,13 +708,15 @@ export const NODE_CONFIG_KEYS: Record<string, SettingEntry> = {
     replica_main_ledger: { kind: 'per-server', reason: "a standby's record of its main server's ledger at its last copy, which a take-over's audit holds it to" },
     replica_ledger_mismatch: { kind: 'per-server', reason: "a standby's last whole copy whose ledger wasn't its main server's (services/backup-puller.ts)" },
     replica_community_settings: { kind: 'per-server', reason: "a standby's kept copy of its main server's community settings, until a take-over or a hand promotion installs it (config/community-settings.ts)" },
-    replica_held_sum: { kind: 'per-server', reason: "the total a standby's next copy is held to after it cleared its ledger for a force-resync that isn't a seed (engine/sync.ts clearForResync)" },
     standby_copy_record: { kind: 'per-server', reason: "a standby's record of how its copies went, which it reports to its main server, and of its last force-resync for a copy that didn't match (services/standby-copy-record.ts)" },
+    standby_swapped_copy: { kind: 'per-server', reason: "the whole copy a standby's database was swapped in from, read once at the start on it (services/stager.ts, services/backup-puller.ts)" },
     standby_health: { kind: 'per-server', reason: "a main server's watch on its own standbys, for its owners (services/standby-health.ts)" },
+    agent_suggestions: { kind: 'per-server', reason: "this server's AI assistants' waiting suggestions, whose grants are this server's own too (agent/suggestions.ts)" },
     replicated_invalidated_keys_v1: { kind: 'per-server', reason: "a standby's own marker" },
     recovery_seal_cleared: { kind: 'per-server', reason: "this server's record of clearing its database after sealing" },
     recovery_seal_reopened: { kind: 'per-server', reason: "this server's record of reopening its seal" },
     image_store_evacuation_vacuumed_v1: { kind: 'per-server', reason: 'a one-shot marker of this server' },
+    'doorNumbers.*': { kind: 'per-server', reason: "the open door's numbers, this server's own and never copied (engine/door-signal.ts)" },
     'migration_*': { kind: 'per-server', reason: "one-shot boot markers of this server's own database" },
 };
 
@@ -459,7 +725,8 @@ export const NODE_CONFIG_BLOB_FIELDS: Record<string, SettingEntry> = {
     serviceRadius: { kind: 'community-settings', reason: "the community's service area: the map, the Market, the directory" },
     publishLocation: { kind: 'community-settings', reason: 'a directory switch; unset reads as publish' },
     publishMembers: { kind: 'community-settings', reason: 'a directory switch; unset reads as publish' },
-    publishContacts: { kind: 'community-settings', reason: 'a directory switch; unset reads as publish' },
+    publishContactEmail: { kind: 'community-settings', reason: 'a directory switch; unset reads as not published (only an owner turns it on)' },
+    publishContactPhone: { kind: 'community-settings', reason: 'a directory switch; unset reads as not published (only an owner turns it on)' },
     publishHealth: { kind: 'community-settings', reason: 'a directory switch; unset reads as publish' },
     directoryPushIntervalHours: { kind: 'community-settings', reason: 'how often the directory is told' },
     lastDirectoryPush: { kind: 'per-server', reason: 'when this server last told the directory' },

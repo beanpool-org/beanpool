@@ -18,6 +18,17 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # disk_preflight / docker_free_kb (shipped to each host) and wait_node_healthy (run here).
 source "$SCRIPT_DIR/scripts/deploy-lib.sh"
 
+# The package is the files git tracks in this folder (below), so this folder must be the top of a git checkout. Checked
+# here, before the registry lookup and before any server is contacted.
+# Ask git itself: --show-prefix is empty only at the top of a work tree (it is not fooled by a path typed in another letter case).
+if ! GIT_PREFIX=$(git -C "$SCRIPT_DIR" rev-parse --show-prefix 2>/dev/null) || [ -n "$GIT_PREFIX" ]; then
+  echo "🛑 FATAL: $SCRIPT_DIR is not the top of a git checkout."
+  echo "   deploy.sh sends only the files git tracks, so run it from the top folder of a git clone of the repository."
+  echo "   A downloaded ZIP or release archive won't work, and a new file must be git added before it ships."
+  echo "   Nothing was packaged and no server was contacted."
+  exit 1
+fi
+
 # Free space a node needs on its host's docker filesystem before we touch it: the new image plus 2 GB of
 # headroom for the node's own data, WAL and logs. The image is 1.21 GB, so a pull needs 3.5 GB. A source
 # build also holds the builder stage's cache until the post-deploy builder prune — measured at 2.2 GB on
@@ -37,12 +48,18 @@ fi
 
 IMAGE="ghcr.io/beanpool-org/beanpool-node:${DEPLOY_TAG:-latest}"
 
-# Load .env file for Cloudflare credentials (if it exists)
+# Load this Mac's .env, if there is one. None of its secrets go to a server any more (FLEET SECRETS in scripts/deploy-lib.sh).
+# Its CF_TUNNEL_TOKEN is used only to recognise the copy earlier deploys wrote to each server's data/tunnel-token: a server is
+# sent that token's sha256, never the token.
 if [ -f "$SCRIPT_DIR/.env" ]; then
   echo "🔑 Loading .env file..."
   set -a
   source "$SCRIPT_DIR/.env"
   set +a
+fi
+FLEET_TUNNEL_SHA=""
+if [ -n "${CF_TUNNEL_TOKEN:-}" ]; then
+  FLEET_TUNNEL_SHA=$(printf '%s' "$CF_TUNNEL_TOKEN" | tr -d '[:space:]' | sha256_hex)
 fi
 
 # Load targets from local configuration file if it exists, otherwise fall back to example target
@@ -139,16 +156,38 @@ if [ "$NEEDS_REGISTRY_IMAGE" = "1" ]; then
 fi
 
 # Package docker-compose.yml + data-preserving deploy config
+# Only the files git tracks here go, as they are on disk now: an uncommitted edit to a tracked file still ships (a build node
+# builds exactly this package), a tracked file deleted here does not, and a file git does not track never does. Until
+# 2026-10-01 this was the whole folder minus the excludes below, which sent .claude/ (settings, board answers), scratchpad/
+# and any stray log or key to every server (scratch/reviews/FABLE-sec-infra.md M2). The excludes stay, as a second filter
+# on the tracked files; bsdtar (this Mac) and GNU tar both apply them to listed names, a folder name at any depth included.
+# --no-recursion: a tracked path that is a folder on disk now ships as the bare folder, never with what is inside it.
 PKG_PATH="$SCRIPT_DIR/.deploy-package.tar.gz"
-echo "📦 Packaging deploy config..."
-tar -czf "$PKG_PATH" \
+PKG_FILES=$(mktemp "${TMPDIR:-/tmp}/beanpool-deploy-files.XXXXXX")
+echo "📦 Packaging deploy config (the files git tracks in $SCRIPT_DIR)..."
+git -C "$SCRIPT_DIR" ls-files -z > "$PKG_FILES"
+(
+  cd "$SCRIPT_DIR"
+  while IFS= read -r -d '' F; do
+    if [ -e "$F" ] || [ -L "$F" ]; then printf '%s\0' "$F"; fi
+  done < "$PKG_FILES" | tar -czf "$PKG_PATH" \
     --exclude='node_modules' --exclude='.git' --exclude='dist' --exclude='.turbo' \
     --exclude='.next' --exclude='out' --exclude='archive' --exclude='apps/native' --exclude='apps/native.bak' \
     --exclude='*.apk' --exclude='data' --exclude='.env' --exclude='.env.*' --exclude='builds' \
     --exclude='.deploy-package.tar.gz' \
     --exclude='ios' --exclude='.expo' --exclude='scratch' \
-    -C "$SCRIPT_DIR" .
-echo "✅ Package ready: $(du -h "$PKG_PATH" | cut -f1)"
+    --no-recursion --null -T -
+)
+rm -f "$PKG_FILES"
+PKG_COUNT=$(tar -tzf "$PKG_PATH" | grep -cv '/$' || true)
+if [ "$PKG_COUNT" -eq 0 ]; then
+  echo "🛑 FATAL: the package is empty: git tracks nothing in $SCRIPT_DIR that the excludes let through. Nothing was sent to a node."
+  exit 1
+fi
+echo "✅ Package ready: $(du -h "$PKG_PATH" | cut -f1), $PKG_COUNT files. Top level (files per folder):"
+tar -tzf "$PKG_PATH" | sed 's#/.*#/#' | sort | uniq -c \
+  | awk '{ n = $1; sub(/^ *[0-9]+ /, ""); printf "%s%s", (NR > 1 ? "  " : ""), (/\/$/ ? $0 " (" n ")" : $0) } END { print "" }' \
+  | fold -s -w 110 | sed 's/^/   /'
 
 # A pull-mode node takes the GHCR image; a build-mode node builds from the tarball on its host.
 is_build_node() {
@@ -167,6 +206,7 @@ remote_node_state() {
 
 FAILED_NODES=()
 FAILED_HOSTS=()
+BUSY_HOSTS=()
 OK_NODES=()
 
 # Deploy each node. A failure on one node is recorded and the loop moves on; the exit code and the summary
@@ -212,46 +252,115 @@ for NODE in "${TARGETS[@]}"; do
     PULL_FIRST=0; NEED_MB=$BUILD_NEED_MB
   fi
 
-  # Upload
-  if ! scp $SSH_OPTS "$PKG_PATH" $USER@$IP:$HOME_DIR/beanpool-deploy.tar.gz; then
+  # Upload, under a name that is this run's own: a second deploy uploading at the same moment then cannot swap the code
+  # under this one. The remote step removes it when it ends.
+  REMOTE_PKG="$HOME_DIR/beanpool-deploy-$DIR-$(date -u +%Y%m%dT%H%M%SZ)-$$-$RANDOM.tar.gz"
+  if ! scp $SSH_OPTS "$PKG_PATH" $USER@$IP:$REMOTE_PKG; then
     echo "❌ $NAME: upload failed — nothing on the node was touched."
     FAILED_NODES+=("$NAME (upload failed)"); FAILED_HOSTS+=("$USER@$IP")
     continue
   fi
 
-  # Check disk, pull, stop, preserve data, extract, start.
-  # Remote exit 3 = aborted BEFORE the running container was touched.
+  # Lock, check the data, check disk, pull, stop, preserve data, extract, start.
+  # Remote exit 3 = aborted BEFORE the running container was touched. 4 = another deploy of this node holds the lock; nothing
+  # was touched. 5 = aborted before the stop, with this node's data still parked by a deploy that did not finish and the node
+  # stopped; 6 = the same, but something still runs with data/ mounted and writes into the parked copy.
   REMOTE_RC=0
   ssh $SSH_OPTS $USER@$IP "/bin/bash" << EOF || REMOTE_RC=$?
-    $(declare -f docker_free_kb disk_preflight)
-    if [ "$PULL_FIRST" = "1" ]; then PREFLIGHT_LABEL="pull"; else PREFLIGHT_LABEL="source build"; fi
-    disk_preflight $NEED_MB "$NAME, \$PREFLIGHT_LABEL" || {
-      echo "🛑 ABORT $NAME: not enough free disk even after pruning unused images. The running container is untouched."
-      df -h / | sed 's/^/   /'
+    $(declare -f docker_free_kb disk_preflight fleet_secret_names sha256_hex strip_fleet_secrets_env remove_fleet_tunnel_token first_password_notice check_data_copies describe_data_copy data_copy_file_line containers_using)
+    trap 'rm -f "$REMOTE_PKG"' EXIT
+    # One deploy at a time for this node on this server. On 2026-09-28 two deploys of test ran at once, the second set aside
+    # the data the first had parked, and the node started a new, empty community. The lock is held until this shell ends,
+    # however it ends, so a deploy that is cut off never leaves it behind. The lock file is never removed.
+    if ! command -v flock >/dev/null 2>&1; then
+      echo "🛑 ABORT $NAME: this server has no flock (package util-linux), which deploy.sh needs to keep two deploys apart. Nothing was changed."
+      exit 3
+    fi
+    exec 9>>"$HOME_DIR/beanpool-deploy-$DIR.lock" || {
+      echo "🛑 ABORT $NAME: could not open the deploy lock $HOME_DIR/beanpool-deploy-$DIR.lock. Nothing was changed."
       exit 3
     }
+    flock -n 9 || {
+      echo "🛑 REFUSED $NAME: another deploy of $DIR is running on this server right now. Nothing was changed."
+      echo "   Let it finish, then deploy again. (It holds $HOME_DIR/beanpool-deploy-$DIR.lock until it ends.)"
+      exit 4
+    }
+    # A copy of data/ or .env parked by a deploy that did not finish: put back if nothing is in its place, and otherwise
+    # stop here, before anything changes.
+    check_data_copies "$HOME_DIR" "$DIR" "$PROJECT_DIR" || exit 3
+    # What check_data_copies found parked, and this deploy puts back only after the stop below. Until then the node is not
+    # running on its own data, so an abort before the stop must say so, not that the running container is untouched.
+    PARKED_NOW=""
+    for P in "$HOME_DIR/beanpool-data-backup-$DIR" "$HOME_DIR/beanpool-env-backup-$DIR"; do
+      if [ -e "\$P" ] || [ -L "\$P" ]; then PARKED_NOW="\$PARKED_NOW \$P"; fi
+    done
+    # abort_before_stop <why> [df]: stop here, before the node is stopped, and say the state this node is left in.
+    abort_before_stop() {
+      if [ -z "\$PARKED_NOW" ]; then
+        echo "🛑 ABORT $NAME: \$1 The running container is untouched."
+      else
+        echo "🛑 ABORT $NAME: \$1"
+      fi
+      if [ "\${2:-}" = "df" ]; then df -h / | sed 's/^/   /'; fi
+      [ -z "\$PARKED_NOW" ] && exit 3
+      echo "   This node's data is still parked at\$PARKED_NOW, where a deploy that did not finish left it; this run did not put it back."
+      STILL_ON_DATA=\$(containers_using "$PROJECT_DIR/data")
+      if [ -z "\$STILL_ON_DATA" ]; then
+        echo "   The node is STOPPED. The next deploy that gets past this step puts the data back and starts the node."
+        exit 5
+      fi
+      echo "   \$(echo \$STILL_ON_DATA) still runs with $PROJECT_DIR/data mounted and is writing into the parked copy."
+      echo "   The next deploy that gets past this step stops it, puts the data back and starts the node."
+      exit 6
+    }
+    if [ "$PULL_FIRST" = "1" ]; then PREFLIGHT_LABEL="pull"; else PREFLIGHT_LABEL="source build"; fi
+    disk_preflight $NEED_MB "$NAME, \$PREFLIGHT_LABEL" || abort_before_stop "not enough free disk even after pruning unused images." df
     if [ "$PULL_FIRST" = "1" ]; then
       # Pull while the old container is still serving: a failed pull or a full disk then costs no downtime,
       # and compose cannot fall back to a surprise source build.
-      echo "📥 Pulling $IMAGE (the running $NAME container is untouched until this succeeds)..."
-      sudo docker pull "$IMAGE" || {
-        echo "🛑 ABORT $NAME: docker pull $IMAGE failed. The running container is untouched."
-        exit 3
-      }
-      disk_preflight $RUN_HEADROOM_MB "$NAME, after pull" no-prune || {
-        echo "🛑 ABORT $NAME: the pull left too little free disk to run safely. The running container is untouched."
-        exit 3
-      }
+      if [ -z "\$PARKED_NOW" ]; then
+        echo "📥 Pulling $IMAGE (the running $NAME container is untouched until this succeeds)..."
+      else
+        echo "📥 Pulling $IMAGE..."
+      fi
+      sudo docker pull "$IMAGE" || abort_before_stop "docker pull $IMAGE failed."
+      disk_preflight $RUN_HEADROOM_MB "$NAME, after pull" no-prune || abort_before_stop "the pull left too little free disk to run safely."
     fi
-    cd $PROJECT_DIR 2>/dev/null && (
+    # Stop the node before anything of its moves. This used to run only when cd $PROJECT_DIR worked, so after a deploy cut
+    # off between the wipe and the extract, the old container was left running.
+    (
+      cd $PROJECT_DIR 2>/dev/null || cd $HOME_DIR
+      # docker stop first: SIGTERM, so the node closes its database and marks the stop clean (engine/shutdown-recovery.ts),
+      # with 20 s before Docker kills it. rm -f alone is SIGKILL, and every deploy showed owners "The node restarted after an
+      # unclean shutdown" (measured on mullum and test, 2026-10-04).
+      sudo docker stop -t 20 $PROJ_NAME-beanpool-node-1 >/dev/null 2>&1 || true
+      sudo docker stop -t 20 beanpool-$PROJ_NAME-beanpool-node-1 >/dev/null 2>&1 || true
+      sudo docker stop -t 20 beanpool-beanpool-$NAME-beanpool-node-1 >/dev/null 2>&1 || true
       sudo docker rm -f $PROJ_NAME-beanpool-node-1 2>/dev/null || true
       sudo docker rm -f beanpool-$PROJ_NAME-beanpool-node-1 2>/dev/null || true
       sudo docker rm -f beanpool-beanpool-$NAME-beanpool-node-1 2>/dev/null || true
-      sudo docker compose --profile tunnel -p \$PROJ_NAME down --remove-orphans 2>/dev/null || true
-      sudo docker compose --profile tunnel -p beanpool-\$PROJ_NAME down --remove-orphans 2>/dev/null || true
+      # The tunnel profile stops the compose cloudflared sidecar that earlier deploys started on test and yarravalley. Until
+      # 2026-09-28 the project name here was escaped, so the server read an empty variable, compose failed on its arguments,
+      # and these two lines never ran.
+      sudo docker compose --profile tunnel -p $PROJ_NAME down --remove-orphans 2>/dev/null || true
+      sudo docker compose --profile tunnel -p beanpool-$PROJ_NAME down --remove-orphans 2>/dev/null || true
       sleep 1
     )
-    # --- BEGIN preserve/restore (scripts/test-deploy-preserve.sh extracts and runs this exact block) ---
+    # A bind mount follows its folder when that is moved, so anything still running with data/ mounted would go on writing
+    # into the parked copy below (test, 2026-09-28). Stop it, whatever it is called; move nothing while anything still has it.
+    RUNNING_ON_DATA=\$(containers_using "$PROJECT_DIR/data")
+    if [ -n "\$RUNNING_ON_DATA" ]; then
+      echo "⏹  Still running with $PROJECT_DIR/data mounted: \$(echo \$RUNNING_ON_DATA). Stopping it before anything moves."
+      for C in \$RUNNING_ON_DATA; do sudo docker stop "\$C" >/dev/null 2>&1; done
+      RUNNING_ON_DATA=\$(containers_using "$PROJECT_DIR/data")
+    fi
+    if [ -n "\$RUNNING_ON_DATA" ]; then
+      echo "🛑 FATAL: \$(echo \$RUNNING_ON_DATA) will not stop and still has $PROJECT_DIR/data mounted. Nothing was moved; data/ is where it was."
+      echo "   The node is stopped. Do not start it while that still runs: two servers on one database can damage it."
+      echo "   Stop that container (sudo docker stop <name>, or sudo systemctl restart docker), then deploy again."
+      exit 1
+    fi
+    # --- BEGIN preserve/restore (scripts/test-deploy-preserve.sh checks this block and runs it, as sent, on a stand-in server) ---
     # Preserve data/ and .env across the wipe below.
     #
     # NOTE: this whole block is inside an UNQUOTED heredoc, so the LOCAL shell expands it before
@@ -269,55 +378,68 @@ for NODE in "${TARGETS[@]}"; do
     # different community.key. Found on test 2026-08-25 holding 220 MB (186 MB of it snapshots),
     # which also inflated every snapshot and harvest taken of data/.
     #
-    # Two rules now: the destination is guaranteed not to exist before each move, and failing to
+    # Two rules from then: the destination is guaranteed not to exist before each move, and failing to
     # preserve or restore data/ is FATAL. Continuing past that would wipe a node's identity keys
     # and ledger, which is not something to shrug off.
-    if [ -e "$HOME_DIR/beanpool-data-backup-$DIR" ]; then
-      echo "⚠️  Stale backup found at $HOME_DIR/beanpool-data-backup-$DIR — a previous deploy did not finish."
-      echo "    The live data/ is authoritative, so parking the stale copy at .stale (outside the project dir)."
-      sudo rm -rf "$HOME_DIR/beanpool-data-backup-$DIR.stale"
-      sudo mv "$HOME_DIR/beanpool-data-backup-$DIR" "$HOME_DIR/beanpool-data-backup-$DIR.stale"
-    fi
-    if [ -d "$PROJECT_DIR/data" ]; then
+    #
+    # 2026-09-28 on test: two deploys ran at once. The first parked data/; the second found the parked
+    # copy, called it stale because "the live data/ is authoritative", moved it to .stale, found no
+    # data/ left to keep, and the node started a new, empty community. So also: one deploy at a time
+    # (the lock at the top), a parked copy with nothing in its place IS the node's and is put back, a
+    # parked copy with something in its place stopped this deploy before anything changed
+    # (check_data_copies), and nothing here deletes a copy of anyone's data.
+    if [ -e "$HOME_DIR/beanpool-data-backup-$DIR" ] || [ -L "$HOME_DIR/beanpool-data-backup-$DIR" ]; then
+      if [ -e "$PROJECT_DIR/data" ] || [ -L "$PROJECT_DIR/data" ]; then
+        echo "🛑 FATAL: both $PROJECT_DIR/data and $HOME_DIR/beanpool-data-backup-$DIR exist. Nothing was moved."; exit 1
+      fi
+      # check_data_copies said so above: the parked copy is this node's data, and is put back below.
+    elif [ -e "$PROJECT_DIR/data" ] || [ -L "$PROJECT_DIR/data" ]; then
       sudo mv "$PROJECT_DIR/data" "$HOME_DIR/beanpool-data-backup-$DIR" || {
         echo "🛑 FATAL: could not preserve $PROJECT_DIR/data — refusing to wipe the project dir."; exit 1; }
     fi
-    if [ -e "$PROJECT_DIR/.env" ]; then
-      sudo rm -rf "$HOME_DIR/beanpool-env-backup-$DIR"
+    if [ -e "$HOME_DIR/beanpool-env-backup-$DIR" ] || [ -L "$HOME_DIR/beanpool-env-backup-$DIR" ]; then
+      if [ -e "$PROJECT_DIR/.env" ] || [ -L "$PROJECT_DIR/.env" ]; then
+        echo "🛑 FATAL: both $PROJECT_DIR/.env and $HOME_DIR/beanpool-env-backup-$DIR exist. Nothing was moved."; exit 1
+      fi
+    elif [ -e "$PROJECT_DIR/.env" ] || [ -L "$PROJECT_DIR/.env" ]; then
       sudo mv "$PROJECT_DIR/.env" "$HOME_DIR/beanpool-env-backup-$DIR" || {
         echo "🛑 FATAL: could not preserve $PROJECT_DIR/.env — refusing to wipe the project dir."; exit 1; }
     fi
+    if [ -e "$PROJECT_DIR/data" ] || [ -L "$PROJECT_DIR/data" ] || [ -e "$PROJECT_DIR/.env" ] || [ -L "$PROJECT_DIR/.env" ]; then
+      echo "🛑 FATAL: data/ or .env is still in $PROJECT_DIR after preserving it — refusing to wipe the project dir."; exit 1
+    fi
     sudo rm -rf $PROJECT_DIR
     mkdir -p $PROJECT_DIR
-    tar -xzf $HOME_DIR/beanpool-deploy.tar.gz -C $PROJECT_DIR
-    if [ -e "$HOME_DIR/beanpool-data-backup-$DIR" ]; then
-      # The tarball excludes data/, but be explicit — if this exists, the mv below nests inside it.
-      sudo rm -rf "$PROJECT_DIR/data"
+    tar -xzf "$REMOTE_PKG" -C $PROJECT_DIR
+    if [ -e "$HOME_DIR/beanpool-data-backup-$DIR" ] || [ -L "$HOME_DIR/beanpool-data-backup-$DIR" ]; then
+      # The tarball excludes data/. If one came out of it anyway, the mv below would nest the node's data inside it.
+      if [ -e "$PROJECT_DIR/data" ] || [ -L "$PROJECT_DIR/data" ]; then
+        echo "🛑 FATAL: the new code brought its own $PROJECT_DIR/data. This node's data is safe at $HOME_DIR/beanpool-data-backup-$DIR;"
+        echo "    set the new data/ aside under a dated name and deploy again."; exit 1
+      fi
       sudo mv "$HOME_DIR/beanpool-data-backup-$DIR" "$PROJECT_DIR/data" || {
         echo "🛑 FATAL: data/ is preserved at $HOME_DIR/beanpool-data-backup-$DIR but could not be restored."
-        echo "    Restore it by hand before starting the node — do NOT re-run the deploy."; exit 1; }
+        echo "    Put it back by hand before starting the node (sudo mv $HOME_DIR/beanpool-data-backup-$DIR $PROJECT_DIR/data),"
+        echo "    or fix the cause and deploy again: a deploy puts a parked copy back when nothing is in its place."; exit 1; }
     fi
-    if [ -e "$HOME_DIR/beanpool-env-backup-$DIR" ]; then
-      sudo rm -rf "$PROJECT_DIR/.env"
+    if [ -e "$HOME_DIR/beanpool-env-backup-$DIR" ] || [ -L "$HOME_DIR/beanpool-env-backup-$DIR" ]; then
+      if [ -e "$PROJECT_DIR/.env" ] || [ -L "$PROJECT_DIR/.env" ]; then
+        echo "🛑 FATAL: the new code brought its own $PROJECT_DIR/.env. This node's is safe at $HOME_DIR/beanpool-env-backup-$DIR;"
+        echo "    set the new .env aside under a dated name and deploy again."; exit 1
+      fi
       sudo mv "$HOME_DIR/beanpool-env-backup-$DIR" "$PROJECT_DIR/.env" || {
         echo "🛑 FATAL: .env is preserved at $HOME_DIR/beanpool-env-backup-$DIR but could not be restored."; exit 1; }
     fi
     # --- END preserve/restore ---
     cd $PROJECT_DIR
     export PUBLIC_IP=\$(curl -s -4 ifconfig.me)  # IPv4: an IPv6-first host answered with its v6 address (global node, 2026-09-25)
-    export CF_API_TOKEN='${CF_API_TOKEN}'
-    export CF_ZONE_ID='${CF_ZONE_ID}'
     export CF_RECORD_NAME='${DNS}'
     ${DEPLOY_TAG:+export BEANPOOL_IMAGE_TAG='${DEPLOY_TAG}'}
-    export ADMIN_PASSWORD='${ADMIN_PASSWORD}'
-    export CF_TUNNEL_TOKEN='${CF_TUNNEL_TOKEN}'
+    # No Cloudflare token, no shared admin password and no fleet tunnel token reach this server (FLEET SECRETS in
+    # scripts/deploy-lib.sh). These remove what earlier deploys and hand edits left, naming what they remove, never a value.
+    strip_fleet_secrets_env "$PROJECT_DIR/.env"
+    remove_fleet_tunnel_token "$PROJECT_DIR/data/tunnel-token" "$FLEET_TUNNEL_SHA"
     sudo mkdir -p $PROJECT_DIR/data
-    if [ -n "\$CF_TUNNEL_TOKEN" ]; then
-      echo "\$CF_TUNNEL_TOKEN" | sudo tee $PROJECT_DIR/data/tunnel-token > /dev/null
-    fi
-    if [ -f "$PROJECT_DIR/data/tunnel-token" ]; then
-      sudo chmod 644 $PROJECT_DIR/data/tunnel-token
-    fi
     if [ "$DIR" = "BeanPool-Review" ]; then
       # Review node (VIC): tunnel-only HTTPS on 8447
       sed -i 's/\"80:8080\"/\"8083:8080\"/g' docker-compose.yml
@@ -374,19 +496,24 @@ for NODE in "${TARGETS[@]}"; do
       sed -i '/"8080:8080"/d' docker-compose.yml
       sed -i '/"8443:8443"/d' docker-compose.yml
     fi
-    echo "Public IP: $PUBLIC_IP"
+    echo "Public IP: \$PUBLIC_IP"
     echo "DNS Record: $CF_RECORD_NAME"
     if [ -n "${DEPLOY_TAG:-}" ]; then
       echo "Image Tag: ${DEPLOY_TAG}"
     fi
+    first_password_notice "$PROJECT_DIR/data" "$USER@$IP"
+    # The node starts only on its own data, back in place: never while a parked copy is still waiting to go back.
+    if [ -e "$HOME_DIR/beanpool-data-backup-$DIR" ] || [ -e "$HOME_DIR/beanpool-env-backup-$DIR" ]; then
+      echo "🛑 FATAL: a parked copy of this node's data/ or .env is still in $HOME_DIR. Not starting the node on anything else."
+      exit 1
+    fi
     sudo docker image prune -f 2>/dev/null || true
     sudo docker network create beanpool-shared 2>/dev/null || true
-    COMPOSE_FLAGS=()
-    if [ "$NAME" = "test" ] || [ "$NAME" = "yarravalley" ]; then
-      COMPOSE_FLAGS=(--profile tunnel)
-    fi
+    # No server of ours starts the compose cloudflared sidecar (the tunnel profile) any more: every one is reached through its
+    # host's own tunnel (qld, vic, global), and the sidecar only ran the fleet token, whose tunnel no longer exists. The
+    # down with the tunnel profile above still stops a sidecar an earlier deploy started.
     # Build on the target host by default, which is why every name below is listed: the running image is then
-    # guaranteed to be the code in the tarball we just uploaded, uncommitted work included.
+    # guaranteed to be the code in the tarball we just uploaded, uncommitted edits to tracked files included.
     #
     # DEPLOY_PULL=1 takes the published GHCR image instead. That drops the guarantee — you get whatever CI last
     # pushed (by default :latest, which only updates on release; pass DEPLOY_TAG=<sha> for main builds), NOT your
@@ -401,29 +528,29 @@ for NODE in "${TARGETS[@]}"; do
         echo "⚠️  WARNING: :latest is the last RELEASE, not main — pass DEPLOY_TAG=<sha> to deploy a commit from main"
       fi
       echo "📦 DEPLOY_PULL=1 — taking the published image (${DEPLOY_TAG:-latest}) for: $NAME (NOT your working tree)"
-      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME pull || {
+      sudo -E docker compose -p $PROJ_NAME pull || {
         echo "🛑 FATAL: docker compose pull failed for image ${IMAGE} on $NAME."
         echo "⚠️  WARNING: Node container for $NAME is currently STOPPED."
         echo "   To retry:   ssh $USER@$IP 'cd $PROJECT_DIR && sudo docker compose pull && sudo docker compose up -d'"
         echo "   To restore: ssh $USER@$IP 'cd $PROJECT_DIR && sudo docker compose up -d'"
         exit 1
       }
-      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d
+      sudo -E docker compose -p $PROJ_NAME up -d
     elif [ "$NAME" = "test" ] || [ "$NAME" = "review" ] || [ "$NAME" = "mullum1" ] || [ "$NAME" = "melb" ] || [ "$NAME" = "castlemaine" ] || [ "$NAME" = "bris" ] || [ "$NAME" = "mullum" ] || [ "$NAME" = "gippsland" ] || [ "$NAME" = "eastgippy" ] || [ "$NAME" = "bindarrabi" ] || [ "$NAME" = "yarravalley" ]; then
       echo "🔨 Local build enabled for target: $NAME"
-      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d --build
+      sudo -E docker compose -p $PROJ_NAME up -d --build
     else
-      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME pull || {
+      sudo -E docker compose -p $PROJ_NAME pull || {
         echo "🛑 FATAL: docker compose pull failed for image ${IMAGE} on $NAME."
         echo "⚠️  WARNING: Node container for $NAME is currently STOPPED."
         echo "   To retry:   ssh $USER@$IP 'cd $PROJECT_DIR && sudo docker compose pull && sudo docker compose up -d'"
         echo "   To restore: ssh $USER@$IP 'cd $PROJECT_DIR && sudo docker compose up -d'"
         exit 1
       }
-      sudo -E docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME up -d
+      sudo -E docker compose -p $PROJ_NAME up -d
     fi
 
-    CONTAINER_ID=\$(sudo docker compose "\${COMPOSE_FLAGS[@]}" -p $PROJ_NAME ps -q beanpool-node 2>/dev/null | head -n1)
+    CONTAINER_ID=\$(sudo docker compose -p $PROJ_NAME ps -q beanpool-node 2>/dev/null | head -n1)
     if [ -n "\$CONTAINER_ID" ]; then
       IMAGE_ID=\$(sudo docker inspect --format '{{.Image}}' "\$CONTAINER_ID" 2>/dev/null)
       REPO_TAG=\$(sudo docker inspect --format '{{.Config.Image}}' "\$CONTAINER_ID" 2>/dev/null)
@@ -440,8 +567,26 @@ for NODE in "${TARGETS[@]}"; do
 EOF
 
   if [ "$REMOTE_RC" -eq 3 ]; then
-    echo "❌ $NAME: aborted before touching the running container (see above)."
-    FAILED_NODES+=("$NAME (aborted, old container still running)"); FAILED_HOSTS+=("$USER@$IP")
+    echo "❌ $NAME: aborted before this deploy stopped or moved anything (see above)."
+    FAILED_NODES+=("$NAME (aborted; this deploy stopped and moved nothing)"); FAILED_HOSTS+=("$USER@$IP")
+    echo ""
+    continue
+  fi
+  if [ "$REMOTE_RC" -eq 5 ] || [ "$REMOTE_RC" -eq 6 ]; then
+    echo "❌ $NAME: aborted with this node's data still parked in $HOME_DIR by a deploy that did not finish (see above)."
+    echo "   The next deploy that gets past that step puts it back and starts the node."
+    if [ "$REMOTE_RC" -eq 5 ]; then
+      FAILED_NODES+=("$NAME (aborted; node STOPPED, its data still parked in $HOME_DIR; the next deploy puts it back)")
+    else
+      FAILED_NODES+=("$NAME (aborted; its data still parked in $HOME_DIR, and a container still writing into it; the next deploy puts it back)")
+    fi
+    FAILED_HOSTS+=("$USER@$IP")
+    echo ""
+    continue
+  fi
+  if [ "$REMOTE_RC" -eq 4 ]; then
+    echo "❌ $NAME: another deploy of this node is running on $USER@$IP. Nothing was changed; this run skips this node, and the host's cleanup at the end."
+    FAILED_NODES+=("$NAME (another deploy was running; nothing changed)"); FAILED_HOSTS+=("$USER@$IP"); BUSY_HOSTS+=("$USER@$IP")
     echo ""
     continue
   fi
@@ -490,6 +635,15 @@ for HOST in $UNIQUE_HOSTS; do
   for F in "${FAILED_HOSTS[@]+"${FAILED_HOSTS[@]}"}"; do
     [ "$F" = "$HOST" ] && PRUNE_IMAGES=0
   done
+  # A deploy that is running there right now needs its new image and its build cache: leave the host alone.
+  BUSY=0
+  for F in "${BUSY_HOSTS[@]+"${BUSY_HOSTS[@]}"}"; do
+    [ "$F" = "$HOST" ] && BUSY=1
+  done
+  if [ "$BUSY" = "1" ]; then
+    echo "   Skipping cleanup on $HOST: another deploy is running there."
+    continue
+  fi
   if [ "$PRUNE_IMAGES" = "1" ]; then
     echo "   Cleaning up caches and unused images on $HOST..."
   else

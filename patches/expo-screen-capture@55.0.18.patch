@@ -1,0 +1,48 @@
+diff --git a/android/src/main/AndroidManifest.xml b/android/src/main/AndroidManifest.xml
+index 925088a4c4ae8ad0b1528be10c2c7ee0185ad3aa..298ea8c1cb2efade4dafb44d7edaed895a9eded9 100644
+--- a/android/src/main/AndroidManifest.xml
++++ b/android/src/main/AndroidManifest.xml
+@@ -1,5 +1,3 @@
+ <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+-  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+-  <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" android:minSdkVersion="33" android:maxSdkVersion="33"/>
+-  <uses-permission android:name="android.permission.DETECT_SCREEN_CAPTURE" android:minSdkVersion="34" />
++  <!-- BeanPool: no permissions. They were for the screenshot listener, which the patched module no longer starts. -->
+ </manifest>
+diff --git a/android/src/main/java/expo/modules/screencapture/ScreenCaptureModule.kt b/android/src/main/java/expo/modules/screencapture/ScreenCaptureModule.kt
+index e76da2f2f74f89b45000922400266b830da35f20..81338a596e793149d5d558aa57af075a81cbdc2a 100644
+--- a/android/src/main/java/expo/modules/screencapture/ScreenCaptureModule.kt
++++ b/android/src/main/java/expo/modules/screencapture/ScreenCaptureModule.kt
+@@ -46,18 +46,12 @@ class ScreenCaptureModule : Module() {
+ 
+     Events(eventName)
+ 
++    // BeanPool: no screenshot detection. As published, OnCreate registered an Activity.ScreenCaptureCallback for the
++    // whole app from launch on Android 14+ (and on each return to the foreground below), so every screenshot of any
++    // screen showed "BeanPool detected this screenshot"; below 14 it watched MediaStore for new screenshots. BeanPool
++    // only blocks capture (FLAG_SECURE, preventScreenCapture below) while the 12 words are on screen, and never listens.
++    // With nothing registered, OnActivityEntersForeground/Background and OnDestroy below have nothing to do.
+     OnCreate {
+-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+-        screenCaptureCallback = Activity.ScreenCaptureCallback {
+-          emitEvent()
+-        }
+-        // Let's try to register the callback
+-        registerCallback()
+-      } else {
+-        screenshotEventEmitter = ScreenshotEventEmitter(context) {
+-          emitEvent()
+-        }
+-      }
+     }
+ 
+     AsyncFunction("getPermissionsAsync") { promise: Promise ->
+@@ -93,8 +87,6 @@ class ScreenCaptureModule : Module() {
+     }.runOnQueue(Queues.MAIN)
+ 
+     OnActivityEntersForeground {
+-      // Call registerCallback once more as a fallback if activity wasn't available in onCreate
+-      registerCallback()
+       screenshotEventEmitter?.onHostResume()
+     }
+ 

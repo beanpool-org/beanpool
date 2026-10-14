@@ -3,15 +3,24 @@
  * database diagnostics, notification preferences, and subsystem controls.
  */
 
+import { AREA_STEP_WORDS, describeArea } from '@beanpool/core';
+import { AreaStep } from '../components/AreaStep';
+import { readMyArea, recallAreaPlace, rememberAreaPlace, senderForMe, useNearbyLimits, writeArea, type MemberArea } from '../lib/member-area';
 import { useState, useEffect, useRef } from 'react';
 import { type BeanPoolIdentity, wipeIdentity, getMnemonic, hasMnemonic, seedViewedKey } from '../lib/identity';
 import { clearAccountStorage } from '../lib/device-prefs';
+import { clearHomeCache } from '../lib/home-cache';
+import {
+    WEB_DELETE_CARD_LINE, WEB_DELETE_CHECKING_LINE, hostOf, leaveThisCommunity, planWebDelete, purgeHere, webDeleteFailedLine,
+    webDeletedButLine, webKeepsKeyLine, webLastCommunityLine, type WebDeletePlan,
+} from '../lib/delete-here';
 import {
     getMemberProfile, updateMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
     getNodeApiUrl, setNodeApiUrl, testNodeConnection, getNotificationPreferences,
-    updateNotificationPreferences, getNodeStats, purgeAccountApi, getSignInRecovery,
+    updateNotificationPreferences, getNodeStats, getSignInRecovery,
 } from '../lib/api';
 import { signInNames } from '../lib/join-recovery';
+import { RecoveryKitButton } from '../components/RecoveryKitButton';
 import { NO_WORDS_HERE, SignInRecoveryLine, waysBackWithoutWords } from '../components/SignInRecoveryLine';
 import { resolveAvatarUrl } from '../lib/avatar';
 import {
@@ -26,13 +35,17 @@ import { NodeAdminLink } from '../components/NodeAdminLink';
 import { OwnerWordsCheck } from '../components/OwnerWordsCheck';
 import { OwnerUnlockCard } from '../components/OwnerUnlockCard';
 import { NewAccountCard } from '../components/NewAccountCard';
+import { OneWayBackCard } from '../components/OneWayBack';
+import type { LinkResult } from '../lib/link-signin';
 import { ModerationPauseCard } from '../components/ModerationPauseCard';
+import { KnownConsentCard } from '../components/KnownConsentCard';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
 import { SuggestChangeForm } from '../components/SuggestChangeForm';
 import { parseArchetype, ARCHETYPES, FEEDBACK_LIVE, BEANPOOL_WEBSITE_URL, beanPoolSettingsEntries, type QuizResult } from '@beanpool/core';
 import { MemberGuide } from '../components/MemberGuide';
 import { loadBlocklist, unblockUser, clearBlocklist, onBlocklistUpdated, getBlocklistFullNote } from '../lib/blocklist';
 import { clearSyncCursor } from '../lib/sync';
+import { WEB_COPY_CLEARS_LINE, anotherCopyMade, copyWordsForAMinute, leftTheWordsScreen } from '../lib/words-clipboard';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -40,12 +53,16 @@ interface Props {
     onBack: () => void;
     themePreference: ThemePreference;
     onThemePreferenceChange: (preference: ThemePreference) => void;
-    initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest';
+    initialMode?: 'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide';
+    /** With initialMode 'guide': the guide page to open at (Home's Tips card, Read more); absent: its front page. */
+    initialGuidePage?: string | null;
     onReRunSetup?: () => void;
     /** Version reported by the connected node, when its health check has answered. */
     nodeVersion?: string;
     /** Open the owners' "Check your 12 words" card (from the home prompt's "Check now"). */
     openOwnerWordsCheck?: boolean;
+    /** A sign-in that came back to be added to this account (App.tsx, lib/link-signin.ts): what came of it. */
+    linkResult?: LinkResult | null;
 }
 
 function ToggleSwitch({
@@ -89,8 +106,30 @@ function ToggleSwitch({
     );
 }
 
-export function SettingsPage({ identity, onIdentityUpdated, onBack, themePreference, onThemePreferenceChange, initialMode, onReRunSetup, nodeVersion, openOwnerWordsCheck }: Props) {
-    const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide'>(initialMode || 'menu');
+export function SettingsPage({ identity, onIdentityUpdated, onBack, themePreference, onThemePreferenceChange, initialMode, initialGuidePage, onReRunSetup, nodeVersion, openOwnerWordsCheck, linkResult }: Props) {
+    const [mode, setMode] = useState<'menu' | 'profile' | 'advanced' | 'seed' | 'diagnostics' | 'notifications' | 'blocked-users' | 'suggest' | 'guide' | 'area'>(initialMode || 'menu');
+    // Your area (design DESIGN-global-sync-by-area §3.5): only on a community that gives each member the listings near
+    // their area. The line is the node's value (GET /api/community/me), with the town typed in this browser.
+    const areaLimits = useNearbyLimits();
+    const [myArea, setMyArea] = useState<MemberArea | null | undefined>(undefined);
+    const [areaLoaded, setAreaLoaded] = useState(false);
+    const [areaError, setAreaError] = useState<string | null>(null);
+    const [areaClearing, setAreaClearing] = useState(false);
+    const loadMyArea = () => {
+        setAreaLoaded(false);
+        readMyArea().then((a) => { setMyArea(a); setAreaLoaded(true); });
+    };
+    useEffect(() => { if (areaLimits) loadMyArea(); }, [areaLimits]);
+    const areaLine = !areaLoaded ? 'Checking…' : myArea === undefined ? "Couldn't check right now" : describeArea(myArea, recallAreaPlace());
+    const clearMyArea = async () => {
+        setAreaClearing(true);
+        setAreaError(null);
+        const result = await writeArea(senderForMe, null);
+        setAreaClearing(false);
+        if (!result.ok) { setAreaError(result.error); return; }
+        rememberAreaPlace(null);
+        setMyArea(null);
+    };
 
     useEffect(() => {
         if (initialMode) {
@@ -134,13 +173,35 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     const [holidayMode, setHolidayMode] = useState(false);
     const [holidayLoading, setHolidayLoading] = useState(false);
 
+    // "Show me as a connection in common" (server SHOW_AS_CONNECTION_PREF): on unless turned off, served to you alone.
+    // null until the node says (an older node never does, and then the row isn't shown).
+    const [showAsConnection, setShowAsConnection] = useState<boolean | null>(null);
+    const [showAsConnectionError, setShowAsConnectionError] = useState<string | null>(null);
+
     useEffect(() => {
         let cancelled = false;
         getMemberPreferences(identity.publicKey)
-            .then(prefs => { if (!cancelled) setHolidayMode(prefs.holiday_mode === 'true'); })
+            .then(prefs => {
+                if (cancelled) return;
+                setHolidayMode(prefs.holiday_mode === 'true');
+                if (typeof prefs.show_as_connection_in_common === 'string') setShowAsConnection(prefs.show_as_connection_in_common !== 'false');
+            })
             .catch(() => { });
         return () => { cancelled = true; };
     }, [identity.publicKey]);
+
+    const handleToggleShowAsConnection = async () => {
+        if (showAsConnection === null) return;
+        const next = !showAsConnection;
+        setShowAsConnection(next);
+        setShowAsConnectionError(null);
+        try {
+            await updateNotificationPreferences(identity.publicKey, { show_as_connection_in_common: next });
+        } catch (e: any) {
+            setShowAsConnection(!next);
+            setShowAsConnectionError(e?.message || 'Your community could not save that. Try again.');
+        }
+    };
 
     const handleToggleHoliday = async () => {
         if (holidayLoading) return;
@@ -392,13 +453,19 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         return () => { cancelled = true; };
     }, [identity, mode]);
 
+    // On the clipboard for a minute, then cleared if nothing else can have been copied since (lib/words-clipboard.ts).
     const handleCopySeed = async () => {
         const words = await getMnemonic(identity);
         if (!words) return;
-        navigator.clipboard.writeText(words.join(' '));
+        if (!(await copyWordsForAMinute(words.join(' ')))) return;
         setSeedCopied(true);
         setTimeout(() => setSeedCopied(false), 2000);
     };
+    // Leaving the words screen, the page can no longer vouch that nothing else was copied since.
+    useEffect(() => {
+        if (mode !== 'seed') return;
+        return leftTheWordsScreen;
+    }, [mode]);
 
     // Redeem invite & Node settings
     const [redeemInviteCode, setRedeemInviteCode] = useState('');
@@ -442,6 +509,21 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     const [purgeError, setPurgeError] = useState<string | null>(null);
     const [purgeCallsignInput, setPurgeCallsignInput] = useState('');
     const [isPurging, setIsPurging] = useState(false);
+    // What Permanently Delete Account does in this browser (lib/delete-here): asked as the member opens it, so the
+    // screen says whether the key stays. Null while the page's own node is asked.
+    const [deletePlan, setDeletePlan] = useState<WebDeletePlan | null>(null);
+    const [purgedNote, setPurgedNote] = useState<string | null>(null);
+    const deletePlanTurn = useRef(0);
+    const openPurge = () => {
+        setDeletionMode('confirm_purge');
+        setPurgeError(null);
+        setPurgeCallsignInput('');
+        setDeletePlan(null);
+        const turn = ++deletePlanTurn.current;
+        void planWebDelete(identity.publicKey).then((plan) => {
+            if (turn === deletePlanTurn.current) setDeletePlan(plan);
+        });
+    };
 
     const [customNodeUrl, setCustomNodeUrl] = useState(() => getNodeApiUrl());
     const [testingNode, setTestingNode] = useState(false);
@@ -479,7 +561,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
         setError(null);
         setSuccess(null);
         try {
-            await redeemInvite(redeemInviteCode.trim(), identity.publicKey, identity.callsign);
+            // Signed with the key it names (the node registers no key a redeem isn't signed by).
+            await redeemInvite(redeemInviteCode.trim(), identity.publicKey, identity.callsign, identity);
             setSuccess('Invite redeemed successfully on current node!');
             setRedeemInviteCode('');
         } catch (e: any) {
@@ -496,6 +579,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
             setSuccess(null);
             try {
                 sessionStorage.clear();
+                // Home's last answer is this browser's cache of the community too (lib/home-cache.ts); a Home still open in
+                // another tab drops its copy and reads afresh, never writing the old one back.
+                await clearHomeCache('cleared');
                 clearSyncCursor();
                 localStorage.removeItem('beanpool-sync-state');
                 localStorage.removeItem(`bp_offline_invites_${identity.publicKey}`);
@@ -522,7 +608,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
     if (mode === 'guide') {
         // The members' sheet and manual, full screen. Its Suggest a change opens the same form as the Settings row.
-        return <MemberGuide onBack={() => setMode('menu')} onSuggest={() => setMode('suggest')} />;
+        // From Home's Tips card it opens at the tip's page; Back from there walks to the guide's front page, then Settings.
+        return <MemberGuide onBack={() => setMode('menu')} onSuggest={() => setMode('suggest')} initialPage={initialGuidePage ?? undefined} />;
     }
 
     return (
@@ -546,7 +633,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                 <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 mb-6 shadow-soft border border-nature-200 dark:border-nature-800 transition-colors relative">
                     <button
                         onClick={() => setMode('profile')}
-                        className="absolute top-4 right-4 text-xs font-bold text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-1.5 rounded-full border border-terra-200 dark:border-terra-800/60 cursor-pointer hover:bg-terra-100 transition-all"
+                        className="absolute top-4 right-4 text-xs font-bold text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-1.5 rounded-full border border-terra-200 dark:border-terra-800/60 cursor-pointer hover:bg-terra-100 dark:hover:bg-terra-900/60 dark:hover:text-terra-300 transition-all"
                     >
                         ✏️ Edit Profile
                     </button>
@@ -555,7 +642,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             {profile?.avatar ? (
                                 <img src={resolveAvatarUrl(profile.avatar)!} className="w-full h-full object-cover" alt={identity.callsign} />
                             ) : (
-                                <span className="text-2xl font-bold text-nature-400 dark:text-nature-500 select-none">
+                                <span className="text-2xl font-bold text-nature-400 dark:text-nature-400 select-none">
                                     {identity.callsign.charAt(0).toUpperCase()}
                                 </span>
                             )}
@@ -571,6 +658,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <span>{fingerprint}</span>
                         <button
                             onClick={() => {
+                                anotherCopyMade();
                                 navigator.clipboard.writeText(identity.publicKey);
                                 alert('Public Key copied to clipboard');
                             }}
@@ -594,8 +682,13 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <RecoveryAlertBanner identity={identity} />
                         {/* A paused member only, until a moderator lifts it (G3). */}
                         <ModerationPauseCard />
+                        {/* An account made with 12 words alone, for as long as it has no sign-in: one way back, and a
+                            sign-in to add (two-doors design §2.5). With the result of one that just came back. */}
+                        <OneWayBackCard identity={identity} placement="settings" onSeeWords={() => setMode('seed')} result={linkResult} />
                         {/* A new account only, until the node says its limits are over (G11-e). */}
                         <NewAccountCard />
+                        {/* A known community only, until the member agrees to what its admins can see (slice 6); never blocks. */}
+                        <KnownConsentCard />
                         {/* Owners and admins only — the node answers the role. */}
                         <NodeAdminLink />
                         {/* Owners only: "Check your 12 words" (sealed-keys.md §7). */}
@@ -604,7 +697,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <OwnerUnlockCard identity={identity} />
                         {/* ─── COMMUNITY WORKING STYLE ─── */}
                         <div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                                 COMMUNITY WORKING STYLE
                             </div>
                             {(() => {
@@ -643,7 +736,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             )}
 
                                             <div className="border-t border-nature-100 dark:border-nature-800 pt-3">
-                                                <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2">
+                                                <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2">
                                                     🌟 What you tend to enjoy
                                                 </div>
                                                 <ul className="space-y-1.5 m-0 p-0 list-none">
@@ -665,7 +758,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                             setQuizInitialMode('deep');
                                                             setShowQuizModal(true);
                                                         }}
-                                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
+                                                        className="flex-1 min-w-0 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
                                                     >
                                                         🧭 More accurate
                                                     </button>
@@ -710,7 +803,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 setQuizInitialMode('quick');
                                                 setShowQuizModal(true);
                                             }}
-                                            className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm"
+                                            className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm"
                                         >
                                             ⚡ Take 60s Quiz
                                         </button>
@@ -721,7 +814,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         {/* ─── ACCOUNT & IDENTITY ─── */}
                         <div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                                 ACCOUNT & IDENTITY
                             </div>
                             <div className="space-y-2.5">
@@ -754,9 +847,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         <span className="text-xl">✨</span>
                                         <div className="flex-1">
                                             <div className="text-[15px] font-bold">Re-run Setup</div>
-                                            <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Update your name & photo, and how BeanPool works</div>
+                                            <div className="text-xs font-normal text-nature-500 dark:text-nature-300">Update your name & photo, and how BeanPool works</div>
                                         </div>
-                                        <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                        <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                     </button>
                                 )}
 
@@ -769,11 +862,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <span className="text-xl">🔑</span>
                                     <div className="flex-1">
                                         <div className="text-[15px] font-bold">View Recovery Phrase</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">
                                             {hasWords ? 'View your 12-word backup seed' : 'Not saved in this browser'}
                                         </div>
                                     </div>
-                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                    <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
                                 <SignInRecoveryLine enrolled={signInRecovery} hasWords={hasWords} />
                             </div>
@@ -781,7 +874,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         {/* ─── APP SETTINGS ─── */}
                         <div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                                 APP SETTINGS
                             </div>
                             <div className="space-y-2.5">
@@ -843,10 +936,26 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <span className="text-xl">🔔</span>
                                     <div className="flex-1">
                                         <div className="text-[15px] font-bold">Notification Preferences</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Phone app push notification settings</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">Phone app push notification settings</div>
                                     </div>
-                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                    <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
+
+                                {/* Your area: a community that syncs listings by area */}
+                                {areaLimits && (
+                                    <button
+                                        data-testid="settings-your-area"
+                                        onClick={() => { setAreaError(null); setMode('area'); }}
+                                        className="w-full p-4 rounded-2xl bg-white dark:bg-nature-900 text-nature-900 dark:text-white font-bold border border-nature-200 dark:border-nature-800 shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-left flex items-center gap-3 group cursor-pointer"
+                                    >
+                                        <span className="text-xl">📍</span>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-[15px] font-bold">{AREA_STEP_WORDS.settingsRow}</div>
+                                            <div className="text-xs font-normal text-nature-500 dark:text-nature-300 break-words">{areaLine}</div>
+                                        </div>
+                                        <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
+                                    </button>
+                                )}
 
                                 {/* Modern Map Pins */}
                                 <div className="bg-white dark:bg-nature-900 rounded-2xl px-5 py-4 shadow-sm border border-nature-200 dark:border-nature-800 flex justify-between items-center">
@@ -893,7 +1002,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         {/* ─── LEGAL & PRIVACY ─── */}
                         <div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                                 LEGAL & PRIVACY
                             </div>
                             <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 overflow-hidden divide-y divide-nature-100 dark:divide-nature-800">
@@ -903,26 +1012,42 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     className="w-full p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors bg-transparent border-none cursor-pointer text-left"
                                 >
                                     <span className="flex items-center gap-3">🚫 Manage Blocked Members</span>
-                                    <span className="text-nature-400">›</span>
+                                    <span className="text-nature-400 dark:text-nature-300">›</span>
                                 </button>
+                                {showAsConnection !== null && (
+                                    <div className="p-4 flex items-center justify-between gap-3" data-testid="show-as-connection">
+                                        <span className="min-w-0">
+                                            <span className="block text-text-primary font-bold text-[15px]">🤝 Show me as a connection in common</span>
+                                            <span className="block text-text-muted text-[12px] mt-0.5">When you and two people are friends both ways, each can see your name on the other's profile</span>
+                                            {showAsConnectionError && <span role="alert" className="block text-text-primary text-[12px] mt-1 font-semibold">{showAsConnectionError}</span>}
+                                        </span>
+                                        <ToggleSwitch
+                                            checked={showAsConnection}
+                                            onChange={handleToggleShowAsConnection}
+                                            label="Show me as a connection in common"
+                                            activeBgClass="bg-accent border-accent"
+                                            inactiveBgClass="bg-bg-hover border-border-primary"
+                                        />
+                                    </div>
+                                )}
                                 <a href="https://beanpool.org/privacy.html" target="_blank" rel="noopener noreferrer" className="p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline">
                                     <span className="flex items-center gap-3">🛡️ Privacy Policy</span>
-                                    <span className="text-nature-400">›</span>
+                                    <span className="text-nature-400 dark:text-nature-300">›</span>
                                 </a>
                                 <a href="https://beanpool.org/terms.html" target="_blank" rel="noopener noreferrer" className="p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline">
                                     <span className="flex items-center gap-3">⚖️ Terms of Service & EULA</span>
-                                    <span className="text-nature-400">›</span>
+                                    <span className="text-nature-400 dark:text-nature-300">›</span>
                                 </a>
                                 <a href="https://beanpool.org/safety.html" target="_blank" rel="noopener noreferrer" className="p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline">
                                     <span className="flex items-center gap-3">🚸 Child Safety Standards</span>
-                                    <span className="text-nature-400">›</span>
+                                    <span className="text-nature-400 dark:text-nature-300">›</span>
                                 </a>
                             </div>
                         </div>
 
                         {/* ─── SYSTEM ─── */}
                         <div>
-                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+                            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                                 SYSTEM
                             </div>
                             <div className="space-y-2.5">
@@ -933,9 +1058,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <span className="text-xl">📊</span>
                                     <div className="flex-1">
                                         <div className="text-[15px] font-bold">Database Health & Stats</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Local storage metrics & integrity checks</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">Local storage metrics & integrity checks</div>
                                     </div>
-                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                    <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
 
                                 <button
@@ -945,9 +1070,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <span className="text-xl">⚙️</span>
                                     <div className="flex-1">
                                         <div className="text-[15px] font-bold">Advanced / Subsystem</div>
-                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-400">Node management & cache controls</div>
+                                        <div className="text-xs font-normal text-nature-500 dark:text-nature-300">Node management & cache controls</div>
                                     </div>
-                                    <span className="text-nature-400 dark:text-nature-500 group-hover:translate-x-1 transition-transform">→</span>
+                                    <span className="text-nature-400 dark:text-nature-300 group-hover:translate-x-1 transition-transform">→</span>
                                 </button>
                             </div>
                         </div>
@@ -1009,15 +1134,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                         <div className="font-bold text-sm text-red-900 dark:text-red-300 flex items-center gap-2">
                                             <span>🗑️</span> Permanently Delete Account & Node Data
                                         </div>
-                                        <p className="text-xs text-red-800 dark:text-red-400 leading-relaxed m-0">
-                                            Permanently purges your account from this community node and clears this device. Cancels active posts, clears push tokens, and settles your balance with the Commons Pool. <strong>Cannot be undone, even with your 12-word phrase.</strong>
+                                        <p data-testid="delete-card-line" className="text-xs text-red-800 dark:text-red-400 leading-relaxed m-0">
+                                            {WEB_DELETE_CARD_LINE} <strong>Cannot be undone, even with your 12-word phrase.</strong>
                                         </p>
                                         <button
-                                            onClick={() => {
-                                                setDeletionMode('confirm_purge');
-                                                setPurgeError(null);
-                                                setPurgeCallsignInput('');
-                                            }}
+                                            onClick={openPurge}
                                             className="mt-2 w-full py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs border-none cursor-pointer transition-colors shadow-sm"
                                         >
                                             Permanently Delete Account
@@ -1049,7 +1170,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 setIsPurging(true);
                                                 try {
                                                     await wipeIdentity();
-                                                    clearAccountStorage();
+                                                    await clearAccountStorage();
                                                     setDeletionMode('purged');
                                                     setTimeout(() => window.location.reload(), 1500);
                                                 } finally {
@@ -1091,6 +1212,14 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                             className="w-full py-2.5 px-3 rounded-xl border border-red-300 dark:border-red-800 bg-white dark:bg-nature-950 text-nature-900 dark:text-white font-mono text-xs disabled:opacity-50"
                                             autoCapitalize="none"
                                         />
+                                        {/* What stays in this browser: the key for the page's own community, or nothing. */}
+                                        <p data-testid="delete-key-plan" aria-live="polite" className="text-xs text-nature-700 dark:text-nature-300 leading-relaxed m-0">
+                                            {!deletePlan
+                                                ? WEB_DELETE_CHECKING_LINE
+                                                : deletePlan.kind === 'this-one'
+                                                    ? `🔑 ${webKeepsKeyLine(deletePlan, hasWords)}`
+                                                    : webLastCommunityLine(hasWords)}
+                                        </p>
                                         {purgeError && (
                                             <div id="purge-error-alert" role="alert" className="p-3 rounded-xl bg-red-100 dark:bg-red-950/60 border border-red-300 dark:border-red-800 text-red-800 dark:text-red-300 text-xs font-semibold">
                                                 {purgeError}
@@ -1110,21 +1239,41 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                         setPurgeError(`Please type "${identity?.callsign || ''}" or "DELETE" exactly to confirm.`);
                                                         return;
                                                     }
+                                                    // The screen said what stays; exactly that happens.
+                                                    const plan = deletePlan;
+                                                    if (!plan) return;
                                                     setIsPurging(true);
                                                     setPurgeError(null);
                                                     try {
-                                                        await purgeAccountApi();
-                                                        await wipeIdentity();
-                                                        clearAccountStorage();
+                                                        // Until the node the panel named answers { ok: true }, nothing in this browser changes:
+                                                        // purgeHere sends nothing when the web app now talks to another node, and gives up
+                                                        // after 20 seconds.
+                                                        const purged = await purgeHere(plan);
+                                                        if (!purged.ok) {
+                                                            setPurgeError(webDeleteFailedLine(purged.reason));
+                                                            return;
+                                                        }
+                                                        if (plan.kind === 'this-one') {
+                                                            // The page's own community keeps the key: back to it, key and settings kept.
+                                                            await leaveThisCommunity();
+                                                            setPurgedNote(`Account deleted at ${hostOf(plan.here)}. This browser keeps your key for ${hostOf(plan.keeps.url)}. Reloading app...`);
+                                                        } else {
+                                                            try {
+                                                                await wipeIdentity();
+                                                                await clearAccountStorage();
+                                                            } catch (e) {
+                                                                setPurgeError(webDeletedButLine(e instanceof Error ? e.message : String(e)));
+                                                                return;
+                                                            }
+                                                            setPurgedNote(null);
+                                                        }
                                                         setDeletionMode('purged');
                                                         setTimeout(() => window.location.reload(), 1500);
-                                                    } catch (e: any) {
-                                                        setPurgeError(e.message || 'Failed to purge account from node. Active escrow deals may need to be resolved first.');
                                                     } finally {
                                                         setIsPurging(false);
                                                     }
                                                 }}
-                                                disabled={isPurging || !isPurgeConfirmed}
+                                                disabled={isPurging || !isPurgeConfirmed || !deletePlan}
                                                 className="flex-1 py-2.5 rounded-xl bg-red-600 text-white font-bold border-none transition-colors text-xs shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 hover:bg-red-700"
                                             >
                                                 {isPurging ? 'Purging...' : '🔥 Purge Account'}
@@ -1137,7 +1286,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             {deletionMode === 'purged' && (
                                 <div className="bg-red-100 dark:bg-red-900/30 rounded-2xl p-4 text-center border border-red-200 dark:border-red-800">
                                     <p className="text-red-800 dark:text-red-400 font-bold text-xs m-0">
-                                        Account data purged. Reloading app...
+                                        {purgedNote ?? 'Account data purged. Reloading app...'}
                                     </p>
                                 </div>
                             )}
@@ -1186,12 +1335,17 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     )}
                                 </div>
 
+                                <RecoveryKitButton words={seedWords} />
+
                                 <button
                                     onClick={handleCopySeed}
-                                    className="w-full py-3 mb-4 rounded-xl font-bold bg-terra-500 hover:bg-terra-600 text-white border-none cursor-pointer transition-colors text-sm shadow-sm"
+                                    className="w-full py-3 mb-2 rounded-xl font-bold bg-terra-500 dark:bg-terra-600 hover:bg-terra-600 text-white border-none cursor-pointer transition-colors text-sm shadow-sm"
                                 >
                                     {seedCopied ? '✅ Copied to Clipboard!' : '📋 Copy All Words'}
                                 </button>
+                                <p data-testid="seed-copy-clears" className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed mb-4">
+                                    {WEB_COPY_CLEARS_LINE}
+                                </p>
                             </>
                         ) : (
                             // Not "generated without seed phrase storage": most often it was brought back from a sign-in copy
@@ -1205,7 +1359,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         <button
                             onClick={() => setMode('menu')}
-                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors text-sm"
                         >
                             ← Back to Settings
                         </button>
@@ -1223,7 +1377,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         </p>
 
                         {diagLoading ? (
-                            <div className="py-10 text-center text-sm text-nature-500 animate-pulse">Running Structural Integrity Check...</div>
+                            <div className="py-10 text-center text-sm text-nature-500 dark:text-nature-400 animate-pulse">Running Structural Integrity Check...</div>
                         ) : (
                             <>
                                 {/* Status Banner */}
@@ -1239,33 +1393,33 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">👥</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.members ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 font-semibold">Community Members</div>
+                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">Community Members</div>
                                     </div>
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">🛒</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.posts ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 font-semibold">Active Posts</div>
+                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">Active Posts</div>
                                     </div>
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">💸</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.transactions ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 font-semibold">Ledger Deals</div>
+                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">Ledger Deals</div>
                                     </div>
                                     <div className="p-3.5 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50">
                                         <div className="text-xl mb-1">💬</div>
                                         <div className="text-lg font-black text-nature-900 dark:text-white">{dbStats?.messages ?? 0}</div>
-                                        <div className="text-[11px] text-nature-500 font-semibold">Messages</div>
+                                        <div className="text-[11px] text-nature-500 dark:text-nature-400 font-semibold">Messages</div>
                                     </div>
                                 </div>
 
                                 {/* Storage info */}
                                 <div className="p-4 rounded-xl border border-nature-200 dark:border-nature-800 bg-oat-50/50 dark:bg-nature-950/50 mb-5 text-xs space-y-1.5">
                                     <div className="flex justify-between">
-                                        <span className="text-nature-500">Storage Usage:</span>
+                                        <span className="text-nature-500 dark:text-nature-400">Storage Usage:</span>
                                         <span className="font-bold text-nature-900 dark:text-white">{storageEstimate}</span>
                                     </div>
                                     <div className="flex justify-between">
-                                        <span className="text-nature-500">Active Node:</span>
+                                        <span className="text-nature-500 dark:text-nature-400">Active Node:</span>
                                         <span className="font-mono text-nature-900 dark:text-white">{window.location.origin}</span>
                                     </div>
                                 </div>
@@ -1288,10 +1442,37 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         <button
                             onClick={() => setMode('menu')}
-                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors text-sm"
                         >
                             ← Back to Settings
                         </button>
+                    </div>
+                )}
+
+                {/* ─── MODE: YOUR AREA ─── */}
+                {mode === 'area' && areaLimits && (
+                    <div className="bg-white dark:bg-nature-900 rounded-2xl p-6 shadow-soft border border-nature-200 dark:border-nature-800" data-testid="settings-area">
+                        <h3 className="text-lg font-bold text-nature-950 dark:text-white mb-1">📍 {AREA_STEP_WORDS.settingsRow}</h3>
+                        <p className="text-[15px] font-semibold text-nature-900 dark:text-white mb-3 break-words" data-testid="settings-area-current">{areaLine}</p>
+                        {myArea && (
+                            <button
+                                data-testid="settings-area-clear"
+                                onClick={clearMyArea}
+                                disabled={areaClearing}
+                                className="w-full min-h-[44px] mb-3 rounded-xl font-semibold border border-red-300 dark:border-red-800 text-red-600 dark:text-red-300 bg-transparent cursor-pointer text-sm disabled:opacity-50"
+                            >
+                                {areaClearing ? 'Clearing…' : 'Clear'}
+                            </button>
+                        )}
+                        {areaError && <p role="alert" className="text-sm text-red-600 dark:text-red-300 mb-3">{areaError}</p>}
+                        <AreaStep
+                            send={senderForMe}
+                            limits={areaLimits}
+                            hideTitle
+                            skipLabel="← Back to Settings"
+                            onSkip={() => setMode('menu')}
+                            onSaved={(a, placeName) => { rememberAreaPlace(placeName); setMyArea(a); setAreaLoaded(true); setMode('menu'); }}
+                        />
                     </div>
                 )}
 
@@ -1386,7 +1567,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         <button
                             onClick={() => setMode('menu')}
-                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors text-sm"
                         >
                             ← Back to Settings
                         </button>
@@ -1420,7 +1601,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             </div>
                         )}
                         {blockedActionError && (
-                            <p role="alert" className="mb-4 text-xs font-semibold text-red-600 dark:text-red-400 leading-relaxed">{blockedActionError}</p>
+                            <p role="alert" className="mb-4 text-xs font-semibold text-red-600 dark:text-red-300 leading-relaxed">{blockedActionError}</p>
                         )}
                         {blockedFullNote && (
                             <p role="status" className="mb-4 text-xs font-semibold text-nature-700 dark:text-nature-300 leading-relaxed">{blockedFullNote}</p>
@@ -1443,7 +1624,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 <div className="text-sm font-bold text-nature-900 dark:text-white truncate">
                                                     {item.callsign}
                                                 </div>
-                                                <div className="text-[11px] text-nature-400 dark:text-nature-500 font-mono truncate">
+                                                <div className="text-[11px] text-nature-400 dark:text-nature-300 font-mono truncate">
                                                     {item.pubkey.slice(0, 16)}...{item.pubkey.slice(-8)}
                                                 </div>
                                             </div>
@@ -1451,7 +1632,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                 type="button"
                                                 onClick={() => unblockFromList(item.pubkey)}
                                                 disabled={blockedBusy !== null}
-                                                className="bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-default"
+                                                className="bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-default"
                                             >
                                                 {blockedBusy === item.pubkey ? 'Unblocking…' : 'Unblock'}
                                             </button>
@@ -1463,7 +1644,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     type="button"
                                     onClick={unblockEveryone}
                                     disabled={blockedBusy !== null}
-                                    className="w-full py-2.5 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-default"
+                                    className="w-full py-2.5 rounded-xl text-xs font-bold text-red-600 dark:text-red-300 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-default"
                                 >
                                     {blockedBusy === 'all' ? 'Unblocking…' : 'Unblock All'}
                                 </button>
@@ -1472,7 +1653,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
 
                         <button
                             onClick={() => setMode('menu')}
-                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 transition-colors text-sm"
+                            className="w-full py-3 rounded-xl font-semibold bg-oat-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-none cursor-pointer hover:bg-oat-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors text-sm"
                         >
                             ← Back to Settings
                         </button>
@@ -1499,7 +1680,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                 autoCapitalize="none"
                             />
                             {nodeTestResult && (
-                                <div className={`p-3 rounded-xl mb-3 text-xs font-mono border ${nodeTestResult.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`}>
+                                <div className={`p-3 rounded-xl mb-3 text-xs font-mono border ${nodeTestResult.ok ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800' : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900'}`}>
                                     {nodeTestResult.ok ? `✅ Connected to "${nodeTestResult.callsign}" (${nodeTestResult.latencyMs}ms)` : `❌ ${nodeTestResult.error}`}
                                 </div>
                             )}
@@ -1524,7 +1705,7 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                         <div className="mb-6 border-b border-nature-100 dark:border-nature-800 pb-6">
                             <h4 className="text-xs font-bold uppercase tracking-wider text-nature-800 dark:text-nature-200 mb-2">🔑 Raw Private Key</h4>
                             <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs text-nature-500">View underlying Ed25519 secret seed</span>
+                                <span className="text-xs text-nature-500 dark:text-nature-400">View underlying Ed25519 secret seed</span>
                                 <button
                                     onClick={() => setShowPrivateKey(!showPrivateKey)}
                                     className="text-xs font-bold text-terra-600 dark:text-terra-400 bg-terra-50 dark:bg-terra-900/30 px-3 py-1 rounded-lg border border-terra-200 cursor-pointer"
@@ -1558,8 +1739,8 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             </button>
                         </div>
 
-                        {error && <p className="text-red-500 text-xs mb-3">{error}</p>}
-                        {success && <p className="text-emerald-600 text-xs mb-3">{success}</p>}
+                        {error && <p className="text-red-500 dark:text-red-300 text-xs mb-3">{error}</p>}
+                        {success && <p className="text-emerald-600 dark:text-emerald-400 text-xs mb-3">{success}</p>}
 
                         <button
                             onClick={() => setMode('menu')}
@@ -1605,7 +1786,7 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
     const rowClass = 'w-full min-h-[56px] p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center gap-3 hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors bg-transparent border-none cursor-pointer text-left no-underline';
     return (
         <div>
-            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-500 mb-2 px-1">
+            <div className="text-xs font-bold uppercase tracking-wider text-nature-400 dark:text-nature-400 mb-2 px-1">
                 BEANPOOL
             </div>
             <div className="bg-white dark:bg-nature-900 rounded-2xl shadow-sm border border-nature-200 dark:border-nature-800 overflow-hidden divide-y divide-nature-100 dark:divide-nature-800">
@@ -1615,9 +1796,9 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                             <span className="text-xl" aria-hidden="true">🫘</span>
                             <span className="flex-1 min-w-0">
                                 <span className="block">Help & how it works</span>
-                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-400">How to use every part of the app, the rules, questions</span>
+                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-300">How to use every part of the app, the rules, questions</span>
                             </span>
-                            <span className="text-nature-400" aria-hidden="true">›</span>
+                            <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">›</span>
                         </button>
                     );
                     if (entry === 'suggest') return (
@@ -1625,9 +1806,9 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                             <span className="text-xl" aria-hidden="true">💬</span>
                             <span className="flex-1 min-w-0">
                                 <span className="block">Suggest a change</span>
-                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-400">Ideas and problems go to the BeanPool project team</span>
+                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-300">Ideas and problems go to the BeanPool project team</span>
                             </span>
-                            <span className="text-nature-400" aria-hidden="true">›</span>
+                            <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">›</span>
                         </button>
                     );
                     return (
@@ -1635,9 +1816,9 @@ export function BeanPoolSettingsGroup({ onHelp, onSuggest, feedbackLive = FEEDBA
                             <span className="text-xl" aria-hidden="true">🌐</span>
                             <span className="flex-1 min-w-0">
                                 <span className="block">beanpool.org</span>
-                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-400">The BeanPool project website</span>
+                                <span className="block text-xs font-normal text-nature-500 dark:text-nature-300">The BeanPool project website</span>
                             </span>
-                            <span className="text-nature-400" aria-hidden="true">↗</span>
+                            <span className="text-nature-400 dark:text-nature-300" aria-hidden="true">↗</span>
                         </a>
                     );
                 })}

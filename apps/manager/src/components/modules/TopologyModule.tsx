@@ -24,6 +24,7 @@ import {
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { downloadedAlert } from '../../lib/backup-shortfall';
 import { usePausablePoll } from '../../lib/activity-pause';
+import { nodeCredential } from '../../lib/profiles';
 
 interface TopologyModuleProps {
     activeNode: NodeProfile;
@@ -76,7 +77,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         try {
             const items = await getRegistrarPending(
                 activeNode?.url,
-                activeNode?.adminPassword,
+                nodeCredential(activeNode),
                 activeNode ? getTfaSessionToken(activeNode.id) : undefined,
             );
             setRegistrarAllocations(items);
@@ -92,7 +93,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         if (activeTab === 'name-claims') {
             loadRegistrar();
         }
-    }, [activeTab, activeNode?.url, activeNode?.adminPassword]);
+    }, [activeTab, activeNode?.url, nodeCredential(activeNode)]);
 
     // Ten seconds while someone is watching the claims list; nothing at all while the tab is
     // hidden or the screen has been sitting untouched (lib/activity-pause). `runOnStart: false`
@@ -101,7 +102,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     usePausablePoll(loadRegistrar, 10000, {
         enabled: activeTab === 'name-claims' && autoRefreshRegistrar,
         runOnStart: false,
-        restartKey: `${activeNode?.url || ''}|${activeNode?.adminPassword || ''}`,
+        restartKey: `${activeNode?.url || ''}|${nodeCredential(activeNode) || ''}`,
     });
 
     const handleApproveClaim = async (name: string) => {
@@ -109,7 +110,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             await approveRegistrarClaim(
                 activeNode?.url,
                 name,
-                activeNode?.adminPassword,
+                nodeCredential(activeNode),
                 activeNode ? getTfaSessionToken(activeNode.id) : undefined,
             );
             setActionToast({ type: 'success', message: `✅ Approved claim for domain ${name}.beanpool.org` });
@@ -126,7 +127,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             await revokeRegistrarClaim(
                 activeNode?.url,
                 name,
-                activeNode?.adminPassword,
+                nodeCredential(activeNode),
                 activeNode ? getTfaSessionToken(activeNode.id) : undefined,
             );
             setActionToast({ type: 'success', message: `🚫 Rejected claim for domain ${name}.beanpool.org` });
@@ -143,7 +144,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             await revokeRegistrarClaim(
                 activeNode?.url,
                 name,
-                activeNode?.adminPassword,
+                nodeCredential(activeNode),
                 activeNode ? getTfaSessionToken(activeNode.id) : undefined,
             );
             setActionToast({ type: 'success', message: `⚠️ Revoked active allocation for domain ${name}.beanpool.org` });
@@ -159,10 +160,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
     const loadHarvester = async () => {
         setHarvestLoading(true);
         try {
-            const data = await fetchHarvesterStatus(
-                activeNode?.adminPassword,
-                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
-            );
+            const data = await fetchHarvesterStatus();
             setHarvesterState(data.harvestState || {});
         } catch (e) {
             console.warn('[HarvesterUI] Failed to fetch harvester status:', e);
@@ -173,7 +171,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
 
     // Same fifteen seconds as before, and the same immediate load on mount or on a credential
     // change — but it stops while the tab is hidden or the operator is away.
-    usePausablePoll(loadHarvester, 15000, { restartKey: activeNode?.adminPassword });
+    usePausablePoll(loadHarvester, 15000, { restartKey: nodeCredential(activeNode) });
 
     // Load Snapshots for target node
     const loadSnapshots = async () => {
@@ -182,7 +180,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         try {
             const items = await fetchNodeSnapshots(
                 targetSnapshotNode.url,
-                targetSnapshotNode.adminPassword,
+                nodeCredential(targetSnapshotNode),
                 getTfaSessionToken(targetSnapshotNode.id),
             );
             setSnapshots(items);
@@ -224,7 +222,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                     ? '/api/manager/backups/download-db'
                     : '/api/manager/backups/download-identity',
                 { nodeId: slug },
-                node?.adminPassword,
+                nodeCredential(node),
                 // Only a fallback: the server names the file, and `downloadAdminFile` prefers that name.
                 // A readable backup comes back as a tar.gz of the database AND its images, a locked one as
                 // a .bpsealed; `.db` was the name of the thing this used to serve and no longer does.
@@ -252,16 +250,10 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         }
     };
 
-    const handleTriggerSync = async (nodeId: string, node?: NodeProfile) => {
+    const handleTriggerSync = async (nodeId: string) => {
         setHarvestingNodeId(nodeId);
         try {
-            await triggerHarvesterSync(
-                nodeId,
-                node?.url,
-                node?.adminPassword,
-                activeNode?.adminPassword,
-                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
-            );
+            await triggerHarvesterSync(nodeId);
             await loadHarvester();
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -277,7 +269,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             const notice = await downloadAdminFile(
                 resolveNodeApiUrl(targetSnapshotNode.url, '/api/local/admin/snapshots/download'),
                 { name: snapName },
-                targetSnapshotNode.adminPassword,
+                nodeCredential(targetSnapshotNode),
                 snapName,
                 getTfaSessionToken(targetSnapshotNode.id),
             );
@@ -295,7 +287,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             const notice = await downloadAdminFile(
                 '/api/manager/backups/download-history',
                 { nodeId, filename },
-                historyNode?.adminPassword,
+                nodeCredential(historyNode),
                 filename,
                 historyNode ? getTfaSessionToken(historyNode.id) : undefined,
             );
@@ -312,11 +304,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         setSelectedHistoryNode({ id: nodeId, name });
         setHistoryLoading(true);
         try {
-            const items = await fetchNodeHistory(
-                nodeId,
-                activeNode?.adminPassword,
-                activeNode ? getTfaSessionToken(activeNode.id) : undefined,
-            );
+            const items = await fetchNodeHistory(nodeId);
             setHistoryList(items);
         } catch {
             setHistoryList([]);
@@ -332,7 +320,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         try {
             await createNodeSnapshot(
                 targetSnapshotNode.url,
-                targetSnapshotNode.adminPassword,
+                nodeCredential(targetSnapshotNode),
                 getTfaSessionToken(targetSnapshotNode.id),
             );
             await loadSnapshots();
@@ -351,7 +339,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
             await deleteNodeSnapshot(
                 targetSnapshotNode.url,
                 name,
-                targetSnapshotNode.adminPassword,
+                nodeCredential(targetSnapshotNode),
                 getTfaSessionToken(targetSnapshotNode.id),
             );
             await loadSnapshots();
@@ -367,7 +355,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         setCadenceSaving(true);
         setCadenceMsg(null);
         try {
-            await updateNodeReplicationCadence(activeNode.url, pullSeconds, reconcileMinutes, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            await updateNodeReplicationCadence(activeNode.url, pullSeconds, reconcileMinutes, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
             setCadenceMsg('✅ Replication cadence updated!');
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -382,7 +370,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
         if (!activeNode || !confirm(`Force full resync for ${activeNode.name}? This discards drifted rows on standby.`)) return;
         setResyncing(true);
         try {
-            await forceNodeResync(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            await forceNodeResync(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
             alert('Replication resync requested.');
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -674,7 +662,7 @@ export function TopologyModule({ activeNode, diag, profiles = [], onRefresh }: T
                                                 <td className="px-4 py-3 text-right">
                                                     <div className="flex items-center justify-end gap-1.5">
                                                         <button
-                                                            onClick={() => handleTriggerSync(slug, node)}
+                                                            onClick={() => handleTriggerSync(slug)}
                                                             disabled={isSyncing}
                                                             className="px-2.5 py-1 rounded-lg bg-nature-800 hover:bg-nature-700 text-white font-bold text-[11px] transition-all"
                                                         >

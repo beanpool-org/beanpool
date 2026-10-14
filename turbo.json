@@ -22,6 +22,9 @@
             ]
         },
         "test": {
+            "passThroughEnv": [
+                "TEST_ALL_TIMEOUT_MS"
+            ],
             "dependsOn": [
                 "^build"
             ]

@@ -46,6 +46,20 @@ function parseMeta(raw: string | null | undefined): any {
     try { return JSON.parse(raw); } catch { return null; }
 }
 
+/**
+ * A line's metadata as the node sent it, without `__sendState`. Only this phone writes that key, on a line of its own the
+ * node hasn't confirmed yet (utils/db.ts insertMessage); the node's copy of a line never carries it, and one that does
+ * would pose an operator's row as this phone's unsent line, which is exempt from the DM thread marks (#1446 review).
+ */
+export function withoutSendState(metadata: string | null | undefined): string | null {
+    if (typeof metadata !== 'string' || !metadata) return metadata ?? null;
+    let obj: any;
+    try { obj = JSON.parse(metadata); } catch { return metadata; }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj) || !('__sendState' in obj)) return metadata;
+    delete obj.__sendState;
+    return Object.keys(obj).length ? JSON.stringify(obj) : null;
+}
+
 /** A row the node has turned into a tombstone: `type = 'removed'`, or `metadata.removed`. */
 export function isRemovedPayload(m: { type?: string | null; metadata?: string | null }): boolean {
     if (m.type === 'removed') return true;
@@ -66,7 +80,8 @@ export function mergeIncomingMessage(local: LocalMessageRow | null | undefined, 
     const inNonce = incoming.nonce ?? '';
     const inType = incoming.type || 'text';
     const inEditedAt = incoming.editedAt ?? incoming.edited_at ?? null;
-    const inMetadata = incoming.metadata ?? null;
+    // The node's metadata, never this phone's own send state (withoutSendState).
+    const inMetadata = withoutSendState(incoming.metadata ?? null);
 
     if (!local) {
         return { ciphertext: inCiphertext, nonce: inNonce, type: inType, editedAt: inEditedAt, metadata: inMetadata, contentReplaced: true };
@@ -94,4 +109,46 @@ export function mergeIncomingMessage(local: LocalMessageRow | null | undefined, 
         return { ciphertext: inCiphertext, nonce: inNonce, type: inType, editedAt: inEditedAt, metadata: inMetadata, contentReplaced: true };
     }
     return keep;
+}
+
+/**
+ * The author of a line the node blanked because they deleted their account (apps/server/src/engine/message-tombstone.ts
+ * blankMessagesOf: their own tombstone, `accountDeleted`), or null. One such line in any sync answer means every line
+ * of theirs on this phone goes too (utils/db.ts blankLinesOfDeletedAccounts).
+ *
+ * Only in a group or event chat (`convType` `group_thread` / `event_thread`), whose line metadata the node writes itself.
+ * A DM line's metadata is whatever the sender's app sent, so a crafted line could pose as a tombstone and blank the other
+ * person's copy of everything its sender wrote (#1407 review). For a DM the signal is the conversation list's
+ * `deletedAccounts` (members.deleted_by_owner_at) alone.
+ */
+export function accountDeletedAuthor(m: IncomingMessage | null | undefined, convType?: string | null): string | null {
+    if (convType !== 'group_thread' && convType !== 'event_thread') return null;
+    if (!m || !isRemovedPayload(m)) return null;
+    const author = m.authorPubkey ?? m.author_pubkey;
+    if (typeof author !== 'string' || !author) return null;
+    const meta = parseMeta(m.metadata);
+    return meta?.accountDeleted === true && meta.removedBy === author ? author : null;
+}
+
+/** A row on this phone that may still hold what its author wrote: anything but a tombstone the node wrote in plain text. */
+export function stillHoldsWords(row: { type: string | null; nonce: string | null }): boolean {
+    return !(row.type === 'removed' && typeof row.nonce === 'string' && row.nonce.startsWith('plaintext'));
+}
+
+/**
+ * The metadata a line of a deleted account takes on this phone: the node's own shape (message-tombstone.ts tombstoneRow),
+ * so the bubble reads as their own delete in every kind of chat (chat-actions.ts tombstoneText), and nothing hung off it
+ * stays: no reactions, mentions or reply link.
+ */
+export function accountDeletedMetadata(raw: string | null | undefined, authorPubkey: string, removedAt: string): string {
+    let meta = parseMeta(raw);
+    if (!meta || typeof meta !== 'object' || Array.isArray(meta)) meta = {};
+    delete meta.mentions;
+    delete meta.reactions;
+    delete meta.replyToId;
+    meta.removed = true;
+    meta.removedBy = authorPubkey;
+    meta.removedAt = removedAt;
+    meta.accountDeleted = true;
+    return JSON.stringify(meta);
 }

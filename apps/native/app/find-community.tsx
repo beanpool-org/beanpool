@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, Text, StyleSheet, Pressable, TextInput, ActivityIndicator, Alert, Linking } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { router, ErrorBoundary } from 'expo-router';
+import { router, ErrorBoundary, useLocalSearchParams } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -19,6 +19,11 @@ import {
     KNOCK_MESSAGE_CHARS, KNOCK_CALLSIGN_CHARS, type KnockStatusResult, type RememberedKnock, type KnockCardState,
 } from '../utils/knock';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
+import { claimProbeOrigin, claimRouteFor } from '../utils/claim-link';
+import { readClaimStatus } from '../utils/node-claim';
+import { FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, type AddressResult } from '@beanpool/core';
+import { AddressSearch } from '../components/AddressSearch';
+import { readTypedPlace, saveTypedPlace, forgetTypedPlace, nearLine, LOCATION_NOTES, type TypedPlace } from '../utils/typed-place';
 
 export { ErrorBoundary };
 
@@ -31,12 +36,18 @@ const LIST_LIMIT = 20;
  * signed with the member's own key (utils/knock.ts). The answers to this phone's knocks are read from those
  * communities only; an invite that comes back is joined with one tap through the ordinary invite path
  * (utils/join-another-community.ts). Nothing near? Watch the place, or start a community.
+ *
+ * "Near" is the phone's location, or a town the member typed instead (Marty, 14 Oct: utils/typed-place.ts, with the
+ * shared address search); the name box below is for a community whose name they know. `?town=1` opens the town box
+ * (the Home card's "or type your town"); Cancel closes it, leaving the place as it was. A place from the phone's
+ * location keeps a quiet "Not here? Type your town".
  */
 export default function FindCommunityScreen() {
     const { colors } = useTheme();
     const insets = useSafeAreaInsets();
     const { identity } = useIdentity();
     const pubkey = identity?.publicKey ?? null;
+    const params = useLocalSearchParams<{ town?: string }>();
 
     const styles = useStyles(({ theme, colors }) => StyleSheet.create({
         container: { flex: 1, backgroundColor: colors.surface.page },
@@ -48,6 +59,10 @@ export default function FindCommunityScreen() {
         sectionLabel: { fontSize: 12, fontWeight: 'bold', color: colors.text.secondary, letterSpacing: 1, marginTop: 20, marginBottom: 8, marginLeft: 4 },
         searchBox: { flexDirection: 'row', alignItems: 'center', minHeight: 48, borderRadius: 14, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, paddingLeft: 12 },
         searchInput: { flex: 1, minWidth: 0, minHeight: 48, fontSize: 16, color: colors.text.body, paddingVertical: 8, paddingHorizontal: 8 },
+        placeRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 12 },
+        placeName: { fontSize: 15, fontWeight: '700', color: colors.text.heading, flexShrink: 1 },
+        linkBtn: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 4, marginTop: 10 },
+        linkText: { fontSize: 15, fontWeight: '600', color: colors.text.link, textDecorationLine: 'underline' },
         pillBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', minHeight: 48, paddingHorizontal: 16, borderRadius: 24, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, marginTop: 10 },
         pillText: { fontSize: 15, fontWeight: '700', color: colors.text.body, flexShrink: 1 },
         card: { backgroundColor: colors.surface.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, padding: 14, marginBottom: 10 },
@@ -57,7 +72,7 @@ export default function FindCommunityScreen() {
         note: { fontSize: 14, color: colors.text.body, marginTop: 8, lineHeight: 20 },
         refusal: { fontSize: 14, color: colors.feedback.warning.fg, marginTop: 8, lineHeight: 20 },
         actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-        primary: { minHeight: 48, paddingHorizontal: 18, borderRadius: 12, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center' },
+        primary: { minHeight: 48, paddingHorizontal: 18, borderRadius: 12, backgroundColor: colors.brand.fill, alignItems: 'center', justifyContent: 'center' },
         primaryText: { color: colors.text.inverse, fontSize: 15, fontWeight: '800', textAlign: 'center' },
         secondary: { minHeight: 48, paddingHorizontal: 18, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center' },
         secondaryText: { color: colors.text.body, fontSize: 15, fontWeight: '700', textAlign: 'center' },
@@ -78,19 +93,32 @@ export default function FindCommunityScreen() {
     const [point, setPoint] = useState<Point | null>(null);
     const [locating, setLocating] = useState(false);
     const [locationNote, setLocationNote] = useState<string | null>(null);
+    // A town the member typed instead (utils/typed-place.ts): it wins over the phone's place until "Use my location".
+    const [typed, setTyped] = useState<TypedPlace | null>(null);
+    const [townOpen, setTownOpen] = useState(params.town === '1');
 
     useEffect(() => {
         let alive = true;
-        // Only a location the phone already may read: this screen asks when the member taps "Use my location".
-        Location.getForegroundPermissionsAsync()
-            .then(async ({ status }) => {
-                if (status !== 'granted') return;
-                const last = await Location.getLastKnownPositionAsync();
-                if (alive && last) setPoint({ lat: last.coords.latitude, lng: last.coords.longitude });
-            })
-            .catch(() => {});
+        readTypedPlace().then(async t => {
+            if (!alive) return;
+            if (t) { setTyped(t); setPoint({ lat: t.lat, lng: t.lng }); return; }
+            // Only a location the phone already may read: this screen asks when the member taps "Use my location".
+            const { status } = await Location.getForegroundPermissionsAsync();
+            if (status !== 'granted') return;
+            const last = await Location.getLastKnownPositionAsync();
+            if (alive && last) setPoint(was => was ?? { lat: last.coords.latitude, lng: last.coords.longitude });
+        }).catch(() => {});
         return () => { alive = false; };
     }, []);
+
+    const pickTown = async (r: AddressResult) => {
+        const t = await saveTypedPlace(r);
+        if (!t) return;
+        setTyped(t);
+        setPoint({ lat: t.lat, lng: t.lng });
+        setTownOpen(false);
+        setLocationNote(null);
+    };
 
     const locateMe = async () => {
         setLocating(true);
@@ -100,13 +128,18 @@ export default function FindCommunityScreen() {
             let status = now.status;
             if (status !== 'granted' && now.canAskAgain) status = (await Location.requestForegroundPermissionsAsync()).status;
             if (status !== 'granted') {
-                setLocationNote('Location is off for BeanPool. You can still search by name below.');
+                setLocationNote(LOCATION_NOTES.off);
+                setTownOpen(true);
                 return;
             }
             const here = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
             setPoint({ lat: here.coords.latitude, lng: here.coords.longitude });
+            setTyped(null);
+            setTownOpen(false);
+            void forgetTypedPlace();
         } catch {
-            setLocationNote("Couldn't find where you are. You can still search by name below.");
+            setLocationNote(LOCATION_NOTES.failed);
+            setTownOpen(true);
         } finally {
             setLocating(false);
         }
@@ -133,6 +166,23 @@ export default function FindCommunityScreen() {
         const t = setTimeout(loadList, query ? 400 : 0);
         return () => clearTimeout(t);
     }, [loadList, query]);
+
+    // ── A typed server address with no owner yet: "Claim ‹name›" (utils/node-claim.ts) ─────────────────────
+    // Asked only for an address, never a name, and offered only while that server answers that it has no owner: a
+    // community with an owner never shows it.
+    // The name is the server's, cleaned (node-claim.ts cleanClaimName), or the address's host when it gave none.
+    const [claimable, setClaimable] = useState<{ origin: string; name: string; codeId: string } | null>(null);
+    useEffect(() => {
+        const origin = claimProbeOrigin(query);
+        setClaimable(null);
+        if (!origin) return;
+        let alive = true;
+        const t = setTimeout(async () => {
+            const s = await readClaimStatus(origin);
+            if (alive && s.kind === 'unclaimed') setClaimable({ origin, name: s.communityName, codeId: s.codeId });
+        }, 500);
+        return () => { alive = false; clearTimeout(t); };
+    }, [query]);
 
     // ── This phone's knocks, and their answers ──────────────────────────────────────────────────────────
     const [asked, setAsked] = useState<RememberedKnock[]>([]);
@@ -242,7 +292,10 @@ export default function FindCommunityScreen() {
             const nudge = joinedNudge(joined.name);
             Alert.alert(nudge.title, nudge.body, [
                 { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
-                { text: nudge.protect, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: PROTECT_REDIRECT } }) },
+                // Only where each community keeps its own sign-in copy (a build without a key vault).
+                ...(nudge.protect
+                    ? [{ text: nudge.protect, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: PROTECT_REDIRECT } }) }]
+                    : []),
             ], { cancelable: false });
         } catch (e: any) {
             Alert.alert("Couldn't join", e?.message || 'Please try again.');
@@ -397,26 +450,73 @@ export default function FindCommunityScreen() {
                 )}
 
                 <Text style={styles.sectionLabel}>{point ? 'NEAREST FIRST' : 'COMMUNITIES'}</Text>
+                {typed && !townOpen && (
+                    <View style={styles.placeRow} testID="find-town-picked">
+                        <Text style={styles.placeName} numberOfLines={2}>{nearLine(typed)}</Text>
+                        <Pressable style={[styles.linkBtn, { marginTop: 0 }]} onPress={() => setTownOpen(true)} accessibilityRole="button" accessibilityLabel="Change the town">
+                            <Text style={styles.linkText}>change</Text>
+                        </Pressable>
+                    </View>
+                )}
+                {(!point || !!typed) && (
+                    <View style={styles.placeRow}>
+                        <Pressable style={styles.pillBtn} onPress={locateMe} disabled={locating} accessibilityRole="button">
+                            <MaterialCommunityIcons name="crosshairs-gps" size={20} color={colors.brand.primary} />
+                            <Text style={styles.pillText}>{locating ? 'Finding you…' : 'Use my location'}</Text>
+                        </Pressable>
+                        {!point && !townOpen && (
+                            <Pressable style={styles.linkBtn} onPress={() => setTownOpen(true)} accessibilityRole="button" testID="find-type-town">
+                                <Text style={styles.linkText}>{TYPE_YOUR_TOWN}</Text>
+                            </Pressable>
+                        )}
+                    </View>
+                )}
+                {!!point && !typed && !townOpen && (
+                    <Pressable style={[styles.linkBtn, { alignSelf: 'flex-start', marginTop: 0 }]} onPress={() => setTownOpen(true)} accessibilityRole="button" testID="find-type-town-instead">
+                        <Text style={styles.linkText}>{NOT_HERE_TYPE_YOUR_TOWN}</Text>
+                    </Pressable>
+                )}
+                {!!locationNote && <Text style={[styles.rowSub, { marginTop: 6 }]} accessibilityLiveRegion="polite">{locationNote}</Text>}
+                {townOpen && (
+                    <View style={{ marginTop: 10 }}>
+                        <AddressSearch onPick={r => void pickTown(r)} accent={colors.brand.primary} words={FIND_TOWN_SEARCH_WORDS} />
+                        <Pressable style={[styles.linkBtn, { alignSelf: 'flex-start', marginTop: 4 }]} onPress={() => setTownOpen(false)} accessibilityRole="button"
+                            accessibilityLabel={typed ? `Cancel, and keep ${nearLine(typed)}` : 'Cancel the town search'} testID="find-town-cancel">
+                            <Text style={styles.linkText}>Cancel</Text>
+                        </Pressable>
+                    </View>
+                )}
+
+                <Text style={[styles.label, { marginTop: 16 }]}>Know the community's name, or its server address?</Text>
                 <View style={styles.searchBox}>
                     <MaterialCommunityIcons name="magnify" size={20} color={colors.text.muted} />
                     <TextInput
                         style={styles.searchInput}
                         value={query}
                         onChangeText={setQuery}
-                        placeholder="Search by name"
+                        placeholder="Community name"
                         placeholderTextColor={colors.text.muted}
                         returnKeyType="search"
                         autoCorrect={false}
                         accessibilityLabel="Search communities by name"
                     />
                 </View>
-                {!point && (
-                    <Pressable style={styles.pillBtn} onPress={locateMe} disabled={locating} accessibilityRole="button">
-                        <MaterialCommunityIcons name="crosshairs-gps" size={20} color={colors.brand.primary} />
-                        <Text style={styles.pillText}>{locating ? 'Finding you…' : 'Use my location'}</Text>
-                    </Pressable>
+                {claimable && (
+                    <View style={[styles.card, { marginTop: 10 }]}>
+                        <Text style={styles.name}>{claimable.name} has no owner yet</Text>
+                        <Text style={styles.facts} selectable>{claimable.origin}</Text>
+                        <Text style={styles.note}>If you installed it, claim it with the one-time code on the server.</Text>
+                        <View style={styles.actions}>
+                            <Pressable
+                                style={styles.primary}
+                                onPress={() => router.push(claimRouteFor({ node: claimable.origin, nodeRefused: false, codeId: claimable.codeId, code: null }) as any)}
+                                accessibilityRole="button"
+                            >
+                                <Text style={styles.primaryText}>Claim {claimable.name}</Text>
+                            </Pressable>
+                        </View>
+                    </View>
                 )}
-                {!!locationNote && <Text style={styles.rowSub}>{locationNote}</Text>}
 
                 <View style={{ marginTop: 12 }}>
                     {loading && communities === null ? (
@@ -461,7 +561,7 @@ export default function FindCommunityScreen() {
                         <View style={styles.rowText}>
                             <Text style={styles.rowTitle}>Tell me when one starts here</Text>
                             <Text style={styles.rowSub}>
-                                {point ? 'Only the area (about 10 km) is kept, never where you are exactly.' : 'Use your location first, so we know where "here" is.'}
+                                {point ? 'Only the area (about 10 km) is kept, never where you are exactly.' : 'Use your location or type your town first, so we know where "here" is.'}
                             </Text>
                         </View>
                     </View>

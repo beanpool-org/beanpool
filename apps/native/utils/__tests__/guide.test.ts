@@ -7,9 +7,24 @@ import {
     GUIDE_CACHE_KEY, GUIDE_SLUGS, GUIDE_URL, type Guide,
 } from '../guide';
 import { FEEDBACK_LIVE } from '@beanpool/core';
+import { loadGuide, serializeGuide } from '../../../../packages/beanpool-guide/src/guide.mjs';
 
 const repo = path.resolve(__dirname, '../../../..');
 const read = (rel: string) => fs.readFileSync(path.join(repo, rel), 'utf8');
+
+// The app bundles the PUBLISHED guide, which the director publishes after merge (packages/beanpool-guide/README.md).
+// So what the guide says, which pages and sections it has and what search finds, is pinned on the pages
+// (packages/beanpool-guide/content): the PR that changes the words changes the pin with them, and nothing here breaks
+// when they are published. The bundled copy is checked only for being valid and the exact bytes of its published text.
+const CONTENT = path.join(repo, 'packages/beanpool-guide/content');
+function readPages(): Guide {
+    const pages = validateGuide(loadGuide(CONTENT, { version: 1 }));
+    if (!pages) throw new Error('the pages in packages/beanpool-guide/content do not make a guide the app accepts');
+    return pages;
+}
+const PAGES = readPages();
+/** Whether the pages hold text the bundled copy does not have yet: it waits for the director's publish. */
+const PENDING = PAGES.hash !== getBundledGuide().hash;
 
 function memoryStorage(initial: Record<string, string> = {}) {
     const data = { ...initial };
@@ -48,9 +63,26 @@ describe('one source: the bundled guide is the website guide', () => {
         expect(getBundledGuide()).toEqual(validateGuide(JSON.parse(website)));
     });
 
-    it('the bundled guide is valid and has every guide the sheet links to', () => {
-        const g = getBundledGuide();
-        for (const slug of Object.values(GUIDE_SLUGS)) expect(findGuidePage(g, slug), slug).not.toBeNull();
+    it('the bundled bytes are a fresh build of the published text, under the published version', () => {
+        const bundled = read('packages/beanpool-guide/generated/guide.json');
+        const { version } = getBundledGuide();
+        expect(serializeGuide(JSON.parse(bundled))).toBe(bundled);
+        // Until the director publishes, the pages hold newer text than the bundled copy, and only its own bytes are checked.
+        if (!PENDING) expect(serializeGuide(loadGuide(CONTENT, { version }))).toBe(bundled);
+    });
+
+    it('the bundled guide is valid', () => {
+        expect(validateGuide(JSON.parse(read('packages/beanpool-guide/generated/guide.json')))).not.toBeNull();
+    });
+
+    it('every guide the sheet links to is a page, and is in the bundled copy unless the pages wait to be published', () => {
+        for (const slug of Object.values(GUIDE_SLUGS)) {
+            expect(findGuidePage(PAGES, slug), slug).not.toBeNull();
+            // A new or renamed page reaches the bundled copy at the publish; until then the sheet hides its row.
+            if (!findGuidePage(getBundledGuide(), slug)) {
+                expect(PENDING, `${slug} is not in the bundled guide, yet the pages hold nothing waiting to be published`).toBe(true);
+            }
+        }
     });
 });
 
@@ -169,8 +201,8 @@ describe('splitBold', () => {
     });
 });
 
-describe('the manual', () => {
-    const guide = getBundledGuide();
+describe('the manual (on the pages)', () => {
+    const guide = PAGES;
 
     it('has every part of the app, and every page lists Related pages', () => {
         expect(manualSections(guide).map(s => s.id)).toEqual(['getting-started', 'market', 'map', 'talk', 'pulse', 'commons', 'ledger', 'settings']);
@@ -216,7 +248,7 @@ describe('the manual', () => {
 });
 
 describe('Learn videos (extra, never required)', () => {
-    const page = { ...findGuidePage(getBundledGuide(), 'gifts')! };
+    const page = { ...findGuidePage(PAGES, 'gifts')! };
     const curated = (title: string, url: string) => ({ title, url, source: 'curated' });
 
     it('no videos, no link', () => {
@@ -241,7 +273,7 @@ describe('Learn videos (extra, never required)', () => {
 
     // Review round 1 (B1): any member can put items in the Learn lane, and an RSS channel picks any title and link.
     it('a member-sourced item with the exact page title never links, on any page', () => {
-        const g = getBundledGuide();
+        const g = PAGES;
         for (const slug of ['your-12-words', 'recovery', 'joining', 'gifts']) {
             const p = findGuidePage(g, slug)!;
             expect(p).toBeTruthy();
@@ -288,7 +320,7 @@ describe('Learn videos (extra, never required)', () => {
     });
 
     it('the feed mapping the app uses keeps source, so a member item from the feed never links', () => {
-        const title = findGuidePage(getBundledGuide(), 'your-12-words')!.title;
+        const title = findGuidePage(PAGES, 'your-12-words')!.title;
         const feed = [
             { id: 'a', category: 'learn', title, url: 'https://www.youtube.com/watch?v=AAAAAAAAAAA', source: 'autolist' },
             { id: 'b', category: 'learn', title: 'your 12 WORDS!!', url: 'https://evil.example/x', source: 'autolist' },
@@ -296,7 +328,7 @@ describe('Learn videos (extra, never required)', () => {
         ];
         const videos = learnVideosFromFeed(feed);
         expect(videos.map(v => v.source)).toEqual(['autolist', 'autolist']);
-        const p = findGuidePage(getBundledGuide(), 'your-12-words')!;
+        const p = findGuidePage(PAGES, 'your-12-words')!;
         expect(findGuideVideo(p, videos)).toBeNull();
         const official = learnVideosFromFeed([{ ...feed[0], source: 'curated' }]);
         expect(findGuideVideo(p, official)?.url).toBe('https://www.youtube.com/watch?v=AAAAAAAAAAA');

@@ -16,7 +16,7 @@
  *      by every module that reads a point from a query) is one this suite measures below; one that isn't fails here
  *   3. the guest shape: every listing there, every person neutral (`'hidden'`, `''`, null, 0), the counts kept,
  *      'pending' kept, the area for the place; direct, group and hidden posts out; one member's listings, a group's or
- *      a person's refused 403; the membership probe names only the signer; the Commons decisions, pool balance and
+ *      a person's refused 403; the membership probe answers only the key it asks about; the Commons decisions, pool balance and
  *      Pulse feed for members only; `X-BeanPool-View: guest`
  *   4. a member's body is the engine's member read, byte for byte, with `X-BeanPool-View: member`
  *   5. ETag: a guest's token never gets a member a 304, a member's never gets a guest one, a key that joins or is
@@ -36,18 +36,23 @@
  *      every drop, converges on the lone listing's area centre, never the listing
  *  7c. the communities (/api/global/communities, and the card's): each distance and the order are from the place each
  *      community shows in the body (the public directory's), and from nothing else
- *   8. the other combinations, each in a child process (below); among them a local node (NODE_PROFILE unset): nothing
- *      changes; a guest's body is the engine's read for that reader, names, keys and places included, and no view
- *      header is sent; an enterprise names its keepers; faces are public by key, avatar URLs
- *      carry no `k=`, and the recovery lookup matches a prefix with photos; where an operator keeps the directory there,
- *      the landing card's count is from each listing's place, as the listing shows it; a non-member signer reads a trust
- *      profile and a code's holder gets a member's card, as before; a pruned account is refused every read it signs,
- *      as on every node (#1177 settles #1156's call); and a HEAD
+ *   8. the other combinations, each in a child process (below); among them a local node (NODE_PROFILE unset), which
+ *      runs section 2's sweep too (nothing public there names a member to a guest), and then its own: the listings and
+ *      every other read that names people (the Commons decisions, the Pulse feed, the enterprises, crowdfunds and
+ *      projects) are refused to a guest with code members_only and the global community's address, and no view header
+ *      is sent; the Commons pot stays public; the membership probe answers only the key it asks about; faces are public by key, avatar URLs
+ *      carry no `k=` (a listing's photo URL carries its key: the listings are members'), and the recovery lookup matches
+ *      the whole name only, with no photo or join date; where an operator keeps the directory there, the landing card's
+ *      count is a member's from each listing's place and anyone else's from its area, so bisecting it finds the area; a
+ *      non-member signer reads no trust profile and a code's holder gets no member's card but their own, as on global;
+ *      a pruned account is refused every read it signs, as on every node (#1177 settles #1156's call); and a HEAD
  *      to a gated read is refused as its GET is, on this node too
  *   9. faces and names (G9a-2): /api/avatar/:pk without its key is 404 to anyone; the member-only key a member's
  *      members list carries opens it, unsigned as an <img> asks; a wrong key, another member's, or the key of a photo
  *      since changed is 404, as is a conditional request without one; a member's listings carry keyed URLs, a guest's
- *      none. The recovery lookup matches the typed name exactly (case forgiven) with no photo or join date
+ *      none. A group's own picture (#1486) is keyed on every node: a member's read of the group carries its keyed URL,
+ *      which opens it unsigned; without that key, with a face's, or at another group's address it is 404 to anyone. The
+ *      recovery lookup matches the typed name exactly (case forgiven) with no photo or join date
  *  10. the Beans constructs (an enterprise Alice leads and Bob keeps and backs, a crowdfund Bob runs, a Commons project
  *      Alice proposed): where they are switched on and so is the visitors' view, every read of them is for members
  *      only, trailing slash or not, and a member reads them naming their people; where they are off, 404 to everyone
@@ -284,6 +289,7 @@ async function main(): Promise<void> {
     const { initStateEngine, createPost, createGroup, getPosts } = se;
     const https = await import('./https-server.js') as any;
     const { db, createCrowdfundProject, initSchema } = await import('./db/db.js');
+    const { getMemberPhoto, setMemberPhoto } = await import('@beanpool/engine');
     const { getProfileSwitches } = await import('./config/node-profile.js');
     const { writeDirectoryRows } = await import('./engine/directory-cache.js');
     // Before boot, where the faces' keys are decided (engine/avatar-keys.ts); the schema first, as boot would lay it.
@@ -301,9 +307,10 @@ async function main(): Promise<void> {
     // ── the community ──────────────────────────────────────────────────────────────────────────
     const member = (callsign: string, status = 'active'): Id => {
         const id = newId();
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
-                    VALUES (?, ?, ?, ?, 'seed', ?, ?)`)
-            .run(id.pk, callsign, status, new Date(Date.now() - 60 * 86_400_000).toISOString(), `INV-${callsign.toUpperCase()}`, TINY_PNG);
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                    VALUES (?, ?, ?, ?, 'seed', ?)`)
+            .run(id.pk, callsign, status, new Date(Date.now() - 60 * 86_400_000).toISOString(), `INV-${callsign.toUpperCase()}`);
+        setMemberPhoto(db, id.pk, TINY_PNG);
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
@@ -323,14 +330,16 @@ async function main(): Promise<void> {
         eventPlaceName: PLACE_NAME, eventPrivateNote: 'Sentinel side gate code 4417',
     }, 'event', 'community');
     const poll = post(alice, 'Sentinel poll: where should the tool library go', undefined, {
-        pollOptions: [{ id: 'opt_hall', text: 'The hall' }, { id: 'opt_shed', text: 'The shed' }],
+        // An open vote, so a member's read names its voters (polls are anonymous unless their creator chooses this).
+        pollOptions: [{ id: 'opt_hall', text: 'The hall' }, { id: 'opt_shed', text: 'The shed' }], pollOpenVote: true,
     }, 'poll', 'community');
     const trade = post(alice, 'Sentinel bike repair, done', TRADE_AT);
     const pendingPost = post(alice, 'Sentinel pumpkin seedlings', PENDING_AT);
     const keeperPost = post(grid, 'Sentinel keeper post', KEEPER_AT);
     const bobOffer = post(bob, 'Sentinel sourdough starter', BOB_AT);
     const direct = post(alice, 'Sentinel direct offer for Bob', OFFER_AT, { audienceScope: 'direct', targetPubkey: bob.pk });
-    const club = createGroup({ name: 'Sentinel club', createdBy: alice.pk });
+    // With a picture of its own, which goes out as a keyed URL to its members only (#1486; section 9).
+    const club = createGroup({ name: 'Sentinel club', createdBy: alice.pk, avatarUrl: TINY_PNG });
     const groupPost = post(alice, 'Sentinel club offer', OFFER_AT, { audienceScope: 'group', targetGroupId: club.id });
     const hiddenPost = post(bob, 'Sentinel reported offer', BOB_AT);
     const now = new Date().toISOString();
@@ -442,11 +451,6 @@ async function main(): Promise<void> {
         `${POSTS}?${ALL_TYPES}&lat=-28.55&lng=153.51&sort=recent`,
         `${POSTS}?audienceScope=public&${ALL_TYPES}`,
     ];
-    if (LOCAL_RUN) {
-        await localChecks();
-        return;
-    }
-
     // ── 2. the sweep ───────────────────────────────────────────────────────────────────────────
     console.log('\n── 2. the sweep: every public read, as an unsigned caller and a non-member signer (a pruned account is refused them all) ──');
     /** One materialised request per pattern, with what that route may echo because the caller typed it. */
@@ -464,13 +468,15 @@ async function main(): Promise<void> {
         { path: '/api/messages/msg-sentinel/attachment' },
         { path: '/api/pulse/items/item_sentinel/thumbnail' },
         { path: `/api/avatar/${alice.pk}`, echoes: [alice.pk] },
+        // A group's own picture, without the key only a group read hands out (#1486): 404 to anyone (section 9).
+        { path: `/api/groups/${club.id}/picture` },
     ];
     for (const re of PATTERNS ?? []) {
         assert(patternExamples.some(e => re.test(e.path.split('?')[0])),
             `PUBLIC_READ_PATTERNS ${re} has an example in this sweep (a new public pattern must be listed here)`);
     }
     /** The other reads that take a point (2b), each read with one as well. */
-    const withPoint = new Set(['/api/global/home', '/api/global/communities']);
+    const withPoint = new Set(['/api/global/home', '/api/global/communities', '/api/home']);
     const exactReads = [...(EXACT ?? [])].flatMap(p => p === POSTS ? postReads
         : withPoint.has(p) ? [p, `${p}?lat=-28.55&lng=153.51`, `${p}?lat=${LONE_AT.lat}&lng=${LONE_AT.lng}`]
             : [p === '/api/invite/check' ? `${p}?code=NOPE-NOPE` : p]);
@@ -515,6 +521,13 @@ async function main(): Promise<void> {
     // Not the device-pairing poll: the middleware never sees /api/pair/ (isSignatureBypassed), a relay that knows no member.
     await prunedRefused('every public read it signs', [...exactReads, ...patternExamples.map(e => e.path)].filter(p => !p.startsWith('/api/pair/')));
 
+    // A local community: the sweep above is its too, since nothing on it names a member to a guest either (Marty,
+    // 2026-09-28; its people reads are members' since 2026-10-01). The rest of its checks are its own.
+    if (LOCAL_RUN) {
+        await localChecks();
+        return;
+    }
+
     // ── 2b. every read that takes a point is measured ──────────────────────────────────────────
     console.log('\n── 2b. every read a visitor can send a point to is one this suite measures ──');
     /**
@@ -526,6 +539,7 @@ async function main(): Promise<void> {
         [POSTS]: "section 7: each place, distance, order, radius and page is its area's",
         '/api/global/home': "section 7b: the nearby count is of the listings whose area is within 50 km, and the bisection finds the area",
         '/api/global/communities': "section 7c: each distance and the order are from the place each community shows (the public directory's)",
+        '/api/home': "section 7d: the find card is the landing card's own body (7b), and each listing's and event's distance the listing's visitors' read (7)",
     };
     /** The People lists take a point from a member only (routes/community.ts peoplePoint): gated, refused to every guest. */
     const PEOPLE_POINT_READS = ['/api/community/members', '/api/members'];
@@ -569,6 +583,7 @@ async function main(): Promise<void> {
         const KNOWN: Record<string, number> = {
             [path.join('routes', 'marketplace.ts')]: 1, // the listing (POSTS)
             [path.join('routes', 'global-directory.ts')]: 2, // the communities and the landing card
+            [path.join('routes', 'home.ts')]: 1, // Home in one read (/api/home)
             [path.join('routes', 'community.ts')]: 1, // peoplePoint: the People lists, members only
         };
         assert(JSON.stringify(Object.entries(found).sort()) === JSON.stringify(Object.entries(KNOWN).sort()),
@@ -669,9 +684,10 @@ async function main(): Promise<void> {
             const refused = await call('GET', id, `${POSTS}?${q}`);
             assert(refused.status === 403 && refused.body?.code === 'members_only', `${who}: ?${q.split('=')[0]}=… is refused 403 members_only (got ${refused.status})`);
         }
+        // Answered only to the key it asks about (multi-community review F3): refused, saying nothing of Alice's key.
         const probe = await call('GET', id, `/api/community/membership/${alice.pk}`);
-        assert(probe.status === 200 && probe.body?.isMember === true && probe.body?.callsign === null,
-            `${who}: the membership probe says Alice's key is a member and names nobody (got ${JSON.stringify(probe.body)})`);
+        assert(probe.status === (id ? 403 : 401) && !('isMember' in (probe.body ?? {})) && !probe.text.includes('SentinelAlice'),
+            `${who}: the membership probe is refused, and says nothing of Alice's key (got ${probe.status} ${JSON.stringify(probe.body)})`);
         for (const p of ['/api/commons/decisions', '/api/commons/decisions/dec-sentinel', '/api/commons/balance', '/api/pulse/feed']) {
             const gated = await call('GET', id, p);
             assert(gated.status === (id ? 403 : 401), `${who}: ${p} is for members only (got ${gated.status})`);
@@ -688,7 +704,8 @@ async function main(): Promise<void> {
         const own = await call('GET', alice, `/api/community/membership/${alice.pk}`);
         assert(own.body?.callsign === 'SentinelAlice', `the membership probe, signed by that very key, names its holder (got ${JSON.stringify(own.body)})`);
         const other = await call('GET', bob, `/api/community/membership/${alice.pk}`);
-        assert(other.body?.callsign === null, 'signed by another member, it names nobody either');
+        assert(other.status === 403 && !('isMember' in (other.body ?? {})) && !other.text.includes('SentinelAlice'),
+            `signed by another member, it is refused and names nobody either (got ${other.status} ${other.text.slice(0, 80)})`);
         for (const p of ['/api/commons/decisions', '/api/commons/decisions/dec-sentinel', '/api/commons/balance', '/api/pulse/feed']) {
             const r = await call('GET', bob, p);
             assert(r.status === 200, `a member reads ${p} (got ${r.status})`);
@@ -755,6 +772,10 @@ async function main(): Promise<void> {
     {
         const wsBase = `${BASE.replace('https', 'wss')}/ws`;
         const sockets = { unsigned: await openSocket(wsBase), outsider: await openSocket(`${wsBase}?${signedWsQuery(outsider)}`), member: await openSocket(`${wsBase}?${signedWsQuery(bob)}`) };
+        // Where listings sync by area (the global profile's `nearbyListings`, DESIGN-global-sync-by-area §2.5), a listing's
+        // own event reaches the members near it and its parties alone (test-ws-nearby-push): Bob's area is near the post.
+        const byArea = getProfileSwitches().nearbyListings;
+        if (byArea) (await import('./engine/member-area.js')).setMemberArea(bob.pk, { lat: 12.3, lng: 45.7 });
         await sleep(200);
         const made = await call('POST', alice, POSTS, { type: 'offer', category: 'other', title: 'Sentinel live offer', description: 'Sentinel live', authorPublicKey: alice.pk, lat: 12.34567, lng: 45.67891 });
         assert(made.status === 200 && made.body?.success, `Alice posts over HTTP (got ${made.status} ${made.text.slice(0, 100)})`);
@@ -763,7 +784,8 @@ async function main(): Promise<void> {
             // The greeting every socket gets on connect is the node's counts (/api/community/info's); after it, doorbells.
             const events = s.raw.map(m => { try { return JSON.parse(m); } catch { return { type: '?' }; } }).filter(e => e.type !== 'state_snapshot');
             const shapes = events.map(e => Object.keys(e).join(','));
-            assert(events.length > 0 && shapes.every(k => k === 'type'), `${who} socket gets doorbells only: { type } (${events.length} after the greeting: ${[...new Set(shapes)].join(' / ')})`);
+            if (byArea) assert(events.length === 0, `${who} socket gets nothing of a listing where listings sync by area: it has no area (${events.length} after the greeting: ${[...new Set(shapes)].join(' / ')})`);
+            else assert(events.length > 0 && shapes.every(k => k === 'type'), `${who} socket gets doorbells only: { type } (${events.length} after the greeting: ${[...new Set(shapes)].join(' / ')})`);
             assert(!s.raw.some(m => m.includes(alice.pk) || m.includes('Sentinel')), `${who} socket is sent nothing of the post or its author`);
         }
         assert(sockets.member.raw.some(m => m.includes('Sentinel live offer')), "a member's socket gets the post, as always");
@@ -909,9 +931,31 @@ async function main(): Promise<void> {
         const bobKey = new URL(`https://x${bobUrl}`).searchParams.get('k') ?? '';
         assert((await call('GET', null, direct.url!.replace(`k=${k}`, `k=${bobKey}`))).status === 404, "another member's key is 404 for Alice's face");
         assert((await call('GET', null, `/api/avatar/${outsider.pk}?k=${k}`)).status === 404, 'a key for a key with no member is 404');
+        // A group's own picture (#1486): keyed on every node, since a group is its members' read everywhere. The URL a group
+        // read hands its member opens it unsigned, as an <img> asks; without that key, or with a face's, it is 404 to anyone.
+        {
+            const card = await call('GET', alice, `/api/groups/${club.id}`);
+            const pictureUrl = card.body?.avatarUrl as string | undefined;
+            assert(!!pictureUrl && new RegExp(`^/api/groups/${club.id}/picture\\?v=[0-9a-f]+&k=[A-Za-z0-9_-]{22}$`).test(pictureUrl) && !card.text.includes('base64'),
+                `a member's read of the club carries its picture as a keyed URL, never the picture (${pictureUrl})`);
+            const pic = await fetch(`${BASE}${pictureUrl}`);
+            assert(pic.status === 200 && pic.headers.get('content-type') === 'image/png' && Buffer.from(await pic.arrayBuffer()).equals(PNG_BYTES),
+                `that URL opens the picture unsigned, as an <img> asks (got ${pic.status} ${pic.headers.get('content-type')})`);
+            const unkeyed = pictureUrl!.replace(/&k=.*$/, '');
+            const pk = new URL(`https://x${pictureUrl}`).searchParams.get('k') ?? '';
+            for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider], ['a member', alice]] as const) {
+                const r = await call('GET', id, unkeyed);
+                assert(r.status === 404 && r.body?.error === 'Picture not found' && !r.text.includes('base64'),
+                    `${who}: the club's picture without its key is 404 Picture not found (got ${r.status})`);
+            }
+            assert((await call('GET', null, pictureUrl!.replace(`k=${pk}`, `k=${k}`))).status === 404, "a face's key is 404 for the club's picture");
+            assert((await call('GET', null, `/api/groups/${club.id}/picture?k=${pk}`)).status === 200, 'its key alone opens it (the version is for caches)');
+            assert((await call('GET', null, `/api/groups/no-such-group/picture?k=${pk}`)).status === 404, "the club's key is 404 for another group's address");
+        }
         // Alice changes her photo: the old URL and its key open nothing; the new ones do.
         const NEW_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-        db.prepare('UPDATE members SET avatar_url = ?, profile_updated_at = ? WHERE public_key = ?').run(NEW_PNG, new Date().toISOString(), alice.pk);
+        db.prepare('UPDATE members SET profile_updated_at = ? WHERE public_key = ?').run(new Date().toISOString(), alice.pk);
+        setMemberPhoto(db, alice.pk, NEW_PNG);
         assert((await call('GET', null, direct.url!)).status === 404, 'after a photo change, the old URL and its key are 404');
         const changed = await avatarOf(bob, '/api/community/members', alice);
         assert(!!changed.url && changed.url !== direct.url && (await call('GET', null, changed.url)).status === 200,
@@ -975,11 +1019,10 @@ async function main(): Promise<void> {
         const { resetChatRateLimit } = await import('./chat-rate-limit.js');
         const { resetAdminAuthTarpit } = await import('./admin-auth.js');
         const { resetPasswordBrake } = await import('./password-brake.js');
-        const { pruneGithubPolls } = await import('./github-poll-rate-limit.js');
         const earlier = beforeCall;
         beforeCall = () => {
             earlier();
-            resetAdminRateLimit?.(); resetChatRateLimit(); resetAdminAuthTarpit(); resetPasswordBrake(); pruneGithubPolls(Date.now() + 3_600_000);
+            resetAdminRateLimit?.(); resetChatRateLimit(); resetAdminAuthTarpit(); resetPasswordBrake();
         };
         // The admin tarpit (admin-auth.ts) sleeps before it refuses: 250 ms even from the floor resetAdminAuthTarpit leaves
         // it at, on each of the ~180 admin reads, writes and HEADs a caller sends here. That was about 400 s of this suite's
@@ -1034,7 +1077,11 @@ async function main(): Promise<void> {
         const tradesBefore = tradeStatuses();
         const clubEventNow = () => JSON.stringify(db.prepare('SELECT title, event_place_name, event_start_at, event_state FROM posts WHERE id = ?').get(clubEvent.id));
         const clubEventBefore = clubEventNow();
-        // A code and a paper ticket from Bob, as anyone he invites holds.
+        // A code and a paper ticket from Bob, as anyone he invites holds. The global node as it ships takes no invites
+        // (every redeem there is 404 feature_off: test-invites-off), so for the card below (11c) invites are on, as an
+        // operator may turn them back on there; the sweep (11d) runs as the node ships.
+        const invitesForTheCard = process.env.NODE_PROFILE === 'global';
+        if (invitesForTheCard) db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run('nodeProfile.invites', 'true');
         const code = se.generateInvite(bob.pk)!.code;
         const ticketPayload = JSON.stringify({ i: bob.pk, t: Date.now() });
         const ticketB64 = Buffer.from(JSON.stringify({ p: ticketPayload, s: crypto.sign(null, Buffer.from(ticketPayload), bob.priv).toString('base64') })).toString('base64');
@@ -1077,27 +1124,32 @@ async function main(): Promise<void> {
         }
 
         // 11c. The redeem card: a code or a ticket names nobody to its holder, but a member re-entering, who signs the
-        // redeem with their own key, still reads their own photo from it (native utils/db.ts redeemInvite).
+        // redeem with their own key, still reads their own photo from it (native utils/db.ts redeemInvite). Until
+        // 2026-10-01 a redeem not signed by Alice's key was answered "already a member" (and on a local node with her card,
+        // below); now a redeem must be signed by the key it names (Fable's review, LOW 4), so it is refused, naming nobody.
         {
             const redeemers: Array<[string, Id | null]> = [['unsigned', null], ['a non-member signer', newId()], ['a pruned account', pruned], ['Bob, signing for Alice', bob]];
             for (const [who, id] of redeemers) {
                 const r1 = await call('POST', id, '/api/invite/redeem', { code, publicKey: alice.pk, callsign: 'Sentinel joiner' });
                 const r2 = await call('POST', id, '/api/invite/redeem-offline', { ticketB64, publicKey: alice.pk, callsign: 'Sentinel joiner' });
-                assert([r1, r2].every(r => r.status === 200 && r.body?.alreadyMember === true && r.body?.member === undefined && noPerson(r, [alice.pk])),
-                    `${who}: redeeming a code and a ticket for Alice's key says she is a member and gives no card (${r1.status} ${r1.text.slice(0, 100)} | ${r2.status} ${r2.text.slice(0, 100)})`);
+                assert([r1, r2].every(r => r.status === 401 && r.body?.code === 'redeem_unsigned' && r.body?.member === undefined && noPerson(r, [alice.pk])),
+                    `${who}: redeeming a code and a ticket for Alice's key is refused, not signed by her key, and gives no card (${r1.status} ${r1.text.slice(0, 100)} | ${r2.status} ${r2.text.slice(0, 100)})`);
             }
             // The card holds the photo itself, as stored: the phone keeps it only if the node can serve it.
-            const photo = (db.prepare('SELECT avatar_url FROM members WHERE public_key = ?').get(alice.pk) as { avatar_url: string }).avatar_url;
+            const photo = getMemberPhoto(db, alice.pk);
             const own = await call('POST', alice, '/api/invite/redeem', { code, publicKey: alice.pk, callsign: 'Sentinel joiner' });
             const ownTicket = await call('POST', alice, '/api/invite/redeem-offline', { ticketB64, publicKey: alice.pk, callsign: 'Sentinel joiner' });
             assert([own, ownTicket].every(r => r.status === 200 && r.body?.member?.callsign === 'SentinelAlice' && r.body?.member?.avatarUrl === photo),
                 `Alice re-entering, signing with her own key, gets her own card and photo as before (${own.status} ${ownTicket.status})`);
         }
+        if (invitesForTheCard) db.prepare('DELETE FROM node_config WHERE key = ?').run('nodeProfile.invites');
 
         // A face goes out as a keyed link or as the photo itself (the redeem card held the photo). So every member but the
         // pruned account gets a photo no listing, enterprise or crowdfund holds, and the sweep looks for it too.
         const FACE = 'data:image/png;base64,U2VudGluZWwgZmFjZSwgYSBtZW1iZXIncyBvd24=';
-        db.prepare("UPDATE members SET avatar_url = ? WHERE public_key NOT IN ('SYSTEM', ?) AND COALESCE(is_treasury, 0) = 0").run(FACE, pruned.pk);
+        for (const { public_key } of db.prepare("SELECT public_key FROM members WHERE public_key NOT IN ('SYSTEM', ?) AND COALESCE(is_treasury, 0) = 0").all(pruned.pk) as { public_key: string }[]) {
+            setMemberPhoto(db, public_key, FACE);
+        }
 
         // 11d. The sweep.
         /** A write's body, unless the route has its own below: every field a route names someone by, each naming Alice. */
@@ -1109,6 +1161,13 @@ async function main(): Promise<void> {
         /** A write's own body, in place of BAIT, where BAIT won't reach the part of it that could hand back a person. */
         const BODIES: Record<string, Record<string, unknown>> = {
             'POST /api/trust/profile': { targetPubkey: alice.pk },
+            // An assistant's call for the reports, which name members, and the owner switch turned off.
+            'POST /mcp': { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'reports_list', arguments: {} } },
+            'POST /api/local/admin/agent/switch': { allowed: false },
+            'POST /api/local/admin/agent/grants': { name: 'Sentinel assistant', days: 7 },
+            'POST /api/local/admin/agent/preview': { tool: 'reports_list', args: { include_text: true } },
+            // A succession statement naming Alice's key as the caller's old one (line-display design §5).
+            'POST /api/community/me/key-succession': { oldPubkey: alice.pk, at: '2026-10-03T04:00:00.000Z', sig: 'A'.repeat(86) + '==' },
             'POST /api/friends/add': { friendPubkey: alice.pk },
             // Anyone holding a code or a ticket, naming a member's key they have not signed for.
             'POST /api/invite/redeem': { code, publicKey: alice.pk, callsign: 'Sentinel joiner' },
@@ -1140,6 +1199,31 @@ async function main(): Promise<void> {
             'POST /api/invite/generate': { publicKey: pruned.pk },
             // Asking to join (G6), past the body checks to the knock itself, where knocks are on: its answer is the signer's own.
             'POST /api/join/knock': { callsign: 'Sentinel knocker', message: 'Sentinel knock, asking to join' },
+            // Claiming the node for Alice's key with a wrong code and no signature of hers: past the shape checks.
+            'POST /api/local/claim': { publicKey: alice.pk, callsign: 'Sentinel claimer', code: 'claim-0000-0000-0000-0000', codeId: '00000000',
+                signedFor: 'localhost', signature: 'AAAA' },
+            // The QR sign-in's two digits, typed by a browser that holds no binding cookie for the pairing.
+            'POST /api/local/admin/auth/pairing/:id/confirm': { code: '00' },
+            // The known floor: raising Alice's own to the cap, and turning the dial on with the cap at its most (owner or admin only).
+            'POST /api/local/admin/known-floor/exception': { memberPubkey: alice.pk, amount: 5000 },
+            'POST /api/local/admin/known-floor': { confirmation: true, knownFloor: 5000, creditCap: 5000 },
+            // Debts and a second chance: paying the Commons Beans it holds, and an admin's settle and work-off (admins only).
+            'POST /api/commons/pay': { amount: 1 },
+            'POST /api/names/debts/:id/settle': { transactionId: 'sentinel-payment' },
+            'POST /api/names/debts/:id/work-off': { memberPubkey: alice.pk },
+            // The Community health panel and the consent: the owner's two lines, and a member's consent to the terms.
+            'POST /api/names/health/settings': { debtLinePct: 90, quietDays: 30 },
+            'POST /api/names/consent': { version: '1:50:60' },
+            'POST /api/local/admin/community-health': { debtLinePct: 90 },
+            'POST /api/local/admin/start-community-url': { url: 'https://start.example.org/how' },
+            // An enterprise's keepers' vote: paying Alice out of the enterprise, and a yes on a vote.
+            'POST /api/enterprise/:treasury/decisions': { title: 'Sentinel pay-out', description: 'A sentinel pay-out to Alice.', effect: 'pay_out',
+                params: { to: alice.pk, amount: 1 } },
+            'POST /api/enterprise/:treasury/decisions/:id/vote': { support: true },
+            // A chat group's vote: removing Alice from the group, and a yes on a vote.
+            'POST /api/groups/:id/decisions': { title: 'Sentinel removal', description: 'A sentinel removal of Alice.', effect: 'remove_group_member',
+                subject: alice.pk },
+            'POST /api/groups/:id/decisions/:decisionId/vote': { support: true },
         };
         /** What a read answers by design with more than was asked: the exact recovery match names its key (section 9). */
         const ECHOES: Record<string, string[]> = { 'GET /api/recovery/lookup/:callsign': [alice.pk] };
@@ -1159,8 +1243,9 @@ async function main(): Promise<void> {
             'POST /api/channels/mine', 'GET /api/channels/options',
             'GET /api/commons/balance', 'GET /api/commons/decisions', 'POST /api/commons/decisions', 'GET /api/commons/decisions/:id',
             'POST /api/commons/decisions/:id/vote', 'GET /api/commons/projects', 'POST /api/commons/projects', 'POST /api/commons/projects/delete',
-            'POST /api/commons/projects/update',
-            'GET /api/community/health', 'GET /api/community/info', 'GET /api/community/me', 'POST /api/community/me/area', 'GET /api/community/members',
+            'POST /api/commons/projects/update', 'POST /api/commons/pay', 'GET /api/commons/repayment',
+            'GET /api/community/consent-terms', 'GET /api/community/health', 'GET /api/community/info', 'GET /api/community/me', 'POST /api/community/me/area',
+            'POST /api/community/me/key-succession', 'GET /api/community/members',
             'GET /api/community/membership/:publicKey', 'POST /api/community/register',
             'GET /api/crowdfund/projects', 'POST /api/crowdfund/projects', 'GET /api/crowdfund/projects/:id', 'POST /api/crowdfund/projects/:id/pledge',
             'POST /api/crowdfund/projects/delete', 'POST /api/crowdfund/projects/update',
@@ -1176,6 +1261,9 @@ async function main(): Promise<void> {
             'POST /api/enterprise/:treasury/resume', 'GET /api/enterprise/:treasury/succession',
             'POST /api/enterprise/:treasury/succession/:proposalId/vote', 'POST /api/enterprise/:treasury/succession/propose',
             'GET /api/enterprise/:treasury/thread', 'POST /api/enterprise/:treasury/thread/message',
+            // An enterprise's keepers' votes (routes/enterprise-decisions.ts): its keepers only, everyone else 404.
+            'GET /api/enterprise/:treasury/decisions', 'POST /api/enterprise/:treasury/decisions',
+            'GET /api/enterprise/:treasury/decisions/:id', 'POST /api/enterprise/:treasury/decisions/:id/vote',
             'DELETE /api/enterprise/:treasury/thread/message/:messageId', 'POST /api/enterprise/:treasury/thread/remove',
             'POST /api/enterprise/:treasury/wind-up/cancel', 'POST /api/enterprise/:treasury/wind-up/finalise',
             'POST /api/enterprise/:treasury/wind-up/initiate',
@@ -1185,47 +1273,68 @@ async function main(): Promise<void> {
             'PUT /api/events/:postId/reminder', 'GET /api/events/mine',
             'POST /api/federation/commission', 'GET /api/federation/commission/capacity', 'GET /api/federation/links', 'POST /api/federation/purchase',
             'GET /api/federation/reachable-peers',
-            'GET /api/friends/:publicKey', 'POST /api/friends/add', 'POST /api/friends/remove',
+            'GET /api/friends/:publicKey', 'GET /api/friends/added-you', 'POST /api/friends/add', 'POST /api/friends/remove',
             'POST /api/funnel-event',
             'GET /api/global/communities', 'GET /api/global/home', 'GET /api/global/watches', 'POST /api/global/watches',
             'DELETE /api/global/watches/:id',
             'GET /api/groups', 'POST /api/groups', 'GET /api/groups/:id', 'PATCH /api/groups/:id', 'GET /api/groups/:id/chat',
-            'POST /api/groups/:id/chat/message', 'POST /api/groups/:id/chat/remove', 'POST /api/groups/:id/join', 'POST /api/groups/:id/lead',
+            'POST /api/groups/:id/chat/message', 'POST /api/groups/:id/chat/remove', 'POST /api/groups/:id/join',
+            'GET /api/groups/:id/keys', 'GET /api/groups/:id/keys/:epoch/wraps', 'GET /api/groups/:id/keys/former', 'GET /api/groups/:id/keys/missing', 'POST /api/groups/:id/keys/epoch',
+            'POST /api/groups/:id/keys/:epoch/reject', 'POST /api/groups/:id/keys/wrap', 'POST /api/groups/:id/lead',
             'GET /api/groups/:id/members', 'POST /api/groups/:id/members', 'DELETE /api/groups/:id/members/:pubkey',
-            'PATCH /api/groups/:id/members/:pubkey', 'DELETE /api/groups/:id/posts/:postId', 'GET /api/groups/:id/succession',
+            'PATCH /api/groups/:id/members/:pubkey', 'GET /api/groups/:id/picture', 'DELETE /api/groups/:id/posts/:postId', 'GET /api/groups/:id/succession',
             'POST /api/groups/:id/succession/:proposalId/vote', 'POST /api/groups/:id/succession/propose',
+            // A chat group's votes (routes/group-decisions.ts): its members see them, everyone else 404.
+            'GET /api/groups/:id/decisions', 'POST /api/groups/:id/decisions', 'GET /api/groups/:id/decisions/:decisionId',
+            'POST /api/groups/:id/decisions/:decisionId/vote',
+            'GET /api/home',
             'GET /api/invite/check', 'POST /api/invite/generate', 'GET /api/invite/mine/:publicKey', 'POST /api/invite/redeem',
             'POST /api/invite/redeem-offline', 'GET /api/invite/tree',
-            'POST /api/join', 'POST /api/join/github/poll', 'POST /api/join/github/start', 'POST /api/join/knock',
+            'POST /api/join', 'POST /api/join/knock',
             'GET /api/join/knock/status', 'GET /api/join/knocks', 'POST /api/join/knocks/:id/approve', 'POST /api/join/knocks/:id/decline',
-            'POST /api/join/sso-nonce',
+            'POST /api/join/link', 'POST /api/join/link/sso-nonce', 'POST /api/join/sso-nonce', 'POST /api/join/work',
             'GET /api/ledger/balance/:publicKey', 'GET /api/ledger/export', 'GET /api/ledger/transactions', 'POST /api/ledger/transfer',
-            'POST /api/local/admin/2fa/disable', 'POST /api/local/admin/2fa/setup', 'GET /api/local/admin/2fa/status',
+            'GET /api/local/claim', 'POST /api/local/claim',
+            'POST /api/local/admin/2fa/backup-codes', 'POST /api/local/admin/2fa/disable', 'POST /api/local/admin/2fa/setup', 'GET /api/local/admin/2fa/status',
             'POST /api/local/admin/2fa/verify', 'POST /api/local/admin/announcements',
             'GET /api/local/admin/app-addresses', 'POST /api/local/admin/app-addresses/confirm', 'POST /api/local/admin/app-addresses/remove',
+            'GET /api/local/admin/app-versions',
             'POST /api/local/admin/auth/break-glass-mode',
-            'GET /api/local/admin/auth/break-glass-status', 'POST /api/local/admin/auth/break-glass/enrol',
+            'GET /api/local/admin/auth/break-glass-status', 'POST /api/local/admin/auth/break-glass/enrol', 'POST /api/local/admin/auth/break-glass/issue',
             'GET /api/local/admin/auth/break-glass/status', 'POST /api/local/admin/auth/challenge', 'GET /api/local/admin/auth/challenge/:challengeId',
             'POST /api/local/admin/auth/enrol', 'POST /api/local/admin/auth/exchange', 'POST /api/local/admin/auth/logout',
             'POST /api/local/admin/auth/pairing', 'GET /api/local/admin/auth/pairing/:id', 'POST /api/local/admin/auth/pairing/:id/approve',
-            'POST /api/local/admin/auth/pairing/:id/decline', 'POST /api/local/admin/auth/pairing/:id/wait', 'POST /api/local/admin/auth/revoke-all',
+            'POST /api/local/admin/auth/pairing/:id/confirm', 'POST /api/local/admin/auth/pairing/:id/decline', 'POST /api/local/admin/auth/pairing/:id/wait', 'POST /api/local/admin/auth/password',
+            'GET /api/local/admin/auth/password-retirement', 'POST /api/local/admin/auth/retire-password',
+            'POST /api/local/admin/auth/revoke-all',
             'GET /api/local/admin/auth/session', 'POST /api/local/admin/auth/verify-challenge', 'POST /api/local/admin/backup',
             'POST /api/local/admin/backup-config', 'GET /api/local/admin/backup-enroll', 'POST /api/local/admin/backup-status',
-            'POST /api/local/admin/backup/verify', 'POST /api/local/admin/branches/:pubkey/prune', 'POST /api/local/admin/commons/projects',
+            'POST /api/local/admin/backup/verify', 'POST /api/local/admin/branches/:pubkey/prune', 'GET /api/local/admin/bursts',
+            'POST /api/local/admin/bursts/:id/undo', 'POST /api/local/admin/commons/projects',
             'POST /api/local/admin/commons/reject', 'POST /api/local/admin/csrf-token', 'POST /api/local/admin/data', 'POST /api/local/admin/decisions',
             'POST /api/local/admin/decisions/:id/accelerate', 'POST /api/local/admin/decisions/:id/halt', 'GET /api/local/admin/diagnostics',
             'POST /api/local/admin/diagnostics', 'POST /api/local/admin/directory/push', 'GET /api/local/admin/disputes',
             'GET /api/local/admin/disputes/:id', 'POST /api/local/admin/disputes/:id/resolve', 'GET /api/local/admin/gateway',
-            'POST /api/local/admin/gateway', 'POST /api/local/admin/health', 'POST /api/local/admin/inbox', 'POST /api/local/admin/inbox/send',
-            'GET /api/local/admin/knocks', 'POST /api/local/admin/ledger-audit', 'POST /api/local/admin/ledger-rebaseline', 'POST /api/local/admin/logs',
+            'POST /api/local/admin/alerts-summary', 'POST /api/local/admin/gateway', 'POST /api/local/admin/health', 'POST /api/local/admin/inbox', 'POST /api/local/admin/inbox/send',
+            'GET /api/local/admin/knocks', 'GET /api/local/admin/known-floor', 'POST /api/local/admin/known-floor', 'POST /api/local/admin/known-floor/exception',
+            'GET /api/local/admin/known-floor/member/:pubkey',
+            'GET /api/local/admin/community-health', 'POST /api/local/admin/community-health',
+            'POST /api/local/admin/start-community-url',
+            'POST /api/local/admin/ledger-audit', 'POST /api/local/admin/ledger-rebaseline', 'POST /api/local/admin/logs',
+            'GET /api/local/admin/members/:pubkey/burst', 'POST /api/local/admin/members/:pubkey/burst/hide',
+            'POST /api/local/admin/members/:pubkey/burst/remove',
             'POST /api/local/admin/members/:pubkey/offboard', 'GET /api/local/admin/members/:pubkey/offboard/preview',
-            'POST /api/local/admin/members/:pubkey/rekey/complete', 'POST /api/local/admin/members/:pubkey/rekey/issue-code',
-            'GET /api/local/admin/members/:pubkey/rekey/status', 'POST /api/local/admin/members/:pubkey/unmute', 'GET /api/local/admin/members/muted',
+            'POST /api/local/admin/members/:pubkey/rekey/cancel', 'POST /api/local/admin/members/:pubkey/rekey/complete', 'POST /api/local/admin/members/:pubkey/rekey/issue-code',
+            'GET /api/local/admin/members/:pubkey/rekey/status', 'POST /api/local/admin/members/:pubkey/rekey/proposals/:newPubkey/decline', 'POST /api/local/admin/members/:pubkey/unmute', 'GET /api/local/admin/members/muted',
             'GET /api/local/admin/node-roles', 'POST /api/local/admin/node-roles', 'DELETE /api/local/admin/node-roles/:pubkey/:role',
-            'POST /api/local/admin/node/config', 'GET /api/local/admin/onboarding-funnel', 'POST /api/local/admin/onboarding-funnel',
+            'GET /api/local/admin/automation-tokens', 'POST /api/local/admin/automation-tokens', 'POST /api/local/admin/automation-tokens/:id/revoke',
+            'POST /api/local/admin/node/config', 'GET /api/local/admin/offbox-backups/download', 'POST /api/local/admin/offbox-backups/list',
+            'POST /api/local/admin/offbox-backups/run', 'POST /api/local/admin/offbox-backups/settings', 'POST /api/local/admin/offbox-backups/status',
+            'POST /api/local/admin/alerts/acknowledge', 'POST /api/local/admin/alerts/settings', 'POST /api/local/admin/alerts/status', 'POST /api/local/admin/alerts/test',
+            'GET /api/local/admin/onboarding-funnel', 'POST /api/local/admin/onboarding-funnel',
             'POST /api/local/admin/posts/:id/delete', 'POST /api/local/admin/posts/:id/restore', 'POST /api/local/admin/posts/bulk-delete',
-            'POST /api/local/admin/public-address/claim', 'GET /api/local/admin/public-address/logs', 'POST /api/local/admin/public-address/offline',
-            'POST /api/local/admin/public-address/restart-sidecar', 'GET /api/local/admin/public-address/status',
+            'POST /api/local/admin/public-address/claim', 'GET /api/local/admin/public-address/extra-names', 'GET /api/local/admin/public-address/logs',
+            'POST /api/local/admin/public-address/offline', 'POST /api/local/admin/public-address/release-name', 'POST /api/local/admin/public-address/restart-tunnel', 'POST /api/local/admin/public-address/rotate', 'GET /api/local/admin/public-address/status',
             'POST /api/local/admin/public-address/update', 'GET /api/local/admin/pulse/channels', 'POST /api/local/admin/pulse/channels',
             'POST /api/local/admin/pulse/channels/remove', 'POST /api/local/admin/replication-access', 'POST /api/local/admin/replication-config/get',
             'POST /api/local/admin/replication-config/save', 'POST /api/local/admin/replication-resync', 'POST /api/local/admin/replication-token/clear',
@@ -1238,28 +1347,26 @@ async function main(): Promise<void> {
             'POST /api/local/admin/standby-health', 'POST /api/local/admin/standby-health/forget', 'POST /api/local/admin/storage/clean',
             'GET /api/local/admin/storage/clean-preview', 'POST /api/local/admin/storage/clean-preview', 'GET /api/local/admin/storage/disk-health',
             'POST /api/local/admin/storage/disk-health', 'GET /api/local/admin/stranded-escrows',
-            'POST /api/local/admin/stranded-escrows/:escrowId/write-off', 'GET /api/local/admin/sync-audit-log', 'GET /api/local/admin/sync-delta',
+            'POST /api/local/admin/stranded-escrows/:escrowId/write-off', 'GET /api/local/admin/sync-audit-log', 'POST /api/local/admin/sync-copy',
+            'DELETE /api/local/admin/sync-copy/:copyId', 'GET /api/local/admin/sync-copy/:copyId/:n', 'GET /api/local/admin/sync-delta',
+            'GET /api/local/admin/sync-object/:sha256',
             'GET /api/local/admin/sync-snapshot', 'GET /api/local/admin/takeover-envelope', 'POST /api/local/admin/takeover/cancel',
             'POST /api/local/admin/takeover/confirm', 'POST /api/local/admin/takeover/open', 'POST /api/local/admin/takeover/phone/start',
             'POST /api/local/admin/takeover/phone/wait', 'POST /api/local/admin/takeover/progress', 'POST /api/local/admin/takeover/recovery-code',
             'POST /api/local/admin/takeover/recovery-code/check', 'POST /api/local/admin/takeover/status', 'POST /api/local/admin/takeover/words-checks',
-            'POST /api/local/admin/treasury', 'POST /api/local/admin/treasury/:treasury/ceiling', 'DELETE /api/local/admin/treasury/:treasury/location',
+            'GET /api/local/admin/treasury', 'POST /api/local/admin/treasury', 'POST /api/local/admin/treasury/:treasury/ceiling', 'DELETE /api/local/admin/treasury/:treasury/location',
             'POST /api/local/admin/treasury/:treasury/location', 'POST /api/local/admin/treasury/:treasury/need',
             'POST /api/local/admin/treasury/:treasury/offer', 'GET /api/local/admin/treasury/:treasury/operators',
             'POST /api/local/admin/treasury/:treasury/operators', 'DELETE /api/local/admin/treasury/:treasury/operators/:pubkey',
             'GET /api/local/admin/unlock/:sessionId', 'POST /api/local/admin/unlock/:sessionId', 'POST /api/local/admin/unlock/cancel',
             'POST /api/local/admin/users/:pubkey/elder', 'POST /api/local/admin/users/:pubkey/freeze', 'POST /api/local/admin/users/:pubkey/operator',
             'POST /api/local/admin/users/:pubkey/prune', 'POST /api/local/admin/users/:pubkey/status', 'POST /api/local/admin/users/:pubkey/suspend',
-            'POST /api/local/admin/users/:pubkey/tier', 'POST /api/local/admin/users/:pubkey/voucher', 'POST /api/local/admin/ws-connections',
-            'POST /api/local/admin/ws-ticket',
+            'POST /api/local/admin/users/:pubkey/tier', 'POST /api/local/admin/users/:pubkey/voucher', 'GET /api/local/admin/web-visits',
+            'POST /api/local/admin/ws-connections', 'POST /api/local/admin/ws-ticket',
             'POST /api/local/change-password', 'GET /api/local/community-info', 'GET /api/local/connectors', 'POST /api/local/connectors',
             'POST /api/local/connectors/connect', 'POST /api/local/connectors/credit-cap', 'POST /api/local/connectors/disconnect',
             'POST /api/local/connectors/remove', 'GET /api/local/dashboard', 'POST /api/local/federation/links/ceiling', 'POST /api/local/reset',
             'GET /api/local/status', 'POST /api/local/update-identity', 'POST /api/local/verify-password',
-            'GET /api/manager/backups/download-db', 'GET /api/manager/backups/download-history', 'GET /api/manager/backups/download-identity',
-            'GET /api/manager/backups/history', 'POST /api/manager/backups/replication-config', 'POST /api/manager/backups/snapshots/create',
-            'POST /api/manager/backups/snapshots/delete', 'POST /api/manager/backups/snapshots/list', 'GET /api/manager/backups/status',
-            'POST /api/manager/backups/trigger',
             'GET /api/map/enterprises',
             'POST /api/marketplace/polls/close', 'POST /api/marketplace/polls/vote', 'GET /api/marketplace/posts', 'POST /api/marketplace/posts',
             'GET /api/marketplace/posts/:id/chat', 'POST /api/marketplace/posts/:id/chat/message', 'POST /api/marketplace/posts/:id/chat/remove',
@@ -1273,16 +1380,23 @@ async function main(): Promise<void> {
             'POST /api/member/channels/:id/disconnect-oauth', 'POST /api/member/channels/:id/verify-oauth',
             'POST /api/member/pulse/channels/:id/dismiss-nudge', 'POST /api/member/pulse/items/:id/delete', 'POST /api/member/pulse/items/:id/mute',
             'POST /api/member/pulse/nudges', 'POST /api/member/pulse/oauth-exchange', 'POST /api/member/pulse/oauth-ingest',
-            'POST /api/member/pulse/preview', 'POST /api/member/pulse/submit', 'POST /api/member/purge', 'POST /api/member/re-enroll',
+            'POST /api/member/pulse/preview', 'POST /api/member/pulse/submit', 'POST /api/member/purge', 'POST /api/member/re-enroll', 'GET /api/member/re-enroll/status',
             'GET /api/members', 'GET /api/members/:publicKey/channels', 'GET /api/members/callsign-available/:callsign', 'POST /api/members/holiday',
             'GET /api/members/preferences', 'POST /api/members/preferences',
             'GET /api/messages/:conversationId', 'GET /api/messages/:id/attachment', 'POST /api/messages/conversation',
             'GET /api/messages/conversations/:publicKey', 'POST /api/messages/delete', 'POST /api/messages/edit', 'POST /api/messages/mark-read',
             'POST /api/messages/mute', 'POST /api/messages/react', 'POST /api/messages/send',
-            'GET /api/node-admin/me', 'GET /api/node-admin/queue',
+            'GET /api/names/copy', 'PUT /api/names/copy', 'POST /api/names/confirmations', 'POST /api/names/confirmations/:id/revoke', 'POST /api/names/confirmations/:id/second',
+            'GET /api/names/entries', 'POST /api/names/entries', 'DELETE /api/names/entries/:id', 'PUT /api/names/entries/:id',
+            'POST /api/names/entries/:id/invite', 'GET /api/names/invites',
+            'POST /api/names/generations', 'GET /api/names/log', 'POST /api/names/settings', 'POST /api/names/shares', 'GET /api/names/state',
+            'GET /api/names/debts', 'POST /api/names/debts/:id/settle', 'POST /api/names/debts/:id/work-off',
+            'GET /api/names/health', 'GET /api/names/health/exceptions', 'GET /api/names/health/log', 'POST /api/names/health/settings',
+            'GET /api/names/consent', 'POST /api/names/consent', 'DELETE /api/names/consent',
+            'POST /api/node-admin/break-glass', 'GET /api/node-admin/me', 'GET /api/node-admin/queue',
             'GET /api/node/config', 'GET /api/node/identity-epoch', 'GET /api/node/info', 'POST /api/node/owner/lock-open-check',
             'GET /api/node/owner/words-check', 'POST /api/node/owner/words-check', 'GET /api/node/takeover-envelope/header',
-            'GET /api/notices', 'POST /api/notices/seen',
+            'GET /api/notices', 'GET /api/notices/push/:id', 'POST /api/notices/seen',
             'POST /api/pair/cancel', 'POST /api/pair/init', 'GET /api/pair/poll', 'POST /api/pair/transfer',
             'GET /api/pricing-guide', 'POST /api/pricing-guide/admin/aggregate', 'POST /api/pricing-guide/admin/config',
             'POST /api/pricing-guide/admin/item', 'DELETE /api/pricing-guide/admin/item/:id', 'POST /api/pricing-guide/admin/pin',
@@ -1293,12 +1407,11 @@ async function main(): Promise<void> {
             'DELETE /api/push-tokens', 'POST /api/push-tokens', 'POST /api/push-tokens/leave/:publicKey',
             'POST /api/ratings', 'GET /api/ratings/:publicKey',
             'POST /api/recovery/collect', 'POST /api/recovery/collect/cancel', 'POST /api/recovery/collect/fragments',
-            'POST /api/recovery/collect/github/poll', 'POST /api/recovery/collect/github/start', 'POST /api/recovery/collect/hub',
+            'POST /api/recovery/collect/hub',
             'POST /api/recovery/collect/mine', 'POST /api/recovery/collect/sso', 'POST /api/recovery/collect/sso-nonce',
             'POST /api/recovery/collect/status', 'GET /api/recovery/lookup/:callsign', 'DELETE /api/recovery/shares',
             'POST /api/recovery/shares/hub-fragment', 'POST /api/recovery/shares/sso', 'DELETE /api/recovery/shares/sso/:provider',
-            'POST /api/recovery/shares/status', 'POST /api/recovery/sso-nonce', 'POST /api/recovery/sso/github/poll',
-            'POST /api/recovery/sso/github/start',
+            'POST /api/recovery/shares/status', 'POST /api/recovery/sso-nonce',
             'POST /api/reports',
             'GET /api/treasuries', 'GET /api/treasuries/map', 'GET /api/treasuries/statuses',
             'POST /api/treasury', 'GET /api/treasury/:treasury', 'POST /api/treasury/:treasury/approve', 'DELETE /api/treasury/:treasury/backing',
@@ -1321,6 +1434,18 @@ async function main(): Promise<void> {
             'GET /api/your-groups',
             // Only where an operator runs the Apple probe (APPLE_PROBE=1, routes/apple-probe.ts).
             'GET /apple-probe', 'POST /apple-probe',
+            // The AI assistant endpoint (agent/mcp-route.ts): an agent token is the only way in (every guest refused, below),
+            // and the owner switch that turns it off.
+            'POST /mcp', 'GET /mcp', 'DELETE /mcp', 'GET /api/local/admin/agent/switch', 'POST /api/local/admin/agent/switch',
+            // Settings' Connected assistants (agent/grants-route.ts): a person's own session only, never a token or a guest.
+            'GET /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants', 'POST /api/local/admin/agent/grants/:id/revoke',
+            'POST /api/local/admin/agent/preview',
+            // An assistant's suggestions (agent/suggestions-route.ts): a person's own session only; approve is the existing route.
+            'GET /api/local/admin/agent/suggestions', 'POST /api/local/admin/agent/suggestions/:id/decline',
+            // The OAuth door (agent/oauth-route.ts): metadata, registration, the consent page and its two calls, token, revoke.
+            'GET /.well-known/oauth-protected-resource', 'GET /.well-known/oauth-protected-resource/mcp', 'GET /.well-known/oauth-authorization-server',
+            'POST /oauth/register', 'GET /oauth/authorize', 'POST /oauth/authorize/:id/wait', 'POST /oauth/authorize/:id/confirm',
+            'POST /oauth/token', 'POST /oauth/revoke',
         ]);
         const ID_BY_PREFIX: Array<[RegExp, string]> = [
             [/^\/api\/groups\//, prunedClub.id], [/^\/api\/marketplace\/posts\/:id\/chat/, clubEvent.id], [/^\/api\/marketplace\/posts\//, offer.id], [/^\/api\/commons\/decisions\//, 'dec-sentinel'],
@@ -1393,6 +1518,30 @@ async function main(): Promise<void> {
             + `and a HEAD for each of the ${gets} GETs × ${guestsHere.length} = ${gets * guestsHere.length}; the admin tarpit answered at once ${tarpitsAnsweredAtOnce} times)`);
         const stillPruned = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(pruned.pk) as { status: string }).status;
         assert(stillPruned === 'pruned', `the pruned account is still pruned after the sweep (${stillPruned})`);
+        // The AI assistant endpoint: an agent token is the only way in. No guest gets an MCP answer by what it has (no signature,
+        // a non-member's, a pruned account's), even sending the Accept header the transport needs; the switch is still on.
+        {
+            const { aiAssistantsAllowed } = await import('./agent/mcp-route.js');
+            const accept = { Accept: 'application/json, text/event-stream' };
+            const seen: string[] = [];
+            const wrong: string[] = [];
+            for (const [who, idFor] of guestsHere) {
+                const id = idFor();
+                const post = await call('POST', id, '/mcp', BODIES['POST /mcp'], accept);
+                const get = await call('GET', id, '/mcp', undefined, accept);
+                const del = await call('DELETE', id, '/mcp', undefined, accept);
+                const line = `${who}: POST ${post.status} ${post.text.slice(0, 120)}, GET ${get.status}, DELETE ${del.status}`;
+                seen.push(line);
+                // A closed account's signature is refused by the middleware before /mcp; anyone else's reaches it and has no token.
+                const refused = id === pruned
+                    ? [post, get, del].every(r => r.status === 403 && r.body?.code === 'account_closed')
+                    : post.status === 401 && get.status === 405 && del.status === 405;
+                if (!refused || [post, get, del].some(r => r.text.includes('"result"'))) wrong.push(line);
+            }
+            assert(wrong.length === 0 && aiAssistantsAllowed(),
+                `every guest is refused /mcp with no MCP answer (unsigned and a non-member: POST 401, GET and DELETE 405; a pruned account: `
+                + `403 account_closed), and AI assistants are still allowed — ${(wrong.length ? wrong : seen).join(' | ')}`);
+        }
         // 11e. What the sweep sent it could not change: Alice's lines, its trades, the event it convenes, and no invite of its own.
         {
             for (const [label, ev, line] of [['its own event', prunedEvent, aliceLines[0]], ['the group event it convenes', clubEvent, aliceLines[1]]] as const) {
@@ -1553,63 +1702,101 @@ async function main(): Promise<void> {
         }
         assert(off.length === 0 && listed > 100, `50 points × 2 reads, ${listed} communities: each at the place it publishes, each distance from that `
             + `place and in its order${off.length ? ` — ${off.slice(0, 5).join(' | ')}` : ''}`);
+
+        console.log('\n── 7d. /api/home, the visitors\' Home: the landing card\'s own body, and each distance the listing\'s own visitors\' read ──');
+        const homeOff: string[] = [];
+        let homeItems = 0;
+        for (let i = 0; i < points.length; i += 4) {
+            const q = points[i];
+            const [, id] = guests[i % guests.length];
+            const at = `lat=${q.lat}&lng=${q.lng}`;
+            const r = await call('GET', id, `/api/home?${at}&cards=find,market,events,community,joined,pulse`);
+            const cards = r.body?.cards ?? {};
+            if (r.status !== 200 || r.body?.welcome !== true || cards.joined || cards.pulse) homeOff.push(`#${i}: ${r.status} ${Object.keys(cards).join(',')}`);
+            // The landing card, which 7b measures: the same body, for the same reader at the same point.
+            const landing = await call('GET', id, `${HOME}?${at}`);
+            if (cards.find && JSON.stringify(cards.find) !== JSON.stringify(landing.body)) homeOff.push(`#${i}: the find card is not the landing card's body`);
+            // Each listing and event: no place of its own, and the distance the listing's visitors' read gives (section 7).
+            for (const item of [...(cards.market?.items ?? []), ...(cards.events?.items ?? [])] as any[]) {
+                homeItems++;
+                if ('lat' in item || 'lng' in item) homeOff.push(`#${i}: ${item.id} carries a place`);
+                if (item.distanceKm === undefined) continue;
+                const own = await call('GET', id, `${POSTS}?id=${item.id}&${ALL_TYPES}&${at}`);
+                const theirs = ((Array.isArray(own.body) ? own.body : []) as any[]).find(p => p.id === item.id)?.distanceKm;
+                if (theirs !== item.distanceKm) homeOff.push(`#${i}: ${item.id} distanceKm ${item.distanceKm}, the listing's read ${theirs}`);
+            }
+        }
+        assert(homeOff.length === 0 && homeItems > 0, `50 points, ${homeItems} listings and events: the visitors' cards only, the find card the landing card's, `
+            + `each distance the listing's visitors' read${homeOff.length ? ` — ${homeOff.slice(0, 5).join(' | ')}` : ''}`);
     }
 
     async function localChecks(): Promise<void> {
-        console.log('── a local node: a guest reads what the engine gives that reader, as before G9a ──');
+        // A local community is its members' (Marty, 2026-09-28: "nothing on a private node should be public now that we
+        // have a global node"): with no visitors' view, a guest is refused its listings (2026-09-28) and its other people
+        // reads (2026-10-01: the Commons decisions, the Pulse feed, the Beans constructs), in words that send them to the
+        // global community. The community's totals stay public, and so do faces by key (a local node does not key them yet).
+        console.log("── a local node: a guest is refused the listings and every other read that names people ──");
+        const GLOBAL_COMMUNITY = 'https://global.beanpool.org';
         for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider]] as const) {
-            for (const p of postReads) {
+            for (const p of [...postReads, `${POSTS}?author=${alice.pk}`]) {
                 const r = await call('GET', id, p);
-                const params = new URL(`https://x${p}`).searchParams;
-                const want = getPosts({
-                    id: params.get('id') ?? undefined, types: params.has('types') ? ['offer', 'need', 'poll', 'event'] : undefined,
-                    excludeEvents: !params.get('id') && !params.has('types'), query: params.get('q') ?? undefined,
-                    limit: params.has('limit') ? Number(params.get('limit')) : 50, offset: 0,
-                    updatedAfter: params.get('updatedAfter') ?? undefined, viewerPubkey: id?.pk, sync: params.get('sync') === 'true', beansOnly: false,
-                    audienceScope: params.get('audienceScope') ?? undefined, includeHidden: false, includeVoters: false,
-                    near: params.has('lat') ? { lat: Number(params.get('lat')), lng: Number(params.get('lng')), radiusKm: params.has('radiusKm') ? Number(params.get('radiusKm')) : undefined } : undefined,
-                    sortByDistance: params.get('sort') === 'distance',
-                } as any);
-                assert(r.status === 200 && r.text === JSON.stringify(want) && r.headers.get('x-beanpool-view') === null,
-                    `${who} ${p.replace(POSTS, '')}: the engine's read for that reader, no view header`);
+                assert(r.status === (id ? 403 : 401) && r.body?.code === 'members_only' && r.body?.global === GLOBAL_COMMUNITY
+                    && r.headers.get('x-beanpool-view') === null && !r.text.includes(alice.pk) && !r.text.includes('Sentinel'),
+                    `${who} ${p.replace(POSTS, '')}: refused members_only, naming the global community, with nothing of a listing (got ${r.status})`);
             }
-            const list = await call('GET', id, `${POSTS}?${ALL_TYPES}`);
-            assert(list.text.includes(alice.pk) && list.text.includes('SentinelAlice') && list.text.includes(String(OFFER_AT.lat)) && list.text.includes(PLACE_NAME),
-                `${who}: the listings name their authors and places, as on every local node`);
-            const byAuthor = await call('GET', id, `${POSTS}?author=${alice.pk}`);
-            assert(byAuthor.status === 200 && Array.isArray(byAuthor.body) && byAuthor.body.length > 0, `${who}: ?author= is answered (${byAuthor.status})`);
+            // Answered only to the key it asks about (multi-community review F3), here as on global.
             const probe = await call('GET', id, `/api/community/membership/${alice.pk}`);
-            assert(probe.body?.callsign === 'SentinelAlice', `${who}: the membership probe names the member (${JSON.stringify(probe.body)})`);
-            for (const p of ['/api/commons/decisions', '/api/commons/balance', '/api/pulse/feed']) {
+            assert(probe.status === (id ? 403 : 401) && !('isMember' in (probe.body ?? {})) && !probe.text.includes('SentinelAlice'),
+                `${who}: the membership probe is refused, and says nothing of the key (${probe.status} ${JSON.stringify(probe.body)})`);
+            for (const p of ['/api/commons/decisions', '/api/commons/decisions/dec-sentinel', '/api/pulse/feed', '/api/enterprises', `/api/enterprise/${enterprise}`,
+                `/api/treasury/${enterprise}`, '/api/crowdfund/projects', `/api/crowdfund/projects/${crowdfund}`, '/api/commons/projects']) {
                 const r = await call('GET', id, p);
-                assert(r.status === 200, `${who}: ${p} is public (${r.status})`);
+                assert(r.status === (id ? 403 : 401) && r.body?.code === 'members_only' && r.body?.global === GLOBAL_COMMUNITY && leaks(r.text).length === 0,
+                    `${who}: ${p} is for members, refused members_only naming the global community (${r.status} ${r.text.slice(0, 80)})`);
             }
+            const pot = await call('GET', id, '/api/commons/balance');
+            assert(pot.status === 200 && typeof pot.body?.balance === 'number', `${who}: the Commons pot, a total, stays public (${pot.status})`);
             const face = await call('GET', id, `/api/avatar/${alice.pk}?size=thumb`);
-            assert(face.status === 200 && face.headers.get('content-type') === 'image/png', `${who}: a face is public by key, as before (${face.status})`);
-            const ent = await call('GET', id, `/api/enterprise/${enterprise}`);
-            assert(ent.status === 200 && ent.body?.keepers?.some((k: any) => k.publicKey === alice.pk) && !KEYED_FACE.test(ent.text),
-                `${who}: an enterprise is public and names its keepers, as before (${ent.status})`);
+            assert(face.status === 200 && face.headers.get('content-type') === 'image/png', `${who}: a face is public by key, not keyed here yet (${face.status})`);
             const lookup = await call('GET', id, '/api/recovery/lookup/sentinel');
-            assert(Array.isArray(lookup.body) && lookup.body.length === 1 && lookup.body[0].publicKey === alice.pk && lookup.body[0].avatarUrl === TINY_PNG && !!lookup.body[0].joinedAt,
-                `${who}: the recovery lookup matches a prefix, with the photo and join date, as before`);
+            assert(Array.isArray(lookup.body) && lookup.body.length === 0, `${who}: the recovery lookup finds nobody by a prefix (${lookup.text.slice(0, 80)})`);
+            const exact = await call('GET', id, '/api/recovery/lookup/sentinelalice');
+            assert(Array.isArray(exact.body) && exact.body.length === 1 && exact.body[0].publicKey === alice.pk && exact.body[0].avatarUrl === null && exact.body[0].joinedAt === null,
+                `${who}: the whole name, case forgiven, finds her, with no photo or join date (${exact.text.slice(0, 120)})`);
+        }
+        for (const p of ['/api/commons/decisions', '/api/pulse/feed', `/api/enterprise/${enterprise}`]) {
+            const r = await call('GET', bob, p);
+            assert(r.status === 200 && r.text.includes(alice.pk), `a member reads ${p}, naming its people (${r.status})`);
         }
         const members = await call('GET', bob, '/api/members');
         const posts = await call('GET', bob, `${POSTS}?${ALL_TYPES}`);
-        assert(members.text.includes(`/api/avatar/${alice.pk}?size=thumb&v=`) && !members.text.includes('&k=') && !posts.text.includes('&k='),
+        // A local community's listings are its members', so their photos are keyed here (engine/photo-keys.ts); faces are not.
+        const keyedFace = /\/api\/avatar\/[^"]*&k=/;
+        assert(members.text.includes(`/api/avatar/${alice.pk}?size=thumb&v=`) && !keyedFace.test(members.text) && !keyedFace.test(posts.text),
             'avatar URLs carry no key here');
+        const offerPhoto = ((posts.body as any[]) ?? []).find(p => p.id === offer.id)?.photos?.[0] as string | undefined;
+        assert(!!offerPhoto && /&k=[A-Za-z0-9_-]{22}$/.test(offerPhoto) && (await call('GET', null, offerPhoto)).status === 200
+            && (await call('GET', null, `/api/marketplace/posts/${offer.id}/photos/0`)).status === 404,
+            `and a listing's photo URL carries its key, which opens it unsigned, and nothing else does (${offerPhoto})`);
 
-        // Round 3's rules are the visitors' view's: here a signer who is no member still reads a trust profile, and a
-        // code's holder still gets a member's card. A pruned account is refused every read it signs, here as on every node
-        // (#1177 settles #1156's call: it passed the gated reads here until then). A HEAD to a gated read is refused as its
-        // GET is on every node.
+        // Round 3's rules are every node's now (2026-10-01): here too a signer who is no member reads no trust profile (the
+        // exact lookup's key would walk the invite tree from one name). A redeem must be signed by the key it names
+        // (2026-10-01), so a code's holder who names someone else's key is refused and gets no card; only that member's own
+        // signed redeem gets it. A pruned account is refused every read it signs, here as on every node (#1177 settles
+        // #1156's call: it passed the gated reads here until then). A HEAD to a gated read is refused as its GET is on every node.
         db.prepare('UPDATE members SET invited_by = ?, elder_vouched_by = ? WHERE public_key = ?').run(bob.pk, bob.pk, alice.pk);
         const tp = await call('POST', outsider, '/api/trust/profile', { targetPubkey: alice.pk });
-        assert(tp.status === 200 && tp.body?.callsign === 'SentinelAlice' && tp.body?.vouchedInBy?.publicKey === bob.pk,
-            `a non-member signer reads Alice's trust profile, naming Bob who brought her in, as before (${tp.status})`);
+        assert(tp.status === 403 && tp.body?.code === 'members_only' && leaks(tp.text).length === 0,
+            `a non-member signer is refused Alice's trust profile, naming nobody (${tp.status} ${tp.text.slice(0, 80)})`);
+        const memberTp = await call('POST', bob, '/api/trust/profile', { targetPubkey: alice.pk });
+        assert(memberTp.status === 200 && memberTp.body?.callsign === 'SentinelAlice', `a member reads it (${memberTp.status})`);
         const code = se.generateInvite(bob.pk)!.code;
         const card = await call('POST', null, '/api/invite/redeem', { code, publicKey: alice.pk, callsign: 'Sentinel joiner' });
-        assert(card.status === 200 && card.body?.alreadyMember === true && card.body?.member?.callsign === 'SentinelAlice',
-            `an unsigned redeem naming Alice's key gets her card, as before (${card.status})`);
+        assert(card.status === 401 && card.body?.code === 'redeem_unsigned' && card.body?.member === undefined && leaks(card.text).length === 0,
+            `an unsigned redeem naming Alice's key is refused and gets no card of hers (${card.status} ${card.text.slice(0, 80)})`);
+        const ownCard = await call('POST', alice, '/api/invite/redeem', { code, publicKey: alice.pk, callsign: 'Sentinel joiner' });
+        assert(ownCard.status === 200 && ownCard.body?.alreadyMember === true && ownCard.body?.member?.callsign === 'SentinelAlice',
+            `Alice, signing her own redeem, gets her own card (${ownCard.status})`);
         for (const p of ['/api/members', `${POSTS}?${ALL_TYPES}`]) {
             const prunedRead = await call('GET', pruned, p);
             assert(prunedRead.status === 403 && prunedRead.body?.code === 'account_closed' && !prunedRead.text.includes(alice.pk),
@@ -1621,21 +1808,31 @@ async function main(): Promise<void> {
         }
         assert(!!members.headers.get('cache-control')?.startsWith('public'), `/api/members keeps its cache header (${members.headers.get('cache-control')})`);
 
-        // The landing card (G5), where an operator keeps the directory on a local node: the count is from each listing's
-        // place, for anyone, as before G9a. The listing shows every reader that place anyway.
+        // The landing card (G5), where an operator keeps the directory on a local node. Its listings are its members'
+        // (2026-09-28), and this public count was the one way left to find them (#1286's deciding review, 4125322427): a
+        // member's count is from each listing's place, as their Market shows it; anyone else's from its area, as on global.
         db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run('nodeProfile.directoryMirror', 'true');
-        for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider]] as const) {
+        const cell = cellOf(LONE_AT);
+        const countsAround = async (id: Id | null, from: Place) => {
             const counts: unknown[] = [];
             for (const d of [NEARBY_KM - 0.01, NEARBY_KM + 0.01]) {
-                const q = destination(LONE_AT, d, 0);
+                const q = destination(from, d, 0);
                 counts.push((await call('GET', id, `/api/global/home?lat=${q.lat}&lng=${q.lng}`)).body?.nearbyPosts?.count);
             }
-            assert(counts[0] === 1 && counts[1] === 0, `${who}: the card counts the lone listing 10 m inside its own 50 km, not 10 m outside (${counts.join(', ')})`);
+            return counts;
+        };
+        for (const [who, id] of [['unsigned', null], ['a non-member signer', outsider]] as const) {
+            const byArea = await countsAround(id, cell);
+            assert(byArea[0] === 1 && byArea[1] === 0, `${who}: the card counts the lone listing 10 m inside its area's 50 km, not 10 m outside (${byArea.join(', ')})`);
         }
-        const attack = await bisectHome(cellOf(LONE_AT));
+        const byPlace = await countsAround(bob, LONE_AT);
+        assert(byPlace[0] === 1 && byPlace[1] === 0, `a member: the card counts it 10 m inside its own 50 km, not 10 m outside (${byPlace.join(', ')})`);
+        const attack = await bisectHome(cell);
+        const fromCell = attack.drops.map(d => km(d, cell));
         const fromPlace = attack.drops.map(d => km(d, LONE_AT));
-        assert(attack.ok && fromPlace.every(d => Math.abs(d - NEARBY_KM) < 0.005) && km(attack.centre, LONE_AT) < 0.005,
-            `so the bisection finds the listing's place (drops ${span(fromPlace)} from it, the fit ${(km(attack.centre, LONE_AT) * 1000).toFixed(1)} m away), as before`);
+        assert(attack.ok && fromCell.every(d => Math.abs(d - NEARBY_KM) < 0.005) && km(attack.centre, cell) < 0.005 && km(attack.centre, LONE_AT) > 5,
+            `so the unsigned bisection finds the area's centre (drops ${span(fromCell)} from it, the fit ${(km(attack.centre, cell) * 1000).toFixed(1)} m away), `
+            + `never the listing (${span(fromPlace)} from it)`);
         db.prepare('DELETE FROM node_config WHERE key = ?').run('nodeProfile.directoryMirror');
     }
 }

@@ -1,5 +1,7 @@
 /**
- * The routes a node profile switch turns off (config/node-profile.ts): 404 `feature_off`, before any handler runs.
+ * The routes a node profile switch turns off (config/node-profile.ts): 404 `feature_off`, before any handler runs. It
+ * runs after the signature middleware, so a signed request a key may not make at all (a replaced key, a closed
+ * account) is refused for that first; the two invite redeems and the admin surface skip that middleware and meet this.
  *
  * One table rather than a check in each handler, so a route added under one of these prefixes is off with its
  * feature without anyone remembering to say so. Reads stay 404 too: the apps treat a failed treasury or crowdfund
@@ -22,7 +24,10 @@ import {
 } from '../config/node-profile.js';
 import { StandbyLedgerError } from '../config/node-role.js';
 import { ProbationLimitError } from '../engine/probation.js';
+import { WriterLimitError } from '../engine/writer-bounds.js';
 import { MutedError, assertNotMuted } from '../engine/auto-moderation.js';
+import { DoorClosedError } from '../config/door.js';
+import { BEANS_NOTE_LIMIT, fitsTextLimit, textTooLongMessage } from '@beanpool/core';
 
 interface GatedRoutes {
     /** On only while every one of these switches is on. */
@@ -78,10 +83,22 @@ export const PROFILE_GATED_ROUTES: readonly GatedRoutes[] = [
     },
     // "Ask to join" (G6, routes/knocks.ts): the applicant's knock and status, and the members' list and answers. Off on
     // the global node, and wherever the operator opted out. Not the operator's count (/api/local/admin/knocks), which
-    // Settings shows beside the switch that turns them back on.
+    // Settings shows beside the switch that turns them back on. A knock is answered with an invite, so where invites
+    // are off (the global node) the answer is theirs, which says how to join instead.
     {
-        needs: ['knocks'],
+        needs: ['invites', 'knocks'],
         paths: [/^\/api\/join\/knocks?(\/|$)/],
+    },
+    // Invites (engine/invites.ts): making one (a member's code, an owner's or admin's seed invite) and joining with one
+    // (a code, an offline ticket, and the pre-flight that checks either). Off on the global node, where the open door is
+    // the only way in. The engine refuses underneath. A member's own invites and the invite tree still read: they make
+    // nobody a member.
+    {
+        needs: ['invites'],
+        paths: [
+            /^\/api\/invite\/(generate|redeem|redeem-offline|check)\/?$/,
+            /^\/api\/admin\/seed-invite\/?$/,
+        ],
     },
     // Formal Decisions: proposing and voting (every write under /api/commons/decisions, so a write route added there
     // later is off with them), and an admin cutting short a removal's grace window, which carries out a vote. Reads of
@@ -91,6 +108,8 @@ export const PROFILE_GATED_ROUTES: readonly GatedRoutes[] = [
         writesOnly: true,
         paths: [
             /^\/api\/commons\/decisions(\/|$)/,
+            // An enterprise's keepers' votes (routes/enterprise-decisions.ts): the same engine, scoped.
+            /^\/api\/enterprise\/[^/]+\/decisions(\/|$)/,
             /^\/api\/local\/admin\/decisions\/[^/]+\/accelerate\/?$/,
         ],
     },
@@ -123,10 +142,16 @@ export async function profileFeatureGate(ctx: Context, next: Next): Promise<void
 
 /**
  * For a route's catch: answers a Beans-off or feature-off refusal, a probation limit (429, with `Retry-After`), a
- * moderation mute (403) or a standby's refusal of a Bean move (409 `standby`, config/node-role.ts) with its own status
- * and code. True when it did.
+ * moderation mute (403), a standby's refusal of a Bean move (409 `standby`, config/node-role.ts), a writer limit
+ * (429 or 413, engine/writer-bounds.ts) or a member's invite where only admins invite (403 `admins_only`,
+ * config/door.ts) with its own status and code. True when it did.
  */
 export function respondProfileRefusal(ctx: { status: number; body: unknown; set?: (field: string, value: string) => void }, e: unknown): boolean {
+    if (e instanceof DoorClosedError) {
+        ctx.status = e.status;
+        ctx.body = { error: e.message, code: e.code };
+        return true;
+    }
     if (e instanceof StandbyLedgerError) {
         ctx.status = e.status;
         ctx.body = { error: e.message, code: e.code };
@@ -149,6 +174,13 @@ export function respondProfileRefusal(ctx: { status: number; body: unknown; set?
     if (e instanceof MutedError) {
         ctx.status = e.status;
         ctx.body = { error: e.message, code: e.code, mutedUntil: e.until };
+        return true;
+    }
+    // A writer limit (W-main, engine/writer-bounds.ts): 429, or 413 for a DM line too long, with when it lets up.
+    if (e instanceof WriterLimitError) {
+        ctx.status = e.status;
+        ctx.body = e.resetsAt ? { error: e.message, code: e.code, resetsAt: e.resetsAt } : { error: e.message, code: e.code };
+        if (e.resetsAt) ctx.set?.('Retry-After', String(Math.max(1, Math.ceil((Date.parse(e.resetsAt) - Date.now()) / 1000))));
         return true;
     }
     return false;
@@ -175,4 +207,19 @@ export function respondIfMuted(ctx: { status: number; body: unknown }, pubkey: s
  */
 export function isNote(memo: unknown): boolean {
     return memo != null && String(memo).trim() !== '';
+}
+
+/** The refusal of a note over BEANS_NOTE_LIMIT, in the words both apps show. */
+export const BEANS_NOTE_TOO_LONG = textTooLongMessage('A note with Beans', BEANS_NOTE_LIMIT);
+
+/**
+ * For the three routes that take a note with Beans or a pledge: answers 400 when the note is over BEANS_NOTE_LIMIT (#1493).
+ * The note is the ledger line's memo, which the payer's and the payee's ledger lists send whole on every line, and the
+ * request body (2 MB) was its only bound. True when it did. Before anything moves.
+ */
+export function respondIfNoteTooLong(ctx: { status: number; body: unknown }, memo: unknown): boolean {
+    if (!isNote(memo) || fitsTextLimit(String(memo), BEANS_NOTE_LIMIT)) return false;
+    ctx.status = 400;
+    ctx.body = { error: BEANS_NOTE_TOO_LONG };
+    return true;
 }

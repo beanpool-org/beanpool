@@ -18,12 +18,12 @@
  *  4. A force-resync clears a watch and a cached community the main server doesn't have, and Rex's watch is his new
  *     key's on the standby.
  *  5. The main server dies and the standby takes over. It has every watch, and Wes and Rex list theirs over HTTPS.
- *     A take-over restarts the server, and its first mirror run comes before any phone has started the app again and
- *     registered its push token (push tokens are each server's own): it sees Byron and Kiezpool, new since the main
- *     server stopped, and tells nobody, so it stamps nothing and spends nobody's notice (#1158 review 4107881683). Wes's
- *     phone then registers over HTTPS and he is told at once, about Byron only (not Mullumbimby again). Wanda's, Vic's
- *     and Quinn's register, and the next run tells Wanda about Kiezpool and Vic about Byron, once each; Quinn, told a
- *     moment before the take-over, keeps his quiet day. The run after that tells nobody.
+ *     A take-over restarts the server, and its first mirror run comes before any phone has started the app again. The
+ *     phones registered with the main server are copied (design G4), so it tells Wes at once, about Byron only (not
+ *     Mullumbimby again), and stamps his notice alone: it spends nobody's notice whose phone it doesn't hold (#1158
+ *     review 4107881683). Wes's phone then registers over HTTPS and tells nobody. Wanda's and Vic's register for the
+ *     first time (and Quinn's again), and the next run tells Wanda about Kiezpool and Vic about Byron, once each; Quinn,
+ *     told a moment before the take-over, keeps his quiet day. The run after that tells nobody.
  *
  * Run:
  *   BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-place-watch-failover.ts
@@ -35,6 +35,7 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, post, type NodeProc } from './takeover-test-harness.js';
+import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -156,7 +157,12 @@ async function child(): Promise<void> {
             for (const [pk, token] of Object.entries(a.tokens)) registerPushToken(pk, token, 'android');
             return true;
         },
-        pushes: async () => pushed.splice(0, pushed.length),
+        // Each as its member is told it (push-notice-test-harness.ts): the communities are the notice's details on this
+        // node, and `generic` says the lock screen showed only "A community has started near you." and the notice.
+        pushes: async () => {
+            const { db } = await import('./db/db.js');
+            return pushed.splice(0, pushed.length).map((m) => ({ ...toldPush(db, m), generic: pushIsGeneric(m) && m.data.k === 'community.near' }));
+        },
         'export-delta': async (a: { since: string }) => {
             const { exportSyncState } = await import('./state-engine.js');
             return exportSyncState('test', a.since);
@@ -291,7 +297,6 @@ async function main(): Promise<void> {
     const nodes: NodeProc[] = [];
     const ownerSeedHex = crypto.randomBytes(32).toString('hex');
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const pw = (p: string) => ({ 'X-Admin-Password': p });
     const wes = newId(), quinn = newId(), wanda = newId(), pru = newId(), del = newId(), rex = newId(), rex2 = newId(), vic = newId();
     const token = (id: Id) => `ExponentPushToken[${id.pk.slice(0, 12)}]`;
 
@@ -412,9 +417,12 @@ async function main(): Promise<void> {
         // ── 5. The take-over ──
         console.log('\n— 5. the main server dies and the standby takes over —');
         await main.kill('SIGKILL');
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code }, pw(PW_STANDBY));
+        // Step 7c: the password alone opens no admin route with 2FA off: the take-over goes under an owner's key session
+        // the standby makes (takeover-test-harness.ts owner-session).
+        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code }, standbyOwner);
         require_(opened.status === 200, `the recovery code opens the keys (${opened.status} ${opened.body?.error ?? ''})`);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, pw(PW_STANDBY));
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         require_(confirmed.status === 200, `confirmed (${confirmed.status})`);
         const exit = await standby.exited;
         assert(exit === 0, `the standby restarts itself (exit ${exit})`);
@@ -433,7 +441,8 @@ async function main(): Promise<void> {
             `and Rex lists his, under his new key (${rexList.status} ${JSON.stringify(rexList.body)})`);
 
         // The take-over restarted the server, and its first mirror run comes 10 s after boot: before any phone has
-        // started the app again and registered its push token here (push tokens are each server's own).
+        // started the app again. The phones registered with the old main server are copied to its standby (design G4):
+        // Wes's and Quinn's are here, Wanda's and Vic's never registered anywhere.
         await standby.send('pushes');
         const beforeRun = await standby.send('watches');
         rows = [MULLUM, BYRON, KIEZ];
@@ -441,20 +450,20 @@ async function main(): Promise<void> {
         assert(run2.ok === true && run2.added === 2,
             `the new main server's first mirror run finds two communities new: Byron and Kiezpool, not Mullumbimby, which the old one had already seen (${JSON.stringify(run2)})`);
         const firstRunPushes = await standby.send('pushes');
-        assert(run2.notified === 0 && firstRunPushes.length === 0,
-            `with no phone registered with it yet, that run tells nobody (${JSON.stringify(run2)}, ${firstRunPushes.length} pushes)`);
+        assert(run2.notified === 1 && firstRunPushes.length === 1 && toIn(firstRunPushes, wes).length === 1
+            && same(toIn(firstRunPushes, wes)[0]?.data?.communities, ['peer-byron']),
+            `that run tells Wes at once, on the phone he registered with the old main server, about Byron alone: never again about Mullumbimby (${JSON.stringify(run2)}, ${JSON.stringify(firstRunPushes.map((m: any) => m.data))})`);
         const afterRun = await standby.send('watches');
-        assert(same(afterRun, beforeRun),
-            `and stamps nothing: no watcher's last notice moves, so nothing they are owed is spent (${JSON.stringify(afterRun.filter((w: any, i: number) => !same(w, beforeRun[i])))})`);
+        const movedAtRun = afterRun.filter((w: any, i: number) => !same(w, beforeRun[i]));
+        assert(movedAtRun.length === 1 && movedAtRun[0].id === wWes.id,
+            `and stamps Wes's notice alone: Quinn keeps his quiet day, and nothing Wanda or Vic is owed (no phone of theirs here) is spent (${JSON.stringify(movedAtRun)})`);
 
-        // Wes's phone starts the app, which registers its token over HTTPS: he is told then, not at the next run.
+        // Wes's phone starts the app, which registers its token over HTTPS: he has been told already.
         const wesRegisters = await signedPost(port, wes, '/api/push-tokens', { publicKey: wes.pk, token: token(wes), platform: 'android' });
         await new Promise((resolve) => setTimeout(resolve, 100));
         const atRegister = await standby.send('pushes');
         assert(wesRegisters.status === 200 && wesRegisters.body?.success === true, `Wes's phone registers its token (${wesRegisters.status} ${JSON.stringify(wesRegisters.body)})`);
-        assert(toIn(atRegister, wes).length === 1 && same(toIn(atRegister, wes)[0]?.data?.communities, ['peer-byron']),
-            `Wes hears once, about Byron alone: never again about Mullumbimby (${JSON.stringify(toIn(atRegister, wes).map((m: any) => m.data))})`);
-        assert(atRegister.length === 1, `and his phone registering tells nobody else (${atRegister.length})`);
+        assert(atRegister.length === 0, `and his phone registering tells nobody, him included: he was told at the run (${atRegister.length})`);
 
         // Wanda's, Vic's and Quinn's phones register too (written here as the app's registration writes them): the next run
         // tells each of them what they are owed, once.
@@ -468,9 +477,12 @@ async function main(): Promise<void> {
             `Wanda hears about Kiezpool (${JSON.stringify(to(wanda).map((m: any) => m.data))})`);
         assert(to(vic).length === 1 && same(to(vic)[0]?.data?.communities, ['peer-byron']),
             `Vic hears about Byron, which reaches his watch (${JSON.stringify(to(vic).map((m: any) => m.data))})`);
-        assert(to(wes).length === 0, `Wes, told when his phone registered, isn't told again (${to(wes).length})`);
+        assert(to(wes).length === 0, `Wes, told at the first run, isn't told again (${to(wes).length})`);
         assert(to(quinn).length === 0,
             `Quinn, told on the old main server a moment ago, keeps his quiet day: no second notice today (${to(quinn).length})`);
+        const everyPush = [...pushes1, ...firstRunPushes, ...pushes];
+        assert(everyPush.length === 5 && everyPush.every((m: any) => m.generic && !JSON.stringify(m.sent).includes('peer-')),
+            `on either server, every push showed only "A community has started near you." and named no community (${everyPush.filter((m: any) => !m.generic).length} did not)`);
         const run4 = await standby.send('mirror');
         assert(run4.ok === true && run4.added === 0 && run4.notified === 0 && (await standby.send('pushes')).length === 0,
             'the run after that finds nothing new and tells nobody');

@@ -34,6 +34,8 @@ if (!OPEN_FEED) delete process.env.ENFORCE_WS_AUTH;
 
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
+import { lockedDm } from './dm-test-payload.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -110,8 +112,9 @@ async function main() {
     const member = (callsign: string): Id => {
         const id = keypair();
         // A profile photo, because posting to the marketplace needs one.
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
-                    VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed', '/uploads/avatar.jpg')`).run(id.pubKeyHex, callsign);
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                    VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`).run(id.pubKeyHex, callsign);
+        setMemberPhoto(db, id.pubKeyHex, '/uploads/avatar.jpg');
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
     };
@@ -167,8 +170,10 @@ async function main() {
     console.log('\n— events —');
     const conv = se.createConversation('dm', [alice.pubKeyHex, bob.pubKeyHex], alice.pubKeyHex);
     if (!conv) throw new Error('setup: could not create the DM');
-    const DM_CIPHERTEXT = 'dm-ciphertext-' + crypto.randomBytes(4).toString('hex');
-    se.sendMessage(conv.id, alice.pubKeyHex, DM_CIPHERTEXT, 'nonce-1');
+    // A DM line in the encrypted form; its random ciphertext is the marker the checks look for.
+    const dmLine = lockedDm();
+    const DM_CIPHERTEXT = dmLine.ciphertext;
+    se.sendMessage(conv.id, alice.pubKeyHex, DM_CIPHERTEXT, dmLine.nonce);
     // A balance change, exactly as transfer() announces it (A2-20): scoped to its two parties.
     se.broadcast({ type: 'transaction', txn: { from: alice.pubKeyHex, to: bob.pubKeyHex, amount: 7, memo: 'rent' } }, [alice.pubKeyHex, bob.pubKeyHex]);
     // A trade request, as escrow announces it: to its two parties only (test-ws-feed-parties drives the real path).
@@ -195,7 +200,10 @@ async function main() {
         for (const t of PRIVATE_TYPES) assert(!got.includes(t), `${name} socket does not get ${t} (got [${got.join(', ')}])`);
         for (const secret of secrets) assert(!s.raw.some(r => r.includes(secret)), `${name} socket never sees ${secret.slice(0, 14)}…`);
         assert(s.events.every(e => Object.keys(e).length === 1), `${name} socket gets bare { type } doorbells only`);
-        assert(got.filter(t => t === 'new_post').length === 1, `${name} socket gets exactly one new_post doorbell — the public event, not the direct post (got ${got.filter(t => t === 'new_post').length})`);
+        // No new_post at all: a local community's listings are its members' (2026-09-28), so a socket with no member's key
+        // hears no listing doorbell here. It got exactly one, for the public event and not the direct post, while the
+        // board was public on every node (test-visitor-doorbells has the global node's).
+        assert(got.filter(t => t === 'new_post').length === 0, `${name} socket gets no new_post doorbell: it may not read the listings here (got ${got.filter(t => t === 'new_post').length})`);
     }
 
     if (OPEN_FEED) {

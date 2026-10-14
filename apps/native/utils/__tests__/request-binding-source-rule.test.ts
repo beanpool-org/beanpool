@@ -133,12 +133,22 @@ describe('the member key signs only through core\'s builders and the listed old-
         const allowed = new Set([
             'utils/crypto.ts buildSignedHeaders',
             'utils/crypto.ts buildSignedWsParams',
+            // BeanPool's key vault (utils/vault.ts): core's format-2 builder, always, bound to the vault's own host. The
+            // vault refuses anything else (apps/vault api/auth.ts), and no community accepts a request signed for it.
+            'utils/crypto.ts buildVaultSignedHeaders',
             'utils/member-statements.ts signAdminChallenge',
             'utils/member-statements.ts signPairing',
             'utils/member-statements.ts makeOfflineTicket',
             // The push leave statement: core's signPushLeave builds `0xFF ‖ beanpool-push-leave/2\nHOST\n…` from the
             // key, the phone's own token and stamp, and the host of the address the phone sent the token to.
             'utils/member-statements.ts signPushLeaveStatement',
+            // A re-key ask (utils/rekey-redeem.ts): core's signReEnroll, `0xFF ‖ beanpool-re-enroll/2\nHOST\nCODE`, the host from
+            // audienceOf of a plain address, the code the member typed or scanned, cleaned to the admin's spelling.
+            'utils/member-statements.ts signReEnrollStatement',
+            // The claim (utils/node-claim.ts): core's claimText through signedRequestBytes, `0xFF ‖ beanpool-claim/2\nHOST\n…`,
+            // the host from audienceOf of a plain address, the code id shape-checked (8 hex), the key the phone's own, the
+            // proof the phone's own HMAC. Nothing the node wrote goes in unchecked.
+            'utils/node-claim.ts buildClaimBody',
         ]);
         expect(sites.filter(s => s.callee === 'memberSigner' && !allowed.has(key(s))).map(key)).toEqual([]);
     });
@@ -217,16 +227,30 @@ describe('the phone\'s community address is written only after the plain-address
         'app/(tabs)/settings.tsx handleUpdateAnchor': /isPlainNodeAddress\(finalAnchorUrl\)/,
         // People's "Join another community", an approved knock, a directory pick; and the way back when a redeem fails.
         'utils/join-another-community.ts joinAnotherCommunity': /assertPlainNodeAddress\(targetUrl\)[\s\S]*isPlainNodeAddress\(opts\.returnUrl\)/,
+        // The claim's "Make ‹name› my community": the origin came through claimNodeOrigin; this is the write's own check.
+        'app/claim-community.tsx makeMine': /assertPlainNodeAddress\(origin\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', origin\)/,
+        // A re-key code bound this phone (app/rekey-code.tsx): the community the ask went to, a plain origin already
+        // (utils/rekey-redeem.ts rekeyCommunityUrl), checked again before it is written.
+        'app/rekey-code.tsx onBound': /assertPlainNodeAddress\(s\.community\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', s\.community\)/,
+        'app/rekey-code.tsx moveOntoCommunity': /assertPlainNodeAddress\(url\);[\s\S]*AsyncStorage\.setItem\('beanpool_anchor_url', url\)/,
         // The header's community switcher.
         'utils/use-communities.ts switchTo': /assertPlainNodeAddress\(url\)/,
         // Both restores (12 words, sign-in).
         'utils/restore-account.ts saveRestoredAccount': /assertPlainNodeAddress\(anchorUrl\)/,
         // Development discovery: only plain candidates are probed.
         'services/pillar-sync.ts discoverAnchor': /isPlainNodeAddress\(url\)/,
+        // Delete account, while another saved community keeps the key: the phone moves there (the plan only picks plain
+        // saved addresses; this is the write's own check).
+        'utils/delete-here.ts leaveThisCommunity': /assertPlainNodeAddress\(next\);[\s\S]*storage\.setItem\(ANCHOR_STORE_KEY, next\)/,
+        // The full-screen "Update required"'s "Use another community": a saved community (only plain ones are offered;
+        // this is the write's own check).
+        'utils/update-block-escape.ts switchFromUpdateBlock': /assertPlainNodeAddress\(url\);[\s\S]*deps\.storage\.setItem\(ANCHOR_STORE_KEY, url\)/,
     };
     /** Writers of a fixed address. */
     const CONSTANT: Record<string, string> = {
         'app/welcome.tsx finishGlobalJoin': 'GLOBAL_NODE_URL',
+        // The same door from an account the phone already has, once it is in (join-global.tsx).
+        'utils/global-join-existing.ts enterGlobalCommunity': 'GLOBAL_NODE_URL',
     };
 
     it('finds the writes it is meant to police', () => {

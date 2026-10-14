@@ -41,12 +41,13 @@ import {
 import { federationCors, mountFederationRoutes } from './federation-api.js';
 import { federatedRelayMessage, federatedVerifyMember } from './federation-protocol.js';
 import { getP2PNode } from './p2p.js';
-import { WebSocketServer } from 'ws';
+import { WebSocket, WebSocketServer } from 'ws';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
-import { checkAdminAuth, isValidWsTicket } from './admin-auth.js';
+import { checkAdminAuth, redeemWsTicket } from './admin-auth.js';
+import { adminSessionBindingLive, onAdminSessionsEnded } from './admin-key-auth.js';
 import os from 'node:os';
-import { logger, addLogClient, removeLogClient, logClients } from './logger.js';
+import { logger, addLogClient, removeLogClient, logClients, startSystemLogRetention } from './logger.js';
 import {
     registerMember, getMembers, getAllMembers, isNodeMember, isInvalidatedKey, isClosedAccountKey,
     readsAsMember, passesReadGate, isLiveVisitor, socketStanding,
@@ -102,6 +103,13 @@ import { createSettingsRoutes } from './routes/settings.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createBackupRoutes } from './routes/backup.js';
+import { createOffboxBackupRoutes } from './routes/offbox-backups.js';
+import { createAlertsRoutes } from './routes/alerts.js';
+import { createAutomationTokenRoutes } from './routes/automation-tokens.js';
+import { createMcpRoutes } from './agent/mcp-route.js';
+import { createAgentGrantRoutes } from './agent/grants-route.js';
+import { createOAuthRoutes, oauthDoorOff } from './agent/oauth-route.js';
+import { createAgentSuggestionRoutes } from './agent/suggestions-route.js';
 import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
 import { identityReadOnlyGuard } from './services/identity-epoch.js';
 import { createOwnerWordsCheckRoutes } from './routes/owner-words-check.js';
@@ -115,11 +123,20 @@ import { createFederationCommissionRoutes } from './routes/federation-commission
 import { createMessagingRoutes } from './routes/messaging.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
+import { createEnterpriseDecisionRoutes } from './routes/enterprise-decisions.js';
+import { createGroupDecisionRoutes } from './routes/group-decisions.js';
 import { profileFeatureGate, featureOffFor } from './routes/profile-feature-gate.js';
+import { privatePreviewGate, privatePreviewEarlyGate, isPrivatePreview, type KeyedImageChecks } from './config/private-preview.js';
+import { avatarKeyMatches, groupPictureKeyMatches } from './engine/avatar-keys.js';
+import { photoKeyMatches } from './engine/photo-keys.js';
 import { standbyLedgerGate } from './routes/standby-ledger-gate.js';
+import { moneyLimitsGate, enterpriseActingFor } from './routes/money-limits-gate.js';
 import { getProfileSwitches } from './config/node-profile.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
-import { createManagerBackupsRoutes } from './routes/manager-backups.js';
+import { scrubServerFaults } from './routes/member-error-text.js';
+import { apiCompression, apiGzipFromEnv, API_GZIP_ENV } from './api-compression.js';
+import { tlsSendWindows } from './tls-send-window.js';
+import { CommonsPotUnknownError } from './engine/audit.js';
 import { createAppleProbeRoutes } from './routes/apple-probe.js';
 import { createAppleReturnRoutes } from './routes/apple-return.js';
 import { isDocumentPolicyFile, isNonCanonicalSpelling, useAppDocumentPolicy, useDocumentPolicy } from './app-document-csp.js';
@@ -131,13 +148,17 @@ import { createNoticeRoutes } from './routes/notices.js';
 import { createBlockRoutes } from './routes/blocks.js';
 import { startTidyingKnocks } from './engine/knocks.js';
 import { startForgettingJoinAddresses } from './engine/open-join.js';
+import { startForgettingOldAddresses } from './services/address-retention.js';
 import { createChannelRoutes } from './routes/channels.js';
 import { createNodeAdminRoutes } from './routes/node-admin.js';
+import { createNamesListRoutes } from './routes/names-list.js';
 import { createSettingsSigninRoutes } from './routes/settings-signin.js';
+import { createNodeClaimRoutes } from './routes/node-claim.js';
 import { createRecoveryCollectRoutes } from './routes/recovery-collect.js';
 import { createPairingRoutes } from './routes/pairing.js';
 import { createPricingGuideRoutes } from './routes/pricing-guide.js';
 import { createActivityRouter } from './routes/activity.js';
+import { createHomeRoutes } from './routes/home.js';
 import { createPulseRoutes } from './routes/pulse.js';
 import { createPulseSubmitRoutes } from './routes/pulse-submit.js';
 import { createAvatarRoutes } from './routes/avatar.js';
@@ -145,17 +166,25 @@ import { startPulseScheduler } from './engine/pulse-resolver.js';
 import { startPricingAggregatorWorker } from './pricing-aggregator.js';
 import type { RouteDeps } from './routes/types.js';
 import { authRateLimit as rateLimit, pruneAuthAttempts } from './auth-rate-limit.js';
-import { pruneGithubPolls } from './github-poll-rate-limit.js';
 import { pruneChatLines } from './chat-rate-limit.js';
 import { clientIp, clientLimiterKey, limiterKeyForIp, resolveClientIp } from './client-ip.js';
+import { countWebAppPageLoad } from './engine/web-visits.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, twoFactorOn } from './password-brake.js';
-import { gatewayAdmit, gatewayAdmitMember, gatewaySettle, pruneGatewayBuckets } from './gateway-rate-limit.js';
+import {
+    gatewayAdmit, gatewayAdmitMember, gatewayAdmitDayBudget, gatewaySettle, pruneGatewayBuckets, gatewayClaimVerified,
+    gatewayAdmitPeerRead, gatewayAdmitUpgrade, gatewaySettleUpgrade, gatewayNoRoomUpgrade, gatewayChargeLargeClaim, CLAIM_SMALL_BODY_BYTES,
+    type GatewayCharge,
+} from './gateway-rate-limit.js';
+import { wsLimits, wsHasRoom, admitWsSocket, admitLogSocket, frameAllowed } from './ws-limits.js';
+import { applyServerLimits, serverTimeoutOptions } from './server-limits.js';
 import { visitorWriteRefused, visitorsOwnRead, routedPath } from './visitor-allowlist.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './engine/members.js';
 import { provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR, BAD_SIGNER_KEY_ERROR } from './engine/member-key.js';
 import { requestNonces, verifyMemberSignature } from './engine/member-signature.js';
 import { checkEnvAddresses } from './engine/own-addresses.js';
-import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER } from '@beanpool/core';
+import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, WS_NO_ROOM_CLOSE_CODE, WS_NO_ROOM_RETRY_SEC, wsNoRoomReason } from '@beanpool/core';
+import { APP_VERSION_HEADER, noteAppVersion } from './app-version-counts.js';
+import { bodyCarriesSampleId, SAMPLE_ID_MESSAGE, SAMPLE_ID_REFUSAL, urlCarriesSampleId } from './sample-id-guard.js';
 
 
 // X-1: replay protection for signed requests. A signed request is valid for SIGNATURE_FRESHNESS_MS around its
@@ -185,7 +214,8 @@ const ENFORCE_READ_AUTH = process.env.ENFORCE_READ_AUTH !== 'false';
 //     before. An unsigned socket, or one signed by a key that is not (yet) a member, is accepted
 //     but gets only a bare doorbell for public changes (PUBLIC_WS_EVENTS in state-engine.ts) — the
 //     same things anyone can already read without signing, so on a node that shows visitors only
-//     the listings (`guestListingsOnly`), only the listings' (state-engine keylessSocketMayUse).
+//     the listings (`guestListingsOnly`), only the listings', and elsewhere every one but the
+//     listings', which are members-only there (state-engine keylessSocketMayUse).
 //     A signature that is forged, stale or replayed is refused with 401.
 //   - ENFORCE_WS_AUTH=true: only member-signed sockets are accepted; everything else gets 401.
 //   - ENFORCE_WS_AUTH=false: the old open feed — every socket gets every community-wide event.
@@ -272,29 +302,35 @@ function verifyWsConnect(pathname: string, params: URLSearchParams): WsConnectRe
 //     request cannot carry signature headers. Message attachments are E2E
 //     ciphertext (NAT-1), so serving them unauthenticated leaks no plaintext.
 //     (A token-in-URL scheme for these is tracked as follow-up.)
+// Some entries are here only so that, switched off by the node's profile, they answer 404 feature_off to everyone:
+// otherwise they are members' reads on every node (MEMBERS_ONLY_READS_*), and the listings and the Commons pot are
+// public only on some (PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT, MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT).
 export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/version',
     '/api/community/info',
     '/api/community/health',
+    // The consent a known community asks for at joining (engine/community-health.ts): read before joining.
+    '/api/community/consent-terms',
     '/api/node/config',
     '/api/directory/info',
-    '/api/commons/balance',          // community transparency (single aggregate)
-    '/api/commons/projects',         // community transparency
-    '/api/crowdfund/projects',       // public crowdfund list
-    '/api/treasuries',               // community transparency: list of treasuries
-    '/api/enterprises',              // community transparency: list of enterprises
-    '/api/enterprises/map',          // map pins: enterprises with a location
-    '/api/map/enterprises',          // map pins: alias
-    '/api/treasuries/map',           // map pins: alias
-    '/api/commons/decisions',        // governance transparency: list of decisions
+    '/api/commons/balance',          // the Commons pot, a community total: public on a local community (MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT)
+    '/api/commons/projects',         // members only (MEMBERS_ONLY_READS_PATTERNS); here for its 404 when switched off
+    '/api/crowdfund/projects',       // members only; here for its 404 when switched off
+    '/api/treasuries',               // members only; here for its 404 when switched off
+    '/api/enterprises',              // members only; here for its 404 when switched off
+    '/api/enterprises/map',          // members only; here for its 404 when switched off
+    '/api/map/enterprises',          // members only; here for its 404 when switched off
+    '/api/treasuries/map',           // members only; here for its 404 when switched off
+    '/api/commons/decisions',        // members only (MEMBERS_ONLY_READS_EXACT)
     '/api/invite/check',             // onboarding: pre-membership invite pre-flight (rate-limited)
     '/api/attest',                   // registrar attestation: signed proof this node holds its identity
-    '/api/marketplace/posts',        // marketplace board (reach is a discovery filter, not access control)
+    '/api/marketplace/posts',        // marketplace board: public only with the visitors' view on (PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT)
     '/api/federation/reachable-peers', // compose-time list of neighbouring communities to reach out to
     '/api/pricing-guide',            // community pricing catalog and public multiplier
     '/api/pair/poll',                // ephemeral QR device pairing poll (pre-auth)
+    '/api/member/re-enroll/status',  // a replacement phone's poll of its re-key ask: signed by a key that is no member yet, the route asks for the signature (routes/community.ts)
     '/api/channels/options',         // the platform/category vocabulary the channel form renders
-    '/api/pulse/feed',               // public syndicated creator activity feed (The Pulse, Phase 2)
+    '/api/pulse/feed',               // members only (MEMBERS_ONLY_READS_EXACT)
     '/api/pulse/oauth/config',       // public platform OAuth availability configuration (The Pulse, Phase 5)
     '/api/node/info',                // federation discovery: name + counts + peer URLs, read cross-origin by peers' PWAs, which cannot sign there
     '/api/federation/links',         // link cards (energy balance per peer), public by design — see its handler in routes/community.ts
@@ -302,78 +338,170 @@ export const PUBLIC_READ_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/global/communities',       // global node (G5): the mirrored communities directory, for anyone deciding where to join
     '/api/global/home',              // global node (G5): the landing card; a signed read adds the caller's own watches
     '/api/join/knock/status',        // ask to join (G6): the applicant, not a member here, reads their own knock; answers only a signed request, for the signer
+    '/api/home',                     // Home in one read: public only with the visitors' view on, and then the visitors' subset (HOME_READ_EXACT)
 ]);
+/**
+ * The peer protocol's own paths, which the gateway's usual buckets leave alone: the public reads another community's
+ * server makes of this one (a harvester's counts, a take-over's health check), which may come in a burst from one
+ * address. They have a generous bucket of their own per address instead (gateway-rate-limit.ts gatewayAdmitPeerRead,
+ * five times the usual minute), and answer from cached counts (state-engine communityCountsCached,
+ * getPublicCommunityHealth): before, they had no ceiling and ran full-table counts on every hit (DoS review F4). Exact
+ * paths, reads only, matched as sent. Everything else under /api/federation/ and /api/community/ is
+ * charged like any other request: before W-main the gateway exempted both whole prefixes, so a member's own signed
+ * purchase, commission, registration or area there was not limited at all (design scratch/global-node/
+ * DESIGN-replica-flood-bounds-opus.md §2, §6.2). The peers' disabled verify and relay routes (federation-api.ts) are
+ * deliberately not listed: a peer route that writes is charged when it comes back.
+ */
+export const GATEWAY_EXEMPT_PEER_READS: ReadonlySet<string> = new Set<string>([
+    '/api/community/info',
+    '/api/community/health',
+]);
+export function isPeerProtocolRead(ctx: { method: string; path: string }): boolean {
+    return (ctx.method === 'GET' || ctx.method === 'HEAD') && GATEWAY_EXEMPT_PEER_READS.has(ctx.path);
+}
+
 // Precise patterns for the parameterized public routes. Kept deliberately tight
 // (anchored, single path segment per `[^/]+`) so a broad prefix can't
 // accidentally expose a sensitive neighbour — e.g. the DM-content reads
 // (/api/messages/conversations/:pk, /api/messages/:conversationId) must stay
 // GATED; only the E2E-ciphertext attachment binary is public.
 export const PUBLIC_READ_PATTERNS: readonly RegExp[] = [
-    /^\/api\/community\/membership\/[^/]+$/,                // onboarding: is this pubkey a member?
-    /^\/api\/members\/callsign-available\/[^/]+$/,          // onboarding/wizard: check callsign availability
-    /^\/api\/crowdfund\/projects\/[^/]+$/,                  // public crowdfund detail
-    /^\/api\/treasury\/[^/]+$/,                             // community transparency: one treasury's detail
-    /^\/api\/enterprise\/[^/]+$/,                           // community transparency: enterprise detail
-    /^\/api\/commons\/decisions\/[^/]+$/,                   // governance transparency: single decision detail
-    /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: look up SSO recovery candidates by callsign
-    /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,    // <img> binary (cannot send signature headers)
+    /^\/api\/community\/membership\/[^/]+$/,                // onboarding: is this pubkey a member? (answered only to the key's own signer; the route refuses anyone else)
+    /^\/api\/members\/callsign-available\/[^/]+$/,          // onboarding/wizard: check callsign availability (rate-limited)
+    /^\/api\/crowdfund\/projects\/[^/]+$/,                  // members only (MEMBERS_ONLY_READS_PATTERNS); here for its 404 when switched off
+    /^\/api\/treasury\/[^/]+$/,                             // members only; here for its 404 when switched off
+    /^\/api\/enterprise\/[^/]+$/,                           // members only; here for its 404 when switched off
+    /^\/api\/commons\/decisions\/[^/]+$/,                   // members only (MEMBERS_ONLY_READS_PATTERNS)
+    /^\/api\/recovery\/lookup\/[^/]+$/,                     // pre-membership: the exact callsign's SSO recovery candidate, no photo (rate-limited)
+    /^\/api\/marketplace\/posts\/[^/]+\/photos\/[^/]+$/,    // <img> binary (cannot send signature headers); keyed for every listing where the listings are members', and for a listing off the board where they are a public read (engine/photo-keys.ts)
     /^\/api\/messages\/[^/]+\/attachment$/,                 // E2E-ciphertext attachment binary for <img>
     /^\/api\/pulse\/items\/[^/]+\/thumbnail$/,              // <img> Pulse feed item thumbnail proxy binary
     /^\/api\/avatar\/[^/]+$/,                               // <img> member avatar binary
+    /^\/api\/groups\/[^/]+\/picture$/,                      // <img> a group's own picture binary; served only to a URL carrying its key, which only a group read hands out (engine/avatar-keys.ts)
 ];
 
-// Public reads that name members, on a node that shows visitors the listings and not the people (`guestListingsOnly`,
-// on the global profile by default and overridable anywhere, G9a): off the allowlist there, so the ordinary gate
-// answers them for members only, whatever else is switched on. Each names people: a decision carries its author's key
-// and can name a member in its params (a suspension), the pool balance belongs to a ledger a visitor has no part in,
-// and the Pulse feed carries each member's key, name, face and their own pages elsewhere. The lobby has nothing of
-// them to be transparent about. Everywhere else they stay public.
-export const MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT: ReadonlySet<string> = new Set<string>([
+// Reads on the allowlist that name members, and so are members' reads on every node: off the allowlist, the ordinary
+// gate answers them for a member of this node (passesReadGate, a suspended member included) and nobody else, a visitor's
+// row and a signed non-member included, as it answers a local community's listings. Marty, 2026-09-28: "nothing on a
+// private node should be public now that we have a global node"; on the global node (G9a) they were members' already.
+// Each names people: a decision carries its author's key and can name a member in its params (a suspension, a
+// removal), and the Pulse feed carries each member's key, name, face and their own pages elsewhere (Instagram, YouTube).
+// A local community refuses them with the listings' code and the global community's address (COMMUNITY_MEMBERS_ONLY).
+export const MEMBERS_ONLY_READS_EXACT: ReadonlySet<string> = new Set<string>([
     '/api/commons/decisions',
-    '/api/commons/balance',
     '/api/pulse/feed',
 ]);
-// And every public read of the Beans constructs, the enterprises and treasuries (one construct), crowdfunds and Commons
-// projects, wherever those are switched on with the visitors' view (a global node with Beans back on, a local node
-// with the view overridden on). Members only rather than stripped for a visitor, as a post is: each is people and
-// money through and through. An enterprise names its keepers and their backing pledges (key, name, face), who paused
-// it, who is winding it up and who placed it, and its flow carries members' memos; a crowdfund names its creator, a
-// project its proposer; each carries balances from a ledger a visitor has no part in, and an enterprise its own face
-// and exact place. A visitor's copy would be a second guestPost over some fifty fields, every new one a leak until
-// someone decides; off the allowlist, a new field or a new public read under these prefixes is members-only already.
-// The apps read a refused one as "none", as they do on a node with them off. (The phone reads the treasuries list and
-// its crowdfund sync unsigned, native db.ts getTreasuries and pillar-sync, so on such a node a member's phone lists
-// none of them until those two reads are signed.)
-export const MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS: readonly RegExp[] = [
+// And every read of the Beans constructs, the enterprises and treasuries (one construct), crowdfunds and Commons
+// projects, where they are switched on (switched off, each answers 404 feature_off to everyone). Members only rather
+// than stripped for a stranger, as a post is on the global node: each is people and money through and through. An
+// enterprise names its keepers and their backing pledges (key, name, face, amount), who paused it, who is winding it up
+// and who placed it, and its flow carries members' memos; a crowdfund names its creator, a project its proposer; each
+// carries balances, and an enterprise its own face and exact place. A stranger's copy would be a second guestPost over
+// some fifty fields, every new one a leak until someone decides; off the allowlist, a new field or a new public read
+// under these prefixes is members-only already. The apps read a refused one as "none", as they do on a node with them
+// off; a member's phone signs every read of its own community (native node-request-signing.ts), and the web app every
+// read it makes with a key (lib/api.ts request). The node's own Settings list the enterprises with the admin password
+// (GET /api/local/admin/treasury).
+export const MEMBERS_ONLY_READS_PATTERNS: readonly RegExp[] = [
     /^\/api\/commons\/decisions\/[^/]+$/,
     /^\/api\/(treasury|treasuries|enterprise|enterprises)(\/|$)/,
     /^\/api\/map\/enterprises$/,
     /^\/api\/crowdfund(\/|$)/,
     /^\/api\/commons\/projects(\/|$)/,
 ];
+// The Commons pot: a community total, and public on a local community, as its circulation and its counts are
+// (/api/community/info). On a node that shows visitors the listings and not the people (`guestListingsOnly`, the global
+// node, G9a) it is members' too: the pool belongs to a ledger a visitor has no part in, and the lobby has nothing of it
+// to be transparent about.
+export const MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT: ReadonlySet<string> = new Set<string>([
+    '/api/commons/balance',
+]);
+
+// Public reads that are the listings, and public only on a node that shows visitors the listings and not the people
+// (`guestListingsOnly`, the global node): there anyone looks around, in the visitors' view (rough areas, no people). On
+// every other node, a local community's, the listings are its members' (Marty, 2026-09-28: "nothing on a private node
+// should be public now that we have a global node"), so these fall to the ordinary gate: a signed read by a member of this
+// node (passesReadGate, a suspended member included), and nobody else, a visitor's row and a signed non-member included.
+// The refusal names the global community (LISTINGS_MEMBERS_ONLY), where the apps send a stranger to look around. A
+// listing's photos keep their public route, because an `<img>` cannot sign, but here each is served only to a URL
+// carrying its key, which only a read of the listing hands out (engine/photo-keys.ts). A linked peer's app browsing
+// here unsigned (routes/marketplace.ts isPeerRequest) is refused too, until linked communities get signed access of
+// their own.
+export const PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT: ReadonlySet<string> = new Set<string>([
+    '/api/marketplace/posts',
+]);
+
+// Home in one read (routes/home.ts, DESIGN-home-dashboard §5.3): public, like the listings, only on a node that shows
+// visitors the listings and not the people (`guestListingsOnly`, the global node), where an unsigned reader or a key that
+// is no member here gets the visitors' subset (the landing card, the listings and events in their rough areas, the
+// community's counts). Everywhere else it is a member's own read, which the ordinary gate answers for a member of this
+// node (passesReadGate) and refuses anyone else with the community's members-only words (COMMUNITY_MEMBERS_ONLY).
+export const HOME_READ_EXACT: ReadonlySet<string> = new Set<string>([
+    '/api/home',
+]);
+
+/** The refusal of a local community's listings to anyone but its members, which the apps turn into their sign-in page. */
+export const LISTINGS_MEMBERS_ONLY = {
+    error: "This community's listings are for its members. Join with an invite from a member, or look around the global community at global.beanpool.org.",
+    code: 'members_only',
+    global: 'https://global.beanpool.org',
+} as const;
+
+/**
+ * The refusal of a local community's other members' reads (MEMBERS_ONLY_READS_*: its enterprises, Decisions, Commons
+ * projects, crowdfunds and Pulse) to anyone but its members: the listings' code and the global community's address, in
+ * words that fit any of them. The global node refuses them as any gated read, as before.
+ */
+export const COMMUNITY_MEMBERS_ONLY = {
+    error: "This is for this community's members. Join with an invite from a member, or look around the global community at global.beanpool.org.",
+    code: 'members_only',
+    global: 'https://global.beanpool.org',
+} as const;
+
+function isListingsRead(path: string): boolean {
+    const routed = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+    return PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT.has(routed);
+}
 
 function isAllowlisted(path: string): boolean {
     return PUBLIC_READ_EXACT.has(path) || PUBLIC_READ_PATTERNS.some(re => re.test(path));
 }
 
 // The router answers a path with one trailing slash as the path itself (@koa/router's default, strict: false), so this
-// test does too. Otherwise `/api/pulse/feed/` would miss it, be held only to the gate's usual live-member test, and
-// reach the feed as a pruned account. Only a public read: the gated reads under the same prefixes (an enterprise's
-// ledger, its thread) keep the gate's usual test.
+// test does too, and `/api/pulse/feed/` is refused with the same words as `/api/pulse/feed`. Only a read on the
+// allowlist: the gated reads under the same prefixes (an enterprise's ledger, its thread) keep the gate's usual answer.
 function namesMembers(path: string): boolean {
     const routed = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
     return isAllowlisted(routed)
-        && (MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT.has(routed) || MEMBERS_ONLY_ON_GUEST_LISTINGS_PATTERNS.some(re => re.test(routed)));
+        && (MEMBERS_ONLY_READS_EXACT.has(routed) || MEMBERS_ONLY_READS_PATTERNS.some(re => re.test(routed)));
 }
 
 function isPublicRead(path: string): boolean {
     if (!isAllowlisted(path)) return false;
     // The switches are read only for these few paths, so no other request pays for them.
+    // The listings: public only where visitors get the listings' view.
+    if (PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT.has(path)) return getProfileSwitches().guestListingsOnly;
+    // Home: the visitors' subset is public only there too.
+    if (HOME_READ_EXACT.has(path)) return getProfileSwitches().guestListingsOnly;
+    // The Commons pot: public everywhere but there.
+    if (MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT.has(path)) return !getProfileSwitches().guestListingsOnly;
     if (!namesMembers(path)) return true;
-    const switches = getProfileSwitches();
     // A Beans read that is switched off names nobody: it answers 404 feature_off to everyone (profileFeatureGate), a
-    // visitor as a member, as it did before this switch existed.
-    return !switches.guestListingsOnly || featureOffFor(path, switches) !== null;
+    // stranger as a member.
+    return featureOffFor(path) !== null;
+}
+
+/**
+ * What the gate answers someone it refuses one of a local community's members' reads, the listings and the rest: their
+ * code and the global community's address, which the apps turn into their sign-in page. Null for any other gated read,
+ * and for these on a node with the visitors' view, whose refusal says nothing more.
+ */
+function membersOnlyRefusal(path: string): typeof LISTINGS_MEMBERS_ONLY | typeof COMMUNITY_MEMBERS_ONLY | null {
+    if (isListingsRead(path)) return LISTINGS_MEMBERS_ONLY;
+    const routed = path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;
+    if (HOME_READ_EXACT.has(routed) && !getProfileSwitches().guestListingsOnly) return COMMUNITY_MEMBERS_ONLY;
+    if (namesMembers(path) && !getProfileSwitches().guestListingsOnly) return COMMUNITY_MEMBERS_ONLY;
+    return null;
 }
 
 // Gated reads that are nothing but what only members may read, so the gate asks readsAsMember of the signer rather than
@@ -474,6 +602,27 @@ function broadcastWsAnalytics() {
 
 const PONG_PAYLOAD = JSON.stringify({ type: 'pong' });
 
+/** How much of a frame's start wsTrafficLine looks at to name its type. */
+const FRAME_TYPE_PROBE = 64;
+/**
+ * A frame that opens `{"type":"<name>"`: the name, if it is one short plain word (no spaces, at most 48 characters, so
+ * never a whole key). The node's own frames all open so; a frame a socket sends in can name only its own word here.
+ */
+const LEADING_FRAME_TYPE = /^\s*\{\s*"type"\s*:\s*"([A-Za-z0-9_.:-]{1,48})"/;
+
+/**
+ * The admin connection log's line for one frame (the `ws_traffic` event on /ws/logs): which socket, which way, how big,
+ * when, and what kind of frame (its leading top-level `type`, else 'json' or 'other'). Never what it says: it carried the
+ * frame's first 150 bytes, so any admin watching saw who paid whom, the amounts and notes, and who messaged whom (#1534;
+ * balances and trades are private by default). The type, size, direction and timing are enough to debug a socket.
+ * `head` is the frame's first FRAME_TYPE_PROBE characters.
+ */
+function wsTrafficLine(id: string, direction: 'in' | 'out', size: number, head: string): string {
+    const m = LEADING_FRAME_TYPE.exec(head);
+    const frameType = m ? m[1] : /^\s*[{[]/.test(head) ? 'json' : 'other';
+    return JSON.stringify({ type: 'ws_traffic', data: { id, direction, size, frameType, at: Date.now() } });
+}
+
 function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http').IncomingMessage) {
     const id = 'ws_' + crypto.randomBytes(8).toString('hex');
     const ip = getIpAddress(req);
@@ -512,24 +661,19 @@ function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http
         if (conn) {
             conn.msgSentCount++;
             conn.lastActivityAt = Date.now();
-            
-            const dataStr = typeof data === 'string' ? data : data.toString();
-            let preview = dataStr.slice(0, 150);
-            if (dataStr.length > 150) preview += '...';
-            
-            const trafficPayload = JSON.stringify({
-                type: 'ws_traffic',
-                data: {
-                    id,
-                    direction: 'out',
-                    size: dataStr.length,
-                    preview
-                }
-            });
 
-            for (const client of logClients) {
-                if (client.readyState === 1 && client !== ws) { // OPEN
-                    try { client.send(trafficPayload); } catch {}
+            // A member's socket only: a line about a log socket's frame went to every other log socket, whose own
+            // send made a line back, until the stack ran out (thousands of frames a log line with two streams open).
+            let watching = false;
+            if (type === 'sync') for (const client of logClients) if (client.readyState === 1 && client !== ws) { watching = true; break; }
+            if (watching) {
+                const dataStr = typeof data === 'string' ? data : data.toString();
+                // What kind of frame, how big, which way and when: never what it says (wsTrafficLine).
+                const trafficPayload = wsTrafficLine(id, 'out', dataStr.length, dataStr.slice(0, FRAME_TYPE_PROBE));
+                for (const client of logClients) {
+                    if (client.readyState === 1 && client !== ws) { // OPEN
+                        try { client.send(trafficPayload); } catch {}
+                    }
                 }
             }
         }
@@ -542,28 +686,31 @@ function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http
 
     // Attach message listener
     ws.on('message', (data: any) => {
+        // A socket sending more than the apps' heartbeat ever does is closed (ws-limits.ts). A frame over the cap never
+        // gets here: ws refuses it (maxPayload) and closes the socket with 1009.
+        if (!frameAllowed(ws)) {
+            try { ws.close(1008, 'Too many messages'); } catch { /* already closing */ }
+            return;
+        }
         const conn = activeConnections.get(id);
         if (conn) {
             conn.msgRecvCount++;
             conn.lastActivityAt = Date.now();
 
-            const dataStr = typeof data === 'string' ? data : data.toString();
-            let preview = dataStr.slice(0, 150);
-            if (dataStr.length > 150) preview += '...';
-
-            const trafficPayload = JSON.stringify({
-                type: 'ws_traffic',
-                data: {
-                    id,
-                    direction: 'in',
-                    size: dataStr.length,
-                    preview
-                }
-            });
-
-            for (const client of logClients) {
-                if (client.readyState === 1 && client !== ws) { // OPEN
-                    try { client.send(trafficPayload); } catch {}
+            // Bytes, never a whole-frame string: a frame is decoded only when small (the heartbeat below), and the
+            // admin log's line reads only its first bytes, for its type, and only while someone is watching the log.
+            // A member's socket only, as on the way out: a frame a log socket sent made a line on every other log socket.
+            const bytes: Buffer = Buffer.isBuffer(data) ? data
+                : typeof data === 'string' ? Buffer.from(data)
+                    : Array.isArray(data) ? Buffer.concat(data) : Buffer.from(data as ArrayBuffer);
+            let watching = false;
+            if (type === 'sync') for (const client of logClients) if (client.readyState === 1 && client !== ws) { watching = true; break; }
+            if (watching) {
+                const trafficPayload = wsTrafficLine(id, 'in', bytes.length, bytes.subarray(0, FRAME_TYPE_PROBE).toString('utf8'));
+                for (const client of logClients) {
+                    if (client.readyState === 1 && client !== ws) { // OPEN
+                        try { client.send(trafficPayload); } catch {}
+                    }
                 }
             }
 
@@ -579,9 +726,9 @@ function trackConnection(ws: any, type: 'sync' | 'admin', req: import('node:http
             // client could stream multi-megabyte frames containing "wantPong" and force a
             // synchronous JSON.parse of each on the main thread of a 1-CPU container shared with
             // four other nodes. A legitimate opt-in ping is well under 256 bytes.
-            if (type === 'sync' && dataStr.length < 256 && dataStr.includes('wantPong')) {
+            if (type === 'sync' && bytes.length < 256 && bytes.includes('wantPong')) {
                 try {
-                    const msg = JSON.parse(dataStr);
+                    const msg = JSON.parse(bytes.toString('utf8'));
                     if (msg && msg.type === 'ping' && msg.wantPong === true) {
                         if (ws.readyState === 1) { // OPEN
                             try { ws.send(PONG_PAYLOAD); } catch {}
@@ -627,10 +774,53 @@ function untrackConnection(ws: any) {
  */
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+/** 400 `sample_id`: a write carried an id from the sample community (sample-id-guard.ts). Nothing past the parser runs. */
+function refuseSampleId(ctx: Koa.Context): void {
+    ctx.status = 400;
+    ctx.body = { error: SAMPLE_ID_MESSAGE, code: SAMPLE_ID_REFUSAL };
+}
+
 /** /api and /ws, ignoring case: answers that are never documents, so they carry no document headers. */
 function isApiOrWsPath(requestPath: string): boolean {
     const lower = requestPath.toLowerCase();
-    return lower === '/api' || lower.startsWith('/api/') || lower === '/ws' || lower.startsWith('/ws/');
+    return lower === '/api' || lower.startsWith('/api/') || lower === '/ws' || lower.startsWith('/ws/') || lower === '/mcp';
+}
+
+/**
+ * The admin surface: the Settings pages and every route the admin password or an admin session opens. The admin IP
+ * allowlist guards exactly these, and a listed CORS origin gets no credentials on them (Fable's web review, L6).
+ * Matched ignoring case and after normalising, so no spelling of a path is treated more loosely than another.
+ */
+export function isAdminSurfacePath(requestPath: string): boolean {
+    const p = path.posix.normalize(requestPath.toLowerCase()).replace(/\/+$/, '') || '/';
+    return p === '/settings' ||
+        p.startsWith('/settings/') ||
+        p === '/settings-legacy' ||
+        p === '/settings.js' ||
+        p === '/api/local/admin' ||
+        p.startsWith('/api/local/admin/') ||
+        p === '/mcp' ||
+        p === '/oauth' ||
+        p.startsWith('/oauth/') ||
+        p.startsWith('/.well-known/oauth-') ||
+        p === '/api/admin' ||
+        p.startsWith('/api/admin/') ||
+        p === '/api/local/verify-password' ||
+        p === '/api/local/dashboard' ||
+        p === '/api/local/update-identity' ||
+        p === '/api/local/change-password' ||
+        p === '/api/local/reset' ||
+        p === '/api/local/connectors' ||
+        p.startsWith('/api/local/connectors/') ||
+        p.startsWith('/api/local/federation/') ||
+        p === '/api/manager' ||
+        p.startsWith('/api/manager/') ||
+        p === '/api/pricing-guide/admin' ||
+        p.startsWith('/api/pricing-guide/admin/') ||
+        // The price-report queue (routes/pricing-guide.ts, checkAdminAuth): reporters' keys and comments. Not the
+        // singular /api/pricing-guide/report, a member's own report.
+        p === '/api/pricing-guide/reports' ||
+        p.startsWith('/api/pricing-guide/reports/');
 }
 
 /**
@@ -669,23 +859,122 @@ function isNonCanonicalPath(router: Router, requestPath: string): boolean {
 // tracking and heartbeat whichever port the socket arrived on.
 export type UpgradeHandler = (req: IncomingMessage, socket: Duplex, head: Buffer) => void;
 
+const UPGRADE_STATUS_TEXT: Record<number, string> = { 401: 'Unauthorized', 403: 'Forbidden', 429: 'Too Many Requests', 503: 'Service Unavailable' };
+
+/** Answer an upgrade with a plain HTTP refusal and close it. */
+function refuseUpgrade(socket: Duplex, status: 401 | 403 | 429 | 503, retryAfterSec?: number): void {
+    const retry = retryAfterSec ? `Retry-After: ${retryAfterSec}\r\n` : '';
+    try { socket.write(`HTTP/1.1 ${status} ${UPGRADE_STATUS_TEXT[status]}\r\n${retry}Connection: close\r\n\r\n`); } catch { /* gone already */ }
+    socket.destroy();
+}
+
+/** How long a socket let in only to be told "no room" may take to answer the close before it is dropped. */
+const NO_ROOM_CLOSE_GRACE_MS = 5_000;
+
+/**
+ * A /ws socket over a cap (ws-limits.ts). Where the caps say `noRoomClose` (the global node) and its address has room
+ * for one more such answer this minute (gateway-rate-limit.ts gatewayNoRoomUpgrade, which gives back what the upgrade
+ * was charged), the upgrade completes and closes at once with the "no room" close and its wait, which the apps read
+ * (@beanpool/core wsNoRoomRetrySec): it is never added to the feed, holds no place, and is dropped if it doesn't answer
+ * the close. Otherwise (a client that did not send `nr=1`, or a node without the close) the old refusal: `status` before the upgrade, as charged.
+ */
+function refuseSocketForRoom(wss: WebSocketServer, req: IncomingMessage, socket: Duplex, head: Buffer, client: string,
+    maxReqs: number, charges: ReadonlyArray<GatewayCharge | null>, status: 429 | 503, understandsNoRoom: boolean): void {
+    // Only a client that says it reads the close (`nr=1` on its connect URL) gets it: an app built before it resets its
+    // backoff and syncs on every socket that opens, so against the close it would retry every few seconds.
+    if (!understandsNoRoom || !wsLimits().noRoomClose || !gatewayNoRoomUpgrade(client, maxReqs, charges)) {
+        refuseUpgrade(socket, status, 30);
+        return;
+    }
+    wss.handleUpgrade(req, socket, head, (ws: any) => {
+        const drop = setTimeout(() => { try { ws.terminate(); } catch { /* gone already */ } }, NO_ROOM_CLOSE_GRACE_MS);
+        drop.unref?.();
+        ws.on('close', () => clearTimeout(drop));
+        ws.on('error', () => { /* a client that vanished: the close above still ends it */ });
+        ws.close(WS_NO_ROOM_CLOSE_CODE, wsNoRoomReason(WS_NO_ROOM_RETRY_SEC));
+    });
+}
+
+/** Hold a socket's place (ws-limits.ts) until its raw socket closes, whichever way: a refused handshake or the end of a
+ *  live socket. */
+function holdUntilClosed(socket: Duplex, release: () => void): void {
+    socket.once('close', release);
+    if (socket.destroyed) release();
+}
+
+/** Whether a /ws upgrade carries any of the connect token's signature parameters (verifyWsConnect). */
+function claimsWsSignature(params: URLSearchParams): boolean {
+    return params.has('pubkey') || params.has('sig') || params.has('ts') || params.has('nonce');
+}
+
+/** The close code a log socket gets when the sign-in it was opened under ends (signed out, signed out everywhere, role taken away). */
+export const LOG_SOCKET_SIGNIN_ENDED = 4401;
+
+/**
+ * Closes every /ws/logs socket whose session has ended: logged out, signed out everywhere (session_epoch bumped), timed
+ * out, its member no longer an admin, or (a password session, or the password itself with no session) the password or
+ * its 2FA changed or break-glass turned on. Run when a session ends
+ * (onAdminSessionsEnded) and every LOG_SESSION_SWEEP_MS for the ends nothing announces (a role taken away, a password
+ * changed). At most maxLogSockets sockets, so the sweep is a handful of reads.
+ */
+function closeEndedLogSockets(logsWss: WebSocketServer): void {
+    logsWss.clients.forEach((ws: any) => {
+        if (ws._adminSession && ws.readyState === WebSocket.OPEN && !adminSessionBindingLive(ws._adminSession)) {
+            ws.close(LOG_SOCKET_SIGNIN_ENDED, 'Your sign-in ended');
+        }
+    });
+}
+const LOG_SESSION_SWEEP_MS = 1000;
+
 function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): UpgradeHandler {
     return async (req, socket, head) => {
         const reqUrl = req.url || '';
         const parsedUrl = new URL(reqUrl, 'https://localhost');
         const pathname = parsedUrl.pathname;
+        // DoS review F1: every upgrade is a request to the gateway limiter (gateway-rate-limit.ts), by the rules an HTTP
+        // request is charged by, and a /ws socket is held to the caps in ws-limits.ts.
+        const client = limiterKeyForIp(resolveClientIp(req.socket.remoteAddress, req.headers));
+        const gw = getGatewayConfig();
+        const limited = !!gw.rateLimiting?.enabled;
+        const maxReqs = gw.rateLimiting?.maxRequestsPerMinute ?? 120;
 
         if (pathname === '/ws') {
+            // The node's room first, before a token is verified or anything is charged.
+            if (!wsHasRoom()) { refuseSocketForRoom(wss, req, socket, head, client, maxReqs, [], 503, parsedUrl.searchParams.get('nr') === '1'); return; }
+            const claims = claimsWsSignature(parsedUrl.searchParams);
+            const admitted = limited ? gatewayAdmitUpgrade(client, maxReqs, claims) : { wait: 0, claimed: false, charge: null };
+            if (admitted.wait) { refuseUpgrade(socket, 429, admitted.wait); return; }
             // SRV-4: see WS_AUTH_MODE for what each kind of connect gets.
             const connect = verifyWsConnect(pathname, parsedUrl.searchParams);
+            let settled: GatewayCharge | null = null;
+            if (limited) {
+                // A verified key is charged as HTTP charges it: its own bucket if it acts here, else the address's.
+                const verified = connect.kind === 'member' ? { key: connect.pubkey, acts: true }
+                    : connect.kind === 'non_member' ? { key: connect.pubkey, acts: false } : null;
+                const { wait, charge } = gatewaySettleUpgrade(client, maxReqs, admitted.claimed, verified);
+                if (wait) { refuseUpgrade(socket, 429, wait); return; }
+                settled = charge;
+            }
             const refuse = WS_AUTH_MODE === 'strict'
                 ? connect.kind !== 'member'
                 : WS_AUTH_MODE === 'members' && connect.kind === 'invalid';
             if (refuse) {
-                socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-                socket.destroy();
+                refuseUpgrade(socket, 401);
                 return;
             }
+            // A private preview serves no visitor: only a member's socket opens (config/private-preview.ts).
+            if (isPrivatePreview() && (connect.kind !== 'member' || connect.visitor)) {
+                refuseUpgrade(socket, 403);
+                return;
+            }
+            // A member's (or a visitor's row's) socket is held to its key's cap; any other, which gets only the public
+            // doorbells (or the open feed, where the operator chose it), is a stranger's, under the tighter caps.
+            const place = admitWsSocket(client, connect.kind === 'member' ? { kind: 'keyed', key: connect.pubkey } : { kind: 'stranger' });
+            if (!place.ok) {
+                refuseSocketForRoom(wss, req, socket, head, client, maxReqs, [admitted.charge, settled], place.status, parsedUrl.searchParams.get('nr') === '1');
+                return;
+            }
+            holdUntilClosed(socket, place.release);
             wss.handleUpgrade(req, socket, head, (ws: any) => {
                 ws.isAlive = true;
                 ws.on('pong', () => { ws.isAlive = true; });
@@ -713,45 +1002,28 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
                 });
             });
         } else if (pathname === '/ws/logs') {
-            const auth = parsedUrl.searchParams.get('auth');
+            // Charged as an unsigned request: an admin opens one now and then, and a flood of made-up tickets stops here.
+            const wait = limited ? gatewayAdmitUpgrade(client, maxReqs, false).wait : 0;
+            if (wait) { refuseUpgrade(socket, 429, wait); return; }
+            // A single-use ticket from POST /api/local/admin/ws-ticket (checkAdminAuth), and nothing else. The admin
+            // password in the query string (`?auth=`) is no longer taken: a URL lands in the tunnel's, proxies' and
+            // browsers' logs and history, and no client has sent one since the tickets (Fable's web review, L5).
+            // A ticket a session asked for is spent only while that session is live (admin-auth.ts, WS TICKET STORE).
             const ticket = parsedUrl.searchParams.get('ticket');
-            const config = getLocalConfig();
-            let authorized = false;
+            const redeemed = ticket ? redeemWsTicket(ticket) : null;
 
-            if (ticket && isValidWsTicket(ticket)) {
-                authorized = true;
-            } else if (auth && config.adminHash && config.salt && !twoFactorOn() && !isBreakGlassMode()) {
-                // The admin password, so under the same per-source brake as every other password check. Never under
-                // 2FA or in break-glass mode: this path takes the password alone, and every client asks for a ticket
-                // (checkAdminAuth) now.
-                const brakeKey = limiterKeyForIp(resolveClientIp(req.socket.remoteAddress, req.headers));
-                const admission = await acquirePasswordAttempt(brakeKey);
-                if (!admission.admitted) {
-                    socket.write(`HTTP/1.1 429 Too Many Requests\r\nRetry-After: ${admission.retryAfter}\r\n\r\n`);
-                    socket.destroy();
-                    return;
-                }
-                let pwOk = false;
-                try {
-                    pwOk = await verifyPasswordAsync(auth, config.adminHash, config.salt);
-                } finally {
-                    // Under 2FA a right password alone clears nothing (password-brake.ts, checkAdminPassword).
-                    settlePasswordAttempt(brakeKey, pwOk, !twoFactorOn());
-                }
-                if (pwOk) {
-                    logger.warn('AUTH', '[SECURITY] WebSocket auth via ?auth= query string is deprecated. Migrate to POST /api/local/admin/ws-ticket.');
-                    authorized = true;
-                }
-            }
-
-            if (!authorized) {
-                socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-                socket.destroy();
+            if (!redeemed) {
+                refuseUpgrade(socket, 401);
                 return;
             }
+            const release = admitLogSocket();
+            if (!release) { refuseUpgrade(socket, 503, 30); return; }
+            holdUntilClosed(socket, release);
             logsWss.handleUpgrade(req, socket, head, (ws: any) => {
                 ws.isAlive = true;
                 ws.on('pong', () => { ws.isAlive = true; });
+                // The session it was opened under (or the password and 2FA, with none), closed with it (closeEndedLogSockets).
+                ws._adminSession = redeemed.binding;
 
                 addLogClient(ws);
                 trackConnection(ws, 'admin', req);
@@ -763,6 +1035,8 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
                     removeLogClient(ws);
                     untrackConnection(ws);
                 });
+                // The session may have ended while the upgrade was answered.
+                closeEndedLogSockets(logsWss);
             });
         } else {
             socket.destroy();
@@ -770,11 +1044,22 @@ function createUpgradeHandler(wss: WebSocketServer, logsWss: WebSocketServer): U
     };
 }
 
+/**
+ * The claim (routes/node-claim.ts), exactly: GET and POST /api/local/claim, nothing under it or beside it. Neither
+ * per-address limiter (the gateway's, the administrative one) runs before it: a stranger who shares the installer's
+ * address (the same Wi-Fi, a carrier NAT, a proxy that is not trusted or forwards no address) could fill either and keep
+ * a right proof refused. The route sheds its own load: no scrypt, at most one HMAC and one Ed25519 verify a request, a
+ * wrong proof brakes its own source for 10 s before any verify, a node with an owner answers 409 before any verify, and
+ * its body is capped at 4 KiB (ROUTE_BODY_LIMITS).
+ */
+function isClaimRoute(ctx: Koa.Context): boolean {
+    return ctx.path === '/api/local/claim' && (ctx.method === 'GET' || ctx.method === 'POST');
+}
+
 /** Paths the signature middleware never verifies (they carry their own auth, or none). */
 function isSignatureBypassed(p: string): boolean {
     return p.startsWith('/api/local/') ||
         p.startsWith('/api/admin/') ||
-        p.startsWith('/api/manager/') ||
         p.startsWith('/api/pair/') ||
         p.startsWith('/api/pricing-guide/admin/') ||
         p.startsWith('/api/pricing-guide/reports') ||
@@ -850,6 +1135,16 @@ function isOwnDeleteAccount(method: string, path: string): boolean {
 
 // The administrative rate limiter's buckets (its middleware is in startHttpsServer): each client's requests in the last minute.
 const adminRateLimits = new Map<string, number[]>();
+/** The administrative requests one client may make in a window (adminRateWindowMs). */
+export const ADMIN_RATE_LIMIT = 300;
+/**
+ * The administrative limiter's window: a minute. A suite (NODE_ENV=test) may scale it down with ADMIN_RATE_WINDOW_MS, to
+ * prove a standby's pace against it in seconds (test-standby-paged-copies-pacing.ts); nothing else can, so no .env loosens it.
+ */
+export function adminRateWindowMs(): number {
+    const scaled = Number(process.env.ADMIN_RATE_WINDOW_MS);
+    return process.env.NODE_ENV === 'test' && Number.isFinite(scaled) && scaled > 0 ? scaled : 60 * 1000;
+}
 /** Tests only: forget every administrative bucket. */
 export function resetAdminRateLimit(): void {
     adminRateLimits.clear();
@@ -884,6 +1179,32 @@ export async function startHttpsServer(port: number): Promise<number> {
     app.use(async (ctx, next) => {
         ctx.request.ip = clientIp(ctx);
         await next();
+    });
+
+    // A large answer goes to a TLS connection 64 KB at a time, so an idle connection doesn't keep the answer's size in
+    // memory after it has gone (tls-send-window.ts, #1746). Before every middleware that sets or changes a body, so it
+    // sends the final one: its work is after next().
+    app.use(tlsSendWindows());
+
+    // An /api answer is gzipped for a reader that asks (api-compression.ts). First of those that set or change a body,
+    // so it compresses the final one: its work is after next(). API_GZIP=off in .env leaves it out altogether.
+    if (apiGzipFromEnv()) app.use(apiCompression());
+    else console.log(`🗜️  ${API_GZIP_ENV}=off: /api answers go out as the routes make them, not gzipped here.`);
+
+    // A database, network or bug's text in an answer outside the operator's routes is a server fault: replaced by fixed
+    // words and answered 500, over every route and gate below (routes/member-error-text.ts).
+    app.use(scrubServerFaults());
+
+    // A Commons pot that isn't a number pauses every Bean move (engine/audit.ts CommonsPotUnknownError). A route that lets
+    // that refusal through is answered in its plain words with 503, not Koa's "Internal Server Error" (#1465 review).
+    app.use(async (ctx, next) => {
+        try {
+            await next();
+        } catch (e) {
+            if (!(e instanceof CommonsPotUnknownError)) throw e;
+            ctx.status = 503;
+            ctx.body = { error: e.message, code: e.code };
+        }
     });
 
     // Federation CORS middleware (must be before body parser for fast OPTIONS handling)
@@ -935,6 +1256,10 @@ export async function startHttpsServer(port: number): Promise<number> {
         await next();
     });
 
+    // The AI assistant's OAuth door with the owners' switch off: 404 for every verb, before the CORS layer below answers
+    // OPTIONS 204 or a router answers 405 (agent/oauth-route.ts).
+    app.use(oauthDoorOff());
+
     // Gateway Configuration Middlewares (CORS Allowed Origins, Admin IP Allowlist, Feature Toggles, Rate Limiting)
 
     app.use(async (ctx, next) => {
@@ -955,9 +1280,14 @@ export async function startHttpsServer(port: number): Promise<number> {
             const isWildcardAllowed = allowedOrigins.includes('*');
 
             if (isExplicitlyAllowed) {
-                // Explicitly allowed origin: set origin & credentials
+                // Explicitly allowed origin: its own origin, and credentials (the member's cookie-free API needs none, but
+                // a site the operator lists may send them). Never on the admin surface: a listed site (a community page
+                // someone else hosts, say) must not be able to read or change the admin API with the operator's signed-in
+                // cookie (Fable's web review, L6). It may still call it with a credential it sends itself, the password
+                // in a header, as any server can.
                 ctx.set('Access-Control-Allow-Origin', requestOrigin);
-                ctx.set('Access-Control-Allow-Credentials', 'true');
+                ctx.vary('Origin');
+                if (!isAdminSurfacePath(ctx.path)) ctx.set('Access-Control-Allow-Credentials', 'true');
                 ctx.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, X-Admin-Password, x-admin-password, X-CSRF-Token, x-csrf-token, x-signature, x-public-key, x-timestamp, x-nonce, x-signed-for');
                 ctx.set('Access-Control-Expose-Headers', 'X-CSRF-Token');
                 ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
@@ -984,29 +1314,7 @@ export async function startHttpsServer(port: number): Promise<number> {
 
         // 2. Admin IP Allowlist Enforcement (/settings, /settings-legacy, /settings.js, /api/local/admin/*, /api/admin/*, and local administrative routes)
         if (gwConfig.adminIpAllowlist && gwConfig.adminIpAllowlist.length > 0) {
-            const normalizedPath = path.posix.normalize(ctx.path.toLowerCase()).replace(/\/+$/, '') || '/';
-            if (
-                normalizedPath === '/settings' ||
-                normalizedPath.startsWith('/settings/') ||
-                normalizedPath === '/settings-legacy' ||
-                normalizedPath === '/settings.js' ||
-                normalizedPath === '/api/local/admin' ||
-                normalizedPath.startsWith('/api/local/admin/') ||
-                normalizedPath === '/api/admin' ||
-                normalizedPath.startsWith('/api/admin/') ||
-                normalizedPath === '/api/local/verify-password' ||
-                normalizedPath === '/api/local/dashboard' ||
-                normalizedPath === '/api/local/update-identity' ||
-                normalizedPath === '/api/local/change-password' ||
-                normalizedPath === '/api/local/reset' ||
-                normalizedPath === '/api/local/connectors' ||
-                normalizedPath.startsWith('/api/local/connectors/') ||
-                normalizedPath.startsWith('/api/local/federation/') ||
-                normalizedPath === '/api/manager' ||
-                normalizedPath.startsWith('/api/manager/') ||
-                normalizedPath === '/api/pricing-guide/admin' ||
-                normalizedPath.startsWith('/api/pricing-guide/admin/')
-            ) {
+            if (isAdminSurfacePath(ctx.path)) {
                 const isAllowed = gwConfig.adminIpAllowlist.some(allowedIp => {
                     const norm = allowedIp.trim();
                     if (realIp === norm || norm === '*') return true;
@@ -1062,14 +1370,20 @@ export async function startHttpsServer(port: number): Promise<number> {
 
         // 4. Rate Limiting (gateway-rate-limit.ts): per real client address for unsigned requests, per member
         //    for signed ones (charged after verification, below requireSignature). Exempts the admin control
-        //    plane and federation/community paths (inter-node synchronisation bursts).
-        const isFederationPath = ctx.path.startsWith('/api/federation/') || ctx.path.startsWith('/api/community/');
-        const limited = !!gwConfig.rateLimiting?.enabled && !ctx.path.startsWith('/api/local/admin/') && !isFederationPath;
+        //    plane (its own limiter) and the peer protocol's own reads (GATEWAY_EXEMPT_PEER_READS), and nothing
+        //    else under /api/federation/ or /api/community/: a purchase, a commission, a registration or an area
+        //    is a member's own request and is charged like any other (W-main).
+        //    The peer protocol's reads have a generous bucket of their own per address (gatewayAdmitPeerRead, DoS review
+        //    F4): exempt from the others, they had no ceiling at all. The claim is exempt too (isClaimRoute).
+        const peerRead = isPeerProtocolRead(ctx);
+        const limited = !!gwConfig.rateLimiting?.enabled && !ctx.path.startsWith('/api/local/admin/') && !peerRead && !isClaimRoute(ctx);
         if (limited) {
             // #132: Use nullish coalescing so a falsy (0) value doesn't silently fall back to the default
             const maxReqs = gwConfig.rateLimiting.maxRequestsPerMinute ?? 120;
             const claimsSignature = !!ctx.get('X-Public-Key') && !!ctx.get('X-Signature') && !isSignatureBypassed(ctx.path);
             if (!gatewayAdmit(ctx, maxReqs, claimsSignature)) return;
+        } else if (peerRead && gwConfig.rateLimiting?.enabled) {
+            if (!gatewayAdmitPeerRead(ctx, gwConfig.rateLimiting.maxRequestsPerMinute ?? 120)) return;
         }
 
         await next();
@@ -1079,14 +1393,15 @@ export async function startHttpsServer(port: number): Promise<number> {
     // Administrative In-Memory Rate Limiter Middleware
     app.use(async (ctx, next) => {
         const lowerPath = ctx.path.toLowerCase();
-        if (lowerPath.startsWith('/api/local/') || lowerPath.startsWith('/api/admin/')) {
+        // The claim has its own brake and no other (isClaimRoute).
+        if ((lowerPath.startsWith('/api/local/') || lowerPath.startsWith('/api/admin/')) && !isClaimRoute(ctx)) {
             // Exempt read-only telemetry / polling endpoints so dashboard polling doesn't burn administrative mutation rate limits
             const isPollingEndpoint = ctx.path.endsWith('/diagnostics') || ctx.path.endsWith('/ws-connections') || ctx.path.endsWith('/system-stats');
             if (!isPollingEndpoint) {
                 const ip = clientLimiterKey(ctx); // IPv6: the /64 (client-ip.ts)
                 const now = Date.now();
-                const windowMs = 60 * 1000; // 1 minute
-                const limit = 300; // max 300 administrative requests per minute
+                const windowMs = adminRateWindowMs(); // 1 minute
+                const limit = ADMIN_RATE_LIMIT; // max 300 administrative requests per minute
 
                 let timestamps = adminRateLimits.get(ip) || [];
                 timestamps = timestamps.filter(t => now - t < windowMs);
@@ -1107,7 +1422,7 @@ export async function startHttpsServer(port: number): Promise<number> {
     // Periodic unref'd garbage collection for rate-limiting maps to prevent memory leaks
     const rateLimitCleaner = setInterval(() => {
         const now = Date.now();
-        const windowMs = 60 * 1000;
+        const windowMs = adminRateWindowMs();
         pruneGatewayBuckets(now);
         for (const [ip, timestamps] of adminRateLimits) {
             const valid = timestamps.filter(t => now - t < windowMs);
@@ -1115,7 +1430,6 @@ export async function startHttpsServer(port: number): Promise<number> {
             else adminRateLimits.set(ip, valid);
         }
         pruneAuthAttempts(now);
-        pruneGithubPolls(now);
         pruneChatLines(now);
         requestNonces.prune(now);
     }, 60 * 1000);
@@ -1123,6 +1437,13 @@ export async function startHttpsServer(port: number): Promise<number> {
     // The open door's sign-up limiter keeps hashed addresses in the database, not in memory: they are cleared once
     // a day old on this timer too, not only when somebody joins (engine/open-join.ts).
     startForgettingJoinAddresses();
+    // Nobody's internet address is kept longer than 7 days: the copying routes' access list, the standby watch and the
+    // take-over keys' holders forget theirs, now (the first boot of a version clears older ones) and hourly after
+    // (services/address-retention.ts).
+    startForgettingOldAddresses();
+    // The log keeps its newest 2,500 lines and none older than 30 days, now and hourly after, on every server: a quiet one
+    // writes no hundredth line for weeks (logger.ts startSystemLogRetention).
+    startSystemLogRetention();
     // Requests to join (G6): on the main server, what no member will read again is cleared from them, and a row past
     // its windows is deleted, on the same kind of timer (engine/knocks.ts, "What is kept").
     startTidyingKnocks();
@@ -1134,6 +1455,9 @@ export async function startHttpsServer(port: number): Promise<number> {
     // JSON body parser middleware
     app.use(async (ctx, next) => {
         if (MUTATING_METHODS.has(ctx.method)) {
+            // No write carries an id from the sample community (sample-id-guard.ts): its path and query first, before a byte
+            // of the body is read, and its body's ids once parsed, below.
+            if (urlCarriesSampleId(ctx.path, ctx.query)) return refuseSampleId(ctx);
             if (ctx.request.type === 'application/json' || ctx.get('content-type')?.includes('json')) {
                 // A2-10: reject an over-limit body up-front by Content-Length so a
                 // well-behaved client gets a clean 413 before we read a byte. The
@@ -1143,22 +1467,27 @@ export async function startHttpsServer(port: number): Promise<number> {
                 // here rather than in the handler is the difference between refusing a
                 // request and buffering, Ed25519-verifying and JSON.parsing 2 MB on the
                 // one event loop first — which on a 1 vCPU node is most of the attack.
-                const routeLimit = routeBodyLimit(ctx.path.toLowerCase());
+                // A signature claim the gateway let in as small carries a small body at most (gateway-rate-limit.ts
+                // CLAIM_SMALL_BODY_BYTES), whatever its length said. One it let in as possibly large is charged to its
+                // address's unverified claims once more than that has been read, never for what it only declared.
+                const claimLimit = ctx.state.gatewayBodyLimit as number | undefined;
+                const routeLimit = Math.min(routeBodyLimit(ctx.path.toLowerCase()), claimLimit ?? Infinity);
                 const declaredLen = Number(ctx.get('content-length'));
                 if (Number.isFinite(declaredLen) && declaredLen > routeLimit) {
                     ctx.status = 413;
                     ctx.body = { error: 'Request body too large' };
                     return;
                 }
+                const pastSmall = ctx.state.gatewayLargeClaim ? () => gatewayChargeLargeClaim(ctx) : undefined;
                 try {
-                    const body = await readBody(ctx.req, routeLimit);
+                    const body = await readBody(ctx.req, routeLimit, pastSmall);
                     (ctx as any).rawBody = body;  // X-1: exact bytes the client signed
                     const parsed = JSON.parse(body);
                     (ctx as any).requestBody = parsed;
                     // Koa core does NOT parse request bodies, and this server mounts no bodyparser
                     // middleware, so `ctx.request.body` is undefined unless it is set right here.
-                    // Fourteen handlers across routes/pairing.ts, routes/pricing-guide.ts and
-                    // routes/manager-backups.ts read the `ctx.request.body` spelling — every one of
+                    // Fourteen handlers across routes/pairing.ts, routes/pricing-guide.ts and the fleet
+                    // manager's backup routes (deleted 2026-10-02) read the `ctx.request.body` spelling — every one of
                     // them was silently receiving `{}`. Pairing 400'd on every attempt, and a
                     // single-node harvest fell through its `!nodeId` guard and ran the whole fleet.
                     // Both spellings now name the same parsed object.
@@ -1177,6 +1506,7 @@ export async function startHttpsServer(port: number): Promise<number> {
                         ctx.body = { error: 'Request body too large' };
                         return;
                     }
+                    if (e instanceof BodyRefusedError) return; // gatewayChargeLargeClaim answered 429
                     (ctx as any).requestBody = {};
                     (ctx.request as any).body = {};
                 }
@@ -1184,6 +1514,7 @@ export async function startHttpsServer(port: number): Promise<number> {
                 (ctx as any).requestBody = {};
                 (ctx.request as any).body = {};
             }
+            if (bodyCarriesSampleId((ctx as any).requestBody)) return refuseSampleId(ctx);
         }
         await next();
     });
@@ -1225,7 +1556,8 @@ export async function startHttpsServer(port: number): Promise<number> {
         } else {
             if (!pubKeyHex || !signatureBase64) {
                 ctx.status = 401;
-                ctx.body = { error: 'Missing cryptographic signature headers' };
+                const refusal = isGatedRead ? membersOnlyRefusal(ctx.path) : null;
+                ctx.body = refusal ? { ...refusal } : { error: 'Missing cryptographic signature headers' };
                 return;
             }
         }
@@ -1288,6 +1620,9 @@ export async function startHttpsServer(port: number): Promise<number> {
             ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };
             return;
         }
+        // The signature is good: the address's unverified claim, if it was charged one, is given back (gateway-rate-limit.ts
+        // `claim:`). What the key may do, and which bucket it is charged to, is decided from here on.
+        gatewayClaimVerified(ctx);
 
         // A closed account's key (isClosedAccountKey), which reaches a route only to delete its own account.
         let closedAccount = false;
@@ -1344,7 +1679,8 @@ export async function startHttpsServer(port: number): Promise<number> {
             // membership isn't required there — e.g. first-time registration.)
             if (isGatedRead && !gatedReadAllowed(ctx.path, ctx.query as Record<string, unknown>, signerKey)) {
                 ctx.status = 403;
-                ctx.body = { error: 'Read access requires a member identity' };
+                const refusal = membersOnlyRefusal(ctx.path);
+                ctx.body = refusal ? { ...refusal } : { error: 'Read access requires a member identity' };
                 return;
             }
 
@@ -1401,21 +1737,58 @@ export async function startHttpsServer(port: number): Promise<number> {
 
         await next();
     }
+    // A private preview answers a join, and an unsigned visitor, with its own sentence first (config/private-preview.ts).
+    // A member's image passes at a URL carrying its own key, as the apps' unsigned <img> asks for it.
+    const previewImages: KeyedImageChecks = {
+        avatar: avatarKeyMatches,
+        postPhoto: (postId, orderNum, k) => {
+            const row = db.prepare('SELECT updated_at FROM post_photos WHERE post_id = ? AND order_num = ?').get(postId, orderNum) as { updated_at: string | null } | undefined;
+            return !!row && photoKeyMatches(postId, orderNum, row.updated_at, k);
+        },
+        groupPicture: groupPictureKeyMatches,
+    };
+    app.use(privatePreviewEarlyGate(isNodeMember, previewImages));
     app.use(requireSignature);
 
-    // The gateway limiter's member bucket: charged only once the signature above has been verified.
+    // The app's version (X-BeanPool-App), counted for the verified signer only, a member or a visitor's row, for the
+    // manager's counts of who runs what (app-version-counts.ts): in memory, never refusing or slowing anything. An app below
+    // the community's floor keeps working with the server; only the app itself stops, at a safe moment.
     app.use(async (ctx, next) => {
-        const gwConfig = getGatewayConfig();
-        if (!gatewayAdmitMember(ctx, gwConfig.rateLimiting?.maxRequestsPerMinute ?? 120)) return;
+        const actor = ctx.state.actor as string | undefined;
+        if (actor) noteAppVersion(actor, ctx.get(APP_VERSION_HEADER), k => isNodeMember(k) || isLiveVisitor(k));
         await next();
     });
 
+    // The gateway limiter's member bucket: charged only once the signature above has been verified. Then the key's
+    // day budget for writes (W-main), whether or not the minute throttle is on: an enterprise's own and the signer's
+    // enterprise work, when the write's path names one the signer keeps (routes/money-limits-gate.ts enterpriseActingFor)
+    // and its own day has room, and the signer's own otherwise; a shop's governance and settling always the signer's own
+    // (gateway-rate-limit.ts ENTERPRISE_GOVERNANCE_WRITE).
+    // A verified key that isn't a member here (nor a visitor's row) is charged to its address as unsigned traffic
+    // (gateway-rate-limit.ts, global-abuse review M-4): minting a keypair for each request buys nothing.
+    app.use(async (ctx, next) => {
+        const gwConfig = getGatewayConfig();
+        const actor = ctx.state.actor as string | undefined;
+        const acts = !!actor && !!ctx.state.gatewaySignedClaim && (isNodeMember(actor) || isLiveVisitor(actor));
+        if (!gatewayAdmitMember(ctx, gwConfig.rateLimiting?.maxRequestsPerMinute ?? 120, acts)) return;
+        const enterprise = ctx.state.actor && ctx.method !== 'GET' && ctx.method !== 'HEAD' && ctx.method !== 'OPTIONS'
+            ? enterpriseActingFor(ctx.state.actor as string, ctx.path) : null;
+        if (!gatewayAdmitDayBudget(ctx, Date.now(), enterprise)) return;
+        await next();
+    });
+
+    // A private preview (config/private-preview.ts): joins other than an owner's or admin's invite, and every read a
+    // non-member makes but the few it lists, answer 403 private_preview. Off (the default), it passes everything.
+    app.use(privatePreviewGate(isNodeMember, previewImages));
     // The routes a node profile switch has turned off (Beans, escrow, enterprises and treasuries, crowdfunds)
     // answer 404 feature_off before any handler runs (routes/profile-feature-gate.ts).
     app.use(profileFeatureGate);
     // On a standby, a write that moves Beans or steps a trade answers 409 standby before any handler runs
     // (routes/standby-ledger-gate.ts): its ledger is its main server's.
     app.use(standbyLedgerGate);
+    // The money limits (W-money, engine/money-limits.ts): a payment, a marketplace request or a pledge change past its
+    // account's day answers 429 before any handler runs, and one the handler refuses gives its count back.
+    app.use(moneyLimitsGate);
 
     // Trust endpoint — only for self-signed mode
     if (!isUsingLetsEncrypt()) {
@@ -1449,6 +1822,13 @@ export async function startHttpsServer(port: number): Promise<number> {
         createCommunityRoutes(deps),
         createAdminRoutes(deps),
         createBackupRoutes(deps),
+        createOffboxBackupRoutes(deps),
+        createAlertsRoutes(deps),
+        createAutomationTokenRoutes(deps),
+        createMcpRoutes(deps),
+        createAgentGrantRoutes(deps),
+        createOAuthRoutes(deps),
+        createAgentSuggestionRoutes(deps),
         createTakeoverEnvelopeRoutes(deps),
         createOwnerWordsCheckRoutes(deps),
         createOwnerUnlockRoutes(deps),
@@ -1460,9 +1840,10 @@ export async function startHttpsServer(port: number): Promise<number> {
         createMessagingRoutes(deps),
         createCommonsRoutes(deps),
         createTreasuryRoutes(deps),
+        createEnterpriseDecisionRoutes(deps),
+        createGroupDecisionRoutes(deps),
         createPublicAddressRoutes(deps),
         createAppAddressesRoutes(deps),
-        createManagerBackupsRoutes(deps),
         createKeeperRoutes(deps),
         createOpenJoinRoutes(deps),
         createGlobalDirectoryRoutes(deps),
@@ -1472,11 +1853,14 @@ export async function startHttpsServer(port: number): Promise<number> {
         createAppleReturnRoutes(),
         createChannelRoutes(deps),
         createNodeAdminRoutes(deps),
+        createNamesListRoutes(deps),
         createSettingsSigninRoutes(deps),
+        createNodeClaimRoutes(deps),
         createRecoveryCollectRoutes(deps),
         createPairingRoutes(deps),
         createPricingGuideRoutes(deps),
         createActivityRouter(deps),
+        createHomeRoutes(deps),
         createPulseRoutes(deps),
         createPulseSubmitRoutes(deps),
         createAvatarRoutes(deps),
@@ -1540,7 +1924,7 @@ export async function startHttpsServer(port: number): Promise<number> {
             if (ctx.path === '/settings' || ctx.path.startsWith('/settings/')) {
                 const settingsIndexPath = path.join(PUBLIC_DIR, 'settings', 'index.html');
                 if (fs.existsSync(settingsIndexPath)) {
-                    useDocumentPolicy(ctx);
+                    useAppDocumentPolicy(ctx); // the manager: no inline script (app-document-csp.ts)
                     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
                     ctx.set('Pragma', 'no-cache');
                     ctx.set('Expires', '0');
@@ -1552,7 +1936,7 @@ export async function startHttpsServer(port: number): Promise<number> {
             if (ctx.path.startsWith('/manager')) {
                 const managerIndexPath = path.join(PUBLIC_DIR, 'manager', 'index.html');
                 if (fs.existsSync(managerIndexPath)) {
-                    useDocumentPolicy(ctx);
+                    useAppDocumentPolicy(ctx);
                     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
                     ctx.set('Pragma', 'no-cache');
                     ctx.set('Expires', '0');
@@ -1564,6 +1948,9 @@ export async function startHttpsServer(port: number): Promise<number> {
             if (ctx.path.startsWith('/app') || ctx.path === '/') {
                 const indexPath = path.join(PUBLIC_DIR, 'index.html');
                 if (fs.existsSync(indexPath)) {
+                    // A person opening the web app is one visit a day's count holds (engine/web-visits.ts): no address,
+                    // browser or cookie is kept. Its files, the API, Settings and the manager never reach this line.
+                    countWebAppPageLoad(ctx);
                     useAppDocumentPolicy(ctx);
                     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
                     ctx.set('Pragma', 'no-cache');
@@ -1579,14 +1966,19 @@ export async function startHttpsServer(port: number): Promise<number> {
     const serverOptions: https.ServerOptions = {
         cert: getServerCertPem(),
         key: getServerKeyPem(),
+        // DoS review F3: the header and request timeouts (server-limits.ts).
+        ...serverTimeoutOptions(),
     };
 
     return new Promise<number>((resolve) => {
         const server = https.createServer(serverOptions, app.callback());
+        applyServerLimits(server);
 
-        // WebSocket upgrade handler (shared with the plain HTTP server — see createUpgradeHandler)
-        const wss = new WebSocketServer({ noServer: true });
-        const logsWss = new WebSocketServer({ noServer: true });
+        // WebSocket upgrade handler (shared with the plain HTTP server — see createUpgradeHandler). A frame over
+        // ws-limits.ts's cap (4 KiB; ws's own default is 100 MiB) is refused by ws, which closes the socket with 1009.
+        const maxPayload = wsLimits().maxPayloadBytes;
+        const wss = new WebSocketServer({ noServer: true, maxPayload });
+        const logsWss = new WebSocketServer({ noServer: true, maxPayload });
         const handleUpgrade = createUpgradeHandler(wss, logsWss);
         _upgradeHandler = handleUpgrade;
         server.on('upgrade', handleUpgrade);
@@ -1605,8 +1997,15 @@ export async function startHttpsServer(port: number): Promise<number> {
             });
         }, 60000);
 
+        // A log socket lives no longer than the session that opened it.
+        const stopLogSessionWatch = onAdminSessionsEnded(() => closeEndedLogSockets(logsWss));
+        const logSessionSweep = setInterval(() => { if (logsWss.clients.size) closeEndedLogSockets(logsWss); }, LOG_SESSION_SWEEP_MS);
+        logSessionSweep.unref?.();
+
         server.on('close', () => {
             clearInterval(heartbeatInterval);
+            clearInterval(logSessionSweep);
+            stopLogSessionWatch();
         });
 
         server.listen(port, () => {
@@ -1630,10 +2029,17 @@ const MAX_JSON_BODY_BYTES = 2 * 1024 * 1024;
 /** Routes whose legitimate bodies are much smaller than the global cap, enforced before
  *  a byte is buffered. Pulse OAuth ingest is at most 50 items of link metadata. */
 const ROUTE_BODY_LIMITS: Array<[RegExp, number]> = [
+    // An AI assistant's MCP request (agent/mcp-route.ts): a method, an id and a few arguments.
+    [/^\/mcp\/?$/, 64 * 1024],
     [/^\/api\/member\/pulse\/oauth-ingest$/, 512 * 1024],
     // A knock (G6) is a 280-character message, a name, and at most a 150,000-character avatar; its answers carry nothing.
     [/^\/api\/join\/knock$/, 192 * 1024],
     [/^\/api\/join\/knocks\//, 4 * 1024],
+    // An admin's locked copy of their names-list record: at most 1 MiB of ciphertext, base64 (engine/names-list.ts).
+    [/^\/api\/names\/copy$/, 1.5 * 1024 * 1024],
+    // A claim is a key, a callsign, a code id, a host, a proof and a signature: under 1 KiB. No limiter runs before it
+    // (isClaimRoute), so it reads no more than this.
+    [/^\/api\/local\/claim$/, 4 * 1024],
 ];
 
 function routeBodyLimit(path: string): number {
@@ -1644,8 +2050,14 @@ function routeBodyLimit(path: string): number {
 }
 
 class BodyTooLargeError extends Error { constructor() { super('Request body too large'); this.name = 'BodyTooLargeError'; } }
+/** `pastSmall` refused the body: the response is already set. */
+class BodyRefusedError extends Error { constructor() { super('Request body refused'); this.name = 'BodyRefusedError'; } }
 
-function readBody(req: import('node:http').IncomingMessage, maxBytes: number = MAX_JSON_BODY_BYTES): Promise<string> {
+/**
+ * `pastSmall`, when given, is asked once, as the body read passes CLAIM_SMALL_BODY_BYTES (a signature claim the gateway
+ * charges only then, gatewayChargeLargeClaim); false stops the read as BodyRefusedError.
+ */
+function readBody(req: import('node:http').IncomingMessage, maxBytes: number = MAX_JSON_BODY_BYTES, pastSmall?: () => boolean): Promise<string> {
     return new Promise((resolve, reject) => {
         const chunks: Buffer[] = [];
         let total = 0;
@@ -1653,6 +2065,15 @@ function readBody(req: import('node:http').IncomingMessage, maxBytes: number = M
         req.on('data', (chunk: Buffer) => {
             if (aborted) return; // already over limit — discard without buffering
             total += chunk.length;
+            if (pastSmall && total > CLAIM_SMALL_BODY_BYTES) {
+                const go = pastSmall();
+                pastSmall = undefined;
+                if (!go) {
+                    aborted = true;
+                    reject(new BodyRefusedError()); // as for an over-limit body, stop buffering without destroying the socket
+                    return;
+                }
+            }
             if (total > maxBytes) {
                 aborted = true;
                 reject(new BodyTooLargeError()); // stop buffering; do NOT destroy the

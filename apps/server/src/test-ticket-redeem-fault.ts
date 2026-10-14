@@ -5,6 +5,12 @@
  * member" and let the key go, so a fault after the write lost a member's only key. Now only the ticket's decoding and
  * checking answer that 400; a fault after registration reaches Koa as a 500, which the apps keep the key for.
  *
+ * Since PR #1589 (an invite bound to a names-list entry) the redeem's writes are one transaction: the ticket's code row,
+ * the member, the code's use and any confirmation. The fault now rolls the member back with the rest, rather than
+ * leaving a member whose ticket was never marked used (review r4176275262). So the probe after it says "not a member",
+ * and the same key's retry joins cleanly, as a new member, with the ticket used once. The 500, and never the 400
+ * "Malformed", stand as before: the apps keep the key and send again.
+ *
  * The fault is a trigger that refuses the redeem's `UPDATE invite_codes ... used_by`, the statement after
  * registerMemberInternal (a full disk or SQLITE_BUSY there does the same). Over HTTP, through the real routes.
  *
@@ -96,19 +102,22 @@ async function main(): Promise<void> {
     assert(res.status !== 400, `a fault after registration is not a 400 (got ${res.status})`);
     assert(res.body?.error !== MALFORMED, 'nor is it answered "Malformed or broken offline ticket payload"');
     assert(res.status === 500, `it reaches Koa as a 500, which the apps keep the key for (got ${res.status})`);
-    const row = memberRow(rowan.pk);
-    assert(!!row && row.is_visitor === 0 && row.callsign === 'Rowan', 'the member was written before the fault, and stays');
+    assert(!memberRow(rowan.pk), 'the member written before the fault is rolled back with it: one transaction, never a member whose ticket is unused');
+    assert((db.prepare('SELECT COUNT(*) AS n FROM invite_codes WHERE used_by = ?').get(rowan.pk) as { n: number }).n === 0, 'and no code is marked used by the key');
 
-    // What the web app does next: it asks the node, signed by the key, and is told "a member".
+    // What the web app does next: it asks the node, signed by the key, and is told "not a member", so it sends again.
     const probe = await call('GET', rowan, `/api/community/membership/${rowan.pk}`);
-    assert(probe.status === 200 && probe.body?.isMember === true, 'the membership probe, signed by the key, says it is a member');
+    assert(probe.status === 200 && probe.body?.isMember === false, `the membership probe, signed by the key, says it is not a member (got ${probe.status} ${JSON.stringify(probe.body)})`);
 
-    // A retry with the same key and ticket, once the fault has passed: answered as a member, and nothing doubled.
+    // A retry with the same key and ticket, once the fault has passed: joins cleanly, as a new member, and nothing doubled.
     const retry = await call('POST', rowan, '/api/invite/redeem-offline', { ticketB64: ticket, publicKey: rowan.pk, callsign: rowan.name });
-    assert(retry.status === 200 && retry.body?.success === true && retry.body?.alreadyMember === true,
-        `the same key's retry is answered "already a member" (got ${retry.status} ${JSON.stringify(retry.body)})`);
+    assert(retry.status === 200 && retry.body?.success === true && !retry.body?.alreadyMember && retry.body?.member?.publicKey === rowan.pk,
+        `the same key's retry joins, as a new member (got ${retry.status} ${JSON.stringify(retry.body)})`);
+    const row = memberRow(rowan.pk);
+    assert(!!row && row.is_visitor === 0 && row.callsign === 'Rowan', 'the member is written by the retry');
     const rows = (db.prepare('SELECT COUNT(*) AS n FROM members WHERE public_key = ?').get(rowan.pk) as { n: number }).n;
     assert(rows === 1, 'one member row for the key');
+    assert((db.prepare('SELECT COUNT(*) AS n FROM invite_codes WHERE used_by = ?').get(rowan.pk) as { n: number }).n === 1, "and the ticket's code used once, by the key");
 
     // 2. A broken ticket is still refused 400 "Malformed", before anything is written.
     const junk = keypair('Junk');

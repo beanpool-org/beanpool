@@ -160,10 +160,11 @@ function watch(keys: () => string[], unblocked: () => string[] = () => []) {
     return {
         gaps,
         add: (label: string, tab: Tab) => { tabs.push([label, tab]); check(); },
-        /** Moves the clock on until nothing is left to happen, or `ms` have passed. */
-        async run(ms: number) {
+        /** Moves the clock on until nothing is left to happen, or `ms` have passed, or the test has run out of time. */
+        async run(ms: number, signal?: AbortSignal) {
             const end = Date.now() + ms;
             while (vi.getTimerCount() > 0 && Date.now() < end) {
+                signal?.throwIfAborted();
                 await vi.advanceTimersToNextTimerAsync();
                 check();
             }
@@ -174,6 +175,8 @@ function watch(keys: () => string[], unblocked: () => string[] = () => []) {
 
 describe('two tabs, and a node that takes time to answer', () => {
     const stops: (() => void)[] = [];
+    /** The runs a sweep below is making: the next test starts only once they have stopped. */
+    let sweeping: Promise<void> = Promise.resolve();
 
     beforeEach(() => {
         localStorage.clear();
@@ -197,7 +200,8 @@ describe('two tabs, and a node that takes time to answer', () => {
         vi.spyOn(console, 'warn').mockImplementation(() => {});
     });
 
-    afterEach(() => {
+    afterEach(async () => {
+        await sweeping.catch(() => { /* its test has failed already */ });
         stops.splice(0).forEach(stop => stop());
         vi.restoreAllMocks();
         vi.useRealTimers();
@@ -223,34 +227,44 @@ describe('two tabs, and a node that takes time to answer', () => {
         return { A, B };
     }
 
-    it.each([50, 120])('a tab holding blocks from before never shows them unblocked while another tab moves them up (reads answered in %i ms)', async readBack => {
-        // Tab A moves K1 and K2 up. Tab B's own read is put at every point of that, and the browser's word of A's change
-        // comes at once, a little later, or later still. With reads slower than the move, B's read can be answered by the
-        // node before A's move reaches it and land after A has taken the list off the browser.
-        const runs: string[] = [];
-        for (const after of [0, 7, 30, 60]) {
-            for (let bReadsAt = 0; bReadsAt <= 300; bReadsAt += 5) {
-                node.back = { read: readBack };
-                const { A, B } = await twoTabsWithBlocksWaiting(after);
-                const w = watch(() => [K1, K2]);
-                w.add('B', B);
-                stops.push(A.startBlocklist(ME));
-                w.add('A', A);
-                setTimeout(() => { B.loadBlocklist().catch(() => { /* said through getBlocklistStatus */ }); }, bReadsAt);
-                await w.run(5000);
+    // Tab A moves K1 and K2 up. Tab B's own read is put at every point of that, and the browser's word of A's change comes
+    // at once, a little later, or later still. With reads slower than the move, B's read can be answered by the node before
+    // A's move reaches it and land after A has taken the list off the browser.
+    //
+    // Every run is on the fake clock, so what happens in it never depends on this machine; how long the runs take does. All
+    // 488 in one test outlasted the suite's 30 s on a busy Mac (load 20-90, 14 Oct merge queue), and the runs it was still
+    // making went on into the next test and failed it ("expected null"). So each word-of-the-change delay is a test of its
+    // own, 61 runs; a test that runs out of time stops its runs, and the next test starts only once they have.
+    describe.each([50, 120])('a tab holding blocks from before never shows them unblocked while another tab moves them up (reads answered in %i ms)', readBack => {
+        it.for([0, 7, 30, 60])('the browser\'s word of the change after %i ms', async (after, { signal }) => {
+            // A test that runs out of time stops here; the next one waits for that (afterEach).
+            sweeping = (async () => {
+                const runs: string[] = [];
+                for (let bReadsAt = 0; bReadsAt <= 300; bReadsAt += 5) {
+                    signal.throwIfAborted();
+                    node.back = { read: readBack };
+                    const { A, B } = await twoTabsWithBlocksWaiting(after);
+                    const w = watch(() => [K1, K2]);
+                    w.add('B', B);
+                    stops.push(A.startBlocklist(ME));
+                    w.add('A', A);
+                    setTimeout(() => { B.loadBlocklist().catch(() => { /* said through getBlocklistStatus */ }); }, bReadsAt);
+                    await w.run(5000, signal);
 
-                const where = `word of the change after ${after} ms, B reading at ${bReadsAt} ms`;
-                runs.push(...w.gaps.map(g => `${where}: ${g}`));
-                expect([...node.list].sort(), where).toEqual([K1, K2].sort());
-                expect(localStorage.getItem(BLOCKLIST_STORAGE_KEY), where).toBeNull();
-                expect([...B.getBlockedUsers()].sort(), where).toEqual([K1, K2].sort());
-                expect([...A.getBlockedUsers()].sort(), where).toEqual([K1, K2].sort());
-                w.stop();
-                stops.splice(0).forEach(stop => stop());
-                vi.useRealTimers();
-            }
-        }
-        expect(runs).toEqual([]);
+                    const where = `word of the change after ${after} ms, B reading at ${bReadsAt} ms`;
+                    runs.push(...w.gaps.map(g => `${where}: ${g}`));
+                    expect([...node.list].sort(), where).toEqual([K1, K2].sort());
+                    expect(localStorage.getItem(BLOCKLIST_STORAGE_KEY), where).toBeNull();
+                    expect([...B.getBlockedUsers()].sort(), where).toEqual([K1, K2].sort());
+                    expect([...A.getBlockedUsers()].sort(), where).toEqual([K1, K2].sort());
+                    w.stop();
+                    stops.splice(0).forEach(stop => stop());
+                    vi.useRealTimers();
+                }
+                expect(runs).toEqual([]);
+            })();
+            await sweeping;
+        });
     });
 
     it.each(['unblock', 'Unblock All'])('the member\'s %s in one tab, of a block another tab is moving up, shows at once', async how => {

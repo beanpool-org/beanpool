@@ -38,6 +38,7 @@ import {
 import { runLedgerAudit } from './engine/audit.js';
 import { getActivityFeed } from './db/activity-feed-db.js';
 import { createAdminRoutes } from './routes/admin.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0;
 let passed = 0;
@@ -80,9 +81,10 @@ function makeMember(callsign: string): string {
     const pubkey = 'pk_' + callsign + '_' + crypto.randomBytes(8).toString('hex');
     const uniqueCallsign = `${callsign}_${crypto.randomBytes(4).toString('hex')}`;
     db.prepare(
-        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_url)
-         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'data:image/png;base64,iVBORw0KGgo=')`
+        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubkey, uniqueCallsign);
+    setMemberPhoto(db, pubkey, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubkey);
     return pubkey;
 }
@@ -201,8 +203,13 @@ async function main() {
     assert(dbRow1.dispute_resolved_by === 'admin_pubkey_operator_1', 'DB dispute_resolved_by recorded admin signer');
     assert(Boolean(dbRow1.dispute_resolved_at), 'DB dispute_resolved_at timestamp set');
 
-    // Activity feed public record verification for both parties
-    const feed1 = getActivityFeed(50, 0);
+    // Activity feed record verification for both parties, read as the admin who ruled: a ruling reaches the people its
+    // row names (the party, and the admin as its actor), never anyone else (2026-09-28: a trade shows only its two people)
+    const feed1 = getActivityFeed(50, 0, 'admin_pubkey_operator_1');
+    const asAlice1 = getActivityFeed(50, 0, alice);
+    assert(asAlice1.some(a => a.targetPubkey === alice && a.eventType === 'dispute_resolved')
+        && !asAlice1.some(a => a.targetPubkey === bob && a.eventType === 'dispute_resolved'), 'Alice reads her own ruling, not Bob\'s row');
+    assert(!getActivityFeed(50, 0, 'someone-else').some(a => a.eventType === 'dispute_resolved'), 'Someone outside the deal reads neither');
     const aliceActivity1 = feed1.find(a => a.targetPubkey === alice && a.eventType === 'dispute_resolved');
     const bobActivity1 = feed1.find(a => a.targetPubkey === bob && a.eventType === 'dispute_resolved');
     assert(Boolean(aliceActivity1), 'Public dispute_resolved record written for buyer Alice');
@@ -261,8 +268,8 @@ async function main() {
     assert(dbRow2.dispute_resolved_by === 'admin_pubkey_operator_2', 'DB dispute_resolved_by recorded admin_pubkey_operator_2');
     assert(Boolean(dbRow2.dispute_resolved_at), 'DB dispute_resolved_at timestamp set');
 
-    // Activity feed public record verification for both parties
-    const feed2 = getActivityFeed(50, 0);
+    // Activity feed record verification for both parties, read as the admin who ruled
+    const feed2 = getActivityFeed(50, 0, 'admin_pubkey_operator_2');
     const charlieActivity2 = feed2.find(a => a.targetPubkey === charlie && a.eventType === 'dispute_resolved' && a.metadata?.transactionId === tx2.id);
     const bobActivity2 = feed2.find(a => a.targetPubkey === bob && a.eventType === 'dispute_resolved' && a.metadata?.transactionId === tx2.id);
     assert(Boolean(charlieActivity2), 'Public dispute_resolved record written for buyer Charlie on refund');
@@ -324,8 +331,8 @@ async function main() {
     assert(dbRow3.dispute_resolved_by === 'admin_pubkey_operator_3', 'DB dispute_resolved_by recorded admin_pubkey_operator_3');
     assert(Boolean(dbRow3.dispute_resolved_at), 'DB dispute_resolved_at timestamp set');
 
-    // Activity feed public record verification for both parties
-    const feed3 = getActivityFeed(50, 0);
+    // Activity feed record verification for both parties, read as the admin who ruled
+    const feed3 = getActivityFeed(50, 0, 'admin_pubkey_operator_3');
     const aliceActivity3 = feed3.find(a => a.targetPubkey === alice && a.eventType === 'dispute_resolved' && a.metadata?.transactionId === tx3.id);
     const bobActivity3 = feed3.find(a => a.targetPubkey === bob && a.eventType === 'dispute_resolved' && a.metadata?.transactionId === tx3.id);
     assert(Boolean(aliceActivity3), 'Public dispute_resolved record written for buyer Alice on split');

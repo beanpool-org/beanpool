@@ -4,6 +4,7 @@
  * Base URL is same-origin (the PWA is served by the node).
  */
 import { loadIdentity, type BeanPoolIdentity } from './identity';
+import type { ScopedDecisionList, ScopedEffect, GroupEffect, TourRecord } from '@beanpool/core';
 import { hexToBytes } from '@noble/hashes/utils.js';
 import {
     buildBoundRequestHeaders,
@@ -11,6 +12,8 @@ import {
     buildInviteTicket,
     ed25519Signer,
     type Signer,
+    signReEnroll,
+    audienceOf,
     onboardingEventKey,
     oncePerPersonVariant,
     type PublicCreatorChannel,
@@ -18,6 +21,8 @@ import {
     type ChannelCategory,
 } from '@beanpool/core';
 import type { OwnDecisionVote } from './decision-own-vote';
+import { NOTICES_SEEN_EVENT, type HomeAnswer } from './home-cards';
+import type { HomeLayoutV2 } from './home-layout';
 import type { MyEvent } from './event-extras';
 export type { MyEvent };
 import type { GroupSuccessionData, GroupSuccessionProposal } from './group-succession';
@@ -100,10 +105,13 @@ export async function buildSignedWsParams(wsUrl: string): Promise<string> {
     return buildBoundWsParams({ wsUrl, publicKeyHex: identity.publicKey, sign: memberSigner(identity.privateKey) });
 }
 
-/** The signed-request headers for `method path` with `bodyString`, for the node this web app talks to. */
-function signedHeaders(method: string, path: string, bodyString: string, privateKeyHex: string, publicKeyHex: string) {
+/**
+ * The signed-request headers for `method path` with `bodyString`, for the node this web app talks to, or for the one at
+ * `base` (an origin) when a request goes to another.
+ */
+function signedHeaders(method: string, path: string, bodyString: string, privateKeyHex: string, publicKeyHex: string, base: string = nodeAddress()) {
     return buildBoundRequestHeaders({
-        method, url: `${nodeAddress()}${path}`, body: bodyString, publicKeyHex, sign: memberSigner(privateKeyHex),
+        method, url: `${base}${path}`, body: bodyString, publicKeyHex, sign: memberSigner(privateKeyHex),
     });
 }
 
@@ -118,8 +126,19 @@ export async function buildOfflineInviteCode(
     return `BP-${ticket.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`;
 }
 
+/**
+ * A re-key ask's proof of possession (lib/web-rekey.ts, #1768): core's signReEnroll, `0xFF ‖ beanpool-re-enroll/2\nHOST\nCODE`,
+ * for the node this web app talks to, signed by the key the ask wants bound.
+ */
+export async function signReEnrollAsk(code: string, privateKeyHex: string): Promise<{ signature: string; signedFor: string }> {
+    const base = nodeAddress();
+    const host = audienceOf(base);
+    if (!host) throw new Error('Cannot sign a re-key ask: this page names no community');
+    return { signature: await signReEnroll(base, code, memberSigner(privateKeyHex)), signedFor: host };
+}
+
 // Base request helper with auth
-export async function request<T>(method: string, path: string, body?: any): Promise<T> {
+export async function request<T>(method: string, path: string, body?: any, signal?: AbortSignal): Promise<T> {
     const opts: RequestInit = {
         method,
         cache: 'no-cache',
@@ -127,6 +146,7 @@ export async function request<T>(method: string, path: string, body?: any): Prom
             'Content-Type': 'application/json',
         } as Record<string, string>,
     };
+    if (signal) opts.signal = signal;
 
     const bodyString = body ? JSON.stringify(body) : '';
     if (body) {
@@ -155,10 +175,33 @@ export async function request<T>(method: string, path: string, body?: any): Prom
     return res.json();
 }
 
+/**
+ * A signed request as `request` makes it, with the node's answer handed back as it came, refusals included: for a caller
+ * that reads a refusal's own fields (a 409's `current` and `roster`), the group chat keyring (lib/group-chat-keys.ts).
+ */
+export async function signedFetch(method: string, path: string, body?: unknown): Promise<Response> {
+    const bodyString = body === undefined ? '' : JSON.stringify(body);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const identity = await loadIdentity();
+    if (identity && identity.privateKey) {
+        Object.assign(headers, await signedHeaders(method, path, bodyString, identity.privateKey, identity.publicKey));
+    }
+    return fetch(`${getNodeApiUrl()}${path}`, { method, cache: 'no-cache', headers, ...(body === undefined ? {} : { body: bodyString }) });
+}
+
+/** How the group chat keyring reaches this node: signed as this browser's member. */
+export const groupKeysNet = {
+    get: (path: string) => signedFetch('GET', path),
+    post: (path: string, body: unknown) => signedFetch('POST', path, body),
+};
+
 /** What `request` throws for an answer that isn't ok. */
 async function refusalError(res: Response): Promise<Error> {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
+    let unsaid = false;
+    const err = await res.json().catch(() => { unsaid = true; return { error: res.statusText }; });
     const error = new Error(err.message || err.error || `Request failed: ${res.status}`);
+    // An answer without JSON (a proxy's page): its words are only the status text. A screen may say it in its own.
+    if (unsaid) (error as Error & { unsaid?: boolean }).unsaid = true;
     // The status travels with the error: a node older than a route answers 404, and a screen that can
     // hide a feature quietly needs to tell that apart from the node being down or refusing.
     (error as Error & { status?: number }).status = res.status;
@@ -251,8 +294,23 @@ export interface CommunityInfo {
      * `guestListingsOnly`: a visitor gets the listings and their rough area, not the people (G9a), so the web app shows
      * a key-less visitor the lobby (G9b). `beans`: false where there are no Beans (the global profile).
      * `exampleListings`: a nearly empty Market shows a few example cards (lib/example-listings.ts).
+     * `privatePreview`: only the node's members, and people its owner or an admin invites, get in; a visitor reads nothing
+     * (absent when off).
      */
-    features?: { openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean };
+    features?: {
+        openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean; privatePreview?: boolean;
+        /** Present only where the node keeps each member to the listings near their area (the worldwide community): the nearest `max` within `radiusKm`. */
+        nearbyListings?: { radiusKm: number; max: number };
+        /** An off feature is previewed from the sample community rather than hidden (lib/features.ts). Absent: hidden, as before. */
+        showcase?: boolean;
+        /**
+         * Present, and true, only where no app reads the member directory whole (the worldwide community): people come
+         * by search, by nearness and by key (lib/members-on-demand.ts).
+         */
+        membersOnDemand?: true;
+    };
+    /** Where Start a community's "how to run a node" leads (lib/features.ts startCommunityUrl). Absent: beanpool.org's. */
+    startCommunityUrl?: string;
     /** This community's own names, published (apps/server engine/own-addresses.ts). */
     addresses?: string[];
     /**
@@ -343,8 +401,17 @@ export interface CommunityStanding {
         limits: { posts: NewAccountLimit; photos: NewAccountLimit; new_dm_recipients: NewAccountLimit };
         /** The rule as data: the limits end once the first `hours` are over AND `keptPosts` posts have stayed up. */
         endsWhen?: { hours: number; keptPosts: number };
+        /**
+         * Which rules: `words` for a member who came in with 12 words and has added no sign-in (they have one way back,
+         * and a sign-in can be added), else `ordinary`. Absent on a node from before the 12-words door.
+         */
+        rules?: 'words' | 'ordinary';
     };
     mute: { muted: boolean; until: string | null };
+    /** The member's own coarse area (0.1°), or null when they have set none. Absent on a node from before it. */
+    area?: { lat: number; lng: number; updatedAt?: string | null } | null;
+    /** The reader's own effective features (lib/features.ts): today the node's. Absent on a node from before it. */
+    features?: Record<string, unknown>;
 }
 
 /** The signer's own standing: members only, and only ever their own (the node reads the signature, not a parameter). */
@@ -374,9 +441,14 @@ export async function getUnseenNotices(): Promise<KeptNotice[]> {
     return Array.isArray(res?.notices) ? res.notices : [];
 }
 
-/** Marks the signer's own notices seen; the node ignores an id that is not theirs. */
+/**
+ * Marks the signer's own notices seen; the node ignores an id that is not theirs. Once it has, the page hears
+ * NOTICES_SEEN_EVENT, so Home's "From your community" goes as the member puts an alert away (lib/home-cards.ts).
+ */
 export async function markNoticesSeen(ids: string[]): Promise<{ success: boolean; marked: number }> {
-    return request('POST', '/api/notices/seen', { ids });
+    const answer = await request<{ success: boolean; marked: number }>('POST', '/api/notices/seen', { ids });
+    try { window.dispatchEvent(new Event(NOTICES_SEEN_EVENT)); } catch { /* no window: nothing listens */ }
+    return answer;
 }
 
 export async function registerMember(publicKey: string, callsign: string): Promise<{ success: boolean; member: Member }> {
@@ -413,9 +485,9 @@ export async function checkInvite(code: string): Promise<InviteCheck | null> {
 }
 
 /**
- * The key a redeem names, when it isn't saved in this browser yet: the web invite join saves its new key only once the
- * node has taken the invite (WelcomePage handleCreate). The redeem is signed with it all the same, as both apps sign
- * theirs (apps/server/src/routes/community.ts signedByKey); `request` would sign with the saved identity, if any.
+ * The key a redeem names. The node registers no key a redeem isn't signed by (apps/server/src/routes/community.ts
+ * requireRedeemSignature), and the web invite join saves its new key only once the node has taken the invite
+ * (WelcomePage handleCreate), so every caller passes the key it names; `request` would sign with the saved identity, if any.
  */
 export type RedeemSigner = { publicKey: string; privateKey: string };
 
@@ -450,6 +522,21 @@ export async function getCommunityHealth(): Promise<any> {
 
 export async function checkMembership(publicKey: string): Promise<{ isMember: boolean; callsign: string | null }> {
     return request('GET', `/api/community/membership/${encodeURIComponent(publicKey)}`);
+}
+
+/**
+ * GET /api/community/membership/<key> at `community` (an origin, any community, not only the one this web app talks to),
+ * signed by the key this browser keeps when it is that key, for that community's host: a community answers the probe
+ * only to the key it asks about (multi-community review F3). Any other key goes unsigned, and is refused.
+ */
+export async function fetchMembershipAt(community: string, publicKey: string, signal?: AbortSignal): Promise<Response> {
+    const path = `/api/community/membership/${encodeURIComponent(publicKey)}`;
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    const identity = await loadIdentity();
+    if (identity?.privateKey && identity.publicKey === publicKey) {
+        Object.assign(headers, await signedHeaders('GET', path, '', identity.privateKey, identity.publicKey, community));
+    }
+    return fetch(`${community}${path}`, { headers, cache: 'no-store', ...(signal ? { signal } : {}) });
 }
 
 export async function getMyInvites(publicKey: string): Promise<{ invites: InviteCode[] }> {
@@ -793,8 +880,10 @@ export async function sendMessageApi(
     type?: 'text' | 'image',
     attachment?: MessageAttachment,
     metadata?: string,
+    /** The message's own id (a lower-case UUID v4), which a DM line is sealed to: the node stores the line under it. */
+    id?: string,
 ): Promise<{ success: boolean; message: ApiMessage }> {
-    return request('POST', '/api/messages/send', { conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata });
+    return request('POST', '/api/messages/send', { conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, id });
 }
 
 export async function editMessageApi(
@@ -826,6 +915,26 @@ export async function getMessageAttachmentApi(messageId: string): Promise<Messag
     return request('GET', `/api/messages/${encodeURIComponent(messageId)}/attachment`);
 }
 
+/**
+ * A Commons group's chat as one member sees it (GET /api/groups/:id/chat): its lines (from this member's first epoch on),
+ * whether they may post, and, on a node that locks group chats, `encryption` (the current epoch, whether it is stale,
+ * this member's first epoch). A node from before locked chats answers without `encryption`.
+ */
+export interface GroupChatAnswer {
+    conversation: Conversation;
+    messages: (ApiMessage & { authorCallsign?: string | null })[];
+    role?: GroupRole;
+    canPost?: boolean;
+    readOnly?: boolean;
+    closedAt?: string | null;
+    isConvenor?: boolean;
+    encryption?: { current: number | null; stale: boolean; fromEpoch: number | null };
+}
+
+export async function getGroupChat(groupId: string, limit = 50): Promise<GroupChatAnswer> {
+    return request('GET', `/api/groups/${encodeURIComponent(groupId)}/chat?limit=${limit}`);
+}
+
 export async function getConversationMessages(conversationId: string, limit = 50): Promise<{
     conversation: Conversation;
     messages: ApiMessage[];
@@ -846,6 +955,7 @@ export interface BalanceInfo {
     floor: number;
 
     tier: TierInfo;
+    tierCredit?: number;      // the credit `tier` is read from (a freeze keeps the line held unfrozen); memberLevel
     earnedCredit?: number;
     grantedCredit?: number;   // vouch/genesis/admin grants (separate lane, no vote weight)
     qualifiedValue?: number;  // diversity-capped trade value behind the earned score
@@ -887,8 +997,13 @@ export interface BalanceInfo {
     usableFloor?: number;
     /** Trust Model v3 — count of currently-live Offers (drives the offer-band credit ladder). */
     liveOffers?: number;
+    /** The known floor's part of the limit (community modes slice 4): one live Offer unlocks all of it. Absent from an older node. */
+    knownGrant?: number;
     /** Trust Model v3 — true when your debt is below your usable floor (spending is frozen until you recover or post Offers). */
     frozen?: boolean;
+    /** The community's admins froze your known floor (an exception) / your whole line (the manager's Freeze). Absent from an older node. */
+    knownFrozen?: boolean;
+    creditFrozen?: boolean;
 }
 
 export interface Transaction {
@@ -946,12 +1061,20 @@ export interface MarketplacePost {
     completedAt?: string;
     lat?: number;
     lng?: number;
+    /** How far from the point a read gave (`lat`/`lng`), as the node measured it: km, null for a listing with no place. */
+    distanceKm?: number | null;
     photos?: string[];
     authorEnergyCycled?: number;
     authorFoundingNeeded?: boolean; // author has no completed trades yet — their first trade unlocks their floor
-    pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number }>;
+    /** The author's face, carried on the row for a member's read (null for a visitor's, and for no photo). */
+    authorAvatarUrl?: string | null;
+    pollOptions?: Array<{ id: string; text: string; votes?: number; percentage?: number; newOrWordsVotes?: number }>;
     pollClosesAt?: string;
+    /** A poll its creator made an open vote: members see who chose what (pollVotes). Otherwise anonymous. */
+    pollOpenVote?: boolean;
     totalVotes?: number;
+    /** How many of the votes came from new or 12-word accounts (the global node's public polls; @beanpool/core poll-vote-origins). */
+    pollNewOrWordsVotes?: number;
     userVotedOptionId?: string;
     pollVotes?: Array<{ voterPubkey: string; voterCallsign?: string; optionId: string; createdAt: string }>;
     // Audience scoping (docs/the-commons.md §9, Item 10)
@@ -1009,6 +1132,11 @@ export async function getMarketplacePosts(filter?: {
     q?: string;
     limit?: number;
     offset?: number;
+    /** Distance search (routes/distance-query.ts): a point, a radius around it, nearest first. Each post then carries `distanceKm`. */
+    lat?: number;
+    lng?: number;
+    radiusKm?: number;
+    sort?: 'distance' | 'recent';
 }): Promise<MarketplacePost[]> {
     const params = new URLSearchParams();
     if (filter?.id) params.set('id', filter.id);
@@ -1023,6 +1151,12 @@ export async function getMarketplacePosts(filter?: {
     if (filter?.q) params.set('q', filter.q);
     if (filter?.limit) params.set('limit', String(filter.limit));
     if (filter?.offset) params.set('offset', String(filter.offset));
+    if (filter?.lat != null && filter?.lng != null) {
+        params.set('lat', String(filter.lat));
+        params.set('lng', String(filter.lng));
+        if (filter.radiusKm != null) params.set('radiusKm', String(filter.radiusKm));
+    }
+    if (filter?.sort) params.set('sort', filter.sort);
     return request('GET', `/api/marketplace/posts?${params}`);
 }
 
@@ -1045,6 +1179,8 @@ export async function createMarketplacePost(post: {
     reachPeers?: string[];
     pollOptions?: Array<{ id: string; text: string }>;
     durationDays?: number;
+    /** A poll only: true makes it an open vote (members see who chose what). Left out, it is anonymous. */
+    pollOpenVote?: boolean;
     audienceScope?: 'public' | 'group' | 'direct';
     targetGroupId?: string;
     targetPubkey?: string;
@@ -1088,6 +1224,9 @@ export interface Group {
     /** The group's LEAD convenor (2026-09-23): the one nobody can remove or demote. */
     leadPubkey?: string | null;
     leadCallsign?: string;
+    /** When its members closed it by a vote (GET /api/groups/:id), or null: it stays to read and takes nothing new. */
+    closedAt?: string | null;
+    readOnly?: boolean;
 }
 
 export interface GroupMember {
@@ -1499,6 +1638,19 @@ export async function removeFriendApi(ownerPubkey: string, friendPubkey: string)
     return request('POST', '/api/friends/remove', { ownerPubkey, friendPubkey });
 }
 
+/** Someone who added you lately and whom you haven't added back (GET /api/friends/added-you, your own only). */
+export interface AddedYou {
+    publicKey: string;
+    callsign: string;
+    avatarUrl: string | null;
+    addedAt: string;
+}
+
+/** Who added you lately: newest first, at most 20, and how many more (server engine/friends-added-you.ts). */
+export async function getAddedYou(): Promise<{ addedYou: AddedYou[]; more: number }> {
+    return request('GET', '/api/friends/added-you');
+}
+
 
 
 // ===================== MEMBERS =====================
@@ -1511,6 +1663,28 @@ export interface MemberSummary {
 
 export async function getAllMembers(): Promise<MemberSummary[]> {
     return request('GET', '/api/members');
+}
+
+/**
+ * A member's card as the directory's small forms answer it (`GET /api/members?keys=|q=|lat&lng&limit=`): what the
+ * whole directory gives each member, and `distanceKm` on the nearest-first form (whole km, null for no area).
+ */
+export interface MemberCard {
+    publicKey: string;
+    callsign: string;
+    joinedAt: string;
+    nodeRole?: string | null;
+    avatarUrl?: string | null;
+    profileUpdatedAt?: string | null;
+    earnedCredit?: number;
+    elderVouchedBy?: string | null;
+    archetype?: string | null;
+    distanceKm?: number | null;
+}
+
+/** One of the directory's small forms (lib/members-on-demand.ts builds the path), signed as every read is. */
+export async function getMemberCards(path: string, signal?: AbortSignal): Promise<MemberCard[]> {
+    return request('GET', path, undefined, signal);
 }
 
 // ===================== FEDERATION =====================
@@ -2041,6 +2215,10 @@ export interface KeeperRequestItem {
     decidedBy?: string | null;
     callsign?: string;
     avatarUrl?: string | null;
+    /** On a pending request, whether approving it would go through as far as the applicant's standing goes (null on a closed one): all the lead keeper learns of it. */
+    canBackPledge?: boolean | null;
+    /** What the applicant has left to back with: only on their own request (myPendingRequest), never on a keeper's list. */
+    availableToBack?: number;
     /** Approved by the lead and waiting out the other keepers' 3-day objection window. */
     pendingChange?: KeeperChangeItem | null;
 }
@@ -2122,6 +2300,56 @@ export async function proposeEnterpriseSuccession(treasury: string, candidatePub
     proposal: SuccessionProposalItem;
 }> {
     return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/succession/propose`, { candidatePubkey });
+}
+
+/**
+ * An enterprise's keepers' votes (DESIGN-group-decisions S2; routes/enterprise-decisions.ts). Only its keepers, and those on
+ * a vote's roll, are answered; anyone else gets a 404, so null means "nothing for you", never an error to show.
+ */
+export async function getEnterpriseDecisions(treasury: string): Promise<ScopedDecisionList | null> {
+    try {
+        const body = await request<ScopedDecisionList>('GET', `/api/enterprise/${encodeURIComponent(treasury)}/decisions`);
+        return body && Array.isArray(body.decisions) ? body : null;
+    } catch {
+        return null;
+    }
+}
+
+/** A keeper proposes a vote. A pay-out names its recipient as params.to; the node checks everything again. */
+export async function proposeEnterpriseDecision(treasury: string, body: {
+    title: string; description: string; effect: ScopedEffect; subject?: string; params?: { to: string; amount: number; memo?: string };
+}): Promise<{ success: boolean }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/decisions`, body);
+}
+
+/** Yes or No on a keepers' vote. A vote can't be changed once cast. */
+export async function voteEnterpriseDecision(treasury: string, decisionId: string, support: boolean): Promise<{ success: boolean }> {
+    return request('POST', `/api/enterprise/${encodeURIComponent(treasury)}/decisions/${encodeURIComponent(decisionId)}/vote`, { support });
+}
+
+/**
+ * A chat group's votes (DESIGN-group-decisions S3; routes/group-decisions.ts). Its members (any role) are answered, and those
+ * on a vote's roll after they left; anyone else gets a 404, so null means "nothing for you", never an error to show.
+ */
+export async function getGroupDecisions(groupId: string): Promise<ScopedDecisionList | null> {
+    try {
+        const body = await request<ScopedDecisionList>('GET', `/api/groups/${encodeURIComponent(groupId)}/decisions`);
+        return body && Array.isArray(body.decisions) ? body : null;
+    } catch {
+        return null;
+    }
+}
+
+/** A member or convenor proposes a group vote: the group's own things only, never a recipient or an amount. */
+export async function proposeGroupDecision(groupId: string, body: {
+    title: string; description: string; effect: GroupEffect; subject?: string; params?: { role?: 'convenor' | 'member'; policy?: string };
+}): Promise<{ success: boolean }> {
+    return request('POST', `/api/groups/${encodeURIComponent(groupId)}/decisions`, body);
+}
+
+/** Yes or No on a group's vote. A vote can't be changed once cast. */
+export async function voteGroupDecision(groupId: string, decisionId: string, support: boolean): Promise<{ success: boolean }> {
+    return request('POST', `/api/groups/${encodeURIComponent(groupId)}/decisions/${encodeURIComponent(decisionId)}/vote`, { support });
 }
 
 export async function removeEnterpriseKeeper(treasury: string, memberPubkey: string): Promise<{ success: boolean; applied: boolean; change: KeeperChangeItem | null }> {
@@ -2242,25 +2470,56 @@ export interface RecoverySessionInfo {
 }
 
 /**
- * Owner side: Checks active recovery sessions against the member's account.
+ * Owner side: the recovery sessions live against the member's account. `count` is how many; `collections` the newest
+ * few, never all of them (strangers can open any number, PR #1456 deciding review). A node from before the count lists
+ * every one, and the count is that list's length. Nothing, on no answer.
  */
-export async function getMyActiveRecoveryCollections(): Promise<RecoverySessionInfo[]> {
+export async function getMyActiveRecoveryCollections(): Promise<{ count: number; collections: RecoverySessionInfo[] }> {
     try {
-        const res = await request<{ collections: RecoverySessionInfo[] }>('POST', '/api/recovery/collect/mine', {});
-        return res?.collections || [];
+        const res = await request<{ count?: number; collections: RecoverySessionInfo[] }>('POST', '/api/recovery/collect/mine', {});
+        const collections = res?.collections || [];
+        return { count: typeof res?.count === 'number' ? res.count : collections.length, collections };
     } catch {
-        return [];
+        return { count: 0, collections: [] };
     }
 }
 
 /**
- * Owner side: Cancels an active recovery session.
+ * Owner side: Cancels an active recovery session. On a node with one Stop (stopEveryRecoveryCollection), naming one
+ * stops them all.
  */
 export async function cancelRecoveryCollection(collectionId: string): Promise<boolean> {
     const res = await request<{ cancelled: boolean }>('POST', '/api/recovery/collect/cancel', {
         collectionId,
     });
     return !!res?.cancelled;
+}
+
+/**
+ * Owner side: Stop It Now. Stops every live recovery session against the account and returns how many are still live,
+ * by the node's own count, so "all cancelled" is said only when it is true.
+ *
+ * One request: the node stops them all however many there are, and answers with `live`. A node from before that
+ * refuses a Stop naming no session: then one request per listed session (such a node lists every one, at most ten),
+ * and what is left is the number that failed.
+ */
+export async function stopEveryRecoveryCollection(listed: { collectionId: string }[]): Promise<number> {
+    try {
+        const res = await request<{ live?: number }>('POST', '/api/recovery/collect/cancel', {});
+        if (typeof res?.live === 'number') return res.live;
+    } catch {
+        // An older node ('Which session?'), or no answer: one by one below.
+    }
+    let failed = 0;
+    for (const session of listed) {
+        try {
+            await cancelRecoveryCollection(session.collectionId);
+        } catch (e) {
+            failed++;
+            console.warn(`[RecoveryAlert] Failed to cancel ${session.collectionId}:`, (e as Error).message);
+        }
+    }
+    return failed;
 }
 
 /**
@@ -2286,6 +2545,69 @@ export async function getNotificationPreferences(pubkey: string): Promise<any> {
 
 export async function updateNotificationPreferences(pubkey: string, preferences: Record<string, boolean | number[] | string>): Promise<any> {
     return request<any>('POST', '/api/members/preferences', { publicKey: pubkey, preferences });
+}
+
+// ===================== HOME =====================
+
+/** A Home read: the answer and its tag, or the node saying the copy whose tag was sent is still the answer. */
+export type HomeRead = { notModified: false; answer: HomeAnswer; etag: string | null } | { notModified: true; etag: string };
+
+/**
+ * The whole Home screen in one read (GET /api/home, routes/home.ts): signed for a member, unsigned in the global lobby.
+ * `cards` is what the member's layout shows; absent, the node uses the account's own layout.
+ *
+ * The node tags each answer (`private, max-age=0, must-revalidate`). With `etag`, the tag of the copy the app keeps
+ * (lib/home-cache.ts), an unchanged Home is a 304 and costs headers only (design §5.2). The app sends the tag itself
+ * rather than leaning on the browser's cache, which keeps nothing in a private window, in some in-app browsers, or over a
+ * certificate the browser was told to accept; and only to the node that served this page: another origin's preflight
+ * refuses the header and doesn't let the page read the tag, so there the browser revalidates on its own, if it can.
+ */
+export async function getHome(params: { cards?: readonly string[]; lat?: number; lng?: number } = {}, etag?: string | null): Promise<HomeRead> {
+    const q = new URLSearchParams();
+    if (params.cards) q.set('cards', params.cards.join(','));
+    // This app opens an enterprise's own screen and a chat group's (HomePage needsLine, { to: 'enterprise' | 'group', id }), so
+    // the node may point a keepers' or a group's vote line there and count it (routes/home-answer.ts parseLands). The two
+    // ship together.
+    q.set('lands', 'enterprise,group');
+    if (typeof params.lat === 'number' && typeof params.lng === 'number' && Number.isFinite(params.lat) && Number.isFinite(params.lng)) {
+        q.set('lat', String(params.lat));
+        q.set('lng', String(params.lng));
+    }
+    const qs = q.toString();
+    const path = `/api/home${qs ? `?${qs}` : ''}`;
+    const base = getNodeApiUrl();
+    const sameOrigin = !base || (typeof window !== 'undefined' && base === window.location.origin);
+    const headers: Record<string, string> = {};
+    // Signed as request() signs: by the member when there is one, nothing for a visitor.
+    const identity = await loadIdentity();
+    if (identity && identity.privateKey) {
+        try {
+            Object.assign(headers, await signedHeaders('GET', path, '', identity.privateKey, identity.publicKey));
+        } catch (e) {
+            console.warn('[API] Could not sign request:', e);
+        }
+    }
+    const conditional = !!etag && sameOrigin;
+    if (conditional) headers['If-None-Match'] = etag!;
+    const res = await fetch(`${base}${path}`, { method: 'GET', headers, cache: sameOrigin ? 'no-store' : 'no-cache' });
+    if (res.status === 304 && conditional) return { notModified: true, etag: etag! };
+    if (!res.ok) throw await refusalError(res);
+    return { notModified: false, answer: await res.json() as HomeAnswer, etag: sameOrigin ? res.headers.get('ETag') : null };
+}
+
+/**
+ * What the node kept of the Home keys a save named (H1): the layout that won, the interests it knew, and when those last
+ * changed there (lib/home-interests.ts compares it with the stamp an unsaved change was made on).
+ */
+export interface SavedHomePreferences { success: boolean; 'home.layout'?: unknown; interests?: string[]; interestsUpdatedAt?: string }
+
+/**
+ * Save the member's Home layout and/or interests on their account (H1's two preference keys). A node from before the
+ * card frame refuses a version-2 layout with a 400 (the error carries `status`): pages/HomePage.tsx keeps the cards in
+ * this browser then, and sends them again at the next landing.
+ */
+export async function saveHomePreferences(publicKey: string, preferences: { 'home.layout'?: HomeLayoutV2; interests?: string[]; tour?: TourRecord }): Promise<SavedHomePreferences> {
+    return request<SavedHomePreferences>('POST', '/api/members/preferences', { publicKey, preferences });
 }
 
 // ===================== DIAGNOSTICS & NODE STATS =====================
@@ -2397,10 +2719,14 @@ export async function getActivityFeedApi(limit: number = 50, offset: number = 0)
 
 // ===================== ACCOUNT DELETION & PURGE (#99) =====================
 
-export async function purgeAccountApi(): Promise<{ ok: boolean; message: string }> {
+/**
+ * Settings' Delete account: the node the web app talks to deletes the account. Callers go through lib/delete-here.ts
+ * `purgeHere`, which gives up after a timeout (`signal`) and counts only `{ ok: true }` as a delete.
+ */
+export async function purgeAccountApi(signal?: AbortSignal): Promise<{ ok: boolean; message: string }> {
     return request<{ ok: boolean; message: string }>('POST', '/api/member/purge', {
         action: 'purge_account',
-    });
+    }, signal);
 }
 
 

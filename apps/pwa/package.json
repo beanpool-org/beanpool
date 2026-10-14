@@ -1,6 +1,6 @@
 {
   "name": "@beanpool/pwa",
-  "version": "1.2.26",
+  "version": "1.2.28",
   "description": "BeanPool PWA — Federated Community Interface",
   "type": "module",
   "private": true,
@@ -14,7 +14,12 @@
     "screenshots:market-grid": "node e2e/market-grid-shots.mjs",
     "app-csp-check": "node e2e/app-csp-check.mjs",
     "web-join-check": "node e2e/web-join-check.mjs",
-    "lobby-shots": "node e2e/lobby-shots.mjs"
+    "global-door-check": "node e2e/global-door-check.mjs",
+    "lobby-shots": "node e2e/lobby-shots.mjs",
+    "home-check": "node e2e/home-check.mjs",
+    "dark-contrast-check": "node e2e/dark-contrast-check.mjs",
+    "dark-class-check": "node e2e/dark-class-check.mjs",
+    "showcase-check": "node e2e/showcase-check.mjs"
   },
   "dependencies": {
     "@beanpool/core": "workspace:*",
@@ -40,6 +45,7 @@
     "@types/react-dom": "19.1.0",
     "@vitejs/plugin-react": "^4.4.0",
     "autoprefixer": "^10.4.27",
+    "axe-core": "^4",
     "jsdom": "^30.0.1",
     "playwright": "1.63.0",
     "postcss": "^8.5.8",

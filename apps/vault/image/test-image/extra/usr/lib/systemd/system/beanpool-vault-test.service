@@ -1,0 +1,17 @@
+# A TEST image only (image/test-image/make.mjs; never in a release): the boot test's driver, as root once the vault
+# is up (src/__tests__/image-boot-driver.ts). Not after beanpool-vault-data.service, which waits for the unlock this
+# drives.
+[Unit]
+Description=BeanPool key vault: the boot test's driver (a test image)
+After=beanpool-vault-hygiene.service beanpool-vault-api.service
+Wants=beanpool-vault-api.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/node/bin/node /usr/lib/beanpool-vault-test/driver.mjs
+StandardOutput=journal+console
+TimeoutStartSec=30min
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

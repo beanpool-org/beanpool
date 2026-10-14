@@ -20,12 +20,15 @@ delete process.env.CF_RECORD_NAME;
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import {
-    initStateEngine, exportSyncState, importRemoteState, setNodeRole, clearReplicatedTables, signSyncPayload,
+    initStateEngine, exportSyncState, importRemoteState, setNodeRole, signSyncPayload,
     createGroup, joinGroup, removeGroupMember, setMemberRole, postGroupThreadMessage, canReadGroupThread,
 } from './state-engine.js';
 import { removeOldChatGroups } from './engine/messaging.js';
+import { emptyCopiedTables } from './engine/copied-tables.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
+import { setMemberPhoto } from '@beanpool/engine';
+import { lockedGroupLine } from './group-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -35,8 +38,9 @@ function assert(cond: boolean, msg: string): void {
 
 function makeMember(callsign: string): string {
     const pub = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, updated_at)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'data:image/png;base64,iVBORw0KGgo=', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pub, callsign);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pub, callsign);
+    setMemberPhoto(db, pub, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
     return pub;
 }
@@ -55,7 +59,7 @@ async function asReplica(payload: any): Promise<void> {
 
 async function main(): Promise<void> {
     initStateEngine();
-    const p2pNode = await startP2P(4076, 4077);
+    const p2pNode = await startP2P(0, 0);
     const nodeId = p2pNode.peerId.toString();
     addConnector(`/ip4/127.0.0.1/tcp/4077/p2p/${nodeId}`, 'mirror', 'self-test-peer');
 
@@ -71,7 +75,7 @@ async function main(): Promise<void> {
     joinGroup(g.id, carol);
     joinGroup(g.id, dave);
     setMemberRole(g.id, alice, carol, 'observer');
-    postGroupThreadMessage(g.id, bob, 'Tomato seeds are in');
+    postGroupThreadMessage(g.id, bob, lockedGroupLine(db, g.id)); // a sealed line: the node keeps it as sent
     removeGroupMember(g.id, alice, dave);
 
     const expectedParts = parts(g.id);
@@ -85,7 +89,7 @@ async function main(): Promise<void> {
     assert((payload.conversationParticipants ?? []).filter((p: any) => p.conversationId === g.id).length === 3, 'and its participants');
     assert((payload.messages ?? []).filter((m: any) => m.conversationId === g.id).length === expectedMsgs.length, 'and every message and system line');
 
-    clearReplicatedTables();
+    emptyCopiedTables(db); // a new standby's whole copy starts from nothing (engine/copied-tables.ts)
     assert(!db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(g.id) && msgs(g.id).length === 0, 'the replica starts without the chat');
     await asReplica(payload);
     assert((db.prepare('SELECT type, name FROM conversations WHERE id = ?').get(g.id) as any)?.type === 'group_thread', 'the chat is back');
@@ -126,7 +130,7 @@ async function main(): Promise<void> {
     insertOld();
     const oldSnapshot: any = await exportSyncState(nodeId);
     assert((oldSnapshot.conversations ?? []).some((c: any) => c.id === oldId), 'fixture: a not-yet-updated primary would export it');
-    clearReplicatedTables();
+    emptyCopiedTables(db); // a new standby's whole copy starts from nothing (engine/copied-tables.ts)
     await asReplica(oldSnapshot);
     assert(!db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(oldId), 'the replica does not import the old chat group');
     assert(parts(oldId).length === 0 && msgs(oldId).length === 0, 'nor its participants or messages');

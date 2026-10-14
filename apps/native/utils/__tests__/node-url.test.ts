@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { normalizeNodeUrl, looksLikeNodeAddress, isBareCommunityName } from '../node-url';
 
 describe('normalizeNodeUrl — community name or node address', () => {
@@ -76,5 +78,15 @@ describe('edge cases that were wrong before review', () => {
         expect(isBareCommunityName('mullum-')).toBe(false);
         expect(isBareCommunityName('-mullum')).toBe(false);
         expect(isBareCommunityName('mull-um')).toBe(true);
+    });
+});
+
+describe("the iPhone's own cleartext rule (FABLE-sec-native LOW-1, 2026-10-01)", () => {
+    it('App Transport Security stays on, local networking allowed: written in app.json, not left to the template', () => {
+        // Measured 2026-10-01 in build 1.2.56 (220): the template already wrote exactly this. Android has no such rule
+        // here: a network security config names exact hosts only, never the private ranges a community's own LAN node
+        // sits on, so shouldBlockCleartextNodeUrl stays the rule there.
+        const app = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../app.json'), 'utf-8'));
+        expect(app.expo.ios.infoPlist.NSAppTransportSecurity).toEqual({ NSAllowsArbitraryLoads: false, NSAllowsLocalNetworking: true });
     });
 });

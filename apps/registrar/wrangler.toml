@@ -9,9 +9,12 @@ name = "beanpool-registrar"
 main = "src/index.js"
 compatibility_date = "2025-06-01"
 
-# Attestation sweep — every 5 minutes.
+# Two cron entries, each its own invocation (src/index.js scheduled): the attestation sweep every 5 minutes, and the
+# outside checks of our servers (src/watch.js) 2 minutes after each sweep. Apart, because one invocation may have only
+# 6 connections waiting for headers (a 7th is queued) and one budget of subrequests: a server of ours that hangs must
+# never hold what the sweep needs.
 [triggers]
-crons = ["*/5 * * * *"]
+crons = ["*/5 * * * *", "2-57/5 * * * *"]
 
 # Public, non-secret config.
 [vars]
@@ -20,12 +23,36 @@ ATTEST_FAIL_LIMIT = "2"     # consecutive IMPOSTOR verdicts (a valid signature b
                             # routing is paused (the name stays its owner's). Anything the registrar can't
                             # verify (offline, 5xx, an unknown signing format) never counts (solar-node safe;
                             # 2026-09-24 incident).
+SWAP_FAIL_LIMIT = "12"      # sweeps in a row (5 min apart: about an hour) in which something other than a name's own node
+                            # answered at it (another node's key, or a page that is no attest at all) before routing is
+                            # paused, the name kept for its key (design D2 = b, Marty 2026-09-24). Its node's heal resumes it.
 RELEASE_COOLOFF_S = "2592000"   # 30 days: an owner-released name is held this long for the same key only
                                 # (design D3), then free. An admin release frees at once.
+CLAIM_LIMIT_PER_KEY = "3"   # names one node key may hold at once (live, pending, paused, blocked, or its own release
+                            # still in its hold); a further claim gets 403. A node uses one, and a rename leaves the
+                            # old one held for it 30 days, so 3 covers two renames in that time and keeps one key to
+                            # 3 Cloudflare tunnels. Only new names count: a key over it keeps, heals and takes back
+                            # what it has (src/index.js claimLimit).
 # Circuit-breaker canary: one of OUR nodes, which must attest 'ok' in a sweep for that sweep to act on any
 # row. Leave unset until that node is live in the registrar again (`test` was revoked 2026-09-24 and is
 # `blocked` in name_policy) — a configured canary that isn't live suspends every sweep.
 # CANARY_NAME = "test"
+
+# The control room's outside checks (src/watch.js, design scratch/global-node/DESIGN-alerts-fable.md §2.3): our own
+# servers, looked at every 5 minutes from this Worker — never from the server itself. Public facts only: each a name
+# and the address anyone can reach it at. kind "vault" = the key vault (/v1/health and its signed /v1/report); any
+# other is a node (/api/version and /api/community/health). Nobody else's server is ever watched.
+WATCH_TARGETS = '''[
+  {"name": "global", "url": "https://global.beanpool.org"},
+  {"name": "vault", "url": "https://vault.beanpool.org", "kind": "vault"},
+  {"name": "mullum", "url": "https://mullum.beanpool.org"},
+  {"name": "castlemaine", "url": "https://castlemaine.beanpool.org"},
+  {"name": "test", "url": "https://test.beanpool.org"}
+]'''
+# The vault's ticket PUBLIC key(s), exactly as the apps are built with them (EXPO_PUBLIC_BEANPOOL_VAULT_TICKET_KEYS):
+# 64 hex each, newest first, comma-separated, two at most. The vault's signed report is believed only under one of
+# these. Unset, its report is "not checked" — never "fine" — and /admin and the daily line say so.
+# VAULT_TICKET_KEYS = "<64 hex>"
 
 # D1 binding — set database_id after `wrangler d1 create`.
 [[d1_databases]]
@@ -55,3 +82,7 @@ zone_name = "beanpool.org"
 #   CF_ACCOUNT_ID    151a28c4fd1e6ee09768f4226be76b4d
 #   CF_ZONE_ID       060a99ae34e53b26dcf3be6578722b31
 #   ADMIN_SECRET     shared secret for the admin endpoints (approve/pause/resume/block/release/events)
+#   NTFY_URL         the control room's ntfy topic, as a full URL (https://ntfy.sh/<topic>): the topic name IS the
+#                    secret. Unset = no alerts are sent, and /admin says so (src/alerts.js).
+#   NTFY_TOKEN       optional ntfy access token, sent as `Authorization: Bearer` (limits then follow the account,
+#                    not Cloudflare's shared egress address)

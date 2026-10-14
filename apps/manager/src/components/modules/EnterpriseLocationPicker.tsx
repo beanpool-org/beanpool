@@ -6,6 +6,7 @@ import 'leaflet/dist/leaflet.css';
 import { approximateLocation } from '../../lib/geo';
 import { updateEnterpriseLocation, clearEnterpriseLocation, type NodeTreasury } from '../../lib/node-client';
 import type { NodeProfile } from '../../lib/profiles';
+import { nodeCredential } from '../../lib/profiles';
 
 interface EnterpriseLocationPickerProps {
     treasury: NodeTreasury;
@@ -149,7 +150,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
                 activeNode.url,
                 treasury.publicKey,
                 { lat, lng },
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 effectiveTfaToken
             );
             onLocationSaved(res.lat, res.lng);
@@ -168,7 +169,7 @@ export const EnterpriseLocationPicker: React.FC<EnterpriseLocationPickerProps> =
             await clearEnterpriseLocation(
                 activeNode.url,
                 treasury.publicKey,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 effectiveTfaToken
             );
             setLat(null);

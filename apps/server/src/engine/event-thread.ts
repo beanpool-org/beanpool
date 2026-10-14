@@ -17,6 +17,8 @@ import {
     getMember,
     getConversation,
     isEventHost,
+    convenorHostPaused,
+    CONVENOR_POWERS_PAUSED,
     isVisitorKey,
     EVENT_READABLE_AFTER_END_MS,
     type Conversation,
@@ -24,8 +26,10 @@ import {
 } from '@beanpool/engine';
 import { assertThreadMemberCanPost } from './enterprise-thread.js';
 import { assertNodeMember } from './members.js';
+import { postOutOfSight } from './post-sight.js';
 import type { MessagingCallbacks } from './messaging.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from './message-tombstone.js';
+import { avatarUrlOf } from '@beanpool/core';
 
 export const EVENT_THREAD_MESSAGE_MAX = 2000;
 export const EVENT_THREAD_REMOVED_TEXT = 'removed by the host';
@@ -138,23 +142,48 @@ export function eventHiddenFrom(row: EventRow, pubkey: string | undefined): bool
 }
 
 /**
- * A chat that drops out of this member's chat list: an event's, while the event is hidden from them (G3). The
+ * A chat that drops out of this member's chat list: an event's, while the event isn't there for them (eventUnknownTo:
+ * hidden by reports (G3), or a group's event they can no longer see, their seat in the participants mirror kept). The
  * conversations list and the unread counts behind it and every push's badge (getListedUnreadCounts) all go by this.
  */
 export function chatHiddenFrom(conv: { id: string; type: string }, pubkey: string | undefined): boolean {
     if (conv.type !== 'event_thread') return false;
-    try { return eventHiddenFrom(loadEventForThread(conv.id), pubkey); } catch { return false; }
+    try { return eventUnknownTo(loadEventForThread(conv.id), pubkey); } catch { return false; }
 }
 
 /**
- * Host or Going — checked on every read and every post, never trusted from the participants mirror. Never a visitor's
- * row (isVisitorKey), whatever RSVP it holds from before visitors were refused one: the chat carries the private note.
+ * Host, or Going to an event they can still see — checked on every read and every post, never trusted from the
+ * participants mirror. Never a visitor's row (isVisitorKey), whatever RSVP it holds from before visitors were refused
+ * one: the chat carries the private note.
+ *
+ * Going counts only while the event is in the member's sight (engine/post-sight.ts, getPosts' rule): a member removed
+ * from an invite-only group, or who left it or was banned, was still let into its event's chat and private note by the
+ * RSVP they made as a member, while the event itself had gone from their feed (the director, 2026-09-30, from #1333's
+ * review). Their RSVP stays recorded: it is the host's record of who said they would come, a removal can be undone
+ * (invited back, they are Going again without tapping it), and the rule is read at every use, so an RSVP a standby
+ * imports, or one kept from before, gives no more than one made now. It gives them nothing while they are outside:
+ * not the chat, the note, the chat's live lines, reminders, "Your events" or the event's change pushes.
  */
 export function canReadEventThread(row: EventRow, pubkey: string | undefined): boolean {
     if (!pubkey || isVisitorKey(db, pubkey)) return false;
     if (eventHiddenFrom(row, pubkey)) return false;
     if (isEventHost(db, row, pubkey)) return true;
-    return eventRsvpStatusOf(row.id, pubkey) === 'going';
+    return !postOutOfSight(row, pubkey) && eventRsvpStatusOf(row.id, pubkey) === 'going';
+}
+
+/**
+ * The event isn't there for this caller, so its chat answers as for an id nobody has: hidden by reports (eventHiddenFrom),
+ * or a group's event they can't see (engine/post-sight.ts: not its author, not an active member of the group) and don't
+ * host. "Only the host and people going…" told anyone holding an invite-only group's event id that the event was real.
+ * A member removed from the group while Going is one of these now (canReadEventThread): answered as an outsider is.
+ */
+export function eventUnknownTo(row: EventRow, pubkey: string | undefined): boolean {
+    return eventHiddenFrom(row, pubkey) || (postOutOfSight(row, pubkey) && !canReadEventThread(row, pubkey));
+}
+
+/** eventUnknownTo for an event chat's conversation id; false when it names no event (the caller's own refusal stands). */
+export function eventChatUnknownTo(conversationId: string, pubkey: string | undefined): boolean {
+    try { return eventUnknownTo(loadEventForThread(conversationId), pubkey); } catch { return false; }
 }
 
 /**
@@ -246,17 +275,20 @@ export function syncEventThreadMembership(postId: string, pubkey: string, status
     }
 }
 
-/** One stored row as a chat shows it; a removed row reads as `removedText` (the group chat passes its own). */
+/**
+ * One stored row as a chat shows it; a removed row reads as `removedText` (the group chat passes its own), or as its
+ * author's own delete when they deleted their account (engine/message-tombstone.ts blankMessagesOf).
+ */
 export function toThreadMessage(r: any, conversationId: string, removedText = EVENT_THREAD_REMOVED_TEXT): EventThreadMessage {
     const displayCiphertext = r.type === 'removed'
-        ? Buffer.from(removedText, 'utf8').toString('base64')
+        ? Buffer.from(blankedWithAccount(r.metadata) ? ACCOUNT_DELETED_TEXT : removedText, 'utf8').toString('base64')
         : r.ciphertext;
     return {
         id: r.id,
         conversationId,
         authorPubkey: r.author_pubkey,
         authorCallsign: r.author_callsign || r.author_pubkey?.slice(0, 8),
-        authorAvatar: avatarUrlFor(r.author_pubkey, r.author_avatar),
+        authorAvatar: avatarUrlOf(r.author_pubkey, r.author_avatar),
         ciphertext: displayCiphertext,
         nonce: r.nonce,
         type: r.type,
@@ -268,7 +300,7 @@ export function toThreadMessage(r: any, conversationId: string, removedText = EV
 
 export function getEventThreadMessages(postId: string, limit = 50, offset = 0): EventThreadMessage[] {
     const rows = db.prepare(`
-        SELECT m.*, memb.callsign as author_callsign, memb.avatar_url as author_avatar
+        SELECT m.*, memb.callsign as author_callsign, memb.avatar_ref as author_avatar
         FROM messages m
         LEFT JOIN members memb ON m.author_pubkey = memb.public_key
         WHERE m.conversation_id = ?
@@ -289,7 +321,7 @@ export function getEventThread(
     offset = 0,
 ): EventThreadView {
     const row = loadEventForThread(postId);
-    if (eventHiddenFrom(row, viewerPubkey)) throw new Error(EVENT_NOT_FOUND);
+    if (eventUnknownTo(row, viewerPubkey)) throw new Error(EVENT_NOT_FOUND);
     if (isEventThreadExpired(row)) throw new Error(EVENT_CHAT_GONE);
     if (!canReadEventThread(row, viewerPubkey)) throw new Error(EVENT_CHAT_FORBIDDEN);
 
@@ -320,7 +352,7 @@ export function postEventThreadMessage(
     clientId?: string,
 ): EventThreadMessage {
     const row = loadEventForThread(postId);
-    if (eventHiddenFrom(row, authorPubkey)) throw new Error(EVENT_NOT_FOUND);
+    if (eventUnknownTo(row, authorPubkey)) throw new Error(EVENT_NOT_FOUND);
     // Its author still reads it, but a line now would reach the people Going, whom the event is hidden from.
     if (row.hidden_by_reports_at) throw new Error(EVENT_CHAT_HIDDEN);
     if (isEventThreadExpired(row)) throw new Error(EVENT_CHAT_GONE);
@@ -348,7 +380,7 @@ export function postEventThreadMessage(
                 return toThreadMessage({
                     ...existing,
                     author_callsign: senderMember?.callsign,
-                    author_avatar: senderMember?.avatarUrl,
+                    author_avatar: senderMember?.avatarRef,
                 }, postId);
             }
             throw Object.assign(new Error('Message id already exists'), { code: 'ID_CONFLICT' });
@@ -370,7 +402,7 @@ export function postEventThreadMessage(
         id: msgId,
         author_pubkey: authorPubkey,
         author_callsign: senderMember?.callsign,
-        author_avatar: senderMember?.avatarUrl,
+        author_avatar: senderMember?.avatarRef,
         ciphertext,
         nonce,
         type: 'text',
@@ -389,7 +421,10 @@ export function removeEventThreadMessage(
     actorPubkey: string,
 ): EventThreadMessage {
     const row = loadEventForThread(postId);
-    if (eventHiddenFrom(row, actorPubkey)) throw new Error(EVENT_NOT_FOUND);
+    if (eventUnknownTo(row, actorPubkey)) throw new Error(EVENT_NOT_FOUND);
+    // A convenor of the event's group whose account is suspended: their host power rests until it ends, and the
+    // refusal says so (the route answers 403 for "suspended").
+    if (convenorHostPaused(db, row, actorPubkey)) throw new Error(CONVENOR_POWERS_PAUSED);
     if (!isEventHost(db, row, actorPubkey)) {
         throw new Error('Only the host can remove messages from this event chat');
     }
@@ -424,7 +459,7 @@ export function removeEventThreadMessage(
         type: 'removed',
         metadata: metadataStr,
         author_callsign: authorMember?.callsign,
-        author_avatar: authorMember?.avatarUrl,
+        author_avatar: authorMember?.avatarRef,
     }, postId);
 
     broadcastEventThreadMessage(cb, postId, updated, 'removed');
@@ -444,7 +479,10 @@ function broadcastEventThreadMessage(
     const parts = db.prepare(
         'SELECT public_key FROM conversation_participants WHERE conversation_id = ?'
     ).all(postId) as any[];
-    const recipients = Array.from(new Set(parts.map(p => p.public_key)));
+    // The mirror keeps the seat of someone Going who has since been removed from the group (canReadEventThread): only
+    // those who may read the chat now get its lines.
+    const row = loadEventForThread(postId);
+    const recipients = Array.from(new Set(parts.map(p => p.public_key as string))).filter(pk => canReadEventThread(row, pk));
     cb.broadcast({
         type: 'new_message',
         conversationId: postId,

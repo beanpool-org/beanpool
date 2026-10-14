@@ -28,3 +28,4 @@ A gift cannot be taken back. Check the name before you send.
 
 - Gifts do not build trust. Only completed trades do.
 - You can send gifts while on holiday.
+- You can make up to 100 payments in any 24 hours. Gifts, buying, asking to buy an Offer, approving help on your Need, pledges of beans to a project and buying from another community all count. A keeper's backing of an enterprise moves no beans, so it is not a payment: it counts only as one of your 20 pledge changes a day. Up to 30 of them can go to people you have never paid before; paying people you have paid before still works. Receiving is never limited. If you reach a limit, the app says which, and when you can pay again.

@@ -5,7 +5,8 @@
  *
  *   1. A fresh local node with `nodeProfile.beans=false`: Beans really are off (the override works where nothing
  *      has ever moved), and escrow goes with them.
- *   2. The global profile on a fresh node. The boot log lists every switch still pinned by NOT_BUILT_YET.
+ *   2. The global profile on a fresh node. The boot log lists no switch as pinned: every one is built (the last,
+ *      ssoRequiredForJoin, with the 12-words door).
  *      /api/community/info reports beans, escrow and enterprises off. A send is 403 profile_no_beans before any
  *      other check; a post with a Beans price is 403 and one without is stored at 0, as is an edit; every escrow,
  *      treasury/enterprise, crowdfund/Commons-project and federation purchase route is 404 feature_off, reads
@@ -15,7 +16,10 @@
  *      every ledger primitive refuses on its own. The ledger audit is clean and nothing was written.
  *   3. That database, now recorded as global, refuses to boot as local; a standby of it doesn't refuse; started
  *      once with NODE_PROFILE_ALLOW_CHANGE_FROM=global it converts.
- *   4. The local profile: unchanged. Beans switched off and back on at runtime first, before anything moves. A send
+ *      The daily Wash Trading & Sybil metrics audit does not run (no member walk, no system_metrics row), and says
+ *      why once; with no metrics row, no health flag that reads them is raised.
+ *   4. The local profile: unchanged. Beans switched off and back on at runtime first, before anything moves (the
+ *      metrics audit follows the switch at run time: off, it doesn't run; on, it runs and writes its rows). A send
  *      fails for the old reason, a price is kept, the routes answer, and a real escrow opens.
  *   5. Now the ledger has moved: `nodeProfile.beans=false` is refused at runtime, with no reboot (the "never moved"
  *      seen in 4 did not outlive Beans coming back on), and at boot (the log says why), and Beans stay on;
@@ -31,10 +35,10 @@ delete process.env.NODE_PROFILE_ALLOW_CHANGE_FROM;
 process.env.ADMIN_PASSWORD = 'Global-No-Beans-Admin-83!';
 
 import crypto from 'node:crypto';
+import { setMemberPhoto } from '@beanpool/engine';
 
-const PORT = 8741;
-const BASE = `https://localhost:${PORT}`;
-const ADMIN_PW = process.env.ADMIN_PASSWORD;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 
 let run = 0, passed = 0;
@@ -102,14 +106,20 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const { startHttpsServer } = await import('./https-server.js');
     await initTls();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
+    // Step 7c: with the node's 2FA off the admin password alone opens no admin route (its 403 would come before the
+    // feature check); the admin calls go under an owner's key session.
+    const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
+    const ADMIN = ownerSessionHeaders();
 
     const member = (callsign: string): Id => {
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
         const pubKeyHex = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
-        db.prepare(`INSERT INTO members (public_key, callsign, avatar_url, status, joined_at, updated_at, invited_by, invite_code)
-                    VALUES (?, ?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`)
-            .run(pubKeyHex, callsign, AVATAR);
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, updated_at, invited_by, invite_code)
+                    VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`)
+            .run(pubKeyHex, callsign);
+        setMemberPhoto(db, pubKeyHex, AVATAR);
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pubKeyHex);
         return { pubKeyHex, privateKey, callsign };
     };
@@ -128,8 +138,8 @@ async function main() {
     const boot2 = await capture(() => mirrorNodeProfileAtBoot());
     assert(!boot2.error, `the global node boots (${String(boot2.error ?? 'ok')})`);
     const pinnedLine = boot2.logs.find(l => l.includes('Not built yet, so these run as on any node today')) ?? '';
-    assert(pinnedLine.includes('ssoRequiredForJoin=true'),
-        `the boot log lists every switch still pinned, and what the profile wants (${pinnedLine})`);
+    assert(pinnedLine === '',
+        `no switch is pinned any more, ssoRequiredForJoin included (the 12-words door built it), so the boot log lists none (${pinnedLine})`);
     assert(!/\bknocks=/.test(pinnedLine), 'nor knocks, which G6 built');
     assert(!/\bdirectoryMirror=|publishToDirectory=/.test(pinnedLine), 'nor the directory mirror and publishToDirectory, which G5 built');
     assert(!/\bbeans=|\bescrow=|enterprises=|treasuries=|crowdfund=/.test(pinnedLine), 'and the money switches are no longer among them');
@@ -181,7 +191,7 @@ async function main() {
         assert(r.status === 404 && r.body?.code === 'feature_off' && r.body?.feature === 'escrow', `POST ${path} → 404 feature_off (escrow) (${r.status} ${JSON.stringify(r.body)})`);
     }
     for (const path of ['/api/local/admin/disputes', '/api/local/admin/stranded-escrows']) {
-        const r = await call('GET', path, null, null, { 'x-admin-password': ADMIN_PW });
+        const r = await call('GET', path, null, null, ADMIN);
         assert(r.status === 404 && r.body?.code === 'feature_off', `GET ${path} (admin) → 404 feature_off (${r.status})`);
     }
 
@@ -197,7 +207,7 @@ async function main() {
         const r = await call('GET', path, null, carol);
         assert(r.status === 404 && r.body?.code === 'feature_off', `GET ${path} → 404 feature_off (${r.status})`);
     }
-    const adminTreasury = await call('POST', '/api/local/admin/treasury', { name: 'Commons', avatar: AVATAR }, null, { 'x-admin-password': ADMIN_PW });
+    const adminTreasury = await call('POST', '/api/local/admin/treasury', { name: 'Commons', avatar: AVATAR }, null, ADMIN);
     assert(adminTreasury.status === 404 && adminTreasury.body?.code === 'feature_off', `POST /api/local/admin/treasury (admin) → 404 feature_off (${adminTreasury.status})`);
     assert(treasuries() === treasuriesBefore, `no route made a treasury (${treasuriesBefore} system ones before, ${treasuries()} after)`);
 
@@ -246,7 +256,7 @@ async function main() {
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.decisions`);
 
     // Offboarding, and what still answers
-    const offboard = await call('POST', `/api/local/admin/members/${dave.pubKeyHex}/offboard`, { resolution: 'prune_zero_balance' }, null, { 'x-admin-password': ADMIN_PW });
+    const offboard = await call('POST', `/api/local/admin/members/${dave.pubKeyHex}/offboard`, { resolution: 'prune_zero_balance' }, null, ADMIN);
     assert(offboard.status === 200 && offboard.body?.success, `the offboarding wizard works: a zero balance to settle (${offboard.status} ${JSON.stringify(offboard.body).slice(0, 120)})`);
     const history = await call('GET', `/api/marketplace/transactions?publicKey=${bob.pubKeyHex}`, null, bob);
     assert(history.status === 200 && Array.isArray(history.body) && history.body.length === 0, `a member's own trade list still answers, empty (${history.status})`);
@@ -272,6 +282,19 @@ async function main() {
         'no transaction, no escrow, every balance 0: nothing moved');
     assert(profile.ledgerHistory() === null, 'so this ledger has never moved');
 
+    // The daily Wash Trading & Sybil metrics audit walks every active member synchronously (825 ms at 6,403 members in
+    // the global load rehearsal, the node answering nothing meanwhile). Every number it computes is about Beans, so
+    // where they are off it does not run: no walk, no system_metrics row, and it says why once, not every day.
+    const metricsBefore = count('system_metrics');
+    const metricsRuns = await capture(() => { se.runWashSybilMetricsAudit(); se.runWashSybilMetricsAudit(); });
+    assert(!metricsRuns.error && se.runWashSybilMetricsAudit() === null, `the metrics audit returns nothing on the global profile (${String(metricsRuns.error ?? 'ok')})`);
+    assert(!metricsRuns.logs.some(l => l.includes('Running Wash Trading')), 'it never starts its walk over the members');
+    assert(count('system_metrics') === metricsBefore, `and writes no system_metrics row (${metricsBefore} → ${count('system_metrics')})`);
+    assert(metricsRuns.logs.filter(l => l.includes('Beans are off') && l.includes('metrics audit')).length === 1,
+        `the log says why, once for two runs (${JSON.stringify(metricsRuns.logs)})`);
+    const metricFlags = se.getCommunityHealth().flags.filter(f => ['aggregate_spike', 'cohort_velocity', 'delinquency'].includes(f.type));
+    assert(metricFlags.length === 0, `with no metrics row the health flags that read them raise nothing (${JSON.stringify(metricFlags)})`);
+
     // ── 3. The record now says global ──
     console.log('\n── 3. this database is a global node now ──');
     delete process.env.NODE_PROFILE;
@@ -294,8 +317,15 @@ async function main() {
     // not outlive them, or 5 below would find the ledger "never moved" after it has.
     setOverride('beans', 'false');
     assert(getProfileSwitches().beans === false, 'switched off at runtime on a ledger that has never moved, Beans are off');
+    const metricsOff4 = count('system_metrics');
+    assert(se.runWashSybilMetricsAudit() === null && count('system_metrics') === metricsOff4,
+        'and the metrics audit, reading the switch at run time, does not run: no system_metrics row');
     clearOverrides();
     assert(getProfileSwitches().beans === true, 'and switched back on, they are on');
+    const metricsOn4 = count('system_metrics');
+    const metricsRun4 = await capture(() => se.runWashSybilMetricsAudit());
+    assert(metricsRun4.logs.some(l => l.includes('Running Wash Trading')) && count('system_metrics') === metricsOn4 + 4,
+        `with Beans on, the metrics audit runs again, with no restart, and writes its four rows (${metricsOn4} → ${count('system_metrics')})`);
     const info4 = await call('GET', '/api/community/info', null, alice);
     assert(info4.body.profile === 'local' && info4.body.features?.beans === true && info4.body.features?.escrow === true && info4.body.features?.enterprises === true,
         `info: local, Beans, escrow and enterprises on (${JSON.stringify(info4.body.features)})`);

@@ -80,7 +80,7 @@ export function ensurePulseTreasury(): string {
         }
         // Non-treasury member collided with the reserved callsign — rename to free it
         const newCallsign = `Daily Pulse ${existing.public_key.substring(0, 6)}`;
-        db.prepare("UPDATE members SET callsign = ? WHERE public_key = ?").run(newCallsign, existing.public_key);
+        db.prepare("UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?").run(newCallsign, new Date().toISOString(), existing.public_key);
     }
 
     const created = createTreasury(PULSE_CALLSIGN, PULSE_AVATAR, 0, { systemCreated: true });

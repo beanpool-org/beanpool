@@ -60,6 +60,31 @@ it raises a loud, public, permanent entry in the system feed —
 *"Break-glass recovery used to authorise a new admin key for @callsign."* An operator recovering their
 own node sees a notice they expect; a community seeing that notice unexpectedly knows immediately.
 
+**What the code does today (2026-10-01, Fable's security review, MEDIUM 1).** Until then the promise above held only
+in break-glass mode. With the mode off (the default, and every live node), `checkAdminAuth` tried the code as a
+password on every admin route: a second owner password that never changed. Measured: it read and granted node roles,
+attributed to the owner. Now:
+
+- The code is checked on `POST /api/local/admin/auth/enrol` and `/auth/break-glass/enrol` only, in either mode. On
+  every other admin route it is a wrong password: the same 401 `Invalid password` (the same 403 in break-glass mode),
+  counted by the password brake (§2.6).
+- Each use is logged at security level, as a password sign-in is: whose code, which route, and the address by its
+  daily keyed hash. A code sent to any other route is logged too. The public alert is raised as before.
+- It is stored as salted scrypt, with the password's parameters (`break-glass-code.ts`: `scrypt$<salt>$<hash>`, over
+  the code's SHA-256). The old rows were an unsalted SHA-256 of 64 bits. They are rewritten at the first boot of this
+  version, in `node_roles` and, on a main server, `suspended_node_roles`. The SHA-256 inside the scrypt is what lets the
+  boot do that without the code, which nobody holds. Re-hashing on each code's next use instead would have left most
+  codes weak for good: a code kept in a drawer may never be used. A row that arrives in the old form later (a take-over
+  bundle or a restore from an older server) is accepted, and rewritten on its code's use and at the next boot.
+- From a source the password brake holds, the code is still checked on the enrol routes: that is how an owner enrols a
+  key while the password is under attack. But it is checked at most once every 10 seconds per source and 30 times a
+  minute across the node, since each check is now an scrypt per owner. Anything not shaped like a code (`bg-` and four
+  groups of four hex digits) is refused without one.
+
+Turning break-glass mode on is unchanged: an owner, with the password or a key session, calls
+`POST /api/local/admin/auth/break-glass-mode`. In the mode, the password and the code reach the enrol routes only, and
+an owner's key session turns it off. The code itself can no longer switch the mode.
+
 ### 2.3 The web handoff
 
 The key is on the phone; `/settings` is a browser. One primitive serves both directions:
@@ -77,7 +102,7 @@ monitor, and the heavy configuration work genuinely needs a keyboard.
 | | |
 |---|---|
 | Handshake token | 60 seconds, single use, burned on exchange |
-| Browser session | 2 hours idle, 12 hours hard maximum |
+| Browser session | 2 hours idle, 12 hours hard maximum; **15 minutes idle** for a session the phone app's Manage hand-off opens in the phone's in-app browser, which App Lock can't cover on Android (`PHONE_HANDOFF_IDLE_TTL_MS`, 2026-10-01, #1413) |
 | Revocation | *"Revoke all web sessions"* in the app bumps the admin's `session_epoch`, invalidating every outstanding cookie instantly |
 
 **Phone button — built 2026-09-19 (Marty approved the flow 2026-09-19).**
@@ -88,8 +113,28 @@ monitor, and the heavy configuration work genuinely needs a keyboard.
   live role again when it issues the token and again when the browser exchanges it, and a key session's role
   follows `node_roles` on every request.
 - *Second factor:* the phone's own unlock (fingerprint, face or PIN) comes before the token is requested.
-  A phone with no screen lock gets an explanation and no link: this fails closed, unlike app lock. The
-  node's own TOTP, when turned on, is still asked for on top.
+  A phone with no screen lock gets an explanation and no link: this fails closed, unlike app lock.
+- *No 2FA code on a key sign-in (decision D2, 2026-10-03).* The node's own TOTP is not asked for on the Manage link
+  or a pairing's approval: the phone's lock is the factor, and only a valid signature from the key of someone who
+  holds a role now opens a session. With no code on this path there is nothing to guess, so `key-signin-brake.ts` and
+  its 429 `totp-braked` were removed with the code. An older app that still sends a code is answered as if it had
+  not (a backup code it sends is not spent). In exchange, a session the Manage hand-off opened makes owner-only
+  changes only within `PHONE_STEP_UP_WINDOW_MS` (5 minutes) of the phone's unlock; after it, 403 `step_up_required`
+  until Manage is pressed again (`requirePhoneStepUp`). That covers every owner-only route that changes something
+  (`requireAdminRole` with owners only; reads sent as POST are named in `READ_ONLY_POSTS` and pass), every node-roles
+  change or enrolment that names owner or admin or whose target holds owner or admin now (`roleChangeNeedsOwner`),
+  every action the engine refuses to an admin because of its target (`stepUpIfOwnerOnly` on decisions-engine
+  `adminActionNeedsOwner`: suspending an owner; lifting a suspension or halting a Decision that gives back an owner's
+  or admin's role; accelerating an owner's or admin's removal; pruning, branch-pruning or offboarding an owner or admin;
+  re-keying one, `rekey/issue-code` and `rekey/complete`, their own re-key included, since the code binds a key the
+  caller chooses to that role; a report action with `suspendUser` on one), `POST /auth/revoke-all` for another member (your own is not asked),
+  `POST /auth/break-glass-mode`, and the bulk downloads `GET snapshots/download` and `GET offbox-backups/download`.
+  `GET takeover-envelope` is not asked: it is sealed to the owners. A computer's session (the QR pairing) is not asked.
+  Two of those were not refused to an admin by the engine until #1530 fix round 3. Now `issueRekeyCode` and
+  `completeRekey` refuse a re-key of an owner or admin, a role held aside included (member-wizards `assertMayRekey`),
+  and `actionReport` refuses `suspendUser` on one (it takes the role). Both answer 403 and write nothing, unless the
+  actor is owner level. A member re-keying their own key is never refused, an owner's or admin's included. An admin
+  emergency-suspending another admin stays allowed: the role is held aside, and only an owner gives it back.
 - *The link:* `/settings#handoff=<60 s single-use token>[&section=…]`, opened in Custom Tabs /
   SFSafariViewController. The token goes in the **fragment**, so it never reaches a server, proxy log or
   Referer. `/settings` wipes it from the address bar, then POSTs it once to `/api/local/admin/auth/exchange`.
@@ -124,12 +169,13 @@ monitor, and the heavy configuration work genuinely needs a keyboard.
   The code must name the app's own node; the node's lookup must return the same short code and names the browser ("Firefox on Windows"); then
   the phone unlock (same gate as Manage), then the member key signs
   `beanpool-settings-signin:v1:approve:<id>:<code>`. The node runs the same signer checks as the Manage link
-  (`authorizeKeySigner`: active member, any node role (a moderator's session is then narrowed by MODERATOR_ROUTES), signature, TOTP) and mints the same 60 s handshake token,
+  (`authorizeKeySigner`: active member, any node role (a moderator's session is then narrowed by MODERATOR_ROUTES), signature; no TOTP since D2) and mints the same 60 s handshake token,
   kept inside the pairing: the phone never sees it.
 - *Redemption:* the browser long-polls `…/pairing/:id/wait` with its cookie and the node redeems the held token
   through `consumeHandshakeToken` → the same `admin_session` + CSRF token. Without the binding secret: 403,
   logged. Single use throughout; five refused approvals burn a pairing; creation braked at 10/min per client
-  and 200 live; phone calls go through the auth limiter. SECURITY log lines name who approved which pairing.
+  and 200 live; phone calls go through the auth limiter. SECURITY log lines name who approved which pairing. No 2FA
+  code is asked here since D2 (above), so there is no code to guess and no brake on one.
 - *PWA:* not a scanner. Its Manage row says to open Settings on the computer and scan with the app.
 
 ### 2.4 Migration — do not flip this in one release
@@ -223,7 +269,8 @@ liked. We found this on the test node on 2026-09-19. It was replaced by this bra
 - Parallel guesses from one source are checked one at a time, so a burst can't all pass the gate before the first
   one fails. A dashboard sending several right passwords at once is served in turn, not refused.
 - Every password check goes through it: `checkAdminAuth`, sign-in (`verify-password`), and `/ws/logs?auth=`
-  (refused outright under 2FA or in break-glass mode). Key sign-in never does.
+  (refused outright under 2FA or in break-glass mode). Key sign-in never does: since D2 (2026-10-03) it asks for no 2FA
+  code, so there is nothing on it to guess (§2.3).
 - Under 2FA a right password alone clears nothing; only a right code does. Until 2026-09-19 the admin routes
   that took the password alone cleared a source's record, so someone who knew the password could guess 2FA codes
   without limit by sending it between guesses. Every admin route now goes through `checkAdminAuth` (seed-invite
@@ -283,8 +330,9 @@ section.
 > for up to 10 minutes. The log says so and names `TRUSTED_PROXIES`. Add the proxy's address there and restart
 > the server. The restart also clears the brake.
 
-Once a key owner exists, key sign-in skips the brake entirely. A break-glass code (§2.2) is still checked even from a
-braked source, because it is 64 random bits and can't be guessed online.
+Once a key owner exists, key sign-in skips this brake entirely (its 2FA code has its own, §2.3). A break-glass code
+(§2.2) is still checked from a braked source on the enrol routes, and only there, because it is 64 random bits and
+can't be guessed online: at most once every 10 seconds per source and 30 times a minute across the node.
 
 ---
 

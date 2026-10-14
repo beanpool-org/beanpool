@@ -3,7 +3,8 @@
 // Extracted from apps/server/src/state-engine.ts.
 
 import type Database from 'better-sqlite3';
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarUrlOf } from '@beanpool/core';
+import { authorsOnly, postPhotoUrl, type OffListingPhotoShown } from './photo-url.js';
 
 type Db = Database.Database;
 
@@ -91,7 +92,7 @@ function selectInChunks<T = any>(db: Db, ids: string[], queryBuilder: (placehold
     return results;
 }
 
-export function getConversationsByMember(db: Db, pubkey: string): Conversation[] {
+export function getConversationsByMember(db: Db, pubkey: string, offPhotoShown: OffListingPhotoShown = authorsOnly(pubkey)): Conversation[] {
     const rows = db.prepare(`
         SELECT c.*,
         CASE WHEN c.post_id IS NOT NULL AND p.id IS NULL THEN '(deleted post)' ELSE p.title END as post_title,
@@ -141,27 +142,36 @@ export function getConversationsByMember(db: Db, pubkey: string): Conversation[]
     const membersByPubkey = new Map<string, any>();
     if (allPeerPubkeys.size > 0) {
         const pubkeysArray = Array.from(allPeerPubkeys);
-        const allMembers = selectInChunks(db, pubkeysArray, ph => `SELECT public_key, callsign, avatar_url FROM members WHERE public_key IN (${ph})`);
+        const allMembers = selectInChunks(db, pubkeysArray, ph => `SELECT public_key, callsign, avatar_ref FROM members WHERE public_key IN (${ph})`);
 
         for (const member of allMembers) {
             membersByPubkey.set(member.public_key, member);
         }
     }
 
+    // A chat about a listing shows the listing's first photo, by the URL its listing's photos carry (photo-url.ts: keyed
+    // where they are), and only for a listing this member can see (getPosts' audience rule, hidden by reports included):
+    // a chat can outlast their place in a group. It read a `posts.photos` column no schema has, so it threw whenever a
+    // chat had a listing; every chat is written with none today (createConversation), so none has shown one. A listing
+    // taken off (`active` not 1) shows none to a member the photo route answers 404 (offPhotoShown, the server's rule).
     const postIds = Array.from(new Set(rows.map(r => r.post_id).filter(id => id != null)));
     const postPhotosById = new Map<string, string | null>();
-    if (postIds.length > 0) {
-        const allPosts = selectInChunks(db, postIds, ph => `SELECT id, photos FROM posts WHERE id IN (${ph})`);
-
-        for (const post of allPosts) {
-            let postPhoto: string | null = null;
-            if (post.photos) {
-                try {
-                    const arr = JSON.parse(post.photos);
-                    if (Array.isArray(arr) && arr.length > 0) postPhoto = arr[0];
-                } catch {}
-            }
-            postPhotosById.set(post.id, postPhoto);
+    for (let i = 0; i < postIds.length; i += 500) {
+        const chunk = postIds.slice(i, i + 500);
+        const firstPhotos = db.prepare(`
+            SELECT pp.post_id, pp.order_num, pp.updated_at, p.audience_scope, p.author_pubkey, COALESCE(p.active, 0) = 1 AS live
+              FROM post_photos pp JOIN posts p ON p.id = pp.post_id
+             WHERE pp.post_id IN (${chunk.map(() => '?').join(',')})
+               AND pp.order_num = (SELECT MIN(first.order_num) FROM post_photos first WHERE first.post_id = pp.post_id)
+               AND ((p.audience_scope IS NULL OR p.audience_scope = 'public')
+                    OR p.author_pubkey = ?
+                    OR (p.audience_scope = 'group' AND p.target_group_id IN (SELECT group_id FROM group_members WHERE member_pubkey = ? AND status = 'active'))
+                    OR (p.audience_scope = 'direct' AND (p.target_pubkey = ? OR p.assigned_to = ?)))
+               AND (p.hidden_by_reports_at IS NULL OR p.author_pubkey = ?)
+        `).all(...chunk, pubkey, pubkey, pubkey, pubkey, pubkey) as { post_id: string; order_num: number; updated_at: string | null; audience_scope: string | null; author_pubkey: string; live: number }[];
+        for (const ph of firstPhotos) {
+            if (!ph.live && !offPhotoShown(ph.post_id, ph.author_pubkey)) continue;
+            postPhotosById.set(ph.post_id, postPhotoUrl(ph.post_id, ph.order_num, ph.updated_at, ph.audience_scope));
         }
     }
 
@@ -174,7 +184,7 @@ export function getConversationsByMember(db: Db, pubkey: string): Conversation[]
             const peerMember = membersByPubkey.get(peerPubkey);
             if (peerMember) {
                 peerCallsign = peerMember.callsign;
-                peerAvatar = avatarUrlFor(peerMember.public_key, peerMember.avatar_url);
+                peerAvatar = avatarUrlOf(peerMember.public_key, peerMember.avatar_ref);
             }
         }
 
@@ -246,7 +256,10 @@ export function getConversation(db: Db, id: string): Conversation | undefined {
         createdBy: c.created_by,
         createdAt: c.created_at,
         participants: parts.map(p => p.public_key),
-        readCursors: parts.map(p => ({ publicKey: p.public_key, lastReadAt: p.last_read_at || null }))
+        // A DM's two read cursors are its read ticks. A group's, an event's or an enterprise's would be every member's key
+        // and when each last opened the chat — for an event, the Going list the post keeps from all but its hosts — and
+        // no app shows them (FABLE-sec-events-chat F2, 2026-10-01): served for a DM only.
+        ...(c.type === 'dm' ? { readCursors: parts.map(p => ({ publicKey: p.public_key, lastReadAt: p.last_read_at || null })) } : {}),
     } as any;
 }
 

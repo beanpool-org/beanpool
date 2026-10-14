@@ -89,10 +89,13 @@ is **never written anywhere in the PWA** — no block action exists on the profi
 implements the full block/report path ([blocklist.ts:74](../apps/native/utils/blocklist.ts)). A member being
 harassed has a remedy on the phone and none on the web.
 
-### 8. The PWA ignores `minAppVersion`
-`minAppVersion` appears **zero times** in `apps/pwa/src`. Native reads it from health and blocks
-([GlobalHeader.tsx:267](../apps/native/components/GlobalHeader.tsx)). When an operator raises the floor to force
-a protocol update, web clients carry on regardless.
+### 8. The PWA ignores `minAppVersion` — by design (2026-10-01)
+The floors (`minAppVersion`, `appFloors`) count the phone app's versions, which are not the web app's: the web app
+is the server's own copy and is reloaded fresh with every page load. A web page once compared itself with the phone
+floor, so raising it for phones showed every web user an "update required" no reload could clear. Now the web app
+compares itself with the server's own `version` and offers a reload when a tab is older
+([app-version.ts](../apps/pwa/src/lib/app-version.ts) `webAppBehindServer`); the phone's full-screen block is
+[force-update.ts](../apps/native/utils/force-update.ts).
 
 ### 9. Pulse is absent from the PWA
 The PWA tab union is `'map' | 'marketplace' | 'messages' | 'people' | 'ledger' | 'projects'`

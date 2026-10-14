@@ -1,6 +1,7 @@
 /**
- * Tests only: an in-memory stand-in for `indexedDB`, as much of it as identity.ts uses (open, one object store,
- * get / put / delete in a transaction, oncomplete once the transaction's requests have answered, abort). jsdom has no
+ * Tests only: an in-memory stand-in for `indexedDB`, as much of it as identity.ts and home-cache.ts use (open, one
+ * object store, get / put / delete / clear in a transaction, oncomplete once the transaction's requests have answered,
+ * abort, deleteDatabase). jsdom has no
  * IndexedDB. Values are structured-cloned in and out, as the real one does, so a test cannot pass by holding a
  * reference to what it saved (and a value that can't be cloned throws DataCloneError from put, as there).
  * `failNextCommit` makes a write fail as a full disk does.
@@ -24,8 +25,11 @@ function request<T>(): FakeRequest<T> {
 
 export interface MemoryIndexedDB {
     open(name: string, version?: number): FakeRequest;
+    deleteDatabase(name: string): FakeRequest & { onblocked: ((ev: unknown) => void) | null };
     /** What is stored: database → store → key → value. For assertions. */
     peek(db: string, store: string, key: IDBValidKey): unknown;
+    /** Whether a database of this name exists. For assertions. */
+    has(db: string): boolean;
     /**
      * The next readwrite transaction fails as it commits, as the real one does when the disk is full: its writes are
      * undone, `error` is set, and it fires `abort`, never `error` or `complete`.
@@ -83,6 +87,11 @@ export function memoryIndexedDB(): MemoryIndexedDB {
                                 store.delete(key);
                                 return request();
                             },
+                            clear() {
+                                for (const key of store.keys()) remember(key);
+                                store.clear();
+                                return request();
+                            },
                         };
                     },
                     /** As the real one: this transaction's writes are undone, `error` stays null, and `abort` fires, never `complete`. */
@@ -131,8 +140,20 @@ export function memoryIndexedDB(): MemoryIndexedDB {
             }, 0);
             return req;
         },
+        deleteDatabase(name: string) {
+            const req = request() as FakeRequest & { onblocked: ((ev: unknown) => void) | null };
+            req.onblocked = null;
+            setTimeout(() => {
+                databases.delete(name);
+                req.onsuccess?.({ target: req });
+            }, 0);
+            return req;
+        },
         peek(db: string, store: string, key: IDBValidKey) {
             return databases.get(db)?.get(store)?.get(key);
+        },
+        has(db: string) {
+            return databases.has(db);
         },
         failNextCommit(error: unknown = new DOMException('The quota has been exceeded.', 'QuotaExceededError')) {
             failCommit = { error };

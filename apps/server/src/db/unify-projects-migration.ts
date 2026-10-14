@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3';
+import { setMemberPhoto } from '@beanpool/engine';
 
 /**
  * Migration: Unify crowdfund projects and Commons proposals into Enterprises.
@@ -68,14 +69,15 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
                     if (!existingMember) {
                         targetDb.prepare(`
                             INSERT INTO members (
-                                public_key, callsign, joined_at, avatar_url, bio, status,
+                                public_key, callsign, joined_at, bio, status,
                                 is_treasury, earned_credit, earned_surplus,
                                 purpose, goal_amount, deadline_at, lifecycle, paused, updated_at
-                            ) VALUES (?, ?, ?, ?, ?, ?, 1, 0, 0, ?, ?, ?, 'bounded', 0, ?)
+                            ) VALUES (?, ?, ?, ?, ?, 1, 0, 0, ?, ?, ?, 'bounded', 0, ?)
                         `).run(
-                            enterprisePubkey, callsign, createdAt, photoUrl, desc, status,
+                            enterprisePubkey, callsign, createdAt, desc, status,
                             purpose, goal, deadline, updatedAt
                         );
+                        setMemberPhoto(targetDb, enterprisePubkey, photoUrl || null);
                     } else {
                         targetDb.prepare(`
                             UPDATE members SET

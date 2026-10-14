@@ -1,4 +1,5 @@
 import type { TreasurySummary } from './db';
+import { pledgeClosedLine } from './enterprise-pledge';
 
 /**
  * What an enterprise card on the Commons list says about the enterprise's state.
@@ -23,6 +24,8 @@ export interface EnterpriseCardStatus {
     showKindBadge: boolean;
     hasGoal: boolean;
     isFunded: boolean;
+    /** The card says "Pledge Beans": a goal not yet reached, and an enterprise the node still takes pledges for. */
+    takesPledges: boolean;
     currentRaised: number;
     /** Meta line under the name, e.g. "Paused for season · 2 keepers". */
     meta: string;
@@ -58,5 +61,7 @@ export function enterpriseCardStatus(item: CardInput): EnterpriseCardStatus {
 
     const showKindBadge = stateBadge === null || kindBadge === 'funded';
 
-    return { stateBadge, kindBadge, showKindBadge, hasGoal, isFunded, currentRaised, meta: stateText + keeperText };
+    const takesPledges = hasGoal && !isFunded && pledgeClosedLine(item.status) === null;
+
+    return { stateBadge, kindBadge, showKindBadge, hasGoal, isFunded, takesPledges, currentRaised, meta: stateText + keeperText };
 }

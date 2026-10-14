@@ -107,3 +107,35 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/DX insight specific to the m
 ## 2026-11-21 - Replace any type assertions in PeerConnectorsPanel
 **Learning:** `PeerConnectorsPanel.tsx` used `as any` type assertions in `select` onChange handlers when setting state for `newTrustLevel` and `newMode`, bypassing TypeScript type checking.
 **Action:** Use strict union type assertions (e.g. `as 'peer' | 'blocked' | 'mirror'`) to ensure select handler values match state types.
+
+## 2026-11-22 - Add loading state indicator for ReplicationAccessPanel
+**Learning:** `ReplicationAccessPanel.tsx` displayed unpopulated default metrics ("0 pulls / token not set") while replication settings were fetching asynchronously.
+**Action:** Render an explicit loading indicator and spinner when `loading && !accessData` before data arrives.
+
+## 2026-11-23 - Add loading indicators for EconomySection enterprises and proposals
+**Learning:** `EconomySection.tsx` fell through to "No pending proposals." while `loadingCommons` was `true`, misleading operators into thinking no proposals existed before data finished loading.
+**Action:** Render explicit loading indicators with `animate-spin` spinners when `loadingTreasuries` or `loadingCommons` is `true`.
+
+## 2026-12-05 - Add loading indicator for AutomationTokensPanel
+**Learning:** `AutomationTokensPanel.tsx` rendered "No tokens yet." when `tokens` was `null` (loading state), misleading node operators before data arrived.
+**Action:** Render an explicit loading indicator and spinner when `tokens === null && !listMessage`.
+
+## 2026-12-06 - Add loading indicator for CommunityHealthPanel
+**Learning:** `CommunityHealthPanel.tsx` returned `null` immediately while community health data was fetching asynchronously (`health` was `null`), leaving operators without visual feedback.
+**Action:** Render an explicit loading indicator with an animated spinner when `loading && !health`.
+
+## 2026-12-07 - Add loading indicator for OffboxBackupsPanel
+**Learning:** `OffboxBackupsPanel.tsx` rendered an empty card body below the header while fetching backup settings (`!status && !loadError`), leaving operators without visual feedback during network calls.
+**Action:** Render an explicit loading indicator with an animated spinner when `!status && !loadError`.
+
+## 2026-12-08 - Add loading indicator for AlertsPanel
+**Learning:** `AlertsPanel.tsx` rendered an empty card body below the description header while fetching server alerts status (`!status && !loadError`), leaving operators without visual feedback during network requests.
+**Action:** Render an explicit loading indicator with an animated spinner when `!status && !loadError`.
+
+## 2026-12-09 - Replace any types in RekeyMemberWizard catch blocks
+**Learning:** `RekeyMemberWizard.tsx` used `catch (err: any)` across four async handlers, weakening error handling type safety in re-keying flows.
+**Action:** Replace `catch (err: any)` with `catch (err: unknown)` and safe `err instanceof Error ? err.message : String(err)` guards.
+
+## 2026-12-10 - Replace catch e any in NodeRolesPanel
+**Learning:** `NodeRolesPanel.tsx` used `catch (e: any)` in async role fetching, granting, and revoking handlers, bypassing strict type checking for error objects.
+**Action:** Replace `catch (e: any)` with `catch (e: unknown)` and safe type guards checking `e instanceof Error` or object message properties.

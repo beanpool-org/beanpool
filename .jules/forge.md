@@ -47,6 +47,11 @@ const { id } = req.body; // could be undefined, crashes downstream
 
 ## ✅ Resolved — do NOT re-file
 
+### 2026-10-12 — "safe JSON parsing for commons projects" (#1728, #1802) — CLOSED TWICE, WOULD LOSE DATA.
+Returning `[]` for a corrupt `commons_projects` value in state-engine.ts lets `createProject` save a one-item list over every stored
+project. A loud failure loses nothing; a silent fallback on a path that then writes loses the community's projects. See POLICY.md
+"2026-10-10 — Forge: swallow bad commons_projects JSON". Do not file it again in any form.
+
 ### 2026-09-22 — "braked takeover/open does not return 429" (#1017) — CLOSED, CLAIM FALSE.
 `refuseBraked` (apps/server/src/password-brake.ts) sets `ctx.status = 429` and `Retry-After` itself, and Koa keeps an
 explicitly set status when `ctx.body` is assigned afterwards. `test-takeover-by-code.ts` already asserts 429 on
@@ -134,3 +139,23 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [What was broken]\n**Learning:** [W
 **Issue:** `exportLedgerAudit` in `apps/server/src/engine/audit.ts` executed `JSON.parse(projectsRow.value)` without a try/catch block. Malformed JSON stored in `node_config` under `commons_projects` threw unhandled exceptions, crashing admin ledger export requests.
 **Learning:** Reading JSON blobs from database tables without enclosing `JSON.parse` in a try/catch block allows corrupted database strings to crash admin audit endpoints.
 **Pattern:** Always wrap `JSON.parse` operations on DB config rows in try/catch blocks with safe fallback values.
+
+## 2026-09-29 - [Raw Koa ctx.throw exceptions in commons routes]
+**Issue:** `apps/server/src/routes/commons.ts` used `ctx.throw(400/404, msg)` for error responses instead of setting explicit JSON error bodies (`ctx.status = status; ctx.body = { error: msg }`).
+**Learning:** Calling `ctx.throw` in Koa route handlers throws text `HttpError` exceptions that bypass the API's standard `{ error: '...' }` JSON response contract.
+**Pattern:** Ensure Koa route handlers assign `ctx.status` and `ctx.body = { error: ... }` explicitly instead of throwing Koa text exceptions.
+
+## 2026-09-30 - [Missing try/catch in POST /api/local/admin/posts/bulk-delete]
+**Issue:** `POST /api/local/admin/posts/bulk-delete` in `apps/server/src/routes/admin.ts` called `adminBulkDeletePosts` without enclosing it in a try/catch block.
+**Learning:** Unlike single post deletion (`POST /api/local/admin/posts/:id/delete`), bulk post deletion was exposed to unhandled exceptions (e.g. SQLite locks or state engine failures during multi-post operations), which would produce 500 server crashes instead of formatted JSON error bodies.
+**Pattern:** Ensure all batch/bulk state mutation routes wrap multi-resource engine operations in `try/catch` blocks that log the error and set `ctx.status = 500`.
+
+## 2026-10-05 - [Uncaught DB exception in pruneTombstones]
+**Issue:** `pruneTombstones` in `apps/server/src/connector-manager.ts` executed database tombstone pruning without a `try/catch` block. When run via periodic `setInterval`, database errors (such as SQLite lock/busy states) threw uncaught exceptions in timer callbacks.
+**Learning:** Functions executed in periodic `setInterval` callbacks must handle internal exceptions with a top-level `try/catch` block to prevent uncaught exceptions from destabilizing or crashing the Node process.
+**Pattern:** Ensure all functions passed directly or indirectly to `setInterval` enclose database or external I/O operations inside `try/catch` blocks.
+
+## 2026-10-13 - [Missing try/catch in POST /api/commons/projects/delete]
+**Issue:** `POST /api/commons/projects/delete` in `apps/server/src/routes/commons.ts` called `deleteProject` without a `try/catch` block.
+**Learning:** `deleteProject` checks non-zero ledger balances and throws errors (e.g. "Cannot delete project with non-zero balance: would violate ledger conservation"), which caused uncaught 500 exceptions instead of formatted 400 error responses.
+**Pattern:** Ensure deletion routes calling domain functions that enforce balance/ledger constraints wrap the deletion call in a `try/catch` block that catches errors and sets `ctx.status = 400`.

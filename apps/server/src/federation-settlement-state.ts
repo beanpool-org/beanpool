@@ -116,7 +116,18 @@ export function getSettlement(key: string): SettlementRow | null {
  * Idempotent by design: a retried `PURCHASE` must not create a second row or reset the first. Callers
  * should treat a returned row whose state has already moved on as "already in flight", not as an error.
  */
-export function openSettlement(input: {
+export function openSettlement(input: Parameters<typeof claimSettlement>[0]): SettlementRow {
+    return claimSettlement(input).row;
+}
+
+/**
+ * `openSettlement`, also saying whether THIS call wrote the row (`created`) or found it already there.
+ *
+ * The buyer's node funds an escrow only from the call that created its row (beginOutboundSettlement). It used to tell
+ * the two apart by whether `escrow_<key>` already held Beans, so a new key naming an account that held someone else's
+ * Beans read as "already funded", and its abandonment paid them out. Only the insert knows which call made the row.
+ */
+export function claimSettlement(input: {
     key: string;
     direction: SettlementDirection;
     peerId: string;
@@ -128,12 +139,12 @@ export function openSettlement(input: {
     fee?: number;
     reservedUntil?: string | null;
     state: Extract<SettlementState, 'escrowed' | 'reserved'>;
-}): SettlementRow {
+}): { row: SettlementRow; created: boolean } {
     // Insert-then-validate, NOT validate-then-insert (review finding). A pre-insert check plus
     // `ON CONFLICT DO NOTHING` has a hole: if a conflicting row appears between the check and the insert,
     // the conflict clause silently skips the write and the mismatched row is returned as if it were ours.
     // Validating whatever row actually ends up in the table closes both orderings with one check.
-    db.prepare(`
+    const inserted = db.prepare(`
         INSERT INTO settlements (key, direction, peer_id, buyer_pubkey, buyer_home_node, seller_pubkey,
                                  post_id, amount, fee, reserved_until, state)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -165,7 +176,7 @@ export function openSettlement(input: {
     if (!same) {
         throw new Error(`Settlement key collision for ${input.key}: payload does not match the existing row`);
     }
-    return row;
+    return { row, created: inserted.changes === 1 };
 }
 
 /**

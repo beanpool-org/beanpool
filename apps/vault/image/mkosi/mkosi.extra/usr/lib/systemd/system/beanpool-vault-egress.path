@@ -1,0 +1,10 @@
+# Two custodians changed the settings (the API wrote the file, by a rename): root writes the resolver's names again.
+[Unit]
+Description=BeanPool key vault: the custodians' settings changed
+
+[Path]
+PathChanged=/var/lib/beanpool-vault/settings/settings.json
+Unit=beanpool-vault-egress.service
+
+[Install]
+WantedBy=multi-user.target

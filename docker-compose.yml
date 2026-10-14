@@ -1,8 +1,12 @@
+# Docker's copy of what the server prints holds the same lines as its log, members' names included, and nothing can
+# take a deleted member's name out of it afterwards. So it is kept small: two files of 5 MB, the oldest dropped as the
+# next fills (Docker has no age limit). It goes with the container, so an update that replaces the container starts a
+# new one. The operator manual says so (Privacy and what your server can see).
 x-logging: &default-logging
   driver: json-file
   options:
-    max-size: "10m"
-    max-file: "3"
+    max-size: "5m"
+    max-file: "2"
 
 services:
   beanpool-node:
@@ -49,9 +53,42 @@ services:
       - NODE_PROFILE=${NODE_PROFILE:-}
       # EMPTY. Set to `global` for ONE start to turn a global node's database into the profile above on purpose.
       - NODE_PROFILE_ALLOW_CHANGE_FROM=${NODE_PROFILE_ALLOW_CHANGE_FROM:-}
-      # The oldest app build this node works with; phones below it see a banner they can't dismiss. EMPTY = the
-      # built-in floor, far below anything in the field (apps/server/src/app-store-versions.ts).
+      # The oldest app build this node works with; phones below it see a banner they can't dismiss, and from the build
+      # with the full-screen update, once the grace date has passed, that screen at their next start. EMPTY = the
+      # built-in floor, far below anything in the field (apps/server/src/app-store-versions.ts). _IOS / _ANDROID: one
+      # platform's own floor. _FROM (and _FROM_IOS / _FROM_ANDROID): the grace date, e.g. 2026-10-15; EMPTY = already.
+      # A platform's floor stops nobody until its store has a build that meets it. The manual: "Raising the app's floor".
       - MIN_APP_VERSION=${MIN_APP_VERSION:-}
+      - MIN_APP_VERSION_IOS=${MIN_APP_VERSION_IOS:-}
+      - MIN_APP_VERSION_ANDROID=${MIN_APP_VERSION_ANDROID:-}
+      - MIN_APP_VERSION_FROM=${MIN_APP_VERSION_FROM:-}
+      - MIN_APP_VERSION_FROM_IOS=${MIN_APP_VERSION_FROM_IOS:-}
+      - MIN_APP_VERSION_FROM_ANDROID=${MIN_APP_VERSION_FROM_ANDROID:-}
+      # The live-updates socket caps (apps/server/src/ws-limits.ts). EMPTY = the profile's: a local community 2,000 on
+      # the node, 1,000 of them strangers', 64 an address, 8 strangers an address, 8 a member; the global node 5,000,
+      # 1,500, 1,000, 8 and 4, for its 1 GB server. A whole number scales one with the server (WS_MAX_SOCKETS=20000 on
+      # 4 GB); anything else is ignored and the boot log says so. The listeners' connection cap follows.
+      - WS_MAX_SOCKETS=${WS_MAX_SOCKETS:-}
+      - WS_MAX_STRANGER_SOCKETS=${WS_MAX_STRANGER_SOCKETS:-}
+      - WS_MAX_SOCKETS_PER_ADDRESS=${WS_MAX_SOCKETS_PER_ADDRESS:-}
+      - WS_MAX_STRANGER_SOCKETS_PER_ADDRESS=${WS_MAX_STRANGER_SOCKETS_PER_ADDRESS:-}
+      - WS_MAX_SOCKETS_PER_MEMBER=${WS_MAX_SOCKETS_PER_MEMBER:-}
+      # The heavy-read cap (apps/server/src/heavy-reads.ts): how many MB of heavy list answers (the whole member list,
+      # the web app's People list, a big group's roster) may be in flight at once. Past it a reader waits a few seconds,
+      # then is told "busy" (503) and asks again later. EMPTY = 48, about four member lists of 30,000, sized for the
+      # 512 MB heap below on a 1 GB server. A whole number above 0 to change it (raise it with the heap); anything else
+      # is ignored, with a warning in the log.
+      - HEAVY_READ_BUDGET_MB=${HEAVY_READ_BUDGET_MB:-}
+      # The server gzips its /api answers for apps and browsers that ask (apps/server/src/api-compression.ts), so members
+      # spend less of their data. EMPTY = it does. `off` = it never does: for a server behind an edge that compresses for
+      # the phones already (Cloudflare does, for a <name>.beanpool.org address) and short of CPU, one core say. Off, the
+      # edge still compresses for the phones; only the bytes between the server and the edge grow.
+      - API_GZIP=${API_GZIP:-}
+      # The server asks GitHub (api.github.com) for the newest BeanPool release 30 s after it starts and every 6 hours,
+      # so Settings can say whether an update is out. EMPTY = it does, as it always has. `true` = it never asks on its
+      # own: nothing else depends on it, and Settings' "check now" button still asks when an owner or admin presses it.
+      # See apps/server/src/routes/settings.ts backgroundUpdateCheck.
+      - DISABLE_UPDATE_CHECK=${DISABLE_UPDATE_CHECK:-}
       # Where photos and attachments live. EMPTY = on this node's own disk under /data/images, which is every local
       # node. `s3` = an S3-compatible bucket (Cloudflare R2; the global node), and then all five IMAGE_S3_* must be
       # set or the node refuses to start. From .env only: never stored in node_config, never put in a backup.
@@ -61,6 +98,51 @@ services:
       - IMAGE_S3_REGION=${IMAGE_S3_REGION:-}
       - IMAGE_S3_ACCESS_KEY_ID=${IMAGE_S3_ACCESS_KEY_ID:-}
       - IMAGE_S3_SECRET_ACCESS_KEY=${IMAGE_S3_SECRET_ACCESS_KEY:-}
+      # Backups off the server (optional): up to two S3-compatible destinations for the main server's LOCKED backups.
+      # EMPTY = none, as every node starts; more can be added in Settings. None is BeanPool's and none is needed. From
+      # .env only: never stored in node_config, never put in a backup, never logged. See .env.example and
+      # apps/server/src/services/offbox-backups.ts.
+      - BACKUP_OFFBOX_1_ENDPOINT=${BACKUP_OFFBOX_1_ENDPOINT:-}
+      - BACKUP_OFFBOX_1_BUCKET=${BACKUP_OFFBOX_1_BUCKET:-}
+      - BACKUP_OFFBOX_1_REGION=${BACKUP_OFFBOX_1_REGION:-}
+      - BACKUP_OFFBOX_1_PREFIX=${BACKUP_OFFBOX_1_PREFIX:-}
+      - BACKUP_OFFBOX_1_ACCESS_KEY_ID=${BACKUP_OFFBOX_1_ACCESS_KEY_ID:-}
+      - BACKUP_OFFBOX_1_SECRET_ACCESS_KEY=${BACKUP_OFFBOX_1_SECRET_ACCESS_KEY:-}
+      - BACKUP_OFFBOX_1_NAME=${BACKUP_OFFBOX_1_NAME:-}
+      - BACKUP_OFFBOX_2_ENDPOINT=${BACKUP_OFFBOX_2_ENDPOINT:-}
+      - BACKUP_OFFBOX_2_BUCKET=${BACKUP_OFFBOX_2_BUCKET:-}
+      - BACKUP_OFFBOX_2_REGION=${BACKUP_OFFBOX_2_REGION:-}
+      - BACKUP_OFFBOX_2_PREFIX=${BACKUP_OFFBOX_2_PREFIX:-}
+      - BACKUP_OFFBOX_2_ACCESS_KEY_ID=${BACKUP_OFFBOX_2_ACCESS_KEY_ID:-}
+      - BACKUP_OFFBOX_2_SECRET_ACCESS_KEY=${BACKUP_OFFBOX_2_SECRET_ACCESS_KEY:-}
+      - BACKUP_OFFBOX_2_NAME=${BACKUP_OFFBOX_2_NAME:-}
+      - BACKUP_OFFBOX_INTERVAL_HOURS=${BACKUP_OFFBOX_INTERVAL_HOURS:-}
+      - BACKUP_OFFBOX_RETENTION_DAYS=${BACKUP_OFFBOX_RETENTION_DAYS:-}
+      # Where this server's alerts go (optional): an ntfy topic URL (ALERTS_WEBHOOK_FORMAT=ntfy, the default) or any URL
+      # that takes a JSON POST (json), with an optional bearer token. EMPTY = none, as every node starts: the owners still
+      # get a push and a banner in Settings. Your channel, never BeanPool's. From .env only: never stored in node_config,
+      # never put in a backup or a standby's copy, never logged. Can be set in Settings instead (data/alerts.json, mode 600).
+      # See apps/server/src/services/alerts.ts.
+      - ALERTS_WEBHOOK_URL=${ALERTS_WEBHOOK_URL:-}
+      - ALERTS_WEBHOOK_FORMAT=${ALERTS_WEBHOOK_FORMAT:-}
+      - ALERTS_WEBHOOK_TOKEN=${ALERTS_WEBHOOK_TOKEN:-}
+      # Reports coming in: the first is told at once, the rest of this many minutes as one line (1 to 1440). EMPTY = 60.
+      # A child-safety report is always told at once.
+      - ALERTS_REPORT_FOLD_MINUTES=${ALERTS_REPORT_FOLD_MINUTES:-}
+      # The Expo access token this server's push notifications go with (Authorization: Bearer). EMPTY = pushes go
+      # without one, as they always have. Once BeanPool's Expo project asks for it, a phone's push token alone can no
+      # longer send that phone a notice. From .env only: never stored in node_config, never put in a backup, never logged.
+      # See apps/server/src/config/expo-access-token.ts.
+      - EXPO_ACCESS_TOKEN=${EXPO_ACCESS_TOKEN:-}
+      # The key vault's PUBLIC ticket keys the open door takes (comma-separated, newest first, at most two). EMPTY on
+      # every node but BeanPool's own global one: its door then takes only its own nonce, as it always has, and needs
+      # nothing of BeanPool's. From .env only: never stored, never in a backup or a standby's copy; a standby gets the
+      # same line in its own .env. See apps/server/src/services/vault-ticket-keys.ts.
+      - BEANPOOL_VAULT_TICKET_KEYS=${BEANPOOL_VAULT_TICKET_KEYS:-}
+      # Private preview (apps/server/src/config/private-preview.ts): 1/true/yes/on = only invites made by the owner or an
+      # admin join, and visitors see nothing. Empty or 0/false/no/off = off. Any other value stops the node at start, so a
+      # typo never leaves it open.
+      - PRIVATE_PREVIEW=${PRIVATE_PREVIEW:-}
       # Apple `sub` parity probe (temporary — see routes/apple-probe.ts). Empty
       # default = the probe pages are not registered at all, which is what every
       # node except the one being tested should have. APPLE_DOMAIN_ASSOCIATION is
@@ -114,28 +196,29 @@ services:
       # thread's copy of the setting, and it is on from the first instruction
       # rather than from the first import. Supported since Node 22.13; the image
       # is node:22-alpine3.21 (22.21.1), measured.
-      - NODE_OPTIONS=--max-old-space-size=512 --report-on-signal --report-directory=/data --report-uncaught-exception --report-exclude-env
+      # --report-exclude-network: no network interfaces in a report, and no DNS
+      # lookup of each open connection's address while one is written (on a
+      # direct-mode server those are members' addresses). The server takes the
+      # addresses themselves out of each report (apps/server/src/process-handlers.ts).
+      - NODE_OPTIONS=--max-old-space-size=512 --report-on-signal --report-directory=/data --report-uncaught-exception --report-exclude-env --report-exclude-network
+    # No Docker socket, and no cloudflared service: the tunnel for a <name>.beanpool.org address runs INSIDE this container,
+    # started and restarted by the server itself (apps/server/src/services/tunnel-connector.ts). Anything that can use
+    # /var/run/docker.sock controls the whole machine, so it is never mounted here.
     volumes:
       - ./data:/data
-      - /var/run/docker.sock:/var/run/docker.sock
+    # The tunnel runs inside this container; a tunnel whose settings still say `beanpool-node` (set before it moved in here)
+    # must reach THIS community's server, never another stack's on beanpool-shared, where every community's server has
+    # that name too and Docker can answer with any of them. This wins over Docker's DNS.
+    extra_hosts:
+      - "beanpool-node:127.0.0.1"
     networks:
       - default
       - beanpool-shared
     restart: unless-stopped
-    logging: *default-logging
-
-  cloudflared:
-    profiles:
-      - tunnel
-    image: cloudflare/cloudflared:latest
-    command: tunnel --no-autoupdate run --token-file /data/tunnel-token
-    volumes:
-      - ./data:/data:ro
-    # NOTE: cloudflared must NOT join beanpool-shared — all node stacks use the
-    # same service name "beanpool-node", so Docker DNS round-robins across them.
-    # Keeping cloudflared on the project-default network ensures it always routes
-    # to this stack's node only.
-    restart: unless-stopped
+    # On a stop (docker compose up recreating the container, docker stop, docker compose down) the node closes its
+    # database and marks the stop clean, in milliseconds (apps/server/src/engine/shutdown-recovery.ts). 20 s rather than
+    # Docker's 10 before a kill is room for a slow disk; a kill is what shows owners "an unclean shutdown".
+    stop_grace_period: 20s
     logging: *default-logging
 
 networks:

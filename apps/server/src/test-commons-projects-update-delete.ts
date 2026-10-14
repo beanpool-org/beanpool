@@ -19,9 +19,10 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, createProject, getAllProjects } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db, getCrowdfundProjects, getCrowdfundProject } from './db/db.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
-const PORT = 8559;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -33,9 +34,10 @@ function makeMember(callsign: string) {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(
-        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_url)
-         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'data:image/png;base64,iVBORw0KGgo=')`
+        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubKeyHex, callsign);
+    setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
@@ -63,7 +65,8 @@ async function main() {
 
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const proposer = makeMember('proposer');
     const attacker = makeMember('attacker');
@@ -141,19 +144,20 @@ async function main() {
     const cfProjAfterDelete = getCrowdfundProject(projectId);
     assert(cfProjAfterDelete === undefined, 'Deleted project returns undefined from getCrowdfundProject(id)');
 
-    const cfGetRes = await fetch(`${BASE}/api/crowdfund/projects/${projectId}`);
+    // Read by a member (another than its proposer): the crowdfunds and the enterprises are members' reads (2026-10-01).
+    const cfGetRes = await signedFetch('GET', `/api/crowdfund/projects/${projectId}`, attacker);
     assert(cfGetRes.status === 404, `GET /api/crowdfund/projects/:id returns 404 after deletion (got ${cfGetRes.status})`);
 
     // Verify /api/treasuries excludes deleted and bounded enterprises by default
-    const treasuriesRes = await fetch(`${BASE}/api/treasuries`).then(r => r.json()) as any;
+    const treasuriesRes = (await signedFetch('GET', '/api/treasuries', attacker)).body;
     assert(!treasuriesRes.treasuries.some((t: any) => t.publicKey === projectId), 'Deleted project is not in /api/treasuries');
 
-    // 7. Test POST /api/commons/projects/delete: Deleting non-existent/already deleted project returns 400
+    // 7. Test POST /api/commons/projects/delete: Deleting non-existent/already deleted project returns 404
     const repeatDeleteRes = await signedFetch('POST', '/api/commons/projects/delete', proposer, {
         proposerPubkey: proposer.pubKeyHex,
         projectId,
     });
-    assert(repeatDeleteRes.status === 400, `Deleting non-existent project returns 400 (got ${repeatDeleteRes.status})`);
+    assert(repeatDeleteRes.status === 404, `Deleting non-existent project returns 404 (got ${repeatDeleteRes.status})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -30,6 +30,7 @@
  */
 
 import fs from 'node:fs';
+import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { Readable } from 'node:stream';
@@ -37,13 +38,20 @@ import { pipeline } from 'node:stream/promises';
 import { generateKeyPair, privateKeyFromProtobuf, privateKeyToProtobuf } from '@libp2p/crypto/keys';
 import { peerIdFromPrivateKey, peerIdFromString } from '@libp2p/peer-id';
 import { readSealedHeader, verifySealedHeader, type CodeStanza, type SealedEnvelopeHeader } from '@beanpool/core';
-import { sealFileVerified, checkBackupArchive, MISSING_MEMBER, IN_BUCKET_MEMBER } from './sealed-backup.js';
+import { sealFileVerified, MISSING_MEMBER, IN_BUCKET_MEMBER } from './sealed-backup.js';
+import { extractBackupArchive } from './restore-checks.js';
 import { peerIdOfKeyFile } from './takeover-envelope.js';
+import { forgetAddressesInStoredCopy } from './address-retention.js';
+import { isAutomationTokenShape } from '../automation-tokens.js';
+import { redirectRefusal } from './credential-redirect.js';
 
 export interface FleetNodeConfig {
     id: string;
     name: string;
     url: string;
+    /** An owner's automation token with the backups scope (bp_<id>_<secret>, made in the node's Settings). Sent as
+     *  `Authorization: Bearer`, and then nothing else is: the admin password below is the legacy credential. */
+    automationToken?: string;
     adminPassword?: string;
     replicationToken?: string;
     /** The node's PeerId (its libp2p key), set by the operator. The seal-old pass trusts only a header it signed. */
@@ -76,12 +84,11 @@ export interface NodeHarvestState {
     /**
      * The node's latest backup came back SHORT: it carried fewer image objects than its own database
      * references, and named the missing keys inside the archive. Not a failure — the file was kept, and it is
-     * the most complete backup that node can make. Kept in harvester-state.json, and in the
-     * `/api/manager/backups/status` payload, until a pull comes back whole; cleared by any complete pull.
+     * the most complete backup that node can make. Kept in harvester-state.json until a pull comes back whole;
+     * cleared by any complete pull.
      *
-     * No dashboard view renders it yet. What tells an operator today is the SHORT line
-     * {@link pullBackupForNode} logs on every such pull, and the alert the manager's download of the kept copy
-     * raises from its `X-Backup-Images` / `X-Backup-Missing-Images` headers.
+     * No dashboard view renders it (the fleet manager's routes were deleted 2026-10-02). What tells an operator is the
+     * SHORT line {@link pullBackupForNode} logs on every such pull, and the manifest kept beside the copy.
      */
     shortImages?: { missing: number; note: string; since: string };
     /** The node key the seal-old pass trusts, and where it came from. */
@@ -160,14 +167,21 @@ export function getNodes(): FleetNodeConfig[] {
             if (Array.isArray(parsed) && parsed.length > 0) return parsed;
         }
     } catch (e) {
-        console.warn('[Harvester] Failed to read manager-nodes.json:', e);
+        // The path and what failed, never the error's text: JSON.parse's message can quote the file around the error, and
+        // the file holds owner tokens and passwords. Only the position is kept from it.
+        const at = e instanceof SyntaxError ? /(line \d+ column \d+|position \d+)/.exec(e.message)?.[1] : null;
+        const what = e instanceof SyntaxError ? `not valid JSON${at ? ` (at ${at})` : ''}` : ((e as NodeJS.ErrnoException)?.code ?? 'unreadable');
+        console.warn(`[Harvester] Failed to read ${NODES_FILE}: ${what}. Using the built-in node list.`);
     }
     return DEFAULT_NODES;
 }
 
+/** manager-nodes.json holds owner tokens and passwords: readable by the fleet manager's user only. An existing file made
+ *  by hand with the usual 0644 is put back to 0600 before anything is written into it. */
 export function saveNodes(nodes: FleetNodeConfig[]): void {
     fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(NODES_FILE, JSON.stringify(nodes, null, 2));
+    if (fs.existsSync(NODES_FILE)) fs.chmodSync(NODES_FILE, 0o600);
+    writeFileAtomic(NODES_FILE, JSON.stringify(nodes, null, 2), { mode: 0o600 });
 }
 
 export function loadHarvestState(): Record<string, NodeHarvestState> {
@@ -181,7 +195,7 @@ export function loadHarvestState(): Record<string, NodeHarvestState> {
 
 function saveHarvestState(state: Record<string, NodeHarvestState>): void {
     fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    writeFileAtomic(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
 function normalizeUrl(url: string): string {
@@ -191,15 +205,11 @@ function normalizeUrl(url: string): string {
     return trimmed.replace(/\/+$/, '');
 }
 
-/** Fetch remote counts from /api/community/info or /api/local/admin/diagnostics */
+/** Fetch remote counts from the public /api/community/info: it needs no credential, so none is sent. */
 async function fetchRemoteCounts(node: FleetNodeConfig): Promise<{ members: number; posts: number } | null> {
     try {
         const baseUrl = normalizeUrl(node.url);
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (node.adminPassword) headers['X-Admin-Password'] = node.adminPassword;
-        if (node.replicationToken) headers['X-Replication-Token'] = node.replicationToken;
-
-        const res = await fetch(`${baseUrl}/api/community/info`, { headers, signal: AbortSignal.timeout(10000) });
+        const res = await fetch(`${baseUrl}/api/community/info`, { signal: AbortSignal.timeout(10000) });
         if (res.ok) {
             const data = await res.json() as any;
             return {
@@ -400,7 +410,7 @@ function keepInBucketLabel(from: string, destDb: string): boolean {
  * `to` is removed first, never merged into: `attachments/<messageId>.bin` is keyed by the message id alone,
  * so the same key in two pulls is two different ciphertexts and a merge would keep the older one for ever.
  *
- * Symlinks are skipped. `checkBackupArchive` has already refused the whole archive if any member was a link,
+ * Symlinks are skipped. `extractBackupArchive` has already refused the whole archive if any member was a link,
  * so for the pull path this is belt and braces; for the daily copy the source is a tree this file wrote.
  */
 function replaceTree(from: string, to: string, link: boolean): { files: number; bytes: number } {
@@ -468,17 +478,21 @@ interface KeptBackup {
 }
 
 /** Keep a readable backup WHOLE: state.db, its images and any manifest, and one copy a day in history/. */
-function keepPlainBackup(node: FleetNodeConfig, tarPath: string): KeptBackup {
+async function keepPlainBackup(node: FleetNodeConfig, tarPath: string): Promise<KeptBackup> {
     const nodeDir = nodeDirOf(node);
     const extract = path.join(nodeDir, '.tmp-extract');
     fs.rmSync(extract, { recursive: true, force: true });
     fs.mkdirSync(extract, { recursive: true });
     try {
-        checkBackupArchive(tarPath, { requireStateDb: true });
-        execFileSync('tar', ['-xzf', tarPath, '-C', extract, '--no-same-owner', '--no-same-permissions']);
+        // Checked and unpacked in one pass by the restore's own reader (services/restore-checks.ts), never by `tar`.
+        const members = await extractBackupArchive(tarPath, extract);
+        if (!members.includes('state.db')) throw new Error('Invalid backup archive: state.db missing');
         const extractedDb = path.join(extract, 'state.db');
         if (!fs.existsSync(extractedDb) || !fs.lstatSync(extractedDb).isFile()) throw new Error('Downloaded backup did not contain state.db');
         const destDb = path.join(nodeDir, 'state.db');
+        // A server older than this one sends its internet addresses in its backup: they are not kept here either
+        // (services/address-retention.ts). One that holds none is kept byte for byte, as before.
+        forgetAddressesInStoredCopy(extractedDb);
         fs.copyFileSync(extractedDb, destDb);
         // The objects that database's rows name, and the manifest naming the ones the node could not send.
         // Without them this is the harvester's only copy of a node with no photos and no attachments in it —
@@ -568,21 +582,43 @@ export function listPlainHistory(target: string | FleetNodeConfig): { file: stri
  * backup it can by default and labels it, so the retry has nothing left to ask for.
  */
 export async function pullBackupForNode(node: FleetNodeConfig): Promise<PullResult> {
-    if (!node.adminPassword && !node.replicationToken) {
-        throw new Error('No admin credentials (adminPassword / replicationToken) configured');
+    if (!node.automationToken && !node.adminPassword && !node.replicationToken) {
+        throw new Error('No admin credentials (automationToken / adminPassword / replicationToken) configured');
+    }
+    // The whole shape, as the node checks it, before any header is built. The messages never repeat the value: fetch's
+    // own error for a header with a control character in it does, and the error is kept in harvester-state.json.
+    if (node.automationToken && !isAutomationTokenShape(node.automationToken)) {
+        throw new Error('automationToken is not an automation token (bp_ + 12 hex + _ + 64 hex, nothing before or after): make one with the backups scope in the node\'s Settings and copy it whole');
     }
 
     const baseUrl = normalizeUrl(node.url);
     const headers: Record<string, string> = {};
-    if (node.adminPassword) headers['X-Admin-Password'] = node.adminPassword;
-    if (node.replicationToken) headers['X-Replication-Token'] = node.replicationToken;
+    if (node.automationToken) {
+        // An owner's token with the backups scope: the node decides on it alone, so the password is never sent beside it.
+        headers['Authorization'] = `Bearer ${node.automationToken}`;
+    } else {
+        for (const [field, value] of [['adminPassword', node.adminPassword], ['replicationToken', node.replicationToken]] as const) {
+            // eslint-disable-next-line no-control-regex -- control characters are what this looks for
+            if (value && /[\x00-\x1f\x7f]/.test(value)) throw new Error(`${field} has a control character in it (a line break from a paste?): it cannot be sent`);
+        }
+        if (node.adminPassword) headers['X-Admin-Password'] = node.adminPassword;
+        if (node.replicationToken) headers['X-Replication-Token'] = node.replicationToken;
+    }
 
     const url = `${baseUrl}/api/local/admin/backup`;
+    // Never followed: a redirect would carry the password and the replication token to wherever it points, and that
+    // origin's answer would be kept as this node's backup (credential-redirect.ts).
     const res = await fetch(url, {
         method: 'POST',
         headers,
+        redirect: 'manual',
         signal: AbortSignal.timeout(120000),
     });
+    const refused = redirectRefusal(res, url);
+    if (refused) {
+        await res.body?.cancel().catch(() => {});
+        throw refused;
+    }
 
     if (!res.ok) {
         const body: any = await res.json().catch(() => null);
@@ -609,7 +645,7 @@ export async function pullBackupForNode(node: FleetNodeConfig): Promise<PullResu
         }
         if (start[0] === 0x1f && start[1] === 0x8b) {
             const message = notLockedMessage(res);
-            const kept = keepPlainBackup(node, incoming);
+            const kept = await keepPlainBackup(node, incoming);
             // What was KEPT, not what the node said it sent: this log line used to read `database + N image
             // object(s)` off the response headers while the code beside it threw the images away.
             console.warn(`[Harvester] ${node.name}: kept a readable backup (${describeKept(kept)}). ${message}`);
@@ -688,7 +724,7 @@ async function harvesterSigner(): Promise<{ peerId: string; seed: Uint8Array }> 
     } else {
         fs.mkdirSync(DATA_DIR, { recursive: true });
         bytes = privateKeyToProtobuf(await generateKeyPair('Ed25519'));
-        fs.writeFileSync(keyPath, bytes, { mode: 0o600 });
+        writeFileAtomic(keyPath, bytes, { mode: 0o600 });
     }
     const priv = privateKeyFromProtobuf(bytes);
     if (priv.type !== 'Ed25519') throw new Error('harvester-seal.key is not an Ed25519 key');

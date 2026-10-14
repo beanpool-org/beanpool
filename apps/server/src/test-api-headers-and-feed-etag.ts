@@ -38,9 +38,10 @@ import {
 import { db } from './db/db.js';
 import { recordActivity, pruneOldActivity } from './db/activity-feed-db.js';
 import { startHttpsServer } from './https-server.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
-const PORT = 8561;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -65,12 +66,14 @@ async function main(): Promise<void> {
     const authorPk = authorKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     const authorCallsign = 'HeaderTester_' + crypto.randomBytes(4).toString('hex');
     db.prepare(`
-        INSERT INTO members (public_key, callsign, joined_at, avatar_url)
-        VALUES (?, ?, ?, ?)
-    `).run(authorPk, authorCallsign, new Date().toISOString(), 'bundled://seed');
+        INSERT INTO members (public_key, callsign, joined_at)
+        VALUES (?, ?, ?)
+    `).run(authorPk, authorCallsign, new Date().toISOString());
+    setMemberPhoto(db, authorPk, 'bundled://seed');
 
     // Start real HTTPS server
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // GET signed as the member (replay-proof headers; the path is signed without its query string).
     const memberFetch = (path: string, extra: Record<string, string> = {}) => {

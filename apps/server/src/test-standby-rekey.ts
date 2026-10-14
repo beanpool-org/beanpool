@@ -34,6 +34,8 @@
  *     under every replaced key: none is left under Bea's first key, nor under Cat's old key and Bea's first.
  * 6c. A re-key's start and its completion stamped in one millisecond reach the standby in two copies: the completion is
  *     taken, with the key that replaced the old one, and the start, again, does not undo it.
+ * 6f. Gil's re-key code is made, copied, then cancelled on the main server: the standby's next delta frees his key (the
+ *     cancel's tombstone), and after the take-over his key reads his account.
  * 6d. Between two pulls, Dan stops going to an event, he and Fay unfriend each other, a convenor removes him from one group
  *     and he leaves another (each delete writing its tombstones, under his key), and he is then re-keyed. The standby's
  *     next pull is a delta, then a whole copy: after each, his RSVPs, friend rows, chat places and group rows are the main
@@ -55,6 +57,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, post, type NodeProc } from './takeover-test-harness.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
@@ -232,6 +235,15 @@ async function child(): Promise<void> {
                 marker: (db.prepare("SELECT value FROM node_config WHERE key = 'replicated_invalidated_keys_v1'").get() as { value: string } | undefined)?.value ?? null,
             };
         },
+        // A re-key code made, and cancelled, as the admin routes make them (engine/member-wizards.ts).
+        'rekey-issue': async (a: { pk: string; operator: string }) => {
+            const { issueRekeyCode } = await import('./engine/member-wizards.js');
+            return issueRekeyCode(a.pk, a.operator).code;
+        },
+        'rekey-cancel': async (a: { pk: string; operator: string }) => {
+            const { cancelRekeyCode } = await import('./engine/member-wizards.js');
+            return cancelRekeyCode(a.pk, a.operator);
+        },
         // A standby as a version from before this left it: no replaced key of its main server's, and no word of them.
         'as-old-standby': async () => {
             const { db } = await import('./db/db.js');
@@ -265,7 +277,7 @@ async function child(): Promise<void> {
             const se = await import('./state-engine.js');
             const { db } = await import('./db/db.js');
             // A photo, which posting asks of its author.
-            db.prepare('UPDATE members SET avatar_url = ? WHERE public_key = ?').run('data:image/png;base64,iVBORw0KGgo=', a.owner);
+            setMemberPhoto(db, a.owner, 'data:image/png;base64,iVBORw0KGgo=');
             const kept = se.createGroup({ name: 'Garden', createdBy: a.owner, joinPolicy: 'open' });
             const left = se.createGroup({ name: 'Choir', createdBy: a.owner, joinPolicy: 'open' });
             const event = se.createPost('event', 'community', 'Working bee', 'Bring gloves', 0, 'fixed', a.owner, -28.55, 153.5, [], false, undefined, false,
@@ -316,7 +328,10 @@ async function child(): Promise<void> {
             const { postEventThreadMessage, canReadEventThread, loadEventForThread } = await import('./engine/event-thread.js');
             const sent: { threadType?: string; recipients?: string[] }[] = [];
             const cb = { broadcast: (event: any, recipients?: string[]) => { sent.push({ threadType: event?.threadType, recipients }); }, dispatchPushNotification: () => {} };
-            postGroupThreadMessage(cb as any, a.group, a.author, 'Seedlings on Saturday');
+            // The group's chat takes sealed lines only (group chats step 2): one under the group's current epoch.
+            const { db } = await import('./db/db.js');
+            const { lockedGroupLine } = await import('./group-test-payload.js');
+            postGroupThreadMessage(cb as any, a.group, a.author, lockedGroupLine(db, a.group));
             postEventThreadMessage(cb as any, a.event, a.author, 'Gloves are in the shed');
             const event = loadEventForThread(a.event);
             return {
@@ -410,7 +425,6 @@ async function main(): Promise<void> {
     const dirs = { main: path.join(root, 'main'), standby: path.join(root, 'standby') };
     const nodes: NodeProc[] = [];
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const pw = (p: string) => ({ 'X-Admin-Password': p });
     const anna = newId('Anna');
     const rex = newId('Rex'), rex2 = newId('Rex (new phone)');
     const sue = newId('Sue'), sue2 = newId('Sue (new phone)');
@@ -419,6 +433,7 @@ async function main(): Promise<void> {
     const bea2 = newId('Bea (second phone)'), bea3 = newId('Bea (third phone)'), cat2 = newId('Cat (new phone)');
     const dan = newId('Dan'), dan2 = newId('Dan (new phone)'), fay = newId('Fay');
     const eve = newId('Eve'), eve2 = newId('Eve (second phone)'), eve3 = newId('Eve (third phone)');
+    const gil = newId('Gil');
 
     /** Both servers agree: each key's rows, every balance and their sum. */
     const agree = async (main: NodeProc, standby: NodeProc, who: string, oldId: Id, newId_: Id) => {
@@ -445,7 +460,7 @@ async function main(): Promise<void> {
         const { owner, code } = await main.send('setup-primary', { ownerSeedHex: anna.seedHex, replicationToken });
         require_(owner === anna.pk, 'Anna owns the main server');
         await main.send('members', {
-            members: [['Rex', rex.pk, owner], ['Sue', sue.pk, owner], ['Tom', tom.pk, owner], ['Bea', bea.pk, owner], ['Cat', cat.pk, rex.pk]],
+            members: [['Rex', rex.pk, owner], ['Sue', sue.pk, owner], ['Tom', tom.pk, owner], ['Bea', bea.pk, owner], ['Cat', cat.pk, rex.pk], ['Gil', gil.pk, owner]],
         });
         await main.send('seed-rows', { pk: rex.pk, peer: bea.pk, tag: 'rex' });
         await main.send('seed-rows', { pk: sue.pk, peer: cat.pk, tag: 'sue' });
@@ -481,8 +496,11 @@ async function main(): Promise<void> {
         const rexAfter = await agree(main, standby, 'Rex', rex, rex2);
         assert(rexAfter.s.members[rex2.pk]?.updated_at === rexAfter.m.members[rex2.pk]?.updated_at,
             `his row keeps the main server's stamp (${rexAfter.s.members[rex2.pk]?.updated_at} / ${rexAfter.m.members[rex2.pk]?.updated_at})`);
-        assert(rexAfter.s.keyRows[rex2.pk]['recovery_shares.owner_pubkey'] === 1 && rexAfter.s.keyRows[rex2.pk]['recovery_shares.holder_ref'] === 1,
-            'his recovery copy and the keeper copy he holds for Bea are under the new key there, once each');
+        // Since #1768 the main server deletes a re-keyed member's own copies (they rebuild the replaced seed) with a tombstone,
+        // and renames the copies they keep for others.
+        assert(rexAfter.s.keyRows[rex2.pk]['recovery_shares.owner_pubkey'] === 0 && rexAfter.s.keyRows[rex.pk]['recovery_shares.owner_pubkey'] === 0
+            && rexAfter.s.keyRows[rex2.pk]['recovery_shares.holder_ref'] === 1,
+            'his own recovery copy is gone there under both keys, as on the main server, and the keeper copy he holds for Bea is under the new key, once');
         await main.send('set-bio', { pk: rex2.pk, bio: 'New phone, same Rex' });
         const later = await standby.send('pull', {});
         const bio = (await standby.send('state', { keys: [rex2.pk] })).members[rex2.pk]?.bio;
@@ -552,9 +570,9 @@ async function main(): Promise<void> {
             `every row names the key the main server has it under (${JSON.stringify(sh.keyRows[bea.pk])} / ${JSON.stringify(mh.keyRows[bea.pk])})`);
         assert([bea.pk, bea2.pk, cat.pk].every((k) => Object.values(sh.keyRows[k] as Record<string, number>).every((n) => n === 0)),
             `none names a replaced key: no recovery copy is left under one (${JSON.stringify(sh.keyRows[bea.pk])}, ${JSON.stringify(sh.keyRows[cat.pk])})`);
-        assert(sh.keyRows[bea3.pk]['recovery_shares.owner_pubkey'] === 2 && sh.keyRows[bea3.pk]['recovery_shares.holder_ref'] === 1
-            && sh.keyRows[cat2.pk]['recovery_shares.owner_pubkey'] === 2,
-            `Bea's two copies and the copy of Cat's she keeps are under her last key, and Cat's two under his new one, once each (${JSON.stringify(sh.keyRows[bea3.pk])})`);
+        assert(sh.keyRows[bea3.pk]['recovery_shares.owner_pubkey'] === 0 && sh.keyRows[bea3.pk]['recovery_shares.holder_ref'] === 0
+            && sh.keyRows[cat2.pk]['recovery_shares.owner_pubkey'] === 0,
+            `every copy of a replaced seed is gone, as on the main server: Bea's two, Cat's two and the copy of Cat's she kept (#1768) (${JSON.stringify(sh.keyRows[bea3.pk])})`);
         assert(same(heldBy(sh.accounts, mh.accounts), mh.accounts) && sh.sum === mh.sum, `every balance is the main server's (sum ${sh.sum} / ${mh.sum})`);
 
         // ── 6c. A re-key's two steps in one millisecond ──
@@ -622,15 +640,35 @@ async function main(): Promise<void> {
         assert(eveWhole.ok === true && eveWhole.whole === true, `the standby imports the whole copy (${JSON.stringify({ ok: eveWhole.ok, error: eveWhole.error, whole: eveWhole.whole })})`);
         await socialAgrees('Eve', eveKeys, mainEve, 'after the whole copy');
 
+        // ── 6f. A re-key code made and cancelled ──
+        console.log('\n— 6f. Gil\'s re-key code is made, copied, then cancelled —');
+        {
+            require_(typeof await main.send('rekey-issue', { pk: gil.pk, operator: anna.pk }) === 'string', 'Anna makes Gil a re-key code on the main server');
+            const held = await standby.send('pull', {});
+            require_(held.ok, `the standby copies it (${JSON.stringify({ ok: held.ok, error: held.error })})`);
+            const before = await standby.send('state', { keys: [gil.pk] });
+            assert(before.invalidated.some((r: any) => r.public_key === gil.pk && r.reason === 'rekey_pending') && before.members[gil.pk]?.status === 'suspended',
+                `on the standby, Gil's key is held and he is suspended (${JSON.stringify(before.members[gil.pk])})`);
+            const undone = await main.send('rekey-cancel', { pk: gil.pk, operator: anna.pk });
+            require_(undone?.cancelled === true && undone.status === 'active', `Anna cancels the code (${JSON.stringify(undone)})`);
+            const freed = await standby.send('pull', {});
+            require_(freed.ok && !freed.whole, `the standby's next pull is a delta (${JSON.stringify({ ok: freed.ok, error: freed.error, whole: freed.whole })})`);
+            const after = await standby.send('state', { keys: [gil.pk] });
+            assert(!after.invalidated.some((r: any) => r.public_key === gil.pk) && after.members[gil.pk]?.status === 'active',
+                `on the standby, Gil's key is free and he is active again (${JSON.stringify(after.invalidated.filter((r: any) => r.public_key === gil.pk))} ${JSON.stringify(after.members[gil.pk])})`);
+        }
+
         // ── 7. The take-over ──
         console.log('\n— 7. the main server dies and the standby takes over —');
         await main.send('reseal');
         const envelope = await standby.send('envelope');
         require_(envelope === 'stored' || envelope === 'unchanged', `the standby holds the main server's latest take-over keys (${envelope})`);
         await main.kill('SIGKILL');
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code }, pw(PW_STANDBY));
+        // Step 7c: the take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session).
+        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code }, standbyOwner);
         require_(opened.status === 200, `the recovery code opens the keys (${opened.status} ${opened.body?.error ?? ''})`);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, pw(PW_STANDBY));
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         require_(confirmed.status === 200, `confirmed (${confirmed.status})`);
         const exit = await standby.exited;
         assert(exit === 0, `the standby restarts itself (exit ${exit})`);
@@ -644,6 +682,8 @@ async function main(): Promise<void> {
             const r = await me(id);
             assert(r.status === 403 && r.body?.code === 'key_invalidated', `${id.name}'s old key signs nothing on the new main server: the middleware refuses it (${r.status} ${JSON.stringify(r.body)})`);
         }
+        const gilNow = await me(gil);
+        assert(gilNow.status === 200, `Gil, whose re-key code was cancelled, reads his account with his key there (${gilNow.status} ${JSON.stringify(gilNow.body)?.slice(0, 120)})`);
         const rexNow = await me(rex2);
         assert(rexNow.status === 200, `Rex's new key reads his account there (${rexNow.status} ${JSON.stringify(rexNow.body)?.slice(0, 120)})`);
         const knock = await call(port, rex, 'POST', '/api/join/knock', { callsign: 'Rex', message: 'Hello, I lost my phone.' });
@@ -652,9 +692,10 @@ async function main(): Promise<void> {
         assert(door.status === 403 && door.body?.code === 'key_invalidated', `the open door refuses it (${door.status} ${JSON.stringify(door.body)})`);
         const inviteCode = await standby.send('make-invite', { pk: anna.pk });
         require_(typeof inviteCode === 'string', `Anna makes an invite on the new main server (${inviteCode})`);
-        const invite = await call(port, null, 'POST', '/api/invite/redeem', { code: inviteCode, publicKey: rex.pk, callsign: 'RexAgain' });
+        // Signed with his old key, as his old phone would: a redeem must be signed by the key it names.
+        const invite = await call(port, rex, 'POST', '/api/invite/redeem', { code: inviteCode, publicKey: rex.pk, callsign: 'RexAgain' });
         assert(invite.status === 400 && /replaced by a new one/.test(invite.body?.error ?? ''), `an invite refuses it (${invite.status} ${JSON.stringify(invite.body)})`);
-        const ticket = await call(port, null, 'POST', '/api/invite/redeem-offline', { ticketB64: offlineTicket(anna), publicKey: rex.pk, callsign: 'RexAgain' });
+        const ticket = await call(port, rex, 'POST', '/api/invite/redeem-offline', { ticketB64: offlineTicket(anna), publicKey: rex.pk, callsign: 'RexAgain' });
         assert(ticket.status === 400 && /replaced by a new one/.test(ticket.body?.error ?? ''), `an offline ticket refuses it (${ticket.status} ${JSON.stringify(ticket.body)})`);
 
         // What the deletes before a re-key keep from a member who was removed, after a take-over.

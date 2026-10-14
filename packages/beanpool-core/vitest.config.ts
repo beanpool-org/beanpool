@@ -19,5 +19,9 @@ export default defineConfig({
     test: {
         minWorkers: process.env.CI ? 1 : undefined,
         maxWorkers: process.env.CI ? 2 : undefined,
+        // Set by scripts/test-all.sh only (a busy shared Mac); the scrypt suites time out at 5 s
+        // under load. Unset for a developer running `npx vitest` directly.
+        testTimeout: process.env.TEST_ALL_TIMEOUT_MS ? Number(process.env.TEST_ALL_TIMEOUT_MS) : undefined,
+        hookTimeout: process.env.TEST_ALL_TIMEOUT_MS ? Number(process.env.TEST_ALL_TIMEOUT_MS) : undefined,
     },
 });

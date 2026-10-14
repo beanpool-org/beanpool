@@ -9,6 +9,7 @@ import crypto from 'node:crypto';
 import { db, initSchema } from './db/db.js';
 import { createPost } from './state-engine.js';
 import { createGroupRoutes } from './routes/groups.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let passed = 0;
 let run = 0;
@@ -28,9 +29,10 @@ function makeMember(callsign: string): string {
     const pubkey = crypto.randomBytes(32).toString('hex');
     const uniqueCallsign = `${callsign}_${crypto.randomBytes(4).toString('hex')}`;
     db.prepare(`
-        INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, earned_credit)
-        VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'bundled://sprout', 'active', 50)
+        INSERT INTO members (public_key, callsign, joined_at, status, earned_credit)
+        VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', 50)
     `).run(pubkey, uniqueCallsign);
+    setMemberPhoto(db, pubkey, 'bundled://sprout');
     // Give member initial offer to satisfy covenant
     createPost('offer', 'other', `${callsign}'s Seed Offer`, 'Offer for covenant', 10, 'fixed', pubkey, undefined, undefined, [], false);
     return pubkey;
@@ -41,8 +43,15 @@ async function dispatch(router: any, method: string, path: string, ctx: any) {
     ctx.path = path;
     ctx.url = path;
     ctx.request = ctx.request || {};
+    ctx.set = ctx.set || (() => {});
     const middleware = router.routes();
     await middleware(ctx, async () => {});
+    // A roster is sent as a stream of its shared bytes (roster-snapshots.ts): read it back as the JSON it is.
+    if (ctx.body && typeof ctx.body.pipe === 'function') {
+        const chunks: Buffer[] = [];
+        for await (const c of ctx.body) chunks.push(Buffer.from(c));
+        ctx.body = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    }
     return ctx;
 }
 

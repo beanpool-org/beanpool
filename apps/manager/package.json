@@ -10,6 +10,8 @@
     "test": "vitest run",
     "preview": "vite preview",
     "test:phone-width": "node e2e/phone-width.mjs",
+    "test:connected-assistants": "node e2e/connected-assistants.mjs",
+    "test:agent-suggestions": "node e2e/agent-suggestions.mjs",
     "screenshots": "node e2e/screenshots.mjs",
     "manual-shots": "node e2e/manual-shots.mjs"
   },

@@ -66,6 +66,7 @@ export default {
           input: 'var(--border-input)',
         },
         accent: 'var(--accent)',
+        link: 'var(--link)',
       },
       fontFamily: {
         sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],

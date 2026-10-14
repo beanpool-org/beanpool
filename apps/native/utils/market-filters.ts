@@ -16,7 +16,7 @@
  * screen: a filter the member cannot see never hides a post.
  */
 
-import { tierIndexForCredit } from '@beanpool/core';
+import { foldApostrophes, HOME_SEARCH_MAX_CHARS, searchTermsFor, tierIndexForCredit } from '@beanpool/core';
 import { CATEGORY_META, normalizeCategory } from '../constants/categories';
 import { EVENT_WINDOWS, eventInWindow, isEventInFeed, type EventWindow } from './events';
 import type { FilterChip } from './filter-chips';
@@ -31,6 +31,41 @@ export const MARKET_TYPE_PILLS: ReadonlyArray<{ id: MarketTypeFilter; label: str
     { id: 'events', label: 'Events' },
     { id: 'polls', label: 'Polls' },
 ];
+
+/**
+ * The pill a link opens the Market on (`/(tabs)/market?filter=…`): Home's "All events" and its Decide card's polls line
+ * (utils/home-cards.ts `POLLS_HREF`). Null for anything else, and the Market stays as it was.
+ */
+export function marketFilterFromLink(value: string | string[] | undefined): Extract<MarketTypeFilter, 'events' | 'polls'> | null {
+    const v = Array.isArray(value) ? value[0] : value;
+    return v === 'events' || v === 'polls' ? v : null;
+}
+
+/**
+ * The words a link fills the Market's search with (`/(tabs)/market?q=…`): a saved search's "See more" on Home. Trimmed,
+ * at most a saved search's 40 characters; null for none, and the search stays as it was.
+ */
+export function marketSearchFromLink(value: string | string[] | undefined): string | null {
+    const v = (Array.isArray(value) ? value[0] : value)?.trim().slice(0, HOME_SEARCH_MAX_CHARS).trim();
+    return v ? v : null;
+}
+
+/**
+ * The words the Market's search asks the node for (`q=`): core's `searchTermsFor`, the terms Home's saved-search card
+ * asks with, so a search in any script sends its words (яйца, jardín, 蛋) and the synonyms of the ones the map knows.
+ */
+export function marketSearchQuery(search: string): string {
+    return searchTermsFor(search).join(' ');
+}
+
+/**
+ * Whether a listing's title or description holds one of the search's terms: the Market's own filter, for a node without FTS.
+ * The apostrophes are folded on both sides, so "don't" finds "Don’t miss", typed on iOS (#1828 check, finding 1).
+ */
+export function marketSearchMatches(p: { title?: string | null; description?: string | null }, search: string): boolean {
+    const text = foldApostrophes(`${(p.title ?? '').toLowerCase()} ${(p.description ?? '').toLowerCase()}`);
+    return searchTermsFor(search).some(term => text.includes(foldApostrophes(term)));
+}
 
 export type MarketExtraFilter = 'distance' | 'trust' | 'beans';
 

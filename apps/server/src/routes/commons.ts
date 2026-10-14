@@ -2,16 +2,19 @@
  * Community Commons, Crowdfund Projects, and Community Decision routes.
  */
 
+import { repaymentOf } from '../engine/names-debts.js';
+import { REQUEST_ID_REUSED_CODE } from '../engine/money-requests.js';
 import Router from '@koa/router';
 import {
     createProject, updateProject, deleteProject,
     getProjects, getAllProjects,
     getCommonsBalance,
     adminRejectProject,
-    createDecision, getDecision, publicDecision, getAllDecisions, getOpenDecisions,
+    createDecision, getDecision, decisionForReader, getAllDecisions, getOpenDecisions,
     castDecisionVote, tallyDecision,
     getDecisionVoiceCredits, getOwnDecisionVotes, getVoiceCredits, hasCompletedTrade,
     checkProposalStanding, isNodeMember,
+    payToCommons,
 } from '../state-engine.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
 import { FEATURE_OFF } from '../config/node-profile.js';
@@ -27,9 +30,13 @@ import { getThresholds } from '../config/local-config.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
 import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
-import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
+import { respondProfileRefusal, respondIfMuted, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
+import { assertEnterpriseText } from '../engine/enterprise-text.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import type { RouteDeps } from './types.js';
+import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
+import { readProjectDeadline } from './project-deadline.js';
+import { answerPotPaused } from '../engine/audit.js';
 
 export function createCommonsRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -38,6 +45,32 @@ export function createCommonsRoutes(deps: RouteDeps): Router {
 
 router.get('/api/commons/balance', async (ctx) => {
     ctx.body = { balance: getCommonsBalance() };
+});
+
+// Paying back a debt (community modes slice 5, design §4.2 (a)): a member sends Beans they hold to the Commons; an admin
+// links the payment to the debt record (POST /api/names/debts/:id/settle). Only what they hold: never into debt.
+router.post('/api/commons/pay', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) { ctx.status = 401; ctx.body = { error: 'A signed request is required' }; return; }
+    // `requestId` (engine/money-requests.ts): the app's id for this one payment, so a retry is never paid twice.
+    const { amount, debtId, requestId } = (ctx as any).requestBody || {};
+    try {
+        ctx.body = payToCommons(actor, amount, debtId, requestId);
+    } catch (e: any) {
+        ctx.status = typeof e?.status === 'number' ? e.status : 400;
+        ctx.body = { error: e?.message || 'Could not pay the Commons', ...(e?.code === REQUEST_ID_REUSED_CODE ? { code: e.code } : {}) };
+    }
+});
+
+// A member working off a debt reads why their incoming Beans go to the Commons: what is owed and what is repaid, and the
+// debt's id (their own pay-back code), so the apps' Pay the Commons pays it off at once rather than without the code.
+// Their own only (repaymentOf the signed actor); no entry, no name.
+router.get('/api/commons/repayment', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) { ctx.status = 401; ctx.body = { error: 'A signed request is required' }; return; }
+    ctx.set('Cache-Control', 'no-store');
+    const r = repaymentOf(actor.toLowerCase());
+    ctx.body = { repayment: r ? { debtId: r.id, amount: r.amount, repaid: r.repaid, left: Math.round((r.amount - r.repaid) * 100) / 100 } : null };
 });
 
 router.get('/api/commons/projects', async (ctx) => {
@@ -86,12 +119,18 @@ router.post('/api/commons/projects/update', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    if (!projectId || !title || !requestedAmount) return ctx.throw(400, 'Missing fields');
+    if (!projectId || !title || !requestedAmount) {
+        ctx.status = 400;
+        ctx.body = { error: 'Missing fields' };
+        return;
+    }
     if (respondIfMuted(ctx, actor)) return;
 
     const success = updateProject(actor, projectId, title, description || '', Number(requestedAmount));
     if (!success) {
-        return ctx.throw(400, 'Failed to update project. It might not exist, you might not own it, or it is no longer in a proposed state.');
+        ctx.status = 400;
+        ctx.body = { error: 'Failed to update project. It might not exist, you might not own it, or it is no longer in a proposed state.' };
+        return;
     }
     ctx.body = { success: true };
 });
@@ -104,13 +143,31 @@ router.post('/api/commons/projects/delete', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    if (!projectId) return ctx.throw(400, 'Missing projectId');
-    
-    const success = deleteProject(actor, projectId);
-    if (!success) {
-        return ctx.throw(400, 'Failed to delete project. It might not exist, you might not own it, or it is no longer in a proposed state.');
+    if (!projectId) {
+        ctx.status = 400;
+        ctx.body = { error: 'Missing projectId' };
+        return;
     }
-    ctx.body = { success: true };
+    
+    const projectExists = getProjects().some(p => p.id === projectId);
+    if (!projectExists) {
+        ctx.status = 404;
+        ctx.body = { error: 'Project not found' };
+        return;
+    }
+
+    try {
+        const success = deleteProject(actor, projectId);
+        if (!success) {
+            ctx.status = 400;
+            ctx.body = { error: 'Failed to delete project. You might not own it, or it is no longer in a proposed state.' };
+            return;
+        }
+        ctx.body = { success: true };
+    } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: memberErrorText(e, 'Failed to delete project') };
+    }
 });
 
 // ===================== COMMUNITY DECISIONS (§3.2–§3.8) =====================
@@ -141,7 +198,8 @@ router.get('/api/commons/decisions', async (ctx) => {
     const ownVotes = actor ? getOwnDecisionVotes(actor) : null;
     ctx.body = {
         decisions: decisions.map(d => ({
-            ...publicDecision(d),
+            // A member's balance recorded in a Decision about them goes to that Decision's voters only.
+            ...decisionForReader(d, actor),
             tally: tallyDecision(d.id),
             myVote: ownVotes ? ownVotes.get(d.id) ?? null : null,
         })),
@@ -154,13 +212,18 @@ router.get('/api/commons/decisions', async (ctx) => {
 
 router.get('/api/commons/decisions/:id', async (ctx) => {
     const decision = getDecision(ctx.params.id);
-    if (!decision) return ctx.throw(404, 'Decision not found');
+    // An enterprise's keepers' vote is read in that enterprise (routes/enterprise-decisions.ts), by its keepers only.
+    if (!decision || decision.scopeKind !== 'community') {
+        ctx.status = 404;
+        ctx.body = { error: 'Decision not found' };
+        return;
+    }
     const tally = tallyDecision(decision.id);
     // Voice credits are the signer's own: taken from authentication only, never from a query parameter.
     const actor = (ctx.state as any)?.actor as string | undefined;
     const voiceCredits = actor ? getDecisionVoiceCredits(decision.id, actor) : undefined;
     const myVote = actor ? getOwnDecisionVotes(actor, [decision.id]).get(decision.id) ?? null : null;
-    ctx.body = { decision: publicDecision(decision), tally, voiceCredits, myVote };
+    ctx.body = { decision: decisionForReader(decision, actor), tally, voiceCredits, myVote };
 });
 
 router.post('/api/commons/decisions', async (ctx) => {
@@ -195,13 +258,15 @@ router.post('/api/commons/decisions', async (ctx) => {
             params,
             closesAt: closesAtOverride,
         });
-        ctx.body = { success: true, decision: publicDecision(decision) };
+        ctx.body = { success: true, decision: decisionForReader(decision, actor) };
     } catch (err: any) {
         // A pool-money Decision with Beans off: 403 profile_no_beans (decisions-engine switchOffFor). Formal Decisions
         // switched off: 404 feature_off, as the feature gate in front of this route answers.
         if (respondProfileRefusal(ctx, err)) return;
+        // A grant proposed while the Commons pot is unknown: 503, in the pause words (assertGrantWithinCap).
+        if (answerPotPaused(ctx, err)) return;
         ctx.status = 400;
-        ctx.body = { error: err.message };
+        ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT) };
     }
 });
 
@@ -218,7 +283,8 @@ router.post('/api/commons/decisions/:id/vote', async (ctx) => {
         ctx.body = { error: 'support (boolean) is required' };
         return;
     }
-    const result = castDecisionVote(ctx.params.id, actor, Boolean(support), Number(voteCount || 1), signature);
+    // An enterprise's keepers' vote is cast in that enterprise, never here: answered exactly as an id that doesn't exist.
+    const result = castDecisionVote(ctx.params.id, actor, Boolean(support), Number(voteCount || 1), signature, 'community');
     if (!result.success) {
         // Formal Decisions switched off here: the same answer the feature gate gives in front of this route.
         if (result.code === FEATURE_OFF) {
@@ -255,7 +321,11 @@ router.get('/api/crowdfund/projects', async (ctx) => {
 
 router.get('/api/crowdfund/projects/:id', async (ctx) => {
     const project = getCrowdfundProject(ctx.params.id);
-    if (!project) return ctx.throw(404, 'Project not found');
+    if (!project) {
+        ctx.status = 404;
+        ctx.body = { error: 'Project not found' };
+        return;
+    }
     ctx.body = { project };
 });
 
@@ -267,20 +337,28 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
+    // A project's id is its enterprise's key, its account's and its escrow's (`escrow_<id>`), so the server makes it and
+    // never takes one: an id that named a member's key, an enterprise, the Commons or a deal's escrow had pledges paid
+    // into that account, its status changed to funded, and its edits and deletion rename or prune it (db.ts
+    // isFreshProjectId). No app sends one.
+    if (id !== undefined) {
+        ctx.status = 400;
+        ctx.body = { error: 'A project\'s id is made by the server. Send the project without one.' };
+        return;
+    }
     if (!title || !goalAmount) {
         ctx.status = 400;
         ctx.body = { error: 'creatorPubkey, title, and goalAmount are required' };
         return;
     }
 
-    if (deadlineAt) {
-        const maxDays = getThresholds().maxProjectExpiryDays;
-        const diffDays = (new Date(deadlineAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
-        if (diffDays > maxDays) {
-            ctx.status = 400;
-            ctx.body = { error: `Project deadline cannot exceed ${maxDays} days` };
-            return;
-        }
+    // The one deadline check every project route shares (project-deadline.ts): a string in ISO 8601 form, not in the
+    // past and at most maxProjectExpiryDays ahead, stored as toISOString().
+    const deadline = readProjectDeadline(deadlineAt, getThresholds().maxProjectExpiryDays);
+    if ('error' in deadline) {
+        ctx.status = 400;
+        ctx.body = { error: deadline.error };
+        return;
     }
 
     if (photos !== undefined && photos !== null) {
@@ -294,7 +372,7 @@ router.post('/api/crowdfund/projects', async (ctx) => {
             ctx.body = { error: 'A project can have at most 10 photos' };
             return;
         }
-        // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey. Every one is served,
+        // photos[0] becomes the enterprise's avatar (member_photos), served by /api/avatar/:pubkey. Every one is served,
         // and one the node cannot strip (G9a-3: a HEIC, a TIFF) would keep its GPS, so all are held to the photo rule,
         // bare base64 included: the project's JSON hands each one out as stored.
         if (!photos.every((p: unknown) => isAcceptablePhotoValue(p))) {
@@ -304,7 +382,7 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         }
     }
 
-    const projectId = id || crypto.randomUUID();
+    const projectId = crypto.randomUUID();
     if (!isMemberActive(actor)) {
         ctx.status = 403;
         ctx.body = { error: INACTIVE_MEMBER_CREATE_ERROR };
@@ -321,7 +399,13 @@ router.post('/api/crowdfund/projects', async (ctx) => {
         ctx.body = { error: GOAL_AMOUNT_ERROR };
         return;
     }
-    createCrowdfundProject(projectId, actor, title, description || '', photos || [], Number(goalAmount), deadlineAt || null);
+    // Its title is the enterprise's name and its description its purpose, each held to its limit (#1493).
+    try { assertEnterpriseText(title, description || ''); } catch (e: any) {
+        ctx.status = 400;
+        ctx.body = { error: e.message };
+        return;
+    }
+    createCrowdfundProject(projectId, actor, title, description || '', photos || [], Number(goalAmount), deadline.deadline);
     const project = getCrowdfundProject(projectId);
     deps.broadcast?.({ type: 'project_created', project });
     
@@ -342,14 +426,13 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
         return;
     }
 
-    if (deadlineAt) {
-        const maxDays = getThresholds().maxProjectExpiryDays;
-        const diffDays = (new Date(deadlineAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24);
-        if (diffDays > maxDays) {
-            ctx.status = 400;
-            ctx.body = { error: `Project deadline cannot exceed ${maxDays} days` };
-            return;
-        }
+    // As on a create (project-deadline.ts), and null or '' clears it as a create stores none. Left out, it is left as it
+    // is (updateCrowdfundProject writes the deadline only when one is given).
+    const deadline = deadlineAt === undefined ? undefined : readProjectDeadline(deadlineAt, getThresholds().maxProjectExpiryDays);
+    if (deadline && 'error' in deadline) {
+        ctx.status = 400;
+        ctx.body = { error: deadline.error };
+        return;
     }
 
     if (photos !== undefined && photos !== null) {
@@ -363,7 +446,7 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
             ctx.body = { error: 'A project can have at most 10 photos' };
             return;
         }
-        // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey. Every one is served,
+        // photos[0] becomes the enterprise's avatar (member_photos), served by /api/avatar/:pubkey. Every one is served,
         // and one the node cannot strip (G9a-3: a HEIC, a TIFF) would keep its GPS, so all are held to the photo rule,
         // bare base64 included: the project's JSON hands each one out as stored.
         if (!photos.every((p: unknown) => isAcceptablePhotoValue(p))) {
@@ -375,13 +458,13 @@ router.post('/api/crowdfund/projects/update', async (ctx) => {
 
     if (respondIfMuted(ctx, actor)) return;
     try {
-        updateCrowdfundProject(id, actor, title, description || '', photos || [], Number(goalAmount), deadlineAt);
+        updateCrowdfundProject(id, actor, title, description || '', photos || [], Number(goalAmount), deadline?.deadline);
         const project = getCrowdfundProject(id);
         deps.broadcast?.({ type: 'project_updated', project });
         ctx.body = { success: true, project };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to update project' };
+        ctx.body = { error: memberErrorText(e, 'Failed to update project') };
     }
 });
 
@@ -405,7 +488,7 @@ router.post('/api/crowdfund/projects/delete', async (ctx) => {
         ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to delete project' };
+        ctx.body = { error: memberErrorText(e, 'Failed to delete project') };
     }
 });
 
@@ -441,6 +524,7 @@ router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
         return;
     }
     // A note with a pledge is words the project's creator reads: a muted member (G3) pledges without one.
+    if (respondIfNoteTooLong(ctx, memo)) return;
     if (isNote(memo) && respondIfMuted(ctx, actor)) return;
 
     try {
@@ -451,7 +535,7 @@ router.post('/api/crowdfund/projects/:id/pledge', async (ctx) => {
         ctx.body = { success: true, txId };
     } catch (err: any) {
         ctx.status = 400;
-        ctx.body = { error: err.message };
+        ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT) };
     }
 });
 

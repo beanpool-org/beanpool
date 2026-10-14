@@ -26,9 +26,11 @@ import {
     getKeeperChanges, proposeKeeperRemoval, objectToKeeperChange, stepDownAsKeeper,
     ensureEnterpriseThread, getEnterpriseThreadMessages, postEnterpriseThreadMessage, removeEnterpriseThreadMessage,
     isKeeperOfEnterprise, isAdminPubkey, isEnterpriseThreadHidden, isEnterpriseThreadReadOnly, getActingMember, isVisitorKey,
+    passesReadGate, type KeeperJoinRequest,
 } from '../state-engine.js';
 import { getChatMute } from '../engine/chat-mutes.js';
-import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR } from '../db/db.js';
+import { dealQuantityFromBody } from '../engine/post-fields.js';
+import { db, pledgeToProject, getCrowdfundProject, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, PROJECT_FUNDED_NO_PLEDGES_ERROR } from '../db/db.js';
 import { getLinkByTreasury, listFederationLinks } from '../federation-link.js';
 import { commissionAllowanceFor } from '../federation-commission.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
@@ -36,9 +38,37 @@ import { createEventFromBody } from './event-post.js';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
-import { respondProfileRefusal, respondIfMuted, isNote } from './profile-feature-gate.js';
+import { respondProfileRefusal, respondIfMuted, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
+import { enterprisePostLimit, assertMayStartEnterprise } from '../engine/writer-bounds.js';
+import { assertEnterpriseText } from '../engine/enterprise-text.js';
+import { chatRateLimit } from '../chat-rate-limit.js';
 import type { RouteDeps } from './types.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarUrlOf, isSyntheticAccount, replaceLoneSurrogates } from '@beanpool/core';
+import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
+import { readProjectDeadline } from './project-deadline.js';
+import { getThresholds } from '../config/local-config.js';
+import { answerPotPaused } from '../engine/audit.js';
+
+/**
+ * Which pledge `POST /api/(treasury|enterprise)/:treasury/pledge` makes: a keeper's backing, or a crowdfund pledge of
+ * Beans. The route dispatches on it, and the money limits count by it (routes/money-limits-gate.ts: a crowdfund pledge is
+ * a payment too).
+ */
+export function pledgeDispatchKind(treasury: string, body: { type?: unknown; memo?: unknown } | null | undefined): 'backing' | 'crowdfund' {
+    if (body?.type === 'backing') return 'backing';
+    if (body?.memo !== undefined) return 'crowdfund';
+    const ent = db.prepare('SELECT goal_amount FROM members WHERE public_key=? AND is_treasury=1').get(treasury) as { goal_amount: number | null } | undefined;
+    return ent && ent.goal_amount != null ? 'crowdfund' : 'backing';
+}
+
+/**
+ * The actor's own pending request to keep this enterprise, with what they have left to back with. That figure is theirs
+ * alone: getKeeperRequests rows, which the lead keeper and admins read, carry only canBackPledge (#1612 review).
+ */
+function ownPendingRequest(treasury: string, actor: string): (KeeperJoinRequest & { availableToBack: number }) | null {
+    const mine = getKeeperRequests(treasury, 'pending').find(r => r.memberPubkey === actor);
+    return mine ? { ...mine, availableToBack: getAvailableBacking(actor) } : null;
+}
 
 export function createTreasuryRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -144,7 +174,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         return actor;
     };
 
-    // ---- Public transparency reads ------------------------------------------------------
+    // ---- The enterprises' reads (members only on every node, https-server.ts MEMBERS_ONLY_READS_PATTERNS) ----------
     // A completed (wound-up) enterprise never serves coordinates, whatever the row still holds — a keeper may
     // have pinned it on their own house (PR #839 Blocker A).
     const servedCoordinates = (row: any): { lat: number | null; lng: number | null } =>
@@ -157,13 +187,13 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const whereClause = includeBounded
             ? "is_treasury = 1 AND (status IS NULL OR status NOT IN ('pruned', 'deleted'))"
             : "is_treasury = 1 AND (lifecycle IS NULL OR lifecycle != 'bounded') AND (status IS NULL OR status NOT IN ('pruned', 'deleted'))";
-        // A suspended or disabled enterprise is off the public Commons list (#839 review finding) — neither client
+        // A suspended or disabled enterprise is off the Commons list (#839 review finding) — neither client
         // badges those states, so it read as an ordinary live enterprise. Its own keepers and node admins still
-        // see it when the read is signed: the list card is how a keeper reaches the enterprise's page, which
-        // explains the state. Detail and thread reads stay reachable by direct link for everyone.
+        // see it: the list card is how a keeper reaches the enterprise's page, which explains the state. Detail
+        // and thread reads stay reachable by direct link for every member.
         const viewer = ctx.state?.actor as string | undefined;
         const rows = (db.prepare(
-            `SELECT public_key, callsign, avatar_url, earned_credit, legacy_credit_floor, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
+            `SELECT public_key, callsign, avatar_ref, earned_credit, legacy_credit_floor, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE ${whereClause} ORDER BY callsign COLLATE NOCASE`
         ).all() as any[]).filter(r =>
             !(r.status === 'suspended' || r.status === 'disabled')
             || (!!viewer && canAdministerTreasury(viewer, r.public_key))
@@ -213,8 +243,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 return {
                     publicKey: r.public_key, name: r.callsign,
                     callsign: r.callsign,
-                    avatar: avatarUrlFor(r.public_key, r.avatar_url),
-                    avatarUrl: r.avatar_url,
+                    avatar: avatarUrlOf(r.public_key, r.avatar_ref),
+                    // The photo's URL, as `avatar` (#1478): both apps read `avatar` first and this only where it is empty.
+                    avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref),
                     balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
                     allowance: floorInfo.allowance,
                     derivedAllowance: floorInfo.derivedAllowance,
@@ -275,10 +306,11 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     // Enterprise map endpoint (docs/the-commons.md §2.2, Slice 6)
     // Only includes enterprises with a set location; excludes completed, suspended, disabled, pruned and deleted
-    // enterprises. The map is public and unsigned, so there is no keeper exception here (#839 review finding).
+    // enterprises. The map is the same for every reader (members only, https-server.ts MEMBERS_ONLY_READS_PATTERNS), so
+    // there is no keeper exception here (#839 review finding).
     const listEnterpriseMapPinsHandler = async (ctx: any) => {
         const rows = db.prepare(
-            `SELECT public_key, callsign, avatar_url, purpose, lat, lng, paused, status, wind_up_finalised_at
+            `SELECT public_key, callsign, avatar_ref, purpose, lat, lng, paused, status, wind_up_finalised_at
              FROM members
              WHERE is_treasury = 1
                AND lat IS NOT NULL
@@ -292,8 +324,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 publicKey: r.public_key,
                 name: r.callsign || 'Unnamed',
                 callsign: r.callsign || 'Unnamed',
-                avatar: avatarUrlFor(r.public_key, r.avatar_url),
-                avatarUrl: r.avatar_url,
+                avatar: avatarUrlOf(r.public_key, r.avatar_ref),
+                avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref), // as `avatar` (#1478), as in the list
                 purpose: r.purpose ?? null,
                 lat: Number(r.lat),
                 lng: Number(r.lng),
@@ -308,7 +340,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
     const getTreasuryHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const m = db.prepare("SELECT callsign, avatar_url, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE public_key=? AND is_treasury=1 AND status NOT IN ('pruned', 'deleted')").get(treasury) as any;
+        const m = db.prepare("SELECT callsign, avatar_ref, (SELECT photo FROM member_photos mp WHERE mp.public_key = members.public_key) AS avatar_url, earned_surplus, working_capital_ceiling, purpose, goal_amount, deadline_at, lifecycle, status, paused, paused_at, paused_by, paused_floor_snapshot, wind_up_initiated_at, wind_up_initiated_by, wind_up_finalised_at, lat, lng, location_auth_signer, auth_signer, location_updated_at FROM members WHERE public_key=? AND is_treasury=1 AND status NOT IN ('pruned', 'deleted')").get(treasury) as any;
         if (!m) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
         const b = getBalance(treasury);
         const floorInfo = getEnterpriseFloor(treasury);
@@ -334,18 +366,27 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             windUpGraceEndsAt = new Date(new Date(m.wind_up_initiated_at).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
         }
 
-        const posts = db.prepare(
+        // Its listings are listings: a local community's are its members' (https-server.ts PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT),
+        // so this page lists them only to a reader who may read the board here, a member (passesReadGate), or to anyone
+        // where every read is open (ENFORCE_READ_AUTH=false). Under read auth the whole page is members-only already
+        // (MEMBERS_ONLY_READS_PATTERNS); this stays as the listings' own rule.
+        const readerMayReadListings = !deps.enforceReadAuth || (!!ctx.state?.actor && passesReadGate(ctx.state.actor));
+        const posts = readerMayReadListings ? db.prepare(
             // Never a post hidden by reports (G3): that is for its author and the moderators, in the listing.
             "SELECT id, type, category, title, description, credits, price_type, status, repeatable, created_at FROM posts WHERE author_pubkey=? AND status IN ('active','pending') AND type != 'event' AND hidden_by_reports_at IS NULL ORDER BY created_at DESC"
-        ).all(treasury) as any[];
-        const flow = (db.prepare(
-            'SELECT from_pubkey, to_pubkey, amount, memo, timestamp FROM transactions WHERE from_pubkey=? OR to_pubkey=? ORDER BY timestamp DESC LIMIT 20'
-        ).all(treasury, treasury) as any[]).map(f => ({
-            amount: f.amount, memo: f.memo, timestamp: f.timestamp, incoming: f.to_pubkey === treasury,
-        }));
+        ).all(treasury) as any[] : [];
         // Gate pending bids, active deals, and worker wage details so only verified operators of this treasury receive sensitive operational data
         const actor = ctx.state?.actor;
         const isOperator = !!(actor && canOperateTreasury(actor, treasury));
+        // The amounts in and out are everyone's to see; a line's memo is the words of the trade behind it, which only its
+        // two people read (ledgerForReader): the keepers, and the member who wrote it or was paid.
+        const flow = (db.prepare(
+            'SELECT from_pubkey, to_pubkey, amount, memo, timestamp FROM transactions WHERE from_pubkey=? OR to_pubkey=? ORDER BY timestamp DESC LIMIT 20'
+        ).all(treasury, treasury) as any[]).map(f => ({
+            amount: f.amount,
+            memo: isOperator || (!!actor && (f.from_pubkey === actor || f.to_pubkey === actor)) ? f.memo : '',
+            timestamp: f.timestamp, incoming: f.to_pubkey === treasury,
+        }));
 
         // PR #775 review: Sensitive worker wage history (keeper_pubkey, transaction_id, historical payouts)
         // must not leak to unauthenticated / non-operator clients. Public view only sees pending claims without worker identifiers.
@@ -355,10 +396,15 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             "SELECT id, amount, status, created_at FROM deferred_wage_claims WHERE enterprise_pubkey=? AND status='pending' ORDER BY created_at ASC LIMIT 50"
         ).all(treasury) as any[]);
 
-        const pendingBids = isOperator ? (db.prepare(`
+        // Each deal's other party's photo as its URL, never the photo (#1478): up to 50 rows of each kind. `peer_avatar`
+        // keeps its place in the row (the NULL each SELECT puts there).
+        const withPeerAvatars = (rows: any[]) => rows.map(({ peer_avatar_ref, ...r }) => ({
+            ...r, peer_avatar: avatarUrlOf(r.buyer_pubkey === treasury ? r.seller_pubkey : r.buyer_pubkey, peer_avatar_ref),
+        }));
+        const pendingBids = isOperator ? withPeerAvatars(db.prepare(`
             SELECT t.id, t.post_id, t.buyer_pubkey, t.seller_pubkey, t.credits, t.hours, t.status, t.created_at,
                    p.title as post_title, p.type as post_type, p.price_type,
-                   m.callsign as peer_callsign, m.avatar_url as peer_avatar
+                   m.callsign as peer_callsign, NULL as peer_avatar, m.avatar_ref as peer_avatar_ref
             FROM marketplace_transactions t
             JOIN posts p ON t.post_id = p.id
             LEFT JOIN members m ON m.public_key = CASE WHEN t.buyer_pubkey = ? THEN t.seller_pubkey ELSE t.buyer_pubkey END
@@ -366,10 +412,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ORDER BY t.created_at DESC
             LIMIT 50
         `).all(treasury, treasury, treasury) as any[]) : [];
-        const activeDeals = isOperator ? (db.prepare(`
+        const activeDeals = isOperator ? withPeerAvatars(db.prepare(`
             SELECT t.id, t.post_id, t.buyer_pubkey, t.seller_pubkey, t.credits, t.hours, t.status, t.created_at,
                    p.title as post_title, p.type as post_type, p.price_type,
-                   m.callsign as peer_callsign, m.avatar_url as peer_avatar,
+                   m.callsign as peer_callsign, NULL as peer_avatar, m.avatar_ref as peer_avatar_ref,
                    CASE WHEN t.buyer_pubkey = ? THEN 'pay' ELSE 'fulfill' END as action_required
             FROM marketplace_transactions t
             JOIN posts p ON t.post_id = p.id
@@ -388,7 +434,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         ctx.body = {
             publicKey: treasury, name: m.callsign,
             callsign: m.callsign,
-            avatar: avatarUrlFor(treasury, m.avatar_url),
+            avatar: avatarUrlOf(treasury, m.avatar_ref),
             avatarUrl: m.avatar_url,
             balance: b.balance, creditLine: b.earnedCredit, floor: b.floor, usableFloor: b.usableFloor,
             allowance: floorInfo.allowance,
@@ -429,8 +475,9 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             keeperRequests: actor && isLeadOrSoleKeeperOrAdmin(treasury, actor)
                 ? getKeeperRequests(treasury, 'pending')
                 : [],
+            // The applicant's own request carries their own figure; the lead keeper's rows above carry only canBackPledge.
             myPendingRequest: actor
-                ? (getKeeperRequests(treasury, 'pending').find(r => r.memberPubkey === actor) || null)
+                ? ownPendingRequest(treasury, actor)
                 : null,
             // Keeper additions and removals waiting out the other keepers' 3-day objection window (answers A, M).
             // Only the keepers (who may object) and node admins see them: they name an applicant and their pledge,
@@ -456,7 +503,15 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Authentication required' };
             return;
         }
-        if (statusOf(treasury) !== 'active') {
+        // An enterprise that reached its goal is not closed: it says so in the words pledgeToProject uses, on the door both
+        // apps pledge through (#1374 NB, 2026-10-02). Nothing has moved either way.
+        const enterpriseStatus = statusOf(treasury);
+        if (enterpriseStatus === 'funded') {
+            ctx.status = 400;
+            ctx.body = { error: PROJECT_FUNDED_NO_PLEDGES_ERROR };
+            return;
+        }
+        if (enterpriseStatus !== 'active') {
             ctx.status = 403;
             ctx.body = { error: 'This enterprise has been closed, so its funds can no longer be moved.' };
             return;
@@ -480,6 +535,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return;
         }
         // A note with a pledge is words the keepers read: a muted member (G3) pledges without one.
+        if (respondIfNoteTooLong(ctx, memo)) return;
         if (isNote(memo) && respondIfMuted(ctx, actor)) return;
         try {
             const txId = crypto.randomUUID();
@@ -488,7 +544,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, txId };
         } catch (err: any) {
             ctx.status = 400;
-            ctx.body = { error: err.message };
+            ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT) };
         }
     };
 
@@ -518,7 +574,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
 
         const body = (ctx as any).requestBody || {};
         const { name, title, avatar, photos, workingCapitalCeiling, purpose, description, lifecycle, goalAmount, deadlineAt, lat, lng } = body;
-        const enterpriseName = String(name || title || '').trim();
+        const enterpriseName = replaceLoneSurrogates(String(name || title || '').trim());
         if (!enterpriseName || enterpriseName.length < 2) {
             ctx.status = 400;
             ctx.body = { error: 'name must be at least 2 characters' };
@@ -534,12 +590,28 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             return;
         }
         photoUrl = stripImageValue(photoUrl);
-        const enterprisePurpose = String(purpose || description || enterpriseName).trim();
-        const parsedLifecycle = (lifecycle === 'bounded' || goalAmount != null || deadlineAt) ? 'bounded' : 'ongoing';
+        const enterprisePurpose = replaceLoneSurrogates(String(purpose || description || enterpriseName).trim());
+        // Its name and purpose are sent whole by every list of enterprises (#1493): each held to its limit.
+        try { assertEnterpriseText(enterpriseName, enterprisePurpose); } catch (e: any) {
+            ctx.status = 400;
+            ctx.body = { error: e.message };
+            return;
+        }
+        // A bounded enterprise is a crowdfund project: its deadline is held to the same check (project-deadline.ts).
+        const deadline = readProjectDeadline(deadlineAt, getThresholds().maxProjectExpiryDays);
+        if ('error' in deadline) {
+            ctx.status = 400;
+            ctx.body = { error: deadline.error };
+            return;
+        }
+        const parsedDeadline = deadline.deadline;
+        const parsedLifecycle = (lifecycle === 'bounded' || goalAmount != null || parsedDeadline) ? 'bounded' : 'ongoing';
         const parsedGoal = goalAmount != null ? Number(goalAmount) : null;
-        const parsedDeadline = deadlineAt ? String(deadlineAt) : null;
         const parsedLat = lat != null && lat !== '' ? Number(lat) : null;
         const parsedLng = lng != null && lng !== '' ? Number(lng) : null;
+        // Every profile that has enterprises: 3 started a day and 20 still running per member (W-main). After the checks
+        // on what was sent, so a bad name or photo is still told as such, and right before anything is written.
+        try { assertMayStartEnterprise(actor); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
 
         try {
             const res = createTreasury(
@@ -589,18 +661,26 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to create enterprise' };
+            ctx.body = { error: memberErrorText(e, 'Failed to create enterprise') };
         }
     };
     router.post('/api/treasury', createEnterpriseHandler);
     router.post('/api/enterprise', createEnterpriseHandler);
 
     // ---- Admin (password-gated) ---------------------------------------------------------
+    // The enterprises as a stranger's copy of /api/treasuries was: for the node's own Settings (apps/manager
+    // node-client.ts fetchNodeTreasuries), which asks with the admin password, as the list is members' now on every node
+    // (https-server.ts MEMBERS_ONLY_READS_PATTERNS). Off with the enterprises, as the rest under this path.
+    router.get('/api/local/admin/treasury', async (ctx) => {
+        if (!(await checkAdminAuth(ctx))) return;
+        await listTreasuriesHandler(ctx);
+    });
+
     router.post('/api/local/admin/treasury', async (ctx) => {
         if (!(await checkAdminAuth(ctx))) return;
         const { name, avatar, creditLine, workingCapitalCeiling, purpose } = (ctx as any).requestBody || {};
         if (!name || !avatar) { ctx.status = 400; ctx.body = { error: 'name and avatar are required' }; return; }
-        // G9a-3: the enterprise routes hand members.avatar_url out as stored (avatarUrl), so the photo rule, as above.
+        // G9a-3: the enterprise routes hand its photo out as stored (avatarUrl), so the photo rule, as above.
         if (!isAcceptablePhotoValue(String(avatar))) { ctx.status = 400; ctx.body = { error: AVATAR_FORMAT_ERROR }; return; }
         try {
             ctx.body = {
@@ -615,7 +695,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                     }
                 ),
             };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message || 'Failed to create treasury' }; }
+        } catch (e: any) { ctx.status = 400; ctx.body = { error: memberErrorText(e, 'Failed to create treasury') }; }
     });
 
     // docs/the-commons.md §2.4 Rule 7: Working capital ceiling is set at creation and
@@ -645,7 +725,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         const { pubkey } = ctx.params;
         const { granted } = (ctx as any).requestBody || {};
         try { adminSetOperator(pubkey, !!granted); ctx.body = { success: true }; }
-        catch (e: any) { ctx.status = 400; ctx.body = { error: e.message || 'Failed' }; }
+        catch (e: any) { ctx.status = 400; ctx.body = { error: memberErrorText(e, 'Failed') }; }
     });
 
     // ---- Per-enterprise keepership (#106) ----------------------------------------------
@@ -668,7 +748,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             adminAssignTreasuryOperator(treasury, String(pubkey), 'admin');
             ctx.body = { success: true, keepers: treasuryKeepers(treasury) };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message || 'Failed to assign keeper' }; }
+        } catch (e: any) { ctx.status = 400; ctx.body = { error: memberErrorText(e, 'Failed to assign keeper') }; }
     });
 
     router.delete('/api/local/admin/treasury/:treasury/operators/:pubkey', async (ctx) => {
@@ -680,7 +760,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, keepers: treasuryKeepers(treasury) };
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return; // a pledge on a standby: 409 standby
-            ctx.status = 400; ctx.body = { error: e.message || 'Failed to revoke keeper' };
+            ctx.status = 400; ctx.body = { error: memberErrorText(e, 'Failed to revoke keeper') };
         }
     });
 
@@ -697,7 +777,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
             ctx.body = { success: true, post };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+        } catch (e: any) { ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) }; }
     });
 
     router.post('/api/local/admin/treasury/:treasury/need', async (ctx) => {
@@ -710,7 +790,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
             ctx.body = { success: true, post };
-        } catch (e: any) { ctx.status = 400; ctx.body = { error: e.message }; }
+        } catch (e: any) { ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) }; }
     });
 
     // ---- Operator (signed member with can_operate) --------------------------------------
@@ -725,12 +805,18 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             // A muted keeper (G3) posts nothing, and nobody posts for a muted enterprise.
             assertNotMuted(actor);
             assertNotMuted(treasury);
-            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor });
+            // What a keeper puts up for the enterprise counts against the enterprise's own 1,000 new posts a day, never the
+            // keeper's 100 (W-main), and against the keeper's 1,000 for every enterprise they keep together; once the
+            // enterprise's 1,000 are up, against the keeper's own 100 instead (engine/writer-bounds.ts). Checked by the
+            // engine once every refusal of the post itself has passed (a wound-up enterprise, say).
+            const limit = enterprisePostLimit(treasury, actor);
+            const post = createPost('offer', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, b.repeatable !== false, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed to create offer' }; return; }
+            limit.stored(post.id);
             ctx.body = { success: true, post };
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
-            ctx.status = 400; ctx.body = { error: e.message };
+            ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
     });
 
@@ -745,12 +831,14 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             assertNotMuted(actor);
             assertNotMuted(treasury);
-            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor });
+            const limit = enterprisePostLimit(treasury, actor);
+            const post = createPost('need', String(b.category), String(b.title), String(b.description || ''), Number(b.credits) || 0, b.priceType || 'fixed', treasury, b.lat !== undefined ? Number(b.lat) : undefined, b.lng !== undefined ? Number(b.lng) : undefined, b.photos, !!b.repeatable, undefined, undefined, { createdBy: actor, beforeWrite: limit.beforeWrite });
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the treasury needs a live Offer first (offer covenant)' }; return; }
+            limit.stored(post.id);
             ctx.body = { success: true, post };
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
-            ctx.status = 400; ctx.body = { error: e.message };
+            ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
     });
 
@@ -776,12 +864,14 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         try {
             assertNotMuted(actor);
             assertNotMuted(treasury);
-            const post = createEventFromBody(b, treasury, actor);
+            const limit = enterprisePostLimit(treasury, actor);
+            const post = createEventFromBody(b, treasury, actor, limit.beforeWrite);
             if (!post) { ctx.status = 400; ctx.body = { error: 'Failed — the enterprise must be a registered member' }; return; }
+            limit.stored(post.id);
             ctx.body = { success: true, post };
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
-            ctx.status = 400; ctx.body = { error: e.message };
+            ctx.status = 400; ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
     });
 
@@ -798,7 +888,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, transaction: tx };
         } catch (e: any) {
             ctx.status = e.status || e.statusCode || 400;
-            ctx.body = { error: e.message };
+            ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
     });
 
@@ -810,15 +900,15 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         if (!actor) return;
         const { transactionId, finalHours, hours } = (ctx as any).requestBody || {};
         if (!transactionId) { ctx.status = 400; ctx.body = { error: 'transactionId is required' }; return; }
-        const rawHours = finalHours !== undefined ? finalHours : hours;
-        const parsedHours = rawHours != null && !isNaN(Number(rawHours)) ? Number(rawHours) : undefined;
+        // As on the marketplace's completion: a quantity the engine can't read is refused there, not dropped here.
+        const parsedHours = dealQuantityFromBody(finalHours !== undefined ? finalHours : hours);
         try {
             const tx = completePostTransaction(String(transactionId), treasury, parsedHours, { authSigner: actor });
             if (!tx) { ctx.status = 400; ctx.body = { error: 'Could not release (not this treasury’s deal to confirm)' }; return; }
             ctx.body = { success: true, transaction: tx };
         } catch (e: any) {
             ctx.status = e.status || e.statusCode || 400;
-            ctx.body = { error: e.message };
+            ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
     });
 
@@ -835,7 +925,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, transaction: tx };
         } catch (e: any) {
             ctx.status = e.status || e.statusCode || 400;
-            ctx.body = { error: e.message };
+            ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT) };
         }
     });
 
@@ -867,6 +957,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ok = conservingTransaction(() =>
                 moveToCommons(treasury, amt, `Surplus swept to Commons from ${treasury.slice(0, 8)}`, { authSigner: actor }));
         } catch (e: any) {
+            // The pot is unknown: every Bean move is paused, and the keeper is told so (503), not "please try again".
+            if (answerPotPaused(ctx, e)) return;
             const invariant = /moveToCommons is for/.test(e?.message || '');
             console.error(`[Treasury] Sweep from ${treasury.slice(0, 8)} failed:`, e?.message || e);
             ctx.status = invariant ? 400 : 500;
@@ -903,7 +995,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to pause enterprise' };
+            ctx.body = { error: memberErrorText(e, 'Failed to pause enterprise') };
         }
     };
     router.post('/api/treasury/:treasury/pause', pauseHandler);
@@ -923,7 +1015,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to resume enterprise' };
+            ctx.body = { error: memberErrorText(e, 'Failed to resume enterprise') };
         }
     };
     router.post('/api/treasury/:treasury/resume', resumeHandler);
@@ -947,7 +1039,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Only the lead keeper/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to initiate wind-up' };
+            ctx.body = { error: memberErrorText(e, 'Failed to initiate wind-up') };
         }
     };
     router.post('/api/treasury/:treasury/wind-up/initiate', initiateWindUpHandler);
@@ -967,7 +1059,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Only a keeper/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to cancel wind-up' };
+            ctx.body = { error: memberErrorText(e, 'Failed to cancel wind-up') };
         }
     };
     router.post('/api/treasury/:treasury/wind-up/cancel', cancelWindUpHandler);
@@ -990,7 +1082,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Not authorised/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to finalise wind-up' };
+            ctx.body = { error: memberErrorText(e, 'Failed to finalise wind-up') };
         }
     };
     router.post('/api/treasury/:treasury/wind-up/finalise', finaliseWindUpHandler);
@@ -1038,7 +1130,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = isLocationRefusal(e) ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to update enterprise location' };
+            ctx.body = { error: memberErrorText(e, 'Failed to update enterprise location') };
         }
     };
 
@@ -1078,7 +1170,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = isLocationRefusal(e) ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to clear enterprise location' };
+            ctx.body = { error: memberErrorText(e, 'Failed to clear enterprise location') };
         }
     };
 
@@ -1090,6 +1182,28 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
     router.delete('/api/local/admin/treasury/:treasury/location', clearLocationHandler);
 
     // Read-only accountability ledger (public to all node members)
+    /**
+     * An enterprise's book as `reader` may read it. Its Beans are the community's business (docs/the-commons.md §2.2:
+     * "a visible ledger of what it took in and paid out"), so every member reads every amount, the running balance and
+     * the totals. Who paid it or was paid, what they wrote and who signed are a trade's, and a trade shows only its two
+     * people (Marty, 2026-09-28): the enterprise's side is its keepers (canOperateTreasury), the other side the member
+     * named, who reads their own lines in full. To anyone else an entry with a member, or a deal in escrow, says "A
+     * member" or "A deal", with no key, memo or signer. The Commons Pool, the genesis grant, a federation bridge and
+     * another enterprise or treasury are no person and stay named.
+     */
+    const ledgerForReader = (ledger: ReturnType<typeof getEnterpriseLedger>, treasury: string, reader: string | undefined) => {
+        if (reader && canOperateTreasury(reader, treasury)) return ledger;
+        return {
+            ...ledger,
+            entries: ledger.entries.map(e => {
+                if (e.counterparty === reader) return e;
+                if (e.counterparty === 'COMMONS_POOL' || e.counterparty === 'genesis' || e.counterparty.startsWith('bridge_')) return e;
+                if (!isSyntheticAccount(e.counterparty) && isTreasury(e.counterparty)) return e;
+                return { ...e, counterparty: '', counterpartyName: e.counterparty.startsWith('escrow_') ? 'A deal' : 'A member', memo: '', authSigner: null };
+            }),
+        };
+    };
+
     const getLedgerHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
         if (!isTreasury(treasury)) { ctx.status = 404; ctx.body = { error: 'Not a treasury' }; return; }
@@ -1100,10 +1214,12 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 until: until ? String(until) : undefined,
                 limit: limit ? Number(limit) : undefined,
             });
-            ctx.body = ledger;
+            // Varies by reader (a keeper reads names), so no shared cache keeps it.
+            ctx.set('Cache-Control', 'private, no-store');
+            ctx.body = ledgerForReader(ledger, treasury, ctx.state?.actor as string | undefined);
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to retrieve enterprise ledger' };
+            ctx.body = { error: memberErrorText(e, 'Failed to retrieve enterprise ledger') };
         }
     };
     router.get('/api/treasury/:treasury/ledger', getLedgerHandler);
@@ -1154,25 +1270,16 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to pledge backing' };
+            ctx.body = { error: memberErrorText(e, 'Failed to pledge backing') };
         }
     };
 
     // Unified pledge handler: dispatches to crowdfund pledge or keeper backing pledge
     const pledgeDispatchHandler = async (ctx: any) => {
         const { treasury } = ctx.params;
-        const body = (ctx as any).requestBody || {};
-        if (body.type === 'backing') {
-            return backingPledgeHandler(ctx);
-        }
-        if (body.memo !== undefined) {
-            return crowdfundPledgeHandler(ctx);
-        }
-        const ent = db.prepare('SELECT goal_amount, lifecycle FROM members WHERE public_key=? AND is_treasury=1').get(treasury) as any;
-        if (ent && ent.goal_amount != null) {
-            return crowdfundPledgeHandler(ctx);
-        }
-        return backingPledgeHandler(ctx);
+        return pledgeDispatchKind(treasury, (ctx as any).requestBody || {}) === 'crowdfund'
+            ? crowdfundPledgeHandler(ctx)
+            : backingPledgeHandler(ctx);
     };
 
     router.post('/api/treasury/:treasury/pledge', pledgeDispatchHandler);
@@ -1236,7 +1343,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to release backing' };
+            ctx.body = { error: memberErrorText(e, 'Failed to release backing') };
         }
     };
     router.post('/api/treasury/:treasury/release', releaseHandler);
@@ -1273,7 +1380,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, request: req };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to submit join request' };
+            ctx.body = { error: memberErrorText(e, 'Failed to submit join request') };
         }
     };
     router.post('/api/treasury/:treasury/keepers/request', requestJoinHandler);
@@ -1305,7 +1412,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, requests };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to list keeper requests' };
+            ctx.body = { error: memberErrorText(e, 'Failed to list keeper requests') };
         }
     };
     router.get('/api/treasury/:treasury/keepers/requests', listKeeperRequestsHandler);
@@ -1333,7 +1440,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             if (respondProfileRefusal(ctx, e)) return; // a pledge on a standby: 409 standby
             const isAuth = /Only the lead keeper/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to approve keeper request' };
+            ctx.body = { error: memberErrorText(e, 'Failed to approve keeper request') };
         }
     };
     router.post('/api/treasury/:treasury/keepers/requests/:requestId/approve', approveKeeperRequestHandler);
@@ -1360,7 +1467,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Only the lead keeper/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to decline keeper request' };
+            ctx.body = { error: memberErrorText(e, 'Failed to decline keeper request') };
         }
     };
     router.post('/api/treasury/:treasury/keepers/requests/:requestId/decline', declineKeeperRequestHandler);
@@ -1375,7 +1482,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, ...data };
         } catch (e: any) {
             ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to get succession information' };
+            ctx.body = { error: memberErrorText(e, 'Failed to get succession information') };
         }
     };
     router.get('/api/treasury/:treasury/succession', getSuccessionHandler);
@@ -1411,7 +1518,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Only an active keeper|Lead keeper cannot/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to propose lead succession' };
+            ctx.body = { error: memberErrorText(e, 'Failed to propose lead succession') };
         }
     };
     router.post('/api/treasury/:treasury/succession/propose', proposeSuccessionHandler);
@@ -1449,7 +1556,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const isAuth = /Only active keepers|Lead keeper cannot/.test(e?.message || '');
             ctx.status = isAuth ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to vote on succession' };
+            ctx.body = { error: memberErrorText(e, 'Failed to vote on succession') };
         }
     };
     router.post('/api/treasury/:treasury/succession/:proposalId/vote', voteSuccessionHandler);
@@ -1484,7 +1591,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return; // a pledge on a standby: 409 standby
             ctx.status = /Only the lead keeper/.test(e?.message || '') ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to remove keeper' };
+            ctx.body = { error: memberErrorText(e, 'Failed to remove keeper') };
         }
     };
     router.post('/api/treasury/:treasury/keepers/:pubkey/remove', removeKeeperHandler);
@@ -1500,7 +1607,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, ...res };
         } catch (e: any) {
             ctx.status = /Only an active keeper|cannot object/.test(e?.message || '') ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to object' };
+            ctx.body = { error: memberErrorText(e, 'Failed to object') };
         }
     };
     router.post('/api/treasury/:treasury/keepers/changes/:changeId/object', objectKeeperChangeHandler);
@@ -1515,7 +1622,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return; // a pledge on a standby: 409 standby
             ctx.status = /not a keeper/.test(e?.message || '') ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to step down' };
+            ctx.body = { error: memberErrorText(e, 'Failed to step down') };
         }
     };
     router.post('/api/treasury/:treasury/keepers/step-down', stepDownHandler);
@@ -1578,6 +1685,10 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Authentication required' };
             return;
         }
+        // Each line is a row in a room its keepers and members read, so it is throttled as a group or event chat line is:
+        // 30 a minute per signed member, in the chat bucket they share. Before it, the thread had no chat limit, and a
+        // keeper's lines here spent their enterprise's day budget rather than their own.
+        if (!chatRateLimit(ctx, actor)) return;
         const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned' || s === 'completed';
         // A visitor's row posts in no thread, as a key with no row posts in none (getActingMember).
         const actorStatus = getActingMember(actor) ? statusOf(actor) : undefined;
@@ -1624,7 +1735,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             // Before the matching below, which would answer a mute as a plain 400.
             if (respondProfileRefusal(ctx, e)) return;
-            const msg = e?.message || 'Failed to post message';
+            const msg = memberErrorText(e, 'Failed to post message');
             if (e?.code === 'ID_CONFLICT' || msg.includes('already exists')) {
                 ctx.status = 409;
                 ctx.body = { error: msg };
@@ -1664,6 +1775,8 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Only a keeper of this enterprise can remove messages from its thread' };
             return;
         }
+        // A removal changes the room for everyone in it, so it is throttled as posting a line is (as a group chat's delete).
+        if (!chatRateLimit(ctx, actor)) return;
         const blocked = (s?: string) => s === 'disabled' || s === 'suspended' || s === 'pruned' || s === 'completed';
         if (blocked(statusOf(actor))) {
             ctx.status = 403;
@@ -1686,7 +1799,7 @@ export function createTreasuryRoutes(deps: RouteDeps): Router {
                 message,
             };
         } catch (e: any) {
-            const msg = e?.message || 'Failed to remove message';
+            const msg = memberErrorText(e, 'Failed to remove message');
             if (msg.includes('Enterprise not found')) {
                 ctx.status = 404;
             } else if (msg.includes('Only a keeper')) {

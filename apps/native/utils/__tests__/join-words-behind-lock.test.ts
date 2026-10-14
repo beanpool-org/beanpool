@@ -210,7 +210,7 @@ describe('welcome.tsx: every way into the wizard says whether it made the key', 
         expect(finish.indexOf('const keyIsNew')).toBeLessThan(finish.indexOf('await setPendingOnboarding({'));
         expect(finish).toMatch(/setPendingOnboarding\(\{[^}]*\.\.\.\(keyIsNew \? \{ newKey: identity\.publicKey \} : \{\}\),/);
         expect(finish).toMatch(/setPendingIdentity\(identity\);\s*setPendingNewKey\(keyIsNew \? identity\.publicKey : null\);/);
-        expect(s).toContain('await finishGlobalJoin(await joinedUnderNodeName(GLOBAL_NODE_URL, answer, identity), answer.enrolment, key);');
+        expect(s).toContain('await finishGlobalJoin(await joinedUnderNodeName(GLOBAL_NODE_URL, answer, identity), answer.enrolment, key, way);');
     });
 
     it('a resumed wizard: from its record', () => {

@@ -33,7 +33,8 @@
  *    - POST /api/local/admin/members/:pubkey/rekey/complete (401 unauth, 200 auth)
  *    - GET /api/local/admin/members/:pubkey/offboard/preview (401 unauth, 200 auth)
  *    - POST /api/local/admin/members/:pubkey/offboard (401 unauth, 403 on self-gift, 200 auth)
- *    - POST /api/member/re-enroll (public replacement device endpoint)
+ *    - POST /api/member/re-enroll, GET …/re-enroll/status (the phone's ask and poll: 401 with no verified signer; the
+ *      signed flow is test-rekey-redeem.ts)
  */
 
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
@@ -43,6 +44,7 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import Koa from 'koa';
 import { db, initSchema } from './db/db.js';
+import { putPushTokenRow } from './services/push-token-seal.js';
 import {
     initStateEngine,
     transfer,
@@ -66,12 +68,29 @@ import {
     getInvalidatedKeyInfo,
     getOffboardPreview,
     executeOffboard,
+    REKEY_OWN_KEY,
 } from './engine/member-wizards.js';
 import { runLedgerAudit } from './engine/audit.js';
 import { ledger } from './engine/ledger.js';
 import { recordActivity } from './engine/members.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createCommunityRoutes } from './routes/community.js';
+import { setMemberPhoto } from '@beanpool/engine';
+
+// No host but this machine: the push at issue (account.rekey-started) reaches a fixture token, so it is caught where it
+// would leave for Expo, as test-rekey-redeem does (#1783 review N7: the runner does not scrub EXPO_ACCESS_TOKEN).
+const pushed: any[] = [];
+const realFetch = globalThis.fetch;
+globalThis.fetch = (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    if (url.hostname === 'exp.host' || url.hostname.endsWith('expo.dev')) {
+        const batch = JSON.parse(String(init?.body ?? '[]'));
+        pushed.push(...batch);
+        return new Response(JSON.stringify({ data: batch.map(() => ({ status: 'ok', id: crypto.randomUUID() })) }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    if (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') throw new TypeError(`this suite reaches no host but this machine (${url.host})`);
+    return realFetch(input, init);
+}) as typeof fetch;
 
 let run = 0;
 let passed = 0;
@@ -142,9 +161,10 @@ function makeMember(callsign: string, pubkey?: string): string {
     const pk = pubkey || generateValidPubkey();
     const uniqueCallsign = `${callsign}_${crypto.randomBytes(4).toString('hex')}`;
     db.prepare(
-        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status, avatar_url)
-         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', 'data:image/png;base64,iVBORw0KGgo=')`
+        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')`
     ).run(pk, uniqueCallsign);
+    setMemberPhoto(db, pk, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pk);
     return pk;
 }
@@ -207,7 +227,7 @@ async function main() {
     db.prepare("INSERT INTO ratings (id, target_pubkey, rater_pubkey, role, stars, comment) VALUES (?, ?, ?, 'seller', 5, 'Best honey')").run(ratingId, oldAliceKey, bobKey);
 
     // 6. Push tokens: Alice registered a push token on her old (lost) phone
-    db.prepare("INSERT INTO push_tokens (token, public_key, platform) VALUES ('lost_phone_apns_token_xyz', ?, 'ios')").run(oldAliceKey);
+    putPushTokenRow(oldAliceKey, 'lost_phone_apns_token_xyz', 'ios');
 
     // 7. Member preferences: Alice set dark mode
     db.prepare("INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'theme', 'dark')").run(oldAliceKey);
@@ -311,6 +331,8 @@ async function main() {
 
     // Step A: Issue re-key code (tested with uppercase key to verify case normalization)
     const rekeyIssue = issueRekeyCode(oldAliceKey.toUpperCase(), operatorPubkey);
+    for (let i = 0; i < 20 && !pushed.some((m) => m.to === 'lost_phone_apns_token_xyz'); i++) await new Promise((r) => setTimeout(r, 25));
+    assert(pushed.some((m) => m.to === 'lost_phone_apns_token_xyz'), 'the push at issue to the old phone is caught here, never sent to Expo');
     assert(Boolean(rekeyIssue.code), `Re-enrolment code generated: ${rekeyIssue.code}`);
     assert(/^RK-[0-9A-F]{4}-[0-9A-F]{4}$/.test(rekeyIssue.code), 'Code format is RK-XXXX-XXXX');
     assert(isKeyInvalidated(oldAliceKey), 'oldAliceKey is immediately recorded in invalidated_keys');
@@ -535,16 +557,40 @@ async function main() {
     db.prepare("UPDATE members SET status = 'disabled' WHERE public_key = ?").run(oldCarolKey);
     db.prepare(`INSERT INTO suspended_node_roles (decision_id, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
                 VALUES ('carol-keep', ?, 'admin', '2026-01-01T00:00:00.000Z', ?, 2, NULL)`).run(oldCarolKey, operatorPubkey);
-    const carolCode = issueRekeyCode(oldCarolKey, operatorPubkey).code;
+    // An admin may not re-key an owner or admin (a held-aside role counts): it moves the role. The password (owner level) may.
+    throws(() => issueRekeyCode(oldCarolKey, operatorPubkey), /Only an owner can re-key an owner or admin/, 'an admin is refused a code for a suspended admin');
+    assert(!db.prepare('SELECT 1 FROM rekey_requests WHERE old_pubkey = ?').get(oldCarolKey) && !isKeyInvalidated(oldCarolKey),
+        '…before any write: no code, the key still works');
+    const carolCode = issueRekeyCode(oldCarolKey, 'owner:password').code;
+    throws(() => completeRekey(oldCarolKey, generateValidPubkey(), carolCode, operatorPubkey), /Only an owner can re-key an owner or admin/,
+        'an admin is refused completing an admin\'s re-key that an owner issued');
     assert((db.prepare('SELECT status FROM members WHERE public_key = ?').get(oldCarolKey) as any)?.status === 'disabled',
         'issuing a re-key code leaves a suspended member suspended');
     const newCarolKey = generateValidPubkey();
-    completeRekey(oldCarolKey, newCarolKey, carolCode, operatorPubkey);
+    completeRekey(oldCarolKey, newCarolKey, carolCode, 'owner:password');
     const carolHeld = db.prepare('SELECT member_pubkey, role, session_epoch FROM suspended_node_roles WHERE decision_id = ?').get('carol-keep') as any;
     assert(carolHeld?.member_pubkey === newCarolKey && carolHeld.role === 'admin' && carolHeld.session_epoch === 2,
         `the held admin role moves to the new key (got ${JSON.stringify(carolHeld)})`);
     assert((db.prepare('SELECT status FROM members WHERE public_key = ?').get(newCarolKey) as any)?.status === 'disabled',
         'and the member is still suspended under the new key');
+
+    // A code on your own key is refused (#1768): a phone's ask binds nothing, an operator binds its number, and the code
+    // would end the very session that could. Before any write. Another owner (here the password) re-keys them, and the
+    // role moves with the key, an owner's and an admin's alike.
+    for (const role of ['owner', 'admin'] as const) {
+        const selfOld = generateValidPubkey();
+        makeMember(`self_${role}`, selfOld);
+        db.prepare("INSERT OR REPLACE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, ?, 'genesis')").run(selfOld, role);
+        throws(() => issueRekeyCode(selfOld, selfOld), new RegExp(REKEY_OWN_KEY.slice(0, 40)), `an ${role} is refused a code on their own key`);
+        assert(!db.prepare('SELECT 1 FROM rekey_requests WHERE old_pubkey = ?').get(selfOld) && !isKeyInvalidated(selfOld)
+            && (db.prepare('SELECT status FROM members WHERE public_key = ?').get(selfOld) as any)?.status === 'active',
+            '…before any write: no code, the key not held, still active');
+        const byOwner = issueRekeyCode(selfOld, 'owner:password').code;
+        const selfNew = generateValidPubkey();
+        completeRekey(selfOld, selfNew, byOwner, 'owner:password');
+        assert((db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(selfNew) as any)?.role === role,
+            `an owner re-keys the ${role}, who keeps the ${role} role on the new key`);
+    }
 
     // =========================================================================
     // PART 2: OFFBOARDING WIZARD & TWO-PERSON RULE ENFORCEMENT
@@ -735,7 +781,7 @@ async function main() {
     // Member 6: Push Token Purge on Prune
     const pushMemberKey = generateValidPubkey();
     makeMember('push_member', pushMemberKey);
-    db.prepare("INSERT INTO push_tokens (public_key, token, platform) VALUES (?, 'token_123', 'ios')").run(pushMemberKey);
+    putPushTokenRow(pushMemberKey, 'token_123', 'ios');
     assert((db.prepare("SELECT COUNT(*) as c FROM push_tokens WHERE public_key = ?").get(pushMemberKey) as any).c === 1, 'Push token created');
     db.prepare("INSERT INTO place_watches (id, pubkey, lat, lng, radius_km, created_at) VALUES ('push-member-watch', ?, 52.5, 13.4, 50, ?)").run(pushMemberKey, new Date().toISOString());
     executeOffboard(pushMemberKey, { resolution: 'prune_zero_balance' }, operatorPubkey);
@@ -1002,48 +1048,33 @@ async function main() {
 
         const graceKeyPair = generateKeyPair();
 
-        // 4a0. Public re-enroll with missing Proof of Possession signature rejected with 400
-        const missingSigRes = await fetch(`${baseUrl}/api/member/re-enroll`, {
+        // 4a. The phone's ask stands on the signature middleware's signer (ctx.state.actor), which this harness has no part
+        // of: with no signer the route answers 401 and writes nothing. The whole phone flow, signed through the real
+        // middleware, is test-rekey-redeem.ts.
+        const unsignedAskRes = await fetch(`${baseUrl}/api/member/re-enroll`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 code: graceRekeyCode,
                 newPublicKey: graceKeyPair.pubHex,
+                signature: crypto.sign(null, Buffer.from(graceRekeyCode, 'utf8'), graceKeyPair.privateKey).toString('base64'),
             }),
         });
-        assert(missingSigRes.status === 400, 'POST /api/member/re-enroll without signature returns 400');
-        const missingSigData = await missingSigRes.json();
-        assert(missingSigData.error?.includes('Signature is required'), 'Error indicates signature is required');
+        assert(unsignedAskRes.status === 401, `POST /api/member/re-enroll with no verified signer returns 401 (got ${unsignedAskRes.status})`);
+        assert(!getMember(graceKeyPair.pubHex) && !!getMember(graceOldKey), 'the ask moved nothing: an ask never binds a key (DESIGN-rekey-redeem-fable.md §2)');
+        const unsignedPollRes = await fetch(`${baseUrl}/api/member/re-enroll/status?code=${graceRekeyCode}`);
+        assert(unsignedPollRes.status === 401, `GET /api/member/re-enroll/status with no verified signer returns 401 (got ${unsignedPollRes.status})`);
 
-        // 4a. Public re-enroll with invalid Proof of Possession signature rejected
-        const invalidSigRes = await fetch(`${baseUrl}/api/member/re-enroll`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                code: graceRekeyCode,
-                newPublicKey: graceKeyPair.pubHex,
-                signature: 'dGhpcyBpcyBhIGZha2Ugc2lnbmF0dXJl',
-            }),
-        });
-        assert(invalidSigRes.status === 401, 'POST /api/member/re-enroll with invalid signature returns 401');
-        const invalidSigData = await invalidSigRes.json();
-        assert(invalidSigData.error?.includes('proof of possession failed'), 'Error indicates proof of possession failure');
-
-        // 4b. Public re-enroll endpoint: /api/member/re-enroll with valid Proof of Possession signature succeeds
-        const validSig = crypto.sign(null, Buffer.from(graceRekeyCode, 'utf8'), graceKeyPair.privateKey).toString('base64');
+        // 4b. The admin binds the phone's key (Bind this phone): the account moves.
         const graceNewKey = graceKeyPair.pubHex;
-        const reenrollRes = await fetch(`${baseUrl}/api/member/re-enroll`, {
+        const reenrollRes = await fetch(`${baseUrl}/api/local/admin/members/${graceOldKey}/rekey/complete`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                code: graceRekeyCode,
-                newPublicKey: graceNewKey,
-                signature: validSig,
-            }),
+            headers: { 'Content-Type': 'application/json', 'x-admin-session': 'valid-operator-session' },
+            body: JSON.stringify({ code: graceRekeyCode, newPubkey: graceNewKey }),
         });
-        assert(reenrollRes.status === 200, 'POST /api/member/re-enroll returns 200');
+        assert(reenrollRes.status === 200, 'POST rekey/complete with the phone\'s key returns 200');
         const reenrollData = await reenrollRes.json();
-        assert(reenrollData.success === true, 'Re-enrolment via public endpoint succeeded');
+        assert(reenrollData.success === true, 'Re-enrolment by the admin\'s bind succeeded');
         assert(reenrollData.newPubkey === graceNewKey, 'Re-enrolment returned newPubkey');
         assert(getBalance(graceNewKey).balance === 90, 'Grace balance of 90 beans accessible under new key');
 

@@ -15,14 +15,20 @@
  *   starts or comes back, until it is confirmed. The node never drops a key's row because another key registered the
  *   same token: any community that holds the token could then silence a member's recovery alerts (server
  *   state-engine.ts `registerPushToken`, #1184 review 4110460184).
+ * - BeanPool's key vault, in a build that has one: the push token this phone gave it for the account comes out of the
+ *   account's copies there, so its recovery notices stop too (utils/vault.ts `withdrawVaultPushToken`), within the
+ *   same time and never holding up the leave.
  * - Communities. The list the community switcher shows (`beanpool_saved_nodes`) and each one's cached copy
  *   (community-cache.ts).
  *
- * Sign Out and the self-delete purge ({@link signOutOfThisPhone}, settings.tsx) and Replace (restore-account.ts
- * `saveRestoredAccount`) take both, through {@link releaseAccountFromPhone}. The node-mismatch delete
- * ({@link deleteAccountFromThisPhone}, node-mismatch.tsx) stops the push alerts only: there the communities stay, as
- * before, so the member can pick theirs to recover on (welcome.tsx). Restoring the same account, or onto an empty
- * phone, takes nothing (#1183's rule).
+ * Sign Out, the self-delete purge at the member's last community on the phone ({@link signOutOfThisPhone},
+ * settings.tsx) and Replace (restore-account.ts `saveRestoredAccount`) take both, through
+ * {@link releaseAccountFromPhone}. A self-delete at a community while another saved one keeps the key takes neither:
+ * only that community leaves the phone, and the key stays (delete-here.ts). The node-mismatch delete
+ * ({@link deleteAccountFromThisPhone}, node-mismatch.tsx), offered only when no saved community keeps the key, stops
+ * the push alerts and takes every cached copy (the identity leaves, so its group key memory goes, as at Sign Out:
+ * director, #1815 review finding 2); the saved list stays, so the member can pick theirs to recover on (welcome.tsx).
+ * Restoring the same account, or onto an empty phone, takes nothing (#1183's rule).
  *
  * Every caller runs this BEFORE the key, the push record, the community address or the guest markers are wiped: the
  * unregister and the statements need the key and the record, and the cached copies need the addresses. The statements
@@ -30,11 +36,14 @@
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
+import { communitySwitched } from './community-switch';
 import { buildSignedHeaders } from './crypto';
 import { wipeIdentity, type BeanPoolIdentity } from './identity';
+import { namesPinAddresses, saveNamesCopiesBeforeLeaving, type NamesCopyUnconfirmed, type NamesPinStore } from './names-list';
 import { confirmLeave, leaveStatementsSettled, recordLeave } from './push-leave';
 import { communityAddress, forgetPushRegistrations, pushRegisteredCommunities, stopRegistering } from './push-registrations';
 import { PUSH_TOKEN_STORE_KEY, SAVED_NODES_STORE_KEY } from './storage-keys';
+import { withdrawVaultPushToken } from './vault';
 
 /** How long the whole unregister may take. The requests go out together, so this is also each one's limit. */
 export const UNREGISTER_TIMEOUT_MS = 4000;
@@ -45,6 +54,10 @@ const ANCHOR_STORE_KEY = 'beanpool_anchor_url';
 const GUEST_NODES_STORE_KEY = 'beanpool_guest_nodes';
 
 type LeavingAccount = Pick<BeanPoolIdentity, 'publicKey' | 'privateKey'>;
+
+interface WipeStorage {
+    getAllKeys(): Promise<readonly string[]>;
+}
 
 interface Storage {
     getItem(key: string): Promise<string | null>;
@@ -158,6 +171,29 @@ export async function unregisterPushToken(
 }
 
 /**
+ * The full-screen "Update required"'s "Leave this community" while other communities keep the key
+ * (utils/update-block-escape.ts `leaveFromUpdateBlock`): `community` alone is asked to drop this phone's push token
+ * for `account`, by the signed DELETE without a leave's stamp (the account stays on the phone, so no leave statement is
+ * written: its next sign-in would take one back). Best effort and never awaited by the leave: the community is the one
+ * that put the block up, and may be hostile or down. True only when it answered that it took it, or when this phone
+ * holds no token (nothing was sent there). Never throws; gives up at `timeoutMs`.
+ */
+export async function stopPushAlertsAt(
+    account: LeavingAccount, community: string, timeoutMs: number = UNREGISTER_TIMEOUT_MS,
+): Promise<boolean> {
+    const base = communityAddress(community);
+    if (!base || !account.publicKey || !account.privateKey) return false;
+    let token: string | null = null;
+    try {
+        token = await SecureStore.getItemAsync(PUSH_TOKEN_STORE_KEY);
+    } catch {
+        return false;
+    }
+    if (!token) return true;
+    return unregisterAt(base, JSON.stringify({ publicKey: account.publicKey, token }), account, timeoutMs);
+}
+
+/**
  * Stop the push alerts of the account leaving this phone, on the communities the phone sent its token to (see the file
  * comment), then forget that record: the next account starts its own. Never throws.
  */
@@ -167,28 +203,41 @@ export async function stopPushAlerts(account: LeavingAccount | null, storage: St
     if (account.publicKey) await stopRegistering(account.publicKey);
     // And after the account's sign-in has taken back its old statements, whose communities that puts back on it.
     await leaveStatementsSettled();
-    await unregisterPushToken(account, await pushRegisteredCommunities(storage));
+    const communities = await pushRegisteredCommunities(storage);
+    // BeanPool's key vault sends the account's recovery notices to the phones in its copies: this phone comes out too,
+    // alongside the communities and within the same time (utils/vault.ts `withdrawVaultPushToken`).
+    await Promise.all([
+        unregisterPushToken(account, communities),
+        withdrawVaultPushToken(account, UNREGISTER_TIMEOUT_MS),
+    ]);
     await forgetPushRegistrations(storage);
 }
 
 /**
- * The communities the leaving account saved, and their cached copies, go from this phone. Removing the list can throw,
- * and a caller decides what that means (Replace: ReplaceNotSaved). A cached copy that can't be removed is logged.
+ * The communities the leaving account saved, and their cached copies, go from this phone, with every other community copy
+ * on it (a community a Wipe left is no longer listed, and its file keeps that identity's group key memory: community-
+ * cache.ts `everyCopy`). Removing the list can throw, and a caller decides what that means (Replace: ReplaceNotSaved). A
+ * cached copy that can't be removed is logged.
  */
 export async function forgetCommunities(communities: readonly string[], storage: Storage = AsyncStorage): Promise<void> {
-    try {
-        const { removeCommunityCaches } = await import('./community-cache');
-        await removeCommunityCaches(communities);
-    } catch (e) {
-        console.warn('[Account] The cached community copies could not all be removed', e);
-    }
+    await removeEveryCommunityCopy(communities);
     await storage.removeItem(SAVED_NODES_STORE_KEY);
 }
 
+/** Every community copy on this phone goes, listed or not (community-cache.ts `everyCopy`); one that can't is logged. */
+async function removeEveryCommunityCopy(communities: readonly string[]): Promise<void> {
+    try {
+        const { removeCommunityCaches } = await import('./community-cache');
+        await removeCommunityCaches(communities, { everyCopy: true });
+    } catch (e) {
+        console.warn('[Account] The cached community copies could not all be removed', e);
+    }
+}
+
 /**
- * An account leaves this phone (Sign Out, the self-delete purge, Replace): its push alerts stop, then its communities
- * and their cached copies go. `account` is the leaving account, whose key is still on the phone; with none, only the
- * communities go. The caller then wipes the key and the rest of the account's app storage.
+ * An account leaves this phone (Sign Out, the self-delete purge at its last community, Replace): its push alerts stop,
+ * then its communities and their cached copies go. `account` is the leaving account, whose key is still on the phone;
+ * with none, only the communities go. The caller then wipes the key and the rest of the account's app storage.
  */
 export async function releaseAccountFromPhone(account: LeavingAccount | null, storage: Storage = AsyncStorage): Promise<void> {
     await stopPushAlerts(account, storage);
@@ -196,22 +245,56 @@ export async function releaseAccountFromPhone(account: LeavingAccount | null, st
 }
 
 /**
- * "Sign Out (Device Only)", and the phone's half of the self-delete purge once the node has answered (settings.tsx):
- * the open community's tables are dropped, the account is released ({@link releaseAccountFromPhone}), then its key and
- * app storage go (identity.ts `wipeIdentity`).
+ * Before Sign Out wipes them (identity.ts `wipeIdentityScopedStorage`): each names-list pin this key keeps on the phone has
+ * its locked copy saved on the node and confirmed (names-list.ts `saveNamesCopiesBeforeLeaving`, design §5). Returns the
+ * ones not confirmed, for the words (a store that fails counts as one); never throws and never blocks.
  */
-export async function signOutOfThisPhone(account: LeavingAccount | null): Promise<void> {
-    const { clearDB } = await import('./db');
-    await clearDB();
-    await releaseAccountFromPhone(account);
-    await wipeIdentity();
+export async function namesCopiesBeforeSignOut(
+    account: LeavingAccount | null, storage: Pick<WipeStorage, 'getAllKeys'> = AsyncStorage, store?: NamesPinStore,
+): Promise<NamesCopyUnconfirmed[]> {
+    if (!account?.publicKey || !account.privateKey) return [];
+    try {
+        const anchors = namesPinAddresses(await storage.getAllKeys(), account.publicKey);
+        if (!anchors.length) return [];
+        return await saveNamesCopiesBeforeLeaving(account as BeanPoolIdentity, anchors, store);
+    } catch (e) {
+        console.warn('[Names] The names-list copies could not be saved before Sign Out', e instanceof Error ? e.message : e);
+        return [{ anchor: '', onlyKey: null }];
+    }
 }
 
 /**
- * "Delete this account from this phone" (node-mismatch.tsx): its push alerts stop, then its key and app storage go.
- * The saved communities stay, so the member can pick theirs to recover on.
+ * "Sign Out (Device Only)", and the phone's half of the self-delete purge at the member's last community on the phone
+ * once the node has answered (settings.tsx, delete-here.ts `planDelete`):
+ * the open community's tables are dropped, the account is released ({@link releaseAccountFromPhone}), then its key and
+ * app storage go (identity.ts `wipeIdentity`).
+ */
+export async function signOutOfThisPhone(account: LeavingAccount | null, opts: { namesCopiesSaved?: boolean } = {}): Promise<void> {
+    // The names list's pins go with the wipe: their locked copies are saved on the node first (best effort; Settings asks
+    // before this and passes `namesCopiesSaved`, so the copies aren't saved twice).
+    if (!opts.namesCopiesSaved) await namesCopiesBeforeSignOut(account);
+    const { clearDB } = await import('./db');
+    // The identity leaves this phone: what it knew of its groups' keys goes with it (utils/db.ts clearDB).
+    await clearDB({ identityLeaves: true });
+    await releaseAccountFromPhone(account);
+    await wipeIdentity();
+    // No community and no account on the phone now: the update screen's block, if one was up, comes down
+    // (utils/community-switch.ts).
+    communitySwitched();
+}
+
+/**
+ * "Delete this account from this phone" (node-mismatch.tsx), once no saved community keeps the key (delete-here.ts
+ * `otherCommunitiesKeeping`): its push alerts stop; the identity leaves this phone, so, as at Sign Out, the open
+ * community's tables are dropped and every cached copy goes, and with them what it knew of its groups' keys in every
+ * community file (director, #1815 review finding 2); then its key and app storage go. The saved communities stay, so
+ * the member can pick theirs to recover on.
  */
 export async function deleteAccountFromThisPhone(account: LeavingAccount | null): Promise<void> {
     await stopPushAlerts(account);
+    const { clearDB } = await import('./db');
+    await clearDB({ identityLeaves: true });
+    await removeEveryCommunityCopy(await communitiesOnThisPhone());
     await wipeIdentity();
+    communitySwitched();
 }

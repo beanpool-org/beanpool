@@ -5,10 +5,20 @@
  * any browser after signing in, and nothing about it stays on a shared computer.
  *
  * - The member's own: read, added to, removed from and cleared only with their own signed request (routes/blocks.ts).
- *   The member comes from the signature, never the body. Nothing else here reads it: no other member, no visitor, no
- *   unsigned request, not the activity feed, and no broadcast but a bare doorbell to the owner's own sockets. The
- *   blocked member is never told, and nothing they can read changes. The community's operator can see it, as they see
- *   reports (the trade Marty accepted).
+ *   The member comes from the signature, never the body. No other member, no visitor and no unsigned request reads it,
+ *   nor the activity feed, and no broadcast carries it but a bare doorbell to the owner's own sockets. The blocked
+ *   member is never told, and nothing they can read changes. The community's operator can see it, as they see reports
+ *   (the trade Marty accepted).
+ * - What the node does with it (hasBlocked, blockersOf): a direct message from a blocked member is kept for its sender
+ *   alone and never reaches the owner, then or after an unblock (engine/withheld-lines.ts); no push of their line or
+ *   @mention in a group's chat reaches the owner (the node's own notices, a vote on the owner's convenorship among them,
+ *   still do), nor of a new deal request from them, its expiry, their 1-step accept of the owner's Offer or their cancel
+ *   of that deal (the trade itself, its escrow and its SYSTEM lines unchanged); they can't address a listing to the
+ *   owner; and, as the guide says, "Your friends no longer see you as a connection in common on their profile", nor
+ *   does anyone the owner blocked count for the owner (getTrustProfileForViewer). No friend row is touched: "It does
+ *   not end the friendship: they still have you as a friend, and if your contact is set to Friends they still see it. To
+ *   end that too, take them off your Friends tab on the phone; on the web … They can notice a removal." A shared room (a
+ *   group's, an event's or an enterprise's chat) shows everyone the same lines, so the apps hide theirs there.
  * - A blocked key is any key in the one spelling (engine/member-key.ts), a member's or not: the marketplace shows listings
  *   from a connected community's public board straight from that node (MarketplacePage's peer browse), and their author
  *   has no row here, yet has a Block button. Never the owner's own. At most MEMBER_BLOCKS_MAX each. The web app's one-time
@@ -42,7 +52,7 @@
  * A standby that copied from its main server before it had this table never stored the rows made meanwhile, and no delta
  * brings them again: it takes one whole copy (memberBlocksWantWholeCopy), as for the replaced keys (engine/key-move.ts).
  */
-import { db } from '../db/db.js';
+import { db, rethrowUnlessRowRefused } from '../db/db.js';
 import { isMemberKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from './member-key.js';
 import type { SyncMemberBlock } from '@beanpool/engine';
 
@@ -93,6 +103,143 @@ export const PAIR_TOMBSTONES_OF = "table_name = 'member_blocks' AND row_key >= ?
 
 /** The later of two stamps, either possibly null. */
 const later = (a: string | null, b: string | null): string | null => (a === null ? b : b === null ? a : a > b ? a : b);
+
+/** Whether `owner` has `key` on their block list. */
+export function hasBlocked(owner: string, key: string): boolean {
+    return !!db.prepare('SELECT 1 FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?').get(owner, key);
+}
+
+/** Everyone who has `key` on their block list (idx_member_blocks_blocked). */
+export function blockersOf(key: string): Set<string> {
+    return new Set((db.prepare('SELECT owner_pubkey FROM member_blocks WHERE blocked_pubkey = ?').all(key) as { owner_pubkey: string }[])
+        .map(r => r.owner_pubkey));
+}
+
+// ── who blocked an author, kept from one push to the next ───────────────────────────────────────────────────────
+
+/**
+ * The block lists' version: one more for every row that any statement inserts, changes or deletes in member_blocks on
+ * this node's connection, counted by SQLite itself (temporary triggers, watchBlockWrites), so no writer can leave it
+ * behind: a block, an unblock, Unblock All, a prune, a self-deletion, a re-key's move, a standby's copy and its
+ * tombstones, a whole copy's start, and any written later. A rolled-back write moves it too, which only empties the
+ * kept lists once more.
+ */
+const BLOCKS_VERSION = Symbol.for('beanpool.memberBlocksVersion');
+const blocksVersion = (): number => (db as any)[BLOCKS_VERSION] ?? 0;
+let watching = false;
+let rebuildWarned = false;
+/** What blockersOfKept read, by key, at `keptAt` and `keptAtData`; emptied whenever either moves on. */
+const kept = new Map<string, Set<string>>();
+let keptAt = -1;
+/**
+ * The connection's `PRAGMA data_version` when the kept lists were read. It moves when ANOTHER connection commits to
+ * state.db (an ops tool in its own process, a script, a second handle in this one), which no trigger of this
+ * connection sees: the belt to the triggers' braces (#1867). It moves for a write to any table, not only
+ * member_blocks, so another connection's write empties the kept lists whatever it wrote: only the next read pays.
+ */
+let keptAtData = -1;
+let keptKeys = 0;
+/** The most keys the kept lists hold together (an author nobody blocked counts as one). Past it they start again. */
+export const KEPT_BLOCKERS_MAX = 100_000;
+
+const COUNTED_OPS = ['INSERT', 'UPDATE', 'DELETE'] as const;
+const COUNTED_TRIGGERS = COUNTED_OPS.map(op => `member_blocks_${op.toLowerCase()}_counted`);
+type Pluck = { get(...params: unknown[]): unknown };
+/**
+ * Read at every kept read (~2 µs together, #1867): how many of the counting triggers are still there, and the
+ * connection's data_version. SQLite drops TEMP triggers without a word: a `PRAGMA temp_store` set at run time, the table
+ * dropped and made again, or the transaction that made them rolled back. Prepared at the first kept read.
+ */
+let countingTriggers: Pluck | null = null;
+let dataVersion: Pluck | null = null;
+const triggersLeft = () => countingTriggers!.get() as number;
+
+/** The block lists' version (blocksVersion above). */
+export function blockListsVersion(): number {
+    return blocksVersion();
+}
+
+/**
+ * Has SQLite count every write to member_blocks on this connection from now on (blocksVersion), and answers whether
+ * all three counting triggers are there. Its triggers are TEMP: on this connection only, never stored in the database,
+ * never copied, and gone with the process. Never inside a transaction: one rolled back would take the triggers with
+ * it. Not exported: only blockersOfKept may start the count, and only with its kept lists emptied, so nothing is kept
+ * from before the count began.
+ */
+function watchBlockWrites(): boolean {
+    if (db.inTransaction) return false;
+    if (!watching) {
+        db.function('member_blocks_written', { deterministic: false }, () => {
+            (db as any)[BLOCKS_VERSION] = blocksVersion() + 1;
+            return null;
+        });
+        countingTriggers = db.prepare(`SELECT COUNT(*) FROM temp.sqlite_master WHERE type = 'trigger' AND tbl_name = 'member_blocks'
+            AND name IN (${COUNTED_TRIGGERS.map(n => `'${n}'`).join(', ')})`).pluck();
+        dataVersion = db.prepare('PRAGMA data_version').pluck();
+        watching = true;
+    }
+    try {
+        COUNTED_OPS.forEach((op, i) => db.exec(`CREATE TEMP TRIGGER IF NOT EXISTS ${COUNTED_TRIGGERS[i]} AFTER ${op} ON main.member_blocks
+                     BEGIN SELECT member_blocks_written(); END`));
+    } catch (e) {
+        console.error('[member-blocks] could not make the triggers counting block-list writes; reading the table at every push:', e);
+        return false;
+    }
+    return triggersLeft() === COUNTED_TRIGGERS.length;
+}
+
+/**
+ * blockersOf, kept until the block lists change (a listing's push by area reads its author's at every event: an author
+ * blocked by 10,000 members cost 3.5 ms a push to read, #1831). The next read after any write to member_blocks reads
+ * the table again, so a block or an unblock holds from the next push, as before. Inside a transaction it reads the
+ * table and keeps nothing: a write there may still be rolled back, and the rollback writes no row.
+ *
+ * Before it serves a kept list it checks that nothing could have written unseen (#1867): another connection's commit
+ * (data_version) empties the kept lists; a counting trigger gone empties them too, and makes the three again, since
+ * every write from then on is counted and nothing kept from before is used (rebuilt rather than refused, so a dropped
+ * trigger costs one read, not #1831's 3.5 ms at every push from then on). If they can't be made, it reads the table
+ * and keeps nothing.
+ */
+export function blockersOfKept(key: string): ReadonlySet<string> {
+    if (db.inTransaction) return blockersOf(key);
+    const left = watching ? triggersLeft() : 0;
+    if (left !== COUNTED_TRIGGERS.length) {
+        const wasWatching = watching;
+        kept.clear();
+        keptKeys = 0;
+        keptAt = -1;
+        const remade = watchBlockWrites();
+        if (wasWatching) {
+            if (remade) {
+                rebuildWarned = false;
+                console.warn(`[member-blocks] only ${left} of the ${COUNTED_TRIGGERS.length} triggers counting block-list writes were left; kept lists emptied, triggers made again`);
+            } else if (!rebuildWarned) {
+                rebuildWarned = true;
+                console.warn(`[member-blocks] only ${left} of the ${COUNTED_TRIGGERS.length} triggers counting block-list writes were left; kept lists emptied, triggers could not be made again; reading the table at every push`);
+            }
+        }
+        if (!remade) return blockersOf(key);
+    }
+    // Read before the table, so another connection's commit after it moves it past what is kept.
+    const data = dataVersion!.get() as number;
+    const version = blocksVersion();
+    if (keptAt !== version || keptAtData !== data) {
+        kept.clear();
+        keptKeys = 0;
+        keptAt = version;
+        keptAtData = data;
+    }
+    const known = kept.get(key);
+    if (known) return known;
+    const read = blockersOf(key);
+    if (keptKeys + read.size + 1 > KEPT_BLOCKERS_MAX) {
+        kept.clear();
+        keptKeys = 0;
+    }
+    kept.set(key, read);
+    keptKeys += read.size + 1;
+    return read;
+}
 
 /** A member's own list, oldest block first. */
 export function listBlocks(owner: string): MemberBlock[] {
@@ -303,6 +450,7 @@ export function mergeReplicatedBlocks(rows: unknown): BlockMerge {
                 upsert.run(b.ownerPubkey, b.blockedPubkey, b.createdAt, b.updatedAt);
                 merge.written++;
             } catch (e: any) {
+                rethrowUnlessRowRefused(e);
                 console.warn(`[Blocks] A copied block could not be stored here, left out: ${e?.message || e}`);
                 merge.invalid++;
             }

@@ -35,7 +35,7 @@ export function TotpCodeDialog(props: {
                             This community's settings are also protected by a 2FA code. Enter the 6-digit code from your authenticator app, or a backup code.
                         </Text>
                         {wrongCode ? (
-                            <Text style={{ fontSize: 14, color: colors.feedback.danger.solid, marginBottom: 8 }} accessibilityLiveRegion="polite">
+                            <Text style={{ fontSize: 14, color: colors.feedback.danger.fg, marginBottom: 8 }} accessibilityLiveRegion="polite">
                                 That code didn't work. Codes change every 30 seconds — try the current one.
                             </Text>
                         ) : null}
@@ -67,7 +67,7 @@ export function TotpCodeDialog(props: {
                                 accessibilityRole="button"
                                 accessibilityLabel={submitLabel}
                                 accessibilityState={{ busy, disabled: busy }}
-                                style={{ minHeight: 48, paddingHorizontal: 20, justifyContent: 'center', borderRadius: 12, backgroundColor: colors.brand.primary }}
+                                style={{ minHeight: 48, paddingHorizontal: 20, justifyContent: 'center', borderRadius: 12, backgroundColor: colors.brand.fill }}
                             >
                                 {busy
                                     ? <ActivityIndicator size="small" color={colors.text.inverse} />

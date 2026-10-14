@@ -93,6 +93,8 @@ The project has a working reference implementation across four apps (`apps/serve
 - All code must pass the project's linting and formatting checks before review.
   - Run linting via `pnpm lint` (configured via Flat config `eslint.config.mjs`).
 - Any changes to sensitive backend POST routes must be added to and verified by the auth boundary script at `scripts/verify-auth-boundary.mjs`. Run `node scripts/verify-auth-boundary.mjs` to prove that the `requireSignature` middleware coverage holds.
+- `pnpm install` runs install scripts only for the packages in `pnpm.onlyBuiltDependencies` in the root `package.json` (better-sqlite3, esbuild and workerd), so a hijacked or typosquatted dependency can't run code just by being installed. pnpm names every other package with an install script in its "build scripts that were ignored" line; the patched packages appear there too, and their patches are still applied. If a new dependency really needs its install script (a native addon with no prebuilt binary, say), add it to that list and say why in the PR.
+- GitHub workflows pin every action to a full commit SHA with its version in a comment, declare a top-level `permissions:`, and keep any job that publishes a release behind `environment: release`. `scripts/check-workflows.mjs` (run by test-all) enforces this.
 
 ---
 

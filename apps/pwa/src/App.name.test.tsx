@@ -7,7 +7,7 @@
  *
  * The whole App, with the stored identity real (an in-memory IndexedDB) and the node's reads mocked at lib/api.
  */
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { App } from './App';
@@ -42,12 +42,14 @@ vi.mock('./lib/sync', () => ({
 }));
 
 vi.mock('./lib/api', () => ({
+    // The page's own server unless Settings points it elsewhere: App reads it for the web app's update banner.
+    getNodeApiUrl: vi.fn(() => ''),
     registerMember: vi.fn(),
     checkMembership: vi.fn(),
     getConversations: vi.fn(async () => ({ conversations: [], totalUnread: 0 })),
     getMyMarketplaceTransactions: vi.fn(async () => []),
     getCommunityHealth: vi.fn(async () => ({ online: true, version: '1.2.26' })),
-    getMyActiveRecoveryCollections: vi.fn(async () => []),
+    getMyActiveRecoveryCollections: vi.fn(async () => ({ count: 0, collections: [] })),
     getCommunityMe: vi.fn(async () => null),
     getUnseenNotices: vi.fn(async () => []),
     markNoticesSeen: vi.fn(),
@@ -70,6 +72,10 @@ const shownName = () => screen.getByTestId('marketplace-page').textContent;
 /** Opened, and every read the app makes on opening settled. */
 async function openApp() {
     render(<App />);
+    // Members land on Home (DESIGN-home-dashboard-fable.md §8); the Market's stand-in, which shows the name the app
+    // hands its pages, is one tap away.
+    const nav = await screen.findByTestId('mobile-bottom-nav');
+    fireEvent.click(within(nav).getByText('Market'));
     await screen.findByTestId('marketplace-page');
     await waitFor(() => expect(api.checkMembership).toHaveBeenCalled());
     await new Promise((r) => setTimeout(r, 50));

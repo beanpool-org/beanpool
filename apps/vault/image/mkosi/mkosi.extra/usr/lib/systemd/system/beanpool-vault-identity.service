@@ -1,0 +1,16 @@
+# Which image booted (the UKI systemd-boot started, and the root hash on the command line): root reads the ESP, which
+# only root may, before the keyholder starts, and leaves the answer in /run for it (src/shared/image-identity.ts).
+[Unit]
+Description=BeanPool key vault: which image booted
+After=local-fs.target
+Before=beanpool-vault-keyholder.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/node/bin/node /usr/lib/beanpool-vault/vault-keyholder.mjs --identify /run/beanpool-vault-image.json
+PrivateNetwork=yes
+LimitCORE=0
+
+[Install]
+WantedBy=multi-user.target

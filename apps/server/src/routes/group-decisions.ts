@@ -1,0 +1,156 @@
+/**
+ * A chat group's votes (DESIGN-group-decisions §2.3–§2.6, slice S3): the community Decision engine, scoped to one group
+ * (a guild, a working group, a social circle). The group is the PATH's, never a body field; the actor is the signer the
+ * middleware verified, never a body field. Inside it the group's members (any role) see its votes and its members and
+ * convenors vote; observers watch; anyone else, and anyone who left, sees only the votes they were on the roll of, and
+ * everything else is answered as if it were missing (404), as a group post is.
+ *
+ * While a vote is open its card shows turnout only; Yes and No once it has closed (Marty's pick 3). Ballots are secret.
+ */
+import Router from '@koa/router';
+import {
+    createScopedDecision, getGroupDecisions, getGroupDecision, castDecisionVote, getOwnDecisionVotes, publicDecision,
+    scopedTallyForReader, groupRollNow, decisionsOn, canVoteOnScoped, observesGroupNow, groupNameableNow, ScopedNotFoundError, type Decision,
+} from '../decisions-engine.js';
+import { groupClosedAt } from '../state-engine.js';
+import { db } from '../db/db.js';
+import { getMember } from '@beanpool/engine';
+import { assertNotMuted } from '../engine/auto-moderation.js';
+import { FEATURE_OFF } from '../config/node-profile.js';
+import { respondProfileRefusal } from './profile-feature-gate.js';
+import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
+import type { RouteDeps } from './types.js';
+
+function notFound(ctx: any): void {
+    ctx.status = 404;
+    ctx.body = { error: 'Not found' };
+}
+
+/**
+ * The callsigns of the vote's author and subject (#1794 N7). A removed voter's screen has no roster to name them from, and
+ * a callsign is what the community directory already shows any member; every reader of a card is already on its roll
+ * or in the group. A deleted account keeps a row whose callsign is "Deleted Member" (state-engine purgeMemberSelf), so the
+ * card names them that, which is true. Only a key with no member row, or a blank callsign, is left out, and the apps then
+ * say "someone in the group".
+ */
+function cardNames(d: Decision): Record<string, string> {
+    const names: Record<string, string> = {};
+    for (const pk of [d.authorPubkey, d.subject]) {
+        if (!pk || names[pk]) continue;
+        const callsign = (getMember(db, pk) as any)?.callsign;
+        if (typeof callsign === 'string' && callsign.trim()) names[pk] = callsign;
+    }
+    return names;
+}
+
+function card(d: Decision, actor: string) {
+    const mine = getOwnDecisionVotes(actor, [d.id]).get(d.id);
+    return {
+        ...publicDecision(d),
+        tally: scopedTallyForReader(d),
+        myVote: mine ? { support: mine.support, updatedAt: mine.updatedAt } : null,
+        // Yes / No follow this vote's own roll, frozen when it opened (§2.6), never the group's roll now: someone removed or
+        // made an observer since still votes on it, someone who joined since does not.
+        canVote: canVoteOnScoped(d, actor),
+        names: cardNames(d),
+    };
+}
+
+export function createGroupDecisionRoutes(_deps: RouteDeps): Router {
+    const router = new Router();
+
+    router.get('/api/groups/:id/decisions', async (ctx) => {
+        const actor = (ctx.state as any)?.actor as string | undefined;
+        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        try {
+            const decisions = getGroupDecisions(ctx.params.id, actor);
+            const roll = groupRollNow(ctx.params.id);
+            const closedAt = groupClosedAt(ctx.params.id);
+            const onRollNow = roll.some(k => k.pubkey === actor);
+            const cards = decisions.map(d => card(d, actor));
+            const votesOnOne = cards.some(c => c.canVote);
+            const canPropose = decisionsOn() && !closedAt && roll.length >= 2 && onRollNow;
+            ctx.body = {
+                decisions: cards,
+                // A roll of one holds no vote (§2.2), an observer proposes nothing, a closed group takes no vote.
+                canPropose,
+                // Who the form may name, only to someone who may propose: the group's people now, less any suspended.
+                nameable: canPropose ? groupNameableNow(ctx.params.id) : [],
+                // On the group's roll now, or on an open vote's roll from before they were removed or made an observer.
+                onRoll: onRollNow || votesOnOne,
+                // "You watch this group": an observer now who votes on none of its open votes.
+                watching: !onRollNow && !votesOnOne && observesGroupNow(ctx.params.id, actor),
+                rollSize: roll.length,
+                closedAt,
+            };
+        } catch (err) {
+            if (err instanceof ScopedNotFoundError) return notFound(ctx);
+            throw err;
+        }
+    });
+
+    router.get('/api/groups/:id/decisions/:decisionId', async (ctx) => {
+        const actor = (ctx.state as any)?.actor as string | undefined;
+        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required' }; return; }
+        try {
+            const d = getGroupDecision(ctx.params.id, ctx.params.decisionId, actor);
+            ctx.body = { decision: card(d, actor) };
+        } catch (err) {
+            if (err instanceof ScopedNotFoundError) return notFound(ctx);
+            throw err;
+        }
+    });
+
+    router.post('/api/groups/:id/decisions', async (ctx) => {
+        const actor = (ctx.state as any)?.actor as string | undefined;
+        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required to propose a vote' }; return; }
+        const { title, description, effect, subject, params } = (ctx as any).requestBody || {};
+        try {
+            // A muted member (G3) proposes nothing other members read.
+            assertNotMuted(actor);
+            const decision = createScopedDecision({
+                scopeKind: 'group',
+                scopeId: ctx.params.id,
+                authorPubkey: actor,
+                title,
+                description,
+                effect,
+                subject,
+                params,
+            });
+            ctx.body = { success: true, decision: card(decision, actor) };
+        } catch (err: any) {
+            if (err instanceof ScopedNotFoundError) return notFound(ctx);
+            if (respondProfileRefusal(ctx, err)) return;
+            ctx.status = 400;
+            ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT) };
+        }
+    });
+
+    router.post('/api/groups/:id/decisions/:decisionId/vote', async (ctx) => {
+        const actor = (ctx.state as any)?.actor as string | undefined;
+        if (!actor) { ctx.status = 401; ctx.body = { error: 'Authentication required to vote' }; return; }
+        const { support, signature } = (ctx as any).requestBody || {};
+        if (typeof support !== 'boolean') { ctx.status = 400; ctx.body = { error: 'support (true or false) is required' }; return; }
+        try {
+            getGroupDecision(ctx.params.id, ctx.params.decisionId, actor);
+        } catch (err) {
+            if (err instanceof ScopedNotFoundError) return notFound(ctx);
+            throw err;
+        }
+        const result = castDecisionVote(ctx.params.decisionId, actor, support, 1, typeof signature === 'string' ? signature : undefined, 'group');
+        if (!result.success) {
+            if (result.code === FEATURE_OFF) {
+                ctx.status = 404;
+                ctx.body = { error: result.error, code: result.code, feature: 'decisions' };
+                return;
+            }
+            ctx.status = 400;
+            ctx.body = { error: result.error };
+            return;
+        }
+        ctx.body = { success: true };
+    });
+
+    return router;
+}

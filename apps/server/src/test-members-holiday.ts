@@ -17,9 +17,10 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, createPost, requestPost, reconcileLedgerFromDb, isOnHoliday } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
-const PORT = 8552;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 let run = 0, passed = 0;
 
 function assert(cond: boolean, msg: string): void {
@@ -36,9 +37,10 @@ function makeMember(callsign: string) {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(
-        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_url, status)
-         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'data:image/png;base64,iVBORw0KGgo=', 'active')`
+        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')`
     ).run(pubKeyHex, callsign);
+    setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 100, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
@@ -83,7 +85,8 @@ async function main() {
     console.log('Running Members Holiday Mode integration tests...\n');
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const alice = makeMember('alice_hol');
     const bob = makeMember('bob_hol');
@@ -199,7 +202,7 @@ async function main() {
     // Rows stored under other keys before this rule stay where they are, and no read serves them.
     db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, 'made_up_before', 'x')`).run(alice.pubKeyHex);
     const served = Object.keys(await readPrefs(alice)).sort();
-    assert(served.join() === 'eventReminderOffsets,holiday_mode,notify_chat,notify_escrow,notify_marketplace,notify_recovery',
+    assert(served.join() === 'eventReminderOffsets,holiday_mode,notify_chat,notify_escrow,notify_marketplace,notify_recovery,show_as_connection_in_common',
         `a key stored before the rule is not served back (${served.join()})`);
     assert(rowsOf(alice.pubKeyHex).includes('made_up_before'), '...and its row is left in place');
 

@@ -120,6 +120,11 @@ async function child(): Promise<void> {
             const members = (db.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c;
             return { resync, envelope, held: listHeldEnvelopes().map((h) => h.envelopeId), members };
         },
+        /** How many members this server holds: after a whole copy it swapped in at a restart (P2), the new start's. */
+        members: async () => {
+            const { db } = await import('./db/db.js');
+            return (db.prepare('SELECT COUNT(*) AS c FROM members').get() as { c: number }).c;
+        },
         checkpoint: async () => {
             const { db } = await import('./db/db.js');
             db.pragma('wal_checkpoint(TRUNCATE)');
@@ -208,7 +213,9 @@ async function main(): Promise<void> {
         assert(standby.ready.role === 'backup' && standbyOwnPeerId !== mainPeerId, 'the standby is up with its own PeerId');
         await standby.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: mainPeerId });
         const pull1 = await standby.send('pull');
-        assert(pull1.resync.ok && pull1.members >= 3, `the standby copied the database (${JSON.stringify(pull1.resync)}, ${pull1.members} members)`);
+        // The copy is swapped in at a restart (P2): counted by the new start.
+        const members1 = pull1.resync.restarting ? await standby.send('members') : pull1.members;
+        assert(pull1.resync.ok && members1 >= 3, `the standby copied the database (${JSON.stringify(pull1.resync)}, ${members1} members)`);
         assert(pull1.envelope === 'stored' && pull1.held.length === 1 && pull1.held[0] === setup.envelopeId, 'and holds the main server\'s take-over envelope');
         {
             const onMain = (await main.send('recovery-rows')).rows.filter((r: any) => r.owner_pubkey === deposited.pk);
@@ -240,7 +247,10 @@ async function main(): Promise<void> {
 
         // ── 3. Codes: typos, the wrong number, the brake ──
         console.log('\n— 3. typing the code —');
-        const open = (code: string, password = PW_STANDBY) => post(standby.base, '/api/local/admin/takeover/open', { code }, pw(password));
+        // Step 7c: the password alone opens no admin route with 2FA off: the take-over goes under an owner's key session the
+        // standby makes (takeover-test-harness.ts owner-session).
+        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const open = (code: string) => post(standby.base, '/api/local/admin/takeover/open', { code }, standbyOwner);
         const noAuth = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code });
         assert(noAuth.status === 401, `no admin password → 401 (${noAuth.status})`);
         const typo = await open(setup.code.slice(0, -1) + (setup.code.endsWith('A') ? 'B' : 'A'));
@@ -274,20 +284,21 @@ async function main(): Promise<void> {
         assert(pv.mainServer.answers === false && pv.mainServer.warning === null, 'the main server does not answer, and the preview says so (no warning)');
         assert(pv.recoverySealKey === true && !pv.missing.some((m: string) => /sign-in recovery copies/.test(m)),
             `S2: the preview says the keys carry the key that opens members' sign-in recovery copies (${pv.recoverySealKey})`);
-        assert(pv.missing.some((m: string) => /invites/.test(m)) && pv.missing.some((m: string) => /Decisions/.test(m)) && pv.missing.some((m: string) => /notification/.test(m)),
-            'the preview lists what will be missing (Decisions and votes, pledges, invites, notification settings, …)');
+        assert(pv.missing.some((m: string) => /photos sent in chats/.test(m)) && pv.missing.some((m: string) => /Commons project proposals/.test(m))
+            && !pv.missing.some((m: string) => /Decisions|invites|keeper changes|notifications on|muted chats|activity list|pricing guide/.test(m)),
+            'the preview lists what will be missing (chat photos, Commons proposals, …), and no longer Decisions, invites or keeper changes, nor the phones members get notifications on, muted chats, the activity list or the pricing guide, which the standby copies');
         assert(!JSON.stringify(opened.body).includes(TUNNEL_TOKEN) && !/adminHash|totpSecret|libp2p_key/.test(JSON.stringify(opened.body)),
             'the preview carries no secret from inside the keys');
 
-        const noConfirm = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: pv.sessionId }, pw(PW_STANDBY));
+        const noConfirm = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: pv.sessionId }, standbyOwner);
         assert(noConfirm.status === 400, 'a confirm without confirm:true changes nothing');
-        const badSession = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: 'f'.repeat(64), confirm: true }, pw(PW_STANDBY));
+        const badSession = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: 'f'.repeat(64), confirm: true }, standbyOwner);
         assert(badSession.status === 400 && badSession.body.sessionGone, 'a wrong session id is refused');
         assert(!fs.existsSync(path.join(dirs.standby, 'takeover-journal.json')), 'nothing is written before the confirm');
 
         // ── 5. Confirm ──
         console.log('\n— 5. confirm: the journaled promotion, then the restart —');
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: pv.sessionId, confirm: true }, pw(PW_STANDBY));
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: pv.sessionId, confirm: true }, standbyOwner);
         assert(confirmed.status === 200 && /^[0-9a-f]{64}$/.test(confirmed.body.progressToken),
             `the confirm answers with a progress token (${confirmed.status} ${JSON.stringify(confirmed.body).slice(0, 160)})`);
         const progressToken = confirmed.body.progressToken;
@@ -310,7 +321,12 @@ async function main(): Promise<void> {
             `the progress token follows the take-over across the restart: complete, every step done (${prog.body.state})`);
         const ownPw = await post(standby.base, '/api/local/admin/takeover/progress', {}, pw(PW_STANDBY));
         assert(ownPw.status === 401, "the standby's own admin password no longer works");
-        const communityPw = await post(standby.base, '/api/local/admin/takeover/progress', {}, pw(PW_MAIN));
+        // Step 7c: with 2FA off the community's password alone opens no admin route (refused as needing 2FA, not as a
+        // wrong password); with 2FA on, it and a code read the progress.
+        const communityPwAlone = await post(standby.base, '/api/local/admin/takeover/progress', {}, pw(PW_MAIN));
+        assert(communityPwAlone.status === 403 && communityPwAlone.body?.code === 'password_needs_2fa',
+            `the community's admin password alone is refused as needing 2FA (${communityPwAlone.status} ${communityPwAlone.body?.code})`);
+        const communityPw = await post(standby.base, '/api/local/admin/takeover/progress', {}, await standby.send('password-and-code', { password: PW_MAIN }));
         assert(communityPw.status === 200 && communityPw.body.authorisedBy === 'recovery code #1', "the community's admin password does");
 
         const after = await standby.send('inspect', { ownerSeedHex });
@@ -328,7 +344,11 @@ async function main(): Promise<void> {
         assert(after.backupPrimaryUrl === null && after.backupReplicationToken === null, 'the pull settings are cleared');
         assert(after.publicAddress?.hostname === 'testtown.beanpool.org' && after.publicAddress?.tunnelToken === TUNNEL_TOKEN,
             'the web address is back, with the tunnel token from the older envelope');
-        assert(after.tunnelTokenFile === TUNNEL_TOKEN, 'and the tunnel token is written for the cloudflared sidecar');
+        // Was: the token written to data/tunnel-token for a cloudflared sidecar. The tunnel now runs inside the server.
+        assert(after.tunnel.wantedToken === TUNNEL_TOKEN && after.tunnel.runningToken === TUNNEL_TOKEN && after.tunnel.childToken === TUNNEL_TOKEN
+            && ['starting', 'connected'].includes(after.tunnel.state),
+            `and the tunnel runs inside this server on that token (${after.tunnel.state})`);
+        assert(after.tunnelTokenFile === null, 'with no copy of it in data/tunnel-token');
         assert(after.envelope.state === 'sealed' && JSON.stringify(after.envelope.owners) === JSON.stringify(['Anna']) && JSON.stringify(after.envelope.codes) === '[1]'
             && after.envelope.envelopeId !== dropped.envelopeId,
             `the keys are locked again on this server, to @Anna and code #1 (${after.envelope.envelopeId?.slice(0, 8)})`);
@@ -338,7 +358,7 @@ async function main(): Promise<void> {
         const { peerIdFromPrivateKey } = await import('@libp2p/peer-id');
         assert(peerIdFromPrivateKey(privateKeyFromProtobuf(undoKey)).toString() === standbyOwnPeerId, "…including the standby's own node key");
         assert(after.progress.codeUsed?.codeId === 1 && /Make a new one/.test(after.progress.codeUsed.message), `the used-code notice shows (${after.progress.codeUsed?.message})`);
-        const statusRoute = await post(standby.base, '/api/local/admin/takeover/status', {}, pw(PW_MAIN));
+        const statusRoute = await post(standby.base, '/api/local/admin/takeover/status', {}, await standby.send('owner-session'));
         assert(statusRoute.status === 200 && statusRoute.body.codeUsed?.codeId === 1, 'and the take-over status route carries it for Settings');
         const annc = after.progress.result?.announcement;
         assert(typeof annc === 'string' && /moved to a new server/.test(annc) && /recovery code \(#1\)/.test(annc), `the community was told (${annc})`);
@@ -373,14 +393,15 @@ async function main(): Promise<void> {
 
         // ── 7. A third server trusts the promoted one ──
         console.log('\n— 7. a third server, pinned to the old main server\'s PeerId —');
-        const token2 = await post(standby.base, '/api/local/admin/replication-token/generate', {}, pw(PW_MAIN));
+        const token2 = await post(standby.base, '/api/local/admin/replication-token/generate', {}, await standby.send('owner-session'));
         assert(token2.status === 200 && token2.body.token, 'the promoted server makes a replication token (the community\'s password)');
         const third = await spawnNode(SCRIPT, dirs.third, { ADMIN_PASSWORD: PW_THIRD, NODE_ROLE: 'backup' });
         nodes.push(third);
         await third.send('setup-standby', { primaryUrl: standby.base, replicationToken: token2.body.token, primaryPeerId: mainPeerId });
         const pull3 = await third.send('pull');
         assert(pull3.resync.ok === true, `it accepts the promoted server's signed sync payload (${JSON.stringify(pull3.resync)})`);
-        assert(pull3.members >= 3, `and has the community's members (${pull3.members})`);
+        const members3 = pull3.resync.restarting ? await third.send('members') : pull3.members;
+        assert(members3 >= 3, `and has the community's members (${members3})`);
         assert(pull3.envelope === 'stored' && pull3.held.length === 1, 'and its take-over envelope, signed by the same key');
         await third.kill();
 
@@ -411,7 +432,8 @@ async function main(): Promise<void> {
 
             const probe = await spawnNode(SCRIPT, dirs.probe, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
             nodes.push(probe);
-            const openProbe = () => post(probe.base, '/api/local/admin/takeover/open', { code: setup.code }, pw(PW_STANDBY));
+            const probeOwner: Record<string, string> = await probe.send('owner-session'); // step 7c, as above
+            const openProbe = () => post(probe.base, '/api/local/admin/takeover/open', { code: setup.code }, probeOwner);
 
             // A forged newest copy: names the main server, signed by some other key. Skipped, not used.
             const forged = plant(await seal({ communityId, genesisB64: Buffer.from(fs.readFileSync(path.join(dirs.main, 'genesis.json'))).toString('base64'), signer: crypto.randomBytes(32) }));
@@ -419,7 +441,7 @@ async function main(): Promise<void> {
             assert(withForged.status === 200 && withForged.body.preview.envelope.envelopeId === dropped.envelopeId && withForged.body.preview.envelope.envelopeId !== forged,
                 'a forged newest envelope (not signed by the pinned main server) is skipped at open; the real newest is used');
             assert(/Skipped a held take-over envelope: its signature does not match/.test(probe.output()), '(and the skip is logged)');
-            await post(probe.base, '/api/local/admin/takeover/cancel', {}, pw(PW_STANDBY));
+            await post(probe.base, '/api/local/admin/takeover/cancel', {}, probeOwner);
 
             // Signed by the main server, header says this community, but the bundle inside is another community's.
             plant(await seal({ communityId, genesisB64: otherGenesis }));
@@ -447,9 +469,10 @@ async function main(): Promise<void> {
             const planted = await keyed.send('plant-own-key-copy', { keyB64: ownKey.toString('base64'), seedHex: zed.seedHex, words: zed.words, callsign: 'Zed', sub: GOOGLE_SUB });
             assert(wrappedAlg(planted.row?.kdf_params) === 'node-wrap-xc20p-v1',
                 "(setup) it was once a main server: it holds its own key, and @Zed's copy locked with it");
-            const kOpen = await post(keyed.base, '/api/local/admin/takeover/open', { code: setup.code }, pw(PW_STANDBY));
+            const keyedOwner: Record<string, string> = await keyed.send('owner-session'); // step 7c, as above
+            const kOpen = await post(keyed.base, '/api/local/admin/takeover/open', { code: setup.code }, keyedOwner);
             assert(kOpen.status === 200 && kOpen.body.preview.recoverySealKey === true, `the code opens the keys, which carry the community's key (${kOpen.status})`);
-            const kConfirm = await post(keyed.base, '/api/local/admin/takeover/confirm', { sessionId: kOpen.body.preview.sessionId, confirm: true }, pw(PW_STANDBY));
+            const kConfirm = await post(keyed.base, '/api/local/admin/takeover/confirm', { sessionId: kOpen.body.preview.sessionId, confirm: true }, keyedOwner);
             assert(kConfirm.status === 200, `confirmed (${kConfirm.status} ${JSON.stringify(kConfirm.body).slice(0, 160)})`);
             await keyed.exited;
             const firstRun = keyed.output();
@@ -513,12 +536,13 @@ async function main(): Promise<void> {
             fs.writeFileSync(path.join(dirs.probeOld, 'held-takeover-envelopes', `${String(Date.now() + 2_000_000).padStart(13, '0')}-${oldId}.bpseal`), oldEnvelope, { mode: 0o600 });
             let old = await spawnNode(SCRIPT, dirs.probeOld, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup' });
             nodes.push(old);
-            const oOpen = await post(old.base, '/api/local/admin/takeover/open', { code: setup.code }, pw(PW_STANDBY));
+            const oldOwner: Record<string, string> = await old.send('owner-session'); // step 7c, as above
+            const oOpen = await post(old.base, '/api/local/admin/takeover/open', { code: setup.code }, oldOwner);
             assert(oOpen.status === 200 && oOpen.body.preview.envelope.envelopeId === oldId && oOpen.body.preview.recoverySealKey === false,
                 `the preview says these keys do not carry the recovery-seal key (${oOpen.status} ${oOpen.body.preview?.recoverySealKey})`);
             assert(oOpen.body.preview.missing.some((m: string) => /^members' sign-in recovery copies: these keys were locked before they carried the key/.test(m)),
                 'and lists members\' sign-in recovery copies in what will be missing');
-            const oConfirm = await post(old.base, '/api/local/admin/takeover/confirm', { sessionId: oOpen.body.preview.sessionId, confirm: true }, pw(PW_STANDBY));
+            const oConfirm = await post(old.base, '/api/local/admin/takeover/confirm', { sessionId: oOpen.body.preview.sessionId, confirm: true }, oldOwner);
             assert(oConfirm.status === 200, `the take-over goes on: nothing blocks it (${oConfirm.status})`);
             await old.exited;
             const firstRun = old.output();

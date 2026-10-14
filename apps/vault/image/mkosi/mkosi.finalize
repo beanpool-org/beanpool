@@ -1,0 +1,20 @@
+#!/bin/sh
+# The system tree, just before it becomes the system partition: an emulator's leftover goes, and the tree is listed so
+# two builds (on two machines) can be compared file by file: every file's SHA-256, every symlink's target, and every
+# entry's mode and owner. build.sh leaves the list in <out>/root-files.txt.
+set -eu
+cd "$BUILDROOT"
+# An x86-64 build on another architecture runs the packages' scripts through the host's emulator, and Docker
+# Desktop's Rosetta leaves an empty cache directory behind: not part of the image, and it would make a build on an
+# arm64 Mac differ from one on an x86-64 machine.
+rm -rf ./.cache/rosetta
+rmdir ./.cache 2>/dev/null || true
+# The kernel package's files in /boot would be copied to the ESP, where nothing boots them: the UKI carries its own
+# (mkosi has already copied the kernel to /usr/lib/modules/<version>/vmlinuz for it).
+rm -f ./boot/vmlinuz-* ./boot/System.map-* ./boot/config-* ./boot/initrd.img-*
+out="$OUTPUTDIR/beanpool-vault.root-files.txt"
+{
+    find . -xdev -type f ! -path './var/*' ! -path './boot/*' ! -path './efi/*' -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum
+    find . -xdev -type l ! -path './var/*' -printf 'link %p -> %l\n' | LC_ALL=C sort
+    find . -xdev ! -path './var/*' ! -path './boot/*' ! -path './efi/*' -printf 'meta %m %U:%G %y %p\n' | LC_ALL=C sort
+} > "$out"

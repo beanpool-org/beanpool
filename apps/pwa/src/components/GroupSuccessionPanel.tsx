@@ -141,7 +141,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
                     {/* Totals only. Who voted which way is nobody's business but their own, and the server never
                         sends it: there is no voter list here to leak. */}
                     <div className="text-xs text-nature-600 dark:text-nature-400">{view.tallyLine}</div>
-                    <div className="text-[11px] text-nature-500 dark:text-nature-500 leading-relaxed">
+                    <div className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
                         It passes if more than half of those who answer say yes. Votes are secret, and nobody sees who voted which way.
                     </div>
 
@@ -158,7 +158,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
                                 disabled={busy}
                                 onClick={() => handleVote('yes')}
                                 aria-label={`Vote yes to make ${candidateName} the lead convenor`}
-                                className="flex-1 min-w-[7rem] py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[48px]"
+                                className="flex-1 min-w-[7rem] py-2.5 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                             >
                                 {busy ? 'Voting…' : 'Yes'}
                             </button>
@@ -167,7 +167,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
                                 disabled={busy}
                                 onClick={() => handleVote('no')}
                                 aria-label={`Vote no to making ${candidateName} the lead convenor`}
-                                className="flex-1 min-w-[7rem] py-2.5 px-4 rounded-xl border border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-200 font-bold text-xs transition-all disabled:opacity-50 min-h-[48px]"
+                                className="flex-1 min-w-[7rem] py-2.5 px-4 rounded-xl border border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-200 font-bold text-xs transition-all disabled:opacity-50 min-h-[48px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
                             >
                                 No
                             </button>
@@ -184,7 +184,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
                             id="group-lead-candidate"
                             value={candidate}
                             onChange={(e) => setCandidate(e.target.value)}
-                            className="flex-1 bg-nature-50 dark:bg-nature-800 border border-nature-300 dark:border-nature-700 rounded-xl px-3 py-2 text-xs font-semibold text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 min-h-[44px]"
+                            className="flex-1 bg-nature-50 dark:bg-nature-800 border border-nature-300 dark:border-nature-700 rounded-xl px-3 py-2 text-xs font-semibold text-nature-900 dark:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 min-h-[44px]"
                         >
                             <option value="">Choose someone…</option>
                             {view.candidates.map((m) => (
@@ -196,12 +196,12 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
                         <button
                             type="submit"
                             disabled={busy || !candidate}
-                            className="py-2 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 shrink-0 min-h-[44px]"
+                            className="py-2 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 shrink-0 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2"
                         >
                             {busy ? 'Proposing…' : 'Propose'}
                         </button>
                     </div>
-                    <p className="text-[11px] text-nature-500 dark:text-nature-500 leading-relaxed">
+                    <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
                         Proposing counts as your yes. The vote runs for 14 days, and closes at once if the lead comes back.
                     </p>
                 </form>

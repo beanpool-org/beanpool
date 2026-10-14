@@ -43,6 +43,7 @@ import { createCommonsRoutes } from './routes/commons.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { db } from './db/db.js';
+import { removalInGraceFromBefore } from './decisions-from-before-test-fixture.js';
 import { setCommonsBalance } from '@beanpool/core';
 import * as engine from '@beanpool/engine';
 import type { RouteDeps } from './routes/types.js';
@@ -250,17 +251,22 @@ async function run() {
     // ── I. Secret ballots ─────────────────────────────────────────────────
     console.log('\n--- I. Secret ballots ---');
     // A member's socket (a /ws socket signed by a member is tagged with _memberPubkey at upgrade, and _memberFeed for
-    // one who reads as a member) gets the full event; a stranger's socket gets decision_vote_cast only as a bare
-    // doorbell (PUBLIC_WS_EVENTS), since the decisions list and detail are public reads.
+    // one who reads as a member) gets the full event. A socket that holds a key off the member feed (a visitor's, a
+    // suspended member's) gets decision_vote_cast only as a bare doorbell (PUBLIC_WS_EVENTS). A stranger's socket gets
+    // nothing of it on a local community, whose decisions are members' reads (2026-10-01).
     const seen: any[] = [];
     const fakeSocket = { _memberPubkey: proposerA, _memberFeed: true, send: (m: string) => seen.push(JSON.parse(m)), readyState: 1 };
+    const keyedSeen: any[] = [];
+    const keyedSocket = { _memberPubkey: trader, send: (m: string) => keyedSeen.push(JSON.parse(m)), readyState: 1 };
     const strangerSeen: any[] = [];
     const strangerSocket = { send: (m: string) => strangerSeen.push(JSON.parse(m)), readyState: 1 };
     addWsClient(fakeSocket);
+    addWsClient(keyedSocket);
     addWsClient(strangerSocket);
     seen.length = 0;
     const secretVote = castDecisionVote(poolA.id, partner1, false, 1);
     removeWsClient(fakeSocket);
+    removeWsClient(keyedSocket);
     removeWsClient(strangerSocket);
     assert(secretVote.success, 'partner1 votes No on pool A');
     const castEvent = seen.find(e => e.type === 'decision_vote_cast');
@@ -268,9 +274,11 @@ async function run() {
     assert(castEvent && !('voterPubkey' in castEvent) && !('support' in castEvent) && !('weight' in castEvent) && !('creditCost' in castEvent),
         `the broadcast names no voter, side or weight (got keys ${castEvent ? Object.keys(castEvent).join(',') : 'none'})`);
     assert(!JSON.stringify(seen).includes(partner1), 'no broadcast carries the voter key');
-    const strangerCast = strangerSeen.filter(e => e.type === 'decision_vote_cast');
-    assert(strangerCast.length === 1 && JSON.stringify(strangerCast[0]) === '{"type":"decision_vote_cast"}',
-        `a stranger's socket gets decision_vote_cast as a bare doorbell, no decision id or tally (got ${JSON.stringify(strangerSeen)})`);
+    const keyedCast = keyedSeen.filter(e => e.type === 'decision_vote_cast');
+    assert(keyedCast.length === 1 && JSON.stringify(keyedCast[0]) === '{"type":"decision_vote_cast"}',
+        `a keyed socket off the member feed gets decision_vote_cast as a bare doorbell, no decision id or tally (got ${JSON.stringify(keyedSeen)})`);
+    assert(!strangerSeen.some(e => e.type === 'decision_vote_cast'),
+        `a stranger's socket gets no decision_vote_cast here: the decisions are members' reads (got ${JSON.stringify(strangerSeen)})`);
 
     const detailAsOther = await callRouter(commons, 'GET', `/api/commons/decisions/${poolA.id}`, { actor: proposerA });
     assert(detailAsOther.status === 200 && !('votes' in detailAsOther.body), 'GET /decisions/:id no longer returns a votes list');
@@ -516,14 +524,23 @@ async function run() {
     const liftRoleless = await callRouter(admin, 'POST', `/api/local/admin/users/${roleless}/status`, { actor: keyAdmin, body: { status: 'active' } });
     assert(liftRoleless.status === 200 && statusOf(roleless) === 'active' && !roleRow(roleless), 'a plain admin may lift the suspension of a member who held no role');
 
-    // A passed removal holds the role aside through its grace window; halting it gives the role back (owner only).
+    // A removal holds the role aside through its grace window; halting it gives the role back (owner only).
     const graceAdmin = makeMember('GraceAdmin');
     grantNodeRole(graceAdmin, 'admin', owner);
     const graceRole = roleRow(graceAdmin);
-    const removeAdmin = createDecision({ authorPubkey: owner, title: 'Remove GraceAdmin', description: 'Grace-window role test', touches: 'member', effect: 'remove_member', subject: graceAdmin });
-    const graceExec = decisionsEngine.executeDecision(removeAdmin.id);
-    assert(graceExec.status === 'execution_pending_grace' && statusOf(graceAdmin) === 'disabled' && !roleRow(graceAdmin),
-        `a passed removal suspends them for the grace window and takes the role (got ${graceExec.status})`);
+    // Since 2026-10-01 no Decision removes an admin (docs/the-commons.md §3.8): one is refused when proposed. Until then a
+    // passed one went into its grace window with the role held aside, and a node that ran that code can still have one
+    // there (decisions-from-before-test-fixture.ts): the halt guards below still answer for it.
+    let adminRemovalRefusal = '';
+    try {
+        createDecision({ authorPubkey: owner, title: 'Remove GraceAdmin', description: 'Grace-window role test', touches: 'member', effect: 'remove_member', subject: graceAdmin });
+    } catch (e: any) { adminRemovalRefusal = e?.message || String(e); }
+    assert(/can't remove or suspend an owner or admin/.test(adminRemovalRefusal) && statusOf(graceAdmin) === 'active'
+        && JSON.stringify(roleRow(graceAdmin)) === JSON.stringify(graceRole),
+        `a Decision to remove an admin is refused when proposed, and nothing changes (got "${adminRemovalRefusal}")`);
+    const removeAdmin = { id: removalInGraceFromBefore(owner, graceAdmin, 'Remove GraceAdmin') };
+    assert(getDecision(removeAdmin.id)!.status === 'execution_pending_grace' && statusOf(graceAdmin) === 'disabled' && !roleRow(graceAdmin),
+        `one that passed before then is in its grace window, suspended, the role held aside (got ${getDecision(removeAdmin.id)!.status})`);
     const graceHaltPlain = await callRouter(admin, 'POST', `/api/local/admin/decisions/${removeAdmin.id}/halt`, { actor: keyAdmin, body: { reason: 'Halting the removal of an admin' } });
     assert(graceHaltPlain.status === 403 && getDecision(removeAdmin.id)!.status === 'execution_pending_grace' && statusOf(graceAdmin) === 'disabled',
         `a plain admin cannot halt it — it would hand back an admin role (got ${graceHaltPlain.status} ${JSON.stringify(graceHaltPlain.body)})`);
@@ -606,7 +623,9 @@ async function run() {
     const adminCard = adminDecisions.body.decisions.find((d: any) => d.id === suspendedCard.id);
     assert(adminCard?.params?.suspendedBy === keyAdmin, 'the admin Decisions list still says who suspended');
     const heard: any[] = [];
-    const listener = { send: (m: string) => heard.push(JSON.parse(m)), readyState: 1 };
+    // A member's socket, on the member feed, so it hears each event in full: a key-less one hears no Decision's doorbell on
+    // a local community (its Decisions are members-only, 2026-10-01), and a bare doorbell could carry no key anyway.
+    const listener = { send: (m: string) => heard.push(JSON.parse(m)), readyState: 1, _memberPubkey: voters[0], _memberFeed: true };
     addWsClient(listener);
     const wsTarget = makeMember('WsTarget');
     const wsSuspend = await callRouter(admin, 'POST', `/api/local/admin/users/${wsTarget}/suspend`, { actor: keyAdmin, body: { reason: 'Broadcast carries no admin key' } });
@@ -621,7 +640,7 @@ async function run() {
     completedTrade(restored, voters[0], 3, new Date(Date.now() - DAY));
     const { startP2P } = await import('./p2p.js');
     const { addConnector } = await import('./connector-manager.js');
-    const p2pNode = await startP2P(4038, 4039);
+    const p2pNode = await startP2P(0, 0);
     try {
         const nodeId = p2pNode.peerId.toString();
         const snapshot = await exportSyncState(nodeId);
@@ -642,6 +661,9 @@ async function run() {
         const afterUpdate = db.prepare('SELECT joined_at FROM members WHERE public_key = ?').get(restored) as any;
         assert(afterUpdate?.joined_at === '2026-01-02T03:04:05.678Z', `the update path writes the main server's joined_at, not the standby's own (got ${afterUpdate?.joined_at})`);
         db.prepare("UPDATE members SET joined_at = '2026-01-02T03:04:05.678Z' WHERE public_key = ?").run(restored);
+        // Voting is the restored node's as a main server: a standby writes no Decision or ballot of its own
+        // (config/node-role.ts assertPlainTablesWritable), so the role is only a standby's for the imports.
+        setNodeRole('primary');
         const restoredDecision = createDecision({ authorPubkey: voters[0], title: 'Freeze after restore', description: 'Restored member votes', touches: 'member', effect: 'freeze_credit', subject: troll2 });
         assert(castDecisionVote(restoredDecision.id, restored, true).success, 'the restored member can vote (joined before it opened)');
     } finally {

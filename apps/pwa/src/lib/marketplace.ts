@@ -42,6 +42,8 @@ export interface PollOption {
     text: string;
     votes?: number;
     percentage?: number;
+    /** Of this option's votes, how many came from new or 12-word accounts, where the node gives the split. */
+    newOrWordsVotes?: number;
 }
 
 export interface PollVoteRecord {
@@ -75,7 +77,11 @@ export interface MarketplacePost {
     lng?: number;
     pollOptions?: PollOption[];
     pollClosesAt?: string;
+    /** A poll its creator made an open vote: members see who chose what (pollVotes). Otherwise anonymous. */
+    pollOpenVote?: boolean;
     totalVotes?: number;
+    /** How many of the votes came from new or 12-word accounts (the global node's public polls). */
+    pollNewOrWordsVotes?: number;
     userVotedOptionId?: string;
     pollVotes?: PollVoteRecord[];
     audienceScope?: 'public' | 'group' | 'direct';

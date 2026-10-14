@@ -27,8 +27,9 @@
  *      value is 400; back on, the override is gone; the global profile takes no knocks
  *  11. privacy: nothing about knocks is in a public read; the status read answers only for the signer
  *  12. a member who once knocked deletes their account: what they wrote goes, the record stays
- *  13. replication: every row reaches a standby (never the address hash), an approved knock's invite is made there
- *      (invite codes don't replicate) so the applicant can still redeem it after a take-over; one redeemed on the main
+ *  13. replication: every row reaches a standby (never the address hash); an approved knock's invite comes with the copy
+ *      as the main server's row (invite codes replicate, design G3), and from a main server older than that the standby
+ *      makes it, so the applicant can still redeem it after a take-over; one redeemed on the main is used there and
  *      still reads approved on the standby once its 30 days are up; the replica audit counts join_requests; and two of
  *      a key's knocks changed at one moment merge whatever order the copy lists them in
  *  14. a re-key (the lost-phone flow) moves the member's knocks to the new key, as applicant and as the member who
@@ -66,10 +67,11 @@ import crypto from 'node:crypto';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, broadcast, seedGenesisMember, adminPruneUser, adminSetUserStatus, purgeMemberSelf,
-    exportSyncState, importRemoteState, setNodeRole, clearReplicatedTables,
+    exportSyncState, importRemoteState, setNodeRole, signSyncPayload,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { emptyCopiedTables } from './engine/copied-tables.js';
 import { registerMemberInternal } from './engine/members.js';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { forgetOldJoinAddresses } from './engine/open-join.js';
@@ -77,12 +79,13 @@ import * as knockEngine from './engine/knocks.js';
 import { hashPassword, updateLocalConfig } from './config/local-config.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 import { getReplicaConsistency } from '@beanpool/engine';
 
-const PORT = 8761;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const ADMIN_PW = 'Knock-Knock-Admin-Pw-62!';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -124,8 +127,11 @@ async function call(id: Id | null, method: 'GET' | 'POST', path: string, body?: 
     try { parsed = JSON.parse(text); } catch { parsed = undefined; }
     return { status: res.status, body: parsed, text };
 }
+// Step 7c: with 2FA off the password alone opens no admin route. main() turns 2FA on (no member is seeded, so no count
+// below moves) and the operator's calls send the password with a fresh code.
+let adminHeaders: () => Record<string, string> = () => ({ 'X-Admin-Password': ADMIN_PW });
 const admin = (method: 'GET' | 'POST', path: string, body?: unknown) =>
-    call(null, method, path, body, { headers: { 'X-Admin-Password': ADMIN_PW } });
+    call(null, method, path, body, { headers: adminHeaders() });
 
 const knock = (id: Id, extra: Record<string, unknown> = {}, opts: { upperKey?: boolean } = {}) =>
     call(id, 'POST', '/api/join/knock', { callsign: id.name, message: `Hello from ${id.name}, I live nearby.`, fromNode: 'https://global.beanpool.org/', ...extra }, opts);
@@ -179,7 +185,9 @@ async function main(): Promise<void> {
     initStateEngine();
     const { hash, salt } = hashPassword(ADMIN_PW);
     updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    await startHttpsServer(PORT);
+    adminHeaders = turnOn2faForTests(ADMIN_PW).headers;
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
     // The tidy-up runs every minute by itself. Here it runs only when section 15 calls it: the sections before set a
     // knock's times by hand and read the row straight after.
     tidyEvery(DAY_MS);
@@ -355,14 +363,14 @@ async function main(): Promise<void> {
     const annAgain = await knock(ann);
     assert(annAgain.status === 409 && annAgain.body?.code === 'knock_approved', `Ann knocking again while invited → 409 knock_approved (${annAgain.status})`);
 
-    const byEve = await call(null, 'POST', '/api/invite/redeem', { code, publicKey: eve.pk, callsign: 'Eve' });
+    const byEve = await call(eve, 'POST', '/api/invite/redeem', { code, publicKey: eve.pk, callsign: 'Eve' });
     assert(byEve.status === 400 && /someone else/.test(byEve.body?.error ?? ''), `redeeming Ann's invite with another key → refused (${byEve.text})`);
     const eveMember = db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(eve.pk);
     const stillUnused = (db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(code) as any)?.used_by;
     assert(!eveMember && !stillUnused, 'Eve is not a member and the invite is not used');
-    const byMemberKey = await call(null, 'POST', '/api/invite/redeem', { code, publicKey: mia.pk, callsign: 'Mia' });
+    const byMemberKey = await call(mia, 'POST', '/api/invite/redeem', { code, publicKey: mia.pk, callsign: 'Mia' });
     assert(byMemberKey.status === 400, `nor with a member's key (${byMemberKey.status})`);
-    const byAnn = await call(null, 'POST', '/api/invite/redeem', { code, publicKey: ann.pk, callsign: 'Ann' });
+    const byAnn = await call(ann, 'POST', '/api/invite/redeem', { code, publicKey: ann.pk, callsign: 'Ann' });
     assert(byAnn.status === 200 && byAnn.body?.success === true && !byAnn.body?.alreadyMember, `Ann redeems it with her key (${byAnn.status})`);
     const annMember = db.prepare('SELECT invited_by, invite_code FROM members WHERE public_key = ?').get(ann.pk) as any;
     assert(annMember?.invited_by === max.pk && annMember?.invite_code === code, 'she is a member, invited by Max with that code');
@@ -446,7 +454,7 @@ async function main(): Promise<void> {
     assert(rowsFor(bob.pk)[0]?.status === 'pending', 'Bob\'s knock is untouched');
     const countOff = await admin('GET', '/api/local/admin/knocks');
     assert(countOff.status === 200 && countOff.body?.acceptKnocks === false && countOff.body?.open === openNow, 'the operator still sees the count, beside the switch');
-    const oldSettings = await admin('POST', '/api/local/admin/node/config', { publishLocation: true, publishMembers: true, publishContacts: true, publishHealth: true });
+    const oldSettings = await admin('POST', '/api/local/admin/node/config', { publishLocation: true, publishMembers: true, publishContactEmail: false, publishContactPhone: false, publishHealth: true });
     assert(oldSettings.status === 200 && oldSettings.body?.acceptKnocks === false && (await call(null, 'GET', '/api/node/config')).body?.acceptKnocks === false,
         'a Settings save that doesn\'t send acceptKnocks (a page from before G6) leaves it off');
     const overrideRow = db.prepare("SELECT value FROM node_config WHERE key = 'nodeProfile.knocks'").get() as any;
@@ -483,7 +491,7 @@ async function main(): Promise<void> {
     assert(annScrubbed?.status === 'approved' && annScrubbed?.invite_code === code && annScrubbed?.decided_by === max.pk, 'the record stays');
 
     console.log('\n── 13. replication to a standby ──');
-    const p2p = await startP2P(4096, 4097);
+    const p2p = await startP2P(0, 0);
     const nodeId = p2p.peerId.toString();
     addConnector(`/ip4/127.0.0.1/tcp/4097/p2p/${nodeId}`, 'mirror', 'knock-standby-test');
     const expected = db.prepare('SELECT id, pubkey, callsign, message, avatar, from_node, status, created_at, decided_by, invite_code, decided_at, updated_at FROM join_requests ORDER BY id').all();
@@ -493,9 +501,10 @@ async function main(): Promise<void> {
     assert(carried.every((r: any) => !('ipHash' in r) && !('ip_hash' in r)) && !JSON.stringify(carried).includes(rowsFor(carl.pk)[1]?.ip_hash ?? '~none~'),
         'and never the address hash');
     const bobId = rowsFor(bob.pk)[0]?.id;
-    // A standby: empty replicated tables, and none of the main server's invite codes (they don't replicate).
-    clearReplicatedTables();
-    assert(knockCount() === 0, 'a force-resync clears join_requests');
+    // A standby: empty copied tables, as its whole copy starts (engine/copied-tables.ts), and none of the main server's
+    // invite codes yet (the copy brings them).
+    emptyCopiedTables(db);
+    assert(knockCount() === 0, 'a whole copy starts without join_requests');
     db.prepare('DELETE FROM invite_codes WHERE code = ?').run(fayCode);
     setNodeRole('backup');
     await importRemoteState(payload);
@@ -507,33 +516,35 @@ async function main(): Promise<void> {
     const fayOpen = rowsFor(fay.pk)[1]?.id as string;
     const fayApproved2 = await approve(mia, fayOpen);
     const fayCode2 = fayApproved2.body?.invite?.code as string;
+    // As a main server older than invites travelling sends it: no plain tables, so the standby makes the invite itself.
     const payload2: any = await exportSyncState(nodeId);
+    const { signature: _s, publicKey: _k, plainTables: _p, ...olderMain } = payload2;
     db.prepare('DELETE FROM invite_codes WHERE code = ?').run(fayCode2);
     setKnock(fayOpen, { status: 'pending', decided_by: null, decided_at: null, invite_code: null, updated_at: ago(DAY_MS) });
     setNodeRole('backup');
-    await importRemoteState(payload2);
+    await importRemoteState(await signSyncPayload(olderMain));
     setNodeRole('primary');
     const remade = db.prepare('SELECT * FROM invite_codes WHERE code = ?').get(fayCode2) as any;
     assert(rowsFor(fay.pk)[1]?.status === 'approved' && remade?.created_by === mia.pk && remade?.intended_for === fay.pk && !remade?.used_by,
-        'the standby has the approval, and makes its invite: the same code, by the member who approved, for the applicant\'s key');
+        'from a main server that sends no invites, the standby has the approval and makes its invite: the same code, by the member who approved, for the applicant\'s key');
     const fayOnStandby = await status(fay);
     assert(fayOnStandby.body?.status === 'approved' && fayOnStandby.body?.invite === fayCode2, 'so after a take-over the applicant\'s status still has a working invite');
-    const eveOnStandby = await call(null, 'POST', '/api/invite/redeem', { code: fayCode2, publicKey: eve.pk, callsign: 'Eve' });
+    const eveOnStandby = await call(eve, 'POST', '/api/invite/redeem', { code: fayCode2, publicKey: eve.pk, callsign: 'Eve' });
     assert(eveOnStandby.status === 400, 'which still admits only her key');
-    const fayRedeems = await call(null, 'POST', '/api/invite/redeem', { code: fayCode2, publicKey: fay.pk, callsign: 'Fay' });
+    const fayRedeems = await call(fay, 'POST', '/api/invite/redeem', { code: fayCode2, publicKey: fay.pk, callsign: 'Fay' });
     assert(fayRedeems.status === 200 && fayRedeems.body?.success === true, `and admits her (${fayRedeems.status})`);
-    // She joined on the "main". A standby copies her member row and the approval, and makes the invite unused (the
-    // redemption is not in the copy). Once that invite is 30 days old, her status must still say approved there.
+    // She joined on the "main". A standby copies her member row, the approval and the invite, used by her, as the main
+    // server holds it. Once that invite is 30 days old, her status must still say approved there.
     const payload3: any = await exportSyncState(nodeId);
-    clearReplicatedTables();
+    emptyCopiedTables(db);
     db.prepare('DELETE FROM invite_codes WHERE code = ?').run(fayCode2);
     setNodeRole('backup');
     await importRemoteState(payload3);
     setNodeRole('primary');
     const fayInviteOnStandby = db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(fayCode2) as any;
     const fayMemberOnStandby = db.prepare('SELECT invite_code FROM members WHERE public_key = ?').get(fay.pk) as any;
-    assert(!!fayInviteOnStandby && !fayInviteOnStandby.used_by && fayMemberOnStandby?.invite_code === fayCode2,
-        'on a standby her invite is unused, and her member row says she joined with it');
+    assert(fayInviteOnStandby?.used_by === fay.pk && fayMemberOnStandby?.invite_code === fayCode2,
+        'on a standby her invite is the main server\'s, used by her, and her member row says she joined with it');
     db.prepare('UPDATE invite_codes SET created_at = ? WHERE code = ?').run(ago(31 * DAY_MS), fayCode2);
     const fayLaterOnStandby = await status(fay);
     assert(fayLaterOnStandby.body?.status === 'approved' && fayLaterOnStandby.body?.invite === fayCode2,
@@ -571,11 +582,11 @@ async function main(): Promise<void> {
     };
     const memberRow = (pk: string) => db.prepare('SELECT status, invited_by, invite_code FROM members WHERE public_key = ?').get(pk) as any;
     const knockById = (id: string) => db.prepare('SELECT * FROM join_requests WHERE id = ?').get(id) as any;
-    const redeem = (code: string, id: Id) => call(null, 'POST', '/api/invite/redeem', { code, publicKey: id.pk, callsign: id.name });
-    /** This database becomes a standby holding `copy`: the replicated tables cleared, then imported. */
+    const redeem = (code: string, id: Id) => call(id, 'POST', '/api/invite/redeem', { code, publicKey: id.pk, callsign: id.name });
+    /** This database becomes a standby holding `copy`: the copied tables emptied, then imported. */
     async function becomeCopyOf(copy: any, dropCodes: string[] = []): Promise<void> {
-        clearReplicatedTables();
-        // Invite codes don't replicate: a standby has none of the main server's.
+        emptyCopiedTables(db);
+        // Invite codes a standby doesn't hold yet: the copy brings them, as the main server holds them.
         for (const c of dropCodes) db.prepare('DELETE FROM invite_codes WHERE code = ?').run(c);
         setNodeRole('backup');
         await importRemoteState(copy);
@@ -671,7 +682,7 @@ async function main(): Promise<void> {
     await becomeCopyOf(afterRemoval);
 
     // The approver re-keys before the applicant redeems; later the applicant re-keys too. A standby set up after each
-    // still makes the invite, so after a take-over the applicant still reads approved.
+    // holds the invite as the main server does, so after a take-over the applicant still reads approved.
     freshAddress();
     const ola = newId('Ola');
     const olaNew = newId('OlaNew');
@@ -686,7 +697,7 @@ async function main(): Promise<void> {
     await becomeCopyOf(await exportSyncState(nodeId), [olaCode]);
     const olaInvite = db.prepare('SELECT * FROM invite_codes WHERE code = ?').get(olaCode) as any;
     assert(olaInvite?.created_by === pamNew.pk && olaInvite?.intended_for === ola.pk && !olaInvite?.used_by,
-        'a standby set up after the re-key makes the invite again, by Pam\'s new key, for Ola');
+        'a standby set up after the re-key holds the invite, by Pam\'s new key, for Ola');
     const olaTakeover = await status(ola);
     assert(olaTakeover.body?.status === 'approved' && olaTakeover.body?.invite === olaCode,
         `after a take-over Ola's status still reads approved (${olaTakeover.text})`);
@@ -697,8 +708,8 @@ async function main(): Promise<void> {
     const olaRow = knockById(olaId);
     const olaInviteAgain = db.prepare('SELECT * FROM invite_codes WHERE code = ?').get(olaCode) as any;
     assert(olaRow?.pubkey === olaNew.pk && olaRow?.decided_by === pamNew.pk && rowsFor(ola.pk).length === 0
-        && olaInviteAgain?.created_by === pamNew.pk && olaInviteAgain?.intended_for === olaNew.pk,
-        'a standby set up after both re-keys has the knock on Ola\'s new key, decided by Pam\'s, and makes the invite for her new key');
+        && olaInviteAgain?.created_by === pamNew.pk && olaInviteAgain?.used_by === olaNew.pk,
+        'a standby set up after both re-keys has the knock on Ola\'s new key, decided by Pam\'s, and the invite as the main server holds it: used by her new key');
     const olaNewStatus = await status(olaNew);
     assert(olaNewStatus.body?.status === 'approved' && olaNewStatus.body?.invite === olaCode, `her new key reads approved there (${olaNewStatus.text})`);
     const olaOldRedeem = await redeem(olaCode, ola);
@@ -977,7 +988,7 @@ async function main(): Promise<void> {
     // A paper invite: an offline ticket Mia signed.
     const ticketPayload = JSON.stringify({ i: mia.pk, t: Date.now() });
     const ticket = Buffer.from(JSON.stringify({ p: ticketPayload, s: crypto.sign(null, Buffer.from(ticketPayload), mia.priv).toString('base64') })).toString('base64');
-    const redeemTicket = (id: Id) => call(null, 'POST', '/api/invite/redeem-offline', { ticketB64: ticket, publicKey: id.pk, callsign: id.name });
+    const redeemTicket = (id: Id) => call(id, 'POST', '/api/invite/redeem-offline', { ticketB64: ticket, publicKey: id.pk, callsign: id.name });
     const k1Ticket = await redeemTicket(olga);
     assert(k1Ticket.status === 400 && /replaced/.test(k1Ticket.body?.error ?? ''), `her old key redeeming Mia's offline ticket → refused (${k1Ticket.status} ${k1Ticket.body?.error})`);
     assert(!memberRow(olga.pk), 'still no member row for the old key');

@@ -38,13 +38,21 @@ describe('Settings on a phone', () => {
     beforeEach(() => {
         localStorage.clear();
         sessionStorage.clear();
-        sessionStorage.setItem('bp-admin-token', 'mock-password');
         window.history.replaceState(null, '');
-        vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve({
-            ok: true,
-            status: 200,
-            json: () => Promise.resolve({ success: true, health: { flags: [] }, reports: [], members: [{ pubkey: 'a'.repeat(64), name: 'A' }] }),
-        })));
+        // Signed in: the node says this browser's session cookie is a live password session (lib/key-session.ts).
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+            if (String(url).includes('/api/local/admin/auth/session')) {
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ authenticated: true, isKeySession: false, isPasswordSession: true, role: 'owner', memberPubkey: null }) });
+            }
+            if (String(url).includes('/api/local/admin/csrf-token')) {
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ csrfToken: 'csrf-phone' }) });
+            }
+            return Promise.resolve({
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({ success: true, health: { flags: [] }, reports: [], members: [{ pubkey: 'a'.repeat(64), name: 'A' }] }),
+            });
+        }));
     });
 
     it('names the current screen in the top bar and follows sub-tab changes', async () => {
@@ -177,6 +185,8 @@ describe('Settings on a phone', () => {
         await act(async () => { render(<App isFleetMode={false} />); });
         const bar = screen.getByRole('button', { name: 'Show menu' }).parentElement as HTMLElement;
         await act(async () => { fireEvent.click(within(bar).getByRole('button', { name: 'Log Out' })); });
-        expect(sessionStorage.getItem('bp-admin-token')).toBeNull();
+        expect(screen.getByRole('button', { name: /unlock settings/i })).toBeInTheDocument();
+        const calls = (globalThis.fetch as any).mock.calls as Array<[string]>;
+        expect(calls.some(([u]) => String(u).includes('/api/local/admin/auth/logout'))).toBe(true);
     });
 });

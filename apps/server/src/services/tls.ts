@@ -16,6 +16,7 @@
  */
 
 import fs from 'node:fs';
+import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import * as acme from 'acme-client';
@@ -47,6 +48,8 @@ export function getCaCertPem(): string { return caCertPem; }
 export function getServerCertPem(): string { return serverCertPem; }
 export function getServerKeyPem(): string { return serverKeyPem; }
 export function isUsingLetsEncrypt(): boolean { return usingLetsEncrypt; }
+/** A public node (it asks Let's Encrypt) that is serving its self-signed certificate: what services/alerts.ts tells the owners. */
+export function tlsFellBackToSelfSigned(): boolean { return !!(CF_RECORD_NAME && CF_API_TOKEN && CF_ZONE_ID) && !usingLetsEncrypt && !!serverCertPem; }
 
 /**
  * Initialize TLS certificates. Tries Let's Encrypt for public nodes,
@@ -155,7 +158,7 @@ async function requestLetsEncryptCert(): Promise<boolean> {
                 privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
             });
             accountKey = privateKey;
-            fs.writeFileSync(LE_ACCOUNT_PATH, JSON.stringify({ key: accountKey }));
+            writeFileAtomic(LE_ACCOUNT_PATH, JSON.stringify({ key: accountKey }), { mode: 0o600 });
             console.log('   ACME account key generated');
         }
 
@@ -249,8 +252,8 @@ async function requestLetsEncryptCert(): Promise<boolean> {
         // Save cert + key
         serverCertPem = cert;
         serverKeyPem = serverKeyPemStr;
-        fs.writeFileSync(LE_CERT_PATH, serverCertPem);
-        fs.writeFileSync(LE_KEY_PATH, serverKeyPem);
+        writeFileAtomic(LE_CERT_PATH, serverCertPem);
+        writeFileAtomic(LE_KEY_PATH, serverKeyPem, { mode: 0o600 });
 
         console.log(`✅ Let's Encrypt cert obtained for ${CF_RECORD_NAME}`);
         return true;
@@ -381,10 +384,10 @@ function generateSelfSigned(): void {
     serverKeyPem = serverResult.private;
 
     // Persist
-    fs.writeFileSync(CA_CERT_PATH, caCertPem);
-    fs.writeFileSync(CA_KEY_PATH, caKeyPem);
-    fs.writeFileSync(SERVER_CERT_PATH, serverCertPem);
-    fs.writeFileSync(SERVER_KEY_PATH, serverKeyPem);
+    writeFileAtomic(CA_CERT_PATH, caCertPem);
+    writeFileAtomic(CA_KEY_PATH, caKeyPem, { mode: 0o600 });
+    writeFileAtomic(SERVER_CERT_PATH, serverCertPem);
+    writeFileAtomic(SERVER_KEY_PATH, serverKeyPem, { mode: 0o600 });
 
     console.log('🔐 Certificates generated and saved to data/tls/');
 }

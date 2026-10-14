@@ -43,7 +43,8 @@ async function makeFreshMember(node, callsign, stateKey) {
         throw new Error(`${node}: seed-invite failed ${invite.status} ${JSON.stringify(invite.json)}`);
     }
     const identity = newIdentity(callsign);
-    const redeemed = await plain(node, 'POST', '/api/invite/redeem', {
+    // Signed by the key it registers: the node registers no key a redeem isn't signed by.
+    const redeemed = await signed(node, identity, 'POST', '/api/invite/redeem', {
         code: invite.json.code, publicKey: identity.publicKey, callsign,
     });
     if (redeemed.status !== 200) {
@@ -138,7 +139,7 @@ async function phase2() {
     const ourSeller = st.gippsland.identity;       // a gippsland member, doing the work
     // The peer resolved from eastgippy's OWN connector list rather than constructed here — the route looks the
     // connector up by address or public URL, so a hand-built multiaddr that differs by a character 404s.
-    const conns = await plain('eastgippy', 'GET', '/api/local/connectors');
+    const conns = await plain('eastgippy', 'GET', '/api/local/connectors', undefined, adminHeaders('eastgippy'));
     const gipps = (conns.json?.connectors ?? conns.json ?? [])
         .find(c => c.address?.includes(NODES.gippsland.containerIp));
     if (!gipps) { console.log('  eastgippy has no connector pointing at gippsland — stop'); return; }

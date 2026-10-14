@@ -9,12 +9,13 @@
  * directory the promoted server publishes to is a door here too.
  *
  *  1. The main server M sets its community up: a name, place and contacts, a currency display, thresholds, directory
- *     choices with its contacts and member count OFF and a service area, a pricing source and seasonality, a snapshot
- *     schedule, and an accepted non-zero audit baseline (the test node's -9.82 kind).
- *  2. A standby S with settings of its own takes its first copy: it keeps M's record, and its own name, contacts,
- *     directory choices, thresholds, gateway and baseline stay its own.
+ *     choices with its contact email ON, its phone and member count OFF and a service area, a pricing source and
+ *     seasonality, a snapshot schedule, only its admins inviting (the door, config/door.ts), and an accepted non-zero
+ *     audit baseline (the test node's -9.82 kind).
+ *  2. A standby S with settings of its own (its phone published, its email not) takes its first copy: it keeps M's
+ *     record, and its own name, contacts, directory choices, thresholds, gateway and baseline stay its own.
  *  3. M changes its phone and stops publishing its health (a save of that one switch, which leaves the others as they
- *     were: before, it published the contacts and member count M had turned off), and sets its gateway (other origins
+ *     were: before, it published the member count M had turned off), and sets its gateway (other origins
  *     for its web app, a switch, the request limit, and an admin IP allowlist of its own): the next delta brings the new
  *     record, applied to nothing. Neither the route nor a kept record takes a directory push interval the publisher's
  *     timer can't hold, or a snapshot interval the scheduler's can't (either would fire every millisecond), and a
@@ -32,10 +33,11 @@
  *     pull interval, avatar key and importer format are S's; the main server and its token are gone; the identity epoch
  *     is the bundle's plus one; the admin IP allowlist is S's own.
  *  7. The promotion audit ran on M's baseline: "the ledger adds up" (before, S's own baseline: "does NOT add up").
- *  8. The directory publisher on the promoted server sends the community's name and area, and not its contacts, member
- *     count or health, which the community had turned off; nothing of S's own name or contacts.
- *  9. A standby S3 with its own snapshots off, booted as index.ts boots (the snapshot scheduler armed before the take-over
- *     resumes), copies M, which takes one every 6 hours. Its take-over is cut off by a crash just before the
+ *  8. The directory publisher on the promoted server sends the community's name, area and contact email, and not its
+ *     phone, member count or health, which the community had not published (S's own choice to publish its phone does
+ *     not carry over to the community's phone); nothing of S's own name or contacts.
+ *  9. A standby S3 with its own snapshots off, booted as index.ts boots (the snapshot scheduler armed once the take-over
+ *     has resumed; a standby arms none), copies M, which takes one every 6 hours. Its take-over is cut off by a crash just before the
  *     community-settings step and finished at the next start (resumeTakeoverAtBoot), with no restart after: the promoted
  *     server's snapshot timer runs on M's schedule, not S3's (before, it kept S3's until it next restarted, while the
  *     Backup tab showed M's).
@@ -72,6 +74,8 @@ function guardFetch(): { blocked: string[] } {
         const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
         if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') return real(input, init);
         if (url.hostname === 'exp.host') return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        // The update check, 30 s after any node's start (routes/settings.ts), as the other standby suites answer it.
+        if (url.hostname === 'api.github.com' && url.pathname.startsWith('/repos/beanpool-org/beanpool/')) return new Response('{}', { status: 404 });
         seen.blocked.push(url.hostname);
         throw new Error(`this suite reaches nothing off this machine (${url.hostname})`);
     }) as typeof fetch;
@@ -129,7 +133,7 @@ async function child(): Promise<void> {
                 thresholds: { ...DEFAULT_THRESHOLDS, circulationEpochDays: 20 }, backupPullSeconds: 30,
             });
             setReplicationToken(a.ownToken);
-            updateNodeConfig({ serviceRadius: { lat: 51.5, lng: -0.12, radiusKm: 50 }, directoryPushIntervalHours: 24 });
+            updateNodeConfig({ serviceRadius: { lat: 51.5, lng: -0.12, radiusKm: 50 }, directoryPushIntervalHours: 24, publishContactPhone: true });
             return true;
         },
         /** A local-config.json field no route sets (the currency display), or a change after a promotion. */
@@ -154,7 +158,8 @@ async function child(): Promise<void> {
             const { installCommunitySettings } = await import('./config/community-settings.js');
             const realWrite = fs.writeFileSync;
             (fs as any).writeFileSync = (file: fs.PathOrFileDescriptor, ...rest: unknown[]) => {
-                if (String(file).endsWith('local-config.json')) throw Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' });
+                // local-config.json, or the temp file it is written to before the rename (write-file-atomic.ts).
+                if (/local-config\.json(\.tmp-\d+-[0-9a-f]+)?$/.test(String(file))) throw Object.assign(new Error('ENOSPC: no space left on device, write'), { code: 'ENOSPC' });
                 return (realWrite as (...args: unknown[]) => void)(file, ...rest);
             };
             let threw: string | null = null;
@@ -208,6 +213,11 @@ async function child(): Promise<void> {
             return delays;
         },
         /** How often this server's snapshot timer takes a snapshot now, in hours; null when none runs. */
+        /** Who may invite as this server acts on it (config/door.ts), and whether `pubkey` may. Nothing on a server without it. */
+        'door-now': async (a: { pubkey: string }) => {
+            const door: any = await import('./config/door.js').catch(() => null);
+            return door ? { door: door.getDoor(), may: door.mayInviteHere(a.pubkey) } : { door: null, may: null };
+        },
         'snapshot-timer': async () => {
             const { armedSnapshotInterval } = await import('./services/snapshot-scheduler.js');
             return armedSnapshotInterval();
@@ -258,7 +268,8 @@ async function child(): Promise<void> {
             });
             payload.communitySettings = rec;
             payload.generatedAt = new Date().toISOString();
-            return signSyncPayload(payload);
+            // As the main server serves a copy now: one page of one copy (routes/backup.ts sync-copy), signed with its key.
+            return signSyncPayload((await import('./copy-test-support.js')).asOnePageCopy(payload) as any);
         },
         /** The ledger conservation audit (promotionSanityCheck), run now. */
         'ledger-audit': async () => {
@@ -306,8 +317,11 @@ function newId(name: string): Id {
 
 interface Answer { status: number; body: any }
 
-/** A call to a node's real HTTPS server, signed by `as`, with the admin password in `admin`, or neither. */
-async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: string; body?: unknown } = {}): Promise<Answer> {
+/**
+ * A call to a node's real HTTPS server, signed by `as`, with an owner's admin credential headers in `admin`, or neither.
+ * Step 7c: the password alone opens no admin route with 2FA off, so `admin` is an owner's key session the node makes.
+ */
+async function api(base: string, method: 'GET' | 'POST', route: string, opts: { as?: Id; admin?: Record<string, string>; body?: unknown } = {}): Promise<Answer> {
     const raw = method === 'GET' ? '' : JSON.stringify(opts.body ?? {});
     const headers: Record<string, string> = {};
     if (opts.as) {
@@ -318,7 +332,7 @@ async function api(base: string, method: 'GET' | 'POST', route: string, opts: { 
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    if (opts.admin) headers['X-Admin-Password'] = opts.admin;
+    if (opts.admin) Object.assign(headers, opts.admin);
     if (method !== 'GET') headers['Content-Type'] = 'application/json';
     const res = await fetch(`${base}${route}`, { method, headers, body: method === 'GET' ? undefined : raw });
     const text = await res.text();
@@ -397,8 +411,8 @@ async function directoryRegistry(): Promise<{ url: string; bodies: any[]; close:
 type Settings = { localConfig: any; rows: Record<string, string>; blob: any; kept: any; directory: any };
 
 const LOCAL = ['callsign', 'communityName', 'location', 'contactEmail', 'contactPhone', 'currencyType', 'currencyValue', 'thresholds'] as const;
-const ROWS = ['ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config'] as const;
-const BLOB = ['serviceRadius', 'publishLocation', 'publishMembers', 'publishContacts', 'publishHealth', 'directoryPushIntervalHours'] as const;
+const ROWS = ['ledger_audit_baseline', 'ledger_audit_rebaseline_note', 'pricing_data_source', 'pricing_show_seasonality', 'autosnapshot_config', 'door', 'names_two_admins', 'confirmation', 'known_floor', 'credit_cap', 'health_debt_line_pct', 'health_quiet_days', 'startCommunityUrl'] as const;
+const BLOB = ['serviceRadius', 'publishLocation', 'publishMembers', 'publishContactEmail', 'publishContactPhone', 'publishHealth', 'directoryPushIntervalHours'] as const;
 /** The gateway without its admin IP allowlist: the community's part of it. */
 const communityGateway = (g: any) => (g ? Object.fromEntries(Object.entries(g).filter(([k]) => k !== 'adminIpAllowlist')) : null);
 
@@ -436,28 +450,39 @@ async function main(): Promise<void> {
     try {
         // ── 1. M sets its community up ──
         console.log('\n— 1. the main server sets its community up —');
-        const main = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'primary'));
+        // Every main server's first directory push, 30 s after its start (services/directory-publisher.ts), goes to a registry
+        // on this machine: a standby's copies take a restart each now, so the suite runs past it. A standby keeps the real
+        // address, so one that pushed would still be counted below.
+        const quiet = await directoryRegistry();
+        closers.push(quiet.close);
+        const asMain = { DIRECTORY_REGISTRY_URL: quiet.url };
+        const main = await spawnNode(SCRIPT, dir('main'), env(PW_MAIN, 'primary', asMain));
         nodes.push(main);
         const setup = await main.send('setup-primary', { replicationToken, genesis: gwen.pk });
         const m = `https://localhost:${await main.send('serve')}`;
-        const A = (route: string, body: unknown) => api(m, 'POST', route, { admin: PW_MAIN, body });
+        // Step 7c: the password alone opens no admin route with 2FA off: M's Settings calls go under an owner's key session
+        // M makes (takeover-test-harness.ts owner-session).
+        const mOwner: Record<string, string> = await main.send('owner-session');
+        const A = (route: string, body: unknown) => api(m, 'POST', route, { admin: mOwner, body });
         for (const who of [ann, bo]) {
             const inv = built(`Gwen makes an invite for ${who.name}`, await api(m, 'POST', '/api/invite/generate', { as: gwen, body: { publicKey: gwen.pk } }));
-            built(`${who.name} joins with it`, await api(m, 'POST', '/api/invite/redeem', { body: { code: inv.invite?.code ?? inv.code, publicKey: who.pk, callsign: who.name } }));
+            built(`${who.name} joins with it`, await api(m, 'POST', '/api/invite/redeem', { as: who, body: { code: inv.invite?.code ?? inv.code, publicKey: who.pk, callsign: who.name } }));
         }
         built('the community names itself, its place and its contacts', await A('/api/local/update-identity', {
             callsign: 'riverbend', communityName: 'Riverbend Commons', lat: -33.71, lng: 151.1, contactEmail: 'hello@riverbend.example', contactPhone: '+61 2 5550 0101',
         }));
-        built('it keeps its contacts and member count out of the directory, and draws its service area', await A('/api/local/admin/node/config', {
-            publishContacts: false, publishMembers: false, serviceRadius: { lat: -33.71, lng: 151.1, radiusKm: 9 }, directoryPushIntervalHours: 6,
+        built('it publishes its contact email, keeps its phone and member count out of the directory, and draws its service area', await A('/api/local/admin/node/config', {
+            publishContactEmail: true, publishMembers: false, serviceRadius: { lat: -33.71, lng: 151.1, radiusKm: 9 }, directoryPushIntervalHours: 6,
         }));
         built('it sets its own thresholds', await A('/api/admin/thresholds', { circulationEpochDays: 45, washTradingMinTxns: 6 }));
         built('its pricing guide reads every linked community, without seasons', await A('/api/pricing-guide/admin/config', { dataSource: 'federation', showSeasonality: false }));
         built('its snapshot schedule: one every 6 hours', await A('/api/local/admin/snapshots/config', { enabled: true, intervalHours: 6, keep: 3 }));
+        built('only its admins invite (the owner, with the password)', await A('/api/local/admin/node/config', { door: 'admins' }));
         await main.send('set-local', { patch: { currencyType: 'text', currencyValue: 'Seeds' } });
         built('an old bug left 0.1 Beans of drift', { status: (await main.send('drift', { publicKey: gwen.pk, amount: 0.1 })) ? 200 : 500, body: {} });
         built('the admin accepts it as the audit baseline', await A('/api/local/admin/ledger-rebaseline', { reason: 'Drift from an old bug, checked by hand' }));
         let mSettings: Settings = await main.send('settings');
+        require_(mSettings.rows.door === 'admins', `M: only its admins invite (door ${j(mSettings.rows.door)})`);
         require_(mSettings.rows.ledger_audit_baseline && Math.abs(Number(mSettings.rows.ledger_audit_baseline) - 0.1) < 1e-9,
             `M: its accepted baseline is 0.1 (${mSettings.rows.ledger_audit_baseline})`);
 
@@ -483,12 +508,15 @@ async function main(): Promise<void> {
         let sNow: Settings = await standby.send('settings');
         assert(differing(sOwnCommunity, communitySettings(sNow)).length === 0,
             `while a standby, S keeps its own name, place, contacts, currency, thresholds, gateway, directory choices, baseline, pricing and snapshots (changed: ${first(differing(sOwnCommunity, communitySettings(sNow)))})`);
-        assert(sNow.directory?.contactEmail === 'ops@standby.example' && sNow.directory?.name === 'Standby Seven',
-            `what S would tell the directory is still its own (${j({ name: sNow.directory?.name, email: sNow.directory?.contactEmail })})`);
+        assert(sNow.directory?.contactPhone === '+44 20 7946 0000' && sNow.directory?.contactEmail === null && sNow.directory?.name === 'Standby Seven',
+            `what S would tell the directory is still its own: its name and phone, not its email (${j({ name: sNow.directory?.name, phone: sNow.directory?.contactPhone, email: sNow.directory?.contactEmail })})`);
         const kept1 = sNow.kept;
         assert(kept1 && kept1.installedAt === null && kept1.record?.localConfig?.communityName === 'Riverbend Commons'
-            && kept1.record?.directory?.publishContacts === false && kept1.record?.nodeConfig?.ledger_audit_baseline === mSettings.rows.ledger_audit_baseline,
-            `S keeps M's record, not installed: its name, its choice not to publish contacts, its baseline (${j(kept1 && { installedAt: kept1.installedAt, name: kept1.record?.localConfig?.communityName, publishContacts: kept1.record?.directory?.publishContacts, baseline: kept1.record?.nodeConfig?.ledger_audit_baseline })})`);
+            && kept1.record?.directory?.publishContactEmail === true && kept1.record?.directory?.publishContactPhone === false
+            && kept1.record?.nodeConfig?.ledger_audit_baseline === mSettings.rows.ledger_audit_baseline,
+            `S keeps M's record, not installed: its name, its choice to publish its email and not its phone, its baseline (${j(kept1 && { installedAt: kept1.installedAt, name: kept1.record?.localConfig?.communityName, email: kept1.record?.directory?.publishContactEmail, phone: kept1.record?.directory?.publishContactPhone, baseline: kept1.record?.nodeConfig?.ledger_audit_baseline })})`);
+        assert(kept1?.record?.nodeConfig?.door === 'admins' && sNow.rows.door === undefined,
+            `the record S keeps says only admins invite, and S's own door is its own until it is promoted (${j({ kept: kept1?.record?.nodeConfig?.door, own: sNow.rows.door ?? null })})`);
 
         // ── 3. M changes its settings; a delta brings them ──
         console.log('\n— 3. the main server changes its settings; a delta brings them —');
@@ -519,10 +547,10 @@ async function main(): Promise<void> {
         require_(mSettings.localConfig.gateway?.adminIpAllowlist?.[0] === '203.0.113.7' && mSettings.blob.publishHealth === false,
             `M: its gateway and its health choice are set (${j({ gateway: mSettings.localConfig.gateway, publishHealth: mSettings.blob.publishHealth })})`);
         // Before, the route passed the fields a request left out on as undefined, the stored object dropped them, and each
-        // switch read unset as "publish": this save published M's contacts and member count and dropped its service area.
-        assert(mSettings.blob.publishContacts === false && mSettings.blob.publishMembers === false && mSettings.blob.serviceRadius?.radiusKm === 9
-            && mSettings.blob.directoryPushIntervalHours === 6,
-            `a save that changes one directory switch leaves the others as the community set them (${j({ contacts: mSettings.blob.publishContacts, members: mSettings.blob.publishMembers, radius: mSettings.blob.serviceRadius, every: mSettings.blob.directoryPushIntervalHours })})`);
+        // switch read unset as "publish": this save published M's member count and dropped its service area.
+        assert(mSettings.blob.publishContactEmail === true && mSettings.blob.publishContactPhone === false && mSettings.blob.publishMembers === false
+            && mSettings.blob.serviceRadius?.radiusKm === 9 && mSettings.blob.directoryPushIntervalHours === 6,
+            `a save that changes one directory switch leaves the others as the community set them (${j({ email: mSettings.blob.publishContactEmail, phone: mSettings.blob.publishContactPhone, members: mSettings.blob.publishMembers, radius: mSettings.blob.serviceRadius, every: mSettings.blob.directoryPushIntervalHours })})`);
         const delta = await standby.send('pull');
         require_(delta.ok === true, `the delta lands (${delta.ok ? 'imported' : delta.error})`);
         sNow = await standby.send('settings');
@@ -538,7 +566,8 @@ async function main(): Promise<void> {
         const takesSchedule = await standby.send('record-takes-snapshot-interval', { values: [1, 24, 596, 0, -1, 0.5, 597, 24 * 30, 24 * 366, '12'] });
         assert(j(takesSchedule) === j([true, true, true, false, false, false, false, false, false, false]),
             `a kept record takes the snapshot intervals the route does, and none the scheduler's timer can't hold (${j(takesSchedule)})`);
-        const armed = await standby.send('snapshot-timer-from-rows', {
+        // On M: a standby arms no snapshot timer at all (services/snapshot-scheduler.ts, data-at-rest report F3).
+        const armed = await main.send('snapshot-timer-from-rows', {
             rows: [{ enabled: true, intervalHours: 24 * 30, keep: 7 }, { enabled: true, intervalHours: 0.3, keep: 7 }].map((r) => JSON.stringify(r)),
         });
         assert(armed.length === 2 && armed.every((ms: number) => ms >= 3_600_000 && ms <= 2 ** 31 - 1),
@@ -565,12 +594,15 @@ async function main(): Promise<void> {
             `an install whose write of local-config.json fails (a full disk) stops: not marked installed, nothing of it applied (${j({ threw: failed.threw, installedAt: failed.kept?.installedAt, applied: first(differing(s2Own, communitySettings(failed))) })})`);
         await standby2.send('checkpoint');
         await standby2.kill('SIGTERM');
-        standby2 = await spawnNode(SCRIPT, dir('standby2'), env(PW_STANDBY2, 'primary'));
+        standby2 = await spawnNode(SCRIPT, dir('standby2'), env(PW_STANDBY2, 'primary', asMain));
         nodes.push(standby2);
         require_(standby2.ready.role === 'primary', `S2 starts as a main server, with no take-over (${standby2.ready.role})`);
         let s2: Settings = await standby2.send('settings');
         assert(differing(mCommunity, communitySettings(s2)).length === 0,
             `every community setting is M's (differing: ${first(differing(mCommunity, communitySettings(s2)))})`);
+        const s2Door = await standby2.send('door-now', { pubkey: ann.pk });
+        assert(s2.rows.door === 'admins' && s2Door.door === 'admins' && s2Door.may === false,
+            `promoted by hand, S2 keeps the community's door: only admins invite, so Ann, a member, may not (${j({ row: s2.rows.door, now: s2Door })})`);
         assert(j(s2.localConfig.gateway?.adminIpAllowlist) === j(['192.0.2.44']) && s2.kept?.installedAt,
             `S2 keeps its own admin IP allowlist, and the record says when it was installed (${j({ allowlist: s2.localConfig.gateway?.adminIpAllowlist, installedAt: s2.kept?.installedAt })})`);
         const s2Audit = await standby2.send('ledger-audit');
@@ -579,7 +611,7 @@ async function main(): Promise<void> {
         await standby2.send('set-local', { patch: { communityName: 'Renamed After Promotion' } });
         await standby2.send('checkpoint');
         await standby2.kill('SIGTERM');
-        standby2 = await spawnNode(SCRIPT, dir('standby2'), env(PW_STANDBY2, 'primary'));
+        standby2 = await spawnNode(SCRIPT, dir('standby2'), env(PW_STANDBY2, 'primary', asMain));
         nodes.push(standby2);
         s2 = await standby2.send('settings');
         assert(s2.localConfig.communityName === 'Renamed After Promotion',
@@ -618,20 +650,22 @@ async function main(): Promise<void> {
         console.log('\n— 9 (while the main server is up): a standby with its own snapshots off copies it —');
         fs.mkdirSync(dir('standby3'), { recursive: true });
         fs.copyFileSync(path.join(dir('main'), 'genesis.json'), path.join(dir('standby3'), 'genesis.json'));
-        // Booted as index.ts boots: the snapshot scheduler armed from the schedule row, then the take-over resumed. Its
+        // Booted as index.ts boots: the take-over resumed, then the snapshot scheduler armed for the role. Its
         // take-over is killed the moment the step before community-settings is recorded, as a power cut would.
         const s3Env = env(PW_STANDBY3, 'backup', { BEANPOOL_TEST_SNAPSHOT_SCHEDULER: '1', BEANPOOL_TEST_TAKEOVER_CRASH_AFTER: 'open-door' });
         let standby3 = await spawnNode(SCRIPT, dir('standby3'), s3Env);
         nodes.push(standby3);
         await standby3.send('setup-standby', { primaryUrl: main.base, replicationToken, primaryPeerId: main.ready.peerId });
-        const s3Off = await post(standby3.base, '/api/local/admin/snapshots/config', { enabled: false, intervalHours: 12 }, { 'X-Admin-Password': PW_STANDBY3 });
+        // Step 7c: S3's admin calls go under an owner's key session S3 makes (in memory, so it holds until S3 restarts).
+        const s3Owner: Record<string, string> = await standby3.send('owner-session');
+        const s3Off = await post(standby3.base, '/api/local/admin/snapshots/config', { enabled: false, intervalHours: 12 }, s3Owner);
         require_(s3Off.status === 200 && s3Off.body?.config?.enabled === false, `S3 turns its own snapshots off (${s3Off.status} ${j(s3Off.body)})`);
         const s3Pull = await standby3.send('pull');
         require_(s3Pull.ok === true && s3Pull.envelope === 'stored', `S3's copy lands, with the locked keys (${s3Pull.ok ? `imported; keys ${s3Pull.envelope}` : s3Pull.error})`);
         const s3Kept = JSON.parse((await standby3.send('settings')).kept?.record?.nodeConfig?.autosnapshot_config ?? '{}');
         const s3Timer = await standby3.send('snapshot-timer');
         assert(s3Timer === null && s3Kept.enabled === true && s3Kept.intervalHours === 6,
-            `while a standby, S3 takes no snapshots, its own choice, and keeps M's schedule, one every 6 hours (${j({ timer: s3Timer, kept: s3Kept })})`);
+            `while a standby, S3 takes no snapshots (none does, and its own are off), and keeps M's schedule, one every 6 hours (${j({ timer: s3Timer, kept: s3Kept })})`);
         refused.push(...(await standby3.send('fetches')).blocked);
 
         // ── 6. The take-over ──
@@ -640,13 +674,15 @@ async function main(): Promise<void> {
         await main.kill('SIGKILL');
         const registry = await directoryRegistry();
         closers.push(registry.close);
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY });
+        // Step 7c: the take-over goes under an owner's key session the standby makes (takeover-test-harness.ts owner-session).
+        const standbyOwner: Record<string, string> = await standby.send('owner-session');
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         require_(opened.status === 200 && opened.body.success, `the code opens the keys (${opened.status} ${JSON.stringify(opened.body).slice(0, 160)})`);
         const missing: string[] = opened.body.preview.missing ?? [];
         assert(!missing.some((line) => /settings/i.test(line) && !/notification settings/.test(line)),
             `the preview no longer says the community's settings will be missing (${j(missing)})`);
         refused.push(...(await standby.send('fetches')).blocked);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         require_(confirmed.status === 200, `confirm (${confirmed.status})`);
         require_(await standby.exited === 0, 'the standby restarts itself');
         standby = await spawnNode(SCRIPT, dir('standby'), env(PW_STANDBY, 'backup', { DIRECTORY_REGISTRY_URL: registry.url }));
@@ -657,8 +693,12 @@ async function main(): Promise<void> {
         const expected = { ...mCommunity, 'node_config.pricing_show_seasonality': sOwnCommunity['node_config.pricing_show_seasonality'] };
         assert(differing(expected, communitySettings(sAfter)).length === 0,
             `every community setting is M's; the one the record carried a value S couldn't take is S's own (differing: ${first(differing(expected, communitySettings(sAfter)))})`);
-        assert(sAfter.blob.publishContacts === false && sAfter.blob.publishMembers === false && sAfter.blob.publishHealth === false,
-            `a community that chose not to publish its contacts, member count or health still doesn't (${j({ contacts: sAfter.blob.publishContacts, members: sAfter.blob.publishMembers, health: sAfter.blob.publishHealth })})`);
+        const sDoor = await standby.send('door-now', { pubkey: ann.pk });
+        assert(sAfter.rows.door === 'admins' && sDoor.door === 'admins' && sDoor.may === false,
+            `taken over, S keeps the community's door: only admins invite, so Ann, a member, may not (${j({ row: sAfter.rows.door, now: sDoor })})`);
+        assert(sAfter.blob.publishContactPhone === false && sAfter.blob.publishMembers === false && sAfter.blob.publishHealth === false,
+            `a community that didn't publish its phone, member count or health still doesn't, though S had its own phone published (${j({ phone: sAfter.blob.publishContactPhone, members: sAfter.blob.publishMembers, health: sAfter.blob.publishHealth })})`);
+        assert(sAfter.blob.publishContactEmail === true, `and the email it chose to publish still is (${j({ email: sAfter.blob.publishContactEmail })})`);
         const after = perServer(sAfter);
         const own = perServer(sBefore);
         const oneServer = [
@@ -694,22 +734,25 @@ async function main(): Promise<void> {
         const pushed = await standby.send('directory-push');
         const body = registry.bodies.at(-1);
         assert(pushed.success === true && registry.bodies.length === 1, `one push reaches the directory (${j(pushed)}; ${registry.bodies.length} received)`);
-        assert(body?.callsign === 'Riverbend Commons' && body?.name === 'riverbend' && j(body?.serviceRadius) === j(mSettings.blob.serviceRadius),
-            `it sends the community's name and service area (${j({ callsign: body?.callsign, name: body?.name, serviceRadius: body?.serviceRadius })})`);
-        assert(body && body.communityName === null && body.contactEmail === null && body.contactPhone === null && body.memberCount === null
-            && body.version === null && body.status === null,
-            `and not its contacts, member count or health, which the community turned off (${j(body && { communityName: body.communityName, contactEmail: body.contactEmail, contactPhone: body.contactPhone, memberCount: body.memberCount, version: body.version })})`);
+        assert(body?.callsign === 'Riverbend Commons' && body?.name === 'Riverbend Commons' && body?.communityName === 'Riverbend Commons'
+            && j(body?.serviceRadius) === j(mSettings.blob.serviceRadius),
+            `it sends the community's name and service area (${j({ callsign: body?.callsign, name: body?.name, communityName: body?.communityName, serviceRadius: body?.serviceRadius })})`);
+        assert(body?.contactEmail === 'hello@riverbend.example', `and the contact email the community chose to publish (${j(body?.contactEmail)})`);
+        assert(body && body.contactPhone === null && !/5550 0199|5550 0101/.test(j(body)) && body.memberCount === null && body.version === null && body.status === null,
+            `and not its phone, member count or health, which the community didn't publish (${j(body && { contactPhone: body.contactPhone, memberCount: body.memberCount, version: body.version })})`);
         assert(!/Standby Seven|standby-7|ops@standby\.example|\+44 20 7946/.test(j(body)), 'nothing of the standby\'s own name or contacts');
         refused.push(...(await standby.send('fetches')).blocked);
 
         // ── 9. A take-over finished at the next start ──
         console.log('\n— 9. a take-over cut off before its community-settings step, finished at the next start —');
-        const opened3 = await post(standby3.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY3 });
+        // Step 7c: under an owner's key session S3 makes now, after its copy brought the community's members.
+        const s3Takeover: Record<string, string> = await standby3.send('owner-session');
+        const opened3 = await post(standby3.base, '/api/local/admin/takeover/open', { code: setup.code }, s3Takeover);
         require_(opened3.status === 200 && opened3.body.success, `the code opens the keys on S3 (${opened3.status} ${j(opened3.body).slice(0, 160)})`);
         // The process dies inside this request, the moment `open-door` is recorded: there may be no answer.
-        await post(standby3.base, '/api/local/admin/takeover/confirm', { sessionId: opened3.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY3 });
+        await post(standby3.base, '/api/local/admin/takeover/confirm', { sessionId: opened3.body.preview.sessionId, confirm: true }, s3Takeover);
         await standby3.exited;
-        standby3 = await spawnNode(SCRIPT, dir('standby3'), s3Env);
+        standby3 = await spawnNode(SCRIPT, dir('standby3'), { ...s3Env, ...asMain });
         nodes.push(standby3);
         require_(standby3.ready.role === 'primary' && standby3.ready.resumed === true,
             `S3's next start finishes the take-over, with no restart after it (${j({ role: standby3.ready.role, resumed: standby3.ready.resumed })})`);

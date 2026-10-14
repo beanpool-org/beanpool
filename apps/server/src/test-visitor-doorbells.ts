@@ -4,9 +4,13 @@
  * A /ws socket with no verified member gets PUBLIC_WS_EVENTS as bare `{ type }` doorbells, and its app reads again what
  * it may read on each one. On a node that shows visitors the listings and not the people (`guestListingsOnly`, the
  * global profile), an unsigned reader, and one signed by a key that is no member here, reads the listings' guest view
- * and nothing of the Commons: the decisions, projects, crowdfunds and enterprises are members-only there, or switched
- * off. So there such a socket gets the listings' doorbells (new_post, post_updated, post_removed) and state_synced, and
- * none for a project, a decision or an enterprise. Everywhere else it gets what it always got.
+ * and nothing of the Commons: the decisions, projects, crowdfunds and enterprises are members-only on every node, or
+ * switched off. So there such a socket gets the listings' doorbells (new_post, post_updated, post_removed) and
+ * state_synced, and none for a project, a decision or an enterprise. On a local node the listings are its members' too
+ * (Marty, 2026-09-28), so such a socket gets state_synced only (2026-10-01). A socket that holds a key (a visitor's, a
+ * suspended member's) gets every public doorbell everywhere, but one: on a node that syncs listings by area (the global
+ * profile's `nearbyListings`, DESIGN-global-sync-by-area §2.5), a listing's own event reaches only the members near it
+ * and its parties (test-ws-nearby-push), so there no socket without an area near it gets that listing's doorbell.
  *
  * The real server in this process, real sockets over TLS, every change made over HTTP through the signature middleware
  * or by the engine's own functions, where this node can make one:
@@ -14,8 +18,8 @@
  *      a suspended member's (a key, so unchanged)
  *   2. a listing posted, edited and taken down over HTTP: the doorbell for each reaches every socket, bare to all but
  *      the member's
- *   3. a Decision proposed and voted on over HTTP: its doorbells reach the key-less sockets only where an unsigned
- *      reader can read the decisions; the member's socket, the visitor's and the suspended member's get them everywhere
+ *   3. a Decision proposed and voted on over HTTP: its doorbells reach no key-less socket, as an unsigned reader reads
+ *      no decision on any node; the member's socket, the visitor's and the suspended member's get them everywhere
  *   4. a Commons project proposed and placed on the map (the engine's createProject and setEnterpriseLocation), where
  *      this node runs them: the same
  *   5. the table: every type in PUBLIC_WS_EVENTS broadcast once, and a state_synced for an import that counted only
@@ -33,7 +37,8 @@
  *   - global: NODE_PROFILE=global as it ships: listings only
  *   - local+guest: a local node with `guestListingsOnly` overridden on: listings only (the switch decides, not the
  *     profile), and Beans on, so section 4 runs
- *   - local: NODE_PROFILE unset: unchanged, every public doorbell (section 4 runs)
+ *   - local: NODE_PROFILE unset: state_synced only (section 4 runs); the board section 6 checks is then read by a
+ *     member, as a stranger may not read it there
  *   - standby-read-open: a global standby started with ENFORCE_READ_AUTH=false (a main server refuses to start so), where
  *     every read is open to anyone: every public doorbell, as before (section 5 only: a standby makes no changes)
  * Section 6 runs on each of the other three.
@@ -57,6 +62,16 @@ if (COMBO === 'local' || COMBO === 'local+guest') delete process.env.NODE_PROFIL
 else process.env.NODE_PROFILE = 'global';
 /** A reader with no member's key here reads the listings and nothing of the Commons. */
 const LISTINGS_ONLY = COMBO === 'global' || COMBO === 'local+guest';
+/**
+ * A socket with no member's key hears the listings' doorbells: where it may read the listings, the visitors' view, and
+ * where every read is open. Not on a local node as it ships, whose listings are its members' (2026-09-28).
+ */
+const KEYLESS_HEARS_LISTINGS = COMBO !== 'local';
+/**
+ * Listings sync by area (the global profile): a listing's own event reaches the members whose area is near it and its
+ * parties, and no other socket, keyed or not (state-engine.ts listingReach).
+ */
+const BY_AREA = COMBO === 'global' || COMBO === 'standby-read-open';
 /** Beans are on, so the engine makes Commons projects and places enterprises here. */
 const MONEY_ON = COMBO === 'local' || COMBO === 'local+guest';
 /** A standby: it changes nothing itself, so only section 5 runs. */
@@ -69,6 +84,7 @@ import path from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
+import { setMemberPhoto } from '@beanpool/engine';
 
 const MODE = `[${COMBO}]`;
 let run = 0, passed = 0;
@@ -126,6 +142,22 @@ async function call(id: Id, urlPath: string, body: unknown): Promise<{ status: n
         },
         body: raw,
     });
+    const text = await res.text();
+    let parsed: any = text;
+    try { parsed = JSON.parse(text); } catch { /* not JSON */ }
+    return { status: res.status, body: parsed };
+}
+
+async function getAs(id: Id, urlPath: string): Promise<{ status: number; body: any }> {
+    beforeCall();
+    const ts = Date.now();
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const res = await fetch(`${BASE}${urlPath}`, { headers: {
+        'X-Public-Key': id.pk,
+        'X-Signature': crypto.sign(null, Buffer.from(`GET\n${urlPath.split('?')[0]}\n${ts}\n${nonce}\n`), id.priv).toString('base64'),
+        'X-Timestamp': String(ts),
+        'X-Nonce': nonce,
+    } });
     const text = await res.text();
     let parsed: any = text;
     try { parsed = JSON.parse(text); } catch { /* not JSON */ }
@@ -198,9 +230,10 @@ async function main(): Promise<void> {
     const member = (callsign: string, opts: { status?: string; visitor?: boolean; earned?: number } = {}): Id => {
         const id = newId();
         // A profile photo, because posting needs one; joined long ago, so no new account's limits apply.
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status, is_visitor, earned_credit)
-                    VALUES (?, ?, ?, 'seed', 'seed', 'https://example.com/a.jpg', ?, ?, ?)`)
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status, is_visitor, earned_credit)
+                    VALUES (?, ?, ?, 'seed', 'seed', ?, ?, ?)`)
             .run(id.pk, callsign, new Date(Date.now() - 60 * DAY).toISOString(), opts.status ?? 'active', opts.visitor ? 1 : 0, opts.earned ?? 0);
+        setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
         return id;
     };
@@ -235,6 +268,11 @@ async function main(): Promise<void> {
     if (!STANDBY) {
         // ── 2. a listing ────────────────────────────────────────────────────────────────────────
         console.log('\n── 2. a listing posted, edited and taken down over HTTP ──');
+        // Bob's area 11 km from the listing: where listings sync by area, the members near a listing hear it. Sam's too,
+        // so that there a suspended member near it is seen to get them bare (a visitor can't set an area).
+        const { setMemberArea } = await import('./engine/member-area.js');
+        setMemberArea(bob.pk, { lat: -28.6, lng: 153.5 });
+        setMemberArea(sam.pk, { lat: -28.6, lng: 153.5 });
         clear();
         const made = await call(alice, '/api/marketplace/posts', {
             type: 'offer', category: 'other', title: 'Doorbell offer', description: 'A doorbell test offer', authorPublicKey: alice.pk, lat: -28.5, lng: 153.5,
@@ -246,8 +284,15 @@ async function main(): Promise<void> {
         const removed = await call(alice, '/api/marketplace/posts/remove', { id: postId, authorPublicKey: alice.pk });
         assert(removed.status === 200 && removed.body?.success === true, `Alice takes it down (got ${removed.status} ${JSON.stringify(removed.body).slice(0, 120)})`);
         await until(S.member, 'post_removed');
-        for (const [who, s] of [...keyless, ...keyed]) {
-            assert(LISTING_EVENTS.every(t => typesOf(s).has(t)), `${who} socket gets a doorbell for the new, the edited and the removed listing (${show(s)})`);
+        for (const [who, s] of keyless) {
+            if (BY_AREA) assert(!LISTING_EVENTS.some(t => typesOf(s).has(t)), `${who} socket gets no doorbell for any of them: listings sync by area here, and it has none (${show(s)})`);
+            else if (KEYLESS_HEARS_LISTINGS) assert(LISTING_EVENTS.every(t => typesOf(s).has(t)), `${who} socket gets a doorbell for the new, the edited and the removed listing (${show(s)})`);
+            else assert(!LISTING_EVENTS.some(t => typesOf(s).has(t)), `${who} socket gets no doorbell for any of them: a local community's listings are its members' (${show(s)})`);
+            assert(bare(s), `${who} socket gets them bare: { type } only`);
+        }
+        for (const [who, s] of keyed) {
+            if (BY_AREA && s === S.visitor) assert(!LISTING_EVENTS.some(t => typesOf(s).has(t)), `${who} socket, with no area, gets no doorbell for any of them: listings sync by area here (${show(s)})`);
+            else assert(LISTING_EVENTS.every(t => typesOf(s).has(t)), `${who} socket gets a doorbell for the new, the edited and the removed listing${BY_AREA ? ', its member near it' : ''} (${show(s)})`);
             assert(bare(s), `${who} socket gets them bare: { type } only`);
         }
         assert(LISTING_EVENTS.every(t => typesOf(S.member).has(t)), `the member's socket gets all three (${show(S.member)})`);
@@ -269,11 +314,7 @@ async function main(): Promise<void> {
             assert(DECISION_EVENTS.every(t => typesOf(s).has(t)) && bare(s), `${who} socket still gets both, bare, as before (${show(s)})`);
         }
         for (const [who, s] of keyless) {
-            if (LISTINGS_ONLY) {
-                assert(got(s).length === 0, `${who} socket gets no doorbell for it: an unsigned reader reads no Decision here (${show(s)})`);
-            } else {
-                assert(DECISION_EVENTS.every(t => typesOf(s).has(t)) && bare(s), `${who} socket gets both, bare, as before: the decisions are a public read here (${show(s)})`);
-            }
+            assert(got(s).length === 0, `${who} socket gets no doorbell for it: an unsigned reader reads no Decision here (${show(s)})`);
         }
 
         // ── 4. a Commons project, placed on the map ─────────────────────────────────────────────
@@ -292,11 +333,7 @@ async function main(): Promise<void> {
                 assert(wanted.every(t => typesOf(s).has(t)) && bare(s), `${who} socket still gets both, bare, as before (${show(s)})`);
             }
             for (const [who, s] of keyless) {
-                if (LISTINGS_ONLY) {
-                    assert(!wanted.some(t => typesOf(s).has(t)), `${who} socket gets no doorbell for either: projects and enterprises are members-only here (${show(s)})`);
-                } else {
-                    assert(wanted.every(t => typesOf(s).has(t)) && bare(s), `${who} socket gets both, bare, as before: they are public reads here (${show(s)})`);
-                }
+                assert(!wanted.some(t => typesOf(s).has(t)), `${who} socket gets no doorbell for either: projects and enterprises are members-only here (${show(s)})`);
             }
         }
     }
@@ -305,7 +342,10 @@ async function main(): Promise<void> {
     console.log('\n── 5. the table: every public type, once each ──');
     clear();
     const PUBLIC = [...se.PUBLIC_WS_EVENTS];
-    const keylessRow = LISTINGS_ONLY ? new Set([...LISTING_EVENTS, 'state_synced']) : new Set(PUBLIC);
+    // With the visitors' view, the listings' and state_synced; with every read open (the standby), all of them; on a local
+    // community, whose listings and Commons are its members', state_synced only.
+    const keylessRow = LISTINGS_ONLY ? new Set([...LISTING_EVENTS, 'state_synced'])
+        : KEYLESS_HEARS_LISTINGS ? new Set(PUBLIC) : new Set(['state_synced']);
     assert(keylessRow.size <= PUBLIC.length && [...keylessRow].every(t => se.PUBLIC_WS_EVENTS.has(t)), 'setup: this node\'s row of the table is within PUBLIC_WS_EVENTS');
     for (const type of PUBLIC) se.broadcast({ type, sweep: true });
     // An import that counted only groups (engine/sync.ts): its counts miss tables it writes, so it still rings.
@@ -327,7 +367,7 @@ async function main(): Promise<void> {
         const extra = [...t].filter(x => !keylessRow.has(x));
         const missing = [...keylessRow].filter(x => !t.has(x));
         assert(extra.length === 0 && missing.length === 0,
-            `${who} socket gets exactly ${LISTINGS_ONLY ? 'the listings\' doorbells and state_synced' : 'every public type, as before'} (extra ${JSON.stringify(extra)}, missing ${JSON.stringify(missing)})`);
+            `${who} socket gets exactly ${LISTINGS_ONLY ? 'the listings\' doorbells and state_synced' : KEYLESS_HEARS_LISTINGS ? 'every public type, as before' : 'state_synced only'} (extra ${JSON.stringify(extra)}, missing ${JSON.stringify(missing)})`);
         assert(bare(s), `${who} socket gets them bare: { type } only`);
         assert(got(s).filter(e => e.type === 'state_synced').length === 2, `${who} socket gets state_synced for the import that counted only groups too`);
         assert(!t.has('system_announcement'), `${who} socket gets no member-only event`);
@@ -337,11 +377,21 @@ async function main(): Promise<void> {
         // ── 6. listings that leave the board, or come back, with no post event ──────────────────────
         console.log('\n── 6. listings that leave the board or come back with no post event of their own ──');
         const { createDecision, executeDecision, tickDecisions } = await import('./decisions-engine.js');
-        /** The listings' ids an unsigned reader reads here: the guest view where the switch is on, the board elsewhere. */
+        /**
+         * The listings' ids the board shows: an unsigned reader's, the guest view, where the switch is on; elsewhere a
+         * member's, Carol's (no listing, deal or enterprise of hers here), as a stranger may not read a local community's
+         * board (2026-09-28).
+         */
+        const READER = KEYLESS_HEARS_LISTINGS ? 'an unsigned reader' : 'a member';
         const board = async (): Promise<string[]> => {
             beforeCall();
-            const res = await fetch(`${BASE}/api/marketplace/posts?limit=100`);
-            const body = await res.json().catch(() => null);
+            let body: any = null;
+            if (KEYLESS_HEARS_LISTINGS) {
+                const res = await fetch(`${BASE}/api/marketplace/posts?limit=100`);
+                body = await res.json().catch(() => null);
+            } else {
+                body = (await getAs(carol, '/api/marketplace/posts?limit=100')).body;
+            }
             return Array.isArray(body) ? body.map((p: any) => p.id) : [];
         };
         const offer = async (who: Id, title: string): Promise<string> => {
@@ -359,10 +409,14 @@ async function main(): Promise<void> {
          * doorbell, as before.
          */
         const rings = async (what: string, doorbell: 'post_removed' | 'post_updated', memberGets: string[]): Promise<void> => {
-            await until(S.unsigned, doorbell);
+            await until(S.visitor, doorbell);
             await until(S.member, memberGets[memberGets.length - 1]);
             for (const [who, s] of [...keyless, ...keyed]) {
                 const bells = listingDoorbells(s);
+                if (!KEYLESS_HEARS_LISTINGS && keyless.some(([, k]) => k === s)) {
+                    assert(bells.length === 0 && bare(s), `${what}: ${who} socket gets no listing doorbell: a local community's listings are its members' (${show(s)})`);
+                    continue;
+                }
                 assert(bells.length === 1 && bells[0].type === doorbell && bare(s), `${what}: ${who} socket gets one bare ${doorbell} (${show(s)})`);
             }
             assert(memberGets.every(t => typesOf(S.member).has(t)), `${what}: the member's socket gets ${memberGets.join(', ')} as before (${show(S.member)})`);
@@ -378,14 +432,14 @@ async function main(): Promise<void> {
         const graced = executeDecision(removal.id);
         db.prepare('UPDATE decisions SET grace_period_ends_at = ? WHERE id = ?').run(new Date(Date.now() - 60_000).toISOString(), removal.id);
         assert(graced.status === 'execution_pending_grace' && (await board()).includes(doraOffer),
-            `setup: the removal of Dora is in its grace, past its end, and an unsigned reader still reads her offer (${graced.status})`);
+            `setup: the removal of Dora is in its grace, past its end, and ${READER} still reads her offer (${graced.status})`);
         await sleep(100);
         clear();
         const tick = tickDecisions();
         assert(tick.graceExpired === 1 && (db.prepare('SELECT status FROM members WHERE public_key = ?').get(dora.pk) as any)?.status === 'pruned',
             `the community removes Dora: tickDecisions prunes her (${JSON.stringify(tick)})`);
         await rings('a community removal', 'post_removed', ['user_pruned', 'decision_updated']);
-        assert(!(await board()).includes(doraOffer), 'a community removal: an unsigned reader no longer reads her offer');
+        assert(!(await board()).includes(doraOffer), `a community removal: ${READER} no longer reads her offer`);
 
         // An admin prune of a member with two listings: one doorbell, not one per listing.
         const erin = member('DoorbellErin');
@@ -395,7 +449,7 @@ async function main(): Promise<void> {
         se.adminPruneUser(erin.pk, 'owner:password');
         await rings('an admin prune', 'post_removed', ['profile_updated', 'user_pruned']);
         const afterPrune = await board();
-        assert(erinOffers.every(id => !afterPrune.includes(id)), 'an admin prune: an unsigned reader reads neither of her offers');
+        assert(erinOffers.every(id => !afterPrune.includes(id)), `an admin prune: ${READER} reads neither of her offers`);
 
         // An enterprise with a listing: paused and resumed, winding up and not, and paused when its only keeper, the lead,
         // is unbound (promoteOrPauseAfterLeadLeft).
@@ -404,13 +458,13 @@ async function main(): Promise<void> {
         se.adminAssignTreasuryOperator(shed, lead.pk);
         db.prepare("UPDATE treasury_operators SET role = 'lead' WHERE treasury_pubkey = ? AND member_pubkey = ?").run(shed, lead.pk);
         const shedOffer = se.createPost('offer', 'tools', 'Doorbell shovel', 'A doorbell test listing of an enterprise', 0, 'fixed', shed)?.id ?? '';
-        assert(!!shedOffer && (await board()).includes(shedOffer), 'setup: an enterprise lists an offer, and an unsigned reader reads it');
+        assert(!!shedOffer && (await board()).includes(shedOffer), `setup: an enterprise lists an offer, and ${READER} reads it`);
         const step = async (what: string, act: () => unknown, doorbell: 'post_removed' | 'post_updated', shown: boolean, memberGets: string[]): Promise<void> => {
             await sleep(100);
             clear();
             act();
             await rings(what, doorbell, memberGets);
-            assert((await board()).includes(shedOffer) === shown, `${what}: an unsigned reader ${shown ? 'reads its offer again' : 'no longer reads its offer'}`);
+            assert((await board()).includes(shedOffer) === shown, `${what}: ${READER} ${shown ? 'reads its offer again' : 'no longer reads its offer'}`);
         };
         await step('an enterprise paused', () => se.pauseEnterprise(shed, 'owner:password'), 'post_removed', false, ['profile_updated', 'enterprise_paused']);
         await step('the enterprise resumed', () => se.resumeEnterprise(shed, 'owner:password'), 'post_updated', true, ['profile_updated', 'enterprise_resumed']);
@@ -425,12 +479,12 @@ async function main(): Promise<void> {
         clear();
         se.setHolidayMode(fay.pk, true);
         await rings('a member on holiday', 'post_removed', ['profile_updated']);
-        assert(!(await board()).includes(fayOffer), 'a member on holiday: an unsigned reader no longer reads her offer');
+        assert(!(await board()).includes(fayOffer), `a member on holiday: ${READER} no longer reads her offer`);
         await sleep(100);
         clear();
         se.setHolidayMode(fay.pk, false);
         await rings('back from holiday', 'post_updated', ['profile_updated']);
-        assert((await board()).includes(fayOffer), 'back from holiday: an unsigned reader reads her offer again');
+        assert((await board()).includes(fayOffer), `back from holiday: ${READER} reads her offer again`);
 
         // A report actioned with a suspension: the member's listings are paused.
         const gus = member('DoorbellGus');
@@ -440,7 +494,7 @@ async function main(): Promise<void> {
         clear();
         assert(se.actionReport('doorbell-report', false, true), 'a moderator actions a report on Gus and suspends him');
         await rings("a report's suspension", 'post_removed', ['profile_updated']);
-        assert(!(await board()).includes(gusOffer), "a report's suspension: an unsigned reader no longer reads his offer");
+        assert(!(await board()).includes(gusOffer), `a report's suspension: ${READER} no longer reads his offer`);
 
         // Delete account, over HTTP.
         const hal = member('DoorbellHal');
@@ -450,7 +504,7 @@ async function main(): Promise<void> {
         const purged = await call(hal, '/api/member/purge', {});
         assert(purged.status === 200, `Hal deletes his account (got ${purged.status} ${JSON.stringify(purged.body).slice(0, 120)})`);
         await rings('a Delete account', 'post_removed', ['profile_updated', 'user_pruned']);
-        assert(!(await board()).includes(halOffer), 'a Delete account: an unsigned reader no longer reads his offer');
+        assert(!(await board()).includes(halOffer), `a Delete account: ${READER} no longer reads his offer`);
 
         // A trade's step on a members-only listing: the member socket gets the bare doorbell as before,
         // and no socket off the member feed is rung.
@@ -473,8 +527,12 @@ async function main(): Promise<void> {
         clear();
         se.broadcast({ type: 'post_accepted', postId: 'doorbell-trade', transaction: { id: 'doorbell-trade-tx' } }, [alice.pk], { othersGetDoorbell: true });
         await until(S.member, 'post_accepted');
-        await until(S.unsigned, 'post_updated');
+        await until(S.visitor, 'post_updated');
         for (const [who, s] of [...keyless, ...keyed]) {
+            if (!KEYLESS_HEARS_LISTINGS && keyless.some(([, k]) => k === s)) {
+                assert(!typesOf(s).has('post_updated') && !typesOf(s).has('post_accepted'), `a trade's step: ${who} socket gets nothing: a local community's listings are its members' (${show(s)})`);
+                continue;
+            }
             assert(typesOf(s).has('post_updated') && !typesOf(s).has('post_accepted') && bare(s), `a trade's step: ${who} socket gets a bare post_updated, and not the trade's own event (${show(s)})`);
         }
         assert(typesOf(S.member).has('post_accepted') && bare(S.member) && listingDoorbells(S.member).length === 0,

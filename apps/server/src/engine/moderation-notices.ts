@@ -9,11 +9,12 @@
 // None of them names the admin or moderator who acted, or anyone who reported: the author hears "the community's
 // moderators", and each reporter hears only about their own report.
 
+import type { PushNoticeKind } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { keepNotice } from './kept-notices.js';
 
 type BroadcastFn = (event: any, recipients?: string[], opts?: { othersGetDoorbell?: boolean }) => void;
-type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery') => void;
+type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery', kind: PushNoticeKind) => void;
 
 export interface ModerationNoticeCallbacks {
     broadcast: BroadcastFn;
@@ -91,26 +92,27 @@ function tell(cb: ModerationNoticeCallbacks, recipients: string[], title: string
         }
     }
     try {
-        cb.dispatchPushNotification(to, 'SYSTEM', title, body, data, 'marketplace');
+        cb.dispatchPushNotification(to, 'SYSTEM', title, body, data, 'marketplace', 'community.notice');
     } catch (e: any) {
         console.warn('[Moderation] Push failed:', e?.message || e);
     }
 }
 
 /**
- * Close every still-open report on a post the admins removed, and return who filed them. A removed post
+ * Close every still-open report on a post the admins removed, and return who filed them. A Pulse report is about its
+ * item, whatever post id it carries (state-engine reportSubjectOf), so it is never one of them. A removed post
  * leaves nothing to review, so those reports are actioned too; left open, they would keep the pending count
  * up for a post that is already gone.
  */
 export function closeOpenReportsOnPost(postId: string): string[] {
     const rows = db.prepare(
         `SELECT DISTINCT reporter_pubkey FROM abuse_reports
-          WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL)`
+          WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`
     ).all(postId) as { reporter_pubkey: string }[];
     if (rows.length === 0) return [];
     db.prepare(
-        `UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-          WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL)`
+        `UPDATE abuse_reports SET status = 'actioned', suspended_member = 0, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+          WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL)`
     ).run(postId);
     return rows.map(r => r.reporter_pubkey);
 }
@@ -225,6 +227,35 @@ export function notifyPostHidden(cb: ModerationNoticeCallbacks, post: { id: stri
 export function notifyPostBack(cb: ModerationNoticeCallbacks, post: { id: string; title: string | null; authorPubkey: string | null }): void {
     if (!post.authorPubkey) return;
     tell(cb, [post.authorPubkey], POST_BACK_TITLE, postBackBody(post.title), { kind: 'post_restored', screen: 'post', postId: post.id });
+}
+
+// ── Clean-up by burst (engine/burst-cleanup.ts) ─────────────────────────────────────────────────
+
+export const POSTS_HIDDEN_TITLE = '🛡️ Your posts are hidden for review';
+export const POSTS_BACK_TITLE = '🛡️ Your posts are back';
+
+/** A moderator hid a member's posts with others' in one action. Never why, nor who else, nor who acted. */
+export function postsHiddenBody(count: number): string {
+    return count === 1
+        ? "One of your posts is hidden while the community's moderators look at it. It has not been removed, and you can still see it."
+        : `${count} of your posts are hidden while the community's moderators look at them. They have not been removed, and you can still see them.`;
+}
+
+export function postsBackBody(count: number): string {
+    return count === 1
+        ? "The community's moderators looked at one of your posts, and everyone can see it again."
+        : `The community's moderators looked at ${count} of your posts, and everyone can see them again.`;
+}
+
+/** One notice per author, however many of their posts the action hid, so nobody's app stacks an alert per post. */
+export function notifyPostsHiddenForReview(cb: ModerationNoticeCallbacks, authorPubkey: string, count: number): void {
+    if (count < 1) return;
+    tell(cb, [authorPubkey], POSTS_HIDDEN_TITLE, postsHiddenBody(count), { kind: 'post_hidden', reason: 'moderators', count });
+}
+
+export function notifyPostsBack(cb: ModerationNoticeCallbacks, authorPubkey: string, count: number): void {
+    if (count < 1) return;
+    tell(cb, [authorPubkey], POSTS_BACK_TITLE, postsBackBody(count), { kind: 'post_restored', count });
 }
 
 export function notifyMuted(cb: ModerationNoticeCallbacks, memberPubkey: string): void {

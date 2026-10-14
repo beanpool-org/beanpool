@@ -1,0 +1,38 @@
+# The data partition (key vault design §2.1): LUKS2 under K_disk, which exists only once two custodians have unlocked
+# the vault. This waits for the keyholder to be open, takes K_disk from its root-only socket, opens the partition (it
+# formats it the first time), and mounts it where the API keeps its database. The API opens no database before that
+# (requireDataMount). After a restart it starts again and waits.
+#
+# The mount must land in the machine's own mount namespace, where the API's namespace (a copy made at its start, which
+# takes later mounts from it) sees it. So nothing here may give this unit a mount namespace of its own: no
+# PrivateNetwork (it remounts /sys, in a namespace of its own: the mount then vanished with this oneshot, and the vault
+# never opened), PrivateTmp, PrivateDevices, ProtectSystem, ProtectHome, ProtectKernel*, ProtectControlGroups,
+# ProtectProc, ProtectHostname, ReadOnly/ReadWrite/InaccessiblePaths, TemporaryFileSystem, BindPaths, PrivateMounts or
+# MountFlags. What it keeps needs no namespace: no core file (it holds K_disk for a moment), no IP traffic (a cgroup
+# filter), and system call filters: no new privileges, only Unix, netlink and kernel-crypto (cryptsetup's AF_ALG)
+# sockets, no namespaces, no personality or realtime changes, native system calls only.
+[Unit]
+Description=BeanPool key vault: open the data partition once the vault is unlocked
+After=beanpool-vault-keyholder.service local-fs.target
+Wants=beanpool-vault-keyholder.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/node/bin/node /usr/lib/beanpool-vault/vault-data.mjs
+# It waits for the unlock as long as that takes; a partition that isn't this vault's (exit 3) is not tried again.
+TimeoutStartSec=infinity
+Restart=on-failure
+RestartSec=10
+RestartPreventExitStatus=3
+LimitCORE=0
+IPAddressDeny=any
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX AF_NETLINK AF_ALG
+RestrictNamespaces=yes
+LockPersonality=yes
+RestrictRealtime=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

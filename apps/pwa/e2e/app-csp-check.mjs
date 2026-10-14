@@ -7,6 +7,9 @@
  * 320 px with 1.3x text and at 1280 px:
  *   - a fresh browser: the welcome page draws
  *   - a member: the Market draws its listings, the Map draws its tiles
+ *   - the global node's 12-words door (two-doors design §3.4, slice S5): the join screens make a key, ask for door work,
+ *     and solve it in the Web Worker, which must load from this origin under this policy with no change to it (not a
+ *     blob, not the page's fallback), until the work is ready
  * and fails if the browser reports any violation of the policy, or asks any host outside the policy's own list.
  * A canary inline script is added last on each page; the check fails unless the policy blocks it and the violation
  * is reported, so "no violations" is never a watcher that saw nothing.
@@ -26,6 +29,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { mockResponse } from './fixtures.mjs';
+import { makeDoorWorkChallenge } from '@beanpool/core/door-work';
 
 const PWA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const POLICY_SOURCE = path.resolve(PWA_DIR, '../server/src/app-document-csp.ts');
@@ -39,7 +43,7 @@ async function loadPolicy() {
 }
 
 /** Hosts the policy lets the web app reach, and so the only ones it may ask. */
-const ALLOWED_EXTERNAL = [/^fonts\.googleapis\.com$/, /^fonts\.gstatic\.com$/, /^[a-z]\.tile\.openstreetmap\.org$/, /^nominatim\.openstreetmap\.org$/];
+const ALLOWED_EXTERNAL = [/^[a-z]\.tile\.openstreetmap\.org$/, /^nominatim\.openstreetmap\.org$/];
 
 const ONE_PIXEL_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
 
@@ -54,9 +58,25 @@ function memberIdentity() {
     };
 }
 
-function apiAnswer(pathname, search, me) {
+/** The node's door-work key for the 12-words phase: challenges here are real ones, as the node makes them. */
+const WORK_KEY = crypto.randomBytes(32);
+
+function apiAnswer(pathname, search, me, door = null, signer = '') {
     if (pathname === `/api/community/membership/${me.publicKey}`) return { isMember: true, callsign: me.callsign };
     if (pathname === '/api/community/health') return { status: 'ok', memberCount: 4, version: 'harness' };
+    if (door?.open) {
+        // The global node with its 12-words door open, as /api/community/info says it after #1425.
+        if (pathname === '/api/community/info') {
+            return { memberCount: 4, postCount: 3, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, wordsDoor: true, beans: false } };
+        }
+        if (pathname.startsWith('/api/members/callsign-available/')) return { available: true };
+        if (pathname === '/api/join/sso-nonce') return { nonce: 'harness-nonce', expiresInSeconds: 600, providers: ['google'], clientIds: { google: 'web-client' }, vault: null };
+        if (pathname === '/api/join/work' && /^[0-9a-f]{64}$/i.test(signer)) {
+            door.asked++;
+            const challenge = makeDoorWorkChallenge({ workKey: WORK_KEY, level: 0, key: signer.toLowerCase(), door: 'words' });
+            return { work: { challenge, level: 0, parts: 8, bits: 7, size: 65_536, expiresInSeconds: 600 }, turnstile: null };
+        }
+    }
     return mockResponse(pathname, search);
 }
 
@@ -70,7 +90,7 @@ async function checkView(browser, origin, view, me) {
     const violations = [];
     const consoleCsp = [];
     const unexpectedHosts = new Set();
-    const asked = { fontCss: 0, tiles: 0 };
+    const asked = { fonts: 0, tiles: 0 };
 
     const context = await browser.newContext({ viewport: view.viewport, reducedMotion: 'reduce' });
     await context.exposeBinding('__reportCspViolation', (_source, v) => { violations.push(v); });
@@ -86,22 +106,19 @@ async function checkView(browser, origin, view, me) {
         if (!ALLOWED_EXTERNAL.some((re) => re.test(host))) unexpectedHosts.add(host);
         return route.abort();
     });
-    await context.route('https://fonts.googleapis.com/**', (route) => {
-        asked.fontCss++;
-        return route.fulfill({
-            status: 200,
-            contentType: 'text/css',
-            body: "@font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url(https://fonts.gstatic.com/s/inter/v0/harness.woff2) format('woff2'); }",
-        });
+    // Inter is the node's own file (public/fonts), never a font host's.
+    context.on('request', (req) => {
+        const url = new URL(req.url());
+        if (url.origin === origin && /^\/fonts\/inter-[a-z-]+\.woff2$/.test(url.pathname)) asked.fonts++;
     });
-    await context.route('https://fonts.gstatic.com/**', (route) => route.fulfill({ status: 404, body: '' }));
     await context.route(/^https:\/\/[a-z]\.tile\.openstreetmap\.org\//, (route) => {
         asked.tiles++;
         return route.fulfill({ status: 200, contentType: 'image/png', body: ONE_PIXEL_PNG });
     });
+    const door = { open: false, asked: 0 };
     await context.route(`${origin}/api/**`, (route) => {
         const url = new URL(route.request().url());
-        const body = apiAnswer(url.pathname, url.search, me);
+        const body = apiAnswer(url.pathname, url.search, me, door, route.request().headers()['x-public-key'] ?? '');
         if (body === undefined) return route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ error: 'Not Found' }) });
         return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
     });
@@ -125,7 +142,32 @@ async function checkView(browser, origin, view, me) {
         failures.push('the welcome page did not draw');
     }
 
-    // A member: the key goes where the web app keeps it, then the app opens on the Market.
+    // The global node's 12-words door: the door work runs in a Web Worker from this origin, under this policy.
+    const workers = [];
+    const workFallback = [];
+    page.on('worker', (w) => workers.push(w.url()));
+    page.on('console', (msg) => { if (/\[DoorWork\]/.test(msg.text())) workFallback.push(msg.text()); });
+    door.open = true;
+    await page.goto(`${origin}/app`, { waitUntil: 'load' });
+    await scaleText();
+    try {
+        await page.getByTestId('join-start').click({ timeout: 20_000 });
+        await page.getByTestId('join-new').click();
+        await page.getByTestId('join-callsign').fill('Harness');
+        await page.locator('[data-words-work="ready"]').waitFor({ timeout: 30_000 });
+        await page.getByTestId('join-name-next').click();
+        await page.getByTestId('join-words').waitFor({ timeout: 20_000 });
+    } catch (e) {
+        failures.push(`the 12-words door's work did not get ready (${e.message.split('\n')[0]})`);
+    }
+    const sameOriginWorker = workers.filter((u) => u.startsWith(`${origin}/`));
+    if (door.asked === 0) failures.push('the join screens never asked for door work');
+    if (sameOriginWorker.length === 0) failures.push(`no Web Worker from this origin ran the door work (workers: ${JSON.stringify(workers)})`);
+    if (workers.some((u) => !u.startsWith(`${origin}/`))) failures.push(`a worker from elsewhere: ${JSON.stringify(workers)}`);
+    if (workFallback.length) failures.push(`the worker did not run, the page solved instead: ${JSON.stringify(workFallback)}`);
+    door.open = false;
+
+    // A member: the key goes where the web app keeps it, then the app opens on Home and the Market is one tap away.
     await page.evaluate((identity) => new Promise((resolve, reject) => {
         const open = indexedDB.open('beanpool-identity', 1);
         open.onupgradeneeded = () => open.result.createObjectStore('keys');
@@ -140,6 +182,7 @@ async function checkView(browser, origin, view, me) {
     await page.goto(`${origin}/app`, { waitUntil: 'load' });
     await scaleText();
     try {
+        await page.locator('button:visible').filter({ hasText: /^\S*Market$/ }).first().click({ timeout: 20_000 });
         await page.getByText('Chainsaw, sharpened').first().waitFor({ timeout: 20_000 });
     } catch {
         failures.push('the Market did not draw its listings');
@@ -156,7 +199,12 @@ async function checkView(browser, origin, view, me) {
     await page.waitForLoadState('networkidle').catch(() => {});
     await page.waitForTimeout(500);
 
-    if (asked.fontCss === 0) failures.push('the Inter stylesheet was never asked for');
+    if (asked.fonts === 0) failures.push("Inter's files were never asked for from the node");
+    const interLoaded = await page.evaluate(async () => {
+        await document.fonts.ready;
+        return [...document.fonts].some((f) => f.family.replace(/["']/g, '') === 'Inter' && f.status === 'loaded');
+    });
+    if (!interLoaded) failures.push('Inter never loaded: the page is drawing in the fallback font');
     if (asked.tiles === 0) failures.push('no map tile was asked for');
     if (unexpectedHosts.size) failures.push(`asked hosts outside the policy's list: ${[...unexpectedHosts].join(', ')}`);
     const seen = violations.slice();
@@ -209,8 +257,8 @@ async function main() {
                 console.error(`✗ ${view.name}:`);
                 for (const f of result.failures) console.error(`    ${f}`);
             } else {
-                console.log(`✓ ${view.name}: welcome page, Market and Map drew; Inter asked ${result.asked.fontCss}x, `
-                    + `${result.asked.tiles} tile(s); 0 violations; the canary inline script was blocked and reported`);
+                console.log(`✓ ${view.name}: welcome page, the 12-words door's work in a same-origin Web Worker, Market and Map drew; `
+                    + `Inter from the node (${result.asked.fonts} file(s)), ${result.asked.tiles} tile(s); 0 violations; the canary inline script was blocked and reported`);
             }
         }
     } finally {

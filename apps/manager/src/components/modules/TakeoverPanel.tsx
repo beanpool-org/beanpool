@@ -3,6 +3,8 @@ import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { OwnerPhoneUnlock, type OwnerPhoneSession } from './OwnerPhoneUnlock';
+import { nodeCredential } from '../../lib/profiles';
+import { passwordField } from '../../lib/node-client';
 
 /**
  * "Take over as the main server" — on a standby, with the printed recovery code (sealed-keys.md §5.3–§5.5, slice 5)
@@ -26,7 +28,15 @@ export interface TakeoverStepView {
 
 export interface TakeoverProgressData {
     role: 'primary' | 'backup';
-    state: 'none' | 'running' | 'restarting' | 'complete' | 'failed';
+    /** 'failed' with `rolledBack`: it stopped, and the server is the standby it was. 'rolling-back': being put back. */
+    state: 'none' | 'running' | 'restarting' | 'complete' | 'failed' | 'rolling-back';
+    /** When a take-over that stopped was rolled back, and what was put back. Absent on older servers, which left it failed. */
+    rolledBack?: { at: string; detail: string } | null;
+    /**
+     * 'rolling-back': why putting the standby back stopped. `undoCopyMissing`: the copy of its own files is gone, so nothing
+     * was put back and a restart alone won't finish it. Absent on older servers.
+     */
+    rollBackStopped?: { at: string; why: string; undoCopyMissing?: boolean } | null;
     startedAt: string | null;
     completedAt: string | null;
     authorisedBy: string | null;
@@ -41,7 +51,12 @@ export interface TakeoverProgressData {
         tunnel?: { source: string; message: string } | null;
         /** `addsUp` and `copy` are absent on servers before the ledger copy was checked; `ok` is both. */
         audit?: {
-            ok: boolean; drift: number; strandedEscrows: number; addsUp?: boolean;
+            /** `drift` (and a count) is null when it wasn't a finite number: a balance of Infinity makes the sum Infinity. */
+            ok: boolean; drift: number | null; strandedEscrows: number | null; addsUp?: boolean;
+            /** Balances that are not a finite number; absent on servers before they were counted here. */
+            badBalances?: number | null;
+            /** The audit could not run: why (a server from #1445's fix round on). */
+            error?: string;
             copy?: { match: boolean; here: LedgerHeld; lastCopy: (LedgerHeld & { generatedAt: string | null }) | null } | null;
         } | null;
         announcement?: string | null;
@@ -50,8 +65,14 @@ export interface TakeoverProgressData {
     missing: string[];
     afterwards: string[];
     codeUsed: { codeId: number; at: string; message: string } | null;
-    /** Split-brain guard (slice 8): another server took over this one's identity; it is read-only. Absent on older servers. */
-    replaced?: { epoch: number; ownEpoch: number; since: string | null; detectedAt: string; url: string; message: string } | null;
+    /**
+     * Split-brain guard (slice 8): another server took over this one's identity; it is read-only. Absent on older servers.
+     * `conflict`: another standby took over with the same keys, before this one did (both at one epoch).
+     */
+    replaced?: {
+        epoch: number; ownEpoch: number; since: string | null; detectedAt: string; url: string; message: string;
+        conflict?: boolean; ownSince?: string | null;
+    } | null;
 }
 
 export interface TakeoverPreview {
@@ -91,13 +112,11 @@ const PROGRESS_KEY_PREFIX = 'bp-takeover-progress:';
 
 /** The server's list (services/takeover.ts WHAT_WILL_BE_MISSING), for when it has not answered yet. */
 const MISSING_FALLBACK = [
-    'Decisions and their votes',
-    'enterprise pledges and keeper changes',
-    'invites',
-    "members' notification settings",
+    'photos sent in chats',
     'Commons project proposals still waiting for a decision',
+    "price reports sent without signing in, or by someone who hadn't joined",
     "the admin IP allowlist, if the community had one: it names addresses on the old server's network, so this server keeps its own",
-    'anything that changed on the main server after this standby last copied it',
+    'and, on top of everything above, whatever changed on the main server after this standby last copied it',
 ];
 
 function readStoredToken(nodeId: string): string | null {
@@ -126,15 +145,28 @@ interface LedgerHeld { accounts: number; holdings: number }
  */
 function auditMessage(audit: NonNullable<NonNullable<TakeoverProgressData['result']>['audit']>): string {
     if (audit.ok) return 'The ledger adds up.';
-    const held = (h: LedgerHeld) => `${h.accounts} account(s) holding ${h.holdings.toFixed(2)} Beans`;
+    // Every figure as the server sent it, which may not be a number (JSON writes Infinity as null): never assumed one.
+    const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+    const held = (h: LedgerHeld) => (finite(h.holdings)
+        ? `${h.accounts} account(s) holding ${h.holdings.toFixed(2)} Beans`
+        : `${h.accounts} account(s) holding an amount that is not a number`);
+    const difference = finite(audit.drift) ? `difference ${audit.drift}` : 'the difference is not a number';
     const reasons: string[] = [];
-    if (audit.addsUp !== true) reasons.push(`The ledger does NOT add up (difference ${audit.drift}).`);
+    if (audit.error) reasons.push(`The ledger audit could not run (${audit.error}), so it can't say the ledger adds up.`);
+    // Balances that are not a number leave the difference at 0 or make it not a number, so they are said as themselves,
+    // as the copy is.
+    const bad = audit.badBalances ?? 0;
+    if (audit.addsUp !== true && bad > 0) reasons.push(`${bad} account balance(s) are not a number, so the ledger can't add up.`);
+    const stranded = finite(audit.strandedEscrows) ? audit.strandedEscrows : 0;
+    if (!audit.error && audit.addsUp !== true && (bad === 0 || (finite(audit.drift) && Math.abs(audit.drift) >= 0.01) || stranded > 0)) {
+        reasons.push(`The ledger does NOT add up (${difference}).`);
+    }
     if (audit.copy && !audit.copy.match) {
         reasons.push(audit.copy.lastCopy
             ? `The ledger is not the main server's as this server last copied it: here ${held(audit.copy.here)}, the main server's ${held(audit.copy.lastCopy)}.`
             : "This server has no record of the main server's ledger, so it can't say the ledger is the main server's.");
     }
-    if (reasons.length === 0) reasons.push(`The ledger does NOT add up (difference ${audit.drift}).`);
+    if (reasons.length === 0) reasons.push(`The ledger does NOT add up (${difference}).`);
     return `${reasons.join(' ')} Check it before members trade.`;
 }
 
@@ -157,8 +189,8 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
     const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const adminHeaders = useCallback(
-        () => buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-        [activeNode.adminPassword, activeNode.id],
+        () => buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+        [nodeCredential(activeNode), activeNode.id],
     );
 
     const loadProgress = useCallback(async (): Promise<TakeoverProgressData | null> => {
@@ -167,7 +199,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
             : adminHeaders();
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/progress'), {
-                method: 'POST', headers, body: JSON.stringify({ password: progressToken ? undefined : activeNode.adminPassword }),
+                method: 'POST', headers, body: JSON.stringify({ ...(progressToken ? {} : passwordField(nodeCredential(activeNode))) }),
             });
             if (!res.ok) {
                 // With a progress token, a refusal means the server that answers is not the one that started it.
@@ -182,7 +214,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
             setUnreachable(true);
             return null;
         }
-    }, [activeNode.url, activeNode.adminPassword, progressToken, adminHeaders]);
+    }, [activeNode.url, nodeCredential(activeNode), progressToken, adminHeaders]);
 
     // While a take-over this screen started is under way, follow it (through the restart).
     useEffect(() => {
@@ -204,12 +236,12 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
         if (busy) return;
         if (stage === 'preview') {
             void fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/cancel'), {
-                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ password: activeNode.adminPassword }),
+                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
             }).catch(() => {});
         }
         if (phone) {
             void fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/unlock/cancel'), {
-                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ password: activeNode.adminPassword, sessionId: phone.sessionId }),
+                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), sessionId: phone.sessionId }),
             }).catch(() => {});
         }
         setStage('closed');
@@ -226,7 +258,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
         setError(null);
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/phone/start'), {
-                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ password: activeNode.adminPassword, serverUrl: activeNode.url }),
+                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), serverUrl: activeNode.url }),
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && typeof data.qr === 'string') {
@@ -250,7 +282,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
         const tick = async () => {
             try {
                 const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/phone/wait'), {
-                    method: 'POST', headers: adminHeaders(), body: JSON.stringify({ password: activeNode.adminPassword, sessionId: phone.sessionId }),
+                    method: 'POST', headers: adminHeaders(), body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), sessionId: phone.sessionId }),
                 });
                 const data = await res.json().catch(() => ({}));
                 if (cancelled) return;
@@ -277,7 +309,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
         };
         t = setTimeout(tick, pollMs);
         return () => { cancelled = true; if (t) clearTimeout(t); };
-    }, [stage, phone, activeNode.url, activeNode.adminPassword, adminHeaders, pollMs]);
+    }, [stage, phone, activeNode.url, nodeCredential(activeNode), adminHeaders, pollMs]);
 
     const submitCode = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -285,7 +317,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
         setError(null);
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/open'), {
-                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ password: activeNode.adminPassword, code }),
+                method: 'POST', headers: adminHeaders(), body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), code }),
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.preview) {
@@ -309,7 +341,7 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
         try {
             const res = await fetch(resolveNodeApiUrl(activeNode.url, '/api/local/admin/takeover/confirm'), {
                 method: 'POST', headers: adminHeaders(),
-                body: JSON.stringify({ password: activeNode.adminPassword, sessionId: preview.sessionId, confirm: true }),
+                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)), sessionId: preview.sessionId, confirm: true }),
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && typeof data.progressToken === 'string') {
@@ -321,6 +353,13 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
             } else {
                 setError(typeof data.error === 'string' ? data.error : `The standby answered HTTP ${res.status}.`);
                 if (data.sessionGone) { setPreview(null); setStage('code'); }
+                // Stopped and rolled back, or another server took over with these keys: this session is over, and the server
+                // is the standby it was. The error says why; the progress below shows the steps.
+                else if (typeof data.rolledBack === 'boolean' || data.alreadyTakenOver) {
+                    setPreview(null);
+                    setStage('explain');
+                    void loadProgress();
+                }
             }
         } catch (err: unknown) {
             setError(`The standby did not answer: ${err instanceof Error ? err.message : String(err)}`);
@@ -349,11 +388,20 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
             {progress?.replaced && (
                 <div role="alert" id="takeover-replaced" className="p-3 rounded-xl border bg-red-950/70 border-red-800 text-red-200 text-sm space-y-1" style={WRAP}>
                     <p className="m-0 font-bold">🛑 {progress.replaced.message}</p>
-                    <p className="m-0">
-                        Another server took over this community (identity epoch {progress.replaced.epoch}; this server is at {progress.replaced.ownEpoch}),
-                        and this server&apos;s web address now leads there. Members&apos; changes are refused here. Don&apos;t run this server as the
-                        main server again: to use this machine, set it up from scratch as a standby of the new main server.
-                    </p>
+                    {progress.replaced.conflict ? (
+                        <p className="m-0">
+                            Two standbys took over this community with the same locked keys, and the other one did it first. It answers at
+                            this community&apos;s web address too. Members&apos; changes are refused here, so they go to the other server. Stop
+                            this server, and don&apos;t run it as the main server again: to use this machine, set it up from scratch as a standby of
+                            the other one.
+                        </p>
+                    ) : (
+                        <p className="m-0">
+                            Another server took over this community (identity epoch {progress.replaced.epoch}; this server is at {progress.replaced.ownEpoch}),
+                            and this server&apos;s web address now leads there. Members&apos; changes are refused here. Don&apos;t run this server as the
+                            main server again: to use this machine, set it up from scratch as a standby of the new main server.
+                        </p>
+                    )}
                     <p className="m-0 text-xs text-red-300">Seen {when(progress.replaced.detectedAt)} at {progress.replaced.url}</p>
                 </div>
             )}
@@ -369,7 +417,19 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                 <div id="takeover-progress" className="space-y-3">
                     <p className="text-sm font-bold m-0" style={WRAP}>
                         {state === 'complete' && <span className="text-emerald-300">✅ This server is now the community&apos;s main server.</span>}
-                        {state === 'failed' && <span className="text-red-300">The take-over stopped. It is tried again from the same step when the server restarts.</span>}
+                        {state === 'failed' && progress.rolledBack && (
+                            <span className="text-red-300">
+                                The take-over stopped, and nothing of it was kept: this server is the standby it was, and goes on copying the main
+                                server. Fix what stopped it, then take over again.
+                            </span>
+                        )}
+                        {state === 'failed' && !progress.rolledBack && <span className="text-red-300">The take-over stopped. It is tried again from the same step when the server restarts.</span>}
+                        {state === 'rolling-back' && !progress.rollBackStopped?.undoCopyMissing && (
+                            <span className="text-red-300">The take-over stopped. This server is putting itself back as the standby it was; if that does not finish, restart it.</span>
+                        )}
+                        {state === 'rolling-back' && progress.rollBackStopped?.undoCopyMissing && (
+                            <span className="text-red-300">The take-over stopped, and this server cannot put itself back as the standby it was by itself. It runs as a standby and copies nothing until it can.</span>
+                        )}
                         {(state === 'running' || state === 'restarting') && !unreachable && <span className="text-amber-200">Taking over…</span>}
                         {(state === 'running' || state === 'restarting') && unreachable && (
                             <span className="text-amber-200">The server is restarting. This page checks again every few seconds.</span>
@@ -394,6 +454,11 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                     {progress.error && (
                         <div role="alert" className="p-3 rounded-xl border bg-red-950 border-red-800 text-red-200 text-xs" style={WRAP}>
                             Stopped at “{progress.error.label}”: {progress.error.message}
+                        </div>
+                    )}
+                    {state === 'rolling-back' && progress.rollBackStopped && (
+                        <div role="alert" id="takeover-rollback-stopped" className="p-3 rounded-xl border bg-red-950 border-red-800 text-red-200 text-xs" style={WRAP}>
+                            Putting it back stopped ({when(progress.rollBackStopped.at)}): {progress.rollBackStopped.why}
                         </div>
                     )}
                     {state === 'complete' && progress.result && (
@@ -422,7 +487,8 @@ export function TakeoverPanel({ activeNode, isStandby, pollMs = 2000 }: Takeover
                 </div>
             )}
 
-            {isStandby && state === 'none' && (
+            {/* A take-over that stopped and was rolled back is over: another can start. */}
+            {isStandby && (state === 'none' || (state === 'failed' && !!progress?.rolledBack)) && (
                 <button type="button" id="takeover-start-btn" className={`${BTN} bg-red-900/70 hover:bg-red-800 border border-red-700 text-red-100 w-full sm:w-auto`}
                     onClick={() => { setError(null); setStage('explain'); }}>
                     Take over as the main server

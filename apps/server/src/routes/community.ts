@@ -6,45 +6,48 @@
 import crypto from 'node:crypto';
 import Router from '@koa/router';
 import {
-    registerMember, getMembers, getAllMembers, getMember,
+    registerMember, getMembers, getAllMembers, getMember, getMemberDirectoryRows, getMemberDirectoryRowsByKeys, searchMemberDirectoryRows,
     getBalance, transfer, getTransactions,
     createPost, getPosts, removePost, updatePost,
-    getCommunityInfo,
+    getCommunityInfo, getPublicCommunityInfo,
     generateInvite, redeemInvite, redeemOfflineTicket, checkInvite, getInviteTree, getInvitesByMember,
     adminGenerateInvite, getMemberTrustProfile, getTrustProfileForViewer,
     vouchMember, unvouchMember, canVouch, hasListedOffer, hasLiveOffer, nodeRoleOf, listNodeRoles,
     updateProfile, getProfile, getAllProfiles, isCallsignAvailable, findRecoveryCandidates,
-    getCommunityHealth,
+    getPublicCommunityHealth,
     seedGenesisMember,
     addRating, getRatings, getAverageRating, getRatingsGiven,
-    submitReport, getReports, getReportCount, getReportablePulseItemOwner, findPendingReport, isReportRateLimited,
+    submitReport, getReports, getReportCount, getReportablePulseItemOwner, getReportablePostAuthor, findPendingReport, updatePendingReportReason, isReportRateLimited,
     getFriends, addFriend, removeFriend,
     recordActivity,
     markConversationRead, getUnreadCounts,
-    exportLedgerAudit,
     registerPushToken, removePushToken, applyPushLeave,
-    getMemberPreferences, setMemberPreferences, setHolidayMode,
+    getMemberPreferences, setMemberPreferences, setHolidayMode, homePreferencesNamed,
     getMemberStats,
     dispatchPushNotification,
-    getNodeRole, exportSyncState,
+    exportLedgerFor, canOperateTreasury,
+    getNodeRole, exportSyncState, getNodeConfig,
     createTreasury,
     purgeMemberSelf,
     getMembersVersion,
     lastActiveForViewer,
     contactVisibleTo, contactViewer, readsAsMember, passesReadGate, isVisitorKey, publicMemberCard,
-    isLiveVisitor, getActingMember, mayBringSomeoneIn,
+    isLiveVisitor, getActingMember, mayBringSomeoneIn, alreadyJoined,
 } from '../state-engine.js';
 import { NOT_A_MEMBER_CODE, NOT_A_MEMBER_ERROR } from '../engine/members.js';
 import { isMemberKeySpelling, isNameableAccount, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
-import { completeRekey } from '../engine/member-wizards.js';
+import { pushKeyHex } from '../engine/push-notices.js';
 import { reEnrollText, verifyMemberSignature, verifyStatementSignature } from '../engine/member-signature.js';
+import { cleanRekeyCode, proposeRekey, rekeyRedeemStatus, RekeyRedeemRefusal } from '../engine/rekey-redeem.js';
+import { recordKeySuccession, rekeyedFromOf } from '../engine/key-succession.js';
 import { REQUEST_SIGNING_VERSION, SIGNED_FOR_HEADER, isPushLeaveStamp, isPushLeaveToken, pushLeaveText } from '@beanpool/core';
 import { formerAddresses, primaryAddress, publishedAddresses } from '../engine/own-addresses.js';
 import {
-    getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword,
+    getLocalConfig, saveLocalConfig, updateLocalConfig, hashPassword, hasAdminPassword,
     validatePasswordStrength, removeFirstPasswordFile, type LocalConfig,
+    isPasswordRetired,
 } from '../config/local-config.js';
-import { verifyTotpCode, verifyAndFindBackupCodeHash } from '../totp.js';
+import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from '../totp.js';
 import {
     getConnectors, addConnector, removeConnector,
     connectToAddress, disconnectFromAddress,
@@ -56,27 +59,54 @@ import {
 } from '../federation-link.js';
 import { reachablePeers } from '../federation-listings.js';
 import { blockCrossNodeSettlement } from '../federation-settlement.js';
-import { getProfileSwitches, getNodeProfile, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from '../config/node-profile.js';
+import { getProfileSwitches, getNodeProfile, assertFeatureOn, BEANS_OFF_MESSAGE, PROFILE_NO_BEANS } from '../config/node-profile.js';
+import { featuresFor } from '../config/features-for.js';
+import { getStartCommunityUrl } from '../config/start-community.js';
 import { probationSummary } from '../engine/probation.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { muteOf } from '../engine/auto-moderation.js';
-import { respondIfMuted, isNote } from './profile-feature-gate.js';
-import { isPoint, readMemberArea, setMemberArea, withAreaDistances } from '../engine/member-area.js';
+import { respondIfMuted, respondProfileRefusal, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
+import { assertMayMakeInvite } from '../engine/writer-bounds.js';
+import { FriendRefusal } from '../engine/social.js';
+import { getAddedYou } from '../engine/friends-added-you.js';
+import { isPoint, nearestPeople, readMemberArea, setMemberArea, withAreaDistances } from '../engine/member-area.js';
 import { parsePoint, type Point } from './distance-query.js';
-import { isSyntheticAccount } from '@beanpool/core';
+import { isSyntheticAccount, CONTACT_VALUE_LIMIT, textTooLongMessage } from '@beanpool/core';
+import { ratingsForReader } from '@beanpool/engine';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
-import { db } from '../db/db.js';
+import { inviteLogTag } from '../sanitize-message.js';
+import { db, memberPhotoNotMovedYet, MEMBER_PHOTO_INLINE_REF } from '../db/db.js';
 import { hasNoAvatarYet, recordFunnelEvent } from '../engine/funnel.js';
 import { AVATAR_FORMAT_ERROR } from '../engine/avatar.js';
-import { avatarKeysRequired } from '../engine/avatar-keys.js';
+import { avatarKeysRequired, faceUrlsChangedAfter } from '../engine/avatar-keys.js';
 import { membersOnlyHere, memberReadsOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 import { clientLimiterKey } from '../client-ip.js';
+import { doorRateLimit, rekeyStatusRateLimit } from '../auth-rate-limit.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
-import { issue2faSessionToken, requireAdminRole, type AdminRole } from '../admin-auth.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type AdminRole } from '../admin-auth.js';
+import { restampPasswordSession } from '../admin-key-auth.js';
+import { avatarUrlOf } from '@beanpool/core';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
+import { noteNewReport, reportKind } from '../services/alerts.js';
+import { cleanLabel } from '../config/clean-label.js';
+import { getPlatformFloor } from '../app-store-versions.js';
+import { APP_VERSION_HEADER, parseAppVersionHeader } from '../app-version-counts.js';
+import { memberErrorText, SERVER_FAULT_TEXT } from './member-error-text.js';
+import { heavyRead, heavyReadKey } from '../heavy-reads.js';
+import { membersSnapshotKey, sendMembersSnapshot, snapshotSendWeight, storeMembersSnapshot, usableMembersSnapshot } from '../members-snapshot.js';
+
+/**
+ * The key signing this request when it is joining through the open door here (the door open, a key's spelling, not a
+ * member yet), in the member table's spelling; else null.
+ */
+function joiningAtOpenDoor(ctx: any): string | null {
+    const signer = ctx.state?.actor as string | undefined;
+    if (!signer || !getProfileSwitches().openJoin) return null;
+    const key = signer.toLowerCase();
+    return /^[0-9a-f]{64}$/.test(key) && !alreadyJoined(key) ? key : null;
+}
 
 /**
  * Who may do what on the routes below. Every admin route takes checkAdminAuth (a key-signed session of an owner or
@@ -99,9 +129,16 @@ router.get('/api/local/status', async (ctx) => {
     ctx.set('Access-Control-Allow-Origin', '*');
     
     ctx.body = {
-        isLocked: config.isLocked,
+        // Has an admin password: the hash (hasAdminPassword), never the lock alone. A take-over or a restore writes a hash
+        // unlocked, and one from a community with no password leaves an older server's lock with no hash behind it.
+        isLocked: hasAdminPassword(config),
         callsign: config.callsign || null,
-        location: config.location || null,
+        // Rounded to two decimals (~1 km), as the Home answer's community.place: this route answers anyone, from anywhere, and an
+        // operator may have set a home address. The only reader is the sister map in the legacy settings page (a marker).
+        location: config.location ? { lat: Math.round(config.location.lat * 100) / 100, lng: Math.round(config.location.lng * 100) / 100 } : null,
+        // Design step 10: an owner retired the admin password, so sign-in screens show no password field and the fleet
+        // manager knows to use a token. Absent on a node from before.
+        passwordRetired: !!config.passwordRetired,
     };
 });
 
@@ -109,6 +146,7 @@ router.get('/api/local/status', async (ctx) => {
 
 router.post('/api/local/verify-password', async (ctx) => {
     if (!rateLimit(ctx)) return;
+    if (isPasswordRetired()) { refusePasswordRetired(ctx); return; }
     const body = (ctx as any).requestBody || {};
     const password = body.password;
     const headerPass = ctx.request?.headers?.['x-admin-password'] || (ctx as any).headers?.['x-admin-password'];
@@ -143,7 +181,9 @@ router.post('/api/local/verify-password', async (ctx) => {
             return;
         }
         const cleanCode = String(totpCode).trim();
-        let totpValid = verifyTotpCode(cleanCode, config.totpSecret);
+        // Once only: a code this server already accepted signs nobody in again (totp.ts useTotpCode).
+        const totpUse = useTotpCode(cleanCode, config.totpSecret);
+        let totpValid = totpUse === 'ok';
 
         // Check backup codes if TOTP didn't match
         const backupHashes = config.totpBackupCodesHashes || [];
@@ -160,7 +200,7 @@ router.post('/api/local/verify-password', async (ctx) => {
         if (!totpValid) {
             notePasswordFailure(clientLimiterKey(ctx));
             ctx.status = 401;
-            ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
+            ctx.body = { error: totpUse === 'reused' ? TOTP_CODE_REUSED : 'Invalid 2FA code', totpRequired: true };
             return;
         }
         notePasswordSuccess(clientLimiterKey(ctx));
@@ -192,8 +232,12 @@ router.post('/api/admin/seed-invite', async (ctx) => {
         ctx.body = { error: 'Only an owner or admin of this node can issue invites' };
         return;
     }
-    // Who issued it, for the audit trail: the signed member under a key session (or a break-glass code),
-    // 'owner:password' under the node password — the same attribution the node-roles routes use.
+    // Where invites are off (the global node) an owner or admin makes none either: the feature gate answers that
+    // before this route runs, and this says it again before anything below is written (a fresh node's genesis
+    // member included). A node there has its first members through the open door, and the password makes an owner.
+    try { assertFeatureOn('invites'); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
+    // Who issued it, for the audit trail: the signed member under a key session, 'owner:password' under the node
+    // password — the same attribution the node-roles routes use. (A break-glass code reaches the enrol routes only.)
     const issuedBy: string = (ctx.state as any)?.actor || 'owner:password';
 
     // Validate invite type
@@ -216,7 +260,7 @@ router.post('/api/admin/seed-invite', async (ctx) => {
         if (genesisMember) {
             const invite = adminGenerateInvite(genesisMember.publicKey, genesisType, undefined, issuedBy);
             if (invite) {
-                logger.security('ADMIN', `Seed invite generated: ${invite.code} [${genesisType}] issued by ${issuedBy}`, { issuedBy, code: invite.code, type: genesisType, authRole: role });
+                logger.security('ADMIN', `Seed invite generated: ${inviteLogTag(invite.code)} [${genesisType}] issued by ${issuedBy}`, { issuedBy, inviteTag: inviteLogTag(invite.code), type: genesisType, authRole: role });
                 const tierLabels: Record<string, string> = { standard: '🥚 Newcomer', trusted: '🏠 Resident', ambassador: '🏛️ Steward', elder: '⛰️ Elder' };
                 ctx.body = { success: true, code: invite.code, type: genesisType, tierLabel: tierLabels[genesisType], message: `${tierLabels[genesisType]} invite generated` };
                 return;
@@ -245,7 +289,7 @@ router.post('/api/admin/seed-invite', async (ctx) => {
         return;
     }
 
-    logger.security('ADMIN', `Seed invite generated: ${invite.code} [${genesisType}] issued by ${issuedBy}`, { issuedBy, code: invite.code, type: genesisType, authRole: role });
+    logger.security('ADMIN', `Seed invite generated: ${inviteLogTag(invite.code)} [${genesisType}] issued by ${issuedBy}`, { issuedBy, inviteTag: inviteLogTag(invite.code), type: genesisType, authRole: role });
     ctx.body = { success: true, code: invite.code, type: genesisType, message: 'Genesis member created + seed invite generated' };
 });
 
@@ -270,20 +314,25 @@ router.post('/api/local/update-identity', async (ctx) => {
             updates.location = { lat: parsedLat, lng: parsedLng };
         }
     }
-    if (communityName !== undefined) updates.communityName = (communityName || '').slice(0, 60) || null;
+    if (communityName !== undefined) updates.communityName = cleanLabel(communityName, 60) ?? null;
     if (contactEmail !== undefined) updates.contactEmail = (contactEmail || '').slice(0, 100) || null;
     if (contactPhone !== undefined) updates.contactPhone = (contactPhone || '').slice(0, 30) || null;
     updateLocalConfig(updates);
     ctx.body = { success: true };
 });
 
-// Public community info — no auth required (landing page)
+// Public community info: no key and no password (everything under /api/local/ skips the signature middleware), and the
+// directory lists every community's web address. So each contact is said here only when its owner turned on publishing
+// it (the directory's switches, off unless turned on), and null otherwise; the owner's screens read both from the admin
+// route /api/local/admin/diagnostics. Not cached, so a contact turned off stops showing at once.
 router.get('/api/local/community-info', async (ctx) => {
     const config = getLocalConfig();
+    const published = getNodeConfig();
+    ctx.set('Cache-Control', 'no-store');
     ctx.body = {
         communityName: config.communityName || config.callsign || 'BeanPool Community',
-        contactEmail: config.contactEmail || null,
-        contactPhone: config.contactPhone || null,
+        contactEmail: published.publishContactEmail ? config.contactEmail || null : null,
+        contactPhone: published.publishContactPhone ? config.contactPhone || null : null,
         callsign: config.callsign || null,
     };
 });
@@ -332,6 +381,8 @@ router.post('/api/funnel-event', async (ctx) => {
 
 router.post('/api/local/change-password', async (ctx) => {
     if (!rateLimit(ctx)) return;
+    // Retired for good: no route sets a password again, a key session's included.
+    if (isPasswordRetired()) { refusePasswordRetired(ctx); return; }
     // The password this request replaces, read before any wait. It must still be the one on disk when the new one is
     // written (below).
     const replacing = getLocalConfig();
@@ -352,7 +403,7 @@ router.post('/api/local/change-password', async (ctx) => {
     // with it sign in anywhere the password works.
     // When checkAdminAuth has just verified this very string as the node password (a password caller, or a body-only
     // client whose currentPassword was its sign-in), that is the proof: checking it again would only run scrypt and
-    // take the brake a second time. Anything else (a key session, a break-glass code, a different string) is checked.
+    // take the brake a second time. Anything else (a key session, a different string) is checked.
     const proven = typeof ctx.state?.verifiedAdminPassword === 'string' ? Buffer.from(ctx.state.verifiedAdminPassword) : null;
     const given = typeof currentPassword === 'string' ? Buffer.from(currentPassword) : null;
     const alreadyProven = !!proven && !!given && proven.length === given.length && crypto.timingSafeEqual(proven, given);
@@ -399,29 +450,46 @@ router.post('/api/local/change-password', async (ctx) => {
     // The first boot's made-up password, if it was never changed before, no longer works. Only now the new one is on
     // disk: until then the file holds the password that works.
     removeFirstPasswordFile('The admin password was changed');
+    // Every Settings sign-in made with the old password ends on its next request; the one that changed it carries on.
+    restampPasswordSession(ctx);
     ctx.body = { success: true };
 });
 
 // ===================== DASHBOARD API =====================
 
+// The identity is public, as /api/local/status and libp2p already make it. The peer links are for this node's admins
+// only (GET /api/local/connectors, below). A caller that sends no admin credential gets the identity; one that sends a
+// credential has it checked as any admin route does, and is refused if it doesn't open one.
 router.get('/api/local/dashboard', async (ctx) => {
     const config = getLocalConfig();
     const node = getP2PNode();
-
-    ctx.body = {
-        identity: {
-            peerId: node?.peerId?.toString() || 'unknown',
-            callsign: config.callsign,
-            location: config.location,
-            joinedAt: config.joinedAt,
-        },
-        connectors: getConnectors(),
+    const identity = {
+        peerId: node?.peerId?.toString() || 'unknown',
+        callsign: config.callsign,
+        location: config.location,
+        joinedAt: config.joinedAt,
     };
+
+    if (!(await checkAdminAuth(ctx as any))) {
+        if (!(ctx.body as any)?.notSignedIn) return;
+        ctx.status = 200;
+        // Anyone gets the location rounded to two decimals (~1 km), as /api/local/status and community.place; an owner or
+        // admin gets it exact below, because the settings form edits it from this answer (static/settings.js data.identity).
+        const loc = config.location;
+        ctx.body = { identity: { ...identity, location: loc ? { lat: Math.round(loc.lat * 100) / 100, lng: Math.round(loc.lng * 100) / 100 } : loc } };
+        return;
+    }
+    if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can see its peer links')) return;
+    ctx.body = { identity, connectors: getConnectors() };
 });
 
 // ===================== CONNECTOR API =====================
 
+// Which peers are blocked, with their addresses, the credit extended to each, the trust levels and the links' errors:
+// the community's federation posture, so admin only, as the routes that change it are (#1564 review NB3).
 router.get('/api/local/connectors', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can see its peer links')) return;
     ctx.body = getConnectors();
 });
 
@@ -731,9 +799,11 @@ router.post('/api/local/reset', async (ctx) => {
         communityName: null,
         contactEmail: null,
         contactPhone: null,
+        // A retired password stays retired: the next start must not take ADMIN_PASSWORD from .env again.
+        ...(config.passwordRetired ? { passwordRetired: config.passwordRetired } : {}),
     });
-    // The admin password is gone (checked on disk, as in change-password). The next start takes ADMIN_PASSWORD from
-    // .env, or makes up a new one in a new file.
+    // The admin password is gone (checked on disk, as in change-password). joinedAt is cleared too, so the next start is
+    // a new install's: no admin password, ADMIN_PASSWORD ignored, a claim code if no owner is left (initAdminPassword).
     if (!getLocalConfig().adminHash) removeFirstPasswordFile('Wipe & Reset cleared the admin password');
 
     ctx.body = { success: true, message: 'Node reset. Restart to reconfigure.' };
@@ -743,9 +813,11 @@ router.post('/api/local/reset', async (ctx) => {
 
 router.get('/api/community/info', async (ctx) => {
     // The per-member transaction count is only for the verified signer. An unverified X-Public-Key header
-    // or ?publicKey= gets the node-wide figures, like any anonymous caller.
+    // or ?publicKey= gets the node-wide figures, like any anonymous caller. The node-wide counts are cached for a few
+    // seconds (state-engine communityCountsCached): this read is exempt from the gateway's usual buckets (a peer protocol
+    // read), and ran three full-table counts on every hit (DoS review F4).
     ctx.body = {
-        ...getCommunityInfo(ctx.state.actor as string | undefined),
+        ...getPublicCommunityInfo(ctx.state.actor as string | undefined),
         // Request binding (@beanpool/core request-signing.ts): this server verifies format 2, so an app signs its
         // requests here for the host it connects to. A server that doesn't say gets the old format. `addresses`: this
         // community's own names (engine/own-addresses.ts), public by nature; empty on a node that knows none.
@@ -756,6 +828,9 @@ router.get('/api/community/info', async (ctx) => {
         // community has moved, with a plain link to `primaryAddress`.
         primaryAddress: primaryAddress(),
         formerAddresses: formerAddresses(),
+        // Where the 🏘️ Local community sheet's Start a community leads (config/start-community.ts): beanpool.org's page
+        // unless an owner named their own.
+        startCommunityUrl: getStartCommunityUrl(),
     };
 });
 
@@ -780,7 +855,32 @@ router.get('/api/community/me', async (ctx) => {
         return;
     }
     ctx.set('Cache-Control', 'private, no-store');
-    ctx.body = { publicKey: actor, profile: getNodeProfile(), probation: probationSummary(actor), mute: muteOf(actor), area: readMemberArea(actor) };
+    // `features`: the reader's own effective set (config/features-for.ts), today the node's, as /api/community/info says.
+    ctx.body = {
+        publicKey: actor, profile: getNodeProfile(), probation: probationSummary(actor), mute: muteOf(actor), area: readMemberArea(actor),
+        features: featuresFor(actor),
+        // The keys a re-key replaced with this one, newest first, and whether this key has confirmed each (engine/key-succession.ts):
+        // the phone asks its member to confirm an unattested one (line-display design §5, §6).
+        rekeyedFrom: rekeyedFromOf(actor),
+    };
+});
+
+/**
+ * The signed member's new key confirms that a re-key's old key was theirs (group chats, line-display design §5): the
+ * succession statement core makeKeySuccession makes, `{ oldPubkey, at, sig }`. 201 once; 404 unless `oldPubkey` was
+ * re-keyed to the signer; 400 if the statement does not verify; 409 once set, which never changes.
+ */
+router.post('/api/community/me/key-succession', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    const answer = recordKeySuccession(actor, (ctx as any).requestBody);
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.status = answer.status;
+    ctx.body = answer.body;
 });
 
 /**
@@ -856,22 +956,56 @@ router.get('/api/community/health', async (ctx) => {
     // The fleet manager — the only thing that displays flags — reads them from
     // POST /api/local/admin/data, which calls getCommunityHealth() in-process behind
     // checkAdminAuth. Nothing changes for it.
-    const { flags, ...publicHealth } = getCommunityHealth();
-    void flags;
-    ctx.body = publicHealth;
+    //
+    // So this read never computes them (getPublicCommunityHealth): it ran the whole fraud analysis on every hit, and
+    // threw it away, with no throttle in front of it. Its table counts are cached for a few seconds (DoS review F4).
+    //
+    // An app that names its platform (X-BeanPool-App, app-version-counts.ts) gets that platform's floor as `minAppVersion`:
+    // the number its banner reads (apps/native GlobalHeader, utils/app-version.ts evaluateUpdate), so a floor set for one
+    // platform (MIN_APP_VERSION_IOS / _ANDROID) shows its "required" banner in the grace window before the full-screen
+    // update. Anything else (an older app, the web app, a monitor) can't say which kind of phone it is on, and gets the
+    // lower of the two platforms' floors (getUnnamedAppFloor): MIN_APP_VERSION, as always, unless both platforms have
+    // been raised past it.
+    const health = getPublicCommunityHealth();
+    const app = parseAppVersionHeader(ctx.get(APP_VERSION_HEADER));
+    ctx.vary(APP_VERSION_HEADER);
+    ctx.body = app ? { ...health, minAppVersion: getPlatformFloor(app.platform) } : health;
 });
+
+/** The membership probe's refusal of an unsigned request (401) and of one signed by another key (403). */
+const MEMBERSHIP_PROBE_UNSIGNED = 'Ask this signed by the key you are asking about: a community tells only that key whether it is one of its members.';
+const MEMBERSHIP_PROBE_NOT_YOURS = 'A community tells only the key itself whether it is one of its members.';
 
 // Lightweight membership probe — returns whether a public key is a registered member or recovering.
 // A visitor's row (isVisitorKey: a key someone sent a message or Beans to, or a member of another community) is no
 // member: the apps read `isMember: false` as "join here", and joining with an invite or through the open door makes
 // that same row a member's (engine/members.ts registerMemberInternal).
+//
+// Answered only to a request signed by the key it asks about, on every node, the global one included (multi-community
+// review F3, 2026-10-01). One key is a person's on every community, and members see each other's keys: answered to
+// anyone, the probe let whoever holds a key ask every community whether that person is in it, and watch a recovery. An
+// unsigned request is refused 401 and one signed by another key 403, the same whatever the key is, so the refusal says
+// nothing about it. The apps only ever ask about their own key and sign the probe with it (native membership-probe.ts and
+// db.ts fetchNodeCallsign, the web app's lib/api.ts request and lib/web-join.ts), and read a refusal as no answer.
 router.get('/api/community/membership/:publicKey', async (ctx) => {
-    const member = getMember(ctx.params.publicKey);
+    ctx.set('Cache-Control', 'private, no-store');
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: MEMBERSHIP_PROBE_UNSIGNED, code: 'signature_required' };
+        return;
+    }
+    // The signer is in the member table's spelling (lower case); the key asked about is read the same way.
+    if (provenKeySpelling(ctx.params.publicKey) !== actor) {
+        ctx.status = 403;
+        ctx.body = { error: MEMBERSHIP_PROBE_NOT_YOURS, code: 'not_your_key' };
+        return;
+    }
+    const member = getMember(actor);
     if (member && !isVisitorKey(member.publicKey)) {
-        // On a node that shows visitors the listings and not the people (G9a), a key is not turned into a name for
-        // anyone but its holder: the web app adopting its own name and the phone's probe both sign as that key.
-        const named = !getProfileSwitches().guestListingsOnly || ctx.state.actor === ctx.params.publicKey;
-        ctx.body = { isMember: true, callsign: named ? member.callsign : null };
+        // The key's own signer: its name too (the web app adopting its own, lib/member-name.ts; the phone's restore,
+        // native db.ts fetchNodeCallsign).
+        ctx.body = { isMember: true, callsign: member.callsign };
     } else {
         ctx.body = {
             isMember: false,
@@ -892,10 +1026,17 @@ router.get('/api/community/members', async (ctx) => {
     // they are a member, who has added them as a friend and who they have a trade with: being added, joining or
     // requesting a trade changes what they may see without changing any member row, so the members version
     // alone would confirm a stale copy with a 304.
+    // Of the people who added them, only those whose adding shows them something: a stored contact for Friends only.
+    // Who added you is theirs to know, not yours (the list shows nothing for anyone else), and every one of them in
+    // the hash moved the ETag over an identical body, which named the one who did, recomputed for each member in turn.
     const viewer = contactViewer(ctx.state.actor as string | undefined);
+    const friendsShowing = viewer.addedBy.size === 0 ? [] : (db.prepare(
+        `SELECT f.owner_pubkey AS pk FROM friends f JOIN members m ON m.public_key = f.owner_pubkey
+         WHERE f.friend_pubkey = ? AND m.contact_visibility = 'friends' AND m.contact_value IS NOT NULL AND m.contact_value != ''`,
+    ).all(viewer.pubkey) as { pk: string }[]).map(r => r.pk).filter(pk => viewer.addedBy.has(pk));
     const viewerSig = crypto.createHash('sha256')
         .update(`${ctx.querystring || ''}:${viewer.pubkey || ''}:${viewer.isMember ? 'member' : 'reader'}`
-            + `:${[...viewer.addedBy].sort().join(',')}:${[...viewer.tradePartners].sort().join(',')}`)
+            + `:${friendsShowing.sort().join(',')}:${[...viewer.tradePartners].sort().join(',')}`)
         .digest('hex').slice(0, 8);
     const etag = `W/"community-members-${getMembersVersion()}-${viewerSig}"`;
 
@@ -913,39 +1054,43 @@ router.get('/api/community/members', async (ctx) => {
         }
     }
 
-    // Treasuries are members (so they can trade) but are not people — keep them out of the directory.
-    // An allowlist, never a spread of the row: the spread sent every member's contact details whatever they
-    // chose, the invite code they joined with, and updatedAt (which moves when a moderator mutes someone or
-    // an admin freezes their credit) to every reader, and would have sent any column added to the row later.
-    // The apps read publicKey, callsign, avatarUrl, joinedAt and status; the rest is public on the profile page.
-    const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
-    const members = getMembers()
-        .filter(m => !m.isTreasury)
-        .map(m => {
-            const showContact = !!m.contactValue && contactVisibleTo(m.publicKey, m.contactVisibility, viewer);
-            return {
-                publicKey: m.publicKey,
-                callsign: m.callsign,
-                joinedAt: m.joinedAt,
-                avatarUrl: avatarUrlFor(m.publicKey, m.avatarUrl),
-                profileUpdatedAt: m.profileUpdatedAt,
-                bio: m.bio,
-                contactValue: showContact ? m.contactValue : null,
-                contactVisibility: showContact ? m.contactVisibility : null,
-                status: m.status,
-                lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
-                earnedCredit: m.earnedCredit,
-                elderVouchedBy: m.elderVouchedBy,
-                archetype: m.archetype,
-                nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
-            };
-        });
+    // Built per reader, every member's row in full: the heaviest read of all (15.4 MB and 190 MB of heap at 30,000
+    // members), so it waits for room under the heavy-read cap (heavy-reads.ts) or is answered "busy".
+    await heavyRead(ctx, 'community-members', () => {
+        // Treasuries are members (so they can trade) but are not people — keep them out of the directory.
+        // An allowlist, never a spread of the row: the spread sent every member's contact details whatever they
+        // chose, the invite code they joined with, and updatedAt (which moves when a moderator mutes someone or
+        // an admin freezes their credit) to every reader, and would have sent any column added to the row later.
+        // The apps read publicKey, callsign, avatarUrl, joinedAt and status; the rest is public on the profile page.
+        const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
+        const members = getMembers()
+            .filter(m => !m.isTreasury)
+            .map(m => {
+                const showContact = !!m.contactValue && contactVisibleTo(m.publicKey, m.contactVisibility, viewer);
+                return {
+                    publicKey: m.publicKey,
+                    callsign: m.callsign,
+                    joinedAt: m.joinedAt,
+                    avatarUrl: avatarUrlOf(m.publicKey, m.avatarRef),
+                    profileUpdatedAt: m.profileUpdatedAt,
+                    bio: m.bio,
+                    contactValue: showContact ? m.contactValue : null,
+                    contactVisibility: showContact ? m.contactVisibility : null,
+                    status: m.status,
+                    lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
+                    earnedCredit: m.earnedCredit,
+                    elderVouchedBy: m.elderVouchedBy,
+                    archetype: m.archetype,
+                    nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
+                };
+            });
 
-    const bodyStr = JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);
+        const bodyStr = JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);
 
-    ctx.status = 200;
-    ctx.type = 'application/json';
-    ctx.body = bodyStr;
+        ctx.status = 200;
+        ctx.type = 'application/json';
+        ctx.body = bodyStr;
+    });
 });
 
 router.post('/api/community/register', async (ctx) => {
@@ -968,7 +1113,11 @@ router.post('/api/invite/generate', async (ctx) => {
         ctx.body = { error: 'publicKey is required' };
         return;
     }
-    const invite = generateInvite(publicKey, intendedFor);
+    // 20 made a day and 50 unused at once, per member (W-main, engine/writer-bounds.ts), checked once the maker is known
+    // to be a member who may invite at all (their 403 below comes first), before anything is written. Where only admins
+    // invite (config/door.ts), a member who is no owner or admin is answered 403 `admins_only` before the limit.
+    let invite: ReturnType<typeof generateInvite>;
+    try { invite = generateInvite(publicKey, intendedFor, () => assertMayMakeInvite(publicKey)); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
     if (!invite) {
         ctx.status = 403;
         ctx.body = { error: 'Only registered members can generate invites' };
@@ -978,39 +1127,74 @@ router.post('/api/invite/generate', async (ctx) => {
 });
 
 /**
- * The member card a redeem answers with. A new join's is its own. An existing member's, on a node that shows guests the
- * listings and not the people, goes only to a request signed by that member's key: the phone re-entering signs its
- * redeem with it and reads its own photo from the card (native utils/db.ts redeemInvite). Anyone else holding a code or
- * a ticket learns only that the key is a member, as the public membership probe says, and not its name or face.
+ * The member card a redeem answers with. A new join's is its own. An existing member's, on every node (G9a on the global
+ * node; a local community since 2026-10-01), goes only to a request signed by that member's key: the phone re-entering
+ * signs its redeem with it and reads its own photo from the card (native utils/db.ts redeemInvite). Anyone else holding a
+ * code or a ticket learns only that the key is a member (the redeem's answer), and not its name or face. The membership
+ * probe tells no one but the key itself (multi-community review F3).
  */
 function redeemedCard(ctx: any, result: { member?: Parameters<typeof publicMemberCard>[0]; alreadyMember?: boolean }, publicKey: string) {
     if (!result.member) return undefined;
-    if (result.alreadyMember && getProfileSwitches().guestListingsOnly && !signedByKey(ctx, publicKey)) return undefined;
-    return publicMemberCard(result.member);
+    if (result.alreadyMember && !signedByKey(ctx, publicKey)) return undefined;
+    const card = publicMemberCard(result.member);
+    // A photo still inline while the move out of the rows is stopped part way (db.ts memberPhotoNotMovedYet, #1482):
+    // getMember reads member_photos only, so without it the phone reads "no photo" and publishes its own copy, an older
+    // one, say, over the member's newer photo for good (native utils/db.ts redeemInvite nodeHasPhoto).
+    if (!card.avatarUrl) card.avatarUrl = memberPhotoNotMovedYet(result.member.publicKey);
+    return card;
 }
 
 /**
  * Whether this request carries a fresh signature by `publicKey` itself, in the replay-proof scheme the signature
- * middleware checks. The two redeem routes skip that middleware (the joiner may hold no member key yet), and both apps
- * sign them anyway. It decides what an answer holds, and whether a visitor's row may join (engine/invites.ts
- * unsignedVisitorRefusal). The nonce is not spent here: the signature covers the body, so a replay within the window can
- * only repeat what the key's holder asked for (this code, this key, this name), and once that has joined the row is a
- * member's and a replay is answered "already a member".
+ * middleware checks: the verifier's verdict, or null when it is not signed by that key at all. The two redeem routes
+ * skip that middleware (the joiner holds no member key yet) and check it here instead: a redeem must be signed by the key
+ * it registers (requireRedeemSignature). The nonce is not spent here: the signature covers the body, so a replay within
+ * the window can only repeat what the key's holder asked for (this code, this key, this name), and once that has joined
+ * the row is a member's and a replay is answered "already a member".
  */
-function signedByKey(ctx: any, publicKey: string): boolean {
+function redeemSignature(ctx: any, publicKey: string): ReturnType<typeof verifyMemberSignature> | null {
     const signer = ctx.get('X-Public-Key');
     const signature = ctx.get('X-Signature');
     const timestamp = ctx.get('X-Timestamp');
     const nonce = ctx.get('X-Nonce');
-    if (!signer || !signature || !timestamp || !nonce || typeof publicKey !== 'string' || signer.toLowerCase() !== publicKey.toLowerCase()) return false;
+    if (!signer || !signature || !timestamp || !nonce || typeof publicKey !== 'string' || signer.toLowerCase() !== publicKey.toLowerCase()) return null;
     // The one verifier (engine/member-signature.ts), in the middleware's window: signed for this community (a redeem
-    // signed at another counts as unsigned here), or in the old format until the switch.
+    // signed at another is refused 421 here), or in the old format until the switch (426 after it).
     const signedForHeader = ctx.headers?.[SIGNED_FOR_HEADER.toLowerCase()];
-    const verdict = verifyMemberSignature({
+    return verifyMemberSignature({
         pubKeyHex: signer, signature, timestamp, nonce, method: ctx.method, path: ctx.path, body: ctx.rawBody ?? '',
         signedFor: typeof signedForHeader === 'string' ? signedForHeader : null,
     }, { consumeNonce: false });
-    return verdict.ok;
+}
+
+function signedByKey(ctx: any, publicKey: string): boolean {
+    return redeemSignature(ctx, publicKey)?.ok === true;
+}
+
+/** What an unsigned redeem, or one signed by another key, is answered (401 `redeem_unsigned`). */
+const REDEEM_UNSIGNED_ERROR = 'This join must be signed by the key it registers. Update the BeanPool app and try again.';
+
+/**
+ * A redeem registers the key it names, so it must be signed by that key (Fable's security review 2026-10-01, LOW 4).
+ * Unsigned, anyone holding a code could register someone else's key (a member of another community, copied from its
+ * directory) under a name of their choosing: an account that key's holder never asked for and cannot see. Both apps
+ * have signed their redeems since the first public release (native utils/db.ts redeemInvite; the web join passes its new
+ * key), so no app in the stores sends one unsigned. Answered before the code or ticket is looked at, so it stays unused.
+ * Not signed by that key at all: 401 `redeem_unsigned`. Signed by it and refused: the verifier's own answer, as for any
+ * signed request (a stale clock, a bad signature, 421 for another community, 426 for the old format after the switch).
+ * Returns false, with the answer set, when refused.
+ */
+function requireRedeemSignature(ctx: any, joiner: string): boolean {
+    const verdict = redeemSignature(ctx, joiner);
+    if (verdict?.ok) return true;
+    if (verdict) {
+        ctx.status = verdict.status;
+        ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };
+        return false;
+    }
+    ctx.status = 401;
+    ctx.body = { error: REDEEM_UNSIGNED_ERROR, code: 'redeem_unsigned' };
+    return false;
 }
 
 /**
@@ -1043,17 +1227,19 @@ router.post('/api/invite/redeem', async (ctx) => {
     // One key, one spelling, before anything is looked up or written: the code stays unused.
     const joiner = redeemKey(ctx, publicKey);
     if (!joiner) return badRedeemKey(ctx);
+    // Signed by the key it registers, before the code is looked at.
+    if (!requireRedeemSignature(ctx, joiner)) return;
 
-    // A visitor's row joins only on a redeem its own key signed; a key with no row joins unsigned, as before.
-    const result = redeemInvite(code, joiner, callsign.slice(0, 20), signedByKey(ctx, joiner));
+    // Invites off (the global node): 404 feature_off, from the feature gate before this route, and from the engine.
+    let result: ReturnType<typeof redeemInvite>;
+    try { result = redeemInvite(code, joiner, callsign.slice(0, 20), true); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
     if (!result.success) {
         ctx.status = 400;
         ctx.body = { error: result.error };
         return;
     }
-    // Unsigned (the joiner is not a member yet), and for a publicKey that is already a member this answers before
-    // the code is checked as used, so ANYONE holding a recent code could name any member's key here. The public
-    // card only: the whole row carried that member's contact details whatever they chose. The apps read avatarUrl.
+    // For a publicKey that is already a member this answers before the code is checked as used. The public card only:
+    // the whole row carried that member's contact details whatever they chose. The apps read avatarUrl.
     ctx.body = { success: true, member: redeemedCard(ctx, result, joiner), alreadyMember: result.alreadyMember };
 });
 
@@ -1064,16 +1250,19 @@ router.post('/api/invite/redeem-offline', async (ctx) => {
         ctx.body = { error: 'ticketB64, publicKey, and callsign are required' };
         return;
     }
-    // One key, one spelling, as /api/invite/redeem above: before the ticket is read, so it stays unused.
+    // One key, one spelling, and signed by that key, as /api/invite/redeem above: before the ticket is read, so it
+    // stays unused.
     const joiner = redeemKey(ctx, publicKey);
     if (!joiner) return badRedeemKey(ctx);
-    const result = redeemOfflineTicket(ticketB64, joiner, callsign.slice(0, 20), signedByKey(ctx, joiner));
+    if (!requireRedeemSignature(ctx, joiner)) return;
+    let result: ReturnType<typeof redeemOfflineTicket>;
+    try { result = redeemOfflineTicket(ticketB64, joiner, callsign.slice(0, 20), true); } catch (e) { if (respondProfileRefusal(ctx, e)) return; throw e; }
     if (!result.success) {
         ctx.status = 400;
         ctx.body = { error: result.error };
         return;
     }
-    // The public card only, as /api/invite/redeem above: unsigned, and answers for any existing member's key.
+    // The public card only, as /api/invite/redeem above.
     ctx.body = { success: true, member: redeemedCard(ctx, result, joiner), alreadyMember: result.alreadyMember };
 });
 
@@ -1120,15 +1309,26 @@ router.get('/api/invite/tree', async (ctx) => {
     ctx.body = getInviteTree(root);
 });
 
+// A member's own invites, to that member alone, whatever ENFORCE_READ_AUTH says, as /api/community/me is: an unused code is
+// a key to join the node, and a used one says who joined through whom and when. With read auth opted out this list went to
+// anyone, unsigned too, unused codes and all. Every reader but the maker gets the same refusal, before any lookup, so it
+// says nothing about the key asked about. An invite bound to a names-list entry is among them, so it too reaches its maker
+// alone (engine/names-list.ts readBoundInvites).
 router.get('/api/invite/mine/:publicKey', async (ctx) => {
     const { publicKey } = ctx.params;
-    if (ENFORCE_READ_AUTH && ctx.state.actor !== publicKey) {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (actor !== publicKey) {
         ctx.status = 403;
         ctx.body = { error: 'You may only read your own invites' };
         return;
     }
-    const invites = getInvitesByMember(publicKey);
-    ctx.body = { invites };
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = { invites: getInvitesByMember(publicKey) };
 });
 
 // ===================== PROFILE API (PUBLIC) =====================
@@ -1166,6 +1366,11 @@ router.post('/api/profile/update', async (ctx) => {
             ctx.body = { error: 'callsign_too_short', message: 'Your name needs at least 2 characters.' };
             return;
         }
+        if (e?.message === 'CONTACT_TOO_LONG') {
+            ctx.status = 400;
+            ctx.body = { error: 'contact_too_long', message: textTooLongMessage('How to reach you', CONTACT_VALUE_LIMIT) };
+            return;
+        }
         throw e;
     }
     if (!profile) {
@@ -1192,15 +1397,27 @@ router.post('/api/member/purge', async (ctx) => {
         ctx.body = result;
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to purge account' };
+        ctx.body = { error: memberErrorText(e, 'Failed to purge account') };
     }
 });
 
+// A replacement phone asks to take over a member's account with the admin's RK- code (engine/rekey-redeem.ts, design
+// DESIGN-rekey-redeem-fable.md §4). It binds nothing: it registers a proposal and answers the two digits the phone shows,
+// and the admin types the number on the phone in front of them: the node binds the waiting phone showing it (…/rekey/complete
+// with { code, match }, bindRekeyByMatch; #1783 review B2). The
+// headers are signed by the asking key (the middleware: replay-proof, its spoof check holds `newPublicKey` to the signer),
+// and the body carries its statement over `beanpool-re-enroll/2\n<host>\n<code>`, so an ask names this community.
 router.post('/api/member/re-enroll', async (ctx) => {
     if (!rateLimit(ctx)) return;
     const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
     const { code, newPublicKey, signature } = body;
+    const signer = ctx.state.actor as string | undefined;
 
+    if (!signer) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
     if (!code || typeof code !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'Re-enrolment code is required' };
@@ -1212,23 +1429,28 @@ router.post('/api/member/re-enroll', async (ctx) => {
         return;
     }
 
-    const cleanCode = code.trim().toUpperCase();
+    const cleanCode = cleanRekeyCode(code);
     const cleanNew = newPublicKey.trim().toLowerCase();
+    // The middleware's spoof check already holds the field to the signer; said again here, as the route's own rule.
+    if (cleanNew !== signer) {
+        ctx.status = 403;
+        ctx.body = { error: 'Signature validation failed' };
+        return;
+    }
 
-    // Verify Proof of Possession signature (mandatory to prevent unauthenticated takeover)
     if (!signature || typeof signature !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'Signature is required: proof of possession of new private key must be provided' };
         return;
     }
-    // Request binding: `0xFF ‖ beanpool-re-enroll/2\n<host>\n<code>` naming this community's host (`signedFor`), or the
-    // bare code from an app before it, until the switch (engine/member-signature.ts).
+    // Request binding: `0xFF ‖ beanpool-re-enroll/2\n<host>\n<code>` naming this community's host (`signedFor`). No app
+    // ever called this route before it took proposals, so there is no older format to accept.
     const proof = verifyStatementSignature({
         signature,
         pubKeyHex: cleanNew,
         boundText: (host) => reEnrollText(host, cleanCode),
         signedFor: body.signedFor,
-        oldTexts: [cleanCode],
+        oldTexts: [],
     });
     if (!proof.ok) {
         const bound = proof.status === 421 || proof.status === 426;
@@ -1238,19 +1460,32 @@ router.post('/api/member/re-enroll', async (ctx) => {
     }
 
     try {
-        const req = db.prepare("SELECT * FROM rekey_requests WHERE code = ?").get(cleanCode) as any;
-        if (!req) {
-            ctx.status = 404;
-            ctx.body = { error: 'Invalid re-enrolment code' };
+        ctx.set('Cache-Control', 'private, no-store');
+        ctx.body = proposeRekey(cleanCode, cleanNew, clientLimiterKey(ctx));
+    } catch (e: any) {
+        if (e instanceof RekeyRedeemRefusal) {
+            ctx.status = e.status;
+            ctx.body = { error: e.message, code: e.code };
             return;
         }
-
-        const result = completeRekey(req.old_pubkey, cleanNew, cleanCode, req.operator_pubkey);
-        ctx.body = result;
-    } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e?.message || 'Failed to complete re-enrolment' };
+        ctx.body = { error: memberErrorText(e, 'Failed to ask for the re-key') };
     }
+});
+
+// Where a replacement phone's ask stands (engine/rekey-redeem.ts rekeyRedeemStatus): waiting, bound, declined or gone,
+// for the signing key alone. Public on the read gate (a proposing key is no member yet), so the route asks for the
+// signature itself; a key that never asked on the code, a member's included, is told `gone`.
+router.get('/api/member/re-enroll/status', async (ctx) => {
+    if (!rekeyStatusRateLimit(ctx)) return;
+    const signer = ctx.state.actor as string | undefined;
+    if (!signer) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = rekeyRedeemStatus(ctx.query.code, signer);
 });
 
 router.get('/api/profile/:publicKey', async (ctx) => {
@@ -1269,10 +1504,46 @@ router.get('/api/profile/:publicKey', async (ctx) => {
     ctx.body = profile;
 });
 
-// ===================== LEDGER API (PUBLIC) =====================
+// ===================== LEDGER API (EACH MEMBER'S OWN) =====================
+
+// Balances and trades are private (Marty, 2026-09-28, reversing 2026-09-18's "members can see each other's balance and
+// history"): a member reads their own balance, trust figures and history, and nobody else's. An enterprise or community
+// treasury is no person: its balance is on the public treasuries list already, and its keepers read its history. A
+// Decision about a member shows that member's balance to its voters inside that Decision (routes/commons.ts). Held here
+// whatever ENFORCE_READ_AUTH says, as /api/community/me is: the reader is the verified signer only, never a parameter.
+// Both apps have only ever asked for their own, and read a refusal as "nothing": the phone keeps what it holds.
+const OWN_LEDGER_ERROR = 'Balances and trades are private: you can see only your own.';
+const OWN_LEDGER_CODE = 'own_only';
+
+const isTreasuryAccount = (pk: string): boolean =>
+    !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ? AND is_treasury = 1").get(pk) as { is_treasury: number } | undefined);
+
+/** The verified reader of a ledger read, or undefined once it has answered 401. */
+function ledgerReader(ctx: any): string | undefined {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return undefined;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
+    return actor;
+}
+
+function refuseOthersLedger(ctx: any): void {
+    ctx.status = 403;
+    ctx.body = { error: OWN_LEDGER_ERROR, code: OWN_LEDGER_CODE };
+}
 
 router.get('/api/ledger/balance/:publicKey', async (ctx) => {
     const { publicKey } = ctx.params;
+    const reader = ledgerReader(ctx);
+    if (!reader) return;
+    // Before the lookup, so a refusal says nothing about whether the key is a member here.
+    if (reader !== publicKey && !isTreasuryAccount(publicKey)) {
+        refuseOthersLedger(ctx);
+        return;
+    }
     const member = getMember(publicKey);
     if (!member) {
         ctx.status = 404;
@@ -1353,7 +1624,7 @@ router.post('/api/profile/vouch', async (ctx) => {
         ctx.body = { success: true, level: lvl };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e?.message || 'Vouch failed' };
+        ctx.body = { error: memberErrorText(e, 'Vouch failed') };
     }
 });
 
@@ -1378,7 +1649,7 @@ router.post('/api/profile/unvouch', async (ctx) => {
         ctx.body = { success: true };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e?.message || 'Withdraw failed' };
+        ctx.body = { error: memberErrorText(e, 'Withdraw failed') };
     }
 });
 
@@ -1447,6 +1718,7 @@ router.post('/api/ledger/transfer', async (ctx) => {
     }
     // G3: the note rides to the recipient with the Beans (their history and live feed), so it is a message. A
     // muted member still pays what they owe, without one.
+    if (respondIfNoteTooLong(ctx, memo)) return;
     if (isNote(memo) && respondIfMuted(ctx, from)) return;
 
     // A visitor's beans live on their home node's ledger, so this node cannot settle
@@ -1465,7 +1737,7 @@ router.post('/api/ledger/transfer', async (ctx) => {
         // A visitor's row sends Beans only to a key that has a row here (transfer()): refused as the act test refuses.
         if (e?.code !== NOT_A_MEMBER_CODE) throw e;
         ctx.status = 403;
-        ctx.body = { error: e.message, code: e.code };
+        ctx.body = { error: memberErrorText(e, SERVER_FAULT_TEXT), code: e.code };
         return;
     }
     if (!txn) {
@@ -1483,23 +1755,47 @@ router.post('/api/ledger/transfer', async (ctx) => {
 
 router.get('/api/ledger/transactions', async (ctx) => {
     const publicKey = ctx.query.publicKey as string | undefined;
+    const reader = ledgerReader(ctx);
+    if (!reader) return;
+    // No key used to mean every transaction on the node, with its memo. Now: the reader's own, or an enterprise's for
+    // one of its keepers (as /api/marketplace/transactions), and nothing else.
+    const own = typeof publicKey === 'string' && publicKey === reader;
+    const keeper = typeof publicKey === 'string' && isTreasuryAccount(publicKey) && canOperateTreasury(reader, publicKey);
+    if (!own && !keeper) {
+        refuseOthersLedger(ctx);
+        return;
+    }
     const limit = clampLimit(ctx.query.limit);
     const offset = clampOffset(ctx.query.offset);
     ctx.body = getTransactions(publicKey, limit, offset);
 });
 
+// The member's own export: the Community Pool, their balance and every transaction they are a party to. The whole node's
+// audit (every balance and every memo) stays with the operator, who holds the database.
 router.get('/api/ledger/export', async (ctx) => {
-    ctx.body = exportLedgerAudit();
+    const reader = ledgerReader(ctx);
+    if (!reader) return;
+    ctx.body = exportLedgerFor(reader);
 });
 
 
 // ===================== PUSH NOTIFICATION TOKENS =====================
+
+/** A push platform as the apps name it (React Native's Platform.OS: 'ios', 'android'): a short word, never a payload. */
+const PUSH_PLATFORM = /^[A-Za-z0-9_-]{1,16}$/;
 
 router.post('/api/push-tokens', async (ctx) => {
     const { publicKey, token, platform, registeredAt } = (ctx as any).requestBody || {};
     if (!publicKey || !token || typeof token !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'Missing publicKey or token' };
+        return;
+    }
+    // A token a leave statement can name (at most 512 characters, one line), as Expo's are (ExponentPushToken[…], about
+    // 41): anything else is no phone's, and would be stored and copied as it came (#1295 review 4126286269).
+    if (!isPushLeaveToken(token) || (platform !== undefined && platform !== null && (typeof platform !== 'string' || !PUSH_PLATFORM.test(platform)))) {
+        ctx.status = 400;
+        ctx.body = { error: 'Not a push token this server can store' };
         return;
     }
     // The phone's stamp for this registration (state-engine.ts registerPushToken); none from an app before it.
@@ -1514,16 +1810,23 @@ router.post('/api/push-tokens', async (ctx) => {
         ctx.body = { error: 'A signed request is required' };
         return;
     }
-    const registration = registerPushToken(activeKey, token, platform || 'ios', registeredAt ?? null);
+    const registration = registerPushToken(activeKey, token, platform || 'ios', registeredAt ?? null, clientLimiterKey(ctx));
     if (registration === 'left') {
         // Sent before this key's leave statement for the token and delivered after it: the phone no longer wants it.
         ctx.status = 409;
         ctx.body = { error: 'This phone left this account after sending this registration', code: 'push_token_left' };
         return;
     }
+    if (registration === 'key_rate_limited' || registration === 'rate_limited' || registration === 'busy') {
+        // Over this key's day (state-engine.ts KEY_PUSH_RULES), or a key with no row here over its address's day or the
+        // node's (STRANGER_PUSH_RULES): the app tries again later, and a stranger's lands once its row is made.
+        ctx.status = 429;
+        ctx.body = pushRefusal(registration, 'phone');
+        return;
+    }
     const success = registration === 'registered';
-    // A place-watch notice that reached nobody while this phone had no token here (after a take-over, the new main
-    // server has none) is told now (services/directory-mirror.ts). Never fails the registration.
+    // A place-watch notice that reached nobody while this phone had no token here (after a take-over, one the old main
+    // server didn't have) is told now (services/directory-mirror.ts). Never fails the registration.
     if (success) {
         try {
             tellOwedWatcher(activeKey);
@@ -1531,8 +1834,33 @@ router.post('/api/push-tokens', async (ctx) => {
             console.warn('[Place watches] Telling a watcher at their token registration failed:', e?.message || e);
         }
     }
-    ctx.body = { success };
+    // The key this community signs its notices with (@beanpool/core push-notice.ts): the app pins it, from this answer to
+    // its own signed request over TLS. Left out while this server has no node key yet.
+    const pushKey = success ? pushKeyHex() : null;
+    ctx.body = pushKey ? { success, pushKey } : { success };
 });
+
+/**
+ * A push registration or leave refused for a day cap (state-engine.ts KEY_PUSH_RULES, STRANGER_PUSH_RULES,
+ * STRANGER_LEAVE_RULES): the 429's body. Never PUSH_LEAVE_REFUSED: the phone keeps a refused leave and presents it later.
+ */
+function pushRefusal(refused: 'key_rate_limited' | 'rate_limited' | 'busy', what: 'phone' | 'leave'): { error: string; code: string } {
+    if (refused === 'key_rate_limited') {
+        return {
+            error: what === 'phone' ? 'This account has added too many new phones here today. Please try again tomorrow.'
+                : 'This account has left too many phones here today. This phone will tell the community again later.',
+            code: 'rate_limited',
+        };
+    }
+    if (what === 'leave') {
+        return refused === 'busy'
+            ? { error: 'This community is taking no more of these right now. This phone will tell it again later.', code: 'busy' }
+            : { error: 'Too many of these from this network today. This phone will tell the community again later.', code: 'rate_limited' };
+    }
+    return refused === 'busy'
+        ? { error: 'This community is not taking new phones from people who have not joined right now. Please try again later.', code: 'busy' }
+        : { error: 'Too many new phones from this network today. Please try again tomorrow, or once you have joined.', code: 'rate_limited' };
+}
 
 router.delete('/api/push-tokens', async (ctx) => {
     const { publicKey, token, leftAt } = (ctx as any).requestBody || {};
@@ -1555,7 +1883,13 @@ router.delete('/api/push-tokens', async (ctx) => {
         return;
     }
     if (leftAt !== undefined && leftAt !== null) {
-        applyPushLeave(activeKey, token, leftAt);
+        const left = applyPushLeave(activeKey, token, leftAt, clientLimiterKey(ctx));
+        if (typeof left !== 'number') {
+            // Over a day cap: the phone keeps its leave statement and presents it later (apps/native utils/push-leave.ts).
+            ctx.status = 429;
+            ctx.body = pushRefusal(left, 'leave');
+            return;
+        }
         ctx.body = { success: true };
         return;
     }
@@ -1598,7 +1932,14 @@ router.post('/api/push-tokens/leave/:publicKey', async (ctx) => {
         ctx.body = proof.status === 421 ? { error: proof.error, code: proof.code } : { error: proof.error, code: PUSH_LEAVE_REFUSED };
         return;
     }
-    applyPushLeave(key, token, leftAt);
+    const left = applyPushLeave(key, token, leftAt, clientLimiterKey(ctx));
+    if (typeof left !== 'number') {
+        // Over a day cap (state-engine.ts KEY_PUSH_RULES, STRANGER_LEAVE_RULES): never PUSH_LEAVE_REFUSED, so the phone keeps
+        // the statement and presents it again later.
+        ctx.status = 429;
+        ctx.body = pushRefusal(left, 'leave');
+        return;
+    }
     ctx.body = { left: true };
 });
 
@@ -1616,7 +1957,8 @@ router.get('/api/members/preferences', async (ctx) => {
         ctx.body = { error: 'You may only read your own preferences' };
         return;
     }
-    ctx.body = getMemberPreferences(publicKey);
+    // The Home keys (home.layout, interests) only when the verified signer is the member, whatever ENFORCE_READ_AUTH says.
+    ctx.body = getMemberPreferences(publicKey, ctx.state.actor as string | undefined);
 });
 
 router.post('/api/members/preferences', async (ctx) => {
@@ -1635,13 +1977,13 @@ router.post('/api/members/preferences', async (ctx) => {
     // setMemberPreferences THROWS on a body it refuses (a key that isn't a push setting, holiday mode
     // among them, a toggle that isn't true or false, or a rejected eventReminderOffsets) rather than
     // saving the rest, so a member never believes they set something they didn't. Holiday mode is
-    // POST /api/members/holiday's alone, below.
+    // POST /api/members/holiday's alone, below. A saved Home key is answered with what was kept of it.
     try {
         const success = setMemberPreferences(activeKey, preferences);
-        ctx.body = { success };
+        ctx.body = success ? { success, ...homePreferencesNamed(activeKey, preferences) } : { success };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e?.message || 'Failed to update preferences' };
+        ctx.body = { error: memberErrorText(e, 'Failed to update preferences') };
     }
 });
 
@@ -1660,7 +2002,7 @@ router.post('/api/members/holiday', async (ctx) => {
         ctx.body = { success: true, enabled: !!enabled, openTrades: result.openTrades };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e?.message || 'Failed to update holiday mode', openTrades: e?.openTrades };
+        ctx.body = { error: memberErrorText(e, 'Failed to update holiday mode'), openTrades: e?.openTrades };
     }
 });
 
@@ -1699,18 +2041,36 @@ router.post('/api/ratings', async (ctx) => {
     } catch (err: any) {
         console.error('❌ Server Error adding rating:', err);
         ctx.status = 500;
-        ctx.body = { error: err.message };
+        ctx.body = { error: memberErrorText(err, SERVER_FAULT_TEXT) };
     }
 });
 
+// A review is public opinion about the RATED member; the trade behind it stays the two parties' (Marty, 2026-10-14,
+// decision A). Members of this node read a member's reviews, whatever ENFORCE_READ_AUTH says, as they read a member's
+// standing (/api/trust/profile): a suspended member and a visitor are refused too. A member's OWN lists (received and
+// given) are theirs whatever their standing, as their ledger is: a suspended member may need to answer a 1★. A third
+// member reads stars, words, side and month, and no rater and no deal (ratingsForReader). The reviews a member WROTE are
+// a list of who they traded with, so only they read it, in the ledger's words. The reader is the verified signer only,
+// never a parameter.
 router.get('/api/ratings/:publicKey', async (ctx) => {
+    const reader = ctx.state.actor as string | undefined;
+    if (!reader) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
     const { publicKey } = ctx.params;
+    if (reader !== publicKey && !memberReadsOnlyHere(ctx)) return;
     const { direction } = ctx.query;
     if (direction === 'given') {
-        const memberRatings = getRatingsGiven(publicKey);
-        ctx.body = { ratings: memberRatings };
+        if (reader !== publicKey) {
+            refuseOthersLedger(ctx);
+            return;
+        }
+        ctx.body = { ratings: getRatingsGiven(publicKey) };
     } else {
-        const memberRatings = getRatings(publicKey);
+        const memberRatings = ratingsForReader(getRatings(publicKey), reader, publicKey);
         const average = getAverageRating(publicKey);
         ctx.body = { ratings: memberRatings, ...average };
     }
@@ -1740,6 +2100,14 @@ router.post('/api/reports', async (ctx) => {
             ctx.body = { error: 'targetPulseItemId must be a non-empty string' };
             return;
         }
+        // A Pulse report is about its item and names no post. One that also carried a post id would be read as a report
+        // on that post by everything keyed on posts (its author frozen or suspended, a circle towards hiding it, their
+        // group opened), and the reporter would choose which post: refused, and no app sends one.
+        if (targetPostId !== undefined && targetPostId !== null && targetPostId !== '') {
+            ctx.status = 400;
+            ctx.body = { error: 'pulse_report_names_a_post', message: 'A report on a Pulse item names no post.' };
+            return;
+        }
         const owner = getReportablePulseItemOwner(targetPulseItemId);
         if (!owner) {
             ctx.status = 404;
@@ -1752,6 +2120,28 @@ router.post('/api/reports', async (ctx) => {
             return;
         }
         targetPubkey = owner;
+    } else if (targetPostId !== undefined && targetPostId !== null && targetPostId !== '') {
+        if (typeof targetPostId !== 'string') {
+            ctx.status = 400;
+            ctx.body = { error: 'targetPostId must be a string' };
+            return;
+        }
+        // A report on a post is about its author, whatever targetPubkey the client sent: the moderators act on that
+        // member from it (a suspension, a freeze, "Who joined with them"), so a reporter must not be able to pair a
+        // post with someone else. Every app sends the author already.
+        const author = getReportablePostAuthor(targetPostId);
+        if (author) {
+            targetPubkey = author;
+        } else if (targetPostId !== targetPubkey) {
+            // No post here has this id. Refused, not kept to be pointed at whichever post takes the id later: a post's id
+            // is the author's choice (POST /api/marketplace/posts), so a report filed first would wait for a post nobody
+            // had seen, count towards hiding it, and name whoever the reporter chose. Nobody can have seen a post that
+            // isn't here. The one report that carries no post's id there is the phone app's report of an enterprise,
+            // which sends the enterprise's key as both (treasury-detail.tsx): that stays a report about the account.
+            ctx.status = 404;
+            ctx.body = { error: 'not_found', message: 'That post is not here any more.' };
+            return;
+        }
     }
     if (!targetPubkey || typeof reason !== 'string' || !reason.trim()) {
         ctx.status = 400;
@@ -1760,8 +2150,23 @@ router.post('/api/reports', async (ctx) => {
     }
     // Repeating a still-pending report succeeds without a new row, even at the limit: the member's
     // report is already on file.
+    // Every alert judges the 500 characters the queue keeps (submitReport), so a child-safety alert always points at a
+    // report the queue marks and lists first (the review of #1912, finding 6: words past them were told, then lost).
+    const kept = reason.slice(0, 500);
     const pending = findPendingReport(activeReporter, targetPubkey, targetPostId, targetPulseItemId || undefined);
     if (pending) {
+        // Reported again with "Child safety" after another reason (the review of #1895, finding 3): the report on file
+        // becomes child safety and is told as a new one would be. Once: it is child safety from then on, and a member's
+        // are bounded like any (alerts.ts childAtOnce). Judged on the 500 characters the queue keeps, as the report on
+        // file was: words past them would make every repeat look like a change.
+        if (reportKind(kept) === 'child safety' && reportKind(pending.reason) !== 'child safety') {
+            const changed = updatePendingReportReason(pending.id, reason);
+            if (changed) {
+                noteNewReport(kept, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A report changed to child safety could not be told: ${e instanceof Error ? e.message : String(e)}`));
+                ctx.body = { success: true, report: changed, duplicate: true };
+                return;
+            }
+        }
         ctx.body = { success: true, report: pending, duplicate: true };
         return;
     }
@@ -1776,14 +2181,46 @@ router.post('/api/reports', async (ctx) => {
         ctx.body = { error: 'Failed — must be a registered member, cannot report yourself' };
         return;
     }
+    // The owners and admins hear of it (by kind and count, never who or what): not awaited, so a slow alert channel
+    // never holds the reporter's answer.
+    noteNewReport(kept, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A new report could not be told: ${e instanceof Error ? e.message : String(e)}`));
     ctx.body = { success: true, report };
 });
 
 // ======================== FRIENDS ========================
 
+// Who added the signer lately and hasn't been added back (engine/friends-added-you.ts): the signer's own, nobody else's.
+// Registered before /api/friends/:publicKey, which would otherwise take this path as a key.
+router.get('/api/friends/added-you', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    // It names other members: a member's read only (a visitor, a suspended account and a guest are refused).
+    if (!memberReadsOnlyHere(ctx)) return;
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = getAddedYou(actor);
+});
+
+// A member's friends list (each friend's name and face) is read by that member alone, whatever ENFORCE_READ_AUTH says:
+// every app asks only for its own. Anyone else, an admin and the owner included, is refused before any lookup with one
+// answer whatever key is named, so a refusal says nothing of whether that key is a member or has friends; walking
+// friends of friends would otherwise list a members-on-demand node's people past the search's floor and caps.
 router.get('/api/friends/:publicKey', async (ctx) => {
-    const pubkey = ctx.params.publicKey;
-    ctx.body = getFriends(pubkey);
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (ctx.params.publicKey !== actor) {
+        ctx.status = 403;
+        ctx.body = { error: 'You may only read your own friends' };
+        return;
+    }
+    ctx.body = getFriends(actor);
 });
 
 router.post('/api/friends/add', async (ctx) => {
@@ -1802,7 +2239,19 @@ router.post('/api/friends/add', async (ctx) => {
         ctx.body = { error: 'ownerPubkey and friendPubkey are required' };
         return;
     }
-    const entry = addFriend(activeOwner, friendPubkey);
+    let entry;
+    try {
+        entry = addFriend(activeOwner, friendPubkey);
+    } catch (e) {
+        // Over the day's adds (429, with when it lets up), or someone the signer blocked: refused in words, never dropped.
+        if (respondProfileRefusal(ctx, e)) return;
+        if (e instanceof FriendRefusal) {
+            ctx.status = 400;
+            ctx.body = { error: e.message, code: 'blocked' };
+            return;
+        }
+        throw e;
+    }
     if (!entry) {
         ctx.status = 400;
         ctx.body = { error: 'Failed — both must be registered members' };
@@ -1843,23 +2292,26 @@ router.get('/api/recovery/lookup/:callsign', async (ctx) => {
 
     // The query lives in engine/members.ts, beside isCallsignAvailable, so the two callsign
     // predicates cannot drift apart — see the note there for why that matters on a public
-    // endpoint. It already returns public-safe fields only.
+    // endpoint.
     ctx.status = 200;
-    // On a node that shows visitors the listings and not the people (G9a-2), whoever asks is a stranger until they
-    // are recovered: the name they typed, exactly (case forgiven), and no photo or join date to recognise anyone by.
-    // The key stays, as the recovery flow may need it; alone it opens nothing there (engine/avatar-keys.ts).
-    if (getProfileSwitches().guestListingsOnly) {
-        ctx.body = findRecoveryCandidates(callsign, { exact: true }).map(c => ({ ...c, joinedAt: null, avatarUrl: null }));
-        return;
-    }
-    ctx.body = findRecoveryCandidates(callsign);
+    // Whoever asks is a stranger until they are recovered, on every node (G9a-2 on the global node; a local community
+    // since 2026-10-01, where a prefix listed every member with a sign-in copy, their photo and join date, in 26
+    // requests): the name they typed, exactly (case forgiven), and no photo or join date to recognise anyone by. What
+    // the restore needs stays: the name, the key (the web app's restore saves only the account the lookup named, lib/
+    // web-restore.ts) and whether a sign-in can bring it back. On the global node the key alone opens nothing
+    // (engine/avatar-keys.ts); a local community's faces are not keyed yet.
+    ctx.body = findRecoveryCandidates(callsign, { exact: true }).map(c => ({ ...c, joinedAt: null, avatarUrl: null }));
 });
 
 // Callsign availability — powers the wizard's live "✓ available / ✗ taken" hint and
 // validates the fun-name suggestions before they're offered. Case-insensitive,
 // per-node. `?exclude=<pubkey>` lets a rename ignore the caller's own current name.
 router.get('/api/members/callsign-available/:callsign', async (ctx) => {
-    if (!rateLimit(ctx)) return; // throttle enumeration, same as recovery lookup
+    // Throttle enumeration, same as recovery lookup. A key joining through the open door, signing its own name check,
+    // counts against the door's limiter instead (auth-rate-limit.ts doorRateLimit): a hall on one Wi-Fi would spend the
+    // auth limiter's 15 a minute per address on names alone.
+    const joining = joiningAtOpenDoor(ctx);
+    if (!(joining ? doorRateLimit(ctx, joining) : rateLimit(ctx))) return;
     const raw = (ctx.params.callsign || '').trim();
     const exclude = (ctx.query.exclude as string | undefined) || undefined;
     const available = raw.length >= 2 && isCallsignAvailable(raw, exclude);
@@ -1869,13 +2321,127 @@ router.get('/api/members/callsign-available/:callsign', async (ctx) => {
 
 // ======================== MEMBERS LIST ========================
 
+/** A member-directory delta whose cursor is this recent goes straight past the heavy-read cap; an older one is weighed. */
+const MEMBERS_DELTA_FRESH_MS = 60 * 60 * 1000;
+
+/** The three small forms of the directory (DESIGN-global-members-by-area §2.1): at most this many rows each. */
+const MEMBERS_KEYS_MAX = 100;
+const MEMBERS_SEARCH_MAX = 20;
+const MEMBERS_NEAREST_MAX = 50;
+/** A search shorter than this is refused: the callsign check's floor, so nobody lists the members by typing a letter. */
+const MEMBERS_SEARCH_MIN_CHARS = 2;
+const MEMBER_KEY_ANY_CASE = /^[0-9a-fA-F]{64}$/;
+
+/** The directory's rows as each answer of `GET /api/members` gives them, in their order. */
+function directoryMembers(rows: ReturnType<typeof getMemberDirectoryRows>) {
+    const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
+    // Each value as rowToMember made it and this route then read it (`|| null` and `?? 0`), so the bytes are the same.
+    return rows.map(r => ({
+        publicKey: r.public_key,
+        callsign: r.callsign,
+        joinedAt: r.joined_at,
+        nodeRole: rolesByPubkey.get(r.public_key) ?? null,
+        avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref ?? (r.photo_inline ? MEMBER_PHOTO_INLINE_REF : null)),
+        profileUpdatedAt: r.profile_updated_at || null,
+        earnedCredit: r.earned_credit ?? 0,
+        elderVouchedBy: r.elder_vouched_by || null,
+        archetype: r.archetype || null,
+    }));
+}
+
+/** The people the directory lists: never an escrow, a project or a treasury. */
+function directoryPeople<T extends { public_key: string; is_treasury: unknown }>(rows: T[]): T[] {
+    return rows.filter(r => !r.public_key.startsWith('escrow_') && !r.public_key.startsWith('project_') && !r.is_treasury);
+}
+
+/** A whole number from the query in [1, max], the default when absent, or undefined (refused) for anything else. */
+function wholeUpTo(raw: unknown, max: number, fallback?: number): number | undefined {
+    if (raw === undefined) return fallback;
+    if (typeof raw !== 'string' || !/^[0-9]{1,4}$/.test(raw)) return undefined;
+    const n = Number(raw);
+    return n >= 1 && n <= max ? n : undefined;
+}
+
+/**
+ * The directory's three small forms (DESIGN-global-members-by-area §2.1, #1792), for a phone that holds only the cards
+ * it has a reason to show (features.membersOnDemand), though they answer on every node:
+ * - `keys=<k1,…,kn>` (at most 100, each a key as this community spells keys): those members' rows, in the order asked,
+ *   with `updatedAfter` only those changed after it, and all of them when the face URLs changed after it (the heal the
+ *   whole read makes, below).
+ * - `q=<text>&limit=n` (at most 20): the members whose name starts with what was typed, at least 2 characters, shortest
+ *   first; 64 hexadecimal characters are one member's key.
+ * - `lat&lng&limit=n` (at most 50): the first n of the nearest-first list.
+ * Each is at most 100 rows (~40 KB), so it goes straight past the heavy-read cap, as a fresh delta does, and none is a
+ * shared answer: no ETag, never kept by any cache. A search and a keys read need a signed request, and are answered to
+ * whoever the read gate lets read the whole directory, which tells them more; a point needs a member (peoplePoint).
+ * Nothing here is logged: no line names a key looked up or a name searched, and nobody is ever told who looked them up.
+ */
+function answerMembersOnDemand(ctx: any, point: Point | null): void {
+    const refuse = (status: number, error: string) => { ctx.status = status; ctx.body = { error }; };
+    const { keys, q, limit, updatedAfter } = ctx.query;
+    const forms = (keys !== undefined ? 1 : 0) + (q !== undefined ? 1 : 0) + (point ? 1 : 0);
+    if (forms === 0) return refuse(400, 'limit goes with q, or with lat and lng');
+    if (forms > 1) return refuse(400, 'keys, q, and lat with lng are three different reads: ask one at a time');
+    if (updatedAfter !== undefined && (keys === undefined || typeof updatedAfter !== 'string' || updatedAfter === '')) {
+        return refuse(400, 'updatedAfter goes with keys only, once');
+    }
+    if (!point && !ctx.state.actor) return refuse(401, 'Looking members up needs a signed request');
+    ctx.set('Cache-Control', 'private, no-store');
+    let body: unknown[];
+    if (keys !== undefined) {
+        if (limit !== undefined) return refuse(400, 'keys takes no limit: it answers the keys asked, at most 100');
+        const asked = typeof keys === 'string' && keys !== '' ? [...new Set(keys.split(','))] : [];
+        if (asked.length === 0 || asked.length > MEMBERS_KEYS_MAX || !asked.every(isMemberKeySpelling)) {
+            return refuse(400, `keys is 1 to ${MEMBERS_KEYS_MAX} member keys (64 lower-case hexadecimal characters each), comma separated`);
+        }
+        // As the delta it stands in for: a cursor from before the face URLs changed shape is answered with every key asked.
+        const cursor = updatedAfter !== undefined && !faceUrlsChangedAfter(updatedAfter) ? updatedAfter as string : undefined;
+        if (updatedAfter !== undefined) ctx.set(EPOCH_HEADER, syncEpochHeaderValue());
+        body = directoryMembers(directoryPeople(getMemberDirectoryRowsByKeys(asked, cursor)));
+    } else if (q !== undefined) {
+        const typed = typeof q === 'string' ? q.trim() : '';
+        const n = wholeUpTo(limit, MEMBERS_SEARCH_MAX, MEMBERS_SEARCH_MAX);
+        if (typed.length < MEMBERS_SEARCH_MIN_CHARS) return refuse(400, `q is at least ${MEMBERS_SEARCH_MIN_CHARS} characters of a name`);
+        if (n === undefined) return refuse(400, `limit is a whole number from 1 to ${MEMBERS_SEARCH_MAX}`);
+        const rows = MEMBER_KEY_ANY_CASE.test(typed)
+            ? getMemberDirectoryRowsByKeys([typed.toLowerCase()])
+            : searchMemberDirectoryRows(typed, n);
+        body = directoryMembers(directoryPeople(rows));
+    } else {
+        const n = wholeUpTo(limit, MEMBERS_NEAREST_MAX);
+        if (n === undefined) return refuse(400, `limit is a whole number from 1 to ${MEMBERS_NEAREST_MAX}`);
+        const nearest = nearestPeople(point!.lat, point!.lng, n);
+        const km = new Map(nearest.map(p => [p.publicKey, p.distanceKm]));
+        body = directoryMembers(getMemberDirectoryRowsByKeys(nearest.map(p => p.publicKey)))
+            .map(m => ({ ...m, distanceKm: km.get(m.publicKey) ?? null }));
+    }
+    ctx.status = 200;
+    ctx.type = 'application/json';
+    ctx.body = JSON.stringify(body);
+}
 
 router.get('/api/members', async (ctx) => {
     // With `lat` and `lng`: each person's distance in whole km from their coarse area, nearest first (G4).
     const point = peoplePoint(ctx);
     if (point === undefined) return;
+    // The three small forms, each straight past the cap (answerMembersOnDemand). A read with none of their parameters is
+    // answered below, byte for byte as before them.
+    if (ctx.query.keys !== undefined || ctx.query.q !== undefined || ctx.query.limit !== undefined) {
+        answerMembersOnDemand(ctx, point);
+        return;
+    }
+    const cursor = ctx.query.updatedAfter;
+    // A delta from a phone with no sync since the face URLs changed shape (keys switched on or off, a new secret:
+    // engine/avatar-keys.ts) is answered with the whole directory: every member's face at its URL as it is now. The phone
+    // stores a delta's members over its own, so a whole one heals every face it holds.
+    const facesHeal = faceUrlsChangedAfter(cursor);
+    // The whole directory, the same for every reader let in, is one shared answer per members version
+    // (members-snapshot.ts). Only the forms that differ by reader (lat/lng) or by cursor (a delta) are built per read.
+    const shared = !point && (!cursor || facesHeal);
+    const snapshotKey = shared ? membersSnapshotKey(getMembersVersion(), avatarKeysRequired()) : '';
+    const ready = shared ? usableMembersSnapshot(snapshotKey) : null;
     const querySig = ctx.querystring ? '-' + crypto.createHash('sha256').update(ctx.querystring).digest('hex').slice(0, 8) : '';
-    const etag = `W/"members-${getMembersVersion()}${querySig}"`;
+    const etag = ready ? ready.etag : `W/"members-${getMembersVersion()}${querySig}"`;
 
     ctx.set('ETag', etag);
     // With faces behind a member-only key (G9a-2, engine/avatar-keys.ts) the body holds those keys, so no shared cache
@@ -1885,7 +2451,9 @@ router.get('/api/members', async (ctx) => {
     if (ctx.query.updatedAfter) ctx.set(EPOCH_HEADER, syncEpochHeaderValue());
 
     const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
-    if (ifNoneMatch) {
+    // The whole directory is confirmed only against the bytes of the current version's snapshot: with none built yet
+    // for it, the check waits until it is (answer() below), never against the version tag, which none of its 200s carry.
+    if (ifNoneMatch && (ready || !shared)) {
         const cleanInm = ifNoneMatch.replace(/^W\//, '');
         const cleanEtag = etag.replace(/^W\//, '');
         if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {
@@ -1893,43 +2461,63 @@ router.get('/api/members', async (ctx) => {
             return;
         }
     }
-
-    // Use getMembers() (excludes pruned) so the directory matches the count reported by
-    // /api/community/info — otherwise clients keep pruned members locally and read as
-    // permanently "out of sync" against the node's pruned-excluding member count.
-    let allMembers = getMembers()
-        .filter(m => !m.publicKey.startsWith('escrow_') && !m.publicKey.startsWith('project_') && !m.isTreasury);
-
-    // Incremental delta: when the client passes ?updatedAfter=<ISO>, return only members
-    // who joined or changed their profile (avatar/callsign/bio) since that cursor. This lets
-    // the client pick up new members and avatar changes every sync cycle instead of waiting
-    // for the hourly full-directory snapshot. No param => full directory (unchanged behaviour).
-    const updatedAfter = ctx.query.updatedAfter as string | undefined;
-    if (updatedAfter) {
-        allMembers = allMembers.filter(m =>
-            (m.joinedAt && m.joinedAt > updatedAfter) ||
-            (m.profileUpdatedAt != null && String(m.profileUpdatedAt) > updatedAfter)
-        );
+    if (ready) {
+        // Under the cap too, weighed at what a send holds (a window of the shared bytes, and the bytes themselves while no
+        // other send in flight holds them), and cut off at its deadline.
+        await heavyRead(ctx, 'members-snapshot', () => sendMembersSnapshot(ctx, ready), () => snapshotSendWeight(ctx, ready));
+        return;
     }
 
-    const rolesByPubkey = new Map(listNodeRoles().map(r => [r.member_pubkey, r.role]));
-    const members = allMembers.map(m => ({
-        publicKey: m.publicKey,
-        callsign: m.callsign,
-        joinedAt: m.joinedAt,
-        nodeRole: rolesByPubkey.get(m.publicKey) ?? null,
-        avatarUrl: avatarUrlFor(m.publicKey, m.avatarUrl),
-        profileUpdatedAt: m.profileUpdatedAt,
-        earnedCredit: m.earnedCredit ?? 0,
-        elderVouchedBy: m.elderVouchedBy || null,
-        archetype: m.archetype || null,
-    }));
+    // Pruned members are left out (as getMembers) so the directory matches the count reported by /api/community/info —
+    // otherwise clients keep pruned members locally and read as permanently "out of sync" against the node's
+    // pruned-excluding member count.
+    //
+    // Incremental delta: when the client passes ?updatedAfter=<ISO>, return only members who joined or changed their
+    // profile (avatar/callsign/bio) since that cursor. This lets the client pick up new members and avatar changes every
+    // sync cycle instead of waiting for the hourly full-directory snapshot. No param => full directory.
+    //
+    // Only the columns below are read, and a delta reads only the rows changed since its cursor (engine members.ts
+    // getMemberDirectoryRows): reading every member's whole row for every request cost ~76 ms of CPU for a 513-byte
+    // delta, and ~100 MB of heap for the full directory, at 26,000 members (the global node's load rehearsal). No photo
+    // is read: each URL is made from the row's avatar_ref (@beanpool/core avatarUrlOf). Reading each photo to version
+    // its URL ran a 256 MB heap out of memory with one full list at ~6,400 members with photos. A photo still inline
+    // while a move out of the rows is stopped part way (#1482) gets a URL too, from photo_inline, a 0/1 SQLite works out
+    // (db.ts MEMBER_PHOTO_INLINE_REF): a null there told the member's phone "no photo", and its offline-edit retry
+    // published its own older copy over the newer one.
+    const build = (): string => {
+        const members = directoryMembers(directoryPeople(getMemberDirectoryRows(facesHeal ? undefined : ctx.query.updatedAfter || undefined)));
 
-    const bodyStr = JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);
-
-    ctx.status = 200;
-    ctx.type = 'application/json';
-    ctx.body = bodyStr;
+        return JSON.stringify(point ? withAreaDistances(members, point.lat, point.lng) : members);
+    };
+    const answer = () => {
+        if (shared) {
+            // Built for the members version as it is now (it may have moved while this reader waited under the cap), read
+            // in the same turn as the rows. One that waited finds the snapshot an earlier reader built for that version.
+            const key = membersSnapshotKey(getMembersVersion(), avatarKeysRequired());
+            const snap = usableMembersSnapshot(key) ?? storeMembersSnapshot(key, build());
+            ctx.set('ETag', snap.etag);
+            // A reader holding these very bytes (a version move or a 60 s rebuild that changed nothing in it) needs none.
+            if (ifNoneMatch && ifNoneMatch.includes(snap.etag.replace(/^W\//, ''))) {
+                ctx.status = 304;
+                return;
+            }
+            sendMembersSnapshot(ctx, snap);
+            return;
+        }
+        const bodyStr = build();
+        ctx.status = 200;
+        ctx.type = 'application/json';
+        ctx.body = bodyStr;
+    };
+    // The whole directory (every phone's first sync, and hourly) waits for room under the heavy-read cap
+    // (heavy-reads.ts) or is answered "busy". A delta is the rows changed since its cursor, so only a recent cursor's is
+    // small for sure: one at or after an hour ago (compared as the query compares it, as text) is the rows changed in
+    // the last hour, and goes straight through. Any other (0, 1970, a phone back after a day, an array) can be the whole
+    // directory, so it waits under the cap too, weighed by the last answer to that same cursor: a cursor's answer only
+    // grows as members join, so a small one never stands in for a bigger one under its key.
+    if (!cursor || facesHeal) await heavyRead(ctx, 'members', answer);
+    else if (typeof cursor === 'string' && cursor >= new Date(Date.now() - MEMBERS_DELTA_FRESH_MS).toISOString()) answer();
+    else await heavyRead(ctx, heavyReadKey('members-delta', { after: JSON.stringify(cursor) }), answer);
 });
 
 router.post('/api/admin/reports', async (ctx) => {

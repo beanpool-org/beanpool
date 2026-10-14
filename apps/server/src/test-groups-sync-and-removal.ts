@@ -20,13 +20,14 @@ delete process.env.CF_RECORD_NAME;
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import {
-    initStateEngine, exportSyncState, importRemoteState, setNodeRole, clearReplicatedTables,
+    initStateEngine, exportSyncState, importRemoteState, setNodeRole,
     createGroup, getGroup, listGroups, joinGroup, removeGroupMember, inviteGroupMember, approveGroupMember,
     handOverGroupLead, getGroupLead,
     setMemberRole, isGroupMember, getMemberGroupIds, createPost, getPosts, signSyncPayload,
 } from './state-engine.js';
-import { getStateHash, getReplicaConsistency } from '@beanpool/engine';
+import { getStateHash, getReplicaConsistency, setMemberPhoto } from '@beanpool/engine';
 import { startP2P } from './p2p.js';
+import { emptyCopiedTables } from './engine/copied-tables.js';
 import { addConnector } from './connector-manager.js';
 
 let run = 0, passed = 0;
@@ -51,8 +52,9 @@ function attempt<T>(fn: () => T): T | undefined {
 
 function makeMember(callsign: string): string {
     const pub = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, updated_at)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'data:image/png;base64,iVBORw0KGgo=', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pub, callsign);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pub, callsign);
+    setMemberPhoto(db, pub, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
     return pub;
 }
@@ -70,7 +72,7 @@ function groupPost(author: string, groupId: string, title: string) {
 
 async function main(): Promise<void> {
     initStateEngine();
-    const p2pNode = await startP2P(4072, 4073);
+    const p2pNode = await startP2P(0, 0);
     const nodeId = p2pNode.peerId.toString();
     addConnector(`/ip4/127.0.0.1/tcp/4073/p2p/${nodeId}`, 'mirror', 'self-test-peer');
 
@@ -193,10 +195,10 @@ async function main(): Promise<void> {
     assert(exportedPost?.audienceScope === 'group' && exportedPost?.targetGroupId === guild.id,
         'a group-only post is exported with its scope and group');
 
-    // A fresh node: the replicated tables are empty. clearReplicatedTables is the force-resync path and has to
-    // empty the group tables too; they are also wiped by hand so the import below is what puts them back.
-    clearReplicatedTables();
-    assert(count('groups') === 0 && count('group_members') === 0, 'force-resync clears groups and group_members');
+    // A fresh node: the copied tables are empty, as a new standby's whole copy starts (engine/copied-tables.ts), the group
+    // tables among them; they are also wiped by hand so the import below is what puts them back.
+    emptyCopiedTables(db);
+    assert(count('groups') === 0 && count('group_members') === 0, 'a whole copy starts without groups and group_members');
     db.prepare('DELETE FROM group_members').run();
     db.prepare('DELETE FROM groups').run();
     assert(count('posts') === 0 && count('members') === 0, 'the replica starts empty');
@@ -304,7 +306,7 @@ async function main(): Promise<void> {
     setMemberRole(orchard.id, alice, ivy, 'convenor');
     setMemberRole(orchard.id, alice, lee, 'convenor');
     removeGroupMember(orchard.id, alice, kit);
-    const tenure = (pub: string) => db.prepare(`SELECT role, status, joined_at, role_since, COALESCE(role_since, joined_at) AS since
+    const tenure = (pub: string) => db.prepare(`SELECT role, status, joined_at, role_since, from_epoch, COALESCE(role_since, joined_at) AS since
         FROM group_members WHERE group_id = ? AND member_pubkey = ?`).get(orchard.id, pub) as any;
     const ivyThen = tenure(ivy), judeThen = tenure(jude), kitThen = tenure(kit), leeThen = tenure(lee);
     assert(!!ivyThen?.role_since && ivyThen.role_since > ivyThen.joined_at, 'Ivy\'s appointment is later than her joining');
@@ -315,8 +317,9 @@ async function main(): Promise<void> {
 
     // What an older main sends: no roleSince. Ivy's row unchanged; Jude made a convenor; Kit re-admitted as a
     // convenor and joined again (an older main stamps joined_at on re-admission). Lee's row is a current main's.
+    // Older than from_epoch too (the first epoch a membership holds keys from), which is newer than role_since.
     const olderMain = (pub: string, change: Record<string, unknown> = {}) => {
-        const { roleSince: _r, ...row } = exportedRow(pub) ?? {};
+        const { roleSince: _r, fromEpoch: _f, ...row } = exportedRow(pub) ?? {};
         return { ...row, ...change };
     };
     await new Promise(r => setTimeout(r, 5));
@@ -349,6 +352,9 @@ async function main(): Promise<void> {
         'so their appointment reads as the re-admission, not earlier');
     assert(leeNow?.role === 'convenor' && leeNow.role_since === leeThen.role_since,
         'a current main\'s appointment time replaces the one the replica held');
+    assert(ivyThen.from_epoch != null && ivyNow?.from_epoch === ivyThen.from_epoch,
+        `an older main rewriting the same membership keeps the first epoch it holds keys from (got ${ivyNow?.from_epoch}, held ${ivyThen.from_epoch})`);
+    assert(kitNow?.from_epoch === null, `a membership re-admitted on an older main gets none: the reader falls back to the stored_at rule (got ${kitNow?.from_epoch})`);
 
     console.log(`\n${passed}/${run} passed`);
     await p2pNode.stop();

@@ -13,13 +13,17 @@
  */
 
 import fs from 'node:fs';
+import { writeFileAtomic } from './write-file-atomic.js';
 import path from 'node:path';
 import { multiaddr } from '@multiformats/multiaddr';
 import type { Libp2p } from 'libp2p';
 import { sendHandshake } from './handshake.js';
 import { errorMessage } from './error-message.js';
-import { db } from './db/db.js';
+import { pruneTombstones as pruneExpiredTombstones, TOMBSTONE_RETENTION_DAYS } from './db/db.js';
 import { logger } from './logger.js';
+import { getNodeRole } from './config/node-role.js';
+import { sweepExpiredDebts } from './engine/names-debts.js';
+import { pruneMoneyRequests } from './engine/money-requests.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
@@ -29,7 +33,6 @@ const CONNECTORS_PATH = path.join(DATA_DIR, 'connectors.json');
 const HANDSHAKE_INTERVAL_MS = 10_000; // 10 seconds
 const RETRY_INTERVAL_MS = 30_000;     // 30 seconds
 const MAX_RETRY_DELAY_MS = 5 * 60_000; // 5 minutes max backoff
-const TOMBSTONE_RETENTION_DAYS = 30;
 
 export type TrustLevel = 'mirror' | 'peer' | 'blocked';
 
@@ -237,7 +240,7 @@ function saveConnectors(): void {
         if (!fs.existsSync(DATA_DIR)) {
             fs.mkdirSync(DATA_DIR, { recursive: true });
         }
-        fs.writeFileSync(CONNECTORS_PATH, JSON.stringify(connectors, null, 2));
+        writeFileAtomic(CONNECTORS_PATH, JSON.stringify(connectors, null, 2));
     } catch (e) {
         console.error('[Connectors] Failed to save connectors:', e);
     }
@@ -317,10 +320,17 @@ export function initConnectorManager(node: Libp2p): void {
     // handshake for mutual-trust establishment and RTT measurement).
     handshakeTimer = setInterval(() => { void handshakeConnectedPeers(); }, HANDSHAKE_INTERVAL_MS);
 
-    // Daily-ish tombstone GC: drop tombstones older than retention, but never
-    // delete a tombstone that any peer's cursor hasn't yet advanced past.
+    // Daily-ish tombstone GC: drop tombstones older than the retention.
     pruneTombstones();
     setInterval(pruneTombstones, 24 * 60 * 60 * 1000);
+    // A departed member's debt record goes 3 years after they left (engine/names-debts.ts), on a main server.
+    const sweepDebts = () => { try { if (getNodeRole() === 'primary') sweepExpiredDebts(); } catch (e) { console.error('[NamesDebts] sweep failed:', e); } };
+    sweepDebts();
+    setInterval(sweepDebts, 24 * 60 * 60 * 1000);
+    // A retried payment's id is kept a week (engine/money-requests.ts), then goes, on a main server.
+    const pruneRequests = () => { try { pruneMoneyRequests(); } catch (e) { console.error('[MoneyRequests] prune failed:', e); } };
+    pruneRequests();
+    setInterval(pruneRequests, 24 * 60 * 60 * 1000);
 
     // Auto‑connect enabled connectors on boot
     if (connectors.some(c => c.enabled)) {
@@ -413,21 +423,16 @@ export async function handshakeConnectedPeers(): Promise<void> {
 }
 
 /**
- * Drop tombstones older than the retention window. Conservative: only delete
- * tombstones whose deletedAt is BEFORE the oldest peer cursor (so we never
- * lose a tombstone a peer might still need on its next pull).
+ * Drop the tombstones older than the retention (db/db.ts pruneTombstones). A standby whose cursor is older than that
+ * takes a force-resync instead of a delta (services/backup-puller.ts), so no cursor holds them back. EXPORTED for tests
+ * (test-tombstone-retention.ts): `initConnectorManager`, its caller, needs a libp2p node.
  */
-function pruneTombstones(): void {
-    const retentionThreshold = new Date(Date.now() - TOMBSTONE_RETENTION_DAYS * 24 * 60 * 60 * 1000).toISOString();
-    const oldestCursor = db.prepare(`SELECT MIN(last_synced_at) AS oldest FROM sync_cursors`).get() as { oldest: string | null } | undefined;
-    // If any peer has a cursor older than the retention threshold, keep the
-    // tombstone alive for that peer; otherwise prune by the retention threshold.
-    const cutoff = oldestCursor?.oldest && oldestCursor.oldest < retentionThreshold
-        ? oldestCursor.oldest
-        : retentionThreshold;
-    const res = db.prepare(`DELETE FROM tombstones WHERE deleted_at < ?`).run(cutoff);
-    if (res.changes > 0) {
-        logger.info('P2P', `[Sync] Pruned ${res.changes} tombstone(s) older than ${cutoff}`);
+export function pruneTombstones(): void {
+    try {
+        const n = pruneExpiredTombstones();
+        if (n > 0) logger.info('P2P', `[Sync] Pruned ${n} tombstone(s) older than ${TOMBSTONE_RETENTION_DAYS} days`);
+    } catch (e: any) {
+        logger.error('P2P', `[Sync] Tombstone pruning failed: ${e?.message || e}`);
     }
 }
 

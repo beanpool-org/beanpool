@@ -144,4 +144,73 @@ describe('AnalyticsModule Component', () => {
         fireEvent.click(settingsBtns[0]);
         expect(mockHandlers.onEditNode).toHaveBeenCalledWith(mockProfiles[0]);
     });
+
+    it('renders peak warning badge when usage reaches warning threshold without breaching limit', () => {
+        const warningHistoryMap: Record<string, TelemetryHistoryPoint[]> = {
+            'node-1': [
+                { timestamp: 1000, cpu: 70, memMb: 100, totalMemMb: 1024, ws: 0, p2p: 0, walMb: 0.1, dbMb: 1 },
+            ],
+            'node-2': [
+                { timestamp: 1000, cpu: 10, memMb: 100, totalMemMb: 1024, ws: 0, p2p: 0, walMb: 0.1, dbMb: 1 },
+            ],
+        };
+
+        render(
+            <AnalyticsModule
+                profiles={mockProfiles}
+                activeProfileId="node-1"
+                fleetDiags={mockFleetDiags}
+                historyMap={warningHistoryMap}
+                {...mockHandlers}
+            />
+        );
+
+        // Switch to CPU Load
+        fireEvent.click(screen.getByRole('button', { name: /CPU Load/i }));
+
+        // 70% CPU is >= 80% * 0.85 (68%), so warningThresholdBreached is true
+        expect(screen.getByText('PEAK WARNING')).toBeInTheDocument();
+        expect(screen.getByText('Near Limit')).toBeInTheDocument();
+    });
+
+    it('renders refreshing state and disables button when fleet diagnostics are loading', () => {
+        const loadingFleetDiags = {
+            'node-1': { diag: null, loading: true, error: null },
+            'node-2': { diag: null, loading: false, error: null },
+        };
+
+        render(
+            <AnalyticsModule
+                profiles={mockProfiles}
+                activeProfileId="node-1"
+                fleetDiags={loadingFleetDiags}
+                historyMap={mockHistoryMap}
+                {...mockHandlers}
+            />
+        );
+
+        const refreshBtn = screen.getByRole('button', { name: /Refreshing Analytics\.\.\./i });
+        expect(refreshBtn).toBeDisabled();
+    });
+
+    it('handles single-point history without throwing errors', () => {
+        const singlePointHistoryMap: Record<string, TelemetryHistoryPoint[]> = {
+            'node-1': [
+                { timestamp: 1000, cpu: 25, memMb: 300, totalMemMb: 1024, ws: 1, p2p: 1, walMb: 1.0, dbMb: 5 },
+            ],
+        };
+
+        render(
+            <AnalyticsModule
+                profiles={[mockProfiles[0]]}
+                activeProfileId="node-1"
+                fleetDiags={{ 'node-1': mockFleetDiags['node-1'] }}
+                historyMap={singlePointHistoryMap}
+                {...mockHandlers}
+            />
+        );
+
+        expect(screen.getAllByText('Primary Node').length).toBeGreaterThan(0);
+        expect(screen.getByText('THRESHOLDS NORMAL')).toBeInTheDocument();
+    });
 });

@@ -5,10 +5,12 @@
 
 import crypto from 'node:crypto';
 import { db } from '../db/db.js';
+import { assertPlainTablesWritable, standbyWritesNothing } from '../config/node-role.js';
 import { getMember, getConversation, type Conversation } from '@beanpool/engine';
 import { isSyntheticAccount } from '@beanpool/core';
 import type { MessagingCallbacks } from './messaging.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from './message-tombstone.js';
+import { avatarUrlOf } from '@beanpool/core';
 
 export interface EnterpriseThreadMessage {
     id: string;
@@ -29,6 +31,17 @@ export interface EnterpriseThreadMessage {
  */
 export function isEnterpriseThreadHidden(status: string | null | undefined): boolean {
     return status === 'pruned' || status === 'deleted';
+}
+
+/**
+ * No enterprise for this thread to be read under, as the enterprise's own thread route answers (routes/treasury.ts):
+ * the key is no enterprise, or a pruned or deleted one. GET /api/messages/:id asks it too, so the thread can't be read
+ * by its id after its enterprise is gone (FABLE-sec-events-chat F2, 2026-10-01).
+ */
+export function isEnterpriseThreadGone(enterprisePubkey: string): boolean {
+    const row = db.prepare('SELECT is_treasury, status FROM members WHERE public_key = ?').get(enterprisePubkey) as
+        { is_treasury: number; status: string | null } | undefined;
+    return !row || !row.is_treasury || isEnterpriseThreadHidden(row.status);
 }
 
 /**
@@ -58,14 +71,18 @@ export function isKeeperOfEnterprise(actorPubkey: string, enterprisePubkey: stri
 /**
  * A keeper's read cursor on the thread, kept in thread_read_cursors and never in conversation_participants: a
  * participant row is what the generic send and react routes take as the right to write (PR #924 review, B1).
- * Made read-up-to-now the first time, so a new keeper is not handed the thread's whole history as unread.
+ * Made read-up-to-now the first time, so a new keeper is not handed the thread's whole history as unread. The cursors
+ * are copied to a standby (a plain table, design G4), where this read writes none of its own.
  */
 export function ensureKeeperReadCursor(enterprisePubkey: string, keeperPubkey: string): void {
+    if (standbyWritesNothing()) return;
     db.prepare('INSERT OR IGNORE INTO thread_read_cursors (conversation_id, member_pubkey, last_read_at) VALUES (?, ?, ?)')
         .run(enterprisePubkey, keeperPubkey, new Date().toISOString());
 }
 
+/** THROWS on a standby (config/node-role.ts assertPlainTablesWritable): the keeper marks the thread read on the main server. */
 export function markKeeperThreadRead(enterprisePubkey: string, keeperPubkey: string): void {
+    assertPlainTablesWritable();
     db.prepare(`INSERT INTO thread_read_cursors (conversation_id, member_pubkey, last_read_at) VALUES (?, ?, ?)
                 ON CONFLICT(conversation_id, member_pubkey) DO UPDATE SET last_read_at = excluded.last_read_at`)
         .run(enterprisePubkey, keeperPubkey, new Date().toISOString());
@@ -104,7 +121,7 @@ export function getEnterpriseThreadMessages(
 ): EnterpriseThreadMessage[] {
     ensureEnterpriseThread(enterprisePubkey);
     const rows = db.prepare(`
-        SELECT m.*, memb.callsign as author_callsign, memb.avatar_url as author_avatar
+        SELECT m.*, memb.callsign as author_callsign, memb.avatar_ref as author_avatar
         FROM messages m
         LEFT JOIN members memb ON m.author_pubkey = memb.public_key
         WHERE m.conversation_id = ?
@@ -115,14 +132,15 @@ export function getEnterpriseThreadMessages(
     return rows.reverse().map(r => {
         let displayCiphertext = r.ciphertext;
         if (r.type === 'removed') {
-            displayCiphertext = Buffer.from('removed by a keeper', 'utf8').toString('base64');
+            // A keeper's removal, or the author's own when they deleted their account (engine/message-tombstone.ts).
+            displayCiphertext = Buffer.from(blankedWithAccount(r.metadata) ? ACCOUNT_DELETED_TEXT : 'removed by a keeper', 'utf8').toString('base64');
         }
         return {
             id: r.id,
             conversationId: r.conversation_id,
             authorPubkey: r.author_pubkey,
             authorCallsign: r.author_callsign || r.author_pubkey?.slice(0, 8),
-            authorAvatar: avatarUrlFor(r.author_pubkey, r.author_avatar),
+            authorAvatar: avatarUrlOf(r.author_pubkey, r.author_avatar),
             ciphertext: displayCiphertext,
             nonce: r.nonce,
             type: r.type,
@@ -201,7 +219,7 @@ export function postEnterpriseThreadMessage(
                     conversationId: existing.conversation_id,
                     authorPubkey: existing.author_pubkey,
                     authorCallsign: senderMember?.callsign || authorPubkey.slice(0, 8),
-                    authorAvatar: avatarUrlFor(authorPubkey, senderMember?.avatar_url),
+                    authorAvatar: avatarUrlOf(authorPubkey, senderMember?.avatar_url),
                     ciphertext: existing.ciphertext,
                     nonce: existing.nonce,
                     type: existing.type,
@@ -230,7 +248,7 @@ export function postEnterpriseThreadMessage(
         conversationId: enterprisePubkey,
         authorPubkey,
         authorCallsign: senderMember?.callsign || authorPubkey.slice(0, 8),
-        authorAvatar: avatarUrlFor(authorPubkey, senderMember?.avatar_url),
+        authorAvatar: avatarUrlOf(authorPubkey, senderMember?.avatar_url),
         ciphertext,
         nonce,
         type,
@@ -296,7 +314,7 @@ export function removeEnterpriseThreadMessage(
         conversationId: enterprisePubkey,
         authorPubkey: msgRow.author_pubkey,
         authorCallsign: authorMember?.callsign || msgRow.author_pubkey?.slice(0, 8),
-        authorAvatar: avatarUrlFor(msgRow.author_pubkey, authorMember?.avatar_url),
+        authorAvatar: avatarUrlOf(msgRow.author_pubkey, authorMember?.avatar_url),
         ciphertext,
         nonce,
         type: 'removed',

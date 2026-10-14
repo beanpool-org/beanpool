@@ -5,9 +5,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BeanPool DNS & Tunnel Registrar — Super Admin</title>
     <link rel="icon" type="image/png" href="/favicon.png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <!-- No web font: this page asks nothing of Google. It draws in the system font (the stacks below fall through). -->
     <style>
         :root {
             --bg-primary: #030712;
@@ -94,6 +92,12 @@ export const ADMIN_HTML = `<!DOCTYPE html>
         }
         .badge-tunnel { background: rgba(99, 102, 241, 0.15); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.3); }
         .badge-direct { background: rgba(14, 165, 233, 0.15); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.3); }
+        .scroll-x { overflow-x: auto; }
+        .alert-modes { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; margin: 0.75rem 0; }
+        .alert-mode { display: flex; align-items: center; gap: 0.35rem; font-size: 0.8rem; }
+        .alert-mode button { background: rgba(255,255,255,0.05); color: var(--text-secondary); border: 1px solid rgba(255,255,255,0.12); padding: 0.25rem 0.6rem; border-radius: 8px; cursor: pointer; font-size: 0.75rem; }
+        .alert-mode button.on { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border-color: rgba(245, 158, 11, 0.5); font-weight: 700; }
+        tr.lit td { background: rgba(245, 158, 11, 0.12); }
     </style>
 </head>
 <body>
@@ -134,6 +138,18 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #10b981; margin-bottom: 1rem;">🌐 Names (live, paused, blocked, released)</h2>
             <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem;">A name belongs to its node's key. Pause and Block stop routing but never free a name; only Release frees one: held 30 days for its key (which can take it back), then free to anyone — or at once, with "free now". A name you blocked or paused is held 30 days from every key, its own included.</p>
             <div id="activeTableContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading active allocations...</p></div>
+        </div>
+
+        <div class="admin-card">
+            <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #f59e0b; margin-bottom: 0.5rem;">📣 Alerts to your phone</h2>
+            <p style="font-size: 0.8rem; color: var(--text-muted);">Name requests, new communities, paused names, a suspended sweep, our servers below and your own actions, sent to one ntfy topic, and one quiet daily summary at 08:00 Brisbane. Each says a name, its community name and counts — never a contact address. At most 20 messages an hour.</p>
+            <div id="alertsContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading alerts...</p></div>
+        </div>
+
+        <div class="admin-card">
+            <h2 style="font-size: 1.1rem; font-family: var(--font-header); color: #38bdf8; margin-bottom: 0.5rem;">🛰️ Our servers</h2>
+            <p style="font-size: 0.8rem; color: var(--text-muted);">Looked at every 5 minutes from this Worker, never from the server itself (WATCH_TARGETS). Two failed looks in a row and your phone hears of it; so it does of a locked vault, a vault report that is not right, a release that changed, and a node its watchdog restarted.</p>
+            <div id="serversContainer"><p style="color: var(--text-muted); font-size: 0.85rem;">Loading servers...</p></div>
         </div>
 
         <div class="admin-card">
@@ -181,6 +197,8 @@ export const ADMIN_HTML = `<!DOCTYPE html>
             updateAuthUI();
             document.getElementById('pendingTableContainer').innerHTML = '<p style="color: #f87171;">Logged out. Please enter your ADMIN_SECRET key above.</p>';
             document.getElementById('activeTableContainer').innerHTML = '<p style="color: #f87171;">Logged out.</p>';
+            document.getElementById('alertsContainer').innerHTML = '<p style="color: #f87171;">Logged out.</p>';
+            document.getElementById('serversContainer').innerHTML = '<p style="color: #f87171;">Logged out.</p>';
         }
 
         logoutBtn.addEventListener('click', performLogout);
@@ -240,7 +258,10 @@ export const ADMIN_HTML = `<!DOCTYPE html>
 
                 renderPending(pending);
                 renderActive(active);
+                showFragment();
                 loadEvents(secret);
+                loadAlerts(secret);
+                loadServers(secret);
             } catch (err) {
                 console.error(err);
                 document.getElementById('pendingTableContainer').innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Error loading allocations.</p>';
@@ -264,7 +285,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 const comm = claim.community_name ? esc(claim.community_name) : '—';
                 const contactInfo = claim.contact ? ' (' + esc(claim.contact) + ')' : '';
 
-                html += '<tr>' +
+                html += '<tr id="row-' + esc(claim.name) + '">' +
                     '<td style="font-weight: 700; color: #fbbf24; font-family: monospace;">' + domain + '</td>' +
                     '<td><span style="font-weight: 600; color: #fff;">' + comm + '</span><span style="font-size: 0.75rem; color: var(--text-muted);">' + contactInfo + '</span></td>' +
                     '<td style="font-family: monospace; font-size: 0.75rem;">' + pubkeyShort + '</td>' +
@@ -316,7 +337,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 // Released after you blocked or paused it, the name is held from its own key too (the Worker's rule).
                 const fromAll = alloc.status === 'blocked' || (alloc.status === 'paused' && alloc.pause_reason === 'admin');
 
-                html += '<tr>' +
+                html += '<tr id="row-' + esc(alloc.name) + '">' +
                     '<td style="font-weight: 700; color: ' + look[1] + '; font-family: monospace;">' + domain + '</td>' +
                     '<td><span style="font-weight: 600; color: #fff;">' + comm + '</span><span style="font-size: 0.75rem; color: var(--text-muted);">' + contactInfo + '</span></td>' +
                     '<td style="font-family: monospace; font-size: 0.75rem;">' + pubkeyShort + '</td>' +
@@ -361,7 +382,7 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                         (data.held_until ? (data.reason === 'admin-held-all' ? ', held from every key, its own included, until ' : ', held for its key until ') + new Date(data.held_until * 1000).toLocaleString() : '') + '.');
                     loadRegistrarData();
                 } else {
-                    alert(action + ' failed: ' + (data.error || '') + (data.detail ? ' — ' + data.detail : ''));
+                    alert(action + ' failed: ' + (data.error || '') + (data.detail ? ' — ' + data.detail : '') + (data.ref ? ' (log ref ' + data.ref + ')' : ''));
                 }
             } catch (err) {
                 alert('Network error: ' + err.message);
@@ -391,6 +412,147 @@ export const ADMIN_HTML = `<!DOCTYPE html>
                 container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Error loading events.</p>';
             }
         }
+
+        // A tap on an alert opens /admin#<name>: once the tables are drawn, that name's row is scrolled to and lit.
+        function showFragment() {
+            const hash = typeof location !== 'undefined' ? location.hash : '';
+            let name = '';
+            try { name = decodeURIComponent(String(hash || '').replace(/^#/, '')).toLowerCase(); } catch (e) { return; }
+            if (!/^[a-z0-9-]{3,32}$/.test(name)) return;
+            const row = document.getElementById('row-' + name);
+            if (!row || typeof row.scrollIntoView !== 'function') return;
+            row.className = 'lit';
+            row.scrollIntoView({ block: 'center' });
+        }
+        if (typeof window !== 'undefined') window.addEventListener('hashchange', showFragment);
+
+        const CATEGORY_WORDS = {
+            names: 'Names (requests, new communities, pauses)', health: 'Health (our servers, suspended sweep, refused deletions)',
+            uptake: 'Uptake', admin: 'Your own actions',
+        };
+        const MODE_WORDS = { on: 'on', digest: 'digest', off: 'off' };
+        const when = function(s) { return s ? new Date(s * 1000).toLocaleString() : 'never'; };
+
+        function renderAlerts(st) {
+            const container = document.getElementById('alertsContainer');
+            const ch = st.channel || {};
+            // The daily summary goes with the outside checks of our servers: none while WATCH_TARGETS is unset.
+            const noDaily = st.daily_line === false;
+            let html = '';
+            if (!ch.set) {
+                html += '<p style="color: #f87171; font-size: 0.85rem;">Not set: NTFY_URL is not a Worker secret, so nothing is sent' + (ch.waiting ? ' (' + ch.waiting + ' waiting for it)' : '') + '. Set it with <code>wrangler secret put NTFY_URL</code> (the full topic URL), and NTFY_TOKEN for an ntfy access token.</p>';
+            } else {
+                html += '<p style="font-size: 0.85rem;">ntfy: <b style="color: #10b981;">set</b>' + (ch.token ? ', with a token' : ', no token') +
+                    ' · last sent ' + esc(when(ch.last_ok_at)) + ' · ' + esc(ch.waiting) + ' waiting' +
+                    (ch.failed_in_a_row ? ' · <span style="color: #f87171;">failing: ' + esc(ch.last_status) + ' (' + esc(ch.failed_in_a_row) + ' in a row), next try ' + esc(when(ch.next_try_at)) + '</span>' : '') +
+                    (ch.dropped ? ' · ' + esc(ch.dropped) + ' dropped (over 50 waiting)' : '') + '</p>';
+            }
+            const cap = st.cap || {};
+            html += '<p style="font-size: 0.8rem; color: var(--text-muted);">This hour: ' + esc(cap.sent || 0) + ' sent (cap ' + esc(cap.per_hour || 20) + ', then one "muted" line; high and urgent still go, to 40)' + (cap.muted ? ', ' + esc(cap.muted) + ' muted' : '') + '.' +
+                (st.held_for_digest ? ' ' + esc(st.held_for_digest) + (noDaily ? ' held, but there is no daily summary: WATCH_TARGETS is not set, and the daily line comes with the outside checks.'
+                    : ch.set ? ' held for the daily summary (08:00 Brisbane): shown below.' : ' held — no channel set, so no daily summary carries them yet: shown below.') : '') + '</p>';
+            html += '<div class="alert-modes">' + Object.keys(CATEGORY_WORDS).map(function(c) {
+                const mode = (st.settings || {})[c] || 'on';
+                return '<span class="alert-mode">' + esc(CATEGORY_WORDS[c]) + ': ' + Object.keys(MODE_WORDS).map(function(m) {
+                    return '<button data-alert-category="' + c + '" data-alert-mode="' + m + '"' + (m === mode ? ' class="on"' : '') + '>' + MODE_WORDS[m] + '</button>';
+                }).join('') + '</span>';
+            }).join('') + '</div>';
+            html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.75rem;">on = sent at once · ' + (noDaily
+                ? 'digest = held for the daily summary, which is not sent while WATCH_TARGETS is not set' : 'digest = held, then sent in the daily summary at 08:00 Brisbane') + ' · off = nothing</p>';
+            html += '<button data-alert-test="1" class="btn-approve">Send a test alert</button> <span id="alertTestResult" style="font-size: 0.8rem; color: var(--text-muted);"></span>';
+            const active = st.active || [];
+            if (active.length) {
+                html += '<p style="font-size: 0.85rem; color: #fbbf24; margin-top: 1rem;">Raised now:</p><ul style="font-size: 0.8rem; margin-left: 1.25rem;">' + active.map(function(a) {
+                    return '<li>' + esc(a.detail) + ' <span style="color: var(--text-muted);">(since ' + esc(when(a.since)) + ')</span></li>';
+                }).join('') + '</ul>';
+            }
+            const recent = st.recent || [];
+            if (recent.length) {
+                html += '<div class="scroll-x" style="margin-top: 1rem;"><table class="admin-table"><thead><tr><th>When</th><th>Alert</th><th>State</th></tr></thead><tbody>' + recent.map(function(r) {
+                    // A held event is marked sent only once the daily summary carrying it is sent.
+                    const state = r.held ? (r.sent_at ? 'sent in the daily summary' : noDaily ? 'held — no daily summary (WATCH_TARGETS is not set)' : ch.set ? 'held for the daily summary' : 'held — no channel set')
+                        : r.sent_at ? 'sent' : r.muted ? 'muted (over the hourly cap)' : 'waiting';
+                    return '<tr><td style="font-family: monospace; font-size: 0.75rem; white-space: nowrap;">' + esc(when(r.at)) + '</td>' +
+                        '<td><b style="color: #fff;">' + esc(r.title) + '</b><br><span style="font-size: 0.8rem;">' + esc(r.body) + '</span></td>' +
+                        '<td style="font-size: 0.75rem;">' + esc(state) + '</td></tr>';
+                }).join('') + '</tbody></table></div>';
+            }
+            container.innerHTML = html;
+        }
+
+        async function loadAlerts(secret) {
+            const container = document.getElementById('alertsContainer');
+            try {
+                const res = await fetch('/api/local/admin/registrar/alerts', { headers: { 'x-admin-secret': secret } });
+                if (!res.ok) { container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Could not load alerts.</p>'; return; }
+                renderAlerts(await res.json());
+            } catch (err) {
+                container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Error loading alerts.</p>';
+            }
+        }
+
+        async function setAlertMode(category, mode) {
+            const secret = secretInput.value.trim();
+            const res = await fetch('/api/local/admin/registrar/alerts/settings', {
+                method: 'POST', headers: { 'x-admin-secret': secret, 'content-type': 'application/json' }, body: JSON.stringify({ category: category, mode: mode }),
+            });
+            if (res.ok) renderAlerts(await res.json());
+            else alert('Could not change it: ' + ((await res.json()).error || res.status));
+        }
+
+        async function sendTestAlert() {
+            const secret = secretInput.value.trim();
+            const out = document.getElementById('alertTestResult');
+            out.textContent = 'Sending...';
+            try {
+                const res = await fetch('/api/local/admin/registrar/alerts/test', { method: 'POST', headers: { 'x-admin-secret': secret } });
+                const data = await res.json();
+                out.textContent = data.sent ? 'Sent (' + data.status + '): check your phone.' : (data.error || 'Not sent.');
+                loadAlerts(secret);
+            } catch (err) {
+                out.textContent = 'Network error: ' + err.message;
+            }
+        }
+
+        function renderServers(st) {
+            const container = document.getElementById('serversContainer');
+            const targets = st.targets || [];
+            if (!targets.length) { container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Nothing is watched: WATCH_TARGETS is not set in wrangler.toml.</p>'; return; }
+            let html = '';
+            if (!st.ticket_key_set) html += '<p style="color: #fbbf24; font-size: 0.8rem;">The vault report is not checked: VAULT_TICKET_KEYS (its ticket public key) is not set.</p>';
+            if (st.fleet_differs_since) html += '<p style="color: #fbbf24; font-size: 0.8rem;">Our nodes run different releases, since ' + esc(when(st.fleet_differs_since)) + '.</p>';
+            html += '<div class="scroll-x"><table class="admin-table"><thead><tr><th>Server</th><th>Now</th><th>Runs</th><th>Last 24 h</th></tr></thead><tbody>' + targets.map(function(t) {
+                const l = t.last;
+                const now = !l ? 'not looked at yet'
+                    : l.ok ? 'answers (' + esc(l.status) + (l.ms != null ? ', ' + esc(l.ms) + ' ms' : '') + ')' + (l.state ? ' · ' + esc(l.state) : '') + (l.report ? ' · report ' + esc(l.report) : '')
+                        : '<span style="color: #f87171;">does not answer: ' + esc(l.status) + '</span>' + (t.last_ok_at ? ' · last answered ' + esc(when(t.last_ok_at)) : '');
+                const ver = l && (l.version || l.commit) ? esc(l.version || '') + (l.commit ? ' <span style="font-family: monospace;">(' + esc(String(l.commit).slice(0, 7)) + ')</span>' : '') : '—';
+                const day = t.day || {};
+                return '<tr id="server-' + esc(t.name) + '"><td><b style="color: #fff;">' + esc(t.name) + '</b><br><span style="font-size: 0.75rem; color: var(--text-muted);">' + esc(t.url) + '</span></td>' +
+                    '<td style="font-size: 0.8rem;">' + now + (l ? '<br><span style="font-size: 0.7rem; color: var(--text-muted);">looked ' + esc(when(l.ran_at)) + '</span>' : '') + (l && l.recoveries ? '<br><span style="font-size: 0.75rem;">watchdog restarts: ' + esc(l.recoveries) + '</span>' : '') + '</td>' +
+                    '<td style="font-size: 0.8rem;">' + ver + '</td>' +
+                    '<td style="font-size: 0.8rem;">' + esc(day.ok || 0) + ' of ' + esc(day.looks || 0) + ' looks answered</td></tr>';
+            }).join('') + '</tbody></table></div>';
+            if (st.daily_sent_for) html += '<p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.5rem;">Last daily summary: ' + esc(st.daily_sent_for) + ' (Brisbane day).</p>';
+            container.innerHTML = html;
+        }
+
+        async function loadServers(secret) {
+            const container = document.getElementById('serversContainer');
+            try {
+                const res = await fetch('/api/local/admin/registrar/servers', { headers: { 'x-admin-secret': secret } });
+                if (!res.ok) { container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Could not load servers.</p>'; return; }
+                renderServers(await res.json());
+            } catch (err) {
+                container.innerHTML = '<p style="color: #f87171; font-size: 0.85rem;">Error loading servers.</p>';
+            }
+        }
+
+        document.addEventListener('click', function(e) {
+            const mode = e.target.closest('[data-alert-mode]');
+            if (mode) setAlertMode(mode.getAttribute('data-alert-category'), mode.getAttribute('data-alert-mode'));
+            if (e.target.closest('[data-alert-test]')) sendTestAlert();
+        });
 
         updateAuthUI();
         if (sessionStorage.getItem('bp_registrar_admin_secret')) loadRegistrarData();

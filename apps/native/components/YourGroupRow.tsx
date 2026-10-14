@@ -10,7 +10,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme, useStyles } from '../app/ThemeContext';
-import { chatEmoji, previewLine, rowTime, rowBadge, isMuted, type YourChat } from '../utils/your-groups';
+import { chatEmoji, ownerKindWord, previewLine, rowRoleWord, rowTime, rowBadge, isMuted, type YourChat } from '../utils/your-groups';
 
 interface Props {
     item: YourChat;
@@ -52,28 +52,32 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
         previewUnread: { color: colors.text.heading, fontWeight: '700' },
         badge: {
             flexShrink: 0, minWidth: 22, height: 22, borderRadius: 11, paddingHorizontal: 6,
-            backgroundColor: colors.accent.primary, alignItems: 'center', justifyContent: 'center',
+            backgroundColor: colors.accent.fill, alignItems: 'center', justifyContent: 'center',
         },
         badgeMuted: { backgroundColor: colors.text.muted },
-        badgeText: { color: colors.text.inverse, fontSize: 11, fontWeight: '800' },
+        badgeText: { color: colors.text.onAccent, fontSize: 11, fontWeight: '800' },
+        badgeTextMuted: { color: colors.text.inverse },
     }));
 
     const badge = rowBadge(item, showUnread);
     const unread = badge ? item.unreadCount : 0;
     const muted = isMuted(item.mute);
-    const kindWord = item.kind === 'enterprise' ? 'Enterprise' : item.kind === 'event' ? 'Event' : null;
+    // A project is a project (🎯) and an enterprise an enterprise (🥖), §3.1. The member's part (Leader, Collaborator,
+    // Lead keeper, Keeper) is in the spoken label only: drawn beside the kind it would leave the preview a few dp at 320dp.
+    const kindWord = item.kind === 'group' ? null : ownerKindWord(item.kind, item.lifecycle).replace(/^./, c => c.toUpperCase());
+    const roleWord = rowRoleWord(item);
     const preview = previewLine(item, myPubkey);
     const time = rowTime(item.lastMessage?.timestamp ?? null);
 
     return (
         <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`${item.name}${kindWord ? `, ${kindWord.toLowerCase()}` : ', group'}${unread ? `, ${unread} unread` : ''}${muted ? ', muted' : ''}. ${preview}`}
+            accessibilityLabel={`${item.name}${kindWord ? `, ${kindWord.toLowerCase()}` : ', group'}${roleWord ? `, ${roleWord.toLowerCase()}` : ''}${unread ? `, ${unread} unread` : ''}${muted ? ', muted' : ''}. ${preview}`}
             style={[styles.row, flush && { marginHorizontal: 0 }]}
             onPress={() => onPress(item)}
         >
             <View style={[styles.icon, item.kind === 'enterprise' && styles.iconEnterprise, item.kind === 'event' && styles.iconEvent]}>
-                <Text style={styles.iconText} allowFontScaling={false}>{chatEmoji(item.kind, item.category)}</Text>
+                <Text style={styles.iconText} allowFontScaling={false}>{chatEmoji(item.kind, item.category, item.lifecycle)}</Text>
             </View>
             <View style={styles.body}>
                 <View style={styles.top}>
@@ -90,7 +94,7 @@ export function YourGroupRow({ item, myPubkey, showUnread = false, onPress, flus
                     <Text style={[styles.preview, unread > 0 && styles.previewUnread]} numberOfLines={1}>{preview}</Text>
                     {badge && (
                         <View style={[styles.badge, badge.muted && styles.badgeMuted]}>
-                            <Text style={styles.badgeText} maxFontSizeMultiplier={1.2}>{badge.label}</Text>
+                            <Text style={[styles.badgeText, badge.muted && styles.badgeTextMuted]} maxFontSizeMultiplier={1.2}>{badge.label}</Text>
                         </View>
                     )}
                 </View>

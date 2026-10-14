@@ -9,7 +9,7 @@ Settings is where owners and admins run the community's server. Members never se
 
 ## The screens
 
-- **Home**: the community at a glance, with shortcuts to invite someone, make an enterprise, download a backup and check the books.
+- **Home**: the community at a glance, how many times the web app was opened each day, and shortcuts to invite someone, make an enterprise, download a backup and check the books.
 - **People & Safety**: Members (each person's page and role), Invites & QR, Onboarding Funnel (where people stop when they try to join), Triage & Moderation (reports and taking posts down), and Owners & admins (who runs the server).
 - **Shared Projects & Economy**: Enterprises, Proposals (the community's Decisions), Commons Pool, and Escrow Disputes (deals that are stuck).
 - **Bulletin & News**: Announcements to every member, and Pulse Channels.
@@ -50,4 +50,4 @@ Owners and admins see the same screens. Some buttons only work for owners, and S
 
 ## Some figures are placeholders
 
-A few numbers in Settings are not calculated yet: the trust score on a member's page, the "Live Request Traffic" meter under Gateway & Peers, the "Backed up recently" line on Home, and everything on the Commons Pool tab. That tab always shows "240.0 beans", "✓ Solvent & Fully Backed", "0.0 drift" and "0 queued", whatever the real figures are. Check the real thing (the member's history, the logs, the backups list, the community's Decisions) before you act on them.
+A few numbers in Settings are not calculated yet: the "Trust Rating" on a member's page, the "Live Request Traffic vs Limit" meter under Gateway & Peers, the "Backed up recently" line on Home, and everything on the Commons Pool tab. That tab always shows "240.0 beans", "✓ Solvent & Fully Backed", "0.0 drift" and "0 queued", whatever the real figures are. Check the real thing (the member's history, the logs, the backups list, the community's Decisions) before you act on them.

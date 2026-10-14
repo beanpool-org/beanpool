@@ -10,15 +10,17 @@
  * Every node is a REAL server in its own process (takeover-test-harness.ts) with its real HTTPS server and signature
  * middleware. The registrar is a mock in this process (REGISTRAR_URL), never the live one. A member's request is signed
  * (format 2) for a host, as an app that reached the community by that name signs it, and sent over HTTPS. No node here
- * reaches Docker or Cloudflare: each refuses its own requests to the Docker socket and to the edge Settings probes.
+ * reaches Cloudflare: each refuses its own requests to the edge Settings probes, and its tunnel is the fake cloudflared
+ * (takeover-test-harness.ts). Nor Docker: no server code talks to its socket (test-no-docker-socket.ts).
  *
  * Node N (BEANPOOL_ADDRESSES=b2.test, so it has another name):
  *  1. The registrar answers live `bname`; Settings' status stores it. Requests signed for bname.beanpool.org and b2.test
  *     are accepted, other.test → 421.
  *  2. The registrar answers `none`, and the admin opens Settings: bname is still accepted (main: 421), the tunnel token
  *     file is intact (main: deleted), and Settings says the address service has no record of the name.
- *  3. The registrar answers live `newname` (renamed): bname and newname are both accepted (main: bname 421), only
- *     newname is published. An answer the node doesn't store adds no name (`paused` for `stranger`), and one for a
+ *  3. The registrar answers live `newname`, another name this key holds: not stored, the node stays on bname (the
+ *     registrar renames nothing; a second name is an install's late claim). The owner claims newname in Settings: bname
+ *     and newname are both accepted (main: bname 421), only newname is published. An answer the node doesn't store adds no name (`paused` for `stranger`), and one for a
  *     recorded name is written on it (newname paused, still accepted).
  *  4. Take offline: newname is still accepted during the hold (main: 421), held until the registrar's held_until; the
  *     token is removed. A release answer without held_until holds 30 days. Claiming a released name again takes it back.
@@ -51,15 +53,14 @@ const CF_EDGE_IP = '104.21.93.179';
 // ── The node processes' commands ───────────────────────────────────────────────────────────
 
 /**
- * No test node reaches Docker (writeToken restarts a cloudflared container through the Docker socket, and this machine
- * may have one) or Cloudflare's edge (Settings' claim and Take offline probe it). Their requests fail at once instead.
+ * No test node reaches Cloudflare's edge (Settings' claim and Take offline probe it): those requests fail at once instead.
  */
-function refuseDockerAndEdge(): void {
+function refuseEdge(): void {
     const real = http.request;
     (http as any).request = function (this: unknown, ...args: any[]) {
         const o = args[0];
         const opts = o && typeof o === 'object' && !(o instanceof URL) ? o : null;
-        if (opts && (opts.socketPath || opts.hostname === CF_EDGE_IP || opts.host === CF_EDGE_IP)) {
+        if (opts && (opts.hostname === CF_EDGE_IP || opts.host === CF_EDGE_IP)) {
             const req: any = new EventEmitter();
             req.setTimeout = () => req;
             req.destroy = () => req;
@@ -86,7 +87,7 @@ async function ownHttps(): Promise<string> {
 }
 
 async function child(): Promise<void> {
-    refuseDockerAndEdge();
+    refuseEdge();
     await runNodeChild({
         setup: async (a: { ownerSeedHex: string; replicationToken?: string }) => {
             const { ed25519 } = await import('@noble/curves/ed25519.js');
@@ -123,10 +124,11 @@ async function child(): Promise<void> {
             const envelope = await pullTakeoverEnvelopeNow();
             return { resync, envelope, held: listHeldEnvelopes().map((h) => h.envelopeId) };
         },
-        // What the node holds, as stored: node_config's row (not as a reader tidies it), the token file, its names.
+        // What the node holds, as stored: node_config's row (not as a reader tidies it), the tunnel it runs, its names.
         inspect: async () => {
             const { db } = await import('./db/db.js');
             const { configuredAddresses, publishedAddresses, knowsItsNames, forgetOwnAddresses } = await import('./engine/own-addresses.js');
+            const { tunnelConnectorForTests } = await import('./services/tunnel-connector.js');
             const row = db.prepare("SELECT value FROM node_config WHERE key = 'node_config'").get() as { value?: string } | undefined;
             const stored = row?.value ? JSON.parse(row.value) : {};
             const tokenFile = path.join(process.env.BEANPOOL_DATA_DIR!, 'tunnel-token');
@@ -136,6 +138,8 @@ async function child(): Promise<void> {
                 publicAddress: stored.publicAddress ?? null,
                 registrarNames: stored.registrarNames ?? null,
                 tokenFile: fs.existsSync(tokenFile) ? fs.readFileSync(tokenFile, 'utf-8') : null,
+                // The token the tunnel inside the server runs (it was the token file, for a sidecar, until 2026-09-28).
+                tunnel: tunnelConnectorForTests().runningToken,
                 configured: configuredAddresses(),
                 published: publishedAddresses(),
                 named: knowsItsNames(),
@@ -264,7 +268,9 @@ async function main(): Promise<void> {
         nodes.push(N);
         const setup = await N.send('setup', { ownerSeedHex, replicationToken });
         const nBase: string = setup.https;
-        const admin = { 'X-Admin-Password': PW_N };
+        // Step 7c: the password alone opens no admin route with 2FA off: Settings' calls go under an owner's key session the
+        // node makes (takeover-test-harness.ts owner-session).
+        const admin: Record<string, string> = await N.send('owner-session');
         const statusOpen = () => call(nBase, 'GET', '/api/local/admin/public-address/status', admin);
         const bound = async (node: NodeProc, hosts: string[]) => {
             await settled();
@@ -287,7 +293,7 @@ async function main(): Promise<void> {
             const opened = await statusOpen();
             assert(opened.status === 200 && opened.body?.status === 'live' && opened.body?.hostname === 'bname.beanpool.org', `Settings shows bname live (${show(opened)})`);
             const s = await N.send('inspect');
-            assert(s.tokenFile === 'T-bname', `the tunnel token is written (${s.tokenFile})`);
+            assert(s.tunnel === 'T-bname' && s.tokenFile === null, `the tunnel runs on bname's token, with no copy in a file (${s.tunnel}, ${s.tokenFile})`);
             const r = await bound(N, ['bname.beanpool.org', 'b2.test', 'other.test']);
             assert(r['bname.beanpool.org'] === 200 && r['b2.test'] === 200, `requests signed for bname.beanpool.org and b2.test are accepted (${JSON.stringify(r)})`);
             assert(r['other.test'] === 421, `other.test → 421 (${r['other.test']})`);
@@ -305,16 +311,22 @@ async function main(): Promise<void> {
             assert(r['bname.beanpool.org'] === 200, `a request signed for bname.beanpool.org is still accepted (${r['bname.beanpool.org']}; main: 421)`);
             assert(r['b2.test'] === 200 && r['other.test'] === 421, `b2.test still accepted, other.test still 421 (${r['b2.test']}, ${r['other.test']})`);
             const s = await N.send('inspect');
-            assert(s.tokenFile === 'T-bname', `the tunnel token file is intact (${s.tokenFile === null ? 'deleted' : s.tokenFile}; main: deleted)`);
+            assert(s.tunnel === 'T-bname', `the tunnel still runs on bname's token (${s.tunnel === null ? 'stopped' : s.tunnel}; before L1: its token deleted)`);
             assert(s.publicAddress?.name === 'bname' && s.publicAddress?.tunnelToken === 'T-bname', `the stored address is kept, token and all (${JSON.stringify(s.publicAddress)})`);
             const e = entry(s.registrarNames, 'bname.beanpool.org');
             assert(e?.role === 'current' && e?.status === 'none', `the record keeps bname, current, with the registrar's none written on it (${JSON.stringify(e ?? null)})`);
         });
 
         // ── 3 ──
-        console.log('\n— 3. the registrar answers live newname (renamed) —');
+        console.log('\n— 3. the registrar answers live newname; the owner moves to it in Settings —');
         await section('3', async () => {
             reg.status = live('newname');
+            const asked = await statusOpen();
+            const s0 = await N.send('inspect');
+            assert(asked.status === 200 && asked.body?.hostname === 'bname.beanpool.org' && s0.publicAddress?.name === 'bname' && s0.tunnel === 'T-bname',
+                `an answer about another name this key holds is not stored: still bname (${show(asked)})`);
+            const moved = await call(nBase, 'POST', '/api/local/admin/public-address/claim', admin, { name: 'newname', mode: 'tunnel' });
+            assert(moved.status === 200, `the owner claims newname in Settings (${show(moved)})`);
             const opened = await statusOpen();
             assert(opened.status === 200 && opened.body?.hostname === 'newname.beanpool.org', `Settings shows newname live (${show(opened)})`);
             const r = await bound(N, ['bname.beanpool.org', 'newname.beanpool.org', 'other.test']);
@@ -323,7 +335,7 @@ async function main(): Promise<void> {
             const s = await N.send('inspect');
             assert(entry(s.registrarNames, 'newname.beanpool.org')?.role === 'current' && entry(s.registrarNames, 'bname.beanpool.org')?.role === 'former',
                 `the record: newname current, bname former (${JSON.stringify(s.registrarNames)})`);
-            assert(s.tokenFile === 'T-newname', `the tunnel token is newname's (${s.tokenFile})`);
+            assert(s.tunnel === 'T-newname', `the tunnel runs on newname's token (${s.tunnel})`);
             await settled();
             const info = await call(nBase, 'GET', '/api/community/info');
             const published: string[] = info.body?.addresses ?? [];
@@ -360,7 +372,8 @@ async function main(): Promise<void> {
             assert(r['bname.beanpool.org'] === 200 && r['other.test'] === 421, `bname still accepted, other.test 421 (${r['bname.beanpool.org']}, ${r['other.test']})`);
             await settled();
             const s = await N.send('inspect');
-            assert(s.tokenFile === null && s.publicAddress === null, `the token is removed and the stored address cleared, as before (${s.tokenFile}, ${JSON.stringify(s.publicAddress)})`);
+            assert(s.tunnel === null && s.tokenFile === null && s.publicAddress === null,
+                `the tunnel is stopped and the stored address cleared, as before (${s.tunnel}, ${JSON.stringify(s.publicAddress)})`);
             const nn = entry(s.registrarNames, 'newname.beanpool.org');
             assert(nn?.role === 'former' && nn?.status === 'released' && typeof nn?.releasedByUsAt === 'string'
                 && Date.parse(nn?.heldUntil) === heldUntilS * 1000, `the record: newname former, released by this node, held until the registrar's held_until (${JSON.stringify(nn ?? null)})`);
@@ -389,7 +402,7 @@ async function main(): Promise<void> {
             const nb = entry(s3.registrarNames, 'newname.beanpool.org');
             assert(nb?.role === 'current' && nb?.status === 'live' && nb?.releasedByUsAt === null && nb?.heldUntil === null,
                 `newname is current again, its release and hold cleared (${JSON.stringify(nb ?? null)})`);
-            assert(s3.registrarNames.length === 3 && s3.tokenFile === 'T-newname', `the record still has all three names (${s3.registrarNames.map((e: any) => `${e.address} ${e.role}`).join(', ')})`);
+            assert(s3.registrarNames.length === 3 && s3.tunnel === 'T-newname', `the record still has all three names, and the tunnel runs on newname's token (${s3.registrarNames.map((e: any) => `${e.address} ${e.role}`).join(', ')}; ${s3.tunnel})`);
         });
 
         // ── 5 ──
@@ -398,7 +411,7 @@ async function main(): Promise<void> {
             const U = await spawnNode(SCRIPT, dirs.u, { ...noAgent, ADMIN_PASSWORD: PW_U, NODE_ROLE: 'primary', BEANPOOL_ADDRESSES: undefined, REGISTRAR_URL: reg.url });
             nodes.push(U);
             const uSetup = await U.send('setup', { ownerSeedHex });
-            const uAdmin = { 'X-Admin-Password': PW_U };
+            const uAdmin: Record<string, string> = await U.send('owner-session');
             reg.status = live('uname');
             const first = await call(uSetup.https, 'GET', '/api/local/admin/public-address/status', uAdmin);
             assert(first.status === 200 && first.body?.status === 'live', `U stores uname (${show(first)})`);
@@ -421,9 +434,10 @@ async function main(): Promise<void> {
             const pull2 = await standby.send('pull');
             assert(pull2.envelope === 'stored' && pull2.held.at(-1) === flushed.envelopeId, `the standby holds N's newest keys (${pull2.envelope}, ${flushed.envelopeId})`);
             await N.kill('SIGKILL');
-            const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, { 'X-Admin-Password': PW_STANDBY });
+            const standbyOwner: Record<string, string> = await standby.send('owner-session');
+            const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
             assert(opened.status === 200 && opened.body?.preview?.sessionId, `the recovery code opens the keys (${opened.status})`);
-            const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+            const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
             assert(confirmed.status === 200, `the take-over is confirmed (${confirmed.status} ${JSON.stringify(confirmed.body).slice(0, 160)})`);
             assert((await standby.exited) === 0, 'the standby restarts itself');
             standby = await spawnNode(SCRIPT, dirs.standby, { ...noAgent, ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', BEANPOOL_ADDRESSES: undefined, REGISTRAR_URL: reg.url });

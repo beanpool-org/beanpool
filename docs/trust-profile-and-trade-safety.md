@@ -38,7 +38,8 @@ Good news: most "track record" signals are **already computed** server-side in
 
 ### Small new queries
 - **Completion rate** — completed vs cancelled `marketplace_transactions` (high cancel rate = yellow flag)
-- **Mutual connections** — intersection of viewer's friends and the target's (needs viewer context)
+- **Mutual connections** ("connections in common") — members who are friends **both ways** with the viewer and
+  friends **both ways** with the target: F counts only when V→F, F→V, F→T and T→F all exist (needs viewer context)
 - **Last active** (`last_active_at`)
 - **Invited by / invited N** — from `members.invited_by` (the invite tree is tier-gated → some sybil-resistance)
 
@@ -46,12 +47,33 @@ Good news: most "track record" signals are **already computed** server-side in
 | Element | Rule | Why |
 |---|---|---|
 | Their own friends | **count only**, never names | Publishing a friend graph to strangers = stalking/harvesting risk; not actionable |
-| **Mutual connections** | **names, tappable → "Ask about X"** | Only ever surfaces people the *viewer already knows*; the reachable reference is the whole point |
+| **Mutual connections** | **names, tappable → "Ask about X"**, at most 12 | Only friendships chosen by both ends: F is named only when F and the viewer added each other AND F and the target added each other. A friend row is one-way and unconsented, so a one-way rule let a viewer who added everyone read the target's list (a probe) and a target who added everyone look "in your circle" to all (a forgery). The reachable reference is the whole point |
 | **Invited by** | graduated: always show the *fact* + inviter's *tier*; show the **name** only when the inviter is the viewer / their friend / a mutual; else "an established member" | Name is only useful when you can actually ask them; otherwise it's pure exposure of the inviter |
 | Reports / flags | never raw counts; moderation **outcomes** only | Defamation + brigading risk |
 
-Opt-outs: per-user "show me as a mutual connection" (default on); inviter "show me as the
-inviter on people I bring in" (default on within community).
+Opt-outs:
+- **"Show me as a connection in common"** (built; default on). Settings → Legal & Privacy, phone and web. Stored as the
+  member's own preference `show_as_connection_in_common` (`member_preferences`), served to them alone. Turned off, the
+  member is never named or counted as anyone's connection in common, so it never turns a band green
+  (`getTrustProfileForViewer`; checked in `test-trust-mutuals` T10).
+- Inviter "show me as the inviter on people I bring in" (default on within community): planned, **not built**.
+
+Adding a friend is visible and bounded, because a connection in common is made of friendships both ways:
+- The person added is told: a quiet line on their People tab, "*name* added you · Add back", phone and web (no push).
+  Only adds made after a server first ran this are shown (no backfill), for 30 days, until they add back or block
+  the adder (an adder's block of them changes nothing they read); 20 named, then "and N more" (`GET /api/friends/added-you`, their own only; engine/friends-added-you.ts).
+- A member adds at most **100 people a day** (`friendAddsPerDay`, config/writer-limits.ts). Removing someone counts
+  too (its tombstone), so removing and adding again frees nothing. The 101st is refused in words, with when it lets up, never silently dropped (the phone no longer
+  writes its own row before the node has answered).
+- You can't add someone you blocked: refused, saying so. If they add you, you aren't told: the add is taken as any add
+  (it counts against their 100), and your "added you" line leaves out anyone you blocked (`member_blocks`, the web's
+  block list; the phone also leaves out its own blocks). Refusing it would tell them of the block, which a block never
+  does (engine/member-blocks.ts). Your friends no longer see you as a connection in common on their profile: a blocker
+  is never counted on the profile of the member they blocked, nor for a viewer who blocked them; the friend rows stay,
+  so the blocked member's own reads don't change (`getTrustProfileForViewer`; `test-trust-mutuals` T11-T14). It does
+  not end the friendship: they still have you as a friend, and if your contact is set to Friends they still see it. To end
+  it too: on the phone take them off the Friends tab (it still lists them); on the web, which hides a blocked member
+  from your lists, unblock, take them off your friends, block again. They can notice a removal.
 
 ### Suggested "trust at a glance" layout
 1. Tier badge · member since · last active

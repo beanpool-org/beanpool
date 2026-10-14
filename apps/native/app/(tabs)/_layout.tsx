@@ -5,7 +5,13 @@ import { GlobalHeader, HEADER_ROW_HEIGHT } from '../../components/GlobalHeader';
 import { View, Text, Platform, DeviceEventEmitter, AppState, type AppStateStatus } from 'react-native';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useIdentity } from '../IdentityContext';
-import { usePathname } from 'expo-router';
+import { usePathname, router } from 'expo-router';
+import { useMemo } from 'react';
+import { helpSheetFor, phoneHelpKey, tourStepForTab, tourSteps as coreTourSteps } from '@beanpool/core';
+import { TourBar, tourSceneInset } from '../../components/TourBar';
+import { HelpSheet } from '../../components/HelpSheet';
+import { OPEN_HELP_EVENT, closeTour, helpContext, moveTour, startTour, useTour } from '../../utils/tour-store';
+import { useGuide } from '../../utils/use-guide';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getGlobalUnreadCount, syncMessages, getPosts, getMarketplaceTransactions } from '../../utils/db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,6 +20,11 @@ import { useNodeStatus } from '../NodeStatusContext';
 import { withJitter } from '../../utils/jitter';
 import { fetchNodeProfile, getCachedNodeProfile, hiddenTabsFor, type HideableTab } from '../../utils/node-profile';
 import { UNKNOWN_NODE_PROFILE, anchorRead, profileArrived, type AnchoredNodeProfile } from '../../utils/node-profile-anchor';
+
+/** Each tour step's tab as a route, written out so every link into the app is checked (deep-links-resolve.test.ts). */
+const TOUR_ROUTES: Record<string, '/(tabs)' | '/(tabs)/market' | '/(tabs)/map' | '/(tabs)/chats' | '/(tabs)/projects' | '/(tabs)/ledger'> = {
+    index: '/(tabs)', market: '/(tabs)/market', map: '/(tabs)/map', chats: '/(tabs)/chats', projects: '/(tabs)/projects', ledger: '/(tabs)/ledger',
+};
 
 // A small label sits ABOVE each icon,
 // so the text is buffered from the busy page below. Height is fixed here because the library
@@ -36,6 +47,7 @@ function TabItem({ label, icon, focused, color, count, badge }: {
     count?: number;
     badge?: React.ReactNode;
 }) {
+    const { colors } = useTheme();
     return (
         <View style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center', paddingBottom: UNDERLINE_HEIGHT }}>
             {/* The emoji can't take a tint, so the inactive tabs are dimmed instead and the
@@ -66,7 +78,7 @@ function TabItem({ label, icon, focused, color, count, badge }: {
             {count !== undefined && count > 0 && (
                 <View style={{
                     position: 'absolute', top: 16, left: '50%', marginLeft: 6, minWidth: 16, height: 16,
-                    borderRadius: 8, paddingHorizontal: 4, backgroundColor: '#dc2626',
+                    borderRadius: 8, paddingHorizontal: 4, backgroundColor: colors.feedback.danger.solid,
                     alignItems: 'center', justifyContent: 'center',
                 }}>
                     <Text allowFontScaling={false} style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>
@@ -241,6 +253,47 @@ export default function TabLayout() {
         };
     }, [identity]);
 
+    // ── The tour (scratch/global-node/DESIGN-getting-started-fable.md §2) and the "?" (§4) ──
+    // The bar lives here, over the real tabs; Home starts it and owns what it writes (utils/tour-store.ts).
+    const { run: tour, home: tourHomeNow } = useTour();
+    const guide = useGuide();
+    const isGlobal = strip.profile?.profile === 'global';
+    const moneyShown = !hiddenTabs.includes('ledger');
+    const steps = useMemo(() => coreTourSteps('phone', { global: isGlobal, beans: moneyShown }), [isGlobal, moneyShown]);
+    const tourRunning = !!tour && !!identity && tour.publicKey === identity.publicKey;
+    const tourIndex = tour ? Math.min(tour.step, steps.length - 1) : 0;
+    const tourTab = tourRunning ? steps[tourIndex]?.tab ?? null : null;
+    // The bar's height, so the tabs end at its top and their bottom buttons ride above it (tourSceneInset).
+    const [tourBarHeight, setTourBarHeight] = useState(0);
+    // The account left the phone: its tour goes with it.
+    useEffect(() => { if (tour && (!identity || tour.publicKey !== identity.publicKey)) closeTour(); }, [identity?.publicKey, tour?.publicKey]);
+    // Each step shows its own tab.
+    useEffect(() => {
+        if (!tourTab) return;
+        const path = tourTab === 'index' ? '/' : `/${tourTab}`;
+        if (pathname !== path) router.navigate(TOUR_ROUTES[tourTab] ?? '/(tabs)');
+    }, [tourTab]);
+    // A tab the member taps during the tour moves the tour to that tab's step: it follows, never scolds.
+    useEffect(() => {
+        if (!tourRunning) return;
+        const tab = pathname === '/' ? 'index' : pathname.replace(/^\//, '').split('/')[0];
+        if (tab === tourTab) return;
+        const at = tourStepForTab(steps, tab);
+        if (at >= 0) moveTour(at);
+    }, [pathname]);
+    const endTour = useCallback((kind: 'done' | 'skipped') => {
+        tourHomeNow?.end(kind);
+        closeTour();
+        if (pathname !== '/') router.navigate('/(tabs)');
+    }, [tourHomeNow, pathname]);
+
+    const [helpOpen, setHelpOpen] = useState(false);
+    useEffect(() => {
+        const sub = DeviceEventEmitter.addListener(OPEN_HELP_EVENT, () => setHelpOpen(true));
+        return () => sub.remove();
+    }, []);
+    const helpWords = helpSheetFor(guide.guide, phoneHelpKey(pathname, helpContext()));
+
     return (
         <View style={{ flex: 1 }}>
             {/* Tab screens always sit under the dark-green vine header, so the status-bar
@@ -260,6 +313,7 @@ export default function TabLayout() {
             <View style={isMapScreen ? { height: measuredHeaderHeight } : undefined}>
                 <GlobalHeader onMeasure={onHeaderMeasure} />
             </View>
+            <View style={{ flex: 1, marginBottom: tourSceneInset(tourRunning, tourBarHeight) }} testID="tab-scenes">
             <Tabs backBehavior="none" screenOptions={{
                 tabBarPosition: 'top',
                 headerShown: false,
@@ -286,8 +340,20 @@ export default function TabLayout() {
                 // that component's style array, so this widens it to the whole tab.
                 tabBarIconStyle: { width: '100%', height: '100%' },
             }}>
+                {/* Home (scratch/global-node/DESIGN-home-dashboard-fable.md, slice H2): the screen the app opens on, a
+                    short list of cards. `index` stays the tabs' first route, so every link to `/(tabs)` or `/` lands
+                    here; the Market has its own route since. */}
                 <Tabs.Screen
                     name="index"
+                    options={{
+                        title: 'Home',
+                        tabBarAccessibilityLabel: 'Home',
+                        tabBarButtonTestID: 'tab-home',
+                        tabBarIcon: ({ focused, color }) => <TabItem label="Home" icon="🏠" focused={focused} color={color} />
+                    }}
+                />
+                <Tabs.Screen
+                    name="market"
                     options={{
                         title: 'Market',
                         tabBarAccessibilityLabel: 'Market',
@@ -305,8 +371,8 @@ export default function TabLayout() {
                     }}
                 />
 
-                {/* Talk hosts Messages + People behind a segmented control. Merging them frees
-                    the slot Pulse needs — six labelled tabs is the ceiling at 320dp. */}
+                {/* Talk hosts Messages + People behind a segmented control. Merging them freed
+                    a slot — six labelled tabs is the ceiling at 320dp. */}
                 <Tabs.Screen
                     name="chats"
                     options={{
@@ -327,12 +393,13 @@ export default function TabLayout() {
                         tabBarIcon: ({ focused, color }) => <TabItem label="People" icon="👥" focused={focused} color={color} />
                     }}
                 />
+                {/* A card on Home since H2 (its slot went to Home), and still a route: the card's "See all" opens it. */}
                 <Tabs.Screen
                     name="pulse"
                     options={{
                         title: 'Pulse',
                         tabBarAccessibilityLabel: 'Pulse',
-                        tabBarButtonTestID: 'tab-pulse',
+                        href: null,
                         tabBarIcon: ({ focused, color }) => <TabItem label="Pulse" icon="📡" focused={focused} color={color} />
                     }}
                 />
@@ -376,6 +443,42 @@ export default function TabLayout() {
                     }} 
                 />
             </Tabs>
+            </View>
+            {tourRunning && (
+                <TourBar
+                    steps={steps}
+                    index={tourIndex}
+                    home={tourHomeNow}
+                    colors={colors}
+                    bottomInset={insets.bottom}
+                    onHeight={setTourBarHeight}
+                    onNext={() => moveTour(tourIndex + 1)}
+                    onSkip={() => endTour('skipped')}
+                    onDone={() => endTour('done')}
+                />
+            )}
+            <HelpSheet
+                visible={helpOpen}
+                sheet={helpWords}
+                tourOpen={tourRunning}
+                canTour={!!identity && !!tourHomeNow}
+                colors={colors}
+                onClose={() => setHelpOpen(false)}
+                onReadPage={() => {
+                    setHelpOpen(false);
+                    if (helpWords.slug) router.push({ pathname: '/guide/[slug]', params: { slug: helpWords.slug } });
+                    else if (helpWords.section) router.push({ pathname: '/guide/section/[id]', params: { id: helpWords.section } });
+                }}
+                onSearch={() => { setHelpOpen(false); router.push('/beanpool'); }}
+                onTour={() => {
+                    setHelpOpen(false);
+                    if (!identity) return;
+                    // Pick up where it is, or (Take the tour again) open it on the account from step 1.
+                    if (tourRunning) return;
+                    if (tourHomeNow?.restart) tourHomeNow.restart();
+                    else startTour(identity.publicKey, 0);
+                }}
+            />
         </View>
     );
 }

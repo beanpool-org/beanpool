@@ -28,7 +28,13 @@ export const PLACE_AFTER_JOIN = 'Place shown after you join';
 
 /** Whether this node shows a visitor its listings in a lobby, from `/api/community/info` (a public read). */
 export function visitorsSeeListings(info: CommunityInfo | null | undefined): boolean {
-    return info?.features?.guestListingsOnly === true;
+    // A node in a private preview refuses a visitor every read, so the welcome page (the invite and the way back) opens.
+    return info?.features?.guestListingsOnly === true && !privatePreviewOn(info);
+}
+
+/** Whether the node is in a private preview: an invite from its owner or an admin is the only way in. */
+export function privatePreviewOn(info: CommunityInfo | null | undefined): boolean {
+    return info?.features?.privatePreview === true;
 }
 
 /** Whether the node trades in Beans: only a node that says outright it doesn't (the global profile) has none. */

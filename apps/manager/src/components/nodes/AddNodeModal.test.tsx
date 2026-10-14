@@ -63,7 +63,7 @@ describe('AddNodeModal', () => {
         const submitBtn = screen.getByText('Save Node Profile');
         await userEvent.click(submitBtn);
 
-        expect(handleAdd).toHaveBeenCalledWith('Test Node', 'https://localhost:8443', 'secret123');
+        expect(handleAdd).toHaveBeenCalledWith('Test Node', 'https://localhost:8443', 'secret123', undefined);
     });
 
     it('submits form with undefined password if password field is blank', async () => {
@@ -80,6 +80,6 @@ describe('AddNodeModal', () => {
         const submitBtn = screen.getByText('Save Node Profile');
         await userEvent.click(submitBtn);
 
-        expect(handleAdd).toHaveBeenCalledWith('Test Node', 'https://node1.beanpool.org', undefined);
+        expect(handleAdd).toHaveBeenCalledWith('Test Node', 'https://node1.beanpool.org', undefined, undefined);
     });
 });

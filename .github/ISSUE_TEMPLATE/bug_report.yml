@@ -1,0 +1,52 @@
+name: Something isn't working
+description: Report a bug in the BeanPool app, web app or server.
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Please **don't include** your 12 words, passwords, recovery codes or anyone's private messages.
+        A security problem? Use [the private form](https://github.com/beanpool-org/beanpool/security/advisories/new) instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to make it happen again
+      placeholder: |
+        1. Open the Market
+        2. Tap …
+        3. See …
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where?
+      multiple: true
+      options:
+        - Android app
+        - iPhone app
+        - Web app (browser)
+        - Community server / manager
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version and phone
+      description: The version is in Settings at the bottom (e.g. 1.2.60). Phone model and Android/iOS version if you know them.
+  - type: input
+    id: community
+    attributes:
+      label: Which community?
+      description: Its address, e.g. yourtown.beanpool.org, or "the worldwide community". Leave empty if you'd rather not say.
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots help a lot. Cover any names or messages that aren't yours.

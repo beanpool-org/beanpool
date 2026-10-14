@@ -8,8 +8,9 @@
  *     column the manifest names exists.
  *  3. Every copied table has a watermark column, or is declared a whole set and a delta carries all of it (a row stamped
  *     long ago included), or travels inside its parent's rows (each carries it); a second watermark column is one a delta
- *     finds a row by (a row stamped long ago by the first); its payload key is in the sync payload. Every write to it
- *     moves the watermark: a touch trigger
+ *     finds a row by (a row stamped long ago by the first); its payload key is in the sync payload, a plain table's under
+ *     `plainTables` by its own name, and a plain table has a key to match its rows by and both stamping triggers. Every
+ *     write to it moves the watermark: a touch trigger
  *     stamps it, or each UPDATE and upsert in the source sets it, or writes only columns the table doesn't copy (a write
  *     that moves nothing reaches a standby only in a whole copy), or clears a column the standby clears itself when the
  *     named tombstone arrives (the importer is read for the clear).
@@ -94,7 +95,8 @@ interface ConfigKeyWrite { key: string; at: string }
  * Every node_config row key the .ts files under `roots` write, outside tests: each INSERT, REPLACE or UPDATE of
  * node_config, its key a literal in the SQL or the `?` its `.run(…)` fills. That argument is read through string
  * literals, a constant (declared once in its file, or imported and exported once anywhere), `a + b` and templates (a
- * part that can't be read leaves a prefix: `nodeProfile.*`), and `for (const k of LIST)` over a constant list.
+ * part that can't be read leaves a prefix: `nodeProfile.*`), and `for (const k of LIST)` over a constant list (one that
+ * spreads in another, `[...OTHER, 'k']`, read through it).
  * `unread`: each write whose key this can't read, so a new kind of write is looked at, never missed.
  */
 function nodeConfigKeysWritten(roots: string[], relativeTo: string): { writes: ConfigKeyWrite[]; unread: string[] } {
@@ -151,7 +153,8 @@ function nodeConfigKeysWritten(roots: string[], relativeTo: string): { writes: C
         if (ts.isArrayLiteralExpression(e)) {
             const out: string[] = [];
             for (const el of e.elements) {
-                const v = read(el, seen);
+                // `...LIST`: the strings LIST can be, read as any element is.
+                const v = read(ts.isSpreadElement(el) ? el.expression : el, seen);
                 if (!v) return null;
                 out.push(...v);
             }
@@ -296,8 +299,10 @@ async function main(): Promise<void> {
     console.log(`  ${tables.length} tables looked at`);
 
     console.log('\n— 3. watermarks and payload keys —');
-    const { exportSyncState } = await import('@beanpool/engine');
-    const payload = exportSyncState(db as any, 'manifest-test', null, 0) as unknown as Record<string, unknown>;
+    const { exportSyncState, setMemberPhoto, setGroupPicture } = await import('@beanpool/engine');
+    const { PLAIN_TABLES, PLAIN_TABLES_PAYLOAD, plainTableTriggers } = manifest;
+    // The export as a main server makes it, with the plain tables the manifest names (engine/sync.ts exportSyncState).
+    const payload = exportSyncState(db as any, 'manifest-test', null, 0, PLAIN_TABLES) as unknown as Record<string, unknown>;
     // A whole-set table is carried whole by a delta too: a row stamped long ago, planted here, in a delta from now. A
     // whole-set table with no row to plant fails, so the next one gets its check.
     const WHOLE_SET_ROW: Partial<Record<string, () => (x: any) => boolean>> = {
@@ -317,6 +322,13 @@ async function main(): Promise<void> {
                         VALUES ('manifest-or-watermark', 'k', 'e', 1, '2000-01-01T00:00:00.000Z', strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+1 minute'))`).run();
             return (x) => x?.id === 'manifest-or-watermark';
         },
+        // A re-key from long ago, attested now (line-display design §5): the statement does not move invalidated_at.
+        invalidated_keys: () => {
+            db.prepare(`INSERT INTO invalidated_keys (public_key, reason, invalidated_at, rekeyed_to, succession_sig, succession_at, succession_stored_at)
+                        VALUES ('manifest-or-watermark', 'rekeyed', '2000-01-01T00:00:00.000Z', ?, 's', '2000-01-01T00:00:00.000Z',
+                                strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+1 minute'))`).run('f'.repeat(64));
+            return (x) => x?.publicKey === 'manifest-or-watermark';
+        },
     };
     // A parent row carrying its rows (`inRowOf`): one planted, with one of the rows it carries.
     const IN_ROW_OF: Partial<Record<string, () => (x: any) => boolean>> = {
@@ -324,6 +336,16 @@ async function main(): Promise<void> {
             db.prepare(`INSERT INTO members (public_key, callsign) VALUES ('manifest-in-row', 'Manifest In Row')`).run();
             db.prepare(`INSERT INTO member_preferences (public_key, pref_key, pref_value) VALUES ('manifest-in-row', 'notify_chat', 'false')`).run();
             return (x) => x?.publicKey === 'manifest-in-row' && x?.preferences?.notify_chat === 'false';
+        },
+        member_photos: () => {
+            db.prepare(`INSERT INTO members (public_key, callsign) VALUES ('manifest-in-row-photo', 'Manifest Photo')`).run();
+            setMemberPhoto(db as any, 'manifest-in-row-photo', 'data:image/png;base64,iVBORw0KGgo=');
+            return (x) => x?.publicKey === 'manifest-in-row-photo' && x?.standing?.avatar_url === 'data:image/png;base64,iVBORw0KGgo=';
+        },
+        group_pictures: () => {
+            db.prepare(`INSERT INTO groups (id, name, slug, created_by) VALUES ('manifest-in-row-group', 'Manifest Group', 'manifest-in-row-group', 'manifest-in-row')`).run();
+            setGroupPicture(db as any, 'manifest-in-row-group', 'data:image/png;base64,iVBORw0KGgo=');
+            return (x) => x?.id === 'manifest-in-row-group' && x?.avatarUrl === 'data:image/png;base64,iVBORw0KGgo=';
         },
     };
     const deltaNow = () => exportSyncState(db as any, 'manifest-test', new Date().toISOString(), 0) as unknown as Record<string, unknown>;
@@ -353,12 +375,27 @@ async function main(): Promise<void> {
             assert(columnsOf(t).includes(entry.orWatermark) && !!isIt && carries(deltaNow(), entry.payload, isIt),
                 `${t}: a delta also finds a change by \`${entry.orWatermark}\`, a row stamped long ago by \`${entry.watermark}\` included${plant ? '' : ' (no row to plant for it here: add one)'}`);
         }
-        assert(Array.isArray(payload[entry.payload]), `${t}: travels as \`${entry.payload}\` in the sync payload`);
+        if (entry.plain) {
+            const carried = (payload[PLAIN_TABLES_PAYLOAD] ?? {}) as Record<string, unknown>;
+            assert(entry.payload === PLAIN_TABLES_PAYLOAD && Array.isArray(carried[t]), `${t}: travels as \`${PLAIN_TABLES_PAYLOAD}.${t}\` in the sync payload`);
+            const key = (db.prepare('SELECT name FROM pragma_table_info(?) WHERE pk > 0').all(t) as { name: string }[]).map((c) => c.name);
+            const { insert, touch } = plainTableTriggers({ table: t, watermark: entry.watermark, except: [] });
+            const made = (db.prepare(`SELECT name FROM sqlite_master WHERE type = 'trigger' AND name IN (?, ?)`).all(insert, touch) as { name: string }[]).length;
+            assert(key.length > 0 && made === 2 && entry.watermark !== WHOLE_SET,
+                `${t}: a plain table has a key the generic path matches its rows by (${key.join(', ') || 'none'}) and both triggers that stamp \`${entry.watermark}\` (${made} of 2)`);
+        } else {
+            assert(Array.isArray(payload[entry.payload]), `${t}: travels as \`${entry.payload}\` in the sync payload`);
+        }
     }
     db.prepare(`DELETE FROM accounts WHERE public_key = 'manifest-whole-set'`).run();
     db.prepare(`DELETE FROM treasury_operators WHERE treasury_pubkey = 'manifest-whole-set'`).run();
     db.prepare(`DELETE FROM enterprise_pledges WHERE id = 'manifest-or-watermark'`).run();
+    db.prepare(`DELETE FROM invalidated_keys WHERE public_key = 'manifest-or-watermark'`).run();
     db.prepare(`DELETE FROM member_preferences WHERE public_key = 'manifest-in-row'`).run();
+    db.prepare(`DELETE FROM member_photos WHERE public_key = 'manifest-in-row-photo'`).run();
+    db.prepare(`DELETE FROM group_pictures WHERE group_id = 'manifest-in-row-group'`).run();
+    db.prepare(`DELETE FROM groups WHERE id = 'manifest-in-row-group'`).run();
+    db.prepare(`DELETE FROM members WHERE public_key = 'manifest-in-row-photo'`).run();
     db.prepare(`DELETE FROM members WHERE public_key = 'manifest-in-row'`).run();
 
     // A delta finds a change only if the write moved the watermark. A touch trigger that stamps it moves it on every
@@ -377,9 +414,13 @@ async function main(): Promise<void> {
     const still: string[] = [];
     const notCopiedOnly: string[] = [];
     const tombstoneCleared: string[] = [];
+    const inParentRow = new Set<string>();
     for (const w of [...serverWrites, ...engineWrites]) {
         const entry = TABLES[w.table];
         if (!entry || (entry.kind !== 'replicated' && entry.kind !== 'replicated-except') || entry.watermark === WHOLE_SET) continue;
+        // Rows that travel in their parent's row (`inRowOf`) are found by the parent's watermark, which their writer moves:
+        // not seen here, so held to it by a write, below.
+        if (entry.inRowOf) { inParentRow.add(w.table); continue; }
         if (stamps(w.table, entry.watermark) || w.set.includes(entry.watermark) || (!!entry.orWatermark && w.set.includes(entry.orWatermark))) continue;
         const notCopied = entry.kind === 'replicated-except' ? entry.except : {};
         const cleared = entry.clearedByTombstone ?? {};
@@ -391,6 +432,49 @@ async function main(): Promise<void> {
         `every write to a copied table moves its watermark, or writes only columns it doesn't copy or a tombstone clears (moves nothing: ${list(still)})`);
     console.log(`  writes that move no watermark, of columns not copied: ${list(notCopiedOnly)}`);
     console.log(`  writes that move no watermark, of columns a tombstone clears: ${list(tombstoneCleared)}`);
+    // member_photos, written by its one writer (@beanpool/engine members.ts setMemberPhoto): every change moves the member's
+    // updated_at, a photo whose version and size stay the same included (here, the same bytes with the blanks moved). And
+    // group_pictures by its one writer (@beanpool/engine groups.ts setGroupPicture), the group's (#1486).
+    assert([...inParentRow].every((t) => t === 'member_photos' || t === 'group_pictures'),
+        `the only tables written in place that travel in their parent's row are member_photos and group_pictures, each held to it below (${list(inParentRow)})`);
+    {
+        const pk = 'manifest-photo-stamp';
+        const old = '2000-01-01T00:00:00.000Z';
+        const stampOf = () => (db.prepare('SELECT updated_at FROM members WHERE public_key = ?').get(pk) as { updated_at: string }).updated_at;
+        const reset = () => db.prepare('UPDATE members SET updated_at = ? WHERE public_key = ?').run(old, pk);
+        db.prepare(`INSERT INTO members (public_key, callsign, updated_at) VALUES (?, 'Manifest Stamp', ?)`).run(pk, old);
+        const moves: string[] = [];
+        for (const [label, value] of [['a first photo', ' data:image/png;base64,iVBORw0KGgo='], ['the same photo, its blanks moved (the same version and size)', 'data:image/png;base64,iVBORw0KGgo= '],
+            ['another photo', 'data:image/png;base64,iVBORw0KGgoAAAA='], ['no photo', null]] as const) {
+            reset();
+            setMemberPhoto(db as any, pk, value);
+            if (stampOf() === old) moves.push(label);
+        }
+        reset();
+        setMemberPhoto(db as any, pk, null);
+        assert(moves.length === 0 && stampOf() === old,
+            `member_photos: each change by its writer moves the member's updated_at, and setting what is held moves nothing (did not move: ${list(moves)})`);
+        db.prepare('DELETE FROM members WHERE public_key = ?').run(pk);
+    }
+    {
+        const id = 'manifest-picture-stamp';
+        const old = new Date(Date.now() - 365 * 24 * 3600_000).toISOString(); // a year before the run
+        const stampOf = () => (db.prepare('SELECT updated_at FROM groups WHERE id = ?').get(id) as { updated_at: string }).updated_at;
+        const reset = () => db.prepare('UPDATE groups SET updated_at = ? WHERE id = ?').run(old, id);
+        db.prepare(`INSERT INTO groups (id, name, slug, created_by, updated_at) VALUES (?, 'Manifest Stamp', ?, 'manifest-in-row', ?)`).run(id, id, old);
+        const moves: string[] = [];
+        for (const [label, value] of [['a first picture', ' data:image/png;base64,iVBORw0KGgo='], ['the same picture, its blanks moved (the same version and size)', 'data:image/png;base64,iVBORw0KGgo= '],
+            ['another picture', 'data:image/png;base64,iVBORw0KGgoAAAA='], ['no picture', null]] as const) {
+            reset();
+            setGroupPicture(db as any, id, value);
+            if (stampOf() === old) moves.push(label);
+        }
+        reset();
+        setGroupPicture(db as any, id, null);
+        assert(moves.length === 0 && stampOf() === old,
+            `group_pictures: each change by its writer moves the group's updated_at, and setting what is held moves nothing (did not move: ${list(moves)})`);
+        db.prepare('DELETE FROM groups WHERE id = ?').run(id);
+    }
     // The standby makes each such clear itself: the importer's case for that tombstone sets the column to NULL.
     const importerSource = fs.readFileSync(importer, 'utf-8');
     for (const [t, entry] of Object.entries(TABLES)) {
@@ -461,7 +545,14 @@ async function main(): Promise<void> {
     const notCovered = [...new Set(writes.filter((w) => !covered(w.key)).map((w) => `${w.key} (${w.at})`))];
     assert(keys.size > 20 && keys.has('appAddressStaffSeen') && keys.has('nodeProfile.*') && keys.has('ledger_audit_baseline') && notCovered.length === 0,
         `every node_config row key the server's code writes is classified in NODE_CONFIG_KEYS (${keys.size} keys; unclassified: ${list(notCovered)})`);
-    assert(unread.length === 0, `every write to node_config names its key where this check can read it (unread: ${list(unread)})`);
+    // The stager's carry-over of a standby's own keys into a whole copy's staging database (services/stager.ts): it writes
+    // only keys it read from the standby's two databases, each of which the code above wrote, and it refuses the copy
+    // outright when either holds a key no entry classifies (test-standby-paged-copies.ts step 12). No key is new there.
+    const COPIES_KEYS = ['apps/server/src/services/stager.ts:'];
+    const copying = unread.filter((u) => COPIES_KEYS.some((f) => u.startsWith(f)));
+    const unreadElsewhere = unread.filter((u) => !copying.includes(u));
+    assert(copying.length <= 2, `the stager copies node_config keys in at most two statements (${list(copying)})`);
+    assert(unreadElsewhere.length === 0, `every write to node_config names its key where this check can read it (unread: ${list(unreadElsewhere)})`);
 
     console.log(`\n${testsPassed}/${testsRun} checks passed.`);
     if (testsPassed !== testsRun) throw new Error(`${testsRun - testsPassed} check(s) failed`);

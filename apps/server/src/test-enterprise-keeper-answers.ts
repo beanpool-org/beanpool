@@ -27,9 +27,10 @@ import { createDecision, executeDecision, getDecision } from './decisions-engine
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
-const PORT = 8671;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const AFTER_WINDOW = () => Date.now() + KEEPER_CHANGE_OBJECTION_MS + 1000;
 
 let run = 0, passed = 0;
@@ -54,7 +55,8 @@ function giveEarnedCredit(pubkey: string, targetEarned: number) {
     while (vNeeded > 0) {
         const tradeAmount = Math.min(vNeeded, 400);
         const peerKey = `peer-${pubkey.slice(0, 8)}-${peerIndex++}`;
-        db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, avatar_url, joined_at, status) VALUES (?, ?, 'avatar', ?, 'active')`).run(peerKey, `Peer${peerIndex}`, new Date().toISOString());
+        db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, status) VALUES (?, ?, ?, 'active')`).run(peerKey, `Peer${peerIndex}`, new Date().toISOString());
+        setMemberPhoto(db, peerKey, 'avatar');
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(peerKey);
         const pid = `post-ec-${crypto.randomUUID()}`;
         db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, status) VALUES (?, 'offer', 'misc', 'goods', 'description', ?, ?, 'completed')`).run(pid, tradeAmount, peerKey);
@@ -69,9 +71,10 @@ function makeIdentity(callsign: string, earnedCredit = 0) {
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     const now = new Date().toISOString();
     db.prepare(`
-        INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, joined_at, status, can_operate, last_active_at)
-        VALUES (?, ?, 'data:image/png;base64,iVBORw0KGgo=', ?, 'active', 1, ?)
+        INSERT OR REPLACE INTO members (public_key, callsign, joined_at, status, can_operate, last_active_at)
+        VALUES (?, ?, ?, 'active', 1, ?)
     `).run(pubKeyHex, `${callsign}${++seq}`, now, now);
+    setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 1000, 0)`).run(pubKeyHex);
     if (earnedCredit > 0) giveEarnedCredit(pubKeyHex, earnedCredit);
     return { pubKeyHex, privateKey };
@@ -178,7 +181,7 @@ async function main() {
         assert(getAvailableBacking(app3.pubKeyHex) === 10, 'A: applicant pledged elsewhere during the window (10 left)');
         tickEnterpriseKeepers(AFTER_WINDOW());
         const c3 = getKeeperChanges(ent).find(c => c.id === res3.change!.id)!;
-        assert(c3.status === 'failed' && /exceeds available earned credit/.test(c3.reason || ''), 'A: an over-pledge at apply time fails the change');
+        assert(c3.status === 'failed' && /standing doesn't cover this pledge/.test(c3.reason || '') && !/\d/.test(c3.reason || ''), 'A: an over-pledge at apply time fails the change');
         assert(role(ent, app3.pubKeyHex) === null && activePledge(ent, app3.pubKeyHex) === 0, 'A: no binding and no pledge after a failed apply');
 
         // The lead who approved it is no longer lead when the window ends.
@@ -402,7 +405,8 @@ async function main() {
 
     // =====================================================================
     console.log('\n── HTTP: the routes the apps call ──');
-    startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
     await new Promise(r => setTimeout(r, 500));
     {
         const lead = makeIdentity('HLead', 20), k2 = makeIdentity('HK2', 20), k3 = makeIdentity('HK3', 20);
@@ -422,8 +426,10 @@ async function main() {
         const hadd = approveKeeperRequest(requestToJoinEnterprise(ent, happ.pubKeyHex, 3).id, lead.pubKeyHex);
         const anonRes = await fetch(`${BASE}/api/enterprise/${ent}`);
         const anon = await anonRes.json() as any;
-        assert(anonRes.status === 200 && anon.publicKey === ent, 'HTTP: fixture — the enterprise detail is public-read');
-        assert(Array.isArray(anon.keeperChanges) && anon.keeperChanges.length === 0, 'HTTP: an anonymous reader gets no keeper changes');
+        // The enterprise detail is members' on every node (2026-10-01): an anonymous reader is refused it whole.
+        assert(anonRes.status === 401 && anon.code === 'members_only' && !JSON.stringify(anon).includes(ent),
+            'HTTP: an anonymous reader is refused the enterprise detail (members only)');
+        assert(!('keeperChanges' in anon), 'HTTP: an anonymous reader gets no keeper changes');
         const outsider = makeIdentity('HOutsider', 5);
         const out = await signedFetch('GET', `/api/enterprise/${ent}`, outsider);
         assert(out.status === 200 && Array.isArray(out.body?.keeperChanges) && out.body.keeperChanges.length === 0,

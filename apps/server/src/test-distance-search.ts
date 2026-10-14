@@ -46,6 +46,8 @@ import { db } from './db/db.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
+import { localFetch } from './keepalive-test-fetch.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -95,8 +97,9 @@ function newId(name: string): Id {
 let owner: Id;
 function member(name: string): Id {
     const id = newId(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
-                VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`).run(id.pk, name, new Date(Date.now() - 60 * 86_400_000).toISOString(), owner.pk);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, new Date(Date.now() - 60 * 86_400_000).toISOString(), owner.pk);
+    setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
@@ -115,7 +118,7 @@ async function call(method: 'GET' | 'POST', id: Id | null, urlPath: string, body
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    const res = await fetch(`${BASE}${urlPath}`, { method, headers, body: method === 'GET' ? undefined : raw });
+    const res = await localFetch(`${BASE}${urlPath}`, { method, headers, body: method === 'GET' ? undefined : raw });
     const text = await res.text();
     let parsed: any = text;
     try { parsed = JSON.parse(text); } catch { /* empty (304) */ }
@@ -499,7 +502,7 @@ async function main(): Promise<void> {
     console.log('\n── 11. a standby keeps the area, and nothing else carries it ──');
     await setArea(ann, { lat: preciseLat, lng: preciseLng });
     const annAt = areaOf(ann)?.area_updated_at;
-    const p2p = await startP2P(4292, 4293);
+    const p2p = await startP2P(0, 0);
     const nodeId = p2p.peerId.toString();
     addConnector(`/ip4/127.0.0.1/tcp/4293/p2p/${nodeId}`, 'mirror', 'self-test-peer');
     const payload: any = await exportSyncState(nodeId);
@@ -526,9 +529,10 @@ async function main(): Promise<void> {
 
     const leaks: string[] = [];
     for (const [who, route] of [
-        [bea, `/api/profile/${ann.pk}`], [null, `/api/community/membership/${ann.pk}`], [bea, '/api/community/members'],
+        // The membership probe answers only the key it asks about (multi-community review F3): its one answer with content.
+        [bea, `/api/profile/${ann.pk}`], [ann, `/api/community/membership/${ann.pk}`], [bea, '/api/community/members'],
         [bea, '/api/members'], [null, '/api/community/info'], [null, '/api/node/info'], [null, '/api/directory/info'],
-        [null, '/api/enterprises/map'], [bea, '/api/activity/feed'], [bea, '/api/invite/tree'], [bea, '/api/community/me'],
+        [bea, '/api/enterprises/map'], [bea, '/api/activity/feed'], [bea, '/api/invite/tree'], [bea, '/api/community/me'],
     ] as Array<[Id | null, string]>) {
         const r = await call('GET', who, route);
         if (r.status !== 200) leaks.push(`${route} answered ${r.status}`);

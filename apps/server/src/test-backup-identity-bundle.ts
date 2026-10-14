@@ -3,7 +3,9 @@
  *
  * Sealed keys slice 3 (sealed-keys.md §6.1). Until slice 0 this suite asserted the replication token got the plain
  * identity bundle (that encoded the leak); slice 0 made it owner/admin only; slice 3 deletes the route: the node
- * keys now travel only inside the sealed backup. Over real HTTP, for every credential the node accepts —
+ * keys now travel only inside the sealed backup. Until 2026-10-01 it also asserted the replication token and an
+ * admin's key session got /backup (that encoded two more: Fable's backups and replication reviews); a backup is now
+ * an owner's. Over real HTTP, for every credential the node accepts —
  * none, a wrong token, the replication token, the admin password, password + 2FA code, an owner's key session and
  * an admin's key session:
  *
@@ -36,7 +38,7 @@ import { initStateEngine, seedGenesisMember, grantNodeRole } from './state-engin
 import { db } from './db/db.js';
 import { ensureGenesis } from './genesis.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
-import { generateTotpSecret, generateTotpCode } from './totp.js';
+import { generateTotpSecret, generateTotpCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { createBackupRoutes } from './routes/backup.js';
 import { createTakeoverEnvelopeRoutes } from './routes/takeover-envelope.js';
 import { startP2P } from './p2p.js';
@@ -100,6 +102,7 @@ async function runSuite() {
 
     async function hit(method: string, route: string, headers: Record<string, string>) {
         resetAdminAuthTarpit();
+        forgetUsedTotpCodesForTests(); // A code is accepted once (totp.ts useTotpCode, test-storm-smalls); this suite signs in more than once a step.
         const res = await fetch(base + route, { method, headers });
         const body = Buffer.from(await res.arrayBuffer());
         return { status: res.status, body, type: res.headers.get('content-type') || '', headers: res.headers };
@@ -122,8 +125,21 @@ async function runSuite() {
         finally { fs.rmSync(f, { force: true }); }
     };
     const readableNoCode = async (stage: string) => {
-        for (const [who, headers] of [['token', { 'x-replication-token': repToken }], ['admin password', { 'x-admin-password': testPass }]] as const) {
-            const r = await hit('POST', '/api/local/admin/backup', headers);
+        // The replication token used to get this readable file too: the whole database, the tunnel token in it, and
+        // the admin hash and 2FA secret in node_config.json (Fable's replication review HIGH-1, 2026-10-01). This
+        // suite asserted it did. Now the token is refused here, and only an owner gets the backup.
+        const byToken = await hit('POST', '/api/local/admin/backup', { 'x-replication-token': repToken });
+        assert(byToken.status === 401 && !isGzip(byToken.body) && !byToken.body.includes(Buffer.from('SQLite format 3')),
+            `4. ${stage}: /backup under the replication token alone is refused, and carries nothing (got ${byToken.status})`);
+        // Step 7c: with the node's 2FA off the admin password alone is refused; the owner's password goes with a code.
+        const alone = await hit('POST', '/api/local/admin/backup', { 'x-admin-password': testPass });
+        assert(alone.status === 403 && JSON.parse(alone.body.toString() || '{}').code === 'password_needs_2fa' && !isGzip(alone.body),
+            `4. ${stage}: /backup under the admin password alone, 2FA off, is refused (password_needs_2fa) (got ${alone.status})`);
+        const stageSecret = generateTotpSecret();
+        updateLocalConfig({ totpEnabled: true, totpSecret: stageSecret });
+        const pwAndCode = () => ({ 'x-admin-password': testPass, 'x-admin-totp': generateTotpCode(stageSecret) });
+        for (const [who, headers] of [['admin password and a 2FA code', pwAndCode]] as const) {
+            const r = await hit('POST', '/api/local/admin/backup', headers());
             assert(r.status === 200 && isGzip(r.body) && r.type === 'application/gzip',
                 `4. ${stage}: /backup under the ${who} is the readable tar.gz, as before (got ${r.status}, ${r.type})`);
             assert(r.headers.get('x-backup-locked') === 'no' && r.headers.get('x-backup-not-locked') === NOT_LOCKED,
@@ -138,7 +154,7 @@ async function runSuite() {
         // restores an empty gallery without saying a word. Unlocked, the snapshot now leaves as the same
         // readable tar.gz /backup sends — state.db, node_config.json and the objects that database
         // references — and is still flagged not locked, which is what this check is here to hold.
-        const sd = await hit('GET', `/api/local/admin/snapshots/download?name=${encodeURIComponent(snap.name)}`, { 'x-admin-password': testPass });
+        const sd = await hit('GET', `/api/local/admin/snapshots/download?name=${encodeURIComponent(snap.name)}`, pwAndCode());
         assert(sd.status === 200 && isGzip(sd.body) && sd.headers.get('x-backup-locked') === 'no',
             `4. ${stage}: the snapshot download is a readable archive, flagged not locked (got ${sd.status})`);
         assert(sd.headers.get('x-backup-contents') === 'database+images',
@@ -146,10 +162,12 @@ async function runSuite() {
         const sdMembers = tarMembers(sd.body).sort();
         assert(sdMembers.includes('state.db'),
             `4. ${stage}: …with the snapshot inside it as state.db (${sdMembers.join(', ')})`);
-        const st = await fetch(base + '/api/local/admin/backup-status', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-password': testPass }, body: '{}' });
+        forgetUsedTotpCodesForTests();
+        const st = await fetch(base + '/api/local/admin/backup-status', { method: 'POST', headers: { 'Content-Type': 'application/json', ...pwAndCode() }, body: '{}' });
         const sj: any = await st.json();
         assert(sj.backupLock?.locked === false && sj.backupLock?.message === NOT_LOCKED && sj.backupLock?.reason === 'no-recovery-code',
             `4. ${stage}: backup-status says backups are not locked, and why (${JSON.stringify(sj.backupLock)})`);
+        updateLocalConfig({ totpEnabled: false, totpSecret: null });
     };
     resetAdminAuthTarpit();
     await readableNoCode('no owner, no code');
@@ -162,7 +180,10 @@ async function runSuite() {
     // An owner and still no code: nothing that ships could open a file locked to the owner alone, so still readable.
     await readableNoCode('an owner, no code');
     await makeRecoveryCode();
-    const locked = await hit('POST', '/api/local/admin/backup', { 'x-admin-password': testPass });
+    const lockedSecret = generateTotpSecret();
+    updateLocalConfig({ totpEnabled: true, totpSecret: lockedSecret });
+    const locked = await hit('POST', '/api/local/admin/backup', { 'x-admin-password': testPass, 'x-admin-totp': generateTotpCode(lockedSecret) });
+    updateLocalConfig({ totpEnabled: false, totpSecret: null });
     assert(locked.status === 200 && locked.headers.get('x-backup-locked') === 'yes' && !locked.headers.get('x-backup-not-locked'),
         '4. with a recovery code: /backup is flagged X-Backup-Locked: yes');
 
@@ -171,7 +192,7 @@ async function runSuite() {
         const chal = createAdminChallenge();
         const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
         const solved = verifyAndSolveChallenge({
-            challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature, totpCode: generateTotpCode(totpSecret),
+            challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature,
         });
         if (!solved.ok) throw new Error('key sign-in failed: ' + solved.error);
         const ex = consumeHandshakeToken(solved.handshakeToken!);
@@ -179,16 +200,21 @@ async function runSuite() {
         return ex.sessionId!;
     };
 
-    // Every credential. 2FA is switched on for the rows that need it and off again after.
-    const credentials: { name: string; headers: () => Record<string, string>; tfa?: boolean; accepted: boolean }[] = [
+    // Every credential. 2FA is switched on for the rows that need it and off again after. `accepted`: a backup is an
+    // owner's (the password is owner level). The replication token and an admin's key session were accepted here until
+    // 2026-10-01 (Fable's backups review, HIGH; replication review HIGH-1), and this suite asserted they were.
+    // The admin password alone with 2FA off (and with the replication token beside it) was accepted until step 7c, and
+    // this suite asserted it was; it is refused now, as password_needs_2fa (`needs2fa`). With a code it is accepted.
+    const credentials: { name: string; headers: () => Record<string, string>; tfa?: boolean; accepted: boolean; needs2fa?: boolean }[] = [
         { name: 'no credential', headers: () => ({}), accepted: false },
         { name: 'a wrong token', headers: () => ({ 'x-replication-token': 'not-the-token' }), accepted: false },
-        { name: 'the replication token', headers: () => ({ 'x-replication-token': repToken }), accepted: true },
-        { name: 'the admin password', headers: () => ({ 'x-admin-password': testPass }), accepted: true },
+        { name: 'the replication token', headers: () => ({ 'x-replication-token': repToken }), accepted: false },
+        { name: 'the admin password alone, 2FA off', headers: () => ({ 'x-admin-password': testPass }), accepted: false, needs2fa: true },
         { name: 'password + 2FA code', headers: () => ({ 'x-admin-password': testPass, 'x-admin-totp': generateTotpCode(totpSecret) }), tfa: true, accepted: true },
         { name: "an owner's key session", headers: () => ({ 'x-admin-session': keySession(owner) }), tfa: true, accepted: true },
-        { name: "an admin's key session", headers: () => ({ 'x-admin-session': keySession(admin) }), tfa: true, accepted: true },
-        { name: 'token + admin password', headers: () => ({ 'x-replication-token': repToken, 'x-admin-password': testPass }), accepted: true },
+        { name: "an admin's key session", headers: () => ({ 'x-admin-session': keySession(admin) }), tfa: true, accepted: false },
+        { name: 'token + admin password, 2FA off', headers: () => ({ 'x-replication-token': repToken, 'x-admin-password': testPass }), accepted: false, needs2fa: true },
+        { name: 'token + admin password + 2FA code', headers: () => ({ 'x-replication-token': repToken, 'x-admin-password': testPass, 'x-admin-totp': generateTotpCode(totpSecret) }), tfa: true, accepted: true },
     ];
 
     for (const cred of credentials) {
@@ -203,11 +229,16 @@ async function runSuite() {
         if (bk.status === 200) {
             assert(bk.type === 'application/octet-stream' && readSealedHeader(new Uint8Array(bk.body)).kind === 'backup', `2. /backup under ${cred.name}: a sealed backup`);
         }
-        const tokenCanBackup = cred.name.includes('token') && !cred.name.includes('wrong');
-        assert((bk.status === 200) === (cred.accepted || tokenCanBackup), `2. /backup under ${cred.name}: ${cred.accepted ? 'accepted' : 'refused'} (got ${bk.status})`);
+        assert((bk.status === 200) === cred.accepted, `2. /backup under ${cred.name}: ${cred.accepted ? 'accepted' : 'refused'} (got ${bk.status})`);
+        if (cred.needs2fa) {
+            let code: unknown = null;
+            try { code = JSON.parse(bk.body.toString()).code; } catch { /* not JSON */ }
+            assert(bk.status === 403 && code === 'password_needs_2fa', `2. /backup under ${cred.name}: refused as password_needs_2fa (got ${bk.status} ${code})`);
+        }
 
         const sd = await hit('GET', `/api/local/admin/snapshots/download?name=${encodeURIComponent(snap.name)}`, h());
         assert(!isGzip(sd.body), `2. snapshot download under ${cred.name}: no gzip magic (status ${sd.status})`);
+        assert((sd.status === 200) === cred.accepted, `2. snapshot download under ${cred.name}: ${cred.accepted ? 'accepted' : 'refused'} (got ${sd.status})`);
         if (sd.status === 200) {
             assert(readSealedHeader(new Uint8Array(sd.body)).kind === 'backup' && !sd.body.includes(Buffer.from('SQLite format 3')),
                 `2. snapshot download under ${cred.name}: sealed, no SQLite file in the clear`);

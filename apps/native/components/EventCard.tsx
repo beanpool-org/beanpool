@@ -13,6 +13,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ActivityIndicator, Alert } from 'react-native';
 import { Image } from 'expo-image';
+import { listPhotoUrl } from '@beanpool/core';
 import { router } from 'expo-router';
 import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext';
 import { rsvpEvent } from '../utils/db';
@@ -129,14 +130,14 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
         >
             {/*
               * The host's photo, the same size, crop and cache policy the offer card beside it uses in the list
-              * (index.tsx list view): a 96dp square on the left, with the lines beside it. It sits inside the
+              * (market.tsx list view): a 96dp square on the left, with the lines beside it. It sits inside the
               * card's own Pressable and has no onPress of its own, so it never becomes a second tap target.
               * Without a photo the card is exactly the stack it has always been.
               */}
             <View style={photo ? styles.photoRow : undefined}>
                 {photo && (
                     <Image
-                        source={{ uri: photo }}
+                        source={{ uri: listPhotoUrl(photo) }}
                         style={styles.photo}
                         accessibilityLabel={post.title}
                         contentFit="cover"

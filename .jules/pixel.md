@@ -146,3 +146,47 @@ Format: `## YYYY-MM-DD - [Title]\n**Learning:** [UX/a11y insight specific to thi
 ## 2026-10-02 - Add dynamic accessibilityLabel and busy state to profile setup submit button
 **Learning:** In profile setup completion, replacing text with an ActivityIndicator during save leaves the button unlabelled to screen readers unless provided with dynamic accessibilityLabel and accessibilityState={{ disabled: loading, busy: loading }}.
 **Action:** Supply dynamic accessibilityLabel (e.g. `loading ? "Saving profile..." : "Done"`) and accessibilityState={{ disabled: loading, busy: loading }} on profile completion buttons that conditionally render ActivityIndicator.
+
+## 2026-10-18 - Add dynamic accessibilityLabel, hint, and busy state to WantsToJoin action buttons
+**Learning:** In list items with asynchronous actions (such as join request approval/rejection), action buttons that become disabled when busy need explicit `accessibilityState={{ disabled: !!busy, busy: busy === req.id }}` and dynamic `accessibilityLabel` attributes so screen readers announce both the loading status and the member context.
+**Action:** Always provide dynamic `accessibilityLabel` (`busy === req.id ? ... : ...`), `accessibilityHint`, and `accessibilityState={{ disabled: !!busy, busy: busy === req.id }}` on async action buttons in list cards.
+
+## 2026-10-24 - Add dynamic accessibilityLabel to computer sign-in submit button
+**Learning:** Action buttons in modal flows whose text child is replaced by an `ActivityIndicator` during asynchronous actions leave screen readers without accessible text during loading states unless an explicit dynamic `accessibilityLabel` is assigned.
+**Action:** Always provide dynamic `accessibilityLabel` (`busy ? "Signing computer in..." : "Sign in"`) on action buttons that render `ActivityIndicator` in place of text when busy.
+
+## 2026-11-02 - Add dynamic accessibilityLabel and hint to InvitePeopleSheet submit button
+**Learning:** In invite sheets, action buttons whose text is replaced by an `ActivityIndicator` while sending leave screen readers without accessible text during async operations unless dynamic `accessibilityLabel` and `accessibilityHint` attributes are provided.
+**Action:** Provide dynamic `accessibilityLabel` and `accessibilityHint` on invite submit buttons rendering `ActivityIndicator` when busy.
+
+## 2026-11-08 - Add dynamic accessibilityLabel and hint to AddWordsForm submit button
+**Learning:** Recovery phrase submit buttons whose child text is replaced by an `ActivityIndicator` during verification leave screen readers without explicit accessible labels unless dynamic `accessibilityLabel` and `accessibilityHint` attributes are provided on the parent `Pressable`.
+**Action:** Always supply dynamic `accessibilityLabel` (`busy ? ADD_WORDS_COPY.checking : ADD_WORDS_COPY.submit`) and `accessibilityHint` on recovery phrase submit buttons rendering `ActivityIndicator` when busy.
+
+## 2026-11-15 - Add accessibilityHint to event submit button in NewEventModal
+**Learning:** Form action buttons that perform distinct actions depending on modal state (create, edit, or copy) benefit from dynamic `accessibilityHint` attributes to clarify the result of activating the button for screen reader users.
+**Action:** Provide explicit dynamic `accessibilityHint` attributes on action buttons that handle multiple modes (`editOf`, `isCopy`, etc.).
+
+## 2026-11-22 - Add accessibilityHint to group invite landing action button
+**Learning:** In group invite landing screens, primary action buttons whose function changes based on viewer join status (joining or opening chat) benefit from dynamic `accessibilityHint` attributes so screen reader users know the exact outcome of tapping the button.
+**Action:** Supply dynamic `accessibilityHint` attributes on group invite primary action buttons.
+
+## 2026-11-28 - Add dynamic accessibilityLabel to ReviewModal submit button
+**Learning:** Action buttons in rating or review flows whose text child is replaced by an `ActivityIndicator` during submission leave screen readers without explicit loading state feedback unless provided with a dynamic `accessibilityLabel` that reflects the in-progress state.
+**Action:** Provide dynamic `accessibilityLabel` (`submitting ? (isExisting ? 'Updating rating...' : 'Submitting rating...') : (isExisting ? 'Update Rating' : 'Submit Rating')`) on review submit buttons rendering `ActivityIndicator` when submitting.
+
+## 2026-12-05 - Add dynamic accessibilityLabel and busy state to welcome flow action buttons
+**Learning:** Action buttons in welcome and onboarding flows whose text child is conditionally replaced by an `ActivityIndicator` during loading leave screen readers without accessible text during async operations unless dynamic `accessibilityLabel` and `accessibilityState={{ disabled: loading, busy: loading }}` attributes are provided.
+**Action:** Supply dynamic `accessibilityLabel` and `accessibilityState={{ disabled: loading, busy: loading }}` on primary action buttons that conditionally render an `ActivityIndicator` in place of text when loading.
+
+## 2026-12-12 - Add dynamic accessibilityLabel and hint to propose vote submit buttons in EnterpriseDecisions
+**Learning:** Decision proposal submit buttons whose child text is replaced by an `ActivityIndicator` during creation leave screen reader users without accessible text feedback when submitting unless explicit dynamic `accessibilityLabel` and `accessibilityHint` attributes are supplied.
+**Action:** Provide dynamic `accessibilityLabel` (`busy ? "Opening the vote..." : "Open the vote"`) and `accessibilityHint="Opens a new decision vote"` on decision submit buttons rendering `ActivityIndicator` when busy.
+
+## 2026-12-19 - Add dynamic accessibilityLabel, hint, and busy state to re-key code submit button
+**Learning:** Primary submit buttons in re-key and re-enrollment flows whose child text is replaced by an `ActivityIndicator` during request verification leave screen reader users without accessible text feedback when submitting unless explicit dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled, busy }}` attributes are supplied.
+**Action:** Always supply dynamic `accessibilityLabel`, `accessibilityHint`, and `accessibilityState={{ disabled: busy, busy }}` on re-enrollment submit buttons rendering `ActivityIndicator` when submitting.
+
+## 2026-12-26 - Add dynamic accessibilityLabel to event reminder save button
+**Learning:** Event reminder save buttons whose text child is conditionally replaced by an `ActivityIndicator` during saving leave screen readers without explicit text feedback during loading unless dynamic `accessibilityLabel` and `accessibilityState={{ busy: saving, disabled: saving }}` are provided.
+**Action:** Always supply dynamic `accessibilityLabel` (`saving ? "Saving reminder for this event..." : "Save for this event"`) and `accessibilityState={{ busy: saving, disabled: saving }}` on save buttons rendering `ActivityIndicator` when saving.

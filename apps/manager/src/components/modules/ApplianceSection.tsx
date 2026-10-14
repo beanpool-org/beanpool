@@ -30,12 +30,19 @@ import { TakeoverPanel } from './TakeoverPanel';
 import { TakeoverLockPanel } from './TakeoverLockPanel';
 import type { RolesViewer } from './NodeRolesPanel';
 import { OwnerWordsChecksPanel } from './OwnerWordsChecksPanel';
+import { AutomationTokensPanel } from './AutomationTokensPanel';
+import { ConnectedAssistantsPanel } from './ConnectedAssistantsPanel';
+import { RetirePasswordPanel } from './RetirePasswordPanel';
 import { RestoreLockedBackup, type LockedBackupInfo } from './RestoreLockedBackup';
+import { OffboxBackupsPanel } from './OffboxBackupsPanel';
+import { AlertsPanel } from './AlertsPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import { LogsModule, type LogEntry } from './LogsModule';
 import { GatewayModule } from './GatewayModule';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { StrandedEscrowsPanel } from './StrandedEscrowsPanel';
+import { nodeCredential } from '../../lib/profiles';
+import { passwordField } from '../../lib/node-client';
 
 interface ApplianceSectionProps {
     activeNode: NodeProfile;
@@ -51,7 +58,7 @@ interface ApplianceSectionProps {
     onRefreshLogs: () => void;
     onDownloadBackup: () => Promise<void>;
     onRunLedgerAudit: () => Promise<void>;
-    auditState: { running: boolean; result: { ok: boolean; drift: number; sumBalances?: number; baseline?: number; strandedEscrows?: number } | null };
+    auditState: { running: boolean; result: { ok: boolean; drift: number | null; sumBalances?: number | null; baseline?: number; strandedEscrows?: number } | null };
     initialSubTab?: 'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access';
     /** Told when the owner picks a sub-tab, so Back and the phone top bar follow it. */
     onSubTabChange?: (sub: 'diagnostics' | 'backups' | 'gateway' | 'network' | 'identity' | 'access') => void;
@@ -90,8 +97,8 @@ export function ApplianceSection({
                 const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/backup-status');
                 const res = await fetch(url, {
                     method: 'POST',
-                    headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                    body: JSON.stringify({ password: activeNode.adminPassword }),
+                    headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
                 }).catch(() => null);
                 if (res && res.ok) {
                     const data = await res.json().catch(() => ({}));
@@ -105,7 +112,7 @@ export function ApplianceSection({
         }
         fetchBackupRole();
         return () => { active = false; };
-    }, [activeNode.id, activeNode.url, activeNode.adminPassword]);
+    }, [activeNode.id, activeNode.url, nodeCredential(activeNode)]);
 
     const isStandby = propIsStandby !== undefined
         ? propIsStandby
@@ -122,11 +129,11 @@ export function ApplianceSection({
     const [lockedRestore, setLockedRestore] = useState<{ file: File; backup: LockedBackupInfo; canUseCode: boolean; canUsePhone: boolean } | null>(null);
 
     // Backup Schedule state
-    const [scheduleConfig, setScheduleConfig] = useState<SnapshotScheduleConfig>({
-        enabled: true,
-        intervalHours: 24,
-        keep: 7,
-    });
+    const [scheduleConfig, setScheduleConfig] = useState<SnapshotScheduleConfig | null>(null);
+    // False until the node has said its schedule: the form is hidden until then, so made-up values are never shown or saved.
+    const [scheduleKnown, setScheduleKnown] = useState(false);
+    // True once a read of the schedule has failed; until then an unknown schedule is still being read.
+    const [scheduleReadFailed, setScheduleReadFailed] = useState(false);
     const [savingSchedule, setSavingSchedule] = useState(false);
     const [scheduleStatusMsg, setScheduleStatusMsg] = useState<string | null>(null);
 
@@ -144,11 +151,20 @@ export function ApplianceSection({
     const [changingPwd, setChangingPwd] = useState(false);
 
     // 2FA state
-    const [tfaStatus, setTfaStatus] = useState<{ enabled: boolean; qrDataUrl?: string; secret?: string } | null>(null);
+    // passwordRetired: the server says so (2FA status, since the 2FA routes refuse on a retired server); absent from older ones.
+    const [tfaStatus, setTfaStatus] = useState<{ enabled: boolean; qrDataUrl?: string; secret?: string; backupCodesRemaining?: number; passwordRetired?: boolean } | null>(null);
     const [totpVerifyCode, setTotpVerifyCode] = useState('');
     // Turning 2FA off asks for a code from the authenticator (or a backup code) right now: the node refuses it on
     // the strength of an earlier sign-in alone.
     const [totpDisableCode, setTotpDisableCode] = useState('');
+    // Codes shown once (break-glass, 2FA backup): held in this component's state only, never stored, gone on Done.
+    const [breakGlassOwnerKey, setBreakGlassOwnerKey] = useState('');
+    const [breakGlassShown, setBreakGlassShown] = useState<string | null>(null);
+    const [breakGlassMessage, setBreakGlassMessage] = useState('');
+    const [backupCodesTotp, setBackupCodesTotp] = useState('');
+    const [backupCodesShown, setBackupCodesShown] = useState<string[] | null>(null);
+    const [backupCodesMessage, setBackupCodesMessage] = useState('');
+    const isOwnerViewer = rolesViewer.kind === 'password' || rolesViewer.role === 'owner';
     const [tfaMessage, setTfaMessage] = useState<string | null>(null);
 
     // Update check state
@@ -183,7 +199,7 @@ export function ApplianceSection({
         try {
             const res = await fetchDiskHealth(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             if (res?.diskHealth) {
@@ -201,7 +217,7 @@ export function ApplianceSection({
         try {
             const res = await fetchStorageCleanPreview(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             setCleanPreview(res.preview);
@@ -218,7 +234,7 @@ export function ApplianceSection({
         try {
             const res = await cleanStorageAndCompressLogs(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             setCleanResult(res);
@@ -236,7 +252,7 @@ export function ApplianceSection({
         try {
             const list = await fetchNodeSnapshots(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             setSnapshots(Array.isArray(list) ? list : []);
@@ -251,12 +267,17 @@ export function ApplianceSection({
         try {
             const cfg = await fetchNodeSnapshotSchedule(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
-            if (cfg) setScheduleConfig(cfg);
-        } catch {
-            // Keep default
+            setScheduleConfig(cfg);
+            setScheduleKnown(true);
+            setScheduleReadFailed(false);
+        } catch (e: unknown) {
+            setScheduleKnown(false);
+            setScheduleConfig(null);
+            setScheduleReadFailed(true);
+            setScheduleStatusMsg(`Couldn't read this node's backup schedule, so it is shown as unknown: ${e instanceof Error ? e.message : String(e)}`);
         }
     };
 
@@ -264,7 +285,7 @@ export function ApplianceSection({
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/status');
             const res = await fetch(url, {
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
             });
             if (res.ok) {
                 const data = await res.json();
@@ -281,6 +302,9 @@ export function ApplianceSection({
     };
 
     useEffect(() => {
+        setScheduleKnown(false);
+        setScheduleConfig(null);
+        setScheduleReadFailed(false);
         loadSnapshots();
         loadScheduleConfig();
         load2faStatus();
@@ -292,7 +316,7 @@ export function ApplianceSection({
         try {
             await createNodeSnapshot(
                 activeNode.url,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             await loadSnapshots();
@@ -309,7 +333,7 @@ export function ApplianceSection({
             await deleteNodeSnapshot(
                 activeNode.url,
                 name,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             await loadSnapshots();
@@ -320,16 +344,18 @@ export function ApplianceSection({
 
     const handleSaveSchedule = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!scheduleKnown || !scheduleConfig) return;
         setSavingSchedule(true);
         setScheduleStatusMsg(null);
         try {
             const updated = await updateNodeSnapshotSchedule(
                 activeNode.url,
                 scheduleConfig,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             setScheduleConfig(updated);
+            setScheduleKnown(true);
             setScheduleStatusMsg('Backup schedule updated successfully.');
         } catch (e: unknown) {
             setScheduleStatusMsg(e instanceof Error ? e.message : 'Failed to update schedule');
@@ -347,7 +373,7 @@ export function ApplianceSection({
             const res = await verifyNodeBackup(
                 activeNode.url,
                 snapshotName,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             setVerifyResult(res);
@@ -367,7 +393,7 @@ export function ApplianceSection({
         setRestoreStatus(null);
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/restore');
-            const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            const headers = buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
             delete headers['Content-Type'];
 
             const res = await fetch(url, {
@@ -419,18 +445,18 @@ export function ApplianceSection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/change-password');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({
-                    currentPassword: currentPassword || activeNode.adminPassword,
+                    currentPassword: currentPassword || nodeCredential(activeNode),
                     newPassword,
                 }),
             });
             if (res.ok) {
-                setPwdStatus({ text: 'Password updated successfully! Please re-login with the new password.', isError: false });
+                // This sign-in carries on; every other one made with the old password has ended (the node's doing).
+                setPwdStatus({ text: 'Password updated successfully! Other sign-ins with the old password have ended.', isError: false });
                 setCurrentPassword('');
                 setNewPassword('');
                 setConfirmPassword('');
-                sessionStorage.setItem('bp-admin-token', newPassword);
             } else {
                 const err = await res.json().catch(() => ({}));
                 setPwdStatus({ text: err.error || 'Failed to change password', isError: true });
@@ -449,8 +475,8 @@ export function ApplianceSection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/admin/check-update');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ password: activeNode.adminPassword }),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
             });
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
@@ -479,7 +505,7 @@ export function ApplianceSection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/setup');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
             });
             if (res.ok) {
                 const data = await res.json();
@@ -497,7 +523,7 @@ export function ApplianceSection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/verify');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({ totpCode: totpVerifyCode.trim() }),
             });
             const data = await res.json().catch(() => ({}));
@@ -505,11 +531,7 @@ export function ApplianceSection({
                 setTfaMessage('2FA successfully enabled!');
                 setTotpVerifyCode('');
                 const token = data.tfaSessionToken || data.sessionToken;
-                if (token) {
-                    setTfaSessionToken(activeNode.id, token);
-                    sessionStorage.setItem('bp_tfa_session_local-node', token);
-                    sessionStorage.setItem('bp-2fa-session', token);
-                }
+                if (token) setTfaSessionToken(activeNode.id, token);
                 await load2faStatus();
             } else {
                 alert(data.error || 'Invalid 2FA code. Please try again.');
@@ -530,15 +552,13 @@ export function ApplianceSection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/disable');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({ code }),
             });
             if (res.ok) {
                 setTfaMessage('2FA disabled.');
                 setTotpDisableCode('');
                 setTfaSessionToken(activeNode.id, undefined);
-                sessionStorage.removeItem('bp_tfa_session_local-node');
-                sessionStorage.removeItem('bp-2fa-session');
                 await load2faStatus();
             } else {
                 const err = await res.json().catch(() => ({}));
@@ -549,6 +569,60 @@ export function ApplianceSection({
         }
     };
 
+    // A key session makes a code for its own key; the password names the owner (the node refuses a key without the role).
+    const handleIssueBreakGlass = async () => {
+        setBreakGlassMessage('');
+        const memberPubkey = breakGlassOwnerKey.trim();
+        if (rolesViewer.kind === 'password' && !memberPubkey) {
+            setBreakGlassMessage("Paste the owner's member key the code is for.");
+            return;
+        }
+        try {
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/auth/break-glass/issue');
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                body: JSON.stringify(rolesViewer.kind === 'password' ? { memberPubkey } : {}),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.breakGlassCode) {
+                setBreakGlassShown(data.breakGlassCode);
+                setBreakGlassOwnerKey('');
+            } else {
+                setBreakGlassMessage(`No code was made: ${data.error || `HTTP ${res.status}`}`);
+            }
+        } catch (e: unknown) {
+            setBreakGlassMessage(e instanceof Error ? e.message : String(e));
+        }
+    };
+
+    const handleShowBackupCodes = async () => {
+        setBackupCodesMessage('');
+        const code = backupCodesTotp.trim();
+        if (!/^\d{6}$/.test(code)) {
+            setBackupCodesMessage('Enter the 6-digit code your authenticator app shows now.');
+            return;
+        }
+        try {
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/2fa/backup-codes');
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                body: JSON.stringify({ code }),
+            });
+            const data = await res.json().catch(() => ({}));
+            setBackupCodesTotp('');
+            if (res.ok && Array.isArray(data.backupCodes)) {
+                setBackupCodesShown(data.backupCodes);
+                await load2faStatus();
+            } else {
+                setBackupCodesMessage(`No new codes: ${data.error || `HTTP ${res.status}`}`);
+            }
+        } catch (e: unknown) {
+            setBackupCodesMessage(e instanceof Error ? e.message : String(e));
+        }
+    };
+
     const handleResetNode = async () => {
         if (!confirm('CRITICAL DANGER: Are you sure you want to reset this node? All identity and local configs will be erased.')) return;
         if (!confirm('Confirming second time: This cannot be undone. Proceed?')) return;
@@ -556,9 +630,9 @@ export function ApplianceSection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/reset');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({
-                    password: activeNode.adminPassword,
+                    ...passwordField(nodeCredential(activeNode)),
                 }),
             });
             if (!res.ok) {
@@ -942,11 +1016,11 @@ export function ApplianceSection({
                                 </div>
                                 <div>
                                     <span className="text-nature-400 font-medium">Drift</span>
-                                    <div className="font-mono text-white mt-0.5 font-bold">{auditState.result.drift} beans</div>
+                                    <div className="font-mono text-white mt-0.5 font-bold">{Number.isFinite(auditState.result.drift) ? `${auditState.result.drift} beans` : 'not a number'}</div>
                                 </div>
                                 <div>
                                     <span className="text-nature-400 font-medium">Total Balances</span>
-                                    <div className="font-mono text-white mt-0.5 font-bold">{auditState.result.sumBalances ?? 0} beans</div>
+                                    <div className="font-mono text-white mt-0.5 font-bold">{auditState.result.sumBalances === undefined ? '0 beans' : Number.isFinite(auditState.result.sumBalances) ? `${auditState.result.sumBalances} beans` : 'not a number'}</div>
                                 </div>
                                 <div>
                                     <span className="text-nature-400 font-medium">Stranded Escrows</span>
@@ -1066,15 +1140,15 @@ export function ApplianceSection({
                                     <span>Automated Backup Schedule</span>
                                 </h3>
                                 <p className="text-xs text-nature-400 m-0 mt-0.5">
-                                    Autonomous on-disk point-in-time snapshots using crash-consistent SQLite VACUUM INTO
+                                    Autonomous on-disk point-in-time snapshots using crash-consistent SQLite VACUUM INTO. Taken on the main server only; none is kept past 14 days.
                                 </p>
                             </div>
                             <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                                scheduleConfig.enabled
+                                scheduleKnown && scheduleConfig?.enabled
                                     ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                                     : 'bg-nature-800 text-nature-400'
                             }`}>
-                                {scheduleConfig.enabled ? `Active (${scheduleConfig.intervalHours}h)` : 'Disabled'}
+                                {!scheduleKnown || !scheduleConfig ? 'Unknown' : scheduleConfig.enabled ? `Active (${scheduleConfig.intervalHours}h)` : 'Disabled'}
                             </span>
                         </div>
 
@@ -1084,63 +1158,70 @@ export function ApplianceSection({
                             </div>
                         )}
 
-                        <form onSubmit={handleSaveSchedule} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
-                            <div>
-                                <label className="block text-xs font-bold text-nature-300 mb-1">
-                                    Automated Schedule
-                                </label>
-                                <label className="flex items-center gap-2 bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2.5 cursor-pointer text-xs text-white">
-                                    <input
-                                        type="checkbox"
-                                        checked={scheduleConfig.enabled}
-                                        onChange={(e) => setScheduleConfig({ ...scheduleConfig, enabled: e.target.checked })}
-                                        className="rounded border-nature-700 text-terra-500 focus:ring-0"
-                                    />
-                                    <span>Enable automated snapshots</span>
-                                </label>
-                            </div>
+                        {!scheduleKnown || !scheduleConfig ? (
+                            <p className="text-xs text-nature-400 m-0">
+                                {scheduleReadFailed
+                                    ? "The node's schedule could not be read, so it can't be changed from here right now."
+                                    : "Reading the node's schedule…"}
+                            </p>
+                        ) : (
+                            <form onSubmit={handleSaveSchedule} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-end">
+                                <div>
+                                    <label className="block text-xs font-bold text-nature-300 mb-1">
+                                        Automated Schedule
+                                    </label>
+                                    <label className="flex items-center gap-2 bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2.5 cursor-pointer text-xs text-white">
+                                        <input
+                                            type="checkbox"
+                                            checked={scheduleConfig.enabled}
+                                            onChange={(e) => setScheduleConfig({ ...scheduleConfig, enabled: e.target.checked })}
+                                            className="rounded border-nature-700 text-terra-500 focus:ring-0"
+                                        />
+                                        <span>Enable automated snapshots</span>
+                                    </label>
+                                </div>
 
-                            <div>
-                                <label className="block text-xs font-bold text-nature-300 mb-1">
-                                    Cadence Interval
-                                </label>
-                                <select
-                                    value={scheduleConfig.intervalHours}
-                                    onChange={(e) => setScheduleConfig({ ...scheduleConfig, intervalHours: Number(e.target.value) })}
-                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2.5 text-xs text-white"
-                                >
-                                    <option value={6}>Every 6 hours</option>
-                                    <option value={12}>Every 12 hours</option>
-                                    <option value={24}>Every 24 hours (Daily)</option>
-                                    <option value={48}>Every 48 hours (Every 2 days)</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-bold text-nature-300 mb-1">
-                                    Retention Limit
-                                </label>
-                                <div className="flex gap-2">
+                                <div>
+                                    <label className="block text-xs font-bold text-nature-300 mb-1">
+                                        Cadence Interval
+                                    </label>
                                     <select
-                                        value={scheduleConfig.keep}
-                                        onChange={(e) => setScheduleConfig({ ...scheduleConfig, keep: Number(e.target.value) })}
+                                        value={scheduleConfig.intervalHours}
+                                        onChange={(e) => setScheduleConfig({ ...scheduleConfig, intervalHours: Number(e.target.value) })}
                                         className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2.5 text-xs text-white"
                                     >
-                                        <option value={3}>Keep last 3 snapshots</option>
-                                        <option value={7}>Keep last 7 snapshots (1 week)</option>
-                                        <option value={14}>Keep last 14 snapshots (2 weeks)</option>
-                                        <option value={30}>Keep last 30 snapshots (1 month)</option>
+                                        <option value={6}>Every 6 hours</option>
+                                        <option value={12}>Every 12 hours</option>
+                                        <option value={24}>Every 24 hours (Daily)</option>
+                                        <option value={48}>Every 48 hours (Every 2 days)</option>
                                     </select>
-                                    <button
-                                        type="submit"
-                                        disabled={savingSchedule}
-                                        className="px-4 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50 shrink-0"
-                                    >
-                                        {savingSchedule ? 'Saving...' : 'Save'}
-                                    </button>
                                 </div>
-                            </div>
-                        </form>
+
+                                <div>
+                                    <label className="block text-xs font-bold text-nature-300 mb-1">
+                                        Retention Limit
+                                    </label>
+                                    <div className="flex gap-2">
+                                        <select
+                                            value={scheduleConfig.keep}
+                                            onChange={(e) => setScheduleConfig({ ...scheduleConfig, keep: Number(e.target.value) })}
+                                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3 py-2.5 text-xs text-white"
+                                        >
+                                            <option value={3}>Keep last 3 snapshots</option>
+                                            <option value={7}>Keep last 7 snapshots (1 week)</option>
+                                            <option value={14}>Keep last 14 snapshots (2 weeks)</option>
+                                        </select>
+                                        <button
+                                            type="submit"
+                                            disabled={savingSchedule}
+                                            className="px-4 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50 shrink-0"
+                                        >
+                                            {savingSchedule ? 'Saving...' : 'Save'}
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        )}
                     </div>
 
                     {/* Database Integrity Verification Card */}
@@ -1250,6 +1331,16 @@ export function ApplianceSection({
                         )}
                     </div>
 
+                    {/* Backups off the server (the owners' card: the node answers anyone else 403) */}
+                    <SectionErrorBoundary sectionName="Backups off the server" resetKey={activeNode.id}>
+                        <OffboxBackupsPanel activeNode={activeNode} />
+                    </SectionErrorBoundary>
+
+                    {/* This server's alerts (the owners' card: the node answers anyone else 403) */}
+                    <SectionErrorBoundary sectionName="Alerts" resetKey={activeNode.id}>
+                        <AlertsPanel activeNode={activeNode} />
+                    </SectionErrorBoundary>
+
                     {/* Standby Live Backup / Replication Configuration (Standby) vs Replication Access (Primary) */}
                     {isStandby ? (
                         <SectionErrorBoundary sectionName="Standby Live Backup" resetKey={activeNode.id}>
@@ -1331,159 +1422,215 @@ export function ApplianceSection({
             {/* Subtab: Access & Security */}
             {subTab === 'access' && (
                 <div className="space-y-6 max-w-2xl">
-                    {/* Password Change Card */}
-                    <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
-                            <span>🔑</span>
-                            <span>Change Admin Password</span>
-                        </h3>
-                        <p className="text-xs text-nature-400 m-0">
-                            Rotate the shared node administrator password
+                    {tfaStatus?.passwordRetired ? (
+                        // Retired (the Retire card below says when and by whom): no password to change, and no 2FA, which
+                        // only ever guarded the password. The server refuses both (routes/settings.ts refuse2faWhileRetired).
+                        <p data-testid="no-server-2fa" className="p-4 rounded-2xl bg-nature-900/80 border border-nature-800 text-sm text-nature-200 m-0">
+                            This server has no admin password, so it has no server 2FA: your phone&apos;s lock is your second factor.
                         </p>
-
-                        {pwdStatus && (
-                            <div className={`p-3 rounded-xl border text-xs font-semibold ${
-                                pwdStatus.isError ? 'bg-red-950/60 border-red-800 text-red-200' : 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
-                            }`}>
-                                {pwdStatus.text}
-                            </div>
-                        )}
-
-                        <form onSubmit={handleChangePassword} className="space-y-3">
-                            <div>
-                                <label className="block text-xs font-bold text-nature-300 mb-1">Current Password</label>
-                                <input
-                                    type="password"
-                                    value={currentPassword}
-                                    onChange={(e) => setCurrentPassword(e.target.value)}
-                                    placeholder="Enter current password"
-                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-nature-300 mb-1">New Password</label>
-                                <input
-                                    type="password"
-                                    value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
-                                    placeholder="Minimum 8 characters"
-                                    required
-                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-nature-300 mb-1">Confirm New Password</label>
-                                <input
-                                    type="password"
-                                    value={confirmPassword}
-                                    onChange={(e) => setConfirmPassword(e.target.value)}
-                                    placeholder="Confirm new password"
-                                    required
-                                    className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
-                                />
-                            </div>
-                            <button
-                                type="submit"
-                                disabled={changingPwd}
-                                className="px-5 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50"
-                            >
-                                {changingPwd ? 'Updating...' : 'Update Password'}
-                            </button>
-                        </form>
-                    </div>
-
-                    {/* 2FA / TOTP Card */}
-                    <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
-                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-nature-800 pb-3">
-                            <div className="min-w-0">
+                    ) : (
+                        <>
+                            {/* Password Change Card */}
+                            <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
                                 <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
-                                    <span>🛡️</span>
-                                    <span>Two-Factor Authentication (2FA)</span>
+                                    <span>🔑</span>
+                                    <span>Change Admin Password</span>
                                 </h3>
-                                <p className="text-xs text-nature-400 m-0 mt-0.5">
-                                    Require a 6-digit TOTP code on operator login
+                                <p className="text-xs text-nature-400 m-0">
+                                    Rotate the shared node administrator password
                                 </p>
-                            </div>
-                            <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                                tfaStatus?.enabled ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-nature-800 text-nature-400'
-                            }`}>
-                                {tfaStatus?.enabled ? 'Enabled' : 'Disabled'}
-                            </span>
-                        </div>
 
-                        {tfaMessage && (
-                            <div className="p-3 rounded-xl bg-nature-950 border border-nature-800 text-xs text-white">
-                                {tfaMessage}
-                            </div>
-                        )}
-
-                        {tfaStatus?.qrDataUrl && !tfaStatus.enabled && (
-                            <div className="space-y-3 p-4 rounded-xl bg-nature-950 border border-nature-800">
-                                <img src={tfaStatus.qrDataUrl} alt="2FA QR Code" className="w-44 h-44 mx-auto rounded-lg" />
-                                {tfaStatus.secret && (
-                                    <div className="text-center font-mono text-xs text-terra-400 font-bold">
-                                        Secret: {tfaStatus.secret}
+                                {pwdStatus && (
+                                    <div className={`p-3 rounded-xl border text-xs font-semibold ${
+                                        pwdStatus.isError ? 'bg-red-950/60 border-red-800 text-red-200' : 'bg-emerald-950/60 border-emerald-800 text-emerald-300'
+                                    }`}>
+                                        {pwdStatus.text}
                                     </div>
                                 )}
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        value={totpVerifyCode}
-                                        onChange={(e) => setTotpVerifyCode(e.target.value)}
-                                        placeholder="Enter 6-digit code to verify"
-                                        className="flex-1 bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono text-center"
-                                    />
+
+                                <form onSubmit={handleChangePassword} className="space-y-3">
+                                    <div>
+                                        <label className="block text-xs font-bold text-nature-300 mb-1">Current Password</label>
+                                        <input
+                                            type="password"
+                                            value={currentPassword}
+                                            onChange={(e) => setCurrentPassword(e.target.value)}
+                                            placeholder="Enter current password"
+                                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-nature-300 mb-1">New Password</label>
+                                        <input
+                                            type="password"
+                                            value={newPassword}
+                                            onChange={(e) => setNewPassword(e.target.value)}
+                                            placeholder="Minimum 8 characters"
+                                            required
+                                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-nature-300 mb-1">Confirm New Password</label>
+                                        <input
+                                            type="password"
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                            placeholder="Confirm new password"
+                                            required
+                                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
+                                        />
+                                    </div>
+                                    <button
+                                        type="submit"
+                                        disabled={changingPwd}
+                                        className="px-5 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50"
+                                    >
+                                        {changingPwd ? 'Updating...' : 'Update Password'}
+                                    </button>
+                                </form>
+                            </div>
+
+                            {/* 2FA / TOTP Card */}
+                            <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
+                                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-nature-800 pb-3">
+                                    <div className="min-w-0">
+                                        <h3 className="text-base font-bold text-white m-0 flex items-center gap-2">
+                                            <span>🛡️</span>
+                                            <span>Two-Factor Authentication (2FA)</span>
+                                        </h3>
+                                        <p className="text-xs text-nature-400 m-0 mt-0.5">
+                                            Require a 6-digit TOTP code on operator login
+                                        </p>
+                                    </div>
+                                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
+                                        tfaStatus?.enabled ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-nature-800 text-nature-400'
+                                    }`}>
+                                        {tfaStatus?.enabled ? 'Enabled' : 'Disabled'}
+                                    </span>
+                                </div>
+
+                                {tfaMessage && (
+                                    <div className="p-3 rounded-xl bg-nature-950 border border-nature-800 text-xs text-white">
+                                        {tfaMessage}
+                                    </div>
+                                )}
+
+                                {tfaStatus?.qrDataUrl && !tfaStatus.enabled && (
+                                    <div className="space-y-3 p-4 rounded-xl bg-nature-950 border border-nature-800">
+                                        <img src={tfaStatus.qrDataUrl} alt="2FA QR Code" className="w-44 h-44 mx-auto rounded-lg" />
+                                        {tfaStatus.secret && (
+                                            <div className="text-center font-mono text-xs text-terra-400 font-bold">
+                                                Secret: {tfaStatus.secret}
+                                            </div>
+                                        )}
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={totpVerifyCode}
+                                                onChange={(e) => setTotpVerifyCode(e.target.value)}
+                                                placeholder="Enter 6-digit code to verify"
+                                                className="flex-1 bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono text-center"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={handleVerify2FA}
+                                                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white"
+                                            >
+                                                Verify &amp; Enable
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {!tfaStatus?.enabled && !tfaStatus?.qrDataUrl && (
                                     <button
                                         type="button"
-                                        onClick={handleVerify2FA}
-                                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white"
+                                        onClick={handleSetup2FA}
+                                        className="px-5 py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"
                                     >
-                                        Verify &amp; Enable
+                                        Setup 2FA Authenticator
                                     </button>
-                                </div>
-                            </div>
-                        )}
+                                )}
 
-                        {!tfaStatus?.enabled && !tfaStatus?.qrDataUrl && (
-                            <button
-                                type="button"
-                                onClick={handleSetup2FA}
-                                className="px-5 py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700 transition-all"
-                            >
-                                Setup 2FA Authenticator
-                            </button>
-                        )}
-
-                        {tfaStatus?.enabled && (
-                            // Wraps: the input takes at least 10rem, so on a narrow screen the button drops to its own
-                            // line instead of squeezing the code. The label is visible text above (it wraps; a
-                            // placeholder that long clipped at 320px and 1.3× text). No numeric keypad: backup codes
-                            // have letters (a–f).
-                            <div className="flex flex-wrap gap-2">
-                                <label htmlFor="tfa-disable-code" className="w-full text-xs text-nature-400">
-                                    Current 2FA or backup code
-                                </label>
-                                <input
-                                    id="tfa-disable-code"
-                                    type="text"
-                                    autoComplete="one-time-code"
-                                    autoCapitalize="none"
-                                    spellCheck={false}
-                                    value={totpDisableCode}
-                                    onChange={(e) => setTotpDisableCode(e.target.value)}
-                                    placeholder="123456"
-                                    className="flex-1 basis-40 min-w-0 min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono text-center"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={handleDisable2FA}
-                                    className="min-h-[48px] px-5 py-2.5 rounded-xl bg-red-900/80 hover:bg-red-800 text-xs font-bold text-white border border-red-700 transition-all"
-                                >
-                                    Disable 2FA
-                                </button>
+                                {tfaStatus?.enabled && (
+                                    // Wraps: the input takes at least 10rem, so on a narrow screen the button drops to its own
+                                    // line instead of squeezing the code. The label is visible text above (it wraps; a
+                                    // placeholder that long clipped at 320px and 1.3× text). No numeric keypad: backup codes
+                                    // have letters (a–f).
+                                    <div className="flex flex-wrap gap-2">
+                                        <label htmlFor="tfa-disable-code" className="w-full text-xs text-nature-400">
+                                            Current 2FA or backup code
+                                        </label>
+                                        <input
+                                            id="tfa-disable-code"
+                                            type="text"
+                                            autoComplete="one-time-code"
+                                            autoCapitalize="none"
+                                            spellCheck={false}
+                                            value={totpDisableCode}
+                                            onChange={(e) => setTotpDisableCode(e.target.value)}
+                                            placeholder="123456"
+                                            className="flex-1 basis-40 min-w-0 min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono text-center"
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={handleDisable2FA}
+                                            className="min-h-[48px] px-5 py-2.5 rounded-xl bg-red-900/80 hover:bg-red-800 text-xs font-bold text-white border border-red-700 transition-all"
+                                        >
+                                            Disable 2FA
+                                        </button>
+                                    </div>
+                                )}
+                                {tfaStatus?.enabled && isOwnerViewer && (
+                                    // New backup codes need the authenticator's current code, never a backup code; shown once.
+                                    <div className="pt-3 border-t border-nature-800 space-y-2">
+                                        {backupCodesShown ? (
+                                            <>
+                                                <p className="text-[11px] text-nature-300 m-0">
+                                                    Your new backup codes. Each works once; the old ones no longer work. They are shown only now.
+                                                </p>
+                                                <ul className="grid grid-cols-2 gap-1 font-mono text-sm text-white list-none p-0 m-0 select-all" data-testid="backup-codes">
+                                                    {backupCodesShown.map(c => <li key={c}>{c}</li>)}
+                                                </ul>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setBackupCodesShown(null)}
+                                                    className="min-h-[48px] w-full py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
+                                                >
+                                                    I have kept them safe
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <div className="flex flex-wrap gap-2">
+                                                <label htmlFor="tfa-backup-codes-code" className="w-full text-xs text-nature-400">
+                                                    New backup codes ({tfaStatus?.backupCodesRemaining ?? 0} left): the 6-digit code your authenticator shows now
+                                                </label>
+                                                <input
+                                                    id="tfa-backup-codes-code"
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    autoComplete="one-time-code"
+                                                    value={backupCodesTotp}
+                                                    onChange={(e) => setBackupCodesTotp(e.target.value)}
+                                                    placeholder="123456"
+                                                    className="flex-1 basis-40 min-w-0 min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono text-center"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={handleShowBackupCodes}
+                                                    className="min-h-[48px] px-5 py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
+                                                >
+                                                    Show new backup codes
+                                                </button>
+                                            </div>
+                                        )}
+                                        {backupCodesMessage && <p className="text-[11px] text-amber-300 m-0" role="alert">{backupCodesMessage}</p>}
+                                    </div>
+                                )}
                             </div>
-                        )}
-                    </div>
+                        </>
+                    )}
 
                     {/* Break-Glass Emergency Recovery Card (per admin-surface §2.2) */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
@@ -1521,25 +1668,71 @@ export function ApplianceSection({
                         </div>
 
                         <div className="p-4 rounded-xl bg-nature-950/60 border border-nature-800/80 space-y-3">
-                            <div className="flex items-center justify-between">
-                                <span className="text-xs font-semibold text-nature-300">Enrol New Admin Key</span>
-                                <span className="text-[10px] px-2 py-0.5 rounded bg-nature-800 text-nature-400 font-mono">
-                                    Non-functional placeholder
-                                </span>
-                            </div>
-                            <p className="text-[11px] text-nature-400 m-0">
-                                Key-based cryptographic admin auth enrolment ships in Phase 3. Today, password authentication
-                                acts as interim owner action per admin-surface §2.5.
-                            </p>
-                            <button
-                                type="button"
-                                disabled
-                                className="w-full py-2.5 rounded-xl bg-nature-800 text-xs font-bold text-nature-500 border border-nature-700/50 cursor-not-allowed"
-                            >
-                                Enrol Device Key via Break-Glass (Unavailable in Phase 2)
-                            </button>
+                            <span className="text-xs font-semibold text-nature-300">Your break-glass code</span>
+                            {breakGlassShown ? (
+                                <div className="space-y-2">
+                                    <p className="text-[11px] text-nature-300 m-0">
+                                        Write this down and keep it offline. It is shown once; any earlier code no longer works.
+                                    </p>
+                                    <p className="font-mono text-base text-white break-all select-all m-0" data-testid="break-glass-code">{breakGlassShown}</p>
+                                    <button
+                                        type="button"
+                                        onClick={() => setBreakGlassShown(null)}
+                                        className="min-h-[48px] w-full py-2.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white border border-nature-700"
+                                    >
+                                        I have kept it safe
+                                    </button>
+                                </div>
+                            ) : isOwnerViewer ? (
+                                <div className="space-y-2">
+                                    <p className="text-[11px] text-nature-400 m-0">
+                                        {rolesViewer.kind === 'key'
+                                            ? 'Makes a new code for your own key. Any code you had before stops working.'
+                                            : "Signed in with the password: paste the member key of the owner the code is for. Any code they had before stops working. An owner can also make their own in the app: Settings, Community admin, Break-glass code."}
+                                    </p>
+                                    {rolesViewer.kind === 'password' && (
+                                        <>
+                                            <label htmlFor="break-glass-owner-key" className="block text-xs text-nature-400">Owner's member key</label>
+                                            <input
+                                                id="break-glass-owner-key"
+                                                type="text"
+                                                autoCapitalize="none"
+                                                spellCheck={false}
+                                                value={breakGlassOwnerKey}
+                                                onChange={(e) => setBreakGlassOwnerKey(e.target.value)}
+                                                className="w-full min-w-0 min-h-[48px] bg-nature-950 border border-nature-700 rounded-xl px-3 py-2 text-xs text-white font-mono"
+                                            />
+                                        </>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={handleIssueBreakGlass}
+                                        className="min-h-[48px] w-full py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white"
+                                    >
+                                        Make a break-glass code
+                                    </button>
+                                </div>
+                            ) : (
+                                <p className="text-[11px] text-nature-400 m-0">Only an owner has a break-glass code.</p>
+                            )}
+                            {breakGlassMessage && <p className="text-[11px] text-amber-300 m-0" role="alert">{breakGlassMessage}</p>}
                         </div>
                     </div>
+
+                    {/* Retire the admin password (design step 10): owners only; only an owner's key retires it */}
+                    <SectionErrorBoundary sectionName="Retire the admin password" resetKey={activeNode.id}>
+                        <RetirePasswordPanel key={activeNode.id} activeNode={activeNode} viewer={rolesViewer} />
+                    </SectionErrorBoundary>
+
+                    {/* Automation tokens: owners only (the panel draws nothing for anyone else) */}
+                    <SectionErrorBoundary sectionName="Automation tokens" resetKey={activeNode.id}>
+                        <AutomationTokensPanel key={activeNode.id} activeNode={activeNode} viewer={rolesViewer} />
+                    </SectionErrorBoundary>
+
+                    {/* Connected assistants (admin MCP S3): owners and admins, each their own; owners see every one */}
+                    <SectionErrorBoundary sectionName="Connected assistants" resetKey={activeNode.id}>
+                        <ConnectedAssistantsPanel key={activeNode.id} activeNode={activeNode} viewer={rolesViewer} />
+                    </SectionErrorBoundary>
 
                     {/* Factory Reset Danger Zone */}
                     <div className="p-6 rounded-2xl bg-red-950/20 border border-red-900/40 shadow-xl space-y-3">

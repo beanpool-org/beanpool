@@ -19,6 +19,16 @@ lookups/counts → O(1)" fix). Before opening a PR:
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #111)
 
+### 2026-10-01 — "batch pre-fetch keepers and pledges in listTreasuriesHandler" (#1364) — CLOSED, NO MEANINGFUL GAIN.
+Measured on the handler: about 1 ms saved at 30 enterprises (8.8-9.4 → 7.8 ms) and 10% at 600. The cost was a second,
+hand-kept copy of `treasuryKeepers()` / `getEnterprisePledges()` row shaping inside a treasury route, plus keepers with
+tied `granted_at` coming back in a different order. A batched read belongs in `state-engine.ts` next to the per-row one,
+sharing its shaping, and needs a timing at a realistic enterprise count (a community has tens, not hundreds).
+
+### 2026-09-30 — "single-pass status grouping in offBoardPostsToResend" (#1320) — CLOSED, NO BENEFIT.
+`deals` is capped at the last 50 deals (`HEALED_DEALS`); the rewrite is behaviour-identical, so it saves microseconds. Fourth time
+(#745, #1018, #1034, #1320): name the loop and a list that grows with the community before filing.
+
 ### 2026-09-23 — "O(1) group lookups in MapPage composer audience notices" (#1034) — CLOSED, NO BENEFIT.
 Three one-shot `userGroups.find()` calls in one panel's render, over the member's own groups (a handful). No loop, no
 recursion, nothing a member sees changes. This is the third time (#745, #1018, #1034): name the loop or recursion and
@@ -226,3 +236,27 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-08 - Single-Pass Event RSVP Counting in getPosts Engine
 **Learning:** In `packages/beanpool-engine/src/posts.ts`, `getPosts` calculated `goingCount` and `interestedCount` for event posts by calling `rsvps.filter(...)` twice. For feeds and searches containing $E$ events and $R$ RSVPs, this performed $2 \times R$ array operations and generated two temporary array allocations per event post on hot query paths.
 **Action:** Refactored RSVP status counting into a single `for...of` loop pass over `rsvps`, computing both `goingCount` and `interestedCount` in $R$ iterations with zero intermediate array allocations.
+
+## 2026-10-09 - Batch Sybil Funnel Puppet Isolation Check in State Engine
+**Learning:** In `apps/server/src/state-engine.ts`, `getCommunityHealth` evaluated puppet isolation for Sybil funnel detection by running two SQL queries per invitee (`marketPartners` and `directPartners`) inside a `for...of` loop. For farmers with $N$ invitees, this caused $2N$ separate SQLite queries per farmer during health checks.
+**Action:** Replaced the per-invitee loop with a single batch query using `json_each(?)` that checks for outside marketplace and direct transaction partners across all invitees at once, reducing query overhead from $O(N)$ to $O(1)$ per farmer.
+
+## 2026-10-10 - Single-Pass Event RSVP Processing and Viewer Lookup in Engine
+**Learning:** In `packages/beanpool-engine/src/posts.ts`, `getPostsRankedBy` performed a separate `rsvps.find(...)` array scan per event post to locate the viewer's own RSVP record before running a `for...of` loop to count `goingCount` and `interestedCount`.
+**Action:** Consolidated viewer RSVP record lookup into the existing `for...of` loop pass over `rsvps`, computing counts and resolving the viewer's RSVP in a single pass with zero redundant array scans.
+
+## 2026-10-11 - O(1) User Group Lookups in PWA MapPage Audience Scope Notices
+**Learning:** In `apps/pwa/src/pages/MapPage.tsx`, rendering audience scope notices for group posts called `userGroups.find(g => g.id === targetGroupId)` repeatedly inside JSX templates on every render.
+**Action:** Pre-computed `userGroupsById` Map indexed by group `id` via `useMemo` at component scope, converting group lookups into constant-time O(1) retrievals.
+
+## 2026-10-12 - O(1) Escrow Banner Pending Transaction Lookups in PWA MessagesPage
+**Learning:** In `apps/pwa/src/pages/MessagesPage.tsx`, checking for active trust hold / escrow banners executed `userTransactions.find(...)` inside the render block on every render cycle ($O(T)$ complexity).
+**Action:** Memoized `activePendingTransaction` via `useMemo` dependent on `activeConv` and `userTransactions`, eliminating $O(T)$ array scans during active chat renders.
+
+## 2026-10-13 - O(1) Signature Usage Lookups in Server App Addresses Report
+**Learning:** In `apps/server/src/routes/app-addresses.ts`, `appAddressesReport` called `count(kind, address)` which executed `usage.find(...)` array scans across configured addresses and lost addresses, causing repetitive linear array scans.
+**Action:** Pre-indexed `usage` array into a `usageMap` Map indexed by `${u.kind}:${u.address}` for constant-time $O(1)$ lookups.
+
+## 2026-10-14 - Pre-compute Treasury Accounts Set in Marketplace Feed Handler
+**Learning:** In `apps/server/src/routes/marketplace.ts`, mapping marketplace feed responses evaluated `tradeSide(p)` for each post, which executed `isTreasury(...)` — triggering per-post SQLite queries (`SELECT is_treasury FROM members WHERE public_key=?`). For feeds containing $P$ posts, this caused up to $2P$ database queries per feed request.
+**Action:** Pre-computed `treasuryKeys` Set via a single `SELECT public_key FROM members WHERE is_treasury = 1` query prior to mapping `posts`, converting per-post treasury checks into constant-time $O(1)$ Set lookups.

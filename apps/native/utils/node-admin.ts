@@ -9,6 +9,7 @@
  *   2. The phone's own unlock (fingerprint, face or device PIN) before any link is requested. A phone with
  *      no lock set gets an explanation, not a link — this path FAILS CLOSED, unlike the app-lock helper in
  *      LocalAuth.ts, which opens on a lockless phone on purpose so nobody is locked out of their own account.
+ *      A pass the phone held while the app was away (it reached the app too late) is no unlock either.
  *   3. The member key signs a sign-in text the phone builds from the node's challenge id (request binding: bound
  *      to this node's host, member-statements.ts); the node answers with a 60-second, single-use token (and
  *      still asks for its own 2FA code if the owner turned 2FA on).
@@ -18,6 +19,8 @@
  */
 
 import * as LocalAuthentication from 'expo-local-authentication';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { phoneLockPrompt, timeDoorPrompt } from './LocalAuth';
 import { buildSignedHeaders } from './crypto';
 import type { BeanPoolIdentity } from './identity';
 import { signAdminChallenge, UnsignableChallengeError, type SignedStatement } from './member-statements';
@@ -46,8 +49,11 @@ export async function fetchMyNodeRole(nodeUrl: string, identity: BeanPoolIdentit
 
 const NO_ROLE: MyNodeRole = { role: null, communityName: null };
 
-/** As fetchMyNodeRole, but null when the node gave no answer at all (offline, a 5xx), as opposed to "no role". */
-async function askNodeRole(nodeUrl: string, identity: BeanPoolIdentity): Promise<MyNodeRole | null> {
+/**
+ * As fetchMyNodeRole, but null when the node gave no answer at all (offline, a 5xx), as opposed to "no role". People →
+ * Invites asks it where only admins invite (invite-entries.ts mayInviteHere), so "not heard" stays "not heard".
+ */
+export async function askNodeRole(nodeUrl: string, identity: BeanPoolIdentity): Promise<MyNodeRole | null> {
     try {
         const url = `${base(nodeUrl)}/api/node-admin/me`;
         const headers = await buildSignedHeaders('GET', url, '', identity.privateKey, identity.publicKey);
@@ -96,6 +102,29 @@ export function rememberNodeRole(nodeUrl: string, publicKey: string, value: MyNo
     roleCache.set(roleKey(nodeUrl, publicKey), { at: now, value: Promise.resolve(value) });
 }
 
+/**
+ * The last role THIS node gave for THIS key, kept on the phone (AsyncStorage) so it survives a restart. It only fills
+ * in when the node can't be reached: People -> Invites uses it so an owner or admin with no signal can still make an
+ * offline ticket where only admins invite. It decides nothing the node doesn't re-check: a stale "admin" makes a ticket
+ * the node refuses at the join. 'none' is a role the node said is not one that may invite.
+ */
+const lastRoleKey = (nodeUrl: string, publicKey: string) => `beanpool_last_node_role:${roleKey(nodeUrl, publicKey)}`;
+
+export async function persistNodeRole(nodeUrl: string, publicKey: string, role: ManageRole | null): Promise<void> {
+    try { await AsyncStorage.setItem(lastRoleKey(nodeUrl, publicKey), role ?? 'none'); } catch { /* best effort */ }
+}
+
+/** The remembered role: a role, null (the node said none), or undefined (nothing remembered). */
+export async function readPersistedNodeRole(nodeUrl: string, publicKey: string): Promise<ManageRole | null | undefined> {
+    try {
+        const v = await AsyncStorage.getItem(lastRoleKey(nodeUrl, publicKey));
+        if (v === 'none') return null;
+        return canManageNode(v) ? v : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
 /** Ask again next time: the queue was refused or failed, which is what a demotion looks like. */
 export function forgetNodeRole(nodeUrl: string, publicKey: string): void {
     roleCache.delete(roleKey(nodeUrl, publicKey));
@@ -120,7 +149,11 @@ export async function fetchAdminQueue(nodeUrl: string, identity: BeanPoolIdentit
 
 export type UnlockResult = 'ok' | 'no-device-lock' | 'failed';
 
-/** The phone's own unlock. Fails closed: no lock set, or anything unexpected, means no link. */
+/**
+ * The phone's own unlock. Fails closed: no lock set, or anything unexpected, means no link. So does a pass that reached
+ * the app too late to be one given for this request (LocalAuth.timeDoorPrompt: a pass the phone held while the app was
+ * away). What it opens is outside the app (a browser, another computer, a server), where App Lock covers nothing.
+ */
 export async function requireDeviceUnlock(communityName: string): Promise<UnlockResult> {
     let level: LocalAuthentication.SecurityLevel;
     try {
@@ -130,12 +163,13 @@ export async function requireDeviceUnlock(communityName: string): Promise<Unlock
     }
     if (level === LocalAuthentication.SecurityLevel.NONE) return 'no-device-lock';
     try {
-        const res = await LocalAuthentication.authenticateAsync({
+        const passCounts = timeDoorPrompt();
+        const res = await phoneLockPrompt({
             promptMessage: `Confirm it's you to manage ${communityName}`,
             cancelLabel: 'Cancel',
             disableDeviceFallback: false,
         });
-        return res.success ? 'ok' : 'failed';
+        return res.success && passCounts() ? 'ok' : 'failed';
     } catch {
         return 'failed';
     }

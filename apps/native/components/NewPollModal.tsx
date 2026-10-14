@@ -5,6 +5,8 @@
  * - Author enters question (title), optional description.
  * - 2 to 4 options.
  * - Duration selector: 3, 7 (default), or 14 days.
+ * - Open vote: off by default, so the poll is anonymous (everyone sees only the totals). On, members see who chose
+ *   what. Fixed once someone has voted (Marty, 2026-09-28).
  * - Rate limit awareness: 1 open poll per member, 5 per node.
  * - Franchise: active members only, credit_frozen = 0.
  */
@@ -26,9 +28,13 @@ import {
 import * as Crypto from 'expo-crypto';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
+import { palette } from '../constants/colors';
 import { useIdentity } from '../app/IdentityContext';
 import { createPost } from '../utils/db';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
+import { placelessListingNote } from '@beanpool/core';
+import { useNodeProfile } from '../utils/use-node-profile';
+import { nearbyListingsOn, useMyArea } from '../utils/member-area';
 
 const HEADER_PAD_TOP = 14;
 
@@ -52,7 +58,13 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
         { id: '2', text: '' },
     ]);
     const [durationDays, setDurationDays] = useState<3 | 7 | 14>(7);
+    const [openVote, setOpenVote] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+    // A poll has no place. On a community that syncs by area it takes its author's area (design §3.4): the form says the
+    // poll is shown there, or, to an author with none, that members nearby won't see it in their list.
+    const nodeProfile = useNodeProfile();
+    const byArea = nearbyListingsOn(nodeProfile?.features);
+    const placelessNote = placelessListingNote(byArea, useMyArea(visible && byArea, identity));
 
     const handleAddOption = () => {
         if (options.length < 4) {
@@ -118,6 +130,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                 created_at: new Date().toISOString(),
                 poll_options: JSON.stringify(cleanOptionsObj),
                 durationDays,
+                pollOpenVote: openVote,
             });
 
             // Reset form
@@ -125,6 +138,7 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
             setDescription('');
             setOptions([{ id: '1', text: '' }, { id: '2', text: '' }]);
             setDurationDays(7);
+            setOpenVote(false);
 
             Alert.alert('Poll Created', 'Your poll has been published to the community feed!');
             onSuccess?.();
@@ -285,6 +299,29 @@ export function NewPollModal({ visible, onClose, onSuccess }: NewPollModalProps)
                                 </Pressable>
                             ))}
                         </View>
+
+                        {/* Open vote: anonymous unless ticked; can't change once someone has voted */}
+                        <Pressable
+                            onPress={() => setOpenVote(v => !v)}
+                            style={[styles.openVoteRow, openVote && styles.openVoteRowActive]}
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: openVote }}
+                            accessibilityLabel="Open vote: members see who chose what"
+                            testID="poll-open-vote"
+                        >
+                            <Text style={styles.openVoteBox}>{openVote ? '☑' : '☐'}</Text>
+                            <View style={{ flex: 1, minWidth: 0 }}>
+                                <Text style={styles.openVoteTitle}>👁️ Open vote</Text>
+                                <Text style={styles.openVoteHint}>
+                                    {openVote
+                                        ? "Members will see who chose what. You can't change this once someone has voted."
+                                        : "Off: the vote is anonymous. Everyone sees only the totals. Tick it to let members see who chose what; you can't change it once someone has voted."}
+                                </Text>
+                            </View>
+                        </Pressable>
+                        {placelessNote && (
+                            <Text style={styles.openVoteHint} testID="poll-placeless-note" accessibilityLiveRegion="polite">📍 {placelessNote}</Text>
+                        )}
                     </ScrollView>
                 </View>
             </KeyboardAvoidingView>
@@ -410,7 +447,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         addOptionText: {
             fontSize: 12,
             fontWeight: '700',
-            color: '#7c3aed',
+            color: theme === 'dark' ? palette.violet300 : '#7c3aed', // violet600 is 2.9:1 on the dark card; violet300 9.43:1
         },
         optionInputRow: {
             flexDirection: 'row',
@@ -445,7 +482,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         },
         removeOptionText: {
             fontSize: 14,
-            color: '#ef4444',
+            color: colors.feedback.danger.fg,
             fontWeight: '800',
         },
         durationRow: {
@@ -472,6 +509,37 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         },
         durationBtnTextActive: {
             fontWeight: '800',
-            color: '#7c3aed',
+            color: theme === 'dark' ? palette.violet300 : '#7c3aed', // violet600 is 2.9:1 on the dark card; violet300 9.43:1
+        },
+        openVoteRow: {
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            gap: 10,
+            marginTop: 18,
+            padding: 12,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: theme === 'dark' ? '#4b5563' : '#d1d5db',
+            backgroundColor: colors.surface.card,
+        },
+        openVoteRowActive: {
+            borderColor: '#7c3aed',
+            backgroundColor: theme === 'dark' ? 'rgba(124, 58, 237, 0.2)' : '#f5f3ff',
+        },
+        openVoteBox: {
+            fontSize: 20,
+            color: theme === 'dark' ? palette.violet300 : '#7c3aed', // violet600 is 2.9:1 on the dark card; violet300 9.43:1
+            lineHeight: 22,
+        },
+        openVoteTitle: {
+            fontSize: 14,
+            fontWeight: '800',
+            color: colors.text.body,
+            marginBottom: 2,
+        },
+        openVoteHint: {
+            fontSize: 12,
+            color: colors.text.secondary,
+            lineHeight: 17,
         },
     });

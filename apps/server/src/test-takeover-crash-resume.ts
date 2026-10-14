@@ -104,10 +104,10 @@ async function runCase(step: string, baseDir: string, root: string, code: string
     const outputs: string[] = [];
     let node: NodeProc | null = await spawnNode(SCRIPT, dir, env);
     try {
-        const opened = await post(node.base, '/api/local/admin/takeover/open', { code }, { 'X-Admin-Password': PW_STANDBY });
+        const opened = await post(node.base, '/api/local/admin/takeover/open', { code }, await node.send('owner-session')); // step 7c: an owner's key session the node makes
         if (opened.status !== 200) throw new Error(`[${step}] open answered ${opened.status}: ${JSON.stringify(opened.body)}`);
         // For a step before the restart the process dies inside this request, so there may be no answer.
-        await post(node.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, { 'X-Admin-Password': PW_STANDBY });
+        await post(node.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, await node.send('owner-session')); // step 7c: an owner's key session the node makes
         await node.exited;
         outputs.push(node.output());
         node = null;
@@ -182,11 +182,17 @@ async function main(): Promise<void> {
         assert(a.connectors.length === 1 && a.connectors[0].trustLevel === 'peer', `[${r.step}] the link with the other community is restored, no mirror pin`);
         assert(a.configNodeRole === 'primary' && !a.promotionAuditPending && a.lastPromotionAudit?.ok === true && a.backupPrimaryUrl === null,
             `[${r.step}] nodeRole in the config, the audit done and passed, the pull settings cleared`);
-        assert(a.tunnelTokenFile === TUNNEL_TOKEN && a.publicAddress?.tunnelToken === TUNNEL_TOKEN, `[${r.step}] the tunnel token is back`);
+        assert(a.tunnel.wantedToken === TUNNEL_TOKEN && a.tunnel.childToken === TUNNEL_TOKEN && ['starting', 'connected'].includes(a.tunnel.state)
+            && a.publicAddress?.tunnelToken === TUNNEL_TOKEN, `[${r.step}] the tunnel token is back, and the tunnel runs on it (${a.tunnel.state})`);
         assert(a.envelope.state === 'sealed' && !a.heldDirExists && !a.bundleFileExists, `[${r.step}] the keys are re-sealed here; no held copies, no opened keys left`);
         assert(count(r.outputs, AUDIT_BANNER) === 1, `[${r.step}] the conservation audit ran exactly once across every start (${count(r.outputs, AUDIT_BANNER)})`);
         assert(count(r.outputs, ANNOUNCED) === 1, `[${r.step}] the community was told exactly once (${count(r.outputs, ANNOUNCED)})`);
         assert(a.preTakeoverDirs.length === 1, `[${r.step}] one copy of the standby's own files`);
+        if (r.step === 'role' || r.step === 'pull-config') {
+            // Killed once `role` had made it the main server: the start that resumes it boots its database as the main
+            // server, never as a standby promoted in the process (services/takeover.ts settleTakeoverBeforeDatabaseBoot).
+            assert(!/NODE_ROLE set to 'primary'/.test(r.outputs), `[${r.step}] the start that resumed it booted its database as the main server`);
+        }
     }
 
     console.log(`\n${testsPassed}/${testsRun} checks passed.`);

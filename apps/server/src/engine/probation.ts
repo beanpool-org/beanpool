@@ -5,47 +5,88 @@
  * ## Who is on probation
  *
  * A member is on probation for their first 72 hours AND while they have fewer than 3 kept posts: it ends only when
- * both are over. A kept post is one they wrote that a moderator has not removed and that is not hidden by reports;
+ * both are over. A member who came in through the 12-words door (an `open_joins` row of provider `words`, engine/
+ * open-join.ts) has the words rules instead: 7 days AND 3 kept posts, and smaller limits (below), because twelve words
+ * cost nothing where a sign-in costs a provider account (the two-doors design §2.3, scratch/global-node/DESIGN-global-
+ * two-doors-fable.md). Every feature is the same for both; only the length and size of the limits differ, and they end
+ * by themselves. Adding a sign-in (`POST /api/join/link`) moves the member to the ordinary rules at once, counted from
+ * their original join. A kept post is one they wrote that a moderator has not removed and that is not hidden by reports;
  * a post they took down themselves still counts. By account age and kept posts only, never by tier (tiers are merit
  * badges and gate nothing). Not on probation: anyone holding a node role (owner, admin, moderator), who the owner
  * trusted by granting it, and everyone on a node whose `probation` switch is off, which is every local community.
  *
- * ## The limits, each over a rolling 24 hours
+ * ## The limits, each over a rolling 24 hours (ordinary / 12 words)
  *
- *   - 3 new posts (any type; one taken down since still counts, or delete-and-repost would reset it)
- *   - 5 photos on posts: the photos now on their posts written in the last 24 hours, the new post's included. An
+ *   - 3 / 2 new posts (any type; one taken down since still counts, or delete-and-repost would reset it)
+ *   - 5 / 4 photos on posts: the photos now on their posts written in the last 24 hours, the new post's included. An
  *     edit that brings in a photo the post did not have counts it against what is left.
- *   - 10 NEW people reached in DMs, by opening a conversation with them (message or not: it is a line in their
+ *   - 10 / 3 NEW people reached in DMs, by opening a conversation with them (message or not: it is a line in their
  *     inbox) or by writing to them, when neither has reached the other before. A reply to someone who wrote or
  *     opened first is never limited, and neither is anyone they have reached before. A trade's conversation is
  *     nobody's opening (`dmContacts`).
- *   - 1 knock (asking a community to let them in): `knockRefusal`, for a node that keeps its members' knocks. G6 keeps
- *     none on the global node: the app knocks on the community itself (routes/knocks.ts), which can't see how new the
- *     applicant's global account is. There the limits are the community's own (engine/knocks.ts): one open knock per
- *     key and 3 an address a day.
+ *   - 3 / 3 knocks (asking a community to let them in; Marty, 2026-10-01, from 1; the same for both doors):
+ *     `knockRefusal`, for a node that keeps its members' knocks. G6 keeps none on the global node: the app knocks on the community itself (routes/knocks.ts),
+ *     which can't see how new the applicant's global account is. There the limits are the community's own
+ *     (engine/knocks.ts): one open knock per key and 3 an address a day.
  *
  * Over a limit: `ProbationLimitError`, which the routes answer 429 with a plain message naming the limit and when
  * it lets up (`resetsAt`, and `Retry-After`). There is no counter table: every count is read from the rows the
  * member wrote, so a restore, a standby or a take-over carries it with them, and there is nothing to keep in step.
  */
+import { configurePollVoteOrigins } from '@beanpool/engine';
 import { db } from '../db/db.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { nodeRoleOf } from './node-roles.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 
-export const PROBATION = {
+export interface ProbationRules {
     /** On probation for this long after joining... */
-    hours: 72,
+    hours: number;
     /** ...and until this many kept posts. */
-    keptPosts: 3,
+    keptPosts: number;
     /** Every limit is over this rolling window. */
+    windowMs: number;
+    posts: number;
+    photos: number;
+    newDmRecipients: number;
+    knocks: number;
+}
+
+/** The ordinary rules: a member who joined with a sign-in, an invite, or any way but the 12-words door. */
+export const PROBATION = {
+    hours: 72,
+    keptPosts: 3,
     windowMs: 24 * HOUR_MS,
     posts: 3,
     photos: 5,
     newDmRecipients: 10,
-    knocks: 1,
-} as const;
+    knocks: 3,
+} as const satisfies ProbationRules;
+
+/** A member who came in with 12 words and has added no sign-in (the header). */
+export const WORDS_PROBATION = {
+    hours: 7 * 24,
+    keptPosts: 3,
+    windowMs: 24 * HOUR_MS,
+    posts: 2,
+    photos: 4,
+    newDmRecipients: 3,
+    // Knocking on a local community is the same for both doors (design §2.3).
+    knocks: PROBATION.knocks,
+} as const satisfies ProbationRules;
+
+export type ProbationRuleSet = 'ordinary' | 'words';
+
+/** Which rules a member's probation runs on: the 12-words door's while their `open_joins` row says `words`. */
+export function probationRuleSet(pubkey: string): ProbationRuleSet {
+    const row = db.prepare('SELECT provider FROM open_joins WHERE member_pubkey = ?').get(pubkey) as { provider: string } | undefined;
+    return row?.provider === 'words' ? 'words' : 'ordinary';
+}
+
+function rulesOf(set: ProbationRuleSet): ProbationRules {
+    return set === 'words' ? WORDS_PROBATION : PROBATION;
+}
 
 export type ProbationLimit = 'posts' | 'photos' | 'new_dm_recipients' | 'knocks';
 
@@ -64,7 +105,9 @@ export interface ProbationState {
     onProbation: boolean;
     /** Why a member is not on probation: the switch is off here, they hold a node role, or they are past both. */
     exemptBecause: 'off' | 'role' | null;
-    /** When the first 72 hours end, or null when the join time can't be read (then only kept posts decide). */
+    /** Which rules: `words` for a member who came in with 12 words and has added no sign-in, else `ordinary`. */
+    rules: ProbationRuleSet;
+    /** When the first 72 hours (7 days by 12 words) end, or null when the join time can't be read (then only kept posts decide). */
     ageEndsAt: string | null;
     keptPosts: number;
     keptPostsNeeded: number;
@@ -78,7 +121,12 @@ function joinedAtMs(pubkey: string): number | null {
     return Number.isFinite(ms) ? ms : null;
 }
 
-/** The member's kept posts: written here by them, not removed by a moderator, not hidden by reports. */
+/**
+ * The member's kept posts: written here by them, not removed by a moderator, not hidden by reports. A post hidden by
+ * reports stops counting until a moderator keeps it, so reports can hold a newcomer on probation; they can't push an
+ * established member back onto it, because reports from members with less than half their standing never hide their
+ * posts (engine/auto-moderation.ts).
+ */
 export function keptPostCount(pubkey: string): number {
     const row = db.prepare(
         `SELECT COUNT(*) AS c FROM posts
@@ -88,21 +136,86 @@ export function keptPostCount(pubkey: string): number {
     return row.c;
 }
 
+/**
+ * Where the votes on the public board's polls came from (FABLE-sec-global-abuse LOW-7: many cheap accounts voting). Each
+ * vote is stamped when it is cast (`poll_votes.voter_new_or_words`, pollVoterNewOrWords): whether the voter was then new
+ * or a 12-word account. New is on probation (`probationState`): the first 72 hours, or fewer than 3 kept posts. 12 words is
+ * an `open_joins` row of provider `words` (no sign-in added), however long ago, because such an account cost nothing to
+ * make and a patient person can age a thousand of them. A node role (owner, admin, moderator) is neither, as for probation.
+ *
+ * At the vote, never at the read: a voter whose standing changes later at a moment anyone can see (their third post, the
+ * end of their first 72 hours by the join date the People list shows) would otherwise move the poll's count at that
+ * moment, and say that they voted, and with the split which way. A changed vote keeps the stamp of the first.
+ *
+ * Every vote still counts in the poll's totals: this only says how many came from such accounts, never whose. A new
+ * account votes as anyone does (the review's advice for polls was a label, and tiers and probation gate nothing). Only an
+ * anonymous poll says it, and only once it has closed (@beanpool/engine pollOriginsMayShow): an open vote keeps no kind.
+ */
+export function pollVoterNewOrWords(pubkey: string, now: number = Date.now()): 0 | 1 | null {
+    if (!getProfileSwitches().probation) return null;
+    if (nodeRoleOf(pubkey)) return 0;
+    return probationState(pubkey, now).onProbation || probationRuleSet(pubkey) === 'words' ? 1 : 0;
+}
+
+/**
+ * For the public board's polls: per poll and option, the votes stamped as from a new or 12-word account. One query per
+ * 500 polls, by the votes' primary key. Null where the node's probation switch is off (every local community): it says
+ * nothing about where votes came from there. A vote cast before the stamp (NULL) is not counted as one.
+ */
+export function pollVotesFromNewOrWords(conn: typeof db, pollIds: string[]): Map<string, Map<string, number>> | null {
+    if (!getProfileSwitches().probation) return null;
+    const out = new Map<string, Map<string, number>>();
+    for (let i = 0; i < pollIds.length; i += 500) {
+        const chunk = pollIds.slice(i, i + 500);
+        const rows = conn.prepare(pollVoteOriginsSql(chunk.length)).all(...chunk) as { post_id: string; option_id: string; c: number }[];
+        for (const r of rows) {
+            let byOption = out.get(r.post_id);
+            if (!byOption) out.set(r.post_id, byOption = new Map());
+            byOption.set(r.option_id, r.c);
+        }
+    }
+    return out;
+}
+
+/** The query pollVotesFromNewOrWords runs for `polls` poll ids (its parameters): exported for the suite's look at its plan. */
+export function pollVoteOriginsSql(polls: number): string {
+    return `SELECT post_id, option_id, COUNT(*) AS c FROM poll_votes
+             WHERE post_id IN (${Array.from({ length: polls }, () => '?').join(',')}) AND voter_new_or_words = 1
+             GROUP BY post_id, option_id`;
+}
+
+/** Each public poll says where its votes came from, where the node's probation switch is on (pollVotesFromNewOrWords). */
+export function installPollVoteOriginsAtBoot(): void {
+    configurePollVoteOrigins((conn, pollIds) => pollVotesFromNewOrWords(conn, pollIds));
+}
+
 export function probationState(pubkey: string, now: number = Date.now()): ProbationState {
+    const set = probationRuleSet(pubkey);
+    const rules = rulesOf(set);
     const kept = keptPostCount(pubkey);
     const joined = joinedAtMs(pubkey);
-    const ageEndsAt = joined === null ? null : iso(joined + PROBATION.hours * HOUR_MS);
-    const base = { ageEndsAt, keptPosts: kept, keptPostsNeeded: PROBATION.keptPosts };
+    const ageEndsAt = joined === null ? null : iso(joined + rules.hours * HOUR_MS);
+    const base = { rules: set, ageEndsAt, keptPosts: kept, keptPostsNeeded: rules.keptPosts };
     if (!getProfileSwitches().probation) return { onProbation: false, exemptBecause: 'off', ...base };
     if (nodeRoleOf(pubkey)) return { onProbation: false, exemptBecause: 'role', ...base };
     // A join time that can't be read counts as old: only the kept posts decide then.
-    const young = joined !== null && now < joined + PROBATION.hours * HOUR_MS;
-    return { onProbation: young || kept < PROBATION.keptPosts, exemptBecause: null, ...base };
+    const young = joined !== null && now < joined + rules.hours * HOUR_MS;
+    return { onProbation: young || kept < rules.keptPosts, exemptBecause: null, ...base };
 }
 
-/** For the checks on every post and message: the switch first, so a node without probation reads nothing more. */
-function onProbation(pubkey: string, now: number): boolean {
-    return getProfileSwitches().probation && probationState(pubkey, now).onProbation;
+/**
+ * For the checks on every post and message: the rules a member on probation runs on, or null when they are not on it.
+ * The switch first, so a node without probation reads nothing more.
+ */
+function probationRules(pubkey: string, now: number): ProbationRules | null {
+    if (!getProfileSwitches().probation) return null;
+    const state = probationState(pubkey, now);
+    return state.onProbation ? rulesOf(state.rules) : null;
+}
+
+/** Whether a member came in with 12 words, has added no sign-in, and is still on probation: one report hides their post. */
+export function isWordsNewcomer(pubkey: string, now: number = Date.now()): boolean {
+    return probationRules(pubkey, now) === WORDS_PROBATION;
 }
 
 /** "in about 5 hours", from now to the moment a limit lets up. */
@@ -113,15 +226,22 @@ function inAbout(resetsAtMs: number, now: number): string {
     return hours === 1 ? 'in about an hour' : `in about ${hours} hours`;
 }
 
-const WHY = 'New accounts have these limits for their first 3 days, and until 3 of their posts have stayed up.';
+const communities = (n: number) => (n === 1 ? '1 community' : `${n} communities`);
 
-function refusal(limit: ProbationLimit, resetsAtMs: number, now: number): ProbationLimitError {
+function why(rules: ProbationRules): string {
+    return rules === WORDS_PROBATION
+        ? 'Accounts made with 12 words have these limits for their first 7 days, and until 3 of their posts have stayed up. Adding a sign-in lifts them to the usual new-account limits.'
+        : 'New accounts have these limits for their first 3 days, and until 3 of their posts have stayed up.';
+}
+
+function refusal(rules: ProbationRules, limit: ProbationLimit, resetsAtMs: number, now: number): ProbationLimitError {
     const when = inAbout(resetsAtMs, now);
+    const WHY = why(rules);
     const message = {
-        posts: `While your account is new you can make ${PROBATION.posts} posts in any 24 hours. You can post again ${when}. ${WHY}`,
-        photos: `While your account is new you can add ${PROBATION.photos} photos to posts in any 24 hours. You can add more ${when}. ${WHY}`,
-        new_dm_recipients: `While your account is new you can message ${PROBATION.newDmRecipients} new people in any 24 hours. You can message someone new again ${when}. Replying to someone who wrote to you first is not limited. ${WHY}`,
-        knocks: `While your account is new you can ask ${PROBATION.knocks} community in any 24 hours to let you in. You can ask again ${when}. ${WHY}`,
+        posts: `While your account is new you can make ${rules.posts} posts in any 24 hours. You can post again ${when}. ${WHY}`,
+        photos: `While your account is new you can add ${rules.photos} photos to posts in any 24 hours. You can add more ${when}. ${WHY}`,
+        new_dm_recipients: `While your account is new you can message ${rules.newDmRecipients} new people in any 24 hours. You can message someone new again ${when}. Replying to someone who wrote to you first is not limited. ${WHY}`,
+        knocks: `While your account is new you can ask ${communities(rules.knocks)} in any 24 hours to let you in. You can ask again ${when}. ${WHY}`,
     }[limit];
     return new ProbationLimitError(limit, iso(resetsAtMs), message);
 }
@@ -151,22 +271,23 @@ function photoTimes(pubkey: string, now: number, exceptPostId?: string): string[
 }
 
 /**
- * Before a new post: throws ProbationLimitError when a member on probation has made 3 posts in the last 24 hours,
- * or when its `photoCount` photos would take them past 5.
+ * Before a new post: throws ProbationLimitError when a member on probation has made 3 posts (2 by 12 words) in the last
+ * 24 hours, or when its `photoCount` photos would take them past 5 (4).
  */
 export function assertMayPost(pubkey: string, photoCount: number, now: number = Date.now()): void {
-    if (!onProbation(pubkey, now)) return;
+    const rules = probationRules(pubkey, now);
+    if (!rules) return;
     const posts = inWindow(postTimes(pubkey, now), now);
-    if (posts.used >= PROBATION.posts) throw refusal('posts', posts.resetsAtMs!, now);
-    assertPhotosFit(pubkey, photoCount, now);
+    if (posts.used >= rules.posts) throw refusal(rules, 'posts', posts.resetsAtMs!, now);
+    assertPhotosFit(rules, pubkey, photoCount, now);
 }
 
-function assertPhotosFit(pubkey: string, adding: number, now: number, exceptPostId?: string): void {
+function assertPhotosFit(rules: ProbationRules, pubkey: string, adding: number, now: number, exceptPostId?: string): void {
     if (adding <= 0) return;
     const photos = inWindow(photoTimes(pubkey, now, exceptPostId), now);
-    if (photos.used + adding > PROBATION.photos) {
+    if (photos.used + adding > rules.photos) {
         // Nothing counted yet (one post with more photos than the whole allowance): a day from now.
-        throw refusal('photos', photos.resetsAtMs ?? now + PROBATION.windowMs, now);
+        throw refusal(rules, 'photos', photos.resetsAtMs ?? now + rules.windowMs, now);
     }
 }
 
@@ -177,11 +298,12 @@ function assertPhotosFit(pubkey: string, adding: number, now: number, exceptPost
  */
 export function assertMayEditPhotos(pubkey: string, postId: string, photoSetSize: number, newPhotoCount: number, now: number = Date.now()): void {
     if (newPhotoCount <= 0) return;
-    if (!onProbation(pubkey, now)) return;
+    const rules = probationRules(pubkey, now);
+    if (!rules) return;
     const row = db.prepare('SELECT created_at FROM posts WHERE id = ?').get(postId) as { created_at?: string } | undefined;
     const createdMs = row?.created_at ? Date.parse(row.created_at) : NaN;
-    const inside = Number.isFinite(createdMs) && createdMs > now - PROBATION.windowMs;
-    assertPhotosFit(pubkey, inside ? photoSetSize : newPhotoCount, now, inside ? postId : undefined);
+    const inside = Number.isFinite(createdMs) && createdMs > now - rules.windowMs;
+    assertPhotosFit(rules, pubkey, inside ? photoSetSize : newPhotoCount, now, inside ? postId : undefined);
 }
 
 /**
@@ -197,7 +319,8 @@ export function assertMayEditPhotos(pubkey: string, postId: string, photoSetSize
 function dmContacts(pubkey: string): Map<string, { mineFirst: string | null; theirsFirst: string | null }> {
     const rows = db.prepare(
         `SELECT other.public_key AS other, c.created_by, c.created_at,
-                (SELECT MIN(m.timestamp) FROM messages m WHERE m.conversation_id = mine.conversation_id AND m.author_pubkey = mine.public_key) AS mine_first,
+                (SELECT MIN(t) FROM (SELECT m.timestamp AS t FROM messages m WHERE m.conversation_id = mine.conversation_id AND m.author_pubkey = mine.public_key
+                                     UNION ALL SELECT w.timestamp FROM withheld_lines w WHERE w.conversation_id = mine.conversation_id AND w.author_pubkey = mine.public_key)) AS mine_first,
                 (SELECT MIN(m.timestamp) FROM messages m WHERE m.conversation_id = mine.conversation_id AND m.author_pubkey = other.public_key) AS theirs_first,
                 EXISTS (SELECT 1 FROM marketplace_transactions t
                          WHERE (t.buyer_pubkey = mine.public_key AND t.seller_pubkey = other.public_key)
@@ -207,6 +330,17 @@ function dmContacts(pubkey: string): Map<string, { mineFirst: string | null; the
            JOIN conversation_participants other ON other.conversation_id = mine.conversation_id AND other.public_key != mine.public_key
           WHERE mine.public_key = ?`
     ).all(pubkey) as { other: string; created_by: string | null; created_at: string | null; mine_first: string | null; theirs_first: string | null; traded: number }[];
+    // A conversation the member opened with someone who has blocked them (engine/withheld-lines.ts) is one they reached all
+    // the same, at its opening and at their first line in it: it counts as an opened one does, so their count moves as it does
+    // for any chat and shows nothing of the block (#1403 re-review).
+    const kept = db.prepare(
+        `SELECT c.other_pubkey AS other, c.created_at,
+                (SELECT MIN(w.timestamp) FROM withheld_lines w WHERE w.conversation_id = c.id AND w.author_pubkey = c.owner_pubkey) AS mine_first,
+                EXISTS (SELECT 1 FROM marketplace_transactions t
+                         WHERE (t.buyer_pubkey = c.owner_pubkey AND t.seller_pubkey = c.other_pubkey)
+                            OR (t.buyer_pubkey = c.other_pubkey AND t.seller_pubkey = c.owner_pubkey)) AS traded
+           FROM withheld_conversations c WHERE c.owner_pubkey = ?`
+    ).all(pubkey) as { other: string; created_at: string | null; mine_first: string | null; traded: number }[];
     const earliest = (a: string | null, b: string | null) => (!a ? b : !b ? a : a < b ? a : b);
     const byOther = new Map<string, { mineFirst: string | null; theirsFirst: string | null }>();
     for (const r of rows) {
@@ -215,6 +349,13 @@ function dmContacts(pubkey: string): Map<string, { mineFirst: string | null; the
         byOther.set(r.other, {
             mineFirst: earliest(had?.mineFirst ?? null, earliest(r.mine_first, r.created_by === pubkey ? opened : null)),
             theirsFirst: earliest(had?.theirsFirst ?? null, earliest(r.theirs_first, r.created_by === r.other ? opened : null)),
+        });
+    }
+    for (const r of kept) {
+        const had = byOther.get(r.other);
+        byOther.set(r.other, {
+            mineFirst: earliest(had?.mineFirst ?? null, earliest(r.mine_first, r.traded ? null : r.created_at)),
+            theirsFirst: had?.theirsFirst ?? null,
         });
     }
     return byOther;
@@ -231,16 +372,17 @@ function newRecipientTimes(contacts: Map<string, { mineFirst: string | null; the
 
 /**
  * Before a DM line from `sender` to `recipient`, or a conversation opened with them: throws ProbationLimitError when
- * `recipient` would be the 11th new person the sender on probation reaches in 24 hours. Someone the sender has
- * reached before, or who reached them first, is never limited.
+ * `recipient` would be the 11th (4th by 12 words) new person the sender on probation reaches in 24 hours. Someone the
+ * sender has reached before, or who reached them first, is never limited.
  */
 export function assertMayMessage(sender: string, recipient: string, now: number = Date.now()): void {
-    if (!onProbation(sender, now)) return;
+    const rules = probationRules(sender, now);
+    if (!rules) return;
     const contacts = dmContacts(sender);
     const known = contacts.get(recipient);
     if (known?.mineFirst || known?.theirsFirst) return;
     const fresh = inWindow(newRecipientTimes(contacts), now);
-    if (fresh.used >= PROBATION.newDmRecipients) throw refusal('new_dm_recipients', fresh.resetsAtMs!, now);
+    if (fresh.used >= rules.newDmRecipients) throw refusal(rules, 'new_dm_recipients', fresh.resetsAtMs!, now);
 }
 
 /**
@@ -249,9 +391,10 @@ export function assertMayMessage(sender: string, recipient: string, now: number 
  * knocked on, not on the applicant's node (see the list above).
  */
 export function knockRefusal(pubkey: string, knockTimes: readonly string[], now: number = Date.now()): ProbationLimitError | null {
-    if (!onProbation(pubkey, now)) return null;
+    const rules = probationRules(pubkey, now);
+    if (!rules) return null;
     const knocks = inWindow(knockTimes, now);
-    return knocks.used >= PROBATION.knocks ? refusal('knocks', knocks.resetsAtMs!, now) : null;
+    return knocks.used >= rules.knocks ? refusal(rules, 'knocks', knocks.resetsAtMs!, now) : null;
 }
 
 export interface ProbationSummary extends ProbationState {
@@ -268,6 +411,7 @@ export interface ProbationSummary extends ProbationState {
 /** A member's own probation, for `GET /api/community/me`: whether, until when, and what is left today. */
 export function probationSummary(pubkey: string, now: number = Date.now()): ProbationSummary {
     const state = probationState(pubkey, now);
+    const rules = rulesOf(state.rules);
     const posts = inWindow(postTimes(pubkey, now), now);
     const photos = inWindow(photoTimes(pubkey, now), now);
     const dms = inWindow(newRecipientTimes(dmContacts(pubkey)), now);
@@ -277,11 +421,11 @@ export function probationSummary(pubkey: string, now: number = Date.now()): Prob
     return {
         ...state,
         limits: {
-            posts: limit(PROBATION.posts, posts),
-            photos: limit(PROBATION.photos, photos),
-            new_dm_recipients: limit(PROBATION.newDmRecipients, dms),
-            knocks: { limit: PROBATION.knocks },
+            posts: limit(rules.posts, posts),
+            photos: limit(rules.photos, photos),
+            new_dm_recipients: limit(rules.newDmRecipients, dms),
+            knocks: { limit: rules.knocks },
         },
-        endsWhen: { hours: PROBATION.hours, keptPosts: PROBATION.keptPosts },
+        endsWhen: { hours: rules.hours, keptPosts: rules.keptPosts },
     };
 }

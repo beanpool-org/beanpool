@@ -38,7 +38,7 @@ export default function ProposeProjectModal() {
         typeBtnTitle: { fontSize: 14, fontWeight: 'bold', color: colors.text.heading, marginBottom: 4 },
         typeBtnDesc: { fontSize: 11, color: colors.text.secondary, lineHeight: 15 },
         footer: { padding: 20, borderTopWidth: 1, borderTopColor: colors.border.default, backgroundColor: colors.surface.app },
-        submitBtn: { paddingVertical: 16, borderRadius: 14, alignItems: 'center', backgroundColor: colors.brand.primary, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 5 },
+        submitBtn: { paddingVertical: 16, borderRadius: 14, alignItems: 'center', backgroundColor: colors.brand.fill, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 5 },
         submitBtnText: { color: colors.text.inverse, fontSize: 14, fontWeight: 'bold', letterSpacing: 0.5 },
         toast: { position: 'absolute', bottom: 100, left: 20, right: 20, backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber100, borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.amber500, borderWidth: 1, padding: 12, borderRadius: 12, alignItems: 'center' },
         toastText: { color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber800, fontWeight: '700', fontSize: 13 },
@@ -108,7 +108,7 @@ export default function ProposeProjectModal() {
             Alert.alert(
                 "Initiative Started 🌱",
                 lifecycle === 'bounded' 
-                    ? "Your bounded project has been created and is now open for community backing."
+                    ? "Your project has been created and is now open for community backing."
                     : "Your community enterprise has been established in the Commons.",
                 [{ text: "OK", onPress: () => router.back() }]
             );
@@ -122,7 +122,7 @@ export default function ProposeProjectModal() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar style="dark" />
+            <StatusBar style={theme === 'dark' ? 'light' : 'dark'} />
             <View style={styles.header}>
                 <Pressable onPress={() => router.back()} style={styles.backButton} accessibilityRole="button" accessibilityLabel="Close">
                     <MaterialCommunityIcons name="close" size={28} color={colors.text.inverse} />
@@ -143,7 +143,7 @@ export default function ProposeProjectModal() {
                     <View style={styles.infoBox}>
                         <MaterialCommunityIcons name="information" size={20} color={colors.brand.primary} style={{ marginRight: 8 }} />
                         <Text style={styles.infoText}>
-                            Community enterprises trade, produce, and steward shared initiatives. Bounded initiatives raise beans toward specific community goals.
+                            An enterprise keeps going and trades; its keepers run it together. A project has a leader, a goal in Beans and usually an end date.
                         </Text>
                     </View>
 
@@ -153,23 +153,23 @@ export default function ProposeProjectModal() {
                         <View style={styles.typeSelectorRow}>
                             <Pressable
                                 accessibilityRole="button"
-                                accessibilityLabel="Bounded Project: Has funding goal and deadline"
+                                accessibilityLabel="Project: a leader, a goal, an end date"
                                 accessibilityState={{ selected: lifecycle === 'bounded' }}
                                 style={[styles.typeBtn, lifecycle === 'bounded' && styles.typeBtnActive]}
                                 onPress={() => setLifecycle('bounded')}
                             >
-                                <Text style={styles.typeBtnTitle}>🌱 Bounded Project</Text>
-                                <Text style={styles.typeBtnDesc}>Has funding goal and optional deadline</Text>
+                                <Text style={styles.typeBtnTitle}>🌱 Project</Text>
+                                <Text style={styles.typeBtnDesc}>A leader, a goal, an end date</Text>
                             </Pressable>
                             <Pressable
                                 accessibilityRole="button"
-                                accessibilityLabel="Ongoing Enterprise: Permanent co-op or facility"
+                                accessibilityLabel="Enterprise: keepers, it keeps going"
                                 accessibilityState={{ selected: lifecycle === 'ongoing' }}
                                 style={[styles.typeBtn, lifecycle === 'ongoing' && styles.typeBtnActive]}
                                 onPress={() => setLifecycle('ongoing')}
                             >
-                                <Text style={styles.typeBtnTitle}>🏛️ Ongoing</Text>
-                                <Text style={styles.typeBtnDesc}>Permanent co-op or community facility</Text>
+                                <Text style={styles.typeBtnTitle}>🏛️ Enterprise</Text>
+                                <Text style={styles.typeBtnDesc}>Keepers; it keeps going</Text>
                             </Pressable>
                         </View>
                     </View>
@@ -258,7 +258,7 @@ export default function ProposeProjectModal() {
                                         accessibilityRole="button"
                                         accessibilityLabel="Clear deadline"
                                     >
-                                        <Text style={{ fontSize: 12, color: colors.feedback.danger.solid }}>Clear deadline</Text>
+                                        <Text style={{ fontSize: 12, color: colors.feedback.danger.fg }}>Clear deadline</Text>
                                     </Pressable>
                                 )}
                             </View>
@@ -332,7 +332,8 @@ export default function ProposeProjectModal() {
                             onPress={handleSubmit}
                             disabled={submitting}
                             accessibilityRole="button"
-                            accessibilityLabel={submitting ? "Starting enterprise..." : "Start Enterprise"}
+                            accessibilityLabel={submitting ? "Starting initiative..." : "Start initiative"}
+                            accessibilityHint="Creates enterprise or project and opens it for community backing"
                             accessibilityState={{ disabled: submitting, busy: submitting }}
                         >
                             {submitting ? (

@@ -1,0 +1,183 @@
+/**
+ * name-key-memory — the phone remembers which key each name had (group chats, line-display design §10 pick 3, decided).
+ *
+ * Names are the node's (§8): a node that moves a callsign to another key lies everywhere at once. The phone's own past is
+ * the only guard: once it has seen a name on a key, a later roster showing that name on another key, with no succession
+ * statement from the new key reaching the old one (core walkKeySuccession over the row's `formerKeys`), is marked
+ * "(key changed)" beside the name, as Signal marks a safety-number change. A re-key the member confirmed is no change.
+ * The mark stays until such a statement is served. The web app keeps nothing (parent design §4).
+ *
+ * A claim is only the claimant's word (review of #1826, NB4): a chain reaching a key that is another row's current key in
+ * the same roster doesn't count, and a name two rows share is neither moved nor cleared.
+ *
+ * Per community and per name (ASCII case folded, as the node's own lower(callsign) uniqueness is), in AsyncStorage:
+ * { key, changedFrom?, was? }; and per key, the names it was seen under (noteNamesByKey).
+ */
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { verifiedFormerKeys, type FormerKey } from './group-chat-crypto';
+
+export const KEY_CHANGED_HINT = '(key changed)';
+
+export interface RememberedKey {
+    key: string;
+    /** The key this name had before, when it moved with no statement: the mark shows until one reaches it. */
+    changedFrom?: string;
+    /**
+     * The keys this phone saw this name on before a move a statement confirmed, newest first (at most 8): what an in-person
+     * confirmation of the member's new phone checks against (DESIGN-group-history-after-rekey-fable.md §4), so a phone the
+     * node tells "her old key was Zed's" never hands Zed's epochs. A key the name moved to with no statement never enters it
+     * unless a later chain reaches the key that move left (§4 amendment): a relabelled roster can't put Zed's key here.
+     */
+    was?: string[];
+}
+
+const WAS_MAX = 8;
+/** `was` with `k` put first. */
+const withWas = (was: readonly string[] | undefined, k: string): string[] => [k, ...(was ?? []).filter((x) => x !== k)].slice(0, WAS_MAX);
+export type NameKeyMemory = Record<string, RememberedKey>;
+
+export interface MemoryRosterRow {
+    memberPubkey: string;
+    callsign?: string | null;
+    formerKeys?: readonly FormerKey[] | null;
+}
+
+/** SQLite's lower() folds ASCII only, so "Ána" and "ána" are two members on the node, and two names here. */
+const nameKey = (callsign: string) => callsign.trim().replace(/[A-Z]/g, (c) => c.toLowerCase());
+
+/**
+ * The memory after seeing `roster`, and the keys to mark "(key changed)". Pure: a name first seen is remembered; a name
+ * on the same key stays; a name on another key is a change unless the row's verified chain reaches the remembered key.
+ */
+export function noteRosterNames(memory: NameKeyMemory, roster: readonly MemoryRosterRow[]): { memory: NameKeyMemory; changed: Set<string> } {
+    const next: NameKeyMemory = { ...memory };
+    const changed = new Set<string>();
+    const current = new Set(roster.filter((r) => typeof r?.memberPubkey === 'string').map((r) => r.memberPubkey));
+    const named = roster.filter((r): r is MemoryRosterRow & { callsign: string } => !!r?.callsign && typeof r.memberPubkey === 'string');
+    const rowsNamed = new Map<string, number>();
+    for (const r of named) rowsNamed.set(nameKey(r.callsign), (rowsNamed.get(nameKey(r.callsign)) ?? 0) + 1);
+    for (const r of named) {
+        const n = nameKey(r.callsign);
+        const seen = next[n];
+        if ((rowsNamed.get(n) ?? 0) > 1) {
+            // Two rows with one name: the node is saying two things; the memory keeps what it had, mark included.
+            if (seen?.changedFrom && seen.key === r.memberPubkey) changed.add(r.memberPubkey);
+            continue;
+        }
+        // Newest first: each link is the newer key's signature over the one before it.
+        const path = verifiedFormerKeys(r).filter((k) => !current.has(k));
+        const former = new Set(path);
+        const reaches = (k: string) => former.has(k);
+        if (!seen) {
+            next[n] = { key: r.memberPubkey };
+        } else if (seen.key === r.memberPubkey) {
+            if (seen.changedFrom && reaches(seen.changedFrom)) next[n] = { key: r.memberPubkey, was: withWas(seen.was, seen.changedFrom) };
+            else if (seen.changedFrom) changed.add(r.memberPubkey);
+        } else if (reaches(seen.key)) {
+            // An unconfirmed move taints the name (DESIGN-group-history-after-rekey-fable.md, §4 amendment; review of #1844,
+            // finding 1): a chain to the key it moved TO confirms nothing, so the mark and changedFrom stay and that key never
+            // enters `was`. Only a chain that also reaches the key the move left (each link the newer key's signature) confirms it,
+            // and the moved-to key enters only where that chain places it NEWER than the key the move left, the order this phone
+            // saw them in (§4 amendment 2; confirmation 1 of #1844, finding 1): a chain C2 → P → Z says Z came before P.
+            if (!seen.changedFrom) next[n] = { key: r.memberPubkey, was: withWas(seen.was, seen.key) };
+            else if (reaches(seen.changedFrom)) {
+                const inOrder = path.indexOf(seen.key) < path.indexOf(seen.changedFrom);
+                next[n] = { key: r.memberPubkey, was: inOrder ? withWas(withWas(seen.was, seen.changedFrom), seen.key) : withWas(seen.was, seen.changedFrom) };
+            }
+            else { next[n] = { key: r.memberPubkey, changedFrom: seen.changedFrom, ...(seen.was ? { was: seen.was } : {}) }; changed.add(r.memberPubkey); }
+        } else {
+            next[n] = { key: r.memberPubkey, changedFrom: seen.changedFrom ?? seen.key, ...(seen.was ? { was: seen.was } : {}) };
+            changed.add(r.memberPubkey);
+        }
+    }
+    return { memory: next, changed };
+}
+
+const storageKey = (nodeUrl: string) => `beanpool_name_keys:${nodeUrl.replace(/\/+$/, '')}`;
+const byKeyStorageKey = (nodeUrl: string) => `beanpool_names_by_key:${nodeUrl.replace(/\/+$/, '')}`;
+
+/** The names each key was a current row under, newest last; one per folded name, at most 8 a key. */
+export type NamesByKey = Record<string, string[]>;
+const NAMES_MAX = 8;
+
+/**
+ * Pure: `prior` with the name each row of `roster` shows on its key (§4 amendment 2; confirmation 1 of #1844, finding 2).
+ * The memory above is keyed by name, and the node names a re-keyed phone: a lookalike ("Cаt", Cyrillic а) is a name this
+ * phone never saw. This is the other way round: a key this phone saw as another name's never counts as the old key in a
+ * new-phone code under this one.
+ */
+export function noteNamesByKey(prior: NamesByKey, roster: readonly MemoryRosterRow[]): NamesByKey {
+    const next: NamesByKey = { ...prior };
+    for (const r of roster) {
+        if (!r?.callsign || typeof r.memberPubkey !== 'string' || !r.callsign.trim()) continue;
+        const had = Array.isArray(next[r.memberPubkey]) ? next[r.memberPubkey].filter((x) => typeof x === 'string') : [];
+        const n = nameKey(r.callsign);
+        if (!had.some((x) => nameKey(x) === n)) next[r.memberPubkey] = [...had, r.callsign.trim()].slice(-NAMES_MAX);
+    }
+    return next;
+}
+
+/** The names this phone saw `key` under as a current row; [] when none, or the memory can't be read. */
+export async function namesThisPhoneSawFor(nodeUrl: string, key: string): Promise<string[]> {
+    try {
+        const raw = await AsyncStorage.getItem(byKeyStorageKey(nodeUrl));
+        const v = raw ? JSON.parse(raw) : {};
+        const names = v && typeof v === 'object' ? v[key] : undefined;
+        return Array.isArray(names) ? names.filter((x): x is string => typeof x === 'string') : [];
+    } catch {
+        return [];
+    }
+}
+
+/** Reads this community's memory, notes the roster, writes it back: the keys to mark. Storage failing marks nothing. */
+export async function rememberRosterNames(nodeUrl: string, roster: readonly MemoryRosterRow[]): Promise<Set<string>> {
+    try {
+        const raw = await AsyncStorage.getItem(storageKey(nodeUrl));
+        const memory = raw ? (JSON.parse(raw) as NameKeyMemory) : {};
+        const { memory: next, changed } = noteRosterNames(memory && typeof memory === 'object' ? memory : {}, roster);
+        await AsyncStorage.setItem(storageKey(nodeUrl), JSON.stringify(next));
+        const rawByKey = await AsyncStorage.getItem(byKeyStorageKey(nodeUrl));
+        const byKey = rawByKey ? JSON.parse(rawByKey) : {};
+        await AsyncStorage.setItem(byKeyStorageKey(nodeUrl), JSON.stringify(noteNamesByKey(byKey && typeof byKey === 'object' ? byKey : {}, roster)));
+        return changed;
+    } catch {
+        return new Set();
+    }
+}
+
+/**
+ * The keys this phone saw `callsign` on before, other than `current`: its `was` list, an unconfirmed `changedFrom`, and
+ * the remembered key when the phone hasn't seen the move yet. While a move is unconfirmed (`changedFrom` set), only keys
+ * from before it count: the remembered key is the one the node moved the name to (§4 amendment). [] when it never knew the
+ * name, or the memory can't be read. Read only: nothing the node says now goes in, though every entry came from a roster
+ * it served earlier; what the node can't rewrite is the order in which the phone saw them.
+ */
+export async function keysThisPhoneKnewFor(nodeUrl: string, callsign: string, current: string): Promise<string[]> {
+    try {
+        const raw = await AsyncStorage.getItem(storageKey(nodeUrl));
+        const memory = raw ? (JSON.parse(raw) as NameKeyMemory) : {};
+        const seen = memory && typeof memory === 'object' ? memory[nameKey(callsign)] : undefined;
+        if (!seen || typeof seen.key !== 'string') return [];
+        const keys = [...(seen.changedFrom ? [] : [seen.key]), ...(Array.isArray(seen.was) ? seen.was : []), seen.changedFrom].filter((k): k is string => typeof k === 'string' && k !== current);
+        return [...new Set(keys)];
+    } catch {
+        return [];
+    }
+}
+
+/** The details line under a marked name (§10 pick 3). */
+export const KEY_CHANGED_DETAILS = "This phone knew this name on another key, and the new key hasn't confirmed it was theirs.";
+
+/**
+ * A chat's shown lines with the mark: a line whose signer is a marked key gets "(key changed)" on its own line under its
+ * name (`authorHint`: the name's line is cut at 320dp with 1.3× text, the mark must not be; review of #1826, NB9) and the
+ * details line. A line with no name of its own (unverified, still opening) is left as it is.
+ */
+export function markKeyChanged<T extends { senderId?: string; unattributed?: boolean; authorName?: string | null; authorHint?: string | null; integrityNote?: string | null }>(
+    lines: readonly T[], changed: ReadonlySet<string>,
+): T[] {
+    if (changed.size === 0) return [...lines];
+    return lines.map((m) => (!m.unattributed && m.senderId && m.authorName && changed.has(m.senderId)
+        ? { ...m, authorHint: KEY_CHANGED_HINT, integrityNote: m.integrityNote ? `${m.integrityNote} ${KEY_CHANGED_DETAILS}` : KEY_CHANGED_DETAILS }
+        : m));
+}

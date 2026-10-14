@@ -1,6 +1,7 @@
 // "Your groups" (groups decisions 6, 7 and 13, 2026-09-19): one list of every group-like chat a member is in —
-// their Commons groups, the enterprises they keep (🥖) and the events they host or are Going to (📅) — each
-// with its latest message and the member's unread count, computed here per member.
+// their Commons groups, the enterprises they keep (🥖) and the projects they lead or help (🎯), and the events
+// they host or are Going to (📅) — each with its latest message and the member's unread count, computed here
+// per member.
 //
 // Built from the authorities, not from the participants mirror: an active group_members row, a keepership,
 // an RSVP. So a group the member left or was removed from, a pending request, an open invitation, or an
@@ -16,8 +17,9 @@ import {
 import {
     canReadEventThread, loadEventForThread, isEventThreadExpired, eventThreadReadOnlyReason, EVENT_THREAD_REMOVED_TEXT,
 } from './event-thread.js';
+import { blankedWithAccount } from './message-tombstone.js';
 import { getChatMutesFor, type ChatMute } from './chat-mutes.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarUrlOf, groupPictureUrlOf, isGroupEncryptedNonce } from '@beanpool/core';
 
 export type YourChatKind = 'group' | 'enterprise' | 'event';
 
@@ -27,34 +29,49 @@ export const YOUR_CHAT_BADGES: Readonly<Record<YourChatKind, string | null>> = {
     event: '📅',
 };
 
+/** A project's badge (a goal): an enterprise-kind row whose lifecycle is 'bounded' (group decisions §3.1). */
+export const PROJECT_BADGE = '🎯';
+
 export interface YourChatLastMessage {
     id: string;
     authorPubkey: string;
     authorCallsign: string | null;
     type: string;
     systemType: string | null;
-    /** Plain text for display: decoded plaintext-v1, a system line as written, or the removal notice. */
+    /** Plain text for display: decoded plaintext-v1, a system line as written, the removal notice, or LOCKED_PREVIEW. */
     text: string;
     timestamp: string;
+    /** A locked group line as stored, which the app opens for its own preview (group chat encryption design §9). */
+    locked?: { ciphertext: string; nonce: string; metadata: string | null };
 }
+
+/** What a locked group line reads as to an app that does not open it (the PWA until the thread is opened, §9). */
+export const LOCKED_PREVIEW = '🔒 Message';
 
 export interface YourChat {
     kind: YourChatKind;
-    /** 🥖 for an enterprise, 📅 for an event, null for a group. */
+    /** 🥖 for an enterprise, 🎯 for a project, 📅 for an event, null for a group. */
     badge: string | null;
+    /**
+     * An enterprise-kind row only: 'bounded' is a project (a leader and collaborators), 'ongoing' an enterprise (its
+     * keepers). Both open the same chat; an app too old to read this calls both an enterprise.
+     */
+    lifecycle?: 'ongoing' | 'bounded';
     /** The owner: group id, enterprise pubkey, or event post id. */
     id: string;
     /** Open the chat with this id (it equals `id` for all three kinds). */
     conversationId: string;
     name: string;
     avatarUrl: string | null;
-    /** Group: convenor | member | observer. Enterprise: lead | keeper. Event: host | going. */
+    /** Group: convenor | member | observer. Enterprise or project: lead | keeper. Event: host | going. */
     role: string;
     category?: string;
     joinPolicy?: string;
     eventStartAt?: string | null;
     eventEndAt?: string | null;
     readOnly: boolean;
+    /** A group its members closed by a vote (DESIGN-group-decisions §2.3): shown closed, its chat read-only. */
+    closedAt?: string | null;
     lastMessage: YourChatLastMessage | null;
     unreadCount: number;
     mute: ChatMute | null;
@@ -85,6 +102,9 @@ const DELETED_BY_AUTHOR_PREVIEW = 'This message was deleted';
  * the only reading those can carry, whoever pressed the button, including the host or keeper's own line.
  */
 function tombstonePreview(row: any, removedText: string, authorDeleteText: string | null): string {
+    // A deleted account's line is its own author's delete in EVERY kind of chat, an event's and an enterprise's too,
+    // where `authorDeleteText` is null: it must not read as the host's or a keeper's removal.
+    if (blankedWithAccount(row.metadata)) return DELETED_BY_AUTHOR_PREVIEW;
     if (!authorDeleteText) return removedText;
     let meta: any = null;
     if (row.metadata) { try { meta = JSON.parse(row.metadata); } catch { /* unreadable: fall through */ } }
@@ -98,6 +118,8 @@ function tombstonePreview(row: any, removedText: string, authorDeleteText: strin
 function previewText(row: any, removedText: string, authorDeleteText: string | null): string {
     if (row.type === 'removed') return tombstonePreview(row, removedText, authorDeleteText);
     if (row.type === 'system') return String(row.ciphertext ?? '');
+    // A locked group line (group chats step 2): the node can't read it, so an app opens the preview itself from `locked`.
+    if (isGroupEncryptedNonce(row.nonce)) return LOCKED_PREVIEW;
     let text = String(row.ciphertext ?? '');
     if (row.nonce === 'plaintext-v1') {
         try { text = Buffer.from(text, 'base64').toString('utf8'); } catch { /* keep as stored */ }
@@ -120,6 +142,8 @@ function lastMessageOf(conversationId: string, removedText: string, authorDelete
         type: r.type,
         systemType: r.system_type || null,
         text: previewText(r, removedText, authorDeleteText),
+        // The line as stored, for the app to open (§9): only for a locked line.
+        ...(isGroupEncryptedNonce(r.nonce) ? { locked: { ciphertext: r.ciphertext, nonce: r.nonce, metadata: r.metadata ?? null } } : {}),
         timestamp: r.timestamp,
     };
 }
@@ -167,8 +191,9 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
 
     // Commons groups: active membership only.
     const groups = db.prepare(`
-        SELECT g.id, g.name, g.category, g.join_policy, g.avatar_url, gm.role
+        SELECT g.id, g.name, g.category, g.join_policy, g.avatar_ref, gm.role, gc.closed_at
         FROM group_members gm JOIN groups g ON g.id = gm.group_id
+        LEFT JOIN group_closures gc ON gc.group_id = g.id
         WHERE gm.member_pubkey = ? AND gm.status = 'active'
     `).all(pubkey) as any[];
     for (const g of groups) {
@@ -176,13 +201,15 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
         syncGroupThreadMembership(g.id, pubkey);
         finish({
             kind: 'group', badge: YOUR_CHAT_BADGES.group, id: g.id, conversationId: g.id, name: g.name,
-            avatarUrl: g.avatar_url || null, role: g.role, category: g.category, joinPolicy: g.join_policy, readOnly: false,
+            // The group's picture as its URL (#1486), never the picture: as every group read gives it.
+            avatarUrl: groupPictureUrlOf(g.id, g.avatar_ref), role: g.role, category: g.category, joinPolicy: g.join_policy,
+            readOnly: !!g.closed_at, closedAt: g.closed_at ?? null,
         }, GROUP_THREAD_REMOVED_TEXT);
     }
 
     // Enterprises the member keeps (a keeper whose operator capability is live), not hidden ones.
     const enterprises = db.prepare(`
-        SELECT o.treasury_pubkey AS id, o.role, e.callsign, e.avatar_url, e.status, e.joined_at
+        SELECT o.treasury_pubkey AS id, o.role, e.callsign, e.avatar_ref, e.status, e.joined_at, e.lifecycle
         FROM treasury_operators o JOIN members e ON e.public_key = o.treasury_pubkey
         WHERE o.member_pubkey = ? AND COALESCE(e.is_treasury, 0) = 1
     `).all(pubkey) as any[];
@@ -190,9 +217,11 @@ export function listYourChats(pubkey: string): { items: YourChat[]; totalUnread:
         if (isEnterpriseThreadHidden(e.status) || !isKeeperOfEnterprise(pubkey, e.id)) continue;
         ensureEnterpriseThread(e.id);
         ensureKeeperReadCursor(e.id, pubkey);
+        const project = e.lifecycle === 'bounded';
         finish({
-            kind: 'enterprise', badge: YOUR_CHAT_BADGES.enterprise, id: e.id, conversationId: e.id, name: e.callsign,
-            avatarUrl: avatarUrlFor(e.id, e.avatar_url), role: e.role === 'lead' ? 'lead' : 'keeper',
+            kind: 'enterprise', badge: project ? PROJECT_BADGE : YOUR_CHAT_BADGES.enterprise, lifecycle: project ? 'bounded' : 'ongoing',
+            id: e.id, conversationId: e.id, name: e.callsign,
+            avatarUrl: avatarUrlOf(e.id, e.avatar_ref), role: e.role === 'lead' ? 'lead' : 'keeper',
             readOnly: isEnterpriseThreadReadOnly(e.status),
         }, 'removed by a keeper', e.joined_at);
     }

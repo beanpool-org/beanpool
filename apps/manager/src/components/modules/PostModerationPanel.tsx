@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { getTfaSessionToken, deleteNodePost } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { nodeCredential } from '../../lib/profiles';
 
 export interface PostModerationItem {
     id: string;
@@ -111,7 +112,7 @@ export function PostModerationPanel({
                 await deleteNodePost(
                     activeNode.url,
                     deletingPost.id,
-                    activeNode.adminPassword,
+                    nodeCredential(activeNode),
                     getTfaSessionToken(activeNode.id)
                 );
             }

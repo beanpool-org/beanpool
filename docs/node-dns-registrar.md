@@ -50,7 +50,9 @@ Pages Function.
 | Squatting / impersonation on your brand | Reserved-name blocklist (§5) + manual approval + you can **revoke** any lease instantly |
 | A bad node abusing the name | Revoke = delete tunnel/record → node is unreachable at that name within seconds |
 | Origin getting DoS'd | Offer the **tunnel** mode (origin IP never exposed) — see §3 |
-| Spam registrations | Rate-limit by node pubkey + source IP; pending requests expire |
+| Spam registrations | One node key holds at most `CLAIM_LIMIT_PER_KEY` names (3; its own releases count until their hold ends); every field a key sets is capped and checked (2026-10-01). Not built: a per-IP budget (planned as a Cloudflare rate-limit rule on the claim route), and pending requests don't expire |
+| A captured signed request replayed | Signing protocol v2 signs a one-use `x-bp-nonce` the registrar takes once; v1 (no nonce) stays accepted until every node sends v2, and replays inside its ±300 s window until then |
+| beanpool.org vouching for a stranger's server | The switchboard's `?n=` names only a name the registrar holds live (2026-10-01; it used to send the app to any host) |
 
 Key property: with a **tunnel**, we are the landlord and hold a kill switch. With **direct DNS**, the
 operator owns their own reachability and we only hold the name.
@@ -63,7 +65,9 @@ The manager offers a choice. The registrar **probes** the node's source IP on :4
 recommends, but the operator decides.
 
 ### 🛡️ Tunnel  (recommended default)
-Node runs a `cloudflared` sidecar that dials **outbound** to Cloudflare; we map the hostname to that tunnel.
+The node runs `cloudflared` inside its own container, as a child of the server, and it dials **outbound** to Cloudflare; we
+map the hostname to that tunnel. (Until 2026-09-28 it was a separate sidecar container, which the server restarted through
+Docker's control socket; see `apps/server/src/services/tunnel-connector.ts`.)
 
 - ✅ **Works anywhere** — behind home NAT / CGNAT, no port-forwarding, no router config.
 - ✅ **No public/static IP needed** — dynamic IP changes don't break it.
@@ -108,7 +112,7 @@ reachable → offer both, default Tunnel.
 ┌───────┴───────── community node (Docker) ─────────┐   ┌─┴──────────────┐
 │  manager "Public Address" tab  (apps/manager)      │   │ approval page  │
 │  node server  (apps/server) — HTTP listener :PORT  │   │ (in the tab or │
-│  cloudflared sidecar  (only in Tunnel mode)        │   │  a mini admin) │
+│  cloudflared, the server's child (Tunnel mode)     │   │  a mini admin) │
 └────────────────────────────────────────────────────┘   └────────────────┘
 ```
 
@@ -118,8 +122,9 @@ reachable → offer both, default Tunnel.
 - **Manager tab** — a "Public Address" section in `apps/manager` (served at `/gateway`, admin-password
   gated), talking to *its own* node via the existing `node-client.ts` pattern; the node relays to the
   registrar so the node's identity key signs the claim.
-- **cloudflared sidecar** — one extra service in the node's `docker-compose.yml`, started only when a
-  tunnel token is present.
+- **cloudflared** — in the node's image (copied from Cloudflare's, pinned by version and digest in the `Dockerfile`), run
+  by the server as its own child only on the main server with a live tunnel address, on the token in its settings
+  (`services/tunnel-connector.ts`). No second container, no compose profile, no Docker socket.
 
 ---
 
@@ -197,11 +202,14 @@ lookup and a Cloudflare-API zone check are only belt-and-suspenders at mint time
 | `POST /api/registrar/claim` | `{ name, mode, origin, contact? }` | Atomic reserve → probe → `pending`. Returns `{ status:'pending' }` or `409`. |
 | `GET  /api/registrar/status` | (signed) | Node polls: `pending` / `live` (+ `tunnelToken`, `hostname`) / `revoked`. |
 | `POST /api/registrar/offline` | (signed) | Operator tears their own name down. |
+| `POST /api/registrar/heal` | `{ name?, origin? }` | The owner brings its own held name back (a pause its heal lifts): routed again once the node proves its key. Never a claim. |
+| `POST /api/registrar/rotate` | `{ name?, origin? }` | The owner's tunnel name onto a fresh tunnel: the old one (and every copy of its token) deleted, the record re-pointed, the new token answered. Settings' **New tunnel key**. |
 
-`origin` is where Cloudflare/cloudflared should send traffic — for a sidecar on the compose network,
-`http://node:PORT` (the node's plain HTTP listener, `app.listen(port)` in
-[http-server.ts:144](../apps/server/src/http-server.ts)); TLS is terminated at the edge so the origin
-hop is plain HTTP on the private network.
+`origin` is where Cloudflare/cloudflared should send traffic: the node's own loopback, `http://127.0.0.1:PORT` (its plain
+HTTP listener, [http-server.ts](../apps/server/src/http-server.ts)), since cloudflared runs inside the node's container.
+TLS is terminated at the edge, so the origin hop is plain HTTP inside the container. A node whose tunnel was set up
+before 2026-09-28 (origin `http://beanpool-node:8080`, for the old sidecar) claims its own name again once with its
+loopback, which is a heal that moves the ingress; meanwhile its compose file pins `beanpool-node` to 127.0.0.1.
 
 ### Admin-facing (`checkAdminAuth` — your password)
 
@@ -273,17 +281,17 @@ NETWORKING ▸ Public Address
 ```
 
 **Handshake:** the node stores the chosen name/mode, calls `claim`, then polls `status`. On `live` in
-tunnel mode it receives the token, writes it to its data dir, and starts/refreshes the `cloudflared`
-sidecar **automatically**. The token is *also* surfaced in this admin-only tab (masked, with
-reveal/copy/rotate) so a self-hoster can run or debug the connector themselves — auto-assigned *and*
-visible.
+tunnel mode it receives the token, saves it in its settings (node_config, never a file), and starts or restarts its own
+`cloudflared` child **automatically**. When the tunnel is refused ("Unauthorized") for 2 minutes it asks the registrar
+and runs a new token, or claims its own name again to have the tunnel re-made. The token is *also* surfaced in this
+admin-only tab (masked, with reveal/copy) so a self-hoster can debug the connector — auto-assigned *and* visible. The tab
+shows the tunnel's state (connected, retrying and why, not running) and has **Restart tunnel**.
 
 **Config surface (node):** `COMMUNITY_NAME` (or set via the tab), `REGISTRAR_URL`
-(default `https://beanpool.org`), plus a stored `TUNNEL_TOKEN` the node manages itself.
+(default `https://beanpool.org`); the tunnel token the node manages itself, in node_config.
 
-**Docker compose (tunnel mode):** add a `cloudflared` service —
-`cloudflared tunnel run --token ${TUNNEL_TOKEN}` — on the same network as the node; ingress `origin`
-points at the node's service name. Started only when a token exists.
+**Docker compose (tunnel mode):** nothing to add. The tunnel runs inside the node's container on a plain
+`docker compose up`; the compose file mounts no Docker socket and has no `cloudflared` service or profile.
 
 ---
 
@@ -338,6 +346,25 @@ lands on us. So abuse controls ship **with** the registrar, not after.
    offline it is **not** taken away; it just isn't reachable until it's back. It's only auto-removed if
    your node starts serving something that isn't beanpool, if you take it offline yourself, or if an
    admin revokes it."*
+
+   **As built (2026-10-02, after the 2026-09-24 incident; design `scratch/registrar/DESIGN-2026-09-24-fable.md`
+   §2.3, decision D2 = b; M3 of the 2026-10-01 review):** nothing auto-*removes* a name any more — a failed check
+   can only **pause routing**, and the name stays its key's (no other key may claim it). Verdicts: `ok`;
+   `impostor` (a valid signature by ANOTHER node key over our fresh nonce: 2 sweeps in a row pause it); a
+   **content swap** (a 2xx that is no attest at all — a page; a BeanPool node never answers one: 12 applied
+   sweeps in a row, about an hour, pause it, and only in sweeps that saw the verifier working, the canary `ok` or
+   with none some name `ok`); and `unverifiable` (anything else: down, 5xx, an unknown signing format — never
+   evidence). While a run is open, an `ok` is asked again (three answers in all), so a second connector on a copy
+   of the tunnel token can't hide behind the owner's answers, if it answers the attest with another key or a page. One that
+   answers `/api/attest` with an error (4xx/5xx) is `unverifiable`, which never opens a run, so it is not detected. A sweep with too many foreign answers at once
+   (impostors and swaps together > max(2, 10% of live), or every live name) is the registrar's fault and acts on
+   none. A pause deletes the tunnel and the record; the owner's node asks for the name back by itself (a heal,
+   never a claim: on the agent's next tick, or when its dead tunnel is noticed), and it is routed again once the
+   node proves its key — on a fresh tunnel only its signed request gets the token of, or (a direct name) through
+   an attest at the name under its key. Only an admin pause needs the admin. The holder can also **rotate**
+   (Settings' New tunnel key): its name onto a fresh tunnel, the old token dead at once — for a token that may
+   have leaked (a standby given away, a token seen on a screen). It does not lock out a copied data folder or backup:
+   that holds the node key, and `/status` gives that key the new token within a tick. See `apps/registrar/README.md`.
 2. **Approval gate.** Manual approval on `gated` names now (paper trail, bound to pubkey + contact);
    auto for the rest. Fast one-click **revoke** always available.
 3. **Raise the cost of anonymity.** Registration binds `name → node_pubkey` + a contact / an existing
@@ -387,7 +414,7 @@ All three: name claimed in the registrar's table (auto/gated/blocked), invites r
   `151a28c4…`, zone `060a99ae…`) on one throwaway name, to lock the exact API shapes before coding.
 - **Phase 1 — MVP (Case A):** registrar Worker (D1: `name_allocations` + `name_policy`; signed
   claim/status/offline; admin pending/approve/revoke; CF client tunnel path) · **attestation loop** ·
-  manager "Public Address" tab · `cloudflared` compose sidecar · node `/api/attest` endpoint ·
+  manager "Public Address" tab · `cloudflared` compose sidecar (moved inside the node 2026-09-28) · node `/api/attest` endpoint ·
   **switchboard** `beanpool.org/i/<code>` + app handler. Approval manual.
 - **Phase 2 — breadth:** Case B (Direct/A-record + reachability probe) · Case C (BYO-domain wired to the
   switchboard) · auto-approve for the `auto` tier · public community directory · isolation decision.

@@ -88,6 +88,38 @@ export const updateIfUnchanged = async (env, name, expected, fields, { withIds =
 // keys racing for a freed name must not both think they won, and a take-back must not undo the admin's release.
 export const replaceAllocation = (env, name, expected, fields) => updateIfUnchanged(env, name, expected, fields);
 
+// Delete `expected` — a row this request inserted — only if its tenure and state are still as inserted.
+export const deleteIfUnchanged = async (env, name, expected) => {
+    const r = await env.DB.prepare(`DELETE FROM name_allocations WHERE name=? AND ${STATE.map((c) => `${c} IS ?`).join(' AND ')}`)
+        .bind(name, ...STATE.map((c) => expected[c] ?? null)).run();
+    return (r?.meta?.changes ?? 0) > 0;
+};
+
+// How many names `pubkey` holds, for the per-key claim limit (index.js claimLimit): every row of that key that holds
+// its name as holdsName decides it — any state but a release past its hold (`since` = now − the hold), a release that
+// freed the name at once ('admin', 'withdrawn') and an abandoned one; a state this code doesn't know counts, as holdsName
+// treats it — except the admin's release of a name it had taken from that key ('admin-held-all'), held from that key too.
+export const countHeldBy = async (env, pubkey, since) => {
+    const r = await env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM name_allocations WHERE node_pubkey=?
+           AND (status NOT IN ('released', 'abandoned')
+                OR (status = 'released' AND COALESCE(pause_reason, '') NOT IN ('admin', 'withdrawn', 'admin-held-all')
+                    AND COALESCE(released_at, 0) > ?))`
+    ).bind(pubkey, since).first();
+    return Number(r?.n) || 0;
+};
+
+// A signed request's one-use nonce (signing protocol v2, migration 0006): true the first time this key sends it, false
+// after — a replay. A driver that doesn't say how many rows changed reads as a replay: a check that can't tell must not
+// let one through.
+export const takeNonce = async (env, pubkey, nonce, ts) => {
+    const r = await env.DB.prepare('INSERT OR IGNORE INTO request_nonces (pubkey, nonce, ts) VALUES (?,?,?)').bind(pubkey, nonce, ts).run();
+    return (r?.meta?.changes ?? 0) > 0;
+};
+
+// Nonces whose request's timestamp no longer verifies (sign.js CLOCK_SKEW_S) can't be replayed: the sweep drops them.
+export const pruneNonces = (env, before) => env.DB.prepare('DELETE FROM request_nonces WHERE ts < ?').bind(before).run();
+
 // A valid signed request from `pubkey`: the abandonment clock restarts and any warning clears, on every name
 // the key holds. At most one write an hour per key (nodes ask every 5 min), unless a warning must clear.
 export const touchContact = (env, pubkey, now, proto = 'v1') =>
@@ -108,6 +140,10 @@ export const insertInvite = (env, code, nodeName, createdAt = Math.floor(Date.no
 
 export const insertEvent = (env, name, event, detail = null, at = Math.floor(Date.now() / 1000)) =>
     env.DB.prepare('INSERT INTO name_events (name, at, event, detail) VALUES (?,?,?,?)').bind(name, at, event, detail).run();
+
+// When `name` last had `event` (unix s), or null.
+export const lastEventAt = async (env, name, event) =>
+    (await env.DB.prepare('SELECT MAX(at) AS at FROM name_events WHERE name=? AND event=?').bind(name, event).first())?.at ?? null;
 
 export const listEvents = async (env, name, limit = 200) =>
     (name
@@ -145,6 +181,19 @@ export const dropTeardownIfUnchanged = async (env, kind, cfId, name, expected) =
 
 export const teardownRefused = (env, kind, cfId, error) =>
     env.DB.prepare('UPDATE teardown SET tries = tries + 1, last_error=? WHERE kind=? AND cf_id=?').bind(error, kind, cfId).run();
+
+// For the admin's alerts (src/alerts.js): claims waiting for the admin (pending on a name that is not auto-approved, as
+// index.js awaitingApproval decides), and live names.
+export const countAwaitingApproval = async (env) => Number((await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM name_allocations a JOIN name_policy p ON p.pattern = a.name WHERE a.status = 'pending' AND p.tier <> 'auto'"
+).first())?.n) || 0;
+export const countLive = async (env) =>
+    Number((await env.DB.prepare("SELECT COUNT(*) AS n FROM name_allocations WHERE status = 'live'").first())?.n) || 0;
+// Deletions Cloudflare has refused since before `before` (unix s): how many, and the oldest's time.
+export const owedSince = async (env, before) => {
+    const r = await env.DB.prepare('SELECT COUNT(*) AS n, MIN(since) AS oldest FROM teardown WHERE since < ?').bind(before).first();
+    return { n: Number(r?.n) || 0, oldest: r?.oldest ?? null };
+};
 
 // One row per sweep; rows older than 90 days go (288 sweeps a day).
 export const insertSweepLog = async (env, s, now) => {

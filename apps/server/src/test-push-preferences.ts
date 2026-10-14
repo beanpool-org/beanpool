@@ -15,8 +15,8 @@ import { initStateEngine } from './state-engine.js';
 import { db } from './db/db.js';
 import { startHttpsServer } from './https-server.js';
 
-const PORT = 8563;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0;
 let passed = 0;
@@ -72,7 +72,8 @@ async function main(): Promise<void> {
                 VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`)
       .run(pubKeyHex, CALLSIGN);
 
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // ── 0. Unsigned Request Guard Verification ──────────────────────────────────
     const unsignedRes = await fetch(`${BASE}/api/push-tokens`, {
@@ -140,8 +141,9 @@ async function main(): Promise<void> {
     const otherMemberInvites = await signedFetch('GET', `/api/invite/mine/${victimPubHex}`);
     if (process.env.ENFORCE_READ_AUTH !== 'false') { // same rule as https-server.ts: unset means ON
         assert(otherMemberPref.status === 403, 'GET /api/members/preferences for another user returns 403 under ENFORCE_READ_AUTH');
-        assert(otherMemberInvites.status === 403, 'GET /api/invite/mine/:publicKey for another user returns 403 under ENFORCE_READ_AUTH');
     }
+    // A member's invites are theirs alone whatever ENFORCE_READ_AUTH says: an unused code is a key to join.
+    assert(otherMemberInvites.status === 403, 'GET /api/invite/mine/:publicKey for another user returns 403, read auth on or opted out');
 
     // Test signed fetch for own preferences / invites:
     const ownPref = await signedFetch('GET', `/api/members/preferences?publicKey=${pubKeyHex}`);

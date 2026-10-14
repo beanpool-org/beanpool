@@ -3,9 +3,89 @@ import assert from 'node:assert';
 import Database from 'better-sqlite3';
 import {
     generateSearchKeywords, getPosts, guestPost, publicBroadcastPost, NEAREST_FIRST_CIRCLES_KM, NEAREST_FIRST_CIRCLES_MAX_DEPTH,
-    HIDDEN_AUTHOR, type MarketplacePost, type PostFilter,
+    HIDDEN_AUTHOR, SEARCH_TERMS_MAX, searchTermsOfQuery, type MarketplacePost, type PostFilter,
 } from '../posts.js';
 import { areaBox, boundingBox, haversineKm, registerGeoFunctions, roundToArea, MAX_RADIUS_KM } from '../geo.js';
+import { roundToArea as coreRoundToArea, searchTermsFor } from '@beanpool/core';
+
+describe('the words a search asks posts_fts for (#1808 review, finding 5)', () => {
+    it('asks each word once: 4,000 × "a" is one prefix, not 4,000 that each read the whole index', () => {
+        assert.deepStrictEqual(searchTermsOfQuery(Array(4000).fill('a').join(' ')), ['a']);
+        assert.deepStrictEqual(searchTermsOfQuery('eggs honey eggs EGGS'), ['eggs', 'honey', 'EGGS']);
+    });
+    it('asks at most SEARCH_TERMS_MAX, the first ones: core puts the typed words before their synonyms', () => {
+        const many = Array.from({ length: 1000 }, (_, i) => `w${i}`);
+        const terms = searchTermsOfQuery(many.join(' '));
+        assert.strictEqual(terms.length, SEARCH_TERMS_MAX);
+        assert.deepStrictEqual(terms, many.slice(0, SEARCH_TERMS_MAX));
+    });
+    it('holds a wide synonym expansion whole: core\'s words for "food garden" are 175 here', () => {
+        const words = [...new Set(searchTermsFor('food garden').join(' ').split(/\s+/))];
+        assert.ok(words.length > 170);
+        assert.deepStrictEqual(searchTermsOfQuery(searchTermsFor('food garden').join(' ')), words);
+    });
+});
+
+describe('a word with an apostrophe on the node (#1828 check, finding 1)', () => {
+    /** The #1828 check's listings, in posts_fts as schema.sql defines it (unicode61 parts "Don't" into don, t). */
+    function apostropheBoard(): Database.Database {
+        const db = new Database(':memory:');
+        registerGeoFunctions(db);
+        db.exec(`${POSTS_FIXTURE_DDL}
+            CREATE VIRTUAL TABLE posts_fts USING fts5(title, description, search_keywords, content='posts', content_rowid='rowid');
+            INSERT INTO members (public_key, callsign) VALUES ('author1', 'Alice');`);
+        const ins = db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at)
+                                VALUES (?, 'offer', 'other', ?, ?, 0, 'author1', datetime('now'))`);
+        for (const row of [
+            ['1', "L'eau de source", "Bouteilles d'eau de source, livraison locale"],
+            ['2', "Bureau d'angle", 'Grand bureau en bois'],
+            ['3', "Don't miss: garden tools", 'Spades and forks'],
+            ['4', 'Donuts and dolls', 'Handmade'],
+            ['5', "Dell'arte pottery class", 'Corso di ceramica'],
+            ['6', 'Pastel de nata', 'dont ask'],
+            ['7', "Olio d'oliva", "L'olio dell'azienda"],
+            ['8', 'Eau de cologne', 'Parfum'],
+            ['9', 'Café: l’eau minérale', 'typographic apostrophe'],
+            ['10', 'It’s a lovely bike', 'Barely ridden'],
+            ['11', 'Its own stand', 'Bike stand'],
+            ['12', "Can't stop: tomatoes", 'Too many'],
+        ]) ins.run(...row);
+        db.exec(`INSERT INTO posts_fts(posts_fts) VALUES ('rebuild');`);
+        return db;
+    }
+    /** What the phone's Market finds on the node: core's terms for the words, sent as one `q`. */
+    const found = (db: Database.Database, typed: string) =>
+        getPosts(db, { query: searchTermsFor(typed).join(' ') }).map(p => p.id).sort((a, b) => Number(a) - Number(b));
+
+    it('finds the listings that hold the word, whatever its apostrophe, and not every word that starts like it', () => {
+        const db = apostropheBoard();
+        // "dont"* alone found only 6; parted, "don"* also found Donuts (4).
+        assert.deepStrictEqual(found(db, "don't"), ['3', '6']);
+        assert.deepStrictEqual(found(db, 'Don’t'), ['3', '6']);
+        assert.deepStrictEqual(found(db, 'Donʼt'), ['3', '6']);
+        assert.deepStrictEqual(found(db, "it's"), ['10', '11']);
+        assert.deepStrictEqual(found(db, "can't"), ['12']);
+    });
+    it('asks an elided word on its own too: "l\'eau" finds "Eau de cologne", as when the word was parted', () => {
+        const db = apostropheBoard();
+        assert.deepStrictEqual(found(db, "l'eau"), ['1', '8', '9']);
+        assert.deepStrictEqual(found(db, 'l’eau'), ['1', '8', '9']);
+        assert.deepStrictEqual(found(db, "dell'arte"), ['5']);
+        assert.deepStrictEqual(found(db, "l'olio"), ['7']);
+        // A raw q (a client that sends the words as typed) is read the same way.
+        assert.deepStrictEqual(getPosts(db, { query: "L'eau" }).map(p => p.id).sort(), ['1', '8', '9']);
+    });
+    it('keeps an apostrophe inside a word, takes the ones around it off, and asks a U+02BC word as typed too', () => {
+        assert.deepStrictEqual(searchTermsOfQuery("don't"), ["don't"]);
+        assert.deepStrictEqual(searchTermsOfQuery('don’t'), ["don't"]);
+        assert.deepStrictEqual(searchTermsOfQuery("'eggs' james' ' ''"), ['eggs', 'james']);
+        assert.deepStrictEqual(searchTermsOfQuery("l'eau d'olive"), ["l'eau", 'eau', "d'olive", 'olive']);
+        assert.deepStrictEqual(searchTermsOfQuery("o'clock it's"), ["o'clock", "it's"]);
+        // unicode61 reads U+02BC as a letter: a listing typed "пʼять" holds one token.
+        assert.deepStrictEqual(searchTermsOfQuery('пʼять'), ["п'ять", 'пʼять']);
+        assert.deepStrictEqual(searchTermsOfQuery('say "eggs"'), ['say', 'eggs']);
+    });
+});
 
 describe('Posts Search Keyword Expansion', () => {
     const synonymMap: Record<string, string[]> = {
@@ -46,7 +126,7 @@ const POSTS_FIXTURE_DDL = `
     CREATE TABLE members (
         public_key TEXT PRIMARY KEY,
         callsign TEXT NOT NULL,
-        avatar_url TEXT,
+        avatar_ref TEXT,
         status TEXT DEFAULT 'active',
         earned_credit REAL DEFAULT 0,
         paused INTEGER DEFAULT 0,
@@ -58,7 +138,8 @@ const POSTS_FIXTURE_DDL = `
         name TEXT NOT NULL,
         slug TEXT UNIQUE,
         description TEXT,
-        avatar_url TEXT,
+        avatar_ref TEXT,
+        avatar_bytes INTEGER,
         category TEXT DEFAULT 'general',
         created_by TEXT,
         join_policy TEXT DEFAULT 'open',
@@ -295,6 +376,8 @@ describe('The listings, not the people (G9a)', () => {
         assert.strictEqual(roundToArea(179.97), 180);
         assert.strictEqual(roundToArea(-179.97), -180);
         for (const x of [-89.96, 0.3, 12.34, -45.55]) assert.strictEqual(roundToArea(roundToArea(x)), roundToArea(x));
+        // One implementation: the apps round with core's before a position leaves the device; the node with this one.
+        assert.strictEqual(roundToArea, coreRoundToArea);
     });
 
     it('area_km is haversine_km from the area of the place, and NULL for a missing place', () => {

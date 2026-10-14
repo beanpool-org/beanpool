@@ -13,7 +13,7 @@ The same limit applies to your voice credits for votes on the Commons' beans.
 
 ## What it does not limit
 
-It does not limit how much you can buy, sell, give or receive with anyone. You can trade with one person as much as you both like.
+It does not limit how much you can buy, sell, give or receive with anyone. You can trade with one person as much as you both like, within the daily limit on how many payments you make (see "Sending a gift").
 
 ## Why
 

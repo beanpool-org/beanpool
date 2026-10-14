@@ -4,7 +4,8 @@ const data = JSON.stringify({
   password: "Un1versal",
   publishLocation: false,
   publishMembers: false,
-  publishContacts: false,
+  publishContactEmail: false,
+  publishContactPhone: false,
   publishHealth: false,
   serviceRadius: { lat: -28.5, lng: 153.5, radiusKm: 50 }
 });

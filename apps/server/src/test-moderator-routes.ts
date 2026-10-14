@@ -32,6 +32,7 @@ import { db } from './db/db.js';
 import { checkAdminAuth, resetAdminAuthTarpit, MODERATOR_ROUTES } from './admin-auth.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { updateLocalConfig, hashPassword } from './config/local-config.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { createSettingsRoutes } from './routes/settings.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { createAdminRoutes } from './routes/admin.js';
@@ -45,7 +46,6 @@ import { createMessagingRoutes } from './routes/messaging.js';
 import { createCommonsRoutes } from './routes/commons.js';
 import { createTreasuryRoutes } from './routes/treasury.js';
 import { createPublicAddressRoutes } from './routes/public-address.js';
-import { createManagerBackupsRoutes } from './routes/manager-backups.js';
 import { createKeeperRoutes } from './routes/keepers.js';
 import { createChannelRoutes } from './routes/channels.js';
 import { createNodeAdminRoutes } from './routes/node-admin.js';
@@ -57,6 +57,7 @@ import { createActivityRouter } from './routes/activity.js';
 import { createPulseRoutes } from './routes/pulse.js';
 import { createPulseSubmitRoutes } from './routes/pulse-submit.js';
 import { createAvatarRoutes } from './routes/avatar.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -112,7 +113,7 @@ async function main() {
     addMember(pat, 'Pat', olive.pubKeyHex);
     grantNodeRole(mo.pubKeyHex, 'moderator', olive.pubKeyHex);
     // Posting needs a profile photo.
-    db.prepare(`UPDATE members SET avatar_url = 'https://example.com/a.jpg' WHERE public_key = ?`).run(oscar.pubKeyHex);
+    setMemberPhoto(db, oscar.pubKeyHex, 'https://example.com/a.jpg');
 
     // Which request reached checkAdminAuth: the sweep tells a refused admin route from a route that never asked.
     const app = new Koa();
@@ -150,7 +151,7 @@ async function main() {
         createTakeoverEnvelopeRoutes(deps), createMarketplaceRoutes(deps), createGroupRoutes(deps),
         createFederationPurchaseRoutes(deps), createFederationCommissionRoutes(deps), createMessagingRoutes(deps),
         createCommonsRoutes(deps), createTreasuryRoutes(deps), createPublicAddressRoutes(deps),
-        createManagerBackupsRoutes(deps), createKeeperRoutes(deps), createChannelRoutes(deps),
+        createKeeperRoutes(deps), createChannelRoutes(deps),
         createNodeAdminRoutes(deps), createSettingsSigninRoutes(deps), createRecoveryCollectRoutes(deps),
         createPairingRoutes(deps), createPricingGuideRoutes(deps), createActivityRouter(deps), createPulseRoutes(deps),
         createPulseSubmitRoutes(deps), createAvatarRoutes(deps),
@@ -333,10 +334,18 @@ async function main() {
         // ── 4. The password path ──
         console.log('\n4. The password never yields a moderator');
         resetAdminAuthTarpit();
-        const pw = await call('GET', '/api/local/admin/auth/session', { 'X-Admin-Password': PW });
+        // Sign-in step 7c: with the node's 2FA off, the password sent alone opens nothing (it was owner level before).
+        const pwAlone = await call('GET', '/api/local/admin/auth/session', { 'X-Admin-Password': PW });
+        assert(pwAlone.body.authenticated === false && pwAlone.body.role === undefined, `with 2FA off the password alone is refused (got ${JSON.stringify(pwAlone.body)})`);
+        resetAdminAuthTarpit();
+        // With 2FA on, the password and a code: an owner's credential, still never a moderator.
+        const twoFa = turnOn2faForTests(PW);
+        const pw = await call('GET', '/api/local/admin/auth/session', twoFa.headers());
         assert(pw.body.authenticated === true && pw.body.role === 'owner', `the password is owner level (got ${pw.body.role})`);
-        const pwWithMod = await call('GET', '/api/local/admin/auth/session', { 'X-Admin-Password': PW, 'x-admin-session': 'not-a-session' });
+        const pwWithMod = await call('GET', '/api/local/admin/auth/session', { ...twoFa.headers(), 'x-admin-session': 'not-a-session' });
         assert(pwWithMod.body.role !== 'moderator', 'a dead session beside the password does not make it a moderator');
+        updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
+        resetAdminAuthTarpit();
         // The password login takes the password and nothing else: a moderator's session stands in for none of it.
         const modPwRoute = await call('POST', '/api/local/verify-password', asMod, { password: 'not-the-password' });
         assert(modPwRoute.status === 401, `a moderator's session does not get past the password login (got ${modPwRoute.status})`);

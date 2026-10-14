@@ -5,21 +5,41 @@ import * as Crypto from 'expo-crypto';
 import { encodeBase64, encodeUtf8, decodeBase64, decodeUtf8, buildSignedHeaders, signData, hexToBytes } from './crypto';
 import { eventCacheColumns, rsvpSignedMessage, isSignableRsvp, UNSIGNABLE_RSVP_MESSAGE, type EventEditPatch, type EventRsvpStatus } from './events';
 import { sortMyEvents, type MyEvent } from './event-extras';
-import { encryptDM, decryptDM, isEncryptedNonce, type DMKeyContext } from './e2e-crypto';
+import {
+    sealDmLine, openDmLine, checkDmThread, dmAfterReference, dmLineMarkText, dmLineShownText, dmLineIsUnattributed, dmReplyToOf,
+    dmLineKind, dmQuoteLabel, dmQuoteFrom, isEncryptedNonce, V2_NONCE_PREFIX, DM_LINE_NOT_ENCRYPTED_TEXT,
+    type DMKeyContext, type DmPart,
+} from './e2e-crypto';
+import { DmNotLockedError, isNodeReadableChatType } from './dm-lock';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
+import { getCachedNodeProfile } from './node-profile';
+import { communityCachesRenamed } from './cache-file-migration';
 import { isPlainNodeAddress } from './node-url';
 import { getCanonicalProfile, saveCanonicalProfile } from './canonical-profile';
 import { isPortableAvatarValue, resolveProfilePublishAvatar, retireParkedPickAfterPublish } from './avatar-value';
 import { emitAppEvent } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
-import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, type LivePostChange } from '@beanpool/core';
+import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
+import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
 import * as FileSystem from 'expo-file-system/legacy';
 import type { OwnDecisionVote } from './decision-own-vote';
 import type { GroupSuccessionData } from './group-succession';
-import { mergeIncomingMessage, isRemovedPayload, type LocalMessageRow } from './chat-sync';
+import { mergeIncomingMessage, isRemovedPayload, accountDeletedAuthor, accountDeletedMetadata, stillHoldsWords, withoutSendState, type LocalMessageRow } from './chat-sync';
+import { DELETED_BY_AUTHOR_TEXT } from './chat-actions';
+import type { BeanPoolIdentity } from './identity';
+import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, forgetGroupKeys, GroupChatKeyError, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
+import {
+    unlockWithOldWords, newPhoneQrPayload, checkNewPhone, confirmNewPhone, handOversHeld, noteConfirmations, confirmedNotes,
+    lockedHistoryCounts, noteLockedHistoryCount, type ConfirmedNote, type HistoryGroup, type NewPhoneCheck, type OldWordsResult,
+} from './group-history-unlock';
+import { oldKeySignedHere, rekeysToMe } from './key-succession';
+import { isKeyReplacedAnswer, noteKeyAnswered, noteKeyReplaced, watchForReplacedKey } from './key-replaced';
+import { sqliteGroupKeyStore } from './group-chat-store';
+import { sendSealedGroupLine, editSealedGroupLine, chatIsLocked, GROUP_CHAT_LOCK_LOST_TEXT, GROUP_CHAT_NOT_MEMBER_TEXT, GROUP_KEYS_FOR_DM_TEXT, GROUP_EDIT_LINE_GONE_TEXT } from './group-chat-lines';
+import { sealLine, GROUP_NONCE_PREFIX } from './group-chat-crypto';
 
 // Decrypted chat images live here — in the filesystem, NOT SQLite — so they survive a
 // DB wipe-and-fetch (which only drops tables) and are populated lazily (only images the
@@ -47,6 +67,8 @@ async function forgetCachedChatImage(messageId: string): Promise<void> {
  * Using the synchronous API available in expo-sqlite version 14.x+ 
  */
 let db: SQLite.SQLiteDatabase | null = null;
+/** The community file each open handle is for: a group's key store reads only its own community's (groupKeyStore). */
+const dbFileOf = new WeakMap<object, string>();
 let dbInitialized = false;
 let dbInitPromise: Promise<void> | null = null;
 
@@ -85,7 +107,14 @@ function releaseSyncLock() {
 let currentDbName: string | null = null;
 let getDbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 
+/**
+ * Resolves once this phone's community copies have the names that give every community its own file
+ * (cache-file-migration.ts). Nothing opens a copy or reads its sync cursors before then.
+ */
+export { communityCachesRenamed };
+
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
+    await communityCachesRenamed();
     const url = await AsyncStorage.getItem('beanpool_anchor_url');
     const expectedDbName = getDatabaseFilenameForNode(url);
 
@@ -126,6 +155,7 @@ export async function getDb(): Promise<SQLite.SQLiteDatabase> {
             if (url && isPlainNodeAddress(url)) await addSavedNode(url);
             
             db = await SQLite.openDatabaseAsync(expectedDbName, { useNewConnection: true });
+            dbFileOf.set(db, expectedDbName);
             
             // Hardcode native concurrent locking parameters per-connection
             await db.execAsync(`
@@ -191,6 +221,18 @@ export async function initDB() {
     dbInitPromise = _doInitDB();
     await dbInitPromise;
 }
+
+/**
+ * Any write to the cached listings forgets the stored tag of the last read by area (nearby_held k = 'tag'), in its own
+ * transaction: the tag says "this phone holds the set as the node has it", and a write from anywhere else (a push, the
+ * deal heal, the event page, the member's own edit or deal) makes what it holds something the tag doesn't describe. A
+ * delta answered 304 over it would keep that until the set next changed (review of #1805, finding 2). The read by area
+ * writes its rows first and stores its tag after (services/pillar-sync.ts), so its own rows never forget it.
+ */
+const NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE = `
+        CREATE TRIGGER IF NOT EXISTS posts_ai_nearby_tag AFTER INSERT ON posts BEGIN DELETE FROM nearby_held WHERE k = 'tag'; END;
+        CREATE TRIGGER IF NOT EXISTS posts_au_nearby_tag AFTER UPDATE ON posts BEGIN DELETE FROM nearby_held WHERE k = 'tag'; END;
+        CREATE TRIGGER IF NOT EXISTS posts_ad_nearby_tag AFTER DELETE ON posts BEGIN DELETE FROM nearby_held WHERE k = 'tag'; END;`;
 
 async function _doInitDB() {
     const database = await getDb();
@@ -283,6 +325,8 @@ async function _doInitDB() {
             author_founding_needed INTEGER DEFAULT 1,
             poll_options TEXT,
             poll_closes_at DATETIME,
+            poll_open_vote INTEGER DEFAULT 0,
+            poll_new_or_words_votes INTEGER,
             audience_scope TEXT DEFAULT 'public',
             target_group_id TEXT,
             target_pubkey TEXT,
@@ -293,7 +337,9 @@ async function _doInitDB() {
             event_place_name TEXT,
             event_state TEXT,
             event_going_count INTEGER DEFAULT 0,
-            event_interested_count INTEGER DEFAULT 0
+            event_interested_count INTEGER DEFAULT 0,
+            carried_callsign TEXT,
+            carried_avatar TEXT
         );
 
         -- Groups & Working Groups (docs/the-commons.md §9, Item 10)
@@ -344,6 +390,16 @@ async function _doInitDB() {
             updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
             PRIMARY KEY (post_id, member_pubkey)
         );
+
+        -- On a community that syncs by area (utils/posts-nearby.ts): the ids its last set read named "tied", the member's
+        -- own and tied listings as the node knows them, which the phone keeps past its cap (keepPostsNearby).
+        CREATE TABLE IF NOT EXISTS nearby_tied (id TEXT PRIMARY KEY);
+        -- And the set it last reconciled with, beside the node's hash of it (k = 'set', JSON ids; k = 'hash') and the tied ids
+        -- the node hashed with it (k = 'tied', JSON ids), written together: the phone sends the hash back and is not sent the
+        -- set again while it holds, or is sent what changed, which it applies and checks against the node's hash (readNearbyHeld). k = 'tag':
+        -- the ETag of its last read that landed whole, sent with the next delta for a 304 (readNearbyTag).
+        CREATE TABLE IF NOT EXISTS nearby_held (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
 
         CREATE INDEX IF NOT EXISTS idx_active_posts ON posts(created_at DESC) WHERE status = 'active';
         CREATE INDEX IF NOT EXISTS idx_posts_category ON posts(category);
@@ -397,6 +453,33 @@ async function _doInitDB() {
         );
         CREATE INDEX IF NOT EXISTS idx_messages_conversation_time ON messages(conversation_id, timestamp ASC);
 
+        -- Group chat keys (slice 3, utils/group-chat-store.ts): each epoch's record as the node served it and MY wrap,
+        -- exactly as sent (ciphertext, nothing secret); the highest epoch verified or made (never falls); verified line
+        -- signatures (hashes) and the first signer seen per line. Opened keys are never written anywhere.
+        CREATE TABLE IF NOT EXISTS group_chat_epochs (
+            group_id TEXT NOT NULL,
+            epoch INTEGER NOT NULL,
+            record TEXT NOT NULL,
+            wrap TEXT,
+            PRIMARY KEY (group_id, epoch)
+        );
+        CREATE TABLE IF NOT EXISTS group_chat_key_state (
+            group_id TEXT PRIMARY KEY,
+            highest INTEGER NOT NULL DEFAULT 0,
+            after INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS group_line_verdicts (
+            group_id TEXT NOT NULL,
+            k TEXT NOT NULL,
+            PRIMARY KEY (group_id, k)
+        );
+        CREATE TABLE IF NOT EXISTS group_line_signers (
+            group_id TEXT NOT NULL,
+            message_id TEXT NOT NULL,
+            signer TEXT NOT NULL,
+            PRIMARY KEY (group_id, message_id)
+        );
+
         -- 6. Relations (Friends, Ratings, Abuse)
         CREATE TABLE IF NOT EXISTS ratings (
             id TEXT PRIMARY KEY,
@@ -409,6 +492,10 @@ async function _doInitDB() {
             created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
             UNIQUE(rater_pubkey, transaction_id)
         );
+        -- Another member's reviews as the node last answered this phone (getMemberRatings), one row per member, for their
+        -- Reviews tab and their stars on a market card offline: since #1914 a review names no rater and no deal to anyone but
+        -- its two parties, so these never go into ratings. The most recently read REVIEWS_READ_KEPT members are kept.
+        CREATE TABLE IF NOT EXISTS member_reviews_read (target_pubkey TEXT PRIMARY KEY, answer TEXT NOT NULL, read_at TEXT NOT NULL);
 
         -- 6b. Friends
         CREATE TABLE IF NOT EXISTS friends (
@@ -515,6 +602,25 @@ async function _doInitDB() {
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN accepted_at DATETIME;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN pending_transaction_id TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN completed_at DATETIME;`); } catch (e) {}
+        // The author's name as the node carried it on the listing, for a listing whose author this phone's directory copy
+        // lacks (a community that syncs by area: utils/posts-nearby.ts). The directory's name wins where it has one; read
+        // as author_callsign, a name the column doesn't take, so `p.*` never repeats it (the review of #1778, finding 8).
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_callsign TEXT;`); } catch (e) {}
+        // Its face the same way (the node's `authorAvatarUrl`, DESIGN-global-members-by-area §2.2.6): a by-area listing
+        // shows its author's face with no card for them. The card's face wins where the phone holds one.
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN carried_avatar TEXT;`); } catch (e) {}
+        // When this phone last fetched the card by key (utils/members-on-demand.ts): the oldest are re-checked first, and
+        // past 1,000 cards the oldest that nothing references are dropped. Null for a card from the whole directory.
+        try { await database.execAsync(`ALTER TABLE members ADD COLUMN card_fetched_at TEXT;`); } catch (e) {}
+        // The ids a by-area community's last set read named `tied` (keepPostsNearby), for a phone whose schema ran before it.
+        try { await database.execAsync(`CREATE TABLE IF NOT EXISTS nearby_tied (id TEXT PRIMARY KEY);`); } catch (e) {}
+        // The set a by-area community's last set read named, and its hash (keepPostsNearby, readNearbyHeld).
+        try { await database.execAsync(`CREATE TABLE IF NOT EXISTS nearby_held (k TEXT PRIMARY KEY, v TEXT NOT NULL);`); } catch (e) {}
+        try { await database.execAsync(NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE); } catch (e) {}
+        // The keep rule (keepPostsNearby) asks, for every held listing on every by-area write, whether a deal or a chat
+        // names it: by index, not a scan of each table per listing (the review of #1778, finding 4: 79 ms at 3,000 deals).
+        try { await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_id ON marketplace_transactions(post_id);`); } catch (e) {}
+        try { await database.execAsync(`CREATE INDEX IF NOT EXISTS idx_conversations_post_id ON conversations(post_id);`); } catch (e) {}
         // Profile sync: track when a profile was last updated for cache-busting
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN profile_updated_at DATETIME;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE members ADD COLUMN earned_credit REAL DEFAULT 0;`); } catch (e) {}
@@ -531,6 +637,11 @@ async function _doInitDB() {
         // Community Polls migrations
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_options TEXT;`); } catch (e) {}
         try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_closes_at DATETIME;`); } catch (e) {}
+        // A poll's ballot (2026-09-28): 1 an open vote (members see who chose what), 0 anonymous, the default.
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_open_vote INTEGER DEFAULT 0;`); } catch (e) {}
+        // How many of a poll's votes came from new or 12-word accounts, as the node last said (the global node's public
+        // polls; NULL where it says nothing). The split by answer travels inside poll_options.
+        try { await database.execAsync(`ALTER TABLE posts ADD COLUMN poll_new_or_words_votes INTEGER;`); } catch (e) {}
         try {
             await database.execAsync(`
                 CREATE TABLE IF NOT EXISTS poll_votes (
@@ -578,6 +689,8 @@ async function _doInitDB() {
                 );
             `);
         } catch (e) {}
+        // Another member's reviews as the node last answered (getMemberRatings), for a phone whose schema ran before it.
+        try { await database.execAsync(`CREATE TABLE IF NOT EXISTS member_reviews_read (target_pubkey TEXT PRIMARY KEY, answer TEXT NOT NULL, read_at TEXT NOT NULL);`); } catch (e) {}
 
         // Force full synchronization once to populate new columns
         AsyncStorage.getItem('bp_trust_sync_v3').then(async (val) => {
@@ -624,9 +737,48 @@ async function _doInitDB() {
 }
 
 /**
- * Simple Drop util if the User needs to wipe memory
+ * The copies' generation: one more each time the copies the sync writes to are cleared or taken off the phone (clearDB,
+ * and services/pillar-sync.ts resetSyncFingerprints, which removeCommunityCaches calls). A sync cycle takes it as it
+ * starts and hands it to each of its writes (applyDelta's `generation`); once it has moved, the cycle writes nothing more
+ * and stores no cursor, hold, epoch or cycle time, since what it read belongs to the copy that was cleared, and the next
+ * cycle reads the fresh copy whole. Without it, a Force Resync tapped while a whole read paged in cleared the pages
+ * already written, the running cycle wrote the rest into the fresh copy and stored its cursor, and every later cycle was
+ * a delta: the newest listings never came back (review of PR #1719 fix round 1, B-1: R7). In memory: a cycle never
+ * outlives the app.
  */
-export async function clearDB() {
+let copyGeneration = 0;
+export function copyGenerationNow(): number {
+    return copyGeneration;
+}
+/**
+ * The copy a read outside the sync is made for, taken when the read starts: the anchor's file and the copy generation.
+ * Handed back to applyDelta (`expectedDbName`, `generation`), the answer lands only in that copy: a community switch, or
+ * a copy cleared, while the read was out writes nothing (review of #1859, NB3: a card fetched on global landed in mullum's).
+ */
+export async function copyForRead(): Promise<{ dbName: string | undefined; generation: number }> {
+    const generation = copyGeneration;
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    return { dbName: anchorUrl ? getDatabaseFilenameForNode(anchorUrl) : undefined, generation };
+}
+/** A new copy generation: every sync cycle in flight writes and stores nothing more (copyGeneration). */
+export function newCopyGeneration(): void {
+    copyGeneration++;
+}
+
+/**
+ * Simple Drop util if the User needs to wipe memory.
+ *
+ * `identityLeaves`: the identity is going off this phone (Sign Out, the self-delete purge), so what this phone knows of
+ * its groups' keys goes too (the four group key tables), as a new phone starts. Every other wipe (Force Resync, Wipe &
+ * Join Fresh, Wipe & Restart) keeps the identity and keeps that memory, kept per identity: the sticky lock and the
+ * highest verified epoch of each group, with the epochs and the cursor they go with. It is a security fact, not a copy
+ * of the node's (director's decision on the confirmation of #1788, NB3).
+ */
+export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
+    // First, before anything awaits: from here no sync cycle that began before stores a cursor for this copy.
+    newCopyGeneration();
+    // Every group key opened this session leaves memory with the copy; a kept store opens them again from its wraps.
+    forgetGroupKeys();
     try {
         const { resetSyncFingerprints } = require('../services/pillar-sync');
         resetSyncFingerprints();
@@ -634,8 +786,19 @@ export async function clearDB() {
         console.warn('[DB] Failed to reset sync fingerprints during clearDB', e);
     }
     const database = await getDb();
-    await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps;');
-    
+    // Under the sync lock: a write in flight (a sync's page, a member's action) commits before the tables go, never into
+    // the middle of the drop; one waiting for the lock after it finds the copy cleared (applyDelta `generation`).
+    await acquireSyncLock({ urgent: true });
+    try {
+        // Again, under the lock: a sync that began while this waited took the generation above and read the old copy's
+        // cursor and row count; it must store nothing either (#1719 confirmation 2, P1).
+        newCopyGeneration();
+        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS member_reviews_read; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps; DROP TABLE IF EXISTS nearby_tied; DROP TABLE IF EXISTS nearby_held;'
+            + (opts.identityLeaves ? ' DROP TABLE IF EXISTS group_chat_epochs; DROP TABLE IF EXISTS group_chat_key_state; DROP TABLE IF EXISTS group_line_verdicts; DROP TABLE IF EXISTS group_line_signers;' : ''));
+    } finally {
+        releaseSyncLock();
+    }
+
     // Reset flags to force schema recreation
     dbInitialized = false;
     dbInitPromise = null;
@@ -661,8 +824,10 @@ export async function clearDB() {
  */
 export async function getPosts(filter?: { type?: string; category?: string; targetGroupId?: string; audienceScope?: string; includeEvents?: boolean; includeGroupsOf?: string; allScopes?: boolean }) {
     let database = await waitForInit();
+    // A held card is the author's face, even when it has none: a photo the author removed must not fall back to the
+    // face the listing carried when the node last sent it (getMyPosts and getPost read it the same way).
     let query = `
-        SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, m.joined_at, g.name as target_group_name
+        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, CASE WHEN m.public_key IS NOT NULL THEN m.avatar_url ELSE p.carried_avatar END as author_avatar, m.joined_at, g.name as target_group_name
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         LEFT JOIN groups g ON p.target_group_id = g.id
@@ -783,6 +948,7 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
                 r.pollOptions = [];
             }
             r.pollClosesAt = r.poll_closes_at || r.pollClosesAt;
+            if (typeof r.poll_new_or_words_votes === 'number') r.pollNewOrWordsVotes = r.poll_new_or_words_votes;
             if (localVotes.has(r.id)) {
                 r.userVotedOptionId = localVotes.get(r.id);
             }
@@ -805,7 +971,7 @@ export async function getPosts(filter?: { type?: string; category?: string; targ
 export async function getMyPosts(pubkey: string) {
     const database = await waitForInit();
     const rows = await database.getAllAsync(`
-        SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, m.joined_at
+        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, CASE WHEN m.public_key IS NOT NULL THEN m.avatar_url ELSE p.carried_avatar END as author_avatar, m.joined_at
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         WHERE p.author_pubkey = ? AND p.status IN ('active', 'pending', 'completed', 'paused') AND p.type != 'event'
@@ -825,6 +991,76 @@ export async function getMyPosts(pubkey: string) {
     });
 }
 
+/**
+ * Reads one listing from the node again and writes it through the sync's own row writer. Tells the screens
+ * (`sync_data_updated`) only when what they show changed: post screens reload on that event and call getPost, which
+ * calls this, so an unconditional emit fetch-loops. The photos are part of it: a node that now keys its listings'
+ * photos (or keys them with a new secret) hands out new URLs for a listing that did not otherwise change, and the
+ * screen must reload to show them (the old ones answer 404). Resolves whether it told them.
+ *
+ * Writes only into `database` while it is still the open one and belongs to `anchorUrl`'s community: a community switch
+ * between the caller reading the anchor and opening the database, or while the read is out, would otherwise put one
+ * community's listing in another's cache (as applyDelta's `expectedDbName` guard does for the sync).
+ */
+async function refreshCachedPost(database: SQLite.SQLiteDatabase, anchorUrl: string, id: string): Promise<boolean> {
+    const res = await fetch(`${anchorUrl}/api/marketplace/posts?id=${encodeURIComponent(id)}&sync=true`);
+    // As in the sync: never the visitors' view over a member's row (utils/posts-view.ts).
+    if (viewOf(res) === 'guest' && await postsViewRefusal(res, anchorUrl, (await loadIdentity())?.publicKey)) return false;
+    const posts = await res.json();
+    if (!Array.isArray(posts)) return false;
+    if (posts.length === 0) {
+        // The node answered that it holds no such listing (it deleted the row: a dropped federation peer's listings). Said
+        // apart from a failed read, which says nothing: the listing page keeps what it shows over a read with no row
+        // (utils/shown-post.ts), and only this lets it say "not found" (the confirmation review of #1778, finding 1). Never
+        // deletes the phone's row: that stays applyDelta's job. Only for the community still open, as the write below.
+        if (res.ok && db === database && currentDbName === getDatabaseFilenameForNode(anchorUrl)) {
+            const { DeviceEventEmitter } = require('react-native');
+            DeviceEventEmitter.emit('post_not_on_node', id);
+        }
+        return false;
+    }
+    const p = posts[0];
+    const before = await database.getFirstAsync<any>(
+        'SELECT status, active, accepted_by, pending_transaction_id, completed_at, updated_at, photos FROM posts WHERE id = ?', [id]
+    );
+    await acquireSyncLock();
+    try {
+        // Checked under the lock: a switch closes the database under the same lock (closeDB, getDb), so none lands
+        // between this check and the write.
+        if (db !== database || currentDbName !== getDatabaseFilenameForNode(anchorUrl)) return false;
+        // The sync's own row writer: a second copy of it here had already drifted, and put a group
+        // listing back to 'public' every time someone opened it.
+        await writeSyncedPost(database, { ...p, id: p.id ?? id });
+    } finally {
+        releaseSyncLock();
+    }
+    const changed = !before ||
+        before.status !== (p.status || 'active') ||
+        (before.active ? 1 : 0) !== (p.active !== undefined ? (p.active ? 1 : 0) : 1) ||
+        (before.accepted_by || null) !== (p.accepted_by || p.acceptedBy || null) ||
+        (before.pending_transaction_id || null) !== (p.pending_transaction_id || p.pendingTransactionId || null) ||
+        (before.completed_at || null) !== (p.completed_at || p.completedAt || null) ||
+        (before.updated_at || null) !== (p.updated_at || p.updatedAt || null) ||
+        (before.photos ?? null) !== syncedPhotosColumn(p);
+    if (changed) {
+        const { DeviceEventEmitter } = require('react-native');
+        DeviceEventEmitter.emit('sync_data_updated');
+    }
+    return changed;
+}
+
+/**
+ * Reads one listing from the node again, as opening it does (refreshCachedPost), for a screen whose photo of it would
+ * not load (utils/photo-refresh.ts bounds how often). Only for a listing of the community this phone is on now: the
+ * photo's URL must be that node's. Resolves whether the screens were told to reload.
+ */
+export async function refreshPostForPhoto(id: string, photoUrl: string): Promise<boolean> {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
+    if (!anchorUrl || !photoUrl.startsWith(`${anchorUrl}/`)) return false;
+    const database = await waitForInit();
+    return refreshCachedPost(database, anchorUrl, id);
+}
+
 export async function getPost(id: string) {
     const database = await waitForInit();
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url') || '';
@@ -834,46 +1070,10 @@ export async function getPost(id: string) {
     // before the next Pillar sync) appears after one round-trip. A slow or empty
     // server response never deletes local rows — deletion is applyDelta's job
     // (the server tombstones deleted posts with active=0).
-    if (anchorUrl) {
-        fetch(`${anchorUrl}/api/marketplace/posts?id=${encodeURIComponent(id)}&sync=true`)
-            .then(async res => {
-                // As in the sync: never the visitors' view over a member's row (utils/posts-view.ts).
-                if (viewOf(res) === 'guest' && await postsViewRefusal(res, anchorUrl, (await loadIdentity())?.publicKey)) return null;
-                return res.json();
-            })
-            .then(async posts => {
-                if (!Array.isArray(posts) || posts.length === 0) return;
-                const p = posts[0];
-                const before = await database.getFirstAsync<any>(
-                    'SELECT status, active, accepted_by, pending_transaction_id, completed_at, updated_at FROM posts WHERE id = ?', [id]
-                );
-                await acquireSyncLock();
-                try {
-                    // The sync's own row writer: a second copy of it here had already drifted, and put a group
-                    // listing back to 'public' every time someone opened it.
-                    await writeSyncedPost(database, { ...p, id: p.id ?? id });
-                } finally {
-                    releaseSyncLock();
-                }
-                // Only notify listeners on a real change — post screens reload on this
-                // event and re-call getPost, so an unconditional emit fetch-loops.
-                const changed = !before ||
-                    before.status !== (p.status || 'active') ||
-                    (before.active ? 1 : 0) !== (p.active !== undefined ? (p.active ? 1 : 0) : 1) ||
-                    (before.accepted_by || null) !== (p.accepted_by || p.acceptedBy || null) ||
-                    (before.pending_transaction_id || null) !== (p.pending_transaction_id || p.pendingTransactionId || null) ||
-                    (before.completed_at || null) !== (p.completed_at || p.completedAt || null) ||
-                    (before.updated_at || null) !== (p.updated_at || p.updatedAt || null);
-                if (changed) {
-                    const { DeviceEventEmitter } = require('react-native');
-                    DeviceEventEmitter.emit('sync_data_updated');
-                }
-            })
-            .catch(() => null);
-    }
+    if (anchorUrl) void refreshCachedPost(database, anchorUrl, id).catch(() => false);
 
     const row = await database.getFirstAsync<any>(`
-        SELECT p.*, m.callsign as author_callsign, m.avatar_url as author_avatar, a.callsign as accepted_by_callsign, a.avatar_url as accepted_by_avatar, m.joined_at
+        SELECT p.*, COALESCE(m.callsign, p.carried_callsign) as author_callsign, CASE WHEN m.public_key IS NOT NULL THEN m.avatar_url ELSE p.carried_avatar END as author_avatar, a.callsign as accepted_by_callsign, a.avatar_url as accepted_by_avatar, m.joined_at
         FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
         LEFT JOIN members a ON p.accepted_by = a.public_key
@@ -963,7 +1163,8 @@ export async function getConversations(myPubkey: string) {
                ) as postStatus,
                COALESCE(p.credits, c.post_credits) as postCredits,
                COALESCE(p.photos, c.post_photo) as postPhotos,
-               m.ciphertext as lastMessage, m.nonce as lastNonce, m.type as lastMsgType, m.system_type as lastSysType, m.metadata as lastMetadata, MAX(m.timestamp) as timestamp,
+               m.ciphertext as lastMessage, m.nonce as lastNonce, m.type as lastMsgType, m.system_type as lastSysType, m.metadata as lastMetadata,
+               m.id as lastId, m.author_pubkey as lastAuthor, MAX(m.timestamp) as timestamp,
                p.author_pubkey as postAuthor, p.type as postType,
                (SELECT mt3.buyer_pubkey FROM marketplace_transactions mt3 WHERE mt3.post_id = c.post_id ORDER BY mt3.created_at DESC LIMIT 1) as latestTxBuyer,
                (SELECT mt3.seller_pubkey FROM marketplace_transactions mt3 WHERE mt3.post_id = c.post_id ORDER BY mt3.created_at DESC LIMIT 1) as latestTxSeller,
@@ -1026,57 +1227,31 @@ export async function getConversations(myPubkey: string) {
 
     return rows.map(row => {
         let displayMsg = row.lastMessage ? '[Message]' : 'Started conversation';
-        if (row.lastNonce && row.lastNonce.startsWith('plaintext')) {
+        // A DM's newest line, judged as the thread judges it (e2e-crypto checkDmThread): an encrypted line opened bound to
+        // the author and id the node stores it under, under this conversation's id or one its metadata names (folded
+        // threads). Only words that open are shown as words; a row in a member's name that isn't an encrypted line, an
+        // old-format line and the admin page's message say what they are. The node's own notices are formatted below.
+        const lastView = row.lastId && !isNodeReadableChatType(row.convType)
+            ? checkDmThread([{ id: row.lastId, authorPubkey: row.lastAuthor, ciphertext: row.lastMessage, nonce: row.lastNonce, type: row.lastMsgType, metadata: row.lastMetadata }],
+                previewIdentity?.privateKey && row.otherPubkey ? { myEdPrivHex: previewIdentity.privateKey, peerEdPubHex: row.otherPubkey } : null, row.id).get(row.lastId)
+            : undefined;
+        // The node's own notice in a DM: said to be one, never shown as the other person's line (formatted below).
+        const lastIsDmNotice = !!row.lastId && !isNodeReadableChatType(row.convType)
+            && dmLineKind({ authorPubkey: row.lastAuthor, nonce: row.lastNonce, type: row.lastMsgType }) === 'node-notice';
+        if (lastView) {
+            if (lastView.mark === 'not-verified') displayMsg = '🔒 Encrypted message';
+            else if (lastView.mark === 'not-encrypted') displayMsg = DM_LINE_NOT_ENCRYPTED_TEXT;
+            else if (lastView.mark === 'old-app') displayMsg = dmLineMarkText('old-app') as string;
+            else if (lastView.mark === 'from-admins') displayMsg = `From your community's admins: ${lastView.text}`;
+            else displayMsg = dmLineShownText(lastView);
+        } else if (row.lastNonce && row.lastNonce.startsWith('plaintext')) {
             try {
                 displayMsg = decodeUtf8(decodeBase64(row.lastMessage));
             } catch {
                 displayMsg = '[Unreadable message]';
             }
         } else if (isEncryptedNonce(row.lastNonce)) {
-            // v2-encrypted DM — only ever set on dm threads, so otherPubkey is THE peer.
-            if (previewIdentity?.privateKey && row.otherPubkey) {
-                try {
-                    displayMsg = decryptDM(row.lastMessage, row.lastNonce, {
-                        myEdPrivHex: previewIdentity.privateKey,
-                        peerEdPubHex: row.otherPubkey,
-                        conversationId: row.id,
-                    });
-                } catch (err) {
-                    let decrypted = false;
-                    if (row.lastMetadata) {
-                        try {
-                            const meta = JSON.parse(row.lastMetadata);
-                            if (meta) {
-                                if (meta.originalConversationId) {
-                                    displayMsg = decryptDM(row.lastMessage, row.lastNonce, {
-                                        myEdPrivHex: previewIdentity.privateKey,
-                                        peerEdPubHex: row.otherPubkey,
-                                        conversationId: meta.originalConversationId,
-                                    });
-                                    decrypted = true;
-                                } else if (Array.isArray(meta.originalConversationIds)) {
-                                    for (const legacyId of meta.originalConversationIds) {
-                                        try {
-                                            displayMsg = decryptDM(row.lastMessage, row.lastNonce, {
-                                                myEdPrivHex: previewIdentity.privateKey,
-                                                peerEdPubHex: row.otherPubkey,
-                                                conversationId: legacyId,
-                                            });
-                                            decrypted = true;
-                                            break;
-                                        } catch (e) {}
-                                    }
-                                }
-                            }
-                        } catch (e) {}
-                    }
-                    if (!decrypted) {
-                        displayMsg = '🔒 Encrypted message';
-                    }
-                }
-            } else {
-                displayMsg = '🔒 Encrypted message';
-            }
+            displayMsg = '🔒 Encrypted message';
         } else if (row.lastNonce === '00000') {
             displayMsg = formatSystemMessage(row.lastSysType, row.lastMetadata, myPubkey, {
                 postAuthor: row.postAuthor,
@@ -1086,6 +1261,7 @@ export async function getConversations(myPubkey: string) {
                 defaultText: row.lastMessage
             });
         }
+        if (lastIsDmNotice) displayMsg = `${dmQuoteLabel('notice')}: ${displayMsg}`;
 
         const isPayer = row.txBuyerPubkey === myPubkey;
         const isPayee = row.txSellerPubkey === myPubkey;
@@ -1110,7 +1286,9 @@ export async function getConversations(myPubkey: string) {
             postCredits: row.postCredits,
             postPhoto,
             type: row.convType || 'dm',
-            peer: row.name || row.otherCallsign || row.id.slice(0, 8),
+            // No card held for the other member (a community that says `membersOnDemand`, before the cycle that fetches
+            // it by key): the key's first 8 characters, never the conversation's (DESIGN-global-members-by-area §2.4).
+            peer: row.name || row.otherCallsign || (row.otherPubkey ? String(row.otherPubkey).slice(0, 8) : row.id.slice(0, 8)),
             peerAvatar: row.otherAvatar || null,
             peerUpdatedAt: row.otherProfileUpdatedAt || null,
             peerPubkey: row.otherPubkey || null,
@@ -1295,6 +1473,7 @@ export async function refreshBalanceFromServer(pubkey: string) {
             const newTierStr = JSON.stringify({
                 tier: balData.tier || tier,
                 floor: balData.floor ?? floor,
+                tierCredit: typeof balData.tierCredit === 'number' ? balData.tierCredit : null,
                 earnedCredit: balData.earnedCredit ?? 0,
                 grantedCredit: balData.grantedCredit ?? 0,
                 qualifiedValue: balData.qualifiedValue ?? 0,
@@ -1311,7 +1490,10 @@ export async function refreshBalanceFromServer(pubkey: string) {
                 hasLiveOffer: !!balData.hasLiveOffer,
                 usableFloor: balData.usableFloor ?? balData.floor ?? floor,
                 liveOffers: balData.liveOffers ?? 0,
+                knownGrant: typeof balData.knownGrant === 'number' ? balData.knownGrant : 0,
                 frozen: !!balData.frozen,
+                knownFrozen: balData.knownFrozen === true,
+                creditFrozen: balData.creditFrozen === true,
             });
             const prevTierStr = await AsyncStorage.getItem(`bp_tier_${pubkey}`);
             if (prevTierStr !== newTierStr) {
@@ -1337,6 +1519,7 @@ export async function getBalance(pubkey: string) {
     let tier: { name: string; emoji: string } = { name: TIER_LEVELS[0].name, emoji: TIER_LEVELS[0].emoji };
 
     let floor = 0;     // no baked-in credit until the node reports one
+    let tierCredit: number | null = null; // the credit the node read `tier` from; null from an older node (memberLevel)
     let earnedCredit = 0;
     let grantedCredit = 0;
     let qualifiedValue = 0;
@@ -1352,7 +1535,10 @@ export async function getBalance(pubkey: string) {
     let hasLiveOffer = false;  // has ≥1 live Offer posted (offer covenant)
     let usableFloor: number | undefined = undefined; // v3: offer-gated usable floor (≤ earned floor)
     let liveOffers = 0;        // v3: count of live Offers (drives the credit ladder)
+    let knownGrant = 0;        // the known floor's part of the limit (one live offer unlocks it); 0 from an older node
     let frozen = false;        // v3: debt below usable floor → spending paused
+    let knownFrozen = false;   // the community's admins froze this member's known floor (utils/credit-line-card.ts)
+    let creditFrozen = false;  // … or their whole line (the manager's Freeze)
 
     // Background fetch to ensure parity
     refreshBalanceFromServer(pubkey).catch(() => null);
@@ -1365,6 +1551,7 @@ export async function getBalance(pubkey: string) {
             const parsed = JSON.parse(cached);
             tier = parsed.tier || tier;
             floor = parsed.floor ?? floor;
+            tierCredit = typeof parsed.tierCredit === 'number' ? parsed.tierCredit : null;
             earnedCredit = parsed.earnedCredit ?? 0;
             grantedCredit = parsed.grantedCredit ?? 0;
             qualifiedValue = parsed.qualifiedValue ?? 0;
@@ -1381,7 +1568,10 @@ export async function getBalance(pubkey: string) {
             hasLiveOffer = !!parsed.hasLiveOffer;
             usableFloor = parsed.usableFloor ?? floor;
             liveOffers = parsed.liveOffers ?? 0;
+            knownGrant = typeof parsed.knownGrant === 'number' ? parsed.knownGrant : 0;
             frozen = !!parsed.frozen;
+            knownFrozen = parsed.knownFrozen === true;
+            creditFrozen = parsed.creditFrozen === true;
         }
     } catch { /* ignore */ }
 
@@ -1389,6 +1579,7 @@ export async function getBalance(pubkey: string) {
         balance: row?.balance || 0,
         floor,
         tier,
+        tierCredit,
         earnedCredit,
         grantedCredit,
         qualifiedValue,
@@ -1406,7 +1597,10 @@ export async function getBalance(pubkey: string) {
         hasLiveOffer,
         usableFloor: usableFloor ?? floor,
         liveOffers,
+        knownGrant,
         frozen,
+        knownFrozen,
+        creditFrozen,
     };
 }
 
@@ -1504,6 +1698,9 @@ export async function getTransactions(pubkey: string) {
             amount: row.amount,
             taxFee: row.tax_fee || 0,
             peer: peerName,
+            // The other account's key: the Ledger tab shows Beans from someone blocked on this phone without their note
+            // (utils/ledger-note.ts).
+            peerPubkey: row.peer_pubkey,
             timestamp: new Date(row.timestamp).toLocaleDateString(),
             memo: displayMemo
         };
@@ -1521,12 +1718,17 @@ export async function getMemberProfile(pubkey: string) {
  * recovery pulls it down rather than asking the user to type it. Best-effort —
  * returns null when the node is unreachable or doesn't know the key (the full
  * profile, incl. avatar, then lands with the normal members-directory sync).
- * Uses the allowlisted pre-membership probe so it works before we're synced in.
+ * Uses the allowlisted pre-membership probe so it works before we're synced in, signed with
+ * the key being restored (`privateKey`): a community names a key only to that key's own
+ * signer (apps/server routes/community.ts), and the key is not saved on the phone yet, so
+ * the phone's signing wrapper (node-request-signing.ts) cannot sign it.
  */
-export async function fetchNodeCallsign(anchorUrl: string, pubkey: string): Promise<string | null> {
+export async function fetchNodeCallsign(anchorUrl: string, pubkey: string, privateKey?: string): Promise<string | null> {
     try {
-        const res = await fetch(`${anchorUrl}/api/community/membership/${pubkey}`, {
-            headers: { Accept: 'application/json' },
+        const url = `${anchorUrl}/api/community/membership/${pubkey}`;
+        const signed = privateKey ? await buildSignedHeaders('GET', url, '', privateKey, pubkey) : {};
+        const res = await fetch(url, {
+            headers: { ...signed, Accept: 'application/json' },
         });
         if (!res.ok) return null;
         const data = await res.json();
@@ -1700,7 +1902,9 @@ export async function createPost(post: any) {
         // Flatten poll parameters to top-level request body
         ...(post.type === 'poll' ? {
             pollOptions: post.poll_options ? (typeof post.poll_options === 'string' ? JSON.parse(post.poll_options) : post.poll_options) : (post.pollOptions || []),
-            durationDays: post.durationDays || 7
+            durationDays: post.durationDays || 7,
+            // Anonymous unless its creator chose an open vote (2026-09-28); only `true` opens one.
+            pollOpenVote: post.pollOpenVote === true,
         } : {}),
         // Events (docs/events-on-the-map.md §2.2): the server forces reach local and the other trade fields.
         ...(post.type === 'event' ? {
@@ -1783,14 +1987,15 @@ export async function createPost(post: any) {
     // 2. Local Database Confirmation
     // Only save to SQLite AFTER the server has safely accepted it, preventing the background sync from wiping our un-synced draft
     await database.runAsync(
-        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers, poll_options, poll_closes_at, audience_scope, target_group_id, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, lat, lng, price_type, repeatable, cash_also_needed, photos, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [post.id, post.type, post.category, post.title, post.description, post.credits,
          post.author_pubkey, post.created_at, post.lat || null, post.lng || null,
          post.price_type || 'fixed', post.repeatable || 0, post.cash_also_needed || 0, post.photos || null,
          post.reach || 'local', post.reachPeers ? JSON.stringify(post.reachPeers) : null,
          post.poll_options ? (typeof post.poll_options === 'string' ? post.poll_options : JSON.stringify(post.poll_options)) : null,
          post.poll_closes_at || (post.durationDays ? new Date(Date.now() + post.durationDays * 86400000).toISOString() : null),
+         post.type === 'poll' && post.pollOpenVote === true ? 1 : 0,
          post.audienceScope || post.audience_scope || 'public',
          post.targetGroupId || post.target_group_id || null,
          ...eventCacheColumns(post)]
@@ -1836,9 +2041,10 @@ export async function votePoll(postId: string, optionId: string) {
         try {
             const database = await waitForInit();
             await database.runAsync(
-                `UPDATE posts SET poll_options = ?, status = ?, updated_at = ? WHERE id = ?`,
+                `UPDATE posts SET poll_options = ?, poll_new_or_words_votes = ?, status = ?, updated_at = ? WHERE id = ?`,
                 [
                     JSON.stringify(json.post.pollOptions || []),
+                    pollNewOrWordsVotesColumn(json.post),
                     json.post.status,
                     json.post.updatedAt || new Date().toISOString(),
                     postId
@@ -2293,6 +2499,60 @@ export async function objectToKeeperChange(treasury: string, changeId: string) {
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/changes/${encodeURIComponent(changeId)}/object`, {});
 }
 
+/**
+ * An enterprise's keepers' votes (DESIGN-group-decisions S2; routes/enterprise-decisions.ts). Only its keepers, and those on
+ * a vote's roll, are answered; anyone else gets a 404, so null here means "nothing for you", never an error to show.
+ */
+export async function getEnterpriseDecisions(treasury: string): Promise<ScopedDecisionList | null> {
+    try {
+        const res = await signedGet(`/api/enterprise/${encodeURIComponent(treasury)}/decisions`);
+        if (!res.ok) return null;
+        const body = await res.json();
+        return body && Array.isArray(body.decisions) ? body as ScopedDecisionList : null;
+    } catch {
+        return null;
+    }
+}
+
+/** A keeper proposes a vote. A pay-out names its recipient as params.to; the node checks everything again. */
+export async function proposeEnterpriseDecision(treasury: string, body: {
+    title: string; description: string; effect: ScopedEffect; subject?: string; params?: { to: string; amount: number; memo?: string };
+}) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/decisions`, body);
+}
+
+/** Yes or No on a keepers' vote. A vote can't be changed once cast. */
+export async function voteEnterpriseDecision(treasury: string, decisionId: string, support: boolean) {
+    return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/decisions/${encodeURIComponent(decisionId)}/vote`, { support });
+}
+
+/**
+ * A chat group's votes (DESIGN-group-decisions S3; routes/group-decisions.ts). Its members (any role) are answered, and those
+ * on a vote's roll after they left; anyone else gets a 404, so null here means "nothing for you", never an error to show.
+ */
+export async function getGroupDecisions(groupId: string): Promise<ScopedDecisionList | null> {
+    try {
+        const res = await signedGet(`/api/groups/${encodeURIComponent(groupId)}/decisions`);
+        if (!res.ok) return null;
+        const body = await res.json();
+        return body && Array.isArray(body.decisions) ? body as ScopedDecisionList : null;
+    } catch {
+        return null;
+    }
+}
+
+/** A member or convenor proposes a group vote: the group's own things only, never a recipient or an amount. */
+export async function proposeGroupDecision(groupId: string, body: {
+    title: string; description: string; effect: GroupEffect; subject?: string; params?: { role?: 'convenor' | 'member'; policy?: string };
+}) {
+    return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/decisions`, body);
+}
+
+/** Yes or No on a group's vote. A vote can't be changed once cast. */
+export async function voteGroupDecision(groupId: string, decisionId: string, support: boolean) {
+    return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/decisions/${encodeURIComponent(decisionId)}/vote`, { support });
+}
+
 export async function stepDownAsKeeper(treasury: string) {
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/keepers/step-down`, {});
 }
@@ -2336,11 +2596,178 @@ export async function removeEventChatMessage(postId: string, messageId: string):
 }
 
 /** The local conversation's kind, so /chat/:id can hand an event chat to its own screen. */
-export async function getConversationKind(conversationId: string): Promise<string | null> {
+// ── A DM stays a DM ─────────────────────────────────────────────────────────────────────────────────────────────
+// The node says what type a conversation is, and a group's, an event's and an enterprise's chats are node-readable by
+// design: shown in their own views, their lines plaintext-v1, and this phone sends plaintext into them. So the node
+// retyping a DM as one of those would show its unencrypted lines as members' words, and make this phone send the next
+// line readable. A conversation this phone has ever seen as a DM, or that holds an encrypted line (no node-readable
+// chat ever does: the node refuses one), stays a DM here whatever the node says: it opens only in the DM view, with
+// the DM checks, and is locked when sent to. A type change from the node is ignored, and logged. The ids seen as DMs
+// are kept in AsyncStorage, so a database wipe-and-fetch, or the node dropping the chat for a while, forgets none.
+
+const DM_SEEN_KEY = 'beanpool_dm_conversations_seen';
+
+async function dmConversationsSeen(): Promise<Set<string>> {
+    try {
+        const raw = JSON.parse((await AsyncStorage.getItem(DM_SEEN_KEY)) || '[]');
+        return new Set(Array.isArray(raw) ? raw.filter((x: unknown) => typeof x === 'string') : []);
+    } catch {
+        return new Set();
+    }
+}
+
+/** Remember conversations seen as DMs (never forgotten; ids are UUIDs, so one list serves every community). */
+async function rememberDmConversations(ids: string[]): Promise<void> {
+    if (!ids.length) return;
+    const seen = await dmConversationsSeen();
+    const before = seen.size;
+    for (const id of ids) if (typeof id === 'string' && id) seen.add(id);
+    if (seen.size !== before) await AsyncStorage.setItem(DM_SEEN_KEY, JSON.stringify([...seen])).catch(() => {});
+}
+
+/**
+ * The spelling of the id this phone knows a DM by, or null when it knows no DM by any spelling of `conversationId`: the
+ * DM list's, the dm row's, or the id an encrypted line was kept under. The held check, the keyring and the group screens
+ * fold an id's case (a link or a push can carry it in capitals), so this folds it too: otherwise one id in capitals
+ * reaches a group's keys on a known DM's own id, and makes it a held group whose lines go to the roster the node shows
+ * (#1841 review, finding 1). The two SQLite lookups ask the id as given, lower- and upper-case, so both keep their index:
+ * a COLLATE NOCASE compare scanned the whole table for every row holdDmTypes asks about (#1841 confirmation 1, finding
+ * 2); refuseGroupKeysForDm keeps the complete check (isKnownDmInAnySpelling). `seenByFold` is the DM list folded once,
+ * for a pass over many rows (dmConversationsByFold).
+ */
+export async function knownDmConversationId(conversationId: string, seenByFold?: Map<string, string[]>): Promise<string | null> {
+    if (!conversationId) return null;
+    const folded = conversationId.toLowerCase();
+    const listed = seenByFold ? (seenByFold.get(folded) ?? []) : [...await dmConversationsSeen()].filter((s) => s.toLowerCase() === folded);
+    // The spelling asked for wins wherever this phone knows a DM under it, so a link to a conversation the phone holds
+    // opens that conversation, never a twin under another spelling: a node can list one first, and SQLite visits an IN
+    // list in BINARY order, upper case first (#1863 review). Another spelling answers only when this one is known nowhere.
+    if (listed.includes(conversationId)) return conversationId;
+    let row: string | null = null;
+    let line: string | null = null;
     try {
         const database = await getDb();
-        const row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
-        return row?.type ?? null;
+        const ids = [...new Set([conversationId, folded, conversationId.toUpperCase()])];
+        const marks = ids.map(() => '?').join(', ');
+        const conv = await database.getFirstAsync<any>(`SELECT id FROM conversations WHERE id IN (${marks}) AND type = 'dm' ORDER BY id = ? DESC LIMIT 1`, [...ids, conversationId]);
+        row = typeof conv?.id === 'string' ? conv.id : null;
+        if (row === conversationId) return row;
+        const msg = await database.getFirstAsync<any>(
+            `SELECT conversation_id FROM messages WHERE conversation_id IN (${marks}) AND nonce LIKE ? ORDER BY conversation_id = ? DESC LIMIT 1`, [...ids, `${V2_NONCE_PREFIX}%`, conversationId]);
+        line = typeof msg?.conversation_id === 'string' ? msg.conversation_id : null;
+        if (line === conversationId) return line;
+    } catch {}
+    return listed[0] ?? row ?? line;
+}
+
+/** The DM list folded once (each id lower-cased, to its spellings in the order seen), for a pass over many rows. */
+async function dmConversationsByFold(): Promise<Map<string, string[]>> {
+    const byFold = new Map<string, string[]>();
+    for (const s of await dmConversationsSeen()) { const f = s.toLowerCase(); const a = byFold.get(f); if (a) a.push(s); else byFold.set(f, [s]); }
+    return byFold;
+}
+
+/**
+ * A known DM in ANY spelling, the slow way (two COLLATE NOCASE scans): the key-making guard's own check, which runs when a
+ * group's keys are about to be synced or made, never per row of a sync. A dm row or a sealed line kept under a mixed-case
+ * spelling the DM list never got (written while the key memory couldn't be read) is caught here (#1863 review).
+ */
+async function isKnownDmInAnySpelling(conversationId: string): Promise<boolean> {
+    if (await isKnownDmConversation(conversationId)) return true;
+    try {
+        const database = await getDb();
+        const dm = await database.getFirstAsync<any>("SELECT 1 AS y FROM conversations WHERE id = ? COLLATE NOCASE AND type = 'dm' LIMIT 1", [conversationId]);
+        if (dm) return true;
+        const spelt = await database.getAllAsync<any>('SELECT id FROM conversations WHERE id = ? COLLATE NOCASE', [conversationId]);
+        const ids = (spelt ?? []).map((r: any) => r?.id).filter((s: unknown): s is string => typeof s === 'string');
+        if (!ids.length) return false;
+        const line = await database.getFirstAsync<any>(
+            `SELECT 1 AS y FROM messages WHERE conversation_id IN (${ids.map(() => '?').join(', ')}) AND nonce LIKE ? LIMIT 1`, [...ids, `${V2_NONCE_PREFIX}%`]);
+        return !!line;
+    } catch {
+        return false;
+    }
+}
+
+/** True for a conversation this phone has seen as a DM, or that holds an encrypted line, in any spelling of its id. */
+export async function isKnownDmConversation(conversationId: string): Promise<boolean> {
+    return (await knownDmConversationId(conversationId)) !== null;
+}
+
+/**
+ * True if this identity has held keys of a group with this id, read straight from its key memory (the rows GroupKeyring
+ * keeps, without opening one), so a sync can ask it of every conversation it writes. Throws when they can't be read.
+ * Asked of the id lower-cased, as groupKeyring() keeps the rows: any spelling of a held group's id is held.
+ */
+async function heldInKeyMemory(conversationId: string, myPub?: string | null): Promise<boolean> {
+    const pub = myPub ?? (await loadIdentity())?.publicKey;
+    if (!pub || !conversationId) return false;
+    const database = await getDb();
+    const key = `${pub}/${conversationId.toLowerCase()}`;
+    const st = await database.getFirstAsync<any>('SELECT highest FROM group_chat_key_state WHERE group_id = ?', [key]);
+    if (Number(st?.highest ?? 0) > 0) return true;
+    return !!(await database.getFirstAsync<any>('SELECT 1 AS y FROM group_chat_epochs WHERE group_id = ? AND wrap IS NOT NULL LIMIT 1', [key]));
+}
+
+/**
+ * The type this phone keeps for a conversation the node calls `nodeType`. A group whose keys this phone has held stays
+ * its group and is never remembered as a DM, whatever the node calls it: one answer typing it `dm` would otherwise move
+ * it to the DM screen for good, every line DM-sealed to whoever the node lists (confirmation 2 of #1788, finding 2). A
+ * known DM stays one. When the key memory can't be read, this answer remembers nothing as a DM; the next sync asks again.
+ */
+async function heldConversationType(conversationId: string, nodeType: string | null | undefined, myPub?: string | null): Promise<string> {
+    const t = nodeType || 'dm';
+    let held: boolean | null;
+    try { held = await heldInKeyMemory(conversationId, myPub); } catch { held = null; }
+    if (held) {
+        if (t !== 'group_thread') console.warn(`[group guard] the node calls held group ${String(conversationId).slice(0, 8)} a ${t}: ignored, it stays a group`);
+        return 'group_thread';
+    }
+    if (t === 'dm') {
+        if (held !== null) await rememberDmConversations([conversationId]);
+        return 'dm';
+    }
+    if (await isKnownDmConversation(conversationId)) {
+        console.warn(`[DM guard] the node calls DM ${String(conversationId).slice(0, 8)} a ${t}: ignored, it stays a DM`);
+        await rememberDmConversations([conversationId]);
+        return 'dm';
+    }
+    return t;
+}
+
+/** Any conversation this phone holds under another type that is a known DM goes back to being one (logged). */
+async function holdDmTypes(): Promise<void> {
+    try {
+        const database = await getDb();
+        const rows = await database.getAllAsync<any>("SELECT id, type FROM conversations WHERE IFNULL(type, 'dm') != 'dm'");
+        const byFold = await dmConversationsByFold();
+        for (const r of rows || []) {
+            if (r?.id && (await knownDmConversationId(r.id, byFold)) !== null) {
+                console.warn(`[DM guard] DM ${String(r.id).slice(0, 8)} was held as a ${r.type}: back to a DM`);
+                await database.runAsync("UPDATE conversations SET type = 'dm' WHERE id = ?", [r.id]);
+                await rememberDmConversations([r.id]);
+            }
+        }
+    } catch {}
+}
+
+/**
+ * The kind of conversation this phone keeps for an id. `askNode`: with no row yet (a push tap, a link before the sync),
+ * ask the node once and keep its answer (the DM guard and the held guard applied), so a group's chat opens in its own
+ * screen rather than the DM one (confirmation 2 of #1788, finding 3).
+ */
+export async function getConversationKind(conversationId: string, opts: { askNode?: boolean } = {}): Promise<string | null> {
+    try {
+        const database = await getDb();
+        let row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+        if (!row && opts.askNode) {
+            await refreshConversationFromNode(conversationId);
+            row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+        }
+        const type = row?.type ?? null;
+        // A known DM is a DM, whatever type its row says, or with no row (the node dropped it): the DM guard above.
+        if (type !== 'dm' && await isKnownDmConversation(conversationId)) return 'dm';
+        return type;
     } catch {
         return null;
     }
@@ -2444,7 +2871,9 @@ export type DecisionEffect =
     | 'remove_member'
     | 'grant_enterprise'
     | 'grant_hardship'
-    | 'write_off_deficit';
+    | 'write_off_deficit'
+    /** A departed member's open debt, by its record id (#1597): no Beans move; the record is marked forgiven. */
+    | 'forgive_debt';
 
 export interface Decision {
     id: string;
@@ -2688,6 +3117,20 @@ function emitOwnProfileUpdated(pubkey: string): void {
 }
 
 /**
+ * The `poll_new_or_words_votes` column for a poll as the node sent it: how many of its votes came from new or 12-word
+ * accounts (@beanpool/core poll-vote-origins), or NULL where the node says nothing (a local community, a group's poll).
+ */
+function pollNewOrWordsVotesColumn(p: any): number | null {
+    const n = p?.pollNewOrWordsVotes ?? p?.poll_new_or_words_votes;
+    return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
+}
+
+/** The `photos` column writeSyncedPost stores for a listing from the node: its URLs, never a local file's. */
+function syncedPhotosColumn(p: any): string | null {
+    return p.photos ? JSON.stringify(p.photos.filter((url: string) => !url.startsWith('file://'))) : null;
+}
+
+/**
  * One listing as the node sends it, written to the cache. The only row writer the delta sync, a pushed change and
  * the by-id refresh in getPost use. It names every column the node sends: INSERT OR REPLACE does not keep a column
  * it leaves out, it puts it back to the table default, which is how every sync once cleared the 💸 marker and
@@ -2697,7 +3140,7 @@ function emitOwnProfileUpdated(pubkey: string): void {
 async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void> {
     const reach = p.reach || 'local';
     await txn.runAsync(
-        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT OR REPLACE INTO posts (id, type, category, title, description, credits, author_pubkey, lat, lng, photos, price_type, repeatable, cash_also_needed, status, active, accepted_by, accepted_by_callsign, accepted_at, completed_at, pending_transaction_id, created_at, updated_at, origin_node, author_energy_cycled, author_founding_needed, reach, reach_peers, poll_options, poll_closes_at, poll_open_vote, poll_new_or_words_votes, audience_scope, target_group_id, target_pubkey, assigned_to, event_start_at, event_end_at, event_place_name, event_state, event_going_count, event_interested_count, carried_callsign, carried_avatar) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, (SELECT carried_callsign FROM posts WHERE id = ?)), CASE WHEN ? THEN ? ELSE (SELECT carried_avatar FROM posts WHERE id = ?) END)',
         [
             p.id ?? null,
             p.type ?? null,
@@ -2708,7 +3151,7 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             p.author_pubkey || p.authorPubkey || p.authorPublicKey || null,
             p.lat ?? null,
             p.lng ?? null,
-            p.photos ? JSON.stringify(p.photos.filter((url: string) => !url.startsWith('file://'))) : null,
+            syncedPhotosColumn(p),
             p.price_type || p.priceType || 'fixed',
             p.repeatable ? 1 : 0,
             (p.cashAlsoNeeded ?? p.cash_also_needed) ? 1 : 0,
@@ -2728,14 +3171,42 @@ async function writeSyncedPost(txn: SQLite.SQLiteDatabase, p: any): Promise<void
             await syncedReachPeers(txn, p, reach),
             p.poll_options ? (typeof p.poll_options === 'string' ? p.poll_options : JSON.stringify(p.poll_options)) : (p.pollOptions ? JSON.stringify(p.pollOptions) : null),
             p.poll_closes_at || p.pollClosesAt || null,
+            // Every column is written here (INSERT OR REPLACE), so the ballot too: an open vote only when the node says so.
+            (p.pollOpenVote ?? p.poll_open_vote) === true || (p.pollOpenVote ?? p.poll_open_vote) === 1 ? 1 : 0,
+            pollNewOrWordsVotesColumn(p),
             // The node sends 'public' for a row with no scope (rowToPost); the table's default says the same.
             p.audienceScope || p.audience_scope || 'public',
             p.targetGroupId || p.target_group_id || null,
             p.targetPubkey || p.target_pubkey || null,
             p.assignedTo || p.assigned_to || null,
-            ...eventCacheColumns(p)
+            ...eventCacheColumns(p),
+            // A copy without the name (an older node) keeps the one the row has.
+            syncedAuthorCallsign(p),
+            p.id ?? null,
+            // Its face: a copy that names it (a node that has members on demand) is the node's word, and its null says the
+            // author has no photo now, so it clears; a copy without the field (an older node) keeps the one the row has.
+            carriesAuthorAvatar(p) ? 1 : 0,
+            syncedAuthorAvatar(p),
+            p.id ?? null,
         ]
     );
+}
+
+/** The author's face URL a listing carries (the node's `authorAvatarUrl` on a by-area read), or null for a copy without one. */
+function syncedAuthorAvatar(p: any): string | null {
+    const url = p.authorAvatarUrl ?? p.author_avatar_url;
+    return typeof url === 'string' && url.trim() !== '' ? url : null;
+}
+
+/** Whether a listing names its author's face at all (`authorAvatarUrl`, null included), as a by-area read does. */
+function carriesAuthorAvatar(p: any): boolean {
+    return p != null && (Object.prototype.hasOwnProperty.call(p, 'authorAvatarUrl') || Object.prototype.hasOwnProperty.call(p, 'author_avatar_url'));
+}
+
+/** The author's name a listing carries (the node's `authorCallsign`), or null for a copy without one. */
+function syncedAuthorCallsign(p: any): string | null {
+    const name = p.authorCallsign ?? p.author_callsign;
+    return typeof name === 'string' && name.trim() !== '' ? name : null;
 }
 
 /**
@@ -2753,17 +3224,163 @@ async function syncedReachPeers(txn: SQLite.SQLiteDatabase, p: any, reach: strin
 }
 
 /**
+ * A community that refuses this phone its listings (a members_only answer, services/pillar-sync.ts): every listing this
+ * phone cached of it goes, with its poll votes and RSVPs, but the phone's own posts and everything of its own member's
+ * (messages, deals, Beans) stay. Only this community's database is written: applyDelta checks it is the one asked.
+ * The next sync that may read the listings is a whole one (pillar-sync drops the cursor).
+ */
+async function dropListingsOfARefusedCommunity(txn: SQLite.SQLiteDatabase, selfPubkey: string | null): Promise<void> {
+    // Without the phone's own key it can't tell its own posts from the others': drop nothing.
+    if (!selfPubkey) return;
+    const own = selfPubkey;
+    const others = 'SELECT id FROM posts WHERE author_pubkey IS NOT ?';
+    await txn.runAsync(`DELETE FROM poll_votes WHERE post_id IN (${others})`, [own]);
+    await txn.runAsync(`DELETE FROM event_rsvps WHERE post_id IN (${others})`, [own]);
+    const gone = await txn.runAsync('DELETE FROM posts WHERE author_pubkey IS NOT ?', [own]);
+    if (gone.changes > 0) console.log(`[DB] applyDelta: ${gone.changes} listing(s) of a community that keeps its listings for its members left this phone`);
+}
+
+/**
  * After a take-over, the listings the whole pull `posts` shows the node no longer has go (utils/posts-replace.ts says
  * which: its rule, and why).
  */
-async function dropPostsTheNodeNoLongerHas(txn: SQLite.SQLiteDatabase, posts: any[]): Promise<void> {
+async function dropPostsTheNodeNoLongerHas(txn: SQLite.SQLiteDatabase, posts: any[], sentOnly: unknown): Promise<void> {
     const held = await txn.getAllAsync<HeldListing>('SELECT id, COALESCE(updated_at, created_at) AS at, audience_scope AS scope FROM posts');
-    const gone = postsTheNodeNoLongerHas(posts, held);
+    const gone = postsTheNodeNoLongerHas(posts, held, new Set(Array.isArray(sentOnly) ? sentOnly.map(String) : []));
     for (let i = 0; i < gone.length; i += 500) {
         const batch = gone.slice(i, i + 500);
         await txn.runAsync(`DELETE FROM posts WHERE id IN (${batch.map(() => '?').join(',')})`, batch);
     }
     if (gone.length > 0) console.log(`[DB] applyDelta: ${gone.length} listing(s) the node no longer has left this phone`);
+}
+
+/**
+ * On a community that syncs listings by area (utils/posts-nearby.ts says the rules): the held listings its member's set
+ * no longer names go (`set`, when this write carries one), then all but the `max` others nearest `area` (or the newest,
+ * without one), each with its poll votes and RSVPs. Never the member's own or one tied to them on this phone: one they
+ * took, any deal on it, a conversation about it, their own vote or answer to it. Without the phone's own key it can't
+ * tell which are theirs: nothing goes. `fresh`: listings written after the set was worked out (pushes replayed over this
+ * cycle), which the set can't speak for. `tied`, when this write carries the set's: the ids the node names as the
+ * member's own or tied, kept from now on (nearby_tied) until the next set read says otherwise, so a tie this phone holds
+ * no row for (a deal made elsewhere, or older than the deals it reads) keeps its listing too. `setHash`, when this write
+ * carries the node's set: the node's hash of it, stored with the set (nearby_held) in this same transaction, so the hash
+ * the phone sends back always names the set it holds; null forgets both (the next read is named the set in full). `tag`:
+ * the ETag of a read that has landed whole (every row of its set held), which the phone sends with its next delta and is
+ * answered 304 while nothing in the set changed; null forgets it, as the first write of every read does. The `tied` the
+ * node hashed is stored with the set and its hash (k = 'tied', as the node named it, not nearby_tied's `tied ∩ set`), so a
+ * diff applied to the held set is checked against exactly what the node hashed; a set with no `tied` is stored with no
+ * hash. `forget`: all of it goes (set, hash, tied, tag), as one write: a diff that didn't check out, so the next read
+ * sends no hash and is named the set whole.
+ */
+async function keepPostsNearby(
+    txn: SQLite.SQLiteDatabase,
+    nearby: { set?: unknown; tied?: unknown; setHash?: unknown; tag?: unknown; forget?: unknown; area?: { lat: number; lng: number } | null; max?: unknown },
+    selfPubkey: string | null,
+    fresh: ReadonlySet<string>,
+): Promise<void> {
+    if (nearby.forget === true) await txn.runAsync('DELETE FROM nearby_held');
+    if (!selfPubkey) return;
+    if (nearby.tag !== undefined) {
+        await txn.runAsync("DELETE FROM nearby_held WHERE k = 'tag'");
+        if (typeof nearby.tag === 'string' && nearby.tag !== '') await txn.runAsync("INSERT INTO nearby_held (k, v) VALUES ('tag', ?)", [nearby.tag]);
+    }
+    const max = typeof nearby.max === 'number' && Number.isFinite(nearby.max) && nearby.max >= 0 ? nearby.max : null;
+    const set = Array.isArray(nearby.set) ? nearby.set.filter((id): id is string => typeof id === 'string') : null;
+    if (max === null && set === null) return;
+    if (set !== null && nearby.setHash !== undefined) {
+        await txn.runAsync("DELETE FROM nearby_held WHERE k IN ('set', 'hash', 'tied')");
+        if (typeof nearby.setHash === 'string' && nearby.setHash !== '' && Array.isArray(nearby.tied)) {
+            const tied = nearby.tied.filter((id): id is string => typeof id === 'string');
+            await txn.runAsync("INSERT INTO nearby_held (k, v) VALUES ('set', ?), ('hash', ?), ('tied', ?)", [JSON.stringify(set), nearby.setHash, JSON.stringify(tied)]);
+        }
+    }
+    if (set !== null && Array.isArray(nearby.tied)) {
+        const inSet = new Set(set);
+        const tied = [...new Set(nearby.tied.filter((id): id is string => typeof id === 'string' && inSet.has(id)))];
+        await txn.runAsync('DELETE FROM nearby_tied');
+        for (let i = 0; i < tied.length; i += 500) {
+            const batch = tied.slice(i, i + 500);
+            await txn.runAsync(`INSERT OR IGNORE INTO nearby_tied (id) VALUES ${batch.map(() => '(?)').join(',')}`, batch);
+        }
+    }
+    const rows = await txn.getAllAsync<{ id: string; lat: number | null; lng: number | null; at: string | null; kept: number; off: number }>(
+        `SELECT p.id, p.lat, p.lng, COALESCE(p.updated_at, p.created_at) AS at, (p.active = 0 OR p.status = 'cancelled') AS off,
+                (p.author_pubkey = ? OR p.accepted_by = ?
+                 OR EXISTS (SELECT 1 FROM marketplace_transactions t WHERE t.post_id = p.id)
+                 OR EXISTS (SELECT 1 FROM conversations c WHERE c.post_id = p.id)
+                 OR EXISTS (SELECT 1 FROM event_rsvps r WHERE r.post_id = p.id AND r.member_pubkey = ?)
+                 OR EXISTS (SELECT 1 FROM poll_votes v WHERE v.post_id = p.id AND v.voter_pubkey = ?)
+                 OR EXISTS (SELECT 1 FROM nearby_tied n WHERE n.id = p.id)) AS kept
+         FROM posts p`,
+        [selfPubkey, selfPubkey, selfPubkey, selfPubkey]);
+    const held: NearbyHeld[] = rows.map(r => ({ id: r.id, lat: r.lat, lng: r.lng, at: r.at, kept: !!r.kept, off: !!r.off }));
+    const gone = new Set(set ? nearbyReconcile(held, set, fresh).drop : []);
+    if (max !== null) for (const id of nearbyPrune(held.filter(h => !gone.has(h.id)), nearby.area ?? null, max)) gone.add(id);
+    const ids = [...gone];
+    for (let i = 0; i < ids.length; i += 500) {
+        const batch = ids.slice(i, i + 500);
+        const marks = batch.map(() => '?').join(',');
+        await txn.runAsync(`DELETE FROM poll_votes WHERE post_id IN (${marks})`, batch);
+        await txn.runAsync(`DELETE FROM event_rsvps WHERE post_id IN (${marks})`, batch);
+        await txn.runAsync(`DELETE FROM posts WHERE id IN (${marks})`, batch);
+    }
+    if (ids.length > 0) console.log(`[DB] applyDelta: ${ids.length} listing(s) outside this member's area left this phone`);
+}
+
+/**
+ * The set this phone last reconciled with on a community that syncs by area, the `tied` the node hashed with it, and the
+ * node's hash of both, as keepPostsNearby stored them together; null without all three (never synced by area, a cleared
+ * copy, a set with no hash, one stored by a build before `tied` was: its next read is named the set whole, once).
+ */
+export async function readNearbyHeld(): Promise<{ set: string[]; tied: string[]; hash: string } | null> {
+    try {
+        const rows = await (await getDb()).getAllAsync<{ k: string; v: string }>("SELECT k, v FROM nearby_held WHERE k IN ('set', 'hash', 'tied')");
+        const hash = rows.find(r => r.k === 'hash')?.v;
+        const set = JSON.parse(rows.find(r => r.k === 'set')?.v ?? 'null');
+        const tied = JSON.parse(rows.find(r => r.k === 'tied')?.v ?? 'null');
+        const ids = (v: unknown): v is string[] => Array.isArray(v) && v.every(id => typeof id === 'string');
+        if (!hash || !ids(set) || !ids(tied)) return null;
+        return { set, tied, hash };
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * What a phone on a community that says `membersOnDemand` must hold, and what it holds (DESIGN-global-members-by-area
+ * §2.2.1; the plan is utils/members-on-demand.ts): `referenced` = everyone in its conversations, both sides of its deals,
+ * raters and rated, its friends and whoever vouched it in; `held` = every card with when it was last fetched by key.
+ * Listing authors are not referenced: the by-area row carries their name and face. Null when the copy can't be read.
+ */
+export async function readMembersOnDemandWorld(ownKey: string): Promise<{ referenced: string[]; held: { key: string; fetchedAt: string | null }[] } | null> {
+    try {
+        const database = await getDb();
+        const referenced = await database.getAllAsync<{ k: string }>(
+            `SELECT public_key AS k FROM conversation_participants
+             UNION SELECT buyer_pubkey FROM marketplace_transactions
+             UNION SELECT seller_pubkey FROM marketplace_transactions
+             UNION SELECT rater_pubkey FROM ratings WHERE target_pubkey = ?
+             UNION SELECT target_pubkey FROM ratings WHERE rater_pubkey = ?
+             UNION SELECT friend_pubkey FROM friends WHERE owner_pubkey = ?
+             UNION SELECT elder_vouched_by FROM members WHERE public_key = ? AND elder_vouched_by IS NOT NULL`,
+            [ownKey, ownKey, ownKey, ownKey]
+        );
+        const held = await database.getAllAsync<{ key: string; fetchedAt: string | null }>(
+            'SELECT public_key AS key, card_fetched_at AS fetchedAt FROM members'
+        );
+        return { referenced: referenced.map(r => r.k).filter((k): k is string => typeof k === 'string'), held };
+    } catch {
+        return null;
+    }
+}
+
+/** The ETag of this phone's last read by area that landed whole (keepPostsNearby `tag`), or null. */
+export async function readNearbyTag(): Promise<string | null> {
+    try {
+        return (await (await getDb()).getFirstAsync<{ v: string }>("SELECT v FROM nearby_held WHERE k = 'tag'"))?.v || null;
+    } catch {
+        return null;
+    }
 }
 
 /**
@@ -2806,8 +3423,10 @@ export async function localPostTies(postId: string): Promise<{ authorPubkey: str
  * Writes a sync's delta to this node's cache. True once it has committed; false when it wrote nothing because the
  * member switched community while the delta was on its way (the guard below): a caller that must know the write
  * landed (a take-over's replace, services/pillar-sync.ts) reads this, since that case does not throw.
+ * `generation`: the copy generation (copyGeneration) the delta was read under; when the copy has been cleared since, it
+ * writes nothing and answers false, as for a switch.
  */
-export async function applyDelta(delta: any, expectedDbName?: string): Promise<boolean> {
+export async function applyDelta(delta: any, expectedDbName?: string, generation?: number): Promise<boolean> {
     await acquireSyncLock();
     try {
         const database = await getDb();
@@ -2819,6 +3438,12 @@ export async function applyDelta(delta: any, expectedDbName?: string): Promise<b
         // Skip the write; the newly-active node syncs cleanly on its own cycle.
         if (expectedDbName && currentDbName !== expectedDbName) {
             console.warn(`[DB] applyDelta: skipping write — active DB '${currentDbName}' != fetch-time DB '${expectedDbName}' (node switched mid-sync)`);
+            return false;
+        }
+        // Read for a copy that has been cleared since (a Force Resync, a wipe): written now, it would land in the fresh
+        // copy as if that copy had read it. Checked under the lock, which clearDB takes to drop the tables.
+        if (generation !== undefined && generation !== copyGeneration) {
+            console.warn('[DB] applyDelta: skipping write — the copy it was read for was cleared');
             return false;
         }
         // Read the identity OUTSIDE the transaction: it is an AsyncStorage/SecureStore read,
@@ -2858,7 +3483,12 @@ export async function applyDelta(delta: any, expectedDbName?: string): Promise<b
         // A PARTIAL list (the incremental `?updatedAfter=` delta) is not evidence of absence —
         // it only carries members who changed — so it keeps COALESCE, exactly as the GC below
         // only runs for a complete list.
-        const avatarNullClears = delta.membersComplete === true;
+        //
+        // A `keys=` answer (`membersByKey`, members on demand) is complete for every key it names:
+        // its null is the node saying that member has no photo now, so it clears too. On a
+        // community that says `membersOnDemand` no complete list ever comes, so without this a
+        // removed photo stayed on every phone that had shown it (review of #1859, B2).
+        const avatarNullClears = delta.membersComplete === true || delta.membersByKey === true;
         const serverMemberSet = new Set();
         for (const m of delta.members) {
             const pk = m.publicKey || m.public_key || '';
@@ -2908,6 +3538,27 @@ export async function applyDelta(delta: any, expectedDbName?: string): Promise<b
             }
         }
     }
+
+    // Members on demand (utils/members-on-demand.ts): the cards this cycle fetched or re-checked by key, stamped with when,
+    // and the cards past the 1,000 bound that nothing references. Only a phone on a community that says
+    // `membersOnDemand` sends either.
+    if (delta.membersFetched && Array.isArray(delta.membersFetched.keys) && delta.membersFetched.keys.length > 0) {
+        const keys: string[] = delta.membersFetched.keys;
+        for (let i = 0; i < keys.length; i += 500) {
+            const chunk = keys.slice(i, i + 500);
+            await txn.runAsync(
+                `UPDATE members SET card_fetched_at = ? WHERE public_key IN (${chunk.map(() => '?').join(',')})`,
+                [delta.membersFetched.at, ...chunk]
+            );
+        }
+    }
+    if (Array.isArray(delta.membersDrop) && delta.membersDrop.length > 0) {
+        const keys: string[] = delta.membersDrop.filter((k: unknown) => typeof k === 'string' && k !== selfPubkey);
+        for (let i = 0; i < keys.length; i += 500) {
+            const chunk = keys.slice(i, i + 500);
+            await txn.runAsync(`DELETE FROM members WHERE public_key IN (${chunk.map(() => '?').join(',')})`, chunk);
+        }
+    }
     
     if (delta.transactions) {
             for (const t of delta.transactions) {
@@ -2929,8 +3580,14 @@ export async function applyDelta(delta: any, expectedDbName?: string): Promise<b
             }
             // After a take-over, the whole pull replaces what the phone holds (services/pillar-sync.ts). Before the
             // pushed changes below: a push that landed during this cycle is newer than the pull, not left over.
-            if (delta.postsReplace === true) await dropPostsTheNodeNoLongerHas(txn, delta.posts);
+            // `postsSentOnly`: the ids among them that the take-over's catch-up read carried, not the pull (posts-replace.ts).
+            if (delta.postsReplace === true) await dropPostsTheNodeNoLongerHas(txn, delta.posts, delta.postsSentOnly);
         }
+
+        // The community refused this phone its listings (a local community's are its members', utils/members-only-listings.ts):
+        // what it kept of them from before goes, so no old listing or pin stays on show and the Market shows the
+        // members-only card.
+        if (delta.postsRefused === true) await dropListingsOfARefusedCommunity(txn, selfPubkey);
 
         // Listing changes the node pushed over /ws (services/pillar-sync.ts applyLivePostChange), in the order they
         // arrived. They come after `posts` so that a catch-up sync whose pull left the node BEFORE a push replays
@@ -2939,6 +3596,20 @@ export async function applyDelta(delta: any, expectedDbName?: string): Promise<b
             for (const change of delta.liveChanges as LivePostChange[]) {
                 await applyLivePostRow(txn, change);
             }
+        }
+
+        // A community that syncs listings by area (services/pillar-sync.ts): after every write of its listings, the phone
+        // keeps its member's set and at most `max` others (utils/posts-nearby.ts). After the pushes above, which it
+        // never drops for a set worked out before them.
+        if (delta.postsNearby && typeof delta.postsNearby === 'object') {
+            const fresh = new Set<string>(Array.isArray(delta.liveChanges)
+                ? (delta.liveChanges as LivePostChange[]).flatMap(c => (c.kind === 'upsert' && c.post?.id ? [String(c.post.id)] : []))
+                : []);
+            // A push replayed in this write landed outside the read the tag describes (one outside the set is kept as fresh):
+            // the tag isn't stored, and the next delta is answered whole (review of #1805, finding 2).
+            const pushed = Array.isArray(delta.liveChanges) && delta.liveChanges.length > 0;
+            const nearby = pushed && typeof delta.postsNearby.tag === 'string' ? { ...delta.postsNearby, tag: null } : delta.postsNearby;
+            await keepPostsNearby(txn, nearby, selfPubkey, fresh);
         }
 
         if (delta.marketplaceTransactions !== undefined) {
@@ -3102,7 +3773,7 @@ async function diffChangedMessages(database: SQLite.SQLiteDatabase, conversation
     return messages.filter((m: any) => {
         const local = localById.get(m.id);
         if (!local) return true;
-        if ((m.metadata || null) !== (local.metadata || null)) return true;
+        if ((withoutSendState(m.metadata || null) || null) !== (local.metadata || null)) return true;
         const editedAt = m.editedAt || m.edited_at || null;
         if (editedAt && editedAt !== local.edited_at) return true;
         // A delete or a removal that the node recorded without touching the metadata we hold (an older row
@@ -3150,11 +3821,66 @@ async function upsertFetchedMessage(database: SQLite.SQLiteDatabase, conversatio
     if (merged.contentReplaced && merged.type === 'removed') await forgetCachedChatImage(m.id);
 }
 
+// Deleted accounts already blanked on this phone, per community copy. The conversation list names them on every sync from
+// then on, and an open chat's page can carry their tombstones on every poll: a pass already done is not run again.
+const deletedAccountsBlanked = new Set<string>();
+
+/**
+ * Every line on this phone by an account its owner deleted reads "This message was deleted", and the copies of their photos
+ * this phone decrypted go (Marty, 2026-10-01: "Yes, blank lines and photos").
+ *
+ * The node blanks every line of theirs (apps/server/src/engine/message-tombstone.ts blankMessagesOf), but a sync brings only
+ * the newest 50 lines of a conversation and the delete sends no event per line: the older lines of a DM, which the chat
+ * reads from here as you scroll up, kept their words, still decryptable, and their photos. So the phone blanks them itself,
+ * in every conversation it holds (a group's and an event's lines are kept here too), from what a sync tells it: the
+ * conversation list's `deletedAccounts`, or a tombstone of theirs in a conversation's answer (chat-sync.ts
+ * accountDeletedAuthor). Both are state, not a socket event, so a phone that was offline when it happened catches it on its
+ * next sync. Never this phone's own lines. Each line keeps its id, conversation and time; the node's own tombstone replaces
+ * this one when a later sync carries it. Returns how many lines it blanked.
+ */
+async function blankLinesOfDeletedAccounts(database: SQLite.SQLiteDatabase, keys: Iterable<string>, myPubkey: string | null | undefined): Promise<number> {
+    const copy = currentDbName ?? '';
+    const pending = [...new Set(keys)].filter(k => typeof k === 'string' && k !== '' && k !== myPubkey && !deletedAccountsBlanked.has(`${copy}\u0001${k}`));
+    if (pending.length === 0) return 0;
+    const rows = await database.getAllAsync<{ id: string; author_pubkey: string; type: string | null; nonce: string | null; metadata: string | null }>(
+        `SELECT id, author_pubkey, type, nonce, metadata FROM messages WHERE author_pubkey IN (${pending.map(() => '?').join(',')})`,
+        pending
+    );
+    const toBlank = rows.filter(stillHoldsWords);
+    const blanked: string[] = [];
+    if (toBlank.length > 0) {
+        // Stored as the node stores its tombstones: plain text, readable without the DM's key.
+        const ciphertext = encodeBase64(encodeUtf8(DELETED_BY_AUTHOR_TEXT));
+        const removedAt = new Date().toISOString();
+        await acquireSyncLock();
+        try {
+            await database.withTransactionAsync(async () => {
+                for (const r of toBlank) {
+                    // Checked again here: a sync may have put the node's own tombstone in since the read above, and it stays.
+                    const res = await database.runAsync(
+                        `UPDATE messages SET type = 'removed', ciphertext = ?, nonce = 'plaintext-v1', metadata = ?
+                         WHERE id = ? AND author_pubkey = ? AND NOT (IFNULL(type, '') = 'removed' AND IFNULL(nonce, '') LIKE 'plaintext%')`,
+                        [ciphertext, accountDeletedMetadata(r.metadata, r.author_pubkey, removedAt), r.id, r.author_pubkey]
+                    );
+                    if (res.changes > 0) blanked.push(r.id);
+                }
+            });
+        } finally {
+            releaseSyncLock();
+        }
+    }
+    for (const id of blanked) await forgetCachedChatImage(id);
+    for (const k of pending) deletedAccountsBlanked.add(`${copy}\u0001${k}`);
+    if (blanked.length > 0) console.log(`[Sync] Blanked ${blanked.length} line(s) of ${pending.length} deleted account(s)`);
+    return blanked.length;
+}
+
 export async function syncMessages(publicKey: string) {
     try {
         const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) return;
         
+        await communityCachesRenamed();
         const expectedDbName = getDatabaseFilenameForNode(anchorUrl);
         const kLastMembersSync = `pillar_sync_${expectedDbName}_members_last_sync`;
         const lastMembersSync = await AsyncStorage.getItem(kLastMembersSync);
@@ -3166,9 +3892,13 @@ export async function syncMessages(publicKey: string) {
             localMembersCount = membersRow?.count || 0;
         } catch (e) {}
 
-        const shouldFetchMembers = !lastMembersSync || 
+        // A community that says `membersOnDemand` (the worldwide one): never the whole directory, nor its `membersComplete`
+        // garbage collection over the cards held (DESIGN-global-members-by-area §1, §2.4 (d)). pillar-sync fetches the cards
+        // this phone has a reason to show by key. Anywhere else, as it always was.
+        const membersOnDemand = (await getCachedNodeProfile(anchorUrl).catch(() => null))?.features.membersOnDemand === true;
+        const shouldFetchMembers = !membersOnDemand && (!lastMembersSync ||
                                    (Date.now() - parseInt(lastMembersSync, 10)) > 3600_000 ||
-                                   localMembersCount === 0;
+                                   localMembersCount === 0);
 
         // Separate 10s budgets: one shared controller let a slow conversations response use up the
         // directory fetch's time too, so it was aborted by us rather than by the network.
@@ -3228,6 +3958,19 @@ export async function syncMessages(publicKey: string) {
         const myIdentity = await loadIdentity();
         const database = await getDb();
 
+        // The people in these chats who deleted their accounts: the older lines of theirs this phone holds are blanked here,
+        // since no page below brings them again (blankLinesOfDeletedAccounts). A node from before this sends none.
+        const deletedAccounts = new Set<string>(
+            Array.isArray(convData.deletedAccounts) ? convData.deletedAccounts.filter((k: unknown): k is string => typeof k === 'string') : []
+        );
+        try {
+            await blankLinesOfDeletedAccounts(database, deletedAccounts, myIdentity?.publicKey);
+        } catch (e) {
+            console.warn('[Sync] Could not blank the lines of deleted accounts:', e);
+        }
+        // And anyone a page below shows as deleted (a tombstone of theirs), who may no longer be in that chat.
+        const seenDeleted = new Set<string>();
+
         for (const conv of convData.conversations) {
             // Decide WITHOUT the lock whether this conversation row actually needs
             // writing. This loop runs on every full message-sync (badge backstop,
@@ -3239,7 +3982,11 @@ export async function syncMessages(publicKey: string) {
             let needsConvWrite = false;
             try {
                 const localConv = await database.getFirstAsync<any>(
-                    'SELECT id, post_title, post_status, post_photo, post_credits FROM conversations WHERE id = ?', [conv.id]);
+                    'SELECT id, type, post_title, post_status, post_photo, post_credits FROM conversations WHERE id = ?', [conv.id]);
+                // The DM guard: a row's type is never rewritten from the node, and a DM it now types otherwise is logged.
+                if (localConv?.type === 'dm' && conv.type && conv.type !== 'dm') {
+                    console.warn(`[DM guard] the node calls DM ${String(conv.id).slice(0, 8)} a ${conv.type}: ignored, it stays a DM`);
+                }
                 if (!localConv) {
                     needsConvWrite = true;
                 } else if (
@@ -3272,6 +4019,8 @@ export async function syncMessages(publicKey: string) {
                 needsConvWrite = true; // on any doubt, fall through to the write path
             }
 
+            // The type this phone keeps (a known DM stays one: the DM guard); an existing row's type is never rewritten.
+            const heldType = needsConvWrite ? await heldConversationType(conv.id, conv.type, myIdentity?.publicKey) : (conv.type || 'dm');
             if (needsConvWrite) {
             await acquireSyncLock();
             try {
@@ -3283,7 +4032,7 @@ export async function syncMessages(publicKey: string) {
                             'INSERT INTO conversations (id, type, post_id, name, created_by, created_at, post_title, post_status, post_photo, post_credits) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                             [
                                 conv.id,
-                                conv.type || 'dm',
+                                heldType,
                                 conv.postId || conv.post_id || null,
                                 conv.name || null,
                                 conv.createdBy || '',
@@ -3349,6 +4098,10 @@ export async function syncMessages(publicKey: string) {
             const msgData = await msgRes.json();
             const messages = msgData.messages;
             if (!Array.isArray(messages)) continue;
+            for (const m of messages) {
+                const gone = accountDeletedAuthor(m, conv.type);
+                if (gone && !deletedAccounts.has(gone)) seenDeleted.add(gone);
+            }
 
             // Diff outside the lock — unchanged conversations skip the write queue.
             const changed = await diffChangedMessages(database, conv.id, messages);
@@ -3363,6 +4116,14 @@ export async function syncMessages(publicKey: string) {
                 });
             } finally {
                 releaseSyncLock();
+            }
+        }
+
+        if (seenDeleted.size > 0) {
+            try {
+                await blankLinesOfDeletedAccounts(database, seenDeleted, myIdentity?.publicKey);
+            } catch (e) {
+                console.warn('[Sync] Could not blank the lines of deleted accounts:', e);
             }
         }
 
@@ -3393,6 +4154,11 @@ export async function syncMessages(publicKey: string) {
         } catch (pruneErr) {
             console.error('[Sync] Failed to prune legacy conversations:', pruneErr);
         }
+
+        // The DM guard: every conversation the node lists as a DM is remembered as one, and any held under another type
+        // that is a known DM (seen as one, or holding an encrypted line) goes back to being one.
+        await rememberDmConversations(convData.conversations.filter((c: any) => c?.id && (c.type || 'dm') === 'dm').map((c: any) => c.id));
+        await holdDmTypes();
 
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('sync_data_updated');
@@ -3469,7 +4235,29 @@ export async function syncSingleConversation(conversationId: string) {
             });
         }
 
-        if (changed.length === 0 && cursorAdvances.length === 0) return;
+        // A tombstone of a deleted account on this page: the older lines of theirs on this phone go too
+        // (blankLinesOfDeletedAccounts, which runs once per account, not on every poll).
+        const gone = new Set<string>();
+        for (const m of messages) {
+            const k = accountDeletedAuthor(m, msgData.conversation?.type);
+            if (k) gone.add(k);
+        }
+        let blanked = 0;
+        if (gone.size > 0) {
+            try {
+                blanked = await blankLinesOfDeletedAccounts(database, gone, myIdentity?.publicKey);
+            } catch (e: any) {
+                console.warn(`[Sync] Could not blank the lines of deleted accounts: ${e?.message || e}`);
+            }
+        }
+
+        if (changed.length === 0 && cursorAdvances.length === 0) {
+            if (blanked > 0) {
+                const { DeviceEventEmitter } = require('react-native');
+                DeviceEventEmitter.emit('sync_data_updated');
+            }
+            return;
+        }
 
         await acquireSyncLock();
         try {
@@ -3489,6 +4277,9 @@ export async function syncSingleConversation(conversationId: string) {
         } finally {
             releaseSyncLock();
         }
+        // The DM guard: a chat whose lines are encrypted is a DM here, whatever type the node gives it.
+        if (msgData?.conversation?.type === 'dm') await rememberDmConversations([conversationId]);
+        await holdDmTypes();
 
         const { DeviceEventEmitter } = require('react-native');
         DeviceEventEmitter.emit('sync_data_updated');
@@ -3572,6 +4363,261 @@ async function getDmKeyContext(conversationId: string): Promise<DMKeyContext | n
     return { myEdPrivHex: identity.privateKey, peerEdPubHex: peers[0], conversationId };
 }
 
+/**
+ * The conversation and its people as the node has them now, written to this phone: the other person may have arrived
+ * since the chat was opened (a push, a link, a sync that hasn't run yet). Quiet on any failure; the caller decides.
+ */
+async function refreshConversationFromNode(conversationId: string): Promise<void> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    try {
+        const res = await signedGet(`/api/messages/${encodeURIComponent(conversationId)}?limit=1`, { signal: controller.signal });
+        if (!res.ok) return;
+        const conv = (await res.json())?.conversation;
+        if (!conv?.id || typeof conv.type !== 'string') return;
+        const database = await getDb();
+        await database.runAsync(
+            'INSERT OR IGNORE INTO conversations (id, type, post_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+            [conv.id, await heldConversationType(conv.id, conv.type), conv.postId ?? null, conv.name ?? null, conv.createdBy ?? null, conv.createdAt ?? new Date().toISOString()]
+        );
+        for (const pk of Array.isArray(conv.participants) ? conv.participants : []) {
+            if (typeof pk === 'string' && pk) {
+                await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conv.id, pk]);
+            }
+        }
+    } catch {
+        // Offline or refused: the lock simply fails, and says so.
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+/** This DM's key context, asking the node for the conversation once if the phone can't resolve the other person. */
+async function requireDmKeyContext(conversationId: string): Promise<DMKeyContext> {
+    let ctx = await getDmKeyContext(conversationId).catch(() => null);
+    if (!ctx) {
+        await refreshConversationFromNode(conversationId);
+        ctx = await getDmKeyContext(conversationId).catch(() => null);
+    }
+    if (!ctx) throw new DmNotLockedError();
+    return ctx;
+}
+
+/**
+ * What a DM line is sealed to besides its conversation (e2e-crypto, format 3): who sends it, under which message id the
+ * node will store it, which part of the message it is, and the line it is written after.
+ */
+interface DmLineToSeal {
+    senderPubHex: string;
+    messageId: string;
+    part?: DmPart;
+    after?: string | null;
+    /** The message a reply answers (its metadata's replyToId), which the node can read but not change unnoticed. */
+    replyToId?: string | null;
+}
+
+function lockWith(ctx: DMKeyContext, text: string, line: DmLineToSeal): { ciphertext: string; nonce: string } {
+    try {
+        return sealDmLine(text, ctx, line);
+    } catch {
+        throw new DmNotLockedError();
+    }
+}
+
+/**
+ * A line of mine this phone hasn't had confirmed by the node: `__sendState` 'sending' or 'failed', which only this phone
+ * writes (the sync drops it from the node's metadata: chat-sync withoutSendState), on a row by my own key. Never another
+ * person's row, whatever its metadata says.
+ */
+function isUndeliveredRow(metadata: string | null | undefined, author: string | null | undefined, myPubkey: string | null | undefined): boolean {
+    if (!metadata || !myPubkey || author !== myPubkey) return false;
+    try {
+        const s = JSON.parse(metadata)?.__sendState;
+        return s === 'sending' || s === 'failed';
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * The line a new one is written after (sealed into it, so the other phone can tell when the node shows it out of order):
+ * the newest encrypted line on this phone that the node has confirmed. Never one still sending or failed: a line resent
+ * later lands after this one, and naming it would mark this one as reordered.
+ */
+async function lineToWriteAfter(conversationId: string, exceptId?: string): Promise<string | null> {
+    const database = await getDb();
+    const rows = await database.getAllAsync<any>(
+        'SELECT id, nonce, metadata, author_pubkey FROM messages WHERE conversation_id = ? AND nonce LIKE ? ORDER BY timestamp DESC LIMIT 20',
+        [conversationId, `${V2_NONCE_PREFIX}%`]
+    ).catch(() => [] as any[]);
+    const me = (await loadIdentity().catch(() => null))?.publicKey ?? null;
+    const newestFirst = (rows || []).filter((r: any) => r?.id && r.id !== exceptId);
+    return dmAfterReference(newestFirst.reverse().map((r: any) => ({ id: r.id, nonce: r.nonce, pending: isUndeliveredRow(r.metadata, r.author_pubkey, me) })));
+}
+
+/**
+ * What one of my lines was sealed to besides its id, for its edit to keep: the line it was written after (an edit stays
+ * where its line is) and the message it answers (its metadata's replyToId, which the line is bound to).
+ */
+async function sealOfLine(conversationId: string, messageId: string): Promise<{ after: string | null; replyToId: string | null }> {
+    const database = await getDb();
+    const row = await database.getFirstAsync<any>(
+        'SELECT ciphertext, nonce, author_pubkey, metadata FROM messages WHERE id = ?', [messageId]
+    ).catch(() => null);
+    const replyToId = replyToIdOf(row?.metadata);
+    if (!row || !isEncryptedNonce(row.nonce)) return { after: null, replyToId };
+    const ctx = await getDmKeyContext(conversationId).catch(() => null);
+    if (!ctx) return { after: null, replyToId };
+    try {
+        const after = openDmLine({ ciphertext: row.ciphertext, nonce: row.nonce }, ctx,
+            { conversationId, senderPubHex: row.author_pubkey, messageId, part: 'body', metadata: row.metadata }).after;
+        return { after, replyToId };
+    } catch {
+        return { after: null, replyToId };
+    }
+}
+
+/** The message a line answers, from metadata as a send carries it (a JSON string): sealed into the line. */
+function replyToIdOf(metadata: string | null | undefined): string | null {
+    return dmReplyToOf(metadata ?? null) ?? null;
+}
+
+async function isNodeReadableConversation(conversationId: string): Promise<boolean> {
+    const database = await getDb();
+    let row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+    if (!row) {
+        // Not on this phone yet (a group chat opened from a push): ask the node what it is before deciding, or a
+        // group chat's first line would be taken for a DM and refused as unlockable.
+        await refreshConversationFromNode(conversationId);
+        row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+    }
+    // A known DM is locked whatever type its row says (the DM guard): the node can't make this phone send it readable.
+    if (isNodeReadableChatType(row?.type) && await isKnownDmConversation(conversationId)) return false;
+    return isNodeReadableChatType(row?.type);
+}
+
+/**
+ * A line as it goes to the node (utils/dm-lock.ts). A node-readable chat (group, event, enterprise) takes
+ * plaintext-v1, as designed. Every other conversation is a DM, locked or not sent: DmNotLockedError when the other
+ * person's key can't be resolved even after asking the node, or the encryption throws. Never a readable fallback.
+ */
+async function lockForConversation(conversationId: string, text: string, line: DmLineToSeal): Promise<{ ciphertext: string; nonce: string; metadata?: Record<string, unknown> }> {
+    // A group's chat is locked since group chats step 2 (slice 3 here): sealed under the group's key, with its epoch in the
+    // metadata the node checks. Only a node from before locked chats, which this phone never saw locked, still reads it.
+    const groupLine = await sealForGroupConversation(conversationId, text, line);
+    if (groupLine === 'readable') return { nonce: 'plaintext-v1', ciphertext: encodeBase64(encodeUtf8(text)) };
+    if (groupLine) return groupLine;
+    if (await isNodeReadableConversation(conversationId)) {
+        // An event's or an enterprise's thread by its type (their own screens post to their own routes; this is the DM
+        // screen's path): readable only to a node whose own chat answer for this id says it isn't locked, never on a type
+        // alone (confirmation 2 of #1788, finding 3).
+        if (await nodeChatIsUnlocked(conversationId)) return { nonce: 'plaintext-v1', ciphertext: encodeBase64(encodeUtf8(text)) };
+        throw new DmNotLockedError();
+    }
+    return lockWith(await requireDmKeyContext(conversationId), text, line);
+}
+
+/**
+ * True once this phone has held a key of the group with this id (its own key memory: an epoch verified, opened or made,
+ * kept per identity), whatever the node or the local row now calls the conversation. Such a group is locked here for good:
+ * every path that can post into it seals or refuses (director's decision b). With no node or no identity nothing can be
+ * sent at all, so that answers false. When the phone can't read its key memory (a SQLite error, a community switched
+ * under it) this throws GROUP_KEY_STORE_UNREAD_TEXT: every send and edit that asks refuses, never "not held" (confirmation
+ * 2 of #1788, finding 1). A link or a push can carry a group's id in capitals (push routes match ids case-insensitively):
+ * groupKeyring() lower-cases it, so every spelling asks the group's one keyring.
+ */
+export async function isHeldGroupChat(conversationId: string): Promise<boolean> {
+    let ring: GroupKeyring;
+    try { ring = await groupKeyringFor(conversationId); } catch { return false; }
+    return ring.seenLocked();
+}
+
+/**
+ * Why a phone that has held this group's keys sends nothing when the node refuses it the keys (404): the node now says
+ * the chat isn't locked (the phone's own lock notice), or it refuses this phone the chat too (a removed member).
+ */
+async function heldGroupRefusal(groupId: string): Promise<GroupChatKeyError> {
+    if (await nodeChatIsUnlocked(groupId)) return new GroupChatKeyError(GROUP_CHAT_LOCK_LOST_TEXT, 'refused');
+    return new GroupChatKeyError(GROUP_CHAT_NOT_MEMBER_TEXT, 'not_member');
+}
+
+/** How the node answers this group's chat: 'unlocked' (no `encryption`), 'locked', or null (refused, unreachable). */
+async function nodeChatAnswer(groupId: string): Promise<'unlocked' | 'locked' | null> {
+    try {
+        const res = await signedGet(`/api/groups/${encodeURIComponent(groupId)}/chat?limit=1`);
+        if (!res.ok) return null;
+        const answer = await res.json().catch(() => null);
+        if (!answer || typeof answer !== 'object') return null;
+        return chatIsLocked(answer) ? 'locked' : 'unlocked';
+    } catch {
+        return null;
+    }
+}
+
+/** True only when the node answers this group's chat with no `encryption`: a node from before locked chats (§14.3). */
+async function nodeChatIsUnlocked(groupId: string): Promise<boolean> {
+    return (await nodeChatAnswer(groupId)) === 'unlocked';
+}
+
+/**
+ * Why an edit of a group line the node answered 404 sent nothing: the node answers the chat, so it no longer has the
+ * line; or it refuses this phone the chat too (a removed member). The phone's own words, never the node's (confirmation
+ * 2 of #1788, J2).
+ */
+async function editRefusal(groupId: string): Promise<GroupChatKeyError> {
+    if (await nodeChatAnswer(groupId)) return new GroupChatKeyError(GROUP_EDIT_LINE_GONE_TEXT, 'refused');
+    return new GroupChatKeyError(GROUP_CHAT_NOT_MEMBER_TEXT, 'not_member');
+}
+
+/**
+ * A group chat line sealed by the keyring's pre-seal rules; 'readable' only when this phone never held the group's keys
+ * and the node's own chat answer for it has no `encryption` (a node from before locked chats, §14.3); null when the
+ * conversation isn't a group's (a DM, an event's or an enterprise's thread).
+ */
+async function sealForGroupConversation(conversationId: string, text: string, line: DmLineToSeal): Promise<{ ciphertext: string; nonce: string; metadata: Record<string, unknown> } | 'readable' | null> {
+    const database = await getDb();
+    let row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]).catch(() => null);
+    // A group this phone has held keys of is its group whatever the row says, with no row (a sync pruned it, a push landed
+    // before it), or once something called it a DM: the phone's own key memory decides, never the node's or the row's
+    // type (confirmation of #1788, 1), and it is asked FIRST (confirmation 2, finding 2). Only a group never held can be
+    // a known DM, and that returns before prepareToSeal: no group key is ever synced for a known DM, so it never becomes
+    // held (the key-making paths below refuse it too, refuseGroupKeysForDm).
+    const held = await isHeldGroupChat(conversationId);
+    if (!held) {
+        if (await isKnownDmConversation(conversationId)) return null;
+        if (!row) {
+            // Not on this phone yet (a push tap or a link before the sync wrote it): ask the node what it is first, so a
+            // group's first line goes through the keys and the node's own chat answer, never out readable on a missing row
+            // (confirmation 2 of #1788, finding 3).
+            await refreshConversationFromNode(conversationId);
+            row = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]).catch(() => null);
+        }
+        if (row?.type !== 'group_thread') return null;
+    }
+    const ring = await groupKeyringFor(conversationId);
+    let sealedUnder: { epoch: number; key: Uint8Array };
+    try {
+        sealedUnder = await ring.prepareToSeal();
+    } catch (e) {
+        // A 404 is an old node (no keys route) or a new one refusing this phone its keys (not a member). Readable words go
+        // only to an old node, by its own chat answer (no `encryption`), and only while this phone never held a key of
+        // this group (review of #1788, finding 4; director's decision b).
+        if (e instanceof GroupKeysRequestError && e.status === 404) {
+            if (held || await ring.seenLocked()) throw await heldGroupRefusal(conversationId);
+            if (await nodeChatIsUnlocked(conversationId)) return 'readable';
+            throw new GroupChatKeyError(GROUP_CHAT_NOT_MEMBER_TEXT, 'not_member');
+        }
+        throw e;
+    }
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('No identity found.');
+    const sealed = sealLine(text, {
+        myEdPrivHex: identity.privateKey, groupKey: sealedUnder.key, groupId: ring.groupId, epoch: sealedUnder.epoch,
+        messageId: line.messageId, after: line.after ?? null, replyToId: line.replyToId ?? null,
+    });
+    return { ...sealed, metadata: { epoch: sealedUnder.epoch } };
+}
+
 export async function getMessages(conversationId: string, opts?: { limit?: number }) {
     const database = await getDb();
     // With a limit, return only the NEWEST `limit` messages (WhatsApp-style history
@@ -3594,6 +4640,16 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
     // Load the DM key context once so v2-encrypted rows can be decrypted in the map below.
     let dmCtx: DMKeyContext | null = null;
     try { dmCtx = await getDmKeyContext(conversationId); } catch { dmCtx = null; }
+    // A direct message: every conversation the node doesn't read by design (utils/dm-lock.ts). Its rows are judged by
+    // the thread check below, whether or not this phone has the other person's key yet. Fails closed: a conversation
+    // this phone has no row for yet (a chat opened from a push or a link, before the first full sync has written it) is
+    // judged as a DM, so no row of it is shown as anyone's words unchecked. Only the DM screen reads this (a group's,
+    // an event's and an enterprise's chats have their own views).
+    let isDm = true;
+    try {
+        const convRow = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]);
+        isDm = !!dmCtx || !convRow || !isNodeReadableChatType(convRow.type) || await isKnownDmConversation(conversationId);
+    } catch {}
     // Read receipts: my pubkey (to flag outgoing) + the peer's read cursor.
     let myPubkey: string | null = null;
     let peerLastReadAt: string | null = null;
@@ -3631,9 +4687,32 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
         }
     } catch {}
 
+    // Every line of a DM judged at once, in the order it is shown (by the node's timestamps, as selected above), by
+    // e2e-crypto checkDmThread: an encrypted line is opened bound to the author and id this phone holds it under, and one
+    // that doesn't open is never shown as anyone's words; a row in a member's name that isn't an encrypted line never is
+    // either; one the node moved or reordered, and every old-format line, is marked; the admin page's message is shown
+    // as the community admins'. Only the node's own notices are left to the system formatting below.
+    const lineViews = isDm
+        ? checkDmThread(rows.map(r => ({ id: r.id, authorPubkey: r.author_pubkey, ciphertext: r.ciphertext, nonce: r.nonce, type: r.type, metadata: r.metadata })), dmCtx, conversationId)
+        : null;
+
     return rows.map(row => {
         let displayTxt = row.ciphertext;
-        if (row.nonce === '00000') {
+        let integrityNote: string | null = null;
+        let unattributed = false;
+        const view = lineViews?.get(row.id);
+        if (view) {
+            displayTxt = view.mark === 'not-verified' && !dmCtx && isEncryptedNonce(row.nonce)
+                ? '[Encrypted — update your app to read]'
+                : dmLineShownText(view);
+            // A line of mine still sending, or failed, is this phone's own row under this phone's clock: the node has
+            // not had it, so it is never marked out of order (a clock behind the node's would sort it before the line it
+            // follows). Only that mark, and only on my own unconfirmed row: no other mark applies to a line I just wrote,
+            // and another person's row is never one (isUndeliveredRow).
+            integrityNote = view.mark === 'out-of-order' && isUndeliveredRow(row.metadata, row.author_pubkey, myPubkey) ? null : dmLineMarkText(view.mark);
+            // Shown in the middle of the chat as nobody's, never in its named author's bubble.
+            unattributed = dmLineIsUnattributed(view);
+        } else if (row.nonce === '00000') {
             displayTxt = formatSystemMessage(row.system_type, row.metadata, myPubkey, {
                 ...fallbackInfo,
                 defaultText: row.ciphertext
@@ -3645,40 +4724,7 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
                 displayTxt = '[Unreadable message]';
             }
         } else if (isEncryptedNonce(row.nonce)) {
-            if (dmCtx) {
-                try {
-                    displayTxt = decryptDM(row.ciphertext, row.nonce, dmCtx);
-                } catch (err) {
-                    // Decryption failed. Try using original conversation ID(s) from metadata (moved during consolidation)
-                    let decrypted = false;
-                    if (row.metadata) {
-                        try {
-                            const meta = JSON.parse(row.metadata);
-                            if (meta) {
-                                if (meta.originalConversationId) {
-                                    const legacyCtx = { ...dmCtx, conversationId: meta.originalConversationId };
-                                    displayTxt = decryptDM(row.ciphertext, row.nonce, legacyCtx);
-                                    decrypted = true;
-                                } else if (Array.isArray(meta.originalConversationIds)) {
-                                    for (const legacyId of meta.originalConversationIds) {
-                                        try {
-                                            const legacyCtx = { ...dmCtx, conversationId: legacyId };
-                                            displayTxt = decryptDM(row.ciphertext, row.nonce, legacyCtx);
-                                            decrypted = true;
-                                            break;
-                                        } catch (e) {}
-                                    }
-                                }
-                            }
-                        } catch (e) {}
-                    }
-                    if (!decrypted) {
-                        displayTxt = '[Unable to decrypt this message]';
-                    }
-                }
-            } else {
-                displayTxt = '[Encrypted — update your app to read]';
-            }
+            displayTxt = '[Encrypted — update your app to read]';
         }
         const outgoing = !!myPubkey && row.author_pubkey === myPubkey;
         const readByPeer = outgoing && !!peerLastReadAt &&
@@ -3689,7 +4735,8 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
         }
         // If the app died mid-delivery the row would show a clock forever —
         // downgrade stale in-flight sends to 'failed' so the bubble offers resend.
-        let sendState = parsedMeta?.__sendState;
+        // Only my own row has a send state: another person's never does, whatever its metadata says.
+        let sendState = outgoing ? parsedMeta?.__sendState : undefined;
         if (sendState === 'sending' && Date.now() - new Date(row.timestamp).getTime() > 60_000) {
             sendState = 'failed';
         }
@@ -3708,6 +4755,12 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
             // Raw edit timestamp: pins the text content for cheap change detection
             // (chat screen compares (id, editedAt) instead of the decrypted text).
             editedAt: row.edited_at ?? null,
+            // One line under a DM message the node moved or reordered, an old-format line, or the admin page's message.
+            integrityNote,
+            // A DM row shown as nobody's: a line that didn't open, one that wasn't encrypted, or the admin page's message.
+            unattributed,
+            // Who a reply quoting this line shows it as from (e2e-crypto dmQuoteFrom): its check, never its row's name.
+            quoteFrom: lineViews ? dmQuoteFrom({ authorPubkey: row.author_pubkey, nonce: row.nonce, type: row.type, metadata: row.metadata }, view) : 'author',
             rawTimestamp: row.timestamp,
             timestamp: new Date(row.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
@@ -3723,23 +4776,24 @@ const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9
 export async function insertMessage(conversationId: string, authorPubkey: string, text: string, metadata?: string, reuseId?: string) {
     const database = await getDb();
 
-    // E2E-encrypt direct messages (NAT-1). Falls back to legacy plaintext-v1 for
-    // group/system threads or if the peer key can't be resolved or crypto fails.
-    let nonce: string;
-    let ciphertext: string;
-    try {
-        const dmCtx = await getDmKeyContext(conversationId);
-        if (dmCtx) {
-            const enc = encryptDM(text, dmCtx);
-            ciphertext = enc.ciphertext;
-            nonce = enc.nonce;
-        } else {
-            nonce = 'plaintext-v1';
-            ciphertext = encodeBase64(encodeUtf8(text));
-        }
-    } catch {
-        nonce = 'plaintext-v1';
-        ciphertext = encodeBase64(encodeUtf8(text));
+    // The id is chosen first: a DM line is sealed to it (e2e-crypto, format 3), so the node must store the line under
+    // exactly this id. Lower case, as the node keeps it. A resend keeps its failed row's id (see below).
+    const tempId = (reuseId && UUID_V4_RE.test(reuseId) ? reuseId : Crypto.randomUUID()).toLowerCase();
+
+    // E2E-encrypt direct messages (NAT-1), or send nothing: DmNotLockedError before anything is written, so the chat
+    // can put the words back in the box. A group chat stays plaintext-v1 (lockForConversation).
+    const locked = await lockForConversation(conversationId, text, {
+        senderPubHex: authorPubkey,
+        messageId: tempId,
+        after: await lineToWriteAfter(conversationId, reuseId),
+        replyToId: replyToIdOf(metadata),
+    });
+    const { ciphertext, nonce } = locked;
+    // A group line names the epoch it was sealed under, beside whatever the caller's metadata says (a reply).
+    if (locked.metadata) {
+        let m: any = {};
+        try { m = metadata ? JSON.parse(metadata) || {} : {}; } catch { m = {}; }
+        metadata = JSON.stringify({ ...m, ...locked.metadata });
     }
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
@@ -3760,13 +4814,17 @@ export async function insertMessage(conversationId: string, authorPubkey: string
     // A new node keeps it, so the optimistic row below and the server's row are
     // the same row by construction — the WS echo of an own-send upserts onto
     // this row instead of materializing a second bubble that vanishes when the
-    // ack lands (the "duplicate then disappears" flicker). An old node ignores
-    // the field and returns its own id; the ack's rename below covers that.
-    const tempId = reuseId && UUID_V4_RE.test(reuseId) ? reuseId : Crypto.randomUUID();
+    // ack lands (the "duplicate then disappears" flicker). The id (tempId, above) is
+    // also what the DM line is sealed to: every node since client ids keeps it, so the
+    // ack's rename below is a no-op; a node that stored it under another id would leave
+    // a line the other phone can't verify, and shows it so.
     let baseMeta: any = {};
     if (metadata) {
         try { baseMeta = JSON.parse(metadata) || {}; } catch {}
     }
+    // A resend replaces its failed row only now, with the words locked: one that can't be locked (or finds no node)
+    // leaves the failed bubble where it was, to be tried again.
+    if (reuseId) await database.runAsync('DELETE FROM messages WHERE id = ?', [reuseId]);
     await database.runAsync(
         'INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, metadata, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [tempId, conversationId, authorPubkey, ciphertext, nonce, JSON.stringify({ ...baseMeta, __sendState: 'sending' }), new Date().toISOString()]
@@ -3852,27 +4910,30 @@ export async function deleteLocalMessage(messageId: string) {
  */
 export async function editMessage(conversationId: string, messageId: string, newText: string) {
     const database = await getDb();
+    const identity = await loadIdentity();
 
-    let nonce: string;
-    let ciphertext: string;
-    try {
-        const dmCtx = await getDmKeyContext(conversationId);
-        if (dmCtx) {
-            const enc = encryptDM(newText, dmCtx);
-            ciphertext = enc.ciphertext;
-            nonce = enc.nonce;
-        } else {
-            nonce = 'plaintext-v1';
-            ciphertext = encodeBase64(encodeUtf8(newText));
+    // A locked group chat's line: re-sealed under its own epoch, never the current one (utils/group-chat-lines.ts).
+    const convRow = await database.getFirstAsync<any>('SELECT type FROM conversations WHERE id = ?', [conversationId]).catch(() => null);
+    if (convRow?.type === 'group_thread' || await isHeldGroupChat(conversationId)) {
+        const row = await database.getFirstAsync<any>('SELECT nonce, metadata FROM messages WHERE id = ?', [messageId]).catch(() => null);
+        if (row?.nonce && String(row.nonce).startsWith(GROUP_NONCE_PREFIX)) {
+            let meta: any = {};
+            try { meta = row.metadata ? JSON.parse(row.metadata) : {}; } catch { meta = {}; }
+            await editThreadMessage(messageId, newText, { groupId: conversationId, metadata: meta, locked: true });
+            return;
         }
-    } catch {
-        nonce = 'plaintext-v1';
-        ciphertext = encodeBase64(encodeUtf8(newText));
     }
+
+    // New words: locked like a new message, or not sent (DmNotLockedError). Sealed to the line's own id, keeping the
+    // line it was written after: an edit stays where its line is.
+    const { ciphertext, nonce } = await lockForConversation(conversationId, newText, {
+        senderPubHex: identity?.publicKey ?? '',
+        messageId,
+        ...(await sealOfLine(conversationId, messageId)),
+    });
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to edit messages.');
-    const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found.');
 
     const body = { messageId, authorPubkey: identity.publicKey, ciphertext, nonce };
@@ -3901,18 +4962,23 @@ export async function editMessage(conversationId: string, messageId: string, new
  */
 export async function sendImageMessage(conversationId: string, dataUri: string, caption: string = '', metadata?: string) {
     const database = await getDb();
-    const dmCtx = await getDmKeyContext(conversationId);
-    if (!dmCtx) throw new Error('Photos can only be sent in direct messages.');
+    if (await isNodeReadableConversation(conversationId) || await isHeldGroupChat(conversationId)) throw new Error('Photos can only be sent in direct messages.');
+    // The picture and its caption are locked, or neither goes (DmNotLockedError). Both are sealed to the message's own
+    // id, which goes to the node with them, each as its own part, so neither can stand in for the other.
+    const dmCtx = await requireDmKeyContext(conversationId);
+    const identity = await loadIdentity();
+    const messageId = Crypto.randomUUID().toLowerCase();
+    const line = { senderPubHex: identity?.publicKey ?? '', messageId, replyToId: replyToIdOf(metadata) };
 
-    const encImg = encryptDM(dataUri, dmCtx);   // big blob -> stored as attachment
-    const encCap = encryptDM(caption, dmCtx);   // (optional) caption -> message body
+    const encImg = lockWith(dmCtx, dataUri, { ...line, part: 'attachment' });   // big blob -> stored as attachment
+    const encCap = lockWith(dmCtx, caption, { ...line, part: 'body', after: await lineToWriteAfter(conversationId) });   // (optional) caption -> message body
 
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node to send messages.');
-    const identity = await loadIdentity();
     if (!identity) throw new Error('No identity found.');
 
     const body = {
+        id: messageId,
         conversationId,
         authorPubkey: identity.publicKey,
         ciphertext: encCap.ciphertext,
@@ -3943,60 +5009,35 @@ export async function sendImageMessage(conversationId: string, dataUri: string, 
  */
 export async function getDecryptedAttachment(conversationId: string, messageId: string): Promise<string | null> {
     try {
-        // 1. Local cache first. Lives in the filesystem (survives a DB wipe-and-fetch), so an
+        // 1. The words first, always: the photo is part of its message, never on its own. They are opened bound to the
+        //    author and id this phone holds the message under, in the conversation it is shown in (a local row, cheap).
+        //    Words that don't open leave the photo locked, the cached copy included: the cache is keyed by message id
+        //    alone and survives a wipe-and-fetch, so a photo opened once would otherwise show again under a line the node
+        //    has since re-attributed or moved.
+        const dmCtx = await getDmKeyContext(conversationId);
+        if (!dmCtx) return null;
+        const database = await getDb();
+        const msgRow = await database.getFirstAsync<any>(
+            'SELECT ciphertext, nonce, author_pubkey, metadata FROM messages WHERE id = ?', [messageId]
+        );
+        if (!msgRow || !isEncryptedNonce(msgRow.nonce)) return null;
+        const ref = { conversationId, senderPubHex: msgRow.author_pubkey, messageId, metadata: msgRow.metadata };
+        const words = openDmLine({ ciphertext: msgRow.ciphertext, nonce: msgRow.nonce }, dmCtx, { ...ref, part: 'body' });
+
+        // 2. Local cache next. Lives in the filesystem (survives a DB wipe-and-fetch), so an
         //    image is downloaded+decrypted at most once per device and re-opens instantly/offline.
         const cachePath = `${CHAT_IMAGE_CACHE_DIR}${messageId}.jpg`;
         const cached = await FileSystem.getInfoAsync(cachePath);
         if (cached.exists) return cachePath;
 
-        // 2. Cache miss → fetch the encrypted blob + decrypt (lazy, on demand — never in bulk).
-        const dmCtx = await getDmKeyContext(conversationId);
-        if (!dmCtx) return null;
+        // 3. Cache miss → fetch the encrypted blob + decrypt (lazy, on demand — never in bulk), bound as its words are and
+        //    in the format they opened in, so neither a photo from another line nor an old-format picture can stand in.
         const res = await signedGet(`/api/messages/${messageId}/attachment`);
         if (!res.ok) return null;
         const { data, nonce } = await res.json();
+        const decrypted = openDmLine({ ciphertext: data, nonce }, dmCtx, { ...ref, part: 'attachment' }, [words.format]).text;
 
-        // Query the message metadata to see if it has an originalConversationId/originalConversationIds
-        let originalConversationId: string | null = null;
-        let originalConversationIds: string[] | null = null;
-        try {
-            const database = await getDb();
-            const msgRow = await database.getFirstAsync<any>('SELECT metadata FROM messages WHERE id = ?', [messageId]);
-            if (msgRow?.metadata) {
-                const meta = JSON.parse(msgRow.metadata);
-                if (meta) {
-                    if (meta.originalConversationId) {
-                        originalConversationId = meta.originalConversationId;
-                    }
-                    if (Array.isArray(meta.originalConversationIds)) {
-                        originalConversationIds = meta.originalConversationIds;
-                    }
-                }
-            }
-        } catch (e) {}
-
-        let decrypted: string | null = null;
-        try {
-            decrypted = decryptDM(data, nonce, dmCtx);
-        } catch (err) {
-            if (originalConversationId) {
-                try {
-                    const legacyCtx = { ...dmCtx, conversationId: originalConversationId };
-                    decrypted = decryptDM(data, nonce, legacyCtx);
-                } catch (e) {}
-            } else if (originalConversationIds) {
-                for (const legacyId of originalConversationIds) {
-                    try {
-                        const legacyCtx = { ...dmCtx, conversationId: legacyId };
-                        decrypted = decryptDM(data, nonce, legacyCtx);
-                        break;
-                    } catch (e) {}
-                }
-            }
-        }
-        if (!decrypted) return null;
-
-        // 3. Persist to the filesystem cache. Decrypted-at-rest is acceptable: E2E protects the
+        // 4. Persist to the filesystem cache. Decrypted-at-rest is acceptable: E2E protects the
         //    image from the NODE, and the device owner already views it. Falls back to the inline
         //    data URI if it isn't a recognised image payload (don't cache an unknown shape).
         const m = decrypted.match(/^data:image\/\w+;base64,(.*)$/);
@@ -4053,7 +5094,9 @@ export async function createConversationApi(type: 'dm', participants: string[], 
             let postStatus: string | null = null;
             let postPhoto: string | null = null;
             let postCredits: number | null = null;
-            const convType = conv.type || type;
+            // This phone asked for a DM: it is one, whatever type the answer names (the DM guard).
+            const convType = await heldConversationType(conv.id, type);
+            if (conv.type && conv.type !== convType) console.warn(`[DM guard] the node answered a new DM as a ${conv.type}: ignored`);
             const pid = convType === 'dm' ? null : (conv.postId || conv.post_id || postId);
             const lookupPid = conv.postId || conv.post_id || postId;
             if (lookupPid) {
@@ -4103,7 +5146,8 @@ export async function createConversationApi(type: 'dm', participants: string[], 
 
 export interface InviteCheck {
     valid: boolean;
-    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed';
+    /** `admins_only`: a ticket a member made, where only the community's admins bring people in (the door). */
+    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed' | 'admins_only';
     inviterCallsign?: string | null;
     communityName?: string | null;
 }
@@ -4434,9 +5478,17 @@ async function _signedRequest(endpoint: string, payload: any) {
         // Whether the body carried a JSON `error` field, which is what tells a node ANSWERING from a node
         // that has no such route to answer with — see utils/chat-actions.chatActionErrorMessage.
         let nodeAnswered = false;
+        // The node's sentence for the member, when its body has one beside the code (`{ error: 'not_found', message:
+        // 'That post is not here any more.' }`). Carried as `nodeMessage`, not put in `message`: callers match on the
+        // code in `message` (chatActionErrorMessage's old-node refusals, the profile-photo heal below), so a caller whose
+        // error the member reads puts it there itself (reportAbuse).
+        let nodeMessage: string | undefined;
         try {
             const errJson = await res.json();
+            // This key was replaced by a re-key: the old phone's offer of its old words (utils/key-replaced.ts).
+            if (isKeyReplacedAnswer(res.status, errJson)) void noteKeyReplaced(anchorUrl, identity.publicKey);
             if (errJson.error) { errorMsg = errJson.error; nodeAnswered = true; }
+            if (typeof errJson.message === 'string' && errJson.message.trim()) nodeMessage = errJson.message.trim();
         } catch {
             try {
                 const txt = await res.text();
@@ -4467,9 +5519,12 @@ async function _signedRequest(endpoint: string, payload: any) {
         const err: any = new Error(errorMsg);
         err.status = res.status;
         err.nodeAnswered = nodeAnswered;
+        err.nodeMessage = nodeMessage;
         throw err;
     }
 
+    // The node took a write this key signed: the key is current here, so a replaced-key note goes (finding 5 of #1844).
+    void noteKeyAnswered(anchorUrl, identity.publicKey);
     return await res.json();
 }
 
@@ -4491,21 +5546,25 @@ export async function signedGet(path: string, options?: { signal?: AbortSignal; 
 
     let headers: Record<string, string> = { 'Accept': 'application/json', ...(options?.customHeaders || {}) };
     const identity = await loadIdentity();
+    let signed = false;
     if (identity?.privateKey && identity?.publicKey) {
         try {
             // The URL fetched below: its host is what is signed for, its path (no query) what the node checks.
             const signedHeaders = await buildSignedHeaders('GET', `${anchorUrl}${path}`, '', identity.privateKey, identity.publicKey);
             headers = { ...headers, ...signedHeaders };
+            signed = true;
         } catch (e) {
             console.warn('[signedGet] Could not sign GET request:', e);
         }
     }
 
-    return fetch(`${anchorUrl}${path}`, {
+    const res = await fetch(`${anchorUrl}${path}`, {
         method: 'GET',
         headers,
         signal: options?.signal,
     });
+    if (identity?.publicKey) watchForReplacedKey(anchorUrl, identity.publicKey, res, signed);
+    return res;
 }
 
 /**
@@ -4771,8 +5830,22 @@ export async function cancelMarketplaceRequest(transactionId: string, buyerPubli
     return res;
 }
 
+/**
+ * Report a member, a post or an event (and, from the enterprise screen, an enterprise). The post and event screens show
+ * a failure's message to the member, so it is the node's sentence when it sent one ("That post is not here any more."),
+ * never its code (`not_found`), which stays on the error as `code`, with `status`.
+ */
 export async function reportAbuse(reporterPublicKey: string, targetPublicKey: string, reason: string, postId?: string) {
-    return _signedRequest('/api/reports', { reporterPubkey: reporterPublicKey, targetPubkey: targetPublicKey, reason, targetPostId: postId });
+    try {
+        return await _signedRequest('/api/reports', { reporterPubkey: reporterPublicKey, targetPubkey: targetPublicKey, reason, targetPostId: postId });
+    } catch (e: any) {
+        if (typeof e?.nodeMessage !== 'string' || !e.nodeMessage) throw e;
+        const said: any = new Error(e.nodeMessage);
+        said.status = e.status;
+        said.code = e.message;
+        said.nodeAnswered = e.nodeAnswered;
+        throw said;
+    }
 }
 
 
@@ -4821,7 +5894,25 @@ export async function submitRating(raterPublicKey: string, targetPublicKey: stri
     return res;
 }
 
-export async function getMemberRatings(publicKey: string): Promise<{ ratings: any[]; average: number; count: number; asProvider: { average: number; count: number }; asReceiver: { average: number; count: number } }> {
+/** How many members' reviews the phone keeps as the node last answered (member_reviews_read): the market draws
+ *  PostAuthorTrust on every card, about 120 a screen. */
+const REVIEWS_READ_KEPT = 300; // not exported: utils/__tests__/net-spy-db.ts stands in only for string exports (the test uses 300)
+
+type MemberRatings = { ratings: any[]; average: number; count: number; asProvider: { average: number; count: number }; asReceiver: { average: number; count: number } };
+
+/** Keeps another member's reviews as the node answered them, by member: stars, words, side, date, and `mine` on the
+ *  reader's own, and no rater and no deal, whatever the node sent. Forgets all but the REVIEWS_READ_KEPT read last. */
+async function keepReviewsRead(database: Awaited<ReturnType<typeof getDb>>, targetPubkey: string, data: any): Promise<void> {
+    const ratings = (data.ratings as any[])
+        .map(r => ({ stars: r.stars ?? r.rating, comment: r.comment ?? null, role: r.role ?? 'provider', createdAt: r.createdAt ?? r.created_at ?? null, ...(r.mine === true ? { mine: true } : {}) }))
+        .filter(r => typeof r.stars === 'number' && r.stars >= 1 && r.stars <= 5);
+    const side = (s: any) => ({ average: Number(s?.average) || 0, count: Number(s?.count) || 0 });
+    const answer = { ratings, average: Number(data.average) || 0, count: Number(data.count ?? ratings.length) || 0, asProvider: side(data.asProvider), asReceiver: side(data.asReceiver) };
+    await database.runAsync('INSERT OR REPLACE INTO member_reviews_read (target_pubkey, answer, read_at) VALUES (?, ?, ?)', [targetPubkey, JSON.stringify(answer), new Date().toISOString()]);
+    await database.runAsync('DELETE FROM member_reviews_read WHERE target_pubkey NOT IN (SELECT target_pubkey FROM member_reviews_read ORDER BY read_at DESC, rowid DESC LIMIT ?)', [REVIEWS_READ_KEPT]);
+}
+
+export async function getMemberRatings(publicKey: string): Promise<MemberRatings> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) {
         await acquireSyncLock();
@@ -4874,7 +5965,8 @@ export async function getMemberRatings(publicKey: string): Promise<{ ratings: an
             throw new Error(`Failed to fetch ratings: ${res.statusText}`);
         }
         const data = await res.json();
-        if (data.ratings) {
+        if (Array.isArray(data.ratings)) {
+            const me = (await loadIdentity().catch(() => null))?.publicKey;
             await acquireSyncLock();
             try {
                 const database = await getDb();
@@ -4888,10 +5980,9 @@ export async function getMemberRatings(publicKey: string): Promise<{ ratings: an
                         const rId = r.id ?? null;
                         const targetPubkey = r.targetPubkey ?? r.target_pubkey ?? null;
                         const raterPubkey = r.raterPubkey ?? r.rater_pubkey ?? null;
-                        if (!rId || !targetPubkey || !raterPubkey) {
-                            console.warn(`[DB] Skipping rating due to missing required keys in getMemberRatings:`, r);
-                            continue;
-                        }
+                        // Another member's review as a third member reads it (#1914) names no rater and no deal: it is
+                        // kept with that member's answer below, not here.
+                        if (!rId || !targetPubkey || !raterPubkey) continue;
                         await database.runAsync(`
                             INSERT OR REPLACE INTO ratings (id, target_pubkey, rater_pubkey, role, stars, comment, transaction_id, created_at)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -4906,6 +5997,8 @@ export async function getMemberRatings(publicKey: string): Promise<{ ratings: an
                             r.createdAt ?? r.created_at ?? new Date().toISOString()
                         ]);
                     }
+                    // The member's own reviews stay in ratings alone, with their raters' names (unchanged).
+                    if (publicKey !== me) await keepReviewsRead(database, publicKey, data);
                 });
             } finally {
                 releaseSyncLock();
@@ -4914,9 +6007,15 @@ export async function getMemberRatings(publicKey: string): Promise<{ ratings: an
         return data;
     } catch (e: any) {
         console.warn('Failed to fetch ratings, defaulting to local DB:', e.message);
+        const me = (await loadIdentity().catch(() => null))?.publicKey;
         await acquireSyncLock();
         try {
             const database = await getDb();
+            // Another member's reviews as the node last answered, when it has: the same count, average and rows offline.
+            const kept = publicKey !== me
+                ? await database.getFirstAsync<{ answer: string }>('SELECT answer FROM member_reviews_read WHERE target_pubkey = ?', [publicKey])
+                : null;
+            if (kept) return JSON.parse(kept.answer) as MemberRatings;
             const rows = await database.getAllAsync<any>(`
                 SELECT r.id, r.target_pubkey, r.rater_pubkey, r.stars, r.comment, r.role, r.transaction_id, r.created_at,
                        m.callsign as rater_callsign, m.avatar_url as rater_avatar
@@ -5163,16 +6262,47 @@ export async function isFriendLocal(ownerPubkey: string, friendPubkey: string): 
     return !!row;
 }
 
-/** Add a friend locally + sync to server */
+/**
+ * Add a friend: the node first, then this phone's copy. The node tells the person added (their People tab's "added you"),
+ * so it can refuse: past 100 adds in a day, or someone you blocked. Then this THROWS the node's own words and adds
+ * nothing here, so the member is told, never left believing a refused add went through. When the node can't be reached
+ * at all (off-grid, no answer), it is kept on this phone, as every add was before.
+ */
 export async function addFriendLocal(ownerPubkey: string, friendPubkey: string): Promise<void> {
     if (ownerPubkey === friendPubkey) return;
+    try {
+        await _syncFriendToServer('add', ownerPubkey, friendPubkey);
+    } catch (e: any) {
+        if (e?.nodeAnswered) throw new Error(String(e.message || 'Your community did not add them.'));
+        console.warn('[Friends] Server sync failed:', e?.message);
+    }
     const database = await getDb();
     await database.runAsync(
         'INSERT OR IGNORE INTO friends (owner_pubkey, friend_pubkey, added_at) VALUES (?, ?, ?)',
         [ownerPubkey, friendPubkey, new Date().toISOString()]
     );
-    // Fire-and-forget server sync
-    _syncFriendToServer('add', ownerPubkey, friendPubkey).catch(e => console.warn('[Friends] Server sync failed:', e.message));
+}
+
+/** Someone who added you lately and whom you haven't added back (GET /api/friends/added-you, your own only). */
+export interface AddedYou {
+    publicKey: string;
+    callsign: string;
+    avatarUrl: string | null;
+    addedAt: string;
+}
+
+/** Who added you lately, newest first (at most 20) and how many more; nothing when the node can't say (an older node, off-grid). */
+export async function fetchAddedYou(): Promise<{ addedYou: AddedYou[]; more: number }> {
+    try {
+        const res = await signedGet('/api/friends/added-you');
+        if (res.ok) {
+            const body = await res.json();
+            if (Array.isArray(body?.addedYou)) return { addedYou: body.addedYou, more: Number(body.more) || 0 };
+        }
+    } catch (e) {
+        console.warn('[Friends] Could not read who added you:', e);
+    }
+    return { addedYou: [], more: 0 };
 }
 
 /** Remove a friend locally + sync to server */
@@ -5363,6 +6493,9 @@ export interface GroupItem {
     /** The group's LEAD convenor (2026-09-23): the one nobody can remove or demote. */
     leadPubkey?: string | null;
     leadCallsign?: string;
+    /** When its members closed it by a vote (GET /api/groups/:id), or null: it stays to read and takes nothing new. */
+    closedAt?: string | null;
+    readOnly?: boolean;
 }
 
 export interface GroupMemberItem {
@@ -5375,6 +6508,8 @@ export interface GroupMemberItem {
     joinedAt: string;
     invitedBy: string | null;
     updatedAt?: string;
+    /** The member's earlier keys, each signed for by its successor (a node from before line-display design §5 sends none). */
+    formerKeys?: FormerKey[] | null;
 }
 
 /** Signed request helper supporting arbitrary HTTP methods (POST, PATCH, DELETE) */
@@ -5505,7 +6640,12 @@ export async function fetchGroups(filter?: { category?: string; memberPubkey?: s
     }));
 }
 
-export async function fetchGroupDetails(id: string): Promise<{ group: GroupItem; members: GroupMemberItem[] } | null> {
+/**
+ * A group's card and its roster. `members` is null when the roster couldn't be read (the node busy with heavy lists
+ * answers 503 with Retry-After, or the read failed): callers keep the roster they show and read it again next time,
+ * never an empty one in its place.
+ */
+export async function fetchGroupDetails(id: string): Promise<{ group: GroupItem; members: GroupMemberItem[] | null } | null> {
     try {
         const [groupRes, membersRes] = await Promise.all([
             signedGet(`/api/groups/${encodeURIComponent(id)}`),
@@ -5513,8 +6653,8 @@ export async function fetchGroupDetails(id: string): Promise<{ group: GroupItem;
         ]);
         if (groupRes.ok) {
             const group = await groupRes.json();
-            const members = membersRes.ok ? await membersRes.json() : [];
-            return { group, members: Array.isArray(members) ? members : [] };
+            const members = membersRes.ok ? await membersRes.json() : null;
+            return { group, members: Array.isArray(members) ? members : null };
         }
     } catch (e) {
         console.warn('[Groups] Failed to fetch group detail:', e);
@@ -5533,15 +6673,24 @@ export async function createGroupApi(groupData: {
     return signedRequestWithMethod('POST', '/api/groups', groupData);
 }
 
-export async function joinGroupApi(groupId: string): Promise<any> {
-    return signedRequestWithMethod('POST', `/api/groups/${encodeURIComponent(groupId)}/join`);
+/**
+ * Join a group, or accept its invitation. Joining an open group or accepting an invitation lets the joiner into the chat,
+ * so they make its next key in the same request (group chat encryption §2.3, utils/group-chat-keys.ts); a request to
+ * join an approval group lets nobody in yet and carries none. `onProgress` drives "Securing the chat…" on a big group.
+ */
+export async function joinGroupApi(groupId: string, info?: { joinPolicy?: string | null; viewerStatus?: string | null; onProgress?: (done: number, total: number) => void }): Promise<any> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    await refuseGroupKeysForDm(groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl)));
+    return joinGroupWithEpoch(nodeUrl, identity, groupKeyStore(nodeUrl), { id: groupId, joinPolicy: info?.joinPolicy, viewerStatus: info?.viewerStatus },
+        info?.onProgress ? { onProgress: info.onProgress } : undefined);
 }
 
-export async function approveGroupMemberApi(groupId: string, memberPubkey: string): Promise<any> {
-    return signedRequestWithMethod('POST', `/api/groups/${encodeURIComponent(groupId)}/members`, {
-        memberPubkey,
-        action: 'approve'
-    });
+/** A convenor approves a request: the approved member's first key is made here, in the same request (§2.3). */
+export async function approveGroupMemberApi(groupId: string, memberPubkey: string, onProgress?: (done: number, total: number) => void): Promise<any> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    await refuseGroupKeysForDm(groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl)));
+    return approveWithEpoch(nodeUrl, identity, groupKeyStore(nodeUrl), groupId, memberPubkey, { memberPubkey, action: 'approve' },
+        onProgress ? { onProgress } : undefined);
 }
 
 export async function inviteGroupMemberApi(groupId: string, memberPubkey: string, role: GroupRole = 'member'): Promise<any> {
@@ -5604,8 +6753,24 @@ export async function voteGroupSuccessionApi(groupId: string, proposalId: string
     );
 }
 
-export async function leaveGroupApi(groupId: string, memberPubkey: string): Promise<boolean> {
-    const res = await signedRequestWithMethod('DELETE', `/api/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberPubkey)}`);
+/**
+ * Leave a group (your own key), or remove a member (a convenor, someone else's). A removal IS the chat's rotation: the
+ * convenor's phone makes a key for everyone but the removed member, in the same request (§2.4). Leaving carries none:
+ * the node marks the key stale and the next member to write makes a new one.
+ */
+export async function leaveGroupApi(groupId: string, memberPubkey: string, onProgress?: (done: number, total: number) => void): Promise<boolean> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    const ring = groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
+    // Under the group's own id (lower-case), as its epochs are: a removal carries one (#1841 review, finding 3).
+    const path = `/api/groups/${encodeURIComponent(ring.groupId)}/members/${encodeURIComponent(memberPubkey)}`;
+    if (memberPubkey !== identity.publicKey) await refuseGroupKeysForDm(ring);
+    const res = memberPubkey === identity.publicKey
+        ? await signedRequestWithMethod('DELETE', path)
+        : await removeWithEpoch(nodeUrl, identity, groupKeyStore(nodeUrl), groupId, memberPubkey, async (body) => {
+            const bodyString = JSON.stringify(body);
+            const headers = await buildSignedHeaders('DELETE', `${nodeUrl}${path}`, bodyString, identity.privateKey, identity.publicKey);
+            return fetch(`${nodeUrl}${path}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...headers }, body: bodyString });
+        }, onProgress ? { onProgress } : undefined);
     if (res?.success) {
         try {
             const database = await getDb();
@@ -5658,12 +6823,170 @@ export async function fetchYourGroups(): Promise<import('./your-groups').YourCha
 export async function getGroupChat(groupId: string, limit = 50, offset = 0): Promise<any> {
     const res = await signedGet(`/api/groups/${encodeURIComponent(groupId)}/chat?limit=${limit}&offset=${offset}`);
     const body = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(body?.error || 'Could not open this group chat.');
+    // The status goes with it: 403 or 404 is the node refusing someone not in the group now, not a failed read.
+    if (!res.ok) throw Object.assign(new Error(body?.error || 'Could not open this group chat.'), { status: res.status });
     return body;
 }
 
-export async function postGroupChatMessage(groupId: string, text: string, clientId?: string, replyToId?: string | null): Promise<any> {
+/**
+ * Send a line in a group's chat. With `lock` (the chat is locked), or once this phone has held a key of this group
+ * whatever the node's answer says (review of #1788, finding 4): sealed on this phone under the group's key
+ * (utils/group-chat-lines.ts sendSealedGroupLine), or refused with a sentence. Otherwise a node from before locked chats,
+ * which takes `{ text }` as it always did (§14.3).
+ */
+export async function postGroupChatMessage(
+    groupId: string, text: string, clientId?: string, replyToId?: string | null,
+    lock?: { after?: string | null; mentionCandidates?: { pubkey: string; callsign: string | null | undefined }[]; onProgress?: (done: number, total: number) => void },
+): Promise<any> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    const ring = groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
+    await refuseGroupKeysForDm(ring);
+    if (lock || await isHeldGroupChat(groupId)) {
+        try {
+            return await sendSealedGroupLine(nodeUrl, identity, groupKeyStore(nodeUrl), {
+                groupId, text, clientId: clientId || Crypto.randomUUID(), replyToId, after: lock?.after, mentionCandidates: lock?.mentionCandidates,
+                progress: lock?.onProgress ? { onProgress: lock.onProgress } : undefined,
+            });
+        } catch (e) {
+            if (e instanceof GroupKeysRequestError && e.status === 404 && await isHeldGroupChat(groupId)) throw await heldGroupRefusal(groupId);
+            throw e;
+        }
+    }
     return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/message`, { text, clientId, replyToId: replyToId || undefined });
+}
+
+/**
+ * The groups a history path may touch (sync, post a self-wrap or a top-up): never a conversation this phone knows as a DM
+ * and never held a group's keys for (refuseGroupKeysForDm, confirmation 2 of #1788, finding 2). Each comes back under
+ * ring.groupId, the group's id lower-cased, so the routes, records and top-ups agree with its one keyring (#1841).
+ */
+async function historyGroups(nodeUrl: string, identity: BeanPoolIdentity, groups: readonly HistoryGroup[]): Promise<HistoryGroup[]> {
+    const out: HistoryGroup[] = [];
+    for (const g of groups) {
+        try {
+            const ring = groupKeyring(nodeUrl, identity, g.id, groupKeyStore(nodeUrl));
+            await refuseGroupKeysForDm(ring);
+            out.push({ ...g, id: ring.groupId });
+        } catch { /* a known DM: no group keys under its id */ }
+    }
+    return out;
+}
+
+/**
+ * A group history from before this member changed phones (utils/group-history-unlock.ts; DESIGN-group-history-after-
+ * rekey-fable.md §3, §4): the old 12 words, typed here, over every group of this account.
+ */
+export async function unlockGroupHistoryWithWords(typed: string | readonly string[], groups: HistoryGroup[], onProgress?: (done: number, total: number) => void): Promise<OldWordsResult> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    const r = await unlockWithOldWords({ nodeUrl, identity, store: groupKeyStore(nodeUrl), groups: await historyGroups(nodeUrl, identity, groups), typed, signedHere: await oldKeySignedHere(nodeUrl, identity), onProgress });
+    // A group whose keys landed and wasn't withheld shows no locked row once its chat reloads; forget its count now, so a
+    // later run doesn't name it as withheld.
+    for (const id of Object.keys(r.unlocked)) if (!r.withheld.some((g) => g.id === id)) await noteLockedHistoryCount(nodeUrl, identity.publicKey, id, 0);
+    return r;
+}
+
+/** Per group (id lower-cased), the lines its chat last showed in the "from before you changed phones" row (§7). */
+export async function lockedHistoryRows(): Promise<Record<string, number>> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return lockedHistoryCounts(nodeUrl, identity.publicKey);
+}
+
+/** The chat view's row count for one group as it shows it now (0 when there is no row). */
+export async function noteLockedHistoryRow(groupId: string, n: number): Promise<void> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    await noteLockedHistoryCount(nodeUrl, identity.publicKey, groupId, n);
+}
+
+/** The code this new phone shows a member to confirm it (§4), or null when this phone knows no old key of its own. */
+export async function newPhoneCode(): Promise<string | null> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    let old = await oldKeySignedHere(nodeUrl, identity);
+    if (!old) {
+        const listed = (await rekeysToMe(nodeUrl, identity)).filter((r) => r.attested);
+        old = listed.length === 1 ? listed[0].pubkey : null;
+    }
+    return old ? newPhoneQrPayload(identity, old) : null;
+}
+
+/** A member's phone checks a scanned new-phone code (§4), over every group of this account. */
+export async function checkScannedNewPhone(scanned: string, groups: HistoryGroup[]): Promise<NewPhoneCheck> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return checkNewPhone({ nodeUrl, identity, groups: await historyGroups(nodeUrl, identity, groups), scanned });
+}
+
+/** "Confirm" (§4): hand the confirmed phone the epochs whose record names the old key this phone remembers. */
+export async function confirmScannedNewPhone(check: Extract<NewPhoneCheck, { ok: true }>, onProgress?: (handed: number, planned: number) => void) {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return confirmNewPhone({ nodeUrl, identity, store: groupKeyStore(nodeUrl), check: { ...check, groups: await historyGroups(nodeUrl, identity, check.groups) }, onProgress });
+}
+
+/** While this new phone's code is on screen (§4): the keys other members had already handed it, to compare with later. */
+export async function newPhoneHandOvers(groups: HistoryGroup[]): Promise<Set<string>> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return handOversHeld(nodeUrl, identity, groupKeyStore(nodeUrl), await historyGroups(nodeUrl, identity, groups));
+}
+
+/** The members who confirmed this phone since `before`, kept as local notes; every note, newest first. */
+export async function newPhoneConfirmedNotes(before: Set<string> | null, groups: HistoryGroup[]): Promise<ConfirmedNote[]> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    if (!before) return confirmedNotes(nodeUrl, identity.publicKey);
+    return noteConfirmations({ nodeUrl, identity, store: groupKeyStore(nodeUrl), groups: await historyGroups(nodeUrl, identity, groups), before });
+}
+
+const _groupKeyStores = new Map<string, GroupKeyStore>();
+/**
+ * This phone's group key store for one community (SQLite, that community's own file: utils/group-chat-store.ts). It reads
+ * and writes only that file: once the phone has switched to another community, every call throws (the keyring refuses,
+ * GROUP_KEY_STORE_UNREAD_TEXT) rather than read the other file and take a held group for never held (confirmation 2 of
+ * #1788, finding 1).
+ */
+export function groupKeyStore(nodeUrl: string): GroupKeyStore {
+    const file = getDatabaseFilenameForNode(nodeUrl);
+    let s = _groupKeyStores.get(file);
+    if (!s) {
+        s = sqliteGroupKeyStore(async () => {
+            const database = await getDb();
+            if (dbFileOf.get(database) !== file) throw new Error('This phone has switched community since this chat was opened.');
+            return database as any;
+        });
+        _groupKeyStores.set(file, s);
+    }
+    return s;
+}
+
+/**
+ * A conversation this phone knows as a DM, and has never held a group's keys for, gets no group keys here: nothing is
+ * posted, edited, joined or rotated under its id as a group's. Group keys are what make a group held, and a held group
+ * is asked first everywhere, so this keeps a known DM from ever becoming one (confirmation 2 of #1788, finding 2).
+ */
+async function refuseGroupKeysForDm(ring: GroupKeyring): Promise<void> {
+    if (await ring.seenLocked()) return;
+    if (await isKnownDmInAnySpelling(ring.groupId)) throw new GroupChatKeyError(GROUP_KEYS_FOR_DM_TEXT, 'refused');
+}
+
+async function groupKeyContext(): Promise<{ nodeUrl: string; identity: BeanPoolIdentity }> {
+    const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
+    if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node.');
+    const identity = await loadIdentity();
+    if (!identity) throw new Error('No identity found. You must be logged in.');
+    return { nodeUrl: anchorUrl.replace(/\/+$/, ''), identity };
+}
+
+/** One group's keyring on this node, for this identity (shared for the session: the opened keys with it). */
+export async function groupKeyringFor(groupId: string): Promise<GroupKeyring> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    return groupKeyring(nodeUrl, identity, groupId, groupKeyStore(nodeUrl));
+}
+
+/**
+ * The keyring a group's screen opens, syncs and serves missing keys from (components/GroupChatView.tsx): refused with
+ * GROUP_KEYS_FOR_DM_TEXT for a conversation this phone knows as a DM and never held a group's keys for, so no key is
+ * synced onto a known DM's id whichever route drew the screen (#1815 review E3b, made structural; #1841 review, finding 1).
+ */
+export async function groupScreenKeyringFor(groupId: string): Promise<GroupKeyring> {
+    const ring = await groupKeyringFor(groupId);
+    await refuseGroupKeysForDm(ring);
+    return ring;
 }
 
 /** An enterprise's discussion thread — public to every member of the community, not only its keepers. */
@@ -5682,8 +7005,14 @@ export async function postEnterpriseChatMessage(treasury: string, text: string, 
  * People who can be invited to a group: the node's own directory (it already leaves out enterprises and other
  * treasury accounts), without the system account. Falls back to the phone's copy when offline.
  */
-export async function getInvitablePeople(): Promise<{ publicKey: string; callsign: string; avatarUrl: string | null }[]> {
+export async function getInvitablePeople(options?: { membersOnDemand?: boolean }): Promise<{ publicKey: string; callsign: string; avatarUrl: string | null }[]> {
     const notPeople = (pk: string) => pk === 'SYSTEM' || pk.startsWith('escrow_');
+    // On a community that says `membersOnDemand` the whole list is never read (15 MB at 30k members): the cards held,
+    // and the sheet's search asks the node (DESIGN-global-members-by-area §2.3).
+    if (options?.membersOnDemand) {
+        const held = await getAllCommunityMembers();
+        return held.filter(m => !notPeople(m.publicKey)).map(m => ({ ...m, avatarUrl: null }));
+    }
     try {
         const res = await signedGet('/api/community/members');
         if (res.ok) {
@@ -5768,10 +7097,23 @@ export async function removeGroupChatMessage(groupId: string, messageId: string)
 }
 
 /**
- * Edit a message in a node-readable chat (a group's). Same endpoint as a DM edit, with the text as base64
- * `plaintext-v1` because the node has to be able to read a group chat.
+ * Edit a line in a group's chat. A locked chat (`line.locked`, the screen's word), or one whose keys this phone has held
+ * whatever the node now says (director's decision b): sealed under the line's own epoch (utils/group-chat-lines.ts), or
+ * refused. Only a node from before locked chats, which this phone never saw locked, takes base64 `plaintext-v1`.
  */
-export async function editThreadMessage(messageId: string, newText: string): Promise<any> {
+export async function editThreadMessage(messageId: string, newText: string, line: { groupId: string; metadata: any; locked: boolean }): Promise<any> {
+    const { nodeUrl, identity } = await groupKeyContext();
+    const ring = groupKeyring(nodeUrl, identity, line.groupId, groupKeyStore(nodeUrl));
+    await refuseGroupKeysForDm(ring);
+    if (line.locked || await isHeldGroupChat(line.groupId)) {
+        try {
+            return await editSealedGroupLine(nodeUrl, identity, groupKeyStore(nodeUrl), { groupId: line.groupId, messageId, metadata: line.metadata, text: newText });
+        } catch (e) {
+            // Only the edit route answers 404 here (a keys sync that fails is retried as "no key"): the line, not the keys.
+            if (e instanceof GroupKeysRequestError && e.status === 404) throw await editRefusal(line.groupId);
+            throw e;
+        }
+    }
     return _signedRequest('/api/messages/edit', {
         messageId,
         ciphertext: encodeBase64(encodeUtf8(newText)),

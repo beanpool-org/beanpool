@@ -5,8 +5,9 @@
  * ## Why
  *
  * A member's sign-in copy is their whole seed (and their 12 words) sealed by their app under `scrypt(provider:sub, salt)`,
- * with the salt in the same row. Nothing in that row is secret but the `sub`, and GitHub's is the public user id. So a
- * copy of the database opened every GitHub-linked account in it, one scrypt each. The apps' format stays exactly as it
+ * with the salt in the same row. Nothing in that row is secret but the `sub`, and GitHub's, while GitHub was a sign-in, was
+ * the public user id. So a copy of the database opened every GitHub-linked account in it, one scrypt each (GitHub is no
+ * longer a sign-in, and its copies are gone: engine/github-sign-in-removal.ts). The apps' format stays exactly as it
  * is (the vectors, both apps and every copy already made are untouched); the node adds a second lock, at the storage
  * boundary, with a key the database never holds.
  *
@@ -33,6 +34,9 @@
  * `recovery-seal-retired-<id>.key` (0600), the reader tries it when the live key does not open a row, and at the next
  * boot every row only a retired key opens is locked again with the live one ({@link rewrapRowsFromRetiredKeys}), so the
  * next take-over bundle, which carries the live key only, opens everything the database holds.
+ *
+ * The same file locks members' push tokens too, under a key of their own derived from it ({@link recoverySealSubkey};
+ * services/push-token-seal.ts), so there is one file to carry.
  *
  * The file is read on every use (32 bytes; the derivation is cached against its contents). A key that is deleted while
  * the server runs is gone at once, rather than living on in memory to lock new deposits that would not open after the
@@ -118,6 +122,9 @@ import { pathToFileURL } from 'node:url';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { KEEPER_ALG_SSO_SINGLE } from '@beanpool/core';
 import { db } from '../db/db.js';
+import { closeOpenCopies } from '../engine/open-copies.js';
+import { closeWashSnapshotHandle } from '@beanpool/engine';
+import { createKeyFileOnce, fsyncDir, writeExclusive } from './key-files.js';
 
 export const RECOVERY_SEAL_KEY_FILE = 'recovery-seal.key';
 
@@ -175,8 +182,8 @@ export function recoverySealKeyPath(): string {
 
 let derived: { file: Buffer; key: Uint8Array } | null = null;
 
-/** The wrap key from the file as it is now; null when there is no file. Never makes one. */
-function currentKey(): Uint8Array | null {
+/** The key file as it is now; null when there is none. Never makes one. */
+function liveKeyFile(): Buffer | null {
     let file: Buffer;
     try {
         file = fs.readFileSync(recoverySealKeyPath());
@@ -189,14 +196,50 @@ function currentKey(): Uint8Array | null {
         throw new RecoverySealKeyMissing(
             `This server holds sign-in recovery copies it cannot open: data/${RECOVERY_SEAL_KEY_FILE} is not a ${KEY_BYTES}-byte key.`);
     }
+    return file;
+}
+
+/** The wrap key from the file as it is now; null when there is no file. Never makes one. */
+function currentKey(): Uint8Array | null {
+    const file = liveKeyFile();
+    if (!file) return null;
     if (derived && derived.file.equals(file)) return derived.key;
     const key = deriveKey(file);
     derived = { file, key };
     return key;
 }
 
-function deriveKey(file: Buffer): Uint8Array {
-    return new Uint8Array(crypto.hkdfSync('sha256', file, Buffer.alloc(0), HKDF_INFO, KEY_BYTES));
+function deriveKey(file: Buffer, info: string = HKDF_INFO, length: number = KEY_BYTES): Uint8Array {
+    return new Uint8Array(crypto.hkdfSync('sha256', file, Buffer.alloc(0), info, length));
+}
+
+const subkeys = new Map<string, { file: Buffer; key: Uint8Array }>();
+
+/**
+ * Another lock under the same file, for something else this server keeps out of reach of a copy of its database
+ * (members' push tokens: services/push-token-seal.ts): HKDF-SHA256 of the file with that use's own `info`, never this
+ * file's `beanpool-recovery-row/v1`, so no two uses share a key. One file to carry: it travels in the take-over bundle
+ * and a sealed backup, and nowhere else. Null when there is no file; thrown ({@link RecoverySealKeyMissing}) when it
+ * can't be read or is not a key. Read on every use, as the seal's own key is; the derivation is cached against the
+ * file's contents. Never makes the file.
+ */
+export function recoverySealSubkey(info: string, length: number): Uint8Array | null {
+    if (info === HKDF_INFO) throw new Error(`${info} is the recovery seal's own key`);
+    const file = liveKeyFile();
+    if (!file) return null;
+    const id = `${info}\n${length}`;
+    const cached = subkeys.get(id);
+    if (cached && cached.file.equals(file)) return cached.key;
+    const key = deriveKey(file, info, length);
+    subkeys.set(id, { file, key });
+    return key;
+}
+
+/** {@link recoverySealSubkey} of each key a carried one replaced (recovery-seal-retired-<id>.key), in name order. */
+export function retiredRecoverySealSubkeys(info: string, length: number): Uint8Array[] {
+    if (info === HKDF_INFO) throw new Error(`${info} is the recovery seal's own key`);
+    retiredKeys();
+    return (retired?.files ?? []).map((file) => deriveKey(file, info, length));
 }
 
 function requireKey(): Uint8Array {
@@ -210,7 +253,7 @@ export function requireRecoverySealKey(): void {
     requireKey();
 }
 
-let retired: { names: string; keys: Uint8Array[] } | null = null;
+let retired: { names: string; files: Buffer[]; keys: Uint8Array[] } | null = null;
 
 /**
  * The keys a carried key replaced ({@link installCarriedRecoverySealKey}), derived, in name order. Read when the live
@@ -226,14 +269,15 @@ function retiredKeys(): Uint8Array[] {
     }
     const sig = names.join('\n');
     if (retired && retired.names === sig) return retired.keys;
-    const keys: Uint8Array[] = [];
+    const files: Buffer[] = [];
     for (const n of names) {
         try {
             const file = fs.readFileSync(path.join(dataDir(), n));
-            if (file.length === KEY_BYTES) keys.push(deriveKey(file));
+            if (file.length === KEY_BYTES) files.push(file);
         } catch { /* unreadable: not a key this server can use */ }
     }
-    retired = { names: sig, keys };
+    const keys = files.map((file) => deriveKey(file));
+    retired = { names: sig, files, keys };
     return keys;
 }
 
@@ -255,27 +299,6 @@ export type CarriedKeyOutcome =
 export function noCarriedKeyLine(where: 'envelope' | 'backup'): string {
     return `No recovery-seal key in this ${where}: members' sign-in copies will not open on this server until they reconnect. `
         + 'Their 12 words still work.';
-}
-
-/** Write a file exclusively (never over another), 0600, synced. False when a file is already there. */
-function writeExclusive(target: string, bytes: Buffer): boolean {
-    let fd: number;
-    try {
-        fd = fs.openSync(target, 'wx', 0o600);
-    } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
-        throw e;
-    }
-    try {
-        fs.writeSync(fd, bytes);
-        fs.fsyncSync(fd);
-    } catch (e) {
-        try { fs.closeSync(fd); } catch { /* closed */ }
-        fs.rmSync(target, { force: true });
-        throw e;
-    }
-    fs.closeSync(fd);
-    return true;
 }
 
 /**
@@ -333,81 +356,15 @@ export function installCarriedRecoverySealKey(b64: string | null | undefined): C
 }
 
 /**
- * What `link()` says on a data folder that has no hard links: FAT/exFAT, many SMB/CIFS and some FUSE mounts (Linux gives
- * EPERM, macOS ENOTSUP). The same list sealed-backup.ts falls back on, with ENOTSUP.
- */
-const NO_HARD_LINKS = new Set(['EPERM', 'ENOTSUP', 'EMLINK', 'ENOSYS', 'EXDEV']);
-
-/** Flush a directory's entries, where the filesystem lets a directory be opened and synced; elsewhere, nothing. */
-function fsyncDir(dir: string): void {
-    let fd: number | null = null;
-    try {
-        fd = fs.openSync(dir, 'r');
-        fs.fsyncSync(fd);
-    } catch { /* not every filesystem (or platform) syncs a directory */ } finally {
-        if (fd !== null) try { fs.closeSync(fd); } catch { /* closed */ }
-    }
-}
-
-/**
  * Make the key file if there is none. Written to a temporary file and linked into place, so a crash leaves no half a key
  * and an existing file (a key, or something that is not one) is never overwritten. On a data folder without hard links,
  * the key is created in place instead, exclusively (`wx`), so that still never overwrites a file: a crash in the moment
- * between the create and the one 32-byte write would leave an empty file, which the boot then names.
+ * between the create and the one 32-byte write would leave an empty file, which the boot then names (services/key-files.ts).
  */
 export function ensureRecoverySealKey(): { created: boolean } {
     const target = recoverySealKeyPath();
     if (fs.existsSync(target)) return { created: false };
-    const dir = path.dirname(target);
-    fs.mkdirSync(dir, { recursive: true });
-    const key = crypto.randomBytes(KEY_BYTES);
-    const tmp = `${target}.${process.pid}.${crypto.randomBytes(4).toString('hex')}.tmp`;
-    try {
-        const fd = fs.openSync(tmp, 'wx', 0o600);
-        try {
-            fs.writeSync(fd, key);
-            fs.fsyncSync(fd);
-        } finally {
-            fs.closeSync(fd);
-        }
-        fs.chmodSync(tmp, 0o600);
-        try {
-            fs.linkSync(tmp, target);
-        } catch (e) {
-            const code = (e as NodeJS.ErrnoException).code ?? '';
-            if (code === 'EEXIST') return { created: false };
-            if (!NO_HARD_LINKS.has(code)) throw e;
-            return { created: createKeyInPlace(target, key) };
-        }
-        fsyncDir(dir);
-        return { created: true };
-    } finally {
-        fs.rmSync(tmp, { force: true });
-    }
-}
-
-/** The fallback without hard links: create the key file exclusively and write it. False if a file is already there. */
-function createKeyInPlace(target: string, key: Buffer): boolean {
-    let fd: number;
-    try {
-        fd = fs.openSync(target, 'wx', 0o600);
-    } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === 'EEXIST') return false;
-        throw e;
-    }
-    try {
-        fs.writeSync(fd, key);
-        fs.fsyncSync(fd);
-    } catch (e) {
-        // This process made the file a moment ago and nothing has used it: a key that did not go down whole is removed,
-        // so the next boot makes one rather than finding a file that is not a key.
-        try { fs.closeSync(fd); } catch { /* closed */ }
-        fs.rmSync(target, { force: true });
-        throw e;
-    }
-    fs.closeSync(fd);
-    fsyncDir(path.dirname(target));
-    return true;
+    return { created: createKeyFileOnce(target, crypto.randomBytes(KEY_BYTES)) };
 }
 
 function parseKdf(kdfParams: string | null | undefined): Record<string, unknown> | null {
@@ -520,8 +477,8 @@ const releaseFields = (r: ReleaseRow): RecoverySealFields =>
 
 /**
  * Rewrite every row one way, in one transaction, with secure_delete on so the old bytes are zeroed where they lay, then
- * truncate the WAL so no old frame keeps them. Stored copies are stamped (a standby is sent the new form); releases are
- * not replicated and keep their stamp.
+ * truncate the WAL so no old frame keeps them. Stored copies are stamped (a standby is sent the new form), and so are
+ * releases, by their touch trigger (a plain table, db.ts stampPlainTables).
  */
 function rewriteRows(which: (kdf: string | null) => boolean, map: (f: RecoverySealFields, aad: Uint8Array) => RecoverySealFields | null):
     { shares: number; releases: number } {
@@ -662,8 +619,11 @@ function mainServerEpoch(): string | null {
     return epochOf(db.prepare('SELECT value FROM node_config WHERE key = ?').pluck().get(MAIN_EPOCH_KEY));
 }
 
-/** On a standby, at an import: keep the seal epoch its main server's payload names. None, or not an epoch: nothing. */
-function noteMainServerEpoch(sent: unknown): void {
+/**
+ * On a standby, at an import: keep the seal epoch its main server's payload names. None, or not an epoch: nothing. And
+ * into a whole copy's staging database (services/stager.ts), so the start on it clears under the epoch the copy names.
+ */
+export function noteMainServerEpoch(sent: unknown): void {
     const epoch = epochOf(sent);
     if (!epoch || epoch === mainServerEpoch()) return;
     db.prepare(UPSERT_CONFIG).run(MAIN_EPOCH_KEY, epoch);
@@ -769,6 +729,17 @@ export function takeRecoverySealFullPull(): boolean {
 }
 
 /**
+ * On a standby, at the first start on a whole copy swapped in (services/backup-puller.ts, db/swap-at-boot.ts): this
+ * process has its whole copy of the main server, and asks for none after a delta. Asked for again, it would be built and
+ * swapped in at another restart, whose first delta would ask again: for good, while the main server holds copies in both
+ * forms. The next start that did not swap a copy in asks once, as before.
+ */
+export function noteWholeCopyThisProcess(): void {
+    wholeCopyAsked = true;
+    wholeCopyWanted = false;
+}
+
+/**
  * On a standby, after an import: remove the copies its main server deleted before the seal. No deletion made before the
  * seal reached a standby (the code then wrote no tombstone for a copy; this code does, engine/recovery-shares.ts
  * deleteAllShares). A re-deposit's older generation did go, because the import drops it; a member disconnecting their
@@ -825,6 +796,11 @@ function dropCopiesMainServerDeleted(wholeCopy: RecoveryRowKey[] | null): void {
         } finally {
             db.pragma(`secure_delete = ${priorSecureDelete}`);
         }
+        // A copy this server is serving in pages holds a reader on the WAL, which a truncating checkpoint would wait on for
+        // the whole busy timeout with the event loop held, and then leave as it was (engine/open-copies.ts): closed first.
+        // So is the wash analysis's refresh snapshot, a reader too.
+        closeOpenCopies('the recovery seal empties the WAL of the copies it removed');
+        closeWashSnapshotHandle(db);
         try { db.pragma('wal_checkpoint(TRUNCATE)'); } catch { /* best effort: the next checkpoint writes over them */ }
         console.log(`🔐 Recovery seal: removed ${copies(gone.length)} its main server deleted before the seal, zeroed where they lay.`);
     }
@@ -1149,8 +1125,15 @@ function askWholeCopyAfterReseal(old: number): void {
         + 'This standby asks that server for one whole copy, which removes those it no longer holds.');
 }
 
-/** One VACUUM, then a checkpoint that empties the WAL. Throws if either fails, after giving the disk its space back. */
-function vacuumAndCheckpoint(): { seconds: number; before: number; after: number } {
+/**
+ * One VACUUM, then a checkpoint that empties the WAL. Throws if either fails, after giving the disk its space back. A copy
+ * this server is serving in pages holds a read transaction on the WAL, which the checkpoint can't pass: its snapshot is
+ * closed first (engine/open-copies.ts), and the standby asks for a new copy. Exported for test-sync-copy-pages.ts.
+ */
+export function vacuumAndCheckpoint(): { seconds: number; before: number; after: number } {
+    const closed = closeOpenCopies('the recovery seal clears state.db (one VACUUM)');
+    closeWashSnapshotHandle(db); // the wash analysis's refresh snapshot is a reader too
+    if (closed > 0) console.log(`🔐 Recovery seal: closed ${closed} cop${closed === 1 ? 'y' : 'ies'} being served to a standby first; it asks for a new one.`);
     const before = fileBytes(dbFile());
     const t0 = performance.now();
     try {

@@ -1,6 +1,8 @@
 import { db } from '../db/db.js';
 import { getMember, isVisitorKey } from '@beanpool/engine';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
+import { noteSecurityEvent } from '../services/security-signal.js';
+import { bumpMembersVersion } from './versions.js';
 
 export type MemberNodeRole = 'owner' | 'admin' | 'moderator';
 export type NodeRole = MemberNodeRole;
@@ -12,8 +14,24 @@ export interface NodeRoleRecord {
     granted_by: string | null;
     session_epoch?: number;
     has_break_glass?: boolean;
+    /** When the owner's break-glass code was last made; null with no code, or for one made before this was recorded. */
+    break_glass_made_at?: string | null;
+    /** From which kind of session it was made (BreakGlassMadeBy); null as break_glass_made_at is. */
+    break_glass_made_by?: BreakGlassMadeBy | null;
     callsign?: string;
 }
+
+/**
+ * The kind of session an owner's break-glass code was made from, shown in Settings beside each owner (#1531), so an owner
+ * who signed out everywhere can see whether a code made since was theirs:
+ *   - 'key-session': a key session in Settings (a computer's, or the phone's Manage hand-off): "Make a break-glass code",
+ *     or the enrolment that made them owner
+ *   - 'app': the app's own "Break-glass code" row, signed with the member key (routes/node-admin.ts)
+ *   - 'password': the admin password
+ *   - 'break-glass': an enrolment opened with another owner's break-glass code
+ *   - 'recover': `beanpool recover` on the server (recover-command.ts)
+ */
+export type BreakGlassMadeBy = 'key-session' | 'app' | 'password' | 'break-glass' | 'recover';
 
 /**
  * The rows whose node role acts: an active member's, not a visitor's (members.is_visitor). A visitor's row never joined,
@@ -21,6 +39,16 @@ export interface NodeRoleRecord {
  * holds from before that rule (heldNodeRoleOf) opens no Settings session and passes no role test here (4111202677).
  */
 export const NODE_ROLE_ACTS = "m.status = 'active' AND m.is_visitor = 0";
+
+/**
+ * The member directory (GET /api/members) names each member's node role. A role that changes moves the member's
+ * profile_updated_at (here), so a phone's delta read carries the row, and the members' version (grantNodeRole and
+ * revokeNodeRole, after their transaction), so a phone holding the old list isn't answered 304. Neither moved before,
+ * and a phone kept the old role until its hourly full read.
+ */
+function noteRoleChanged(pubkey: string): void {
+    db.prepare("UPDATE members SET profile_updated_at = ? WHERE public_key = ?").run(new Date().toISOString(), pubkey);
+}
 
 /**
  * Returns the primary node role of a member, or null if they hold none.
@@ -102,15 +130,23 @@ export function getFirstNodeAdminPubkey(): string {
 /**
  * Lists all active node role assignments with member callsign. A visitor's row's role from before this rule is listed
  * too, though it acts for nothing (NODE_ROLE_ACTS), so an owner sees it and can take it away.
+ *
+ * CROSS JOIN keeps node_roles (a handful of rows) the outer loop, each member found by its key: with a plain JOIN SQLite
+ * walked every member and looked each one up in node_roles (1.5 ms at 30,000 members), on every read of the member
+ * directory (GET /api/members), a phone's delta sync included. Rows with the same granted_at keep the order that walk
+ * gave them (members' rowid).
  */
 export function listNodeRoles(): NodeRoleRecord[] {
     const rows = db.prepare(
         `SELECT nr.member_pubkey, nr.role, nr.granted_at, nr.granted_by, nr.session_epoch,
-                (nr.break_glass_hash IS NOT NULL) as has_break_glass, m.callsign
+                (nr.break_glass_hash IS NOT NULL) as has_break_glass,
+                CASE WHEN nr.break_glass_hash IS NOT NULL THEN nr.break_glass_made_at END AS break_glass_made_at,
+                CASE WHEN nr.break_glass_hash IS NOT NULL THEN nr.break_glass_made_by END AS break_glass_made_by,
+                m.callsign
          FROM node_roles nr
-         JOIN members m ON nr.member_pubkey = m.public_key
+         CROSS JOIN members m ON nr.member_pubkey = m.public_key
          WHERE m.status = 'active'
-         ORDER BY (nr.role = 'owner') DESC, nr.granted_at ASC`
+         ORDER BY (nr.role = 'owner') DESC, nr.granted_at ASC, m.rowid ASC`
     ).all() as any[];
     return rows.map(r => ({
         ...r,
@@ -156,6 +192,89 @@ export function nodeHasOwner(): boolean {
     return !!row;
 }
 
+const withArticle = (role: string) => `${/^[aeiou]/.test(role) ? 'an' : 'a'} ${role}`;
+
+/**
+ * The actor a community vote acts as (state-engine.ts COMMUNITY_DECISION_ACTOR, not imported: it imports this file).
+ * Exported only for test-alerts-security, which checks the two strings are the same.
+ */
+export const COMMUNITY_VOTE_ACTOR = 'system:community-decision';
+
+/** The actor's role, for the owners' alert (services/alerts.ts sec.role): never who. Read before the change. */
+function actorRoleOf(actorPubkey?: string): string {
+    if (actorPubkey === 'owner:password') return 'admin password';
+    if (actorPubkey === 'break-glass:enrolment') return 'break-glass code';
+    if (actorPubkey === COMMUNITY_VOTE_ACTOR) return 'community vote';
+    if (!actorPubkey || actorPubkey === 'SYSTEM') return 'server';
+    if (actorPubkey.startsWith('claim:')) return 'claim code';
+    if (isNodeOwner(actorPubkey)) return 'owner';
+    return isNodeAdmin(actorPubkey, false) ? 'admin' : 'key with no role';
+}
+
+const HOW: Record<string, string> = {
+    'admin password': 'by the admin password', 'break-glass code': 'with a break-glass code', server: 'by the server itself',
+    'claim code': "with the community's claim code", owner: 'by an owner', admin: 'by an admin', 'key with no role': 'by a key with no role',
+    'community vote': 'by a community vote',
+};
+
+/**
+ * Tells the owners a role changed: which role and how, never whose (services/security-signal.ts). Bounded per actor
+ * and hour there; an owner made or removed, or break-glass, is high (never folded out of the channel or the card).
+ */
+function noteRoleAlert(detail: string, stillTrue: () => boolean, a: { actor?: string; actorRole: string; high: boolean; lostBy?: string }): void {
+    noteSecurityEvent({
+        key: 'sec.role', detail: `${detail} Open Settings to see who.`, stillTrue, actor: a.actor || 'SYSTEM', actorRole: a.actorRole, high: a.high,
+        // An owner or admin who lost that role is pushed too: with one owner's key stolen, the other owner hears of it.
+        alsoPush: a.lostBy ? [a.lostBy] : undefined,
+    });
+}
+
+/**
+ * A re-key that moves an owner's or admin's role to a new key (engine/member-wizards.ts completeRekey), for the owners'
+ * alert: sec.keys, "An admin's key was replaced, by an owner", under the actor's own bound, never whose (the deciding
+ * review of #1807, finding 5). Who acted is read now, before the move (a member re-keying themselves holds no role
+ * after it); the returned call tells it, once the re-key has committed. An owner's is high, as an owner made or removed
+ * is. The owners are pushed, not the key replaced: the re-key drops its devices' push tokens (engine/key-move.ts (n)).
+ */
+export function roleKeyReplacedAlert(role: 'owner' | 'admin', oldKey: string, operator: string): () => void {
+    const actorRole = operator === oldKey ? role : actorRoleOf(operator);
+    const how = operator === oldKey ? `by that ${role} themselves` : HOW[actorRole] ?? 'by the server itself';
+    const who = withArticle(role);
+    const detail = `${who[0].toUpperCase()}${who.slice(1)}'s key was replaced by a re-key, ${how}. Open Settings to see who.`;
+    return () => noteSecurityEvent({ key: 'sec.keys', detail, actor: operator || 'SYSTEM', actorRole, high: role === 'owner' });
+}
+
+/**
+ * Who took a role away or gave it back outside grantNodeRole/revokeNodeRole, for the owners' alert. `actor` bounds the
+ * pushes as a grant's does: the person who acted (a member's key, 'owner:password'), or a stable id when nobody did:
+ * 'SYSTEM' for the server itself, 'system:community-decision' for a community vote. `how` comes before "by an owner".
+ */
+export interface RoleChangeBy { actor?: string; how: string }
+
+/**
+ * A role taken away by a suspension, a report, a removal or an account deleted (#1785): the row goes, and the owners are
+ * told as for a revoke, with the same event, bound and push to the one who lost it. Safe inside a transaction: told only
+ * once it committed. Every such delete of a node_roles row goes through here; a take-over's raw rewrite is not one.
+ */
+export function dropNodeRoleRow(pubkey: string, by: RoleChangeBy): NodeRole | null {
+    const actorRole = actorRoleOf(by.actor);
+    const row = db.prepare('SELECT role FROM node_roles WHERE member_pubkey = ?').get(pubkey) as { role: NodeRole } | undefined;
+    if (!row || db.prepare('DELETE FROM node_roles WHERE member_pubkey = ?').run(pubkey).changes === 0) return null;
+    const role = row.role;
+    // Their own act (an account deleted) names no actor role: the role they held is the one they lost.
+    const whoActed = by.actor === pubkey ? '' : ` ${HOW[actorRole]}`;
+    noteRoleAlert(`${withArticle(role).replace(/^a/, 'A')} lost that role, ${by.how}${whoActed}.`, () => heldNodeRoleOf(pubkey) !== role,
+        { actor: by.actor, actorRole, high: role === 'owner', lostBy: role === 'owner' || role === 'admin' ? pubkey : undefined });
+    return role;
+}
+
+/** A role a suspension held aside, given back (decisions-engine restoreSuspendedNodeRole): told as a grant is. */
+export function noteNodeRoleBack(pubkey: string, role: NodeRole, by: RoleChangeBy): void {
+    const actorRole = actorRoleOf(by.actor);
+    noteRoleAlert(`Someone was made ${withArticle(role)} again, ${by.how} ${HOW[actorRole]}.`, () => heldNodeRoleOf(pubkey) === role,
+        { actor: by.actor, actorRole, high: role === 'owner' });
+}
+
 /**
  * Grants a node role ('owner', 'admin' or 'moderator') to a member.
  * Each member holds at most ONE node role.
@@ -179,7 +298,7 @@ export function nodeHasOwner(): boolean {
  * therefore reads the target's CURRENT role from the same transaction and refuses unless it is
  * null or 'moderator'.
  */
-export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?: string): void {
+export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?: string, how?: string): void {
     if (role !== 'owner' && role !== 'admin' && role !== 'moderator') {
         throw new Error("Role must be 'owner', 'admin', or 'moderator'");
     }
@@ -209,6 +328,9 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
         throw new Error('Only active accounts can hold a node role');
     }
 
+    const actorRole = actorRoleOf(actorPubkey);
+    const howChanged = how ?? HOW[actorRole];
+    let before: string | null = null;
     db.transaction(() => {
         const ownerCount = (db.prepare(
             `SELECT COUNT(*) as c FROM node_roles nr
@@ -223,8 +345,10 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
             (!!actorPubkey && isNodeOwner(actorPubkey));
 
         // Read inside the transaction, BEFORE the guard: the admin rule below depends on it.
-        const existing = db.prepare("SELECT role, session_epoch, break_glass_hash FROM node_roles WHERE member_pubkey = ?").get(targetPubkey) as { role: string; session_epoch: number; break_glass_hash: string | null } | undefined;
+        const existing = db.prepare("SELECT role, session_epoch, break_glass_hash, break_glass_made_at, break_glass_made_by FROM node_roles WHERE member_pubkey = ?").get(targetPubkey) as
+            { role: string; session_epoch: number; break_glass_hash: string | null; break_glass_made_at: string | null; break_glass_made_by: string | null } | undefined;
         const currentRole = existing?.role ?? null;
+        before = currentRole;
 
         if (role === 'owner') {
             if (!isOwner) {
@@ -266,14 +390,26 @@ export function grantNodeRole(targetPubkey: string, role: NodeRole, actorPubkey?
         }
         const epoch = existing ? (existing.role !== role ? existing.session_epoch + 1 : existing.session_epoch) : 0;
         const breakGlass = role === 'owner' ? (existing?.break_glass_hash || null) : null;
+        // When and from what the kept code was made travels with it (#1531); gone with it.
+        const madeAt = breakGlass ? (existing?.break_glass_made_at ?? null) : null;
+        const madeBy = breakGlass ? (existing?.break_glass_made_by ?? null) : null;
 
         db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(targetPubkey);
         db.prepare(
-            `INSERT INTO node_roles (member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
-             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)`
-        ).run(targetPubkey, role, actorPubkey || null, epoch, breakGlass);
+            `INSERT INTO node_roles (member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash, break_glass_made_at, break_glass_made_by)
+             VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?, ?, ?)`
+        ).run(targetPubkey, role, actorPubkey || null, epoch, breakGlass, madeAt, madeBy);
+        if (currentRole !== role) noteRoleChanged(targetPubkey);
     })();
+    bumpMembersVersion();
     noteTakeoverInputsChanged(`${role} role granted`);
+    // A claim's grant is told as the community claimed (claim-code.ts), not twice.
+    if (before !== role && !actorPubkey?.startsWith('claim:')) {
+        const was = before ? `${withArticle(before).replace(/^a/, 'A')} was made` : 'Someone was made';
+        noteRoleAlert(`${was} ${withArticle(role)}, ${howChanged}.`, () => heldNodeRoleOf(targetPubkey) === role,
+            { actor: actorPubkey, actorRole, high: role === 'owner' || before === 'owner' || /break-glass/.test(howChanged),
+                lostBy: before === 'owner' || before === 'admin' ? targetPubkey : undefined });
+    }
 }
 
 /**
@@ -293,6 +429,8 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
         throw new Error("Role must be 'owner', 'admin', or 'moderator'");
     }
 
+    const actorRole = actorRoleOf(actorPubkey);
+    let removed = false;
     db.transaction(() => {
         const isOwner = actorPubkey === 'owner:password' || (!!actorPubkey && isNodeOwner(actorPubkey));
 
@@ -324,9 +462,17 @@ export function revokeNodeRole(targetPubkey: string, role: NodeRole, actorPubkey
             }
         }
 
-        db.prepare("DELETE FROM node_roles WHERE member_pubkey = ? AND role = ?").run(targetPubkey, role);
+        if (db.prepare("DELETE FROM node_roles WHERE member_pubkey = ? AND role = ?").run(targetPubkey, role).changes > 0) {
+            noteRoleChanged(targetPubkey);
+            removed = true;
+        }
     })();
+    bumpMembersVersion();
     noteTakeoverInputsChanged(`${role} role revoked`);
+    if (removed) {
+        noteRoleAlert(`${withArticle(role).replace(/^a/, 'A')} lost that role, ${HOW[actorRole]}.`, () => heldNodeRoleOf(targetPubkey) !== role,
+            { actor: actorPubkey, actorRole, high: role === 'owner', lostBy: role === 'owner' || role === 'admin' ? targetPubkey : undefined });
+    }
 }
 
 /**
@@ -351,11 +497,17 @@ export function bumpNodeRoleSessionEpoch(pubkey: string): number {
 }
 
 /**
- * Sets or clears the break_glass_hash for an owner in node_roles.
+ * Sets or clears the break_glass_hash for an owner in node_roles. A new hash is stamped with now and `madeBy` (the kind
+ * of session that made it, shown in Settings: BreakGlassMadeBy); clearing it clears both.
  */
-export function setNodeRoleBreakGlassHash(pubkey: string, hash: string | null): void {
+export function setNodeRoleBreakGlassHash(pubkey: string, hash: string | null, madeBy: BreakGlassMadeBy | null = null): void {
     if (!pubkey) return;
-    db.prepare("UPDATE node_roles SET break_glass_hash = ? WHERE member_pubkey = ?").run(hash, pubkey);
+    db.prepare(
+        `UPDATE node_roles SET break_glass_hash = ?,
+             break_glass_made_at = CASE WHEN ? IS NULL THEN NULL ELSE strftime('%Y-%m-%dT%H:%M:%fZ', 'now') END,
+             break_glass_made_by = CASE WHEN ? IS NULL THEN NULL ELSE ? END
+         WHERE member_pubkey = ?`
+    ).run(hash, hash, hash, madeBy, pubkey);
     noteTakeoverInputsChanged('break-glass code changed');
 }
 

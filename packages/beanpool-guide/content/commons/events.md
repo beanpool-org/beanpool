@@ -64,7 +64,7 @@ The entry carries the name, the time, the place and the link back to the event. 
 - A **Description**, and a photo if you like.
 - **Note for people who are going:** only they will see it. A good place for the exact address or a gate code.
 - **Who can see it:** your whole community, or one group.
-- If you keep an enterprise or look after a group, **Post as** lets you post the event in its name. A group hosts for its own members only; an enterprise hosts for the whole community, so an enterprise event is never group-only.
+- If you keep a project or enterprise or are a convenor of a group, **Post as** lets you post the event in its name. A group hosts for its own members only; an enterprise hosts for the whole community, so an enterprise event is never group-only.
 - Tap **Create**. Your event is in the Market and on the Map.
 
 ## Running your event

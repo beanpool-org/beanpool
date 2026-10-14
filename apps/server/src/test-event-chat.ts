@@ -35,6 +35,7 @@ import {
 import { sendMessage, editMessage, toggleMessageReaction } from './engine/messaging.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createMessagingRoutes } from './routes/messaging.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -60,8 +61,9 @@ const decode = (b64: string) => Buffer.from(b64, 'base64').toString('utf8');
 
 function makeMember(callsign: string): string {
     const pub = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, updated_at)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pub, callsign, AVATAR);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pub, callsign);
+    setMemberPhoto(db, pub, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
     return pub;
 }
@@ -191,7 +193,9 @@ async function main(): Promise<void> {
     assertThrows(() => getEventThread('not-an-event-id', host), /Event not found/, 'a chat for something that is not an event is a 404');
     assert(!!getEventThread(entEv.id, keeper).isHost, 'a keeper of the enterprise host reads without an RSVP');
     assert(!!getEventThread(groupEv.id, convenor).isHost, 'an active convenor of the group reads without an RSVP');
-    assertThrows(() => getEventThread(groupEv.id, stranger), /Only the host and people going/, 'a non-member cannot open a group-only event chat');
+    // Told what an id nobody has gets (engine/post-sight.ts): "Only the host and people going" confirmed that the group's
+    // event exists to someone who can't see it, an invite-only group's included.
+    assertThrows(() => getEventThread(groupEv.id, stranger), /^Event not found$/, 'a non-member cannot open a group-only event chat, and is told "Event not found"');
 
     // The participants mirror is not authority: a row left behind by a replica is not a ticket in.
     db.prepare('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)').run(ev.id, maybe);

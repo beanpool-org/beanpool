@@ -10,9 +10,13 @@
  *   1. unsigned reads of a conversation, a conversation list, a member's transactions and a balance → 401
  *   2. a signed member reading their own of each → 200
  *   3. a signed member reading someone else's conversation / conversation list → 403
+ *   3b. a signed member reading someone else's balance / transactions → 403 (balances and trades are private)
  *   4. every public read the guest path needs → 200, both unsigned (the Welcome screen, before any
  *      identity exists) and signed by a key that is NOT a member here (the PWA guest of #849/#850,
- *      which holds a keypair and signs every read); that guest is still refused private reads (403)
+ *      which holds a keypair and signs every read); that guest is still refused private reads (403),
+ *      a local community's listings, and its other reads that name members (its enterprises, Commons Decisions,
+ *      projects, crowdfunds and Pulse feed, 2026-10-01): 401/403 naming the global community; the membership probe
+ *      answers only the key it asks about (multi-community review F3)
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-read-auth-default.ts
  */
@@ -25,9 +29,10 @@ delete process.env.ENFORCE_WS_AUTH;
 delete process.env.ENFORCE_LEDGER_AUTH;
 
 import crypto from 'node:crypto';
+import { lockedDm } from './dm-test-payload.js'; // no engine import: safe to hoist
 
-const PORT = 8597;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -62,7 +67,8 @@ async function main() {
 
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const member = (callsign: string): Id => {
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
@@ -78,7 +84,8 @@ async function main() {
 
     const conv = createConversation('dm', [alice.pubKeyHex, bob.pubKeyHex], alice.pubKeyHex);
     if (!conv) throw new Error('setup: could not create the DM');
-    sendMessage(conv.id, alice.pubKeyHex, 'ciphertext', 'nonce');
+    const line = lockedDm(); // a DM goes in encrypted
+    sendMessage(conv.id, alice.pubKeyHex, line.ciphertext, line.nonce);
     db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, memo, timestamp) VALUES (?,?,?,?,?,?)`)
         .run('tx-read-auth-default', alice.pubKeyHex, bob.pubKeyHex, 1, 'private memo', new Date().toISOString());
 
@@ -109,12 +116,12 @@ async function main() {
     assert(otherConv.status === 403, `carol, signed, is refused alice and bob's conversation (got ${otherConv.status})`);
     const otherList = await get(`/api/messages/conversations/${alice.pubKeyHex}`, carol);
     assert(otherList.status === 403, `carol, signed, is refused alice's conversation list (got ${otherList.status})`);
-    // Not asserted, reported: balances and the ledger are readable by ANY signed member (the handlers
-    // check membership, not ownership). That is how the app shows another member's trust and trading
-    // gates; whether it should stay member-visible is a product decision, not part of the default flip.
+    // Balances and trades are private (Marty, 2026-09-28, reversing 2026-09-18's "member-visible by design", which this
+    // suite only measured): a member reads their own and nobody else's (test-privacy-defaults has the rest).
     const otherBal = await get(`/api/ledger/balance/${alice.pubKeyHex}`, carol);
     const otherTx = await get(`/api/ledger/transactions?publicKey=${alice.pubKeyHex}`, carol);
-    console.log(`  (measured: another member's balance → ${otherBal.status}, their transactions → ${otherTx.status}; member-visible by design)`);
+    assert(otherBal.status === 403, `carol, signed, is refused alice's balance (got ${otherBal.status})`);
+    assert(otherTx.status === 403, `carol, signed, is refused alice's transactions (got ${otherTx.status})`);
 
     console.log('\n── 4. a guest can still browse ──');
     const enterprise = createTreasury('Guest Visible Bakery', 'data:image/png;base64,iVBORw0KGgo=', 0, { leadKeeperPubkey: alice.pubKeyHex }).publicKey;
@@ -124,23 +131,17 @@ async function main() {
         '/api/community/health',
         '/api/node/config',
         '/api/node/info',
-        '/api/marketplace/posts',
-        '/api/enterprises',
-        '/api/enterprises/map',
-        '/api/treasuries',
+        // Not /api/marketplace/posts: a local community's listings are its members' (Marty, 2026-09-28), so a guest is
+        // refused them below. It was listed here while the board was public on every node. Nor the enterprises, the
+        // Commons Decisions, projects and crowdfunds and the Pulse feed, which name members (2026-10-01): refused below.
         '/api/commons/balance',
-        '/api/commons/projects',
-        '/api/commons/decisions',
-        '/api/crowdfund/projects',
         // Not /api/activity/feed: it names the members in every trade and the Beans, so it is members-only
         // (test-activity-feed-members-only). It was listed here while the feed was public.
-        '/api/pulse/feed',
         '/api/pricing-guide',
         '/api/federation/links',
         '/api/federation/reachable-peers',
-        `/api/enterprise/${enterprise}`,
-        `/api/treasury/${enterprise}`,
-        `/api/community/membership/${alice.pubKeyHex}`,
+        // Not /api/community/membership/<key>: it answers only the key it asks about (multi-community review F3,
+        // 2026-10-01), so a guest asking about Alice is refused below and asks about itself instead.
         '/api/members/callsign-available/somebody-new',
     ];
     const { publicKey: gPub, privateKey: gPriv } = crypto.generateKeyPairSync('ed25519');
@@ -154,6 +155,33 @@ async function main() {
     for (const [what, path] of privateReads) {
         const g = await get(path, guest);
         assert(g.status === 403, `non-member guest, signed, is refused ${what} (got ${g.status})`);
+    }
+    // The membership probe: only the key it asks about hears the answer. The guest asks about itself, as the apps do.
+    const probeAlice = `/api/community/membership/${alice.pubKeyHex}`;
+    const probeUnsigned = await get(probeAlice);
+    const probeGuest = await get(probeAlice, guest);
+    const probeOwnGuest = await get(`/api/community/membership/${guest.pubKeyHex}`, guest);
+    const probeOwnAlice = await get(probeAlice, alice);
+    assert(probeUnsigned.status === 401 && probeGuest.status === 403,
+        `the membership probe about Alice is refused unsigned (401) and to the guest (403) (got ${probeUnsigned.status}, ${probeGuest.status})`);
+    assert(probeOwnGuest.status === 200 && probeOwnAlice.status === 200,
+        `the guest asking about itself, and Alice about herself, are answered (got ${probeOwnGuest.status}, ${probeOwnAlice.status})`);
+    // The listings: refused to both, in words that send them to the global community.
+    const boardUnsigned = await get('/api/marketplace/posts');
+    const boardGuest = await get('/api/marketplace/posts', guest);
+    assert(boardUnsigned.status === 401 && /global\.beanpool\.org/.test(boardUnsigned.error ?? ''), `unsigned GET /api/marketplace/posts is refused, naming the global community (got ${boardUnsigned.status})`);
+    assert(boardGuest.status === 403 && /global\.beanpool\.org/.test(boardGuest.error ?? ''), `non-member guest, signed, GET /api/marketplace/posts is refused the same way (got ${boardGuest.status})`);
+    const boardMember = await get('/api/marketplace/posts', alice);
+    assert(boardMember.status === 200, `alice, a member, reads the board (got ${boardMember.status})`);
+    // The rest that names members: refused to both the same way, and read by a member.
+    for (const path of ['/api/enterprises', '/api/enterprises/map', '/api/treasuries', `/api/enterprise/${enterprise}`, `/api/treasury/${enterprise}`,
+        '/api/commons/projects', '/api/commons/decisions', '/api/crowdfund/projects', '/api/pulse/feed']) {
+        const u = await get(path);
+        const g = await get(path, guest);
+        assert(u.status === 401 && /global\.beanpool\.org/.test(u.error ?? ''), `unsigned GET ${path} is refused, naming the global community (got ${u.status})`);
+        assert(g.status === 403 && /global\.beanpool\.org/.test(g.error ?? ''), `non-member guest, signed, GET ${path} is refused the same way (got ${g.status})`);
+        const m = await get(path, alice);
+        assert(m.status === 200, `alice, a member, reads ${path} (got ${m.status})`);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

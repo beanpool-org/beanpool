@@ -4,6 +4,8 @@ import {
     formatShortCode,
     startPhonePairing,
     waitForPhone,
+    confirmPhoneDigits,
+    wrongDigitsMessage,
     PHONE_SIGNIN_MESSAGES,
 } from './phone-signin';
 
@@ -36,6 +38,14 @@ describe('phone-signin utilities', () => {
         it('returns raw string for non-6-character codes', () => {
             expect(formatShortCode('ABC')).toBe('ABC');
             expect(formatShortCode('1234567')).toBe('1234567');
+        });
+    });
+
+    describe('wrongDigitsMessage', () => {
+        it('formats single vs plural tries left correctly', () => {
+            expect(wrongDigitsMessage(1)).toBe('Those are not the digits on your phone. 1 try left.');
+            expect(wrongDigitsMessage(2)).toBe('Those are not the digits on your phone. 2 tries left.');
+            expect(wrongDigitsMessage(0)).toBe('Those are not the digits on your phone. 0 tries left.');
         });
     });
 
@@ -236,6 +246,75 @@ describe('phone-signin utilities', () => {
                 const res = await waitForPhone('p-123');
                 expect(res).toEqual(expected);
             }
+        });
+    });
+
+    describe('confirmPhoneDigits', () => {
+        it('returns retry on network failure', async () => {
+            globalThis.fetch = vi.fn().mockRejectedValue(new Error('Network error'));
+
+            const res = await confirmPhoneDigits('p-123', '42');
+            expect(res).toEqual({ kind: 'retry' });
+        });
+
+        it('returns retry on status >= 500 or 429', async () => {
+            globalThis.fetch = vi.fn().mockResolvedValue({
+                status: 500,
+                json: async () => ({}),
+            } as Response);
+            expect(await confirmPhoneDigits('p-123', '42')).toEqual({ kind: 'retry' });
+
+            globalThis.fetch = vi.fn().mockResolvedValue({
+                status: 429,
+                json: async () => ({}),
+            } as Response);
+            expect(await confirmPhoneDigits('p-123', '42')).toEqual({ kind: 'retry' });
+        });
+
+        it('returns wrong status with triesLeft', async () => {
+            globalThis.fetch = vi.fn().mockResolvedValue({
+                status: 200,
+                json: async () => ({ status: 'wrong', triesLeft: 2 }),
+            } as Response);
+
+            const res1 = await confirmPhoneDigits('p-123', '42');
+            expect(res1).toEqual({ kind: 'wrong', triesLeft: 2 });
+
+            globalThis.fetch = vi.fn().mockResolvedValue({
+                status: 200,
+                json: async () => ({ status: 'wrong' }),
+            } as Response);
+
+            const res2 = await confirmPhoneDigits('p-123', '42');
+            expect(res2).toEqual({ kind: 'wrong', triesLeft: 0 });
+        });
+
+        it('delegates to pollAnswer for status signed-in or other poll states', async () => {
+            globalThis.fetch = vi.fn().mockResolvedValue({
+                status: 200,
+                json: async () => ({
+                    status: 'signed-in',
+                    role: 'owner',
+                    memberPubkey: 'pubkey-123',
+                    csrfToken: 'csrf-456',
+                }),
+            } as Response);
+
+            const res = await confirmPhoneDigits('p-123', '42');
+            expect(res).toEqual({
+                kind: 'signed-in',
+                session: {
+                    memberPubkey: 'pubkey-123',
+                    role: 'owner',
+                },
+                csrfToken: 'csrf-456',
+            });
+            expect(globalThis.fetch).toHaveBeenCalledWith('/api/local/admin/auth/pairing/p-123/confirm', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: '42' }),
+            });
         });
     });
 });

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { OnboardingModule } from './OnboardingModule';
@@ -204,6 +204,104 @@ describe('OnboardingModule', () => {
     });
 
     /**
+     * The open door (the global node's sign-in join): tries are counted as they happen, the people who
+     * came in are a subset of Joined, and each refusal is named in plain words.
+     */
+    it('shows the open door: tries, who came in by provider, and why people were turned away', async () => {
+        vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({
+            days: 30,
+            openDoor: true,
+            rows: [
+                { day: '2026-09-01', event: 'member_created', variant: '', count: 9 },
+                { day: '2026-09-01', event: 'open_join_attempt', variant: 'google', count: 5 },
+                { day: '2026-09-02', event: 'open_join_attempt', variant: 'apple', count: 2 },
+                { day: '2026-09-01', event: 'cohort_open_door', variant: 'google', count: 3 },
+                { day: '2026-09-02', event: 'cohort_open_door', variant: 'apple', count: 1 },
+                { day: '2026-09-01', event: 'open_join_failed', variant: 'rate_limited', count: 2 },
+                { day: '2026-09-02', event: 'open_join_failed', variant: 'already_joined', count: 1 },
+                { day: '2026-09-02', event: 'open_join_failed', variant: 'door_key_missing', count: 3 },
+                { day: '2026-09-02', event: 'open_join_failed', variant: 'ticket_signature', count: 4 },
+            ],
+        });
+
+        renderModule();
+
+        const section = await screen.findByRole('region', { name: 'Open door' });
+        const box = (label: string) => within(section).getByText(label).closest('div') as HTMLElement;
+        expect(box('Tried to join this way')).toHaveTextContent('7');
+        expect(box('Joined this way')).toHaveTextContent('4');
+        expect(within(section).getByText('Google 3 · Apple 1')).toBeInTheDocument();
+        expect(within(section).getByText(/It is/)).toHaveTextContent('It is open here.');
+
+        const reason = (label: string) => within(section).getByText(label).closest('li') as HTMLElement;
+        expect(reason('Too many new accounts from one network')).toHaveTextContent('2');
+        expect(reason('That sign-in already joined here')).toHaveTextContent('1');
+        expect(reason("This server can't check sign-ins: its open-door key is missing")).toHaveTextContent('3');
+        expect(within(section).queryByText('door_key_missing')).not.toBeInTheDocument();
+        expect(reason('Key vault ticket not signed by a key this server lists')).toHaveTextContent('4');
+        expect(within(section).queryByText('ticket_signature')).not.toBeInTheDocument();
+        expect(within(section).queryByText(/Nobody used the open door/i)).not.toBeInTheDocument();
+        expect(within(section).queryByText(/Nobody was turned away/i)).not.toBeInTheDocument();
+    });
+
+    it('says plainly when nobody used the open door, and that it is shut', async () => {
+        vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({ days: 30, rows: [], openDoor: false });
+
+        renderModule();
+
+        const section = await screen.findByRole('region', { name: 'Open door' });
+        expect(within(section).getByText('Nobody used the open door in this window.')).toBeInTheDocument();
+        expect(within(section).getByText(/It is/)).toHaveTextContent('It is shut here, so people join only with an invite.');
+        expect(within(section).getByText('Tried to join this way').closest('div')).toHaveTextContent('0');
+        expect(within(section).getByText('Joined this way').closest('div')).toHaveTextContent('0');
+        expect(within(section).getByText('Nobody was turned away in this window.')).toBeInTheDocument();
+    });
+
+    /** The 12-words door and the door's work (server: engine/door-signal.ts, services/door-work.ts): named too, never as codes. */
+    it('names the 12-words door, the ceilings and the door work in plain words', async () => {
+        vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({
+            days: 30,
+            openDoor: true,
+            rows: [
+                { day: '2026-10-01', event: 'open_join_attempt', variant: 'words', count: 6 },
+                { day: '2026-10-01', event: 'cohort_open_door', variant: 'words', count: 4 },
+                { day: '2026-10-01', event: 'cohort_open_door', variant: 'google', count: 1 },
+                { day: '2026-10-01', event: 'open_join_failed', variant: 'network_busy_words', count: 2 },
+                { day: '2026-10-01', event: 'open_join_failed', variant: 'network_busy', count: 1 },
+                { day: '2026-10-01', event: 'open_join_failed', variant: 'work_required', count: 1 },
+                { day: '2026-10-01', event: 'open_join_failed', variant: 'work_invalid', count: 1 },
+                { day: '2026-10-01', event: 'open_join_failed', variant: 'work_expired', count: 1 },
+                { day: '2026-10-01', event: 'open_join_failed', variant: 'work_spent', count: 1 },
+            ],
+        });
+
+        renderModule();
+
+        const section = await screen.findByRole('region', { name: 'Open door' });
+        expect(within(section).getByText('12 words 4 · Google 1')).toBeInTheDocument();
+        const reason = (label: string) => within(section).getByText(label).closest('li') as HTMLElement;
+        expect(reason('Too many 12-words accounts from one network (the sign-in way stayed open)')).toHaveTextContent('2');
+        expect(reason('Too many new accounts from one network')).toHaveTextContent('1');
+        expect(reason('Setting up was needed and none was sent (an older app on a busy network)')).toHaveTextContent('1');
+        expect(reason("Setting up didn't check out")).toHaveTextContent('1');
+        expect(reason('Setting up took over ten minutes')).toHaveTextContent('1');
+        expect(reason('Setting up was used twice')).toHaveTextContent('1');
+        for (const code of ['network_busy', 'network_busy_words', 'work_required', 'work_invalid', 'work_expired', 'work_spent', 'words']) {
+            expect(within(section).queryByText(code)).not.toBeInTheDocument();
+        }
+    });
+
+    it('says neither open nor shut for a node too old to send it', async () => {
+        vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({ days: 30, rows: [] });
+
+        renderModule();
+
+        const section = await screen.findByRole('region', { name: 'Open door' });
+        expect(within(section).queryByText(/It is (open|shut)/)).not.toBeInTheDocument();
+        expect(within(section).getByText('Nobody used the open door in this window.')).toBeInTheDocument();
+    });
+
+    /**
      * Both were stale: keeper recovery is gone, so nothing lands in the keepers panel and
      * nothing "arrives with Phase A" any more. Leaving either on screen tells an operator
      * something untrue about their own community.
@@ -266,8 +364,9 @@ describe('OnboardingModule', () => {
         expect(mockSelectNode).toHaveBeenCalledWith('node-2');
     });
 
-    it('forwards 2FA session token when available in sessionStorage', async () => {
-        sessionStorage.setItem('bp_tfa_session_node-1', 'tfa-session-token-123');
+    it('forwards the 2FA session token the page holds for the profile', async () => {
+        // 2FA session tokens are held in memory now, never in sessionStorage (Fable's web review, M1).
+        nodeClient.setTfaSessionToken('node-1', 'tfa-session-token-123');
         vi.mocked(nodeClient.fetchOnboardingFunnel).mockResolvedValue({
             days: 30,
             rows: [],
@@ -284,6 +383,6 @@ describe('OnboardingModule', () => {
             );
         });
 
-        sessionStorage.removeItem('bp_tfa_session_node-1');
+        nodeClient.setTfaSessionToken('node-1', undefined);
     });
 });

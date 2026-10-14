@@ -11,6 +11,8 @@
 
 import { MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type MarketplacePost } from '../lib/marketplace';
 import { PostAuthorTrust, isElder } from './PostAuthorTrust';
+import { listPhotoUrl } from '@beanpool/core';
+import { formatDistance } from '../lib/events';
 
 interface Props {
     post: MarketplacePost;
@@ -23,9 +25,11 @@ interface Props {
     onOpenProfile?: (pubkey: string) => void;
     isOwnPost?: boolean;
     onPhotoClick?: (photos: string[], initialIndex: number, e: React.MouseEvent) => void;
+    /** How far the listing is (km), as the node measured it from the point the Market read from; none, no distance. */
+    distanceKm?: number | null;
 }
 
-export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile, isOwnPost, onPhotoClick }: Props) {
+export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAvatarUrl, remoteNode, viewMode = 'grid', onOpenProfile, isOwnPost, onPhotoClick, distanceKm }: Props) {
     const categoryConfig = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
     const isPulse = post.authorCallsign === 'Daily Pulse' || (post as any).author_callsign === 'Daily Pulse';
     const emoji = isPulse ? '🗞️' : (categoryConfig?.emoji ?? '📦');
@@ -38,6 +42,13 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
     const hasPhoto = post.photos && post.photos.length > 0;
 
     const isGrid = viewMode === 'grid';
+    // How far, as the node measured it (S5): one tag for every layout, nothing without a number.
+    const distanceTag = typeof distanceKm === 'number' && Number.isFinite(distanceKm) ? (
+        <span data-testid="card-distance" className="text-[10px] font-black text-nature-500 dark:text-nature-400 inline-flex items-center gap-1 shrink-0">
+            <span aria-hidden="true">📍</span>
+            <span>{formatDistance(distanceKm)}</span>
+        </span>
+    ) : null;
 
     // Paused Offers show only to their author (server viewer-aware) — mark them so they're
     // distinguishable in "My Posts" from live listings.
@@ -79,7 +90,8 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             {post.title}
                         </h3>
                         <span className="text-[10px] text-nature-500 truncate flex items-center gap-1 flex-wrap">
-                            by {post.authorCallsign || 'Anonymous'} {elderCard && '⛰️'} {isOwnPost && <span className="text-blue-600 font-bold">👤 (You)</span>}
+                            by {post.authorCallsign || 'Anonymous'} {elderCard && '⛰️'} {isOwnPost && <span className="text-blue-600 dark:text-blue-400 font-bold">👤 (You)</span>}
+                            {distanceTag}
                             {post.authorFoundingNeeded && (
                                 <span className="text-[8px] font-black tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-300/30 shrink-0">
                                     🌱 FOUNDING
@@ -153,7 +165,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                 onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
                             }`}
                         >
-                            <img src={post.photos![0]} alt={post.title} className="w-full h-full object-cover" />
+                            <img src={listPhotoUrl(post.photos![0])} alt={post.title} className="w-full h-full object-cover" />
                         </button>
                     ) : (
                         <div className="w-full h-full bg-oat-50 dark:bg-nature-800 flex justify-center items-center">
@@ -165,7 +177,8 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                 {/* Right Content */}
                 <div className="flex-1 flex flex-col justify-center min-w-0">
                     <div className="flex justify-between items-center mb-1">
-                        <div className="flex gap-2 items-center">
+                        {/* Wraps, so at 320 px / 130% the distance tag drops to a second line rather than past the card edge. */}
+                        <div className="flex flex-wrap gap-x-2 gap-y-1 items-center min-w-0">
                             {!isPulse && (
                                 <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
                                     post.type === 'offer' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-400'
@@ -178,11 +191,12 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             {youPill}
                             {pausedPill}
                             {categoryConfig && (
-                                <span className="text-[10px] font-black text-nature-500 dark:text-nature-450 flex items-center gap-1">
+                                <span className="text-[10px] font-black text-nature-500 dark:text-nature-400 flex items-center gap-1">
                                     <span>{categoryConfig.emoji}</span>
                                     <span>{categoryConfig.label}</span>
                                 </span>
                             )}
+                            {distanceTag}
                             {post.repeatable && (
                                 <span className={`text-[9px] font-black tracking-wider px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-400`}>
                                     ↻ RECURRING
@@ -216,7 +230,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                                 <span className="font-bold text-base text-nature-950 dark:text-white" style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', flexWrap: 'nowrap' }}>
                                     {post.credits !== undefined ? post.credits : '?'}
                                     <img src="/assets/bean.png" className="mx-0.5" style={{ width: '14px', height: '14px', flexShrink: 0 }} alt="B" />
-                                    <span className="text-[10px] text-nature-500 ml-0.5">
+                                    <span className="text-[10px] text-nature-500 dark:text-nature-400 ml-0.5">
                                         {{ fixed: '', hourly: '/hr', daily: '/day', weekly: '/wk', monthly: '/mo' }[post.priceType] || ''}
                                     </span>
                                 </span>
@@ -275,6 +289,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     <span className={`font-bold text-nature-950 dark:text-white truncate text-xs mt-0.5`}>
                         {post.title}
                     </span>
+                    {distanceTag && <div className="mt-0.5">{distanceTag}</div>}
                     {pulsePill && <div className="mt-1">{pulsePill}</div>}
                     {youPill && <div className="mt-1">{youPill}</div>}
                     {pausedPill && <div className="mt-1">{pausedPill}</div>}
@@ -315,7 +330,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             onPhotoClick ? 'cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500' : ''
                         }`}
                     >
-                        <img src={post.photos![0]} alt={post.title} className="w-full h-full object-cover" />
+                        <img src={listPhotoUrl(post.photos![0])} alt={post.title} className="w-full h-full object-cover" />
                     </button>
 
                     {/* Status Overlays */}
@@ -331,7 +346,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             </span>
                         )}
                         {post.authorFoundingNeeded && (
-                            <span className={`font-bold bg-emerald-500/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
+                            <span className={`font-bold bg-emerald-500/90 dark:bg-emerald-700/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
                                 🌱 FOUNDING TRADE
                             </span>
                         )}
@@ -352,7 +367,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
                     {/* Recurring Overlay */}
                     {post.repeatable && (
-                        <div className={`absolute left-2 bg-terra-500/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
+                        <div className={`absolute left-2 bg-terra-500/90 dark:bg-terra-600/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
                             ↻ RECURRING
                         </div>
                     )}
@@ -374,7 +389,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                             </span>
                         )}
                         {post.authorFoundingNeeded && (
-                            <span className={`font-bold bg-emerald-500/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
+                            <span className={`font-bold bg-emerald-500/90 dark:bg-emerald-700/90 text-white backdrop-blur-sm rounded-lg shadow-sm text-[0.6rem] px-1.5 py-0.5`}>
                                 🌱 FOUNDING TRADE
                             </span>
                         )}
@@ -394,7 +409,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
 
                     {/* Recurring Overlay */}
                     {post.repeatable && (
-                        <div className={`absolute left-2 bg-terra-500/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
+                        <div className={`absolute left-2 bg-terra-500/90 dark:bg-terra-600/90 backdrop-blur-md text-white font-bold tracking-tight shadow-md bottom-2 px-2 py-1 rounded-lg text-[10px]`}>
                             ↻ RECURRING
                         </div>
                     )}
@@ -414,7 +429,7 @@ export function MarketplaceCard({ post, authorRating, authorEnergy = 0, authorAv
                     isPulse
                         ? 'bg-amber-100 text-amber-900 dark:bg-amber-900/60 dark:text-amber-300 border border-amber-400/60 cursor-default'
                         : post.type === 'offer'
-                        ? 'bg-terra-500 text-white hover:bg-terra-600'
+                        ? 'bg-terra-500 dark:bg-terra-700 text-white hover:bg-terra-600'
                         : 'bg-nature-700 text-white dark:bg-nature-800 hover:bg-nature-800'
                 }`}
             >

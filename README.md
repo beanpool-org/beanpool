@@ -97,11 +97,12 @@ Deterministic identity from a BIP-39 mnemonic:
 - **Recovery mode** — enter 12 words + callsign to restore identity on any device
 - **WebCrypto SHA-256 + PKCS8** — no external crypto dependencies
 
-### 🛡️ Sign-In Recovery (phone app only)
+### 🛡️ Sign-In Recovery
 An optional second way back onto a new device:
-- **Link an account** — Apple, Google, Facebook or GitHub, from Settings on the phone app.
-- **Two pieces, both held by your node** — one stored in the clear, one encrypted so that signing in with the linked account is what unlocks it. Your node therefore needs only your sign-in identity to rebuild the account, which is why SSO is a convenience, not a second custodian.
-- **Not a copy of your words** — it restores the account, and only while your community node is running. The 12 words are the way back that depends on nobody.
+- **Link an account** — Apple, Google or Facebook, from Settings on the phone app. Joining the global community with a sign-in (phone or web) links that one too. GitHub is no longer offered.
+- **One locked copy, held by your node** — your key, and your 12 words if the device had them, locked so that the linked sign-in's id opens it. The node checks that sign-in itself, so it learns the id: **the people who run the node can open the copy**. The node locks the stored copy again with `data/recovery-seal.key`, so a copy of its database alone opens none. SSO is a convenience, custodial by design, not a second custodian.
+- **Only while your community node is running.** The 12 words are the way back that depends on nobody.
+- **BeanPool's key vault** (`apps/vault`, not live yet) is to keep these copies instead, one for every community. The vault can open the copies it keeps. Its keys open only when 2 of 3 custodians unlock it (until the reshare, one person holds all three shares). Every restore through it waits 24 hours, unless another of the member's own devices approves it. It tells the member's devices, and can be stopped from them.
 
 > **Keeper (social) recovery was removed in September 2026.** Enrolling friends as recovery
 > keepers is no longer offered on either client. See
@@ -223,9 +224,11 @@ beanpool/
 │   ├── server/        # Sovereign Node Appliance — Koa REST API, gateway, PWA host, libp2p mesh (routes/, services/, config/, engine/)
 │   ├── pwa/           # PWA — map, marketplace (13 categories), messaging, ledger (Vite + React + Leaflet)
 │   ├── native/        # Native App — 7-tab mobile client (Expo + React Native), SQLite, background sync
-│   └── manager/       # Fleet Manager — Decoupled multi-node control plane (Vite + React + @beanpool/engine)
+│   ├── manager/       # Fleet Manager — Decoupled multi-node control plane (Vite + React + @beanpool/engine)
+│   └── vault/         # Key vault — keeps sign-in recovery copies (vault-keyholder + vault-api); not in the node's image
 ├── packages/
 │   ├── beanpool-engine/# Shared node engine: DB-backed business logic (members, trust, escrow, posts, messaging, sync, audit)
+│   ├── beanpool-signin/# Sign-in checks (Google/Apple/Facebook id_tokens), shared by the node and the key vault
 │   └── beanpool-core/  # Shared protocol constants: Ledger, Merkle, Passport, Governance
 ├── scripts/           # Utility and verification scripts (incl. verify-auth-boundary.mjs)
 ├── branding/          # Bean icon assets (16x16 → 512x512)
@@ -246,12 +249,24 @@ BeanPool is distributed as a **Universal Docker Container** via the GitHub Conta
 - **ARM64** (Raspberry Pi, Apple Silicon, ARM NAS drives)
 - **TrueNAS Scale / Kubernetes** (runs smoothly as a non-root user via `PUID`/`PGID` variables)
 
+The same one block as [beanpool.org/#run-a-node](https://beanpool.org/#run-a-node): fetch, create the network the compose file
+expects (`beanpool-shared`, declared `external`), pull, start, wait for the one-time claim code, then claim the community with your
+phone. The folder is `beanpool`, so Compose's project name is `beanpool` without `-p`.
+
 ```bash
-git clone https://github.com/beanpool-org/beanpool.git
-cd beanpool
+git clone https://github.com/beanpool-org/beanpool.git && cd beanpool
+docker network create beanpool-shared
 docker compose pull
-docker compose -p beanpool up -d
+docker compose up -d
+echo "Waiting for the server to make its claim code (up to 5 minutes)..."
+for i in $(seq 60); do docker compose exec -T beanpool-node test -f /data/claim-code.txt </dev/null 2>/dev/null && break; sleep 5; done
+docker compose exec -T beanpool-node test -f /data/claim-code.txt </dev/null 2>/dev/null || echo "No claim code after 5 minutes. The server's log says why: docker compose logs beanpool-node"
+docker compose exec beanpool-node beanpool claim
 ```
+
+`beanpool claim` asks for a `.beanpool.org` name (or `--address https://your.domain`, or `--no-name` with
+`--direct http://IP:PORT`), then shows the claim code and a QR code: open BeanPool on your phone → **Claim a community**. The
+operator manual's [First-time setup](https://beanpool.org/guide/operators/first-time-setup.html) has the rest.
 
 #### Updating an Existing Node
 
@@ -276,6 +291,7 @@ docker compose up -d
 pnpm install
 pnpm manager                               # Launch Fleet Manager Dashboard (http://localhost:5173)
 cd packages/beanpool-core && pnpm build   # Build shared core first
+cd packages/beanpool-signin && pnpm build # Build the sign-in checks (the server imports them)
 cd apps/pwa && pnpm build                 # Build PWA → apps/server/public/
 cd apps/server && pnpm dev                # Start BeanPool Node with hot reload
 ```
@@ -334,10 +350,9 @@ All endpoints are served on port 8443 (HTTPS):
 | `/api/messages/conversations/:pubkey` | GET | List conversations for a member |
 | `/api/messages/messages/:conversationId` | GET | Get messages in a conversation |
 | `/api/messages/mark-read` | POST | Mark a conversation as read |
-| `/api/friends/:publicKey` | GET | List a member's friends |
+| `/api/friends/:publicKey` | GET | List your own friends (signed by that key; any other key is refused) |
 | `/api/friends/add` | POST | Add a friend |
 | `/api/friends/remove` | POST | Remove a friend |
-| `/api/friends/guardian` | POST | Set/unset a friend as recovery guardian |
 | `/api/recovery/request` | POST | Submit a new social recovery migration request |
 | `/api/recovery/approve` | POST | Approve a recovery request as a guardian |
 | `/api/recovery/reject` | POST | Reject a recovery request as a guardian |

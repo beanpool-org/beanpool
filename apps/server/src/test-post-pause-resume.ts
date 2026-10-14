@@ -16,9 +16,10 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, getPosts } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
-const PORT = 8551;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -29,9 +30,10 @@ function makeMember(callsign: string) {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(
-        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_url)
-         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'data:image/png;base64,iVBORw0KGgo=')`
+        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubKeyHex, callsign);
+    setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
@@ -58,7 +60,8 @@ async function main() {
     console.log('Running Post Pause & Resume tests...\n');
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const author = makeMember('postauthor');
     const stranger = makeMember('stranger');
@@ -103,9 +106,11 @@ async function main() {
     assert(pauseRes.status === 200 && pauseRes.body?.success === true, 'author successfully paused post');
 
     // ── 4. Feed Visibility when Paused ─────────────────────────────────────────
-    const publicFeed = await fetch(`${BASE}/api/marketplace/posts`);
-    const publicItems = (await publicFeed.json()) as any[];
-    assert(!publicItems.some(p => p.id === postId), 'paused post is hidden from public feed');
+    // The board as another member reads it: a local community's board is its members' since 2026-09-28 (this read was
+    // unsigned while the board was public on every node).
+    const publicFeed = await signedFetch('GET', '/api/marketplace/posts', stranger);
+    const publicItems = (Array.isArray(publicFeed.body) ? publicFeed.body : []) as any[];
+    assert(publicFeed.status === 200 && !publicItems.some(p => p.id === postId), 'paused post is hidden from public feed');
 
     const authorSelfView = getPosts({ authorPubkey: author.pubKeyHex, viewerPubkey: author.pubKeyHex });
     assert(authorSelfView.some(p => p.id === postId), 'author viewing their own posts sees paused post');
@@ -126,8 +131,8 @@ async function main() {
     });
     assert(resumeRes.status === 200 && resumeRes.body?.success === true, 'author successfully resumed post');
 
-    const restoredFeed = await fetch(`${BASE}/api/marketplace/posts`);
-    const restoredItems = (await restoredFeed.json()) as any[];
+    const restoredFeed = await signedFetch('GET', '/api/marketplace/posts', stranger);
+    const restoredItems = (Array.isArray(restoredFeed.body) ? restoredFeed.body : []) as any[];
     assert(restoredItems.some(p => p.id === postId), 'resumed post is visible again in public feed');
 
     console.log(`\n${passed}/${run} checks passed.`);

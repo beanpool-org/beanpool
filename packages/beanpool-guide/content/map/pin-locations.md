@@ -12,7 +12,7 @@ Every Offer and Need has a place on the map. You choose it when you post:
 - **My location** uses where your phone is right now.
 - **Drop a pin** lets you tap any spot on the map.
 
-Anyone who opens your community's map can see the pin at that spot, to within about 10 metres. That includes people who have not joined. The app does not blur it for you.
+Every member of your community can see the pin at that spot, to within about 10 metres. The app does not blur it for you. People who have not joined can't see your community's listings. On the global community they can, but only roughly where each one is, never the spot.
 
 **If you post from home and do not want people to know your address, use Drop a pin and put it somewhere nearby instead:** a corner, a park, the shops. You can tell the other person the exact place in a message once you have agreed.
 

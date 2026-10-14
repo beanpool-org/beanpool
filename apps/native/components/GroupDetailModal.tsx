@@ -25,11 +25,13 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../utils/db';
-import { MAKE_OBSERVER_MEMBER_FIRST } from '@beanpool/core';
+import { MAKE_OBSERVER_MEMBER_FIRST, GROUP_CLOSED_NOTE, type GroupPerson } from '@beanpool/core';
 import { MemberAvatar } from './MemberAvatar';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
+import { GroupDecisions } from './EnterpriseDecisions';
 import { buildRosterView } from '../utils/group-roster';
 import { hapticSuccess, hapticTick } from '../utils/haptics';
+import { KEY_CHANGED_HINT } from '../utils/name-key-memory';
 
 interface GroupDetailModalProps {
     group: GroupItem | null;
@@ -38,6 +40,8 @@ interface GroupDetailModalProps {
     myPubkey?: string;
     onMembershipChanged?: () => void;
     onPostToGroup?: (group: GroupItem) => void;
+    /** Members whose name this phone saw on another key, with no statement from the new key (utils/name-key-memory.ts). */
+    keyChanged?: ReadonlySet<string>;
 }
 
 export function GroupDetailModal({
@@ -46,7 +50,8 @@ export function GroupDetailModal({
     onClose,
     myPubkey,
     onMembershipChanged,
-    onPostToGroup
+    onPostToGroup,
+    keyChanged,
 }: GroupDetailModalProps) {
     const { colors } = useTheme();
     const [loading, setLoading] = useState(false);
@@ -63,7 +68,8 @@ export function GroupDetailModal({
             const data = await fetchGroupDetails(group.id);
             if (data) {
                 setGroupData(data.group);
-                setMembers(data.members);
+                // No roster this time (the node busy, or offline): keep the one on screen.
+                if (data.members) setMembers(data.members);
             }
         } catch (e) {
             console.warn('[GroupDetail] Failed to load:', e);
@@ -171,11 +177,14 @@ export function GroupDetailModal({
             marginTop: 16,
         },
         memberRow: {
-            flexDirection: 'row',
-            alignItems: 'center',
             paddingVertical: 10,
             borderBottomWidth: StyleSheet.hairlineWidth,
             borderBottomColor: colors.border.default,
+        },
+        // The avatar, the name and badge, and the buttons the viewer may use, on one line.
+        memberLine: {
+            flexDirection: 'row',
+            alignItems: 'center',
         },
         memberInfo: {
             flex: 1,
@@ -247,7 +256,7 @@ export function GroupDetailModal({
             minHeight: 48,
             alignItems: 'center',
             justifyContent: 'center',
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             paddingHorizontal: 12,
             borderRadius: 8,
         },
@@ -267,7 +276,7 @@ export function GroupDetailModal({
             borderColor: colors.feedback.danger.solid,
         },
         declineBtnText: {
-            color: colors.feedback.danger.solid,
+            color: colors.feedback.danger.fg,
             fontSize: 12,
             fontWeight: '700',
         },
@@ -279,7 +288,7 @@ export function GroupDetailModal({
             gap: 10,
         },
         postBtn: {
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             borderRadius: 14,
             minHeight: 48,
             paddingVertical: 12,
@@ -296,7 +305,7 @@ export function GroupDetailModal({
             fontWeight: '800',
         },
         joinBtn: {
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             borderRadius: 14,
             minHeight: 48,
             paddingVertical: 12,
@@ -323,7 +332,7 @@ export function GroupDetailModal({
             borderColor: colors.border.default,
         },
         leaveBtnText: {
-            color: colors.feedback.danger.solid,
+            color: colors.feedback.danger.fg,
             fontSize: 14,
             fontWeight: '700',
         },
@@ -343,6 +352,15 @@ export function GroupDetailModal({
             fontSize: 11,
             color: colors.text.secondary,
             fontWeight: '600',
+        },
+        // Under the member's line, indented to the name (the avatar's 36 and memberInfo's 12): the whole sheet's width,
+        // whatever buttons the viewer has (review of #1826, confirmation 1, NB4).
+        memberKeyChanged: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.text.muted,
+            marginTop: 2,
+            marginLeft: 48,
         },
         // "lead convenor" beside the LEAD badge. flexShrink so it gives way before the badge does at 320dp.
         leadNote: {
@@ -372,11 +390,20 @@ export function GroupDetailModal({
     // with the PWA and with the engine that enforces it: a convenor never sees Role or ✕ on the lead, or on
     // another convenor.
     const roster = buildRosterView(groupData, members, myPubkey);
+    // Closed by its members' vote (DESIGN-group-decisions §2.3): it stays to read and takes nothing new.
+    const closed = !!groupData.closedAt;
+    // Everyone in the group now, for the Decisions block's names and pickers (the lead as 'lead').
+    const people: GroupPerson[] = activeMembers.map(m => ({
+        pubkey: m.memberPubkey,
+        name: m.callsign || m.memberPubkey.slice(0, 10),
+        role: m.memberPubkey === groupData.leadPubkey ? 'lead' : m.role,
+    }));
 
     const handleJoin = async () => {
         setActionLoading(true);
         try {
-            await joinGroupApi(groupData.id);
+            // Joining lets this member into the chat: their phone makes its next key in the same request (§2.3).
+            await joinGroupApi(groupData.id, { joinPolicy: groupData.joinPolicy, viewerStatus: (groupData as any).viewerStatus });
             hapticSuccess();
             await loadDetails();
             if (onMembershipChanged) onMembershipChanged();
@@ -652,6 +679,12 @@ export function GroupDetailModal({
                                 <MaterialCommunityIcons name="door-open" size={14} color={colors.text.secondary} />
                                 <Text style={styles.pillText}>{groupData.joinPolicy.replace(/_/g, ' ')}</Text>
                             </View>
+                            {closed && (
+                                <View style={styles.pill} accessibilityLabel="Closed by its members' vote">
+                                    <MaterialCommunityIcons name="lock-outline" size={14} color={colors.text.secondary} />
+                                    <Text style={styles.pillText}>Closed</Text>
+                                </View>
+                            )}
                             {isConvenor && (
                                 <View style={[styles.pill, { backgroundColor: colors.brand.tint, borderColor: colors.brand.primary }]}>
                                     <MaterialCommunityIcons
@@ -685,8 +718,32 @@ export function GroupDetailModal({
                             <Text style={styles.description}>{groupData.description}</Text>
                         ) : null}
 
+                        {closed && (
+                            <View style={styles.infoNotice}>
+                                <MaterialCommunityIcons name="lock-outline" size={16} color={colors.text.secondary} />
+                                <Text style={styles.infoNoticeText}>{GROUP_CLOSED_NOTE}</Text>
+                            </View>
+                        )}
+
+                        {/* The group's votes, high on the sheet: a vote's push and Home's line land here. It draws
+                            nothing for someone the node doesn't answer, or when there is no vote and none can open. */}
+                        {/* For anyone the node answers: someone removed or made an observer mid-vote still votes (#1784 review B1). */}
+                        {(
+                            <GroupDecisions
+                                groupId={groupData.id}
+                                myPubkey={myPubkey ?? null}
+                                people={people}
+                                joinPolicy={groupData.joinPolicy}
+                                onChanged={() => {
+                                    // A vote carried out may move the lead, a role or the join rule, or close the group.
+                                    void loadDetails();
+                                    if (onMembershipChanged) onMembershipChanged();
+                                }}
+                            />
+                        )}
+
                         {/* Convenor Tools Section */}
-                        {isConvenor && (
+                        {isConvenor && !closed && (
                             <View style={styles.convenorCard}>
                                 <Text style={styles.convenorTitle}>Convenor Tools</Text>
                                 
@@ -775,7 +832,7 @@ export function GroupDetailModal({
 
                         {/* The quiet-lead vote, beside the roster it is about. It draws nothing unless the lead is
                             eligible for replacement or a vote has been held, so a healthy group sees no change. */}
-                        {isMember && (
+                        {isMember && !closed && (
                             <GroupSuccessionPanel
                                 groupId={groupData.id}
                                 members={members}
@@ -801,59 +858,67 @@ export function GroupDetailModal({
                                 const highlight = row.isLead || m.role === 'convenor';
                                 return (
                                     <View key={m.memberPubkey} style={styles.memberRow}>
-                                        <MemberAvatar avatarUrl={m.avatarUrl} pubkey={m.memberPubkey} callsign={m.callsign || '?'} size={36} />
-                                        <View style={styles.memberInfo}>
-                                            <Text style={styles.memberCallsign} numberOfLines={1}>
-                                                {m.callsign || m.memberPubkey.slice(0, 10)}{row.isYou ? ' (You)' : ''}
-                                            </Text>
-                                            {/* The badge says LEAD on the one row it belongs to. It wraps rather than
-                                                squeezing the callsign at 320dp with 1.3× text. */}
-                                            <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
-                                                <View style={[styles.roleBadge, highlight && styles.roleBadgeConvenor]}>
-                                                    <Text style={[styles.roleBadgeText, highlight && styles.roleBadgeConvenorText]} numberOfLines={1}>
-                                                        {row.isLead ? 'LEAD' : m.role.toUpperCase()}
-                                                    </Text>
+                                        <View style={styles.memberLine}>
+                                            <MemberAvatar avatarUrl={m.avatarUrl} pubkey={m.memberPubkey} callsign={m.callsign || '?'} size={36} />
+                                            <View style={styles.memberInfo}>
+                                                <Text style={styles.memberCallsign} numberOfLines={1}>
+                                                    {m.callsign || m.memberPubkey.slice(0, 10)}{row.isYou ? ' (You)' : ''}
+                                                </Text>
+                                                {/* The badge says LEAD on the one row it belongs to. It wraps rather than
+                                                    squeezing the callsign at 320dp with 1.3× text. */}
+                                                <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
+                                                    <View style={[styles.roleBadge, highlight && styles.roleBadgeConvenor]}>
+                                                        <Text style={[styles.roleBadgeText, highlight && styles.roleBadgeConvenorText]} numberOfLines={1}>
+                                                            {row.isLead ? 'LEAD' : m.role.toUpperCase()}
+                                                        </Text>
+                                                    </View>
+                                                    {row.isLead && (
+                                                        <Text style={styles.leadNote} numberOfLines={1}>lead convenor</Text>
+                                                    )}
                                                 </View>
-                                                {row.isLead && (
-                                                    <Text style={styles.leadNote} numberOfLines={1}>lead convenor</Text>
-                                                )}
                                             </View>
+                                            {/* Role and ✕ only where the viewer may actually act: never on the lead, and
+                                                never on another convenor unless the viewer IS the lead. */}
+                                            {(row.canChangeRole || row.canRemove || row.canHandOverLead) && (
+                                                <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 0 }}>
+                                                    {row.canHandOverLead && (
+                                                        <Pressable
+                                                            style={styles.manageBtn}
+                                                            accessibilityRole="button"
+                                                            accessibilityLabel={`Make ${m.callsign || 'this member'} the lead convenor`}
+                                                            onPress={() => handleHandOverLeadTo(m.memberPubkey, m.callsign)}
+                                                        >
+                                                            <MaterialCommunityIcons name="shield-star-outline" size={18} color={colors.text.secondary} />
+                                                        </Pressable>
+                                                    )}
+                                                    {row.canChangeRole && (
+                                                        <Pressable
+                                                            style={styles.manageBtn}
+                                                            accessibilityRole="button"
+                                                            accessibilityLabel={`Change role for ${m.callsign || 'this member'}`}
+                                                            onPress={() => handleChangeRole(m.memberPubkey, m.role, m.callsign)}
+                                                        >
+                                                            <Text style={styles.manageBtnText} numberOfLines={1}>Role</Text>
+                                                        </Pressable>
+                                                    )}
+                                                    {row.canRemove && (
+                                                        <Pressable
+                                                            style={[styles.manageBtn, { borderColor: colors.feedback.danger.solid }]}
+                                                            accessibilityRole="button"
+                                                            accessibilityLabel={`Remove ${m.callsign || 'this member'} from the group`}
+                                                            onPress={() => handleRemoveMember(m.memberPubkey, m.callsign)}
+                                                        >
+                                                            <MaterialCommunityIcons name="close" size={18} color={colors.feedback.danger.fg} />
+                                                        </Pressable>
+                                                    )}
+                                                </View>
+                                            )}
                                         </View>
-                                        {/* Role and ✕ only where the viewer may actually act: never on the lead, and
-                                            never on another convenor unless the viewer IS the lead. */}
-                                        {(row.canChangeRole || row.canRemove || row.canHandOverLead) && (
-                                            <View style={{ flexDirection: 'row', alignItems: 'center', flexShrink: 0 }}>
-                                                {row.canHandOverLead && (
-                                                    <Pressable
-                                                        style={styles.manageBtn}
-                                                        accessibilityRole="button"
-                                                        accessibilityLabel={`Make ${m.callsign || 'this member'} the lead convenor`}
-                                                        onPress={() => handleHandOverLeadTo(m.memberPubkey, m.callsign)}
-                                                    >
-                                                        <MaterialCommunityIcons name="shield-star-outline" size={18} color={colors.text.secondary} />
-                                                    </Pressable>
-                                                )}
-                                                {row.canChangeRole && (
-                                                    <Pressable
-                                                        style={styles.manageBtn}
-                                                        accessibilityRole="button"
-                                                        accessibilityLabel={`Change role for ${m.callsign || 'this member'}`}
-                                                        onPress={() => handleChangeRole(m.memberPubkey, m.role, m.callsign)}
-                                                    >
-                                                        <Text style={styles.manageBtnText} numberOfLines={1}>Role</Text>
-                                                    </Pressable>
-                                                )}
-                                                {row.canRemove && (
-                                                    <Pressable
-                                                        style={[styles.manageBtn, { borderColor: colors.feedback.danger.solid }]}
-                                                        accessibilityRole="button"
-                                                        accessibilityLabel={`Remove ${m.callsign || 'this member'} from the group`}
-                                                        onPress={() => handleRemoveMember(m.memberPubkey, m.callsign)}
-                                                    >
-                                                        <MaterialCommunityIcons name="close" size={18} color={colors.feedback.danger.solid} />
-                                                    </Pressable>
-                                                )}
-                                            </View>
+                                        {/* Its own line under the member's: beside the name, the one line cut it for
+                                            every name on a convenor's roster at 320dp (NB9); inside the name's column,
+                                            the lead's three buttons left 66px and "changed)" broke mid-word (NB4). */}
+                                        {keyChanged?.has(m.memberPubkey) && (
+                                            <Text style={styles.memberKeyChanged}>{KEY_CHANGED_HINT}</Text>
                                         )}
                                     </View>
                                 );
@@ -861,7 +926,7 @@ export function GroupDetailModal({
                         )}
 
                         <View style={styles.actionArea}>
-                            {isMember && onPostToGroup && (
+                            {isMember && onPostToGroup && !closed && (
                                 <Pressable
                                     style={styles.postBtn}
                                     accessibilityRole="button"
@@ -888,6 +953,10 @@ export function GroupDetailModal({
                                 >
                                     <Text style={styles.leaveBtnText}>Leave Group</Text>
                                 </Pressable>
+                            ) : closed ? (
+                                <View style={[styles.joinBtn, styles.joinBtnDisabled]}>
+                                    <Text style={styles.joinBtnText}>Closed</Text>
+                                </View>
                             ) : isPending ? (
                                 <View style={[styles.joinBtn, styles.joinBtnDisabled]}>
                                     <Text style={styles.joinBtnText}>Request Pending Approval</Text>

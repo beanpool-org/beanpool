@@ -3,8 +3,8 @@
  *
  * Covers:
  * 1. Member cannot attach OAuth verification to a channel they do not own (refused with 403 NOT_YOURS).
- * 2. Mismatched platform account is refused (refused with 400 ACCOUNT_MISMATCH).
- * 3. Matching account sets oauth_verified_at and enables supports_autolist.
+ * 2. The platform naming another account is refused (400 ACCOUNT_MISMATCH); the node asks a fake platform (#1830).
+ * 3. The platform naming this account sets oauth_verified_at and enables supports_autolist.
  * 4. Disconnect clears oauth_verified_at and resets autolist status.
  * 5. Disconnect preserves previously ingested feed items.
  * 6. OAuth config endpoint reports platform availability cleanly without errors when unset.
@@ -12,6 +12,8 @@
  * 8. An OAuth-ingested item dedupes against the same item ingested manually earlier.
  * 9. Resubmission / tombstone restoration through OAuth ingestion.
  * 10. Public channel serialization (isVerified) accurately reflects verification state.
+ * 11. A username equal to the URL's host does not verify a channel (the URL match reads the path only).
+ * 12. An old phone's verify-oauth is refused with 410 update_required and sets no badge.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-pulse-oauth.ts
  */
@@ -21,6 +23,7 @@ import crypto from 'node:crypto';
 import { db } from './db/db.js';
 import { initStateEngine } from './state-engine.js';
 import { addChannel, listPublicChannels } from './engine/creator-channels.js';
+import { setPlatformRequestForTests, channelIdentityFromRow, matchIdentity } from './engine/platform-identity.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { createChannelRoutes } from './routes/channels.js';
 import { createPulseSubmitRoutes, rowToPulseFeedCard, MAX_OAUTH_INGEST_ITEMS } from './routes/pulse-submit.js';
@@ -126,7 +129,47 @@ async function main(): Promise<void> {
     assert(configured.body.tiktok.enabled === true, 'TikTok is enabled when client key is provided');
     assert(configured.body.tiktok.clientKey === 'test_tiktok_client_key_123', 'TikTok clientKey is returned');
 
+    // The node asks the platform who a token belongs to (#1830). A fake TikTok and Instagram answer: a
+    // code names the account the member "signed in to"; nothing here reaches a real platform.
+    process.env.INSTAGRAM_APP_ID = 'test_ig_app';
+    process.env.INSTAGRAM_APP_SECRET = 'test_ig_secret';
+    const signedInAs = new Map<string, { id: string; username: unknown }>();
+    let identityCalls = 0;
+    setPlatformRequestForTests(async (method, url, opts) => {
+        const code = opts?.form?.code || '';
+        if (method === 'POST' && url === 'https://open.tiktokapis.com/v2/oauth/token/') {
+            return signedInAs.has(code)
+                ? { status: 200, json: { access_token: `tok:${code}`, refresh_token: `ref:${code}`, open_id: signedInAs.get(code)!.id, expires_in: 86400 } }
+                : { status: 400, json: { error: 'invalid_grant' } };
+        }
+        if (method === 'POST' && url === 'https://api.instagram.com/oauth/access_token') {
+            return signedInAs.has(code) ? { status: 200, json: { access_token: `tok:${code}`, user_id: 1 } } : { status: 400, json: { error_message: 'bad code' } };
+        }
+        if (url.startsWith('https://open.tiktokapis.com/v2/user/info/')) {
+            identityCalls++;
+            const who = signedInAs.get((opts?.bearer || '').replace(/^tok:/, ''))!;
+            return { status: 200, json: { data: { user: { open_id: who.id, username: who.username } }, error: { code: 'ok' } } };
+        }
+        if (url.startsWith('https://graph.instagram.com/v21.0/me?')) {
+            identityCalls++;
+            const who = signedInAs.get((new URL(url).searchParams.get('access_token') || '').replace(/^tok:/, ''))!;
+            return { status: 200, json: { id: who.id, username: who.username } };
+        }
+        if (url.startsWith('https://graph.instagram.com/access_token?')) return { status: 200, json: { access_token: 'long', expires_in: 5184000 } };
+        throw new Error(`the fake platform does not answer ${url}`);
+    });
+    let codeSeq = 0;
+    const connect = (actor: string | undefined, channelId: string | undefined, platform: string, username: unknown, accountId = `acct-${String(username)}`) => {
+        const code = `code-${++codeSeq}`;
+        signedInAs.set(code, { id: accountId, username });
+        return callRouter(channelRouter, 'POST', '/api/member/pulse/oauth-exchange', {
+            actor,
+            body: { platform, grantType: 'authorization_code', code, redirectUri: `beanpool://auth/${platform}`, channelId },
+        });
+    };
+
     // 1b: Test redirect_uri whitelist rejection in oauth-exchange
+    const redirectChan = addChannel({ ownerPubkey: alice, platform: 'tiktok', raw: '@alice_redirect', category: 'craft' });
     const badRedirectExchange = await callRouter(channelRouter, 'POST', '/api/member/pulse/oauth-exchange', {
         actor: alice,
         body: {
@@ -134,6 +177,7 @@ async function main(): Promise<void> {
             grantType: 'authorization_code',
             code: 'test_code',
             redirectUri: 'https://evil-attacker.com/oauth/callback',
+            channelId: redirectChan.id,
         },
     });
     assert(badRedirectExchange.status === 400, 'Unauthorized redirectUri rejected with 400');
@@ -151,46 +195,36 @@ async function main(): Promise<void> {
     assert(aliceTikTok.supportsAutolist === false, 'Newly added TikTok channel has supportsAutolist = false');
 
     // 2a: Unsigned request is rejected
-    const unauthVerify = await callRouter(channelRouter, 'POST', `/api/member/channels/${aliceTikTok.id}/verify-oauth`, {
-        body: { platform: 'tiktok', platformUsername: 'alice_pottery' },
-    });
-    assert(unauthVerify.status === 401, 'Unsigned verify request is rejected with 401');
+    const unauthVerify = await connect(undefined, aliceTikTok.id, 'tiktok', 'alice_pottery');
+    assert(unauthVerify.status === 401, 'Unsigned connect is rejected with 401');
 
-    // 2b: Bob cannot verify Alice's channel
-    const bobVerifyAlice = await callRouter(channelRouter, 'POST', `/api/member/channels/${aliceTikTok.id}/verify-oauth`, {
-        actor: bob,
-        body: { platform: 'tiktok', platformUsername: 'alice_pottery' },
-    });
+    // 2b: Bob cannot verify Alice's channel, even signed in to an account of that name
+    const bobVerifyAlice = await connect(bob, aliceTikTok.id, 'tiktok', 'alice_pottery');
     assert(bobVerifyAlice.status === 403, 'Bob cannot verify Alice channel (403 NOT_YOURS)');
 
     // 2c: Platform mismatch
-    const badPlatform = await callRouter(channelRouter, 'POST', `/api/member/channels/${aliceTikTok.id}/verify-oauth`, {
-        actor: alice,
-        body: { platform: 'instagram', platformUsername: 'alice_pottery' },
-    });
-    assert(badPlatform.status === 400, 'Platform mismatch is rejected with 400');
+    const badPlatform = await connect(alice, aliceTikTok.id, 'instagram', 'alice_pottery');
+    assert(badPlatform.status === 400 && badPlatform.body.error === 'bad_platform', 'Platform mismatch is rejected with 400');
 
-    // 2d: Account handle mismatch is refused
-    const mismatchedVerify = await callRouter(channelRouter, 'POST', `/api/member/channels/${aliceTikTok.id}/verify-oauth`, {
-        actor: alice,
-        body: { platform: 'tiktok', platformUsername: 'carol_ceramics' },
-    });
+    // 2d: The platform naming another account is refused
+    const mismatchedVerify = await connect(alice, aliceTikTok.id, 'tiktok', 'carol_ceramics');
     assert(mismatchedVerify.status === 400, 'Mismatched account handle is refused with 400 ACCOUNT_MISMATCH');
     assert(mismatchedVerify.body.error === 'account_mismatch', 'Error code is account_mismatch');
+    assert(mismatchedVerify.body.data === undefined, 'A refused connect returns no token');
 
-    // 2e: Matching handle succeeds and verifies channel
-    const validVerify = await callRouter(channelRouter, 'POST', `/api/member/channels/${aliceTikTok.id}/verify-oauth`, {
-        actor: alice,
-        body: { platform: 'tiktok', platformUsername: 'alice_pottery' },
-    });
+    // 2e: The platform naming this account verifies the channel
+    const validVerify = await connect(alice, aliceTikTok.id, 'tiktok', 'alice_pottery');
     assert(validVerify.status === 200, 'Valid verification returns 200');
     assert(typeof validVerify.body.channel.oauthVerifiedAt === 'string', 'channel.oauthVerifiedAt is now populated');
     assert(validVerify.body.channel.supportsAutolist === true, 'channel.supportsAutolist is flipped to true');
+    assert(validVerify.body.data.access_token === `tok:code-${codeSeq}`, 'The token goes back to the phone');
 
     // Verify public view shows verified
     const publicChips = listPublicChannels(alice);
     const alicePubChan = publicChips.find(c => c.id === aliceTikTok.id);
     assert(alicePubChan?.isVerified === true, 'listPublicChannels returns isVerified: true for verified channel');
+    assert(alicePubChan !== undefined && !('platformAccountId' in alicePubChan) && !('verifiedHandle' in alicePubChan),
+        'the public chip carries isVerified only, never the platform account id');
 
     // 2f: Channel URL with query params / tracking still verifies for rightful owner (Fix 2)
     const chanWithQuery = addChannel({
@@ -199,46 +233,72 @@ async function main(): Promise<void> {
         raw: 'https://www.instagram.com/alice_pottery?igshid=abc123tracking&utm_source=feed#bio',
         category: 'craft',
     });
-    // Explicitly null the handle to ensure URL pattern matching logic is exercising matchesUrl
-    db.prepare('UPDATE creator_channels SET handle = NULL, url = ? WHERE id = ?')
-        .run('https://www.instagram.com/alice_pottery?igshid=abc123tracking&utm_source=feed#bio', chanWithQuery.id);
-
-    const verifyChanWithQuery = await callRouter(channelRouter, 'POST', `/api/member/channels/${chanWithQuery.id}/verify-oauth`, {
-        actor: alice,
-        body: { platform: 'instagram', platformUsername: 'alice_pottery' },
-    });
+    const verifyChanWithQuery = await connect(alice, chanWithQuery.id, 'instagram', 'alice_pottery');
     assert(verifyChanWithQuery.status === 200, 'Channel URL carrying query string verifies for rightful owner (Fix 2)');
     assert(typeof verifyChanWithQuery.body.channel.oauthVerifiedAt === 'string', 'Channel with query string is marked oauthVerifiedAt');
 
-    // 2g: Missing or empty platform username cannot produce a false verification
+    // 2g: A platform answer with no username cannot produce a verification
     const unverifiedChan = addChannel({
         ownerPubkey: alice,
         platform: 'tiktok',
         raw: '@alice_unverified',
         category: 'craft',
     });
-    const emptyUsernameVerify = await callRouter(channelRouter, 'POST', `/api/member/channels/${unverifiedChan.id}/verify-oauth`, {
-        actor: alice,
-        body: { platform: 'tiktok', platformUsername: '' },
-    });
-    assert(emptyUsernameVerify.status === 400, 'Empty platform username is rejected with 400');
-    assert(emptyUsernameVerify.body.error === 'empty', 'Error code is empty');
+    const emptyUsernameVerify = await connect(alice, unverifiedChan.id, 'tiktok', '');
+    assert(emptyUsernameVerify.status === 502, 'A platform answer with an empty username is refused with 502');
+    assert(emptyUsernameVerify.body.error === 'identity_unavailable', 'Error code is identity_unavailable');
 
-    // 2h: Arbitrary display name (e.g. "Alice Smith") differing from handle is refused (no false verification)
-    const displayNameVerify = await callRouter(channelRouter, 'POST', `/api/member/channels/${unverifiedChan.id}/verify-oauth`, {
-        actor: alice,
-        body: { platform: 'tiktok', platformUsername: 'Alice Smith' },
-    });
-    assert(displayNameVerify.status === 400, 'Display name mismatch is refused with 400 ACCOUNT_MISMATCH');
-    assert(displayNameVerify.body.error === 'account_mismatch', 'Error code is account_mismatch');
+    // 2h: A display name (e.g. "Alice Smith") is not a handle and never verifies
+    const displayNameVerify = await connect(alice, unverifiedChan.id, 'tiktok', 'Alice Smith');
+    assert(displayNameVerify.status === 502 && displayNameVerify.body.error === 'identity_unavailable',
+        'A display name in place of a username is refused (identity_unavailable)');
 
     // 2i: Case-insensitive real handle verification succeeds
-    const handleCaseVerify = await callRouter(channelRouter, 'POST', `/api/member/channels/${unverifiedChan.id}/verify-oauth`, {
-        actor: alice,
-        body: { platform: 'tiktok', platformUsername: 'Alice_Unverified' },
-    });
+    const handleCaseVerify = await connect(alice, unverifiedChan.id, 'tiktok', 'Alice_Unverified');
     assert(handleCaseVerify.status === 200, 'Case-insensitive real handle verification succeeds');
     assert(typeof handleCaseVerify.body.channel.oauthVerifiedAt === 'string', 'Channel marked oauthVerifiedAt');
+
+    // 2i': An old phone's verify-oauth is refused with words, and badges nothing
+    const oldPhone = addChannel({ ownerPubkey: alice, platform: 'tiktok', raw: '@alice_oldphone', category: 'craft' });
+    const oldVerify = await callRouter(channelRouter, 'POST', `/api/member/channels/${oldPhone.id}/verify-oauth`, {
+        actor: alice,
+        body: { platform: 'tiktok', platformUsername: 'alice_oldphone' },
+    });
+    assert(oldVerify.status === 410 && oldVerify.body.error === 'update_required', 'verify-oauth answers 410 update_required');
+    const unauthOld = await callRouter(channelRouter, 'POST', `/api/member/channels/${oldPhone.id}/verify-oauth`, { body: {} });
+    assert(unauthOld.status === 401, 'Unsigned verify-oauth is still 401');
+    assert((db.prepare('SELECT oauth_verified_at FROM creator_channels WHERE id = ?').get(oldPhone.id) as any).oauth_verified_at === null,
+        'verify-oauth sets no badge');
+
+    // 2j: The match reads only the path. Every stored platform URL starts with the platform's own host, so
+    // matching the whole string let a username equal to that host verify any channel on the platform (#1822).
+    const dana = makeMember('Dana');
+    const hostCases = [
+        { platform: 'tiktok', raw: '@famous_creator', host: 'www.tiktok.com', real: 'famous_creator' },
+        { platform: 'instagram', raw: '@famous_creator', host: 'www.instagram.com', real: 'famous_creator' },
+    ] as const;
+    for (const c of hostCases) {
+        const chan = addChannel({ ownerPubkey: dana, platform: c.platform, raw: c.raw, category: 'other' });
+        const hostVerify = await connect(dana, chan.id, c.platform, c.host);
+        assert(hostVerify.status === 400 && hostVerify.body.error === 'account_mismatch',
+            `${c.platform}: username "${c.host}" (the URL's host) is refused with account_mismatch`);
+
+        // With the handle cleared only the URL path can be matched, so the real account still verifying
+        // proves the path is what is matched.
+        db.prepare('UPDATE creator_channels SET handle = NULL WHERE id = ?').run(chan.id);
+        const realVerify = await connect(dana, chan.id, c.platform, c.real);
+        assert(realVerify.status === 200, `${c.platform}: the real account still verifies through the URL path`);
+    }
+    for (const c of [
+        { platform: 'youtube', url: 'https://www.youtube.com/@famous_creator', handle: '@famous_creator', host: 'www.youtube.com' },
+        { platform: 'soundcloud', url: 'https://soundcloud.com/famous_creator', handle: '@famous_creator', host: 'soundcloud.com' },
+    ]) {
+        const claimed = channelIdentityFromRow(c.platform, c.url, c.handle)!;
+        assert(!matchIdentity(claimed, { accountId: 'x', handle: c.host }) && matchIdentity(claimed, { accountId: 'x', handle: 'famous_creator' }),
+            `${c.platform}: the host never matches, the exact handle does`);
+    }
+    assert(channelIdentityFromRow('facebook', 'https://www.facebook.com/famouspage', 'famouspage') === null,
+        'facebook: never verifiable (a plain claim)');
 
     console.log('\n--- 3. OAuth Ingestion & Deduplication Against Manual Submission ---');
     const testVideoUrl = 'https://www.tiktok.com/@alice_pottery/video/7100000000000000001';

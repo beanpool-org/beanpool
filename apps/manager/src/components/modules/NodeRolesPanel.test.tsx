@@ -88,6 +88,29 @@ describe('NodeRolesPanel', () => {
         expect(screen.queryByTestId('no-owner-banner')).not.toBeInTheDocument();
     });
 
+    it("shows when, and from which kind of session, each owner's break-glass code was made (#1531)", async () => {
+        const DAVE = 'e5'.repeat(32);
+        const ERIN = 'f6'.repeat(32);
+        fetchRoles.mockResolvedValue([
+            { ...aliceOwner, has_break_glass: true, break_glass_made_at: '2026-10-03T09:30:00.000Z', break_glass_made_by: 'key-session' },
+            { member_pubkey: DAVE, role: 'owner', granted_at: '2026-09-18T10:00:00.000Z', granted_by: ALICE, callsign: 'dave', has_break_glass: false, break_glass_made_at: null, break_glass_made_by: null },
+            { member_pubkey: ERIN, role: 'owner', granted_at: '2026-09-18T10:00:00.000Z', granted_by: ALICE, callsign: 'erin', has_break_glass: true, break_glass_made_at: null, break_glass_made_by: null },
+            { ...bobAdmin, has_break_glass: false, break_glass_made_at: null, break_glass_made_by: null },
+        ]);
+        await renderPanel();
+        const alice = screen.getByTestId(`break-glass-made-${ALICE}`);
+        expect(alice.textContent).toMatch(/Break-glass code made .*2026.* from a key session in Settings/);
+        expect(screen.getByTestId(`break-glass-made-${DAVE}`).textContent).toMatch(/No break-glass code/);
+        expect(screen.getByTestId(`break-glass-made-${ERIN}`).textContent).toMatch(/made before nodes recorded when/);
+        // Only an owner has a code: no line for an admin.
+        expect(screen.queryByTestId(`break-glass-made-${BOB}`)).not.toBeInTheDocument();
+    });
+
+    it('says nothing about break-glass codes for a node too old to send it', async () => {
+        await renderPanel();
+        expect(screen.queryByTestId(`break-glass-made-${ALICE}`)).not.toBeInTheDocument();
+    });
+
     it('adds a member found by callsign, after a plain-words confirmation', async () => {
         const onChanged = await renderPanel();
         fireEvent.change(screen.getByLabelText(/Search by callsign/), { target: { value: 'car' } });

@@ -31,6 +31,7 @@ import { db, raiseCreatorOperatorSwitch } from './db/db.js';
 import { bridgeAccountId, ensureBridgeAccount, getEnergyBalance } from './federation-bridge.js';
 import { getConnectors, peerIdFromAddress, getConnectorCreditCap } from './connector-manager.js';
 import { logger } from './logger.js';
+import { getNodeRole, assertPlainTablesWritable } from './config/node-role.js';
 
 export interface FederationLink {
     peerId: string;
@@ -85,6 +86,8 @@ export function ensureFederationLink(
     operatorPubkey?: string,
 ): FederationLink | null {
     if (!peerId) return null;
+    // A standby's links are its main server's (a plain table, engine/replication-manifest.ts): it makes none of its own.
+    assertPlainTablesWritable();
 
     const existing = getFederationLink(peerId);
     if (existing) {
@@ -102,6 +105,18 @@ export function ensureFederationLink(
             }
         }
         return existing;
+    }
+
+    // The link's treasury this community already has, with no link row naming it: a link row lost (by hand, or by a copy
+    // that predates it). Its account holds the link's Beans, so it is the link again, not a second treasury beside it
+    // (named with the peer's suffix, the first one's balance stranded with nothing pointing at it). Only a treasury this
+    // code marked as made for THIS peer (findLinkTreasury): never one by its name, which a member's own enterprise can
+    // have. Its commissioning ceiling starts at 0 again, as a new link's does.
+    const adopted = findLinkTreasury(peerId);
+    if (adopted) {
+        db.prepare('INSERT INTO federation_links (peer_id, treasury_pubkey) VALUES (?, ?)').run(peerId, adopted);
+        logger.info('P2P', `[Link] Found the link treasury for peer ${peerId.slice(-8)} (${adopted.slice(0, 12)}…) with no link naming it: it is the link again, ceiling 0`);
+        return ensureFederationLink(peerId, callsign, createTreasury, operatorPubkey);
     }
 
     // The bridge account may not exist yet — a cap can be set before the first trade. Create it now so
@@ -137,6 +152,9 @@ export function ensureFederationLink(
         }
         db.prepare('INSERT INTO federation_links (peer_id, treasury_pubkey) VALUES (?, ?)')
             .run(peerId, created.publicKey);
+        // The marker that this treasury was made as this peer's link, which outlives the link row (findLinkTreasury).
+        db.prepare('INSERT INTO federation_link_treasuries (treasury_pubkey, peer_id) VALUES (?, ?)')
+            .run(created.publicKey, peerId);
 
         if (op) {
             const bound = db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_by)
@@ -151,6 +169,22 @@ export function ensureFederationLink(
     logger.info('P2P', `[Link] Created "${name}" for peer ${peerId.slice(-8)} (treasury ${created.publicKey.slice(0, 12)}…, ceiling 0)`);
 
     return getFederationLink(peerId);
+}
+
+/**
+ * A treasury this code made as the link for this peer that no link names, or null. Found only by the marker
+ * ensureFederationLink writes when it makes the treasury (federation_link_treasuries), matched on the peer id exactly:
+ * a member can make an enterprise named "<peer> Link" with no photo, and two peers can share a callsign, so a name, a
+ * callsign or a missing photo proves nothing. Nothing else writes the marker (db.ts markLinkTreasuries copies it from the
+ * link rows ensureFederationLink made). The oldest when there is more than one.
+ */
+function findLinkTreasury(peerId: string): string | null {
+    const row = db.prepare(`SELECT t.treasury_pubkey FROM federation_link_treasuries t
+                            JOIN members m ON m.public_key = t.treasury_pubkey
+                            WHERE t.peer_id = ? AND m.is_treasury = 1 AND m.status NOT IN ('migrated', 'pruned')
+                              AND t.treasury_pubkey NOT IN (SELECT treasury_pubkey FROM federation_links)
+                            ORDER BY t.created_at ASC, t.rowid ASC LIMIT 1`).get(peerId) as { treasury_pubkey: string } | undefined;
+    return row?.treasury_pubkey ?? null;
 }
 
 /** The link for a peer, or null. */
@@ -241,6 +275,7 @@ function balanceOf(publicKey: string): number {
  * is no "unlimited" value — an absent ceiling is 0, not infinity.
  */
 export function setCommissionCeiling(peerId: string, ceiling: number): FederationLink | null {
+    assertPlainTablesWritable();
     if (!Number.isFinite(ceiling) || ceiling < 0) throw new Error('Commissioning ceiling must be a non-negative number');
     const res = db.prepare('UPDATE federation_links SET commission_ceiling = ? WHERE peer_id = ?')
         .run(Math.round(ceiling * 100) / 100, peerId);
@@ -258,6 +293,9 @@ export function setCommissionCeiling(peerId: string, ceiling: number): Federatio
  * for; unwinding a live tab is open decision 2 and is deliberately not invented here.
  */
 export function reconcileFederationLinks(createTreasury: CreateTreasuryFn): number {
+    // A standby's links are its main server's, which its copy brings (a plain table, engine/replication-manifest.ts): it
+    // makes none of its own, at boot or when a cap is set there. A take-over's first boot as the main server converges them.
+    if (getNodeRole() === 'backup') return 0;
     let created = 0;
     for (const connector of getConnectors()) {
         if (connector.trustLevel !== 'peer') continue;
@@ -274,7 +312,9 @@ export function reconcileFederationLinks(createTreasury: CreateTreasuryFn): numb
             continue;
         }
         try {
-            if (ensureFederationLink(peerId, connector.callsign, createTreasury)) created++;
+            // A treasury found again is no new one (ensureFederationLink): it isn't counted as made.
+            const foundAgain = findLinkTreasury(peerId) !== null;
+            if (ensureFederationLink(peerId, connector.callsign, createTreasury) && !foundAgain) created++;
         } catch (e: any) {
             // One bad link must not stop the others, and must not stop boot. Logged loudly because a
             // peer with a cap and no link is a peer we will settle with that has no visible home.

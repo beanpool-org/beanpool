@@ -95,7 +95,7 @@ export default function GroupInviteLanding() {
         }
         setBusy(true);
         try {
-            await joinGroupApi(g.id);
+            await joinGroupApi(g.id, { joinPolicy: g.joinPolicy, viewerStatus });
             hapticSuccess();
             yourGroupsStore.refresh();
             if (g.joinPolicy === 'request_to_join' && viewerStatus !== 'invited') {
@@ -218,6 +218,7 @@ export default function GroupInviteLanding() {
                     disabled={!action?.enabled || busy}
                     accessibilityRole="button"
                     accessibilityLabel={action ? action.label : 'Loading'}
+                    accessibilityHint={action?.note || (viewerStatus === 'active' ? 'Opens the group chat' : 'Joins the group and opens its chat')}
                     accessibilityState={{ disabled: !action?.enabled || busy, busy: busy || loadingGroup }}
                 >
                     {busy || !action
@@ -276,7 +277,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
     noticeText: { flex: 1, fontSize: 13, lineHeight: 19, color: colors.text.secondary },
     primaryBtn: {
         minHeight: 56, borderRadius: 16, marginTop: 20, alignItems: 'center', justifyContent: 'center',
-        backgroundColor: colors.brand.primary, paddingHorizontal: 16, alignSelf: 'stretch',
+        backgroundColor: colors.brand.fill, paddingHorizontal: 16, alignSelf: 'stretch',
     },
     btnDisabled: { opacity: 0.55 },
     primaryText: { color: colors.text.inverse, fontSize: 18, fontWeight: '800' },

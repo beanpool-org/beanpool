@@ -22,6 +22,7 @@ import { yamux } from '@libp2p/yamux';
 import { identify } from '@libp2p/identify';
 import { generateKeyPair, privateKeyFromProtobuf, privateKeyToProtobuf } from '@libp2p/crypto/keys';
 import fs from 'node:fs';
+import { writeFileAtomic } from './write-file-atomic.js';
 import path from 'node:path';
 import { announceAddrsFor } from './p2p-announce.js';
 
@@ -34,29 +35,63 @@ let node: Libp2p;
 let _privateKey: any;
 
 
-async function loadOrCreateIdentity() {
-    try {
-        if (!fs.existsSync(DATA_DIR)) {
-            fs.mkdirSync(DATA_DIR, { recursive: true });
-        }
+/**
+ * data/libp2p_key is there and is not a key this server can read (empty, cut off, not a key): the server stops. A new
+ * random identity would be a different PeerId: standbys, take-over bundles and federation links pin this one, and the
+ * file must stay as it is so the real key can be put back.
+ */
+export class NodeKeyUnreadableError extends Error {}
 
-        if (fs.existsSync(KEY_PATH)) {
+/**
+ * The node's identity: data/libp2p_key, or on a new install (no file) a new Ed25519 key, saved 0600. A file that is
+ * there and can't be read, or a new key that can't be saved, stops the start (NodeKeyUnreadableError): never a new
+ * random identity for this run only, and never a write over the file.
+ */
+export async function loadOrCreateIdentity(): Promise<ReturnType<typeof privateKeyFromProtobuf>> {
+    if (!fs.existsSync(DATA_DIR)) {
+        fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+
+    if (fs.existsSync(KEY_PATH)) {
+        let why: string;
+        try {
             const keyBytes = fs.readFileSync(KEY_PATH);
+            if (keyBytes.length === 0) throw new Error('the file is empty');
             const privateKey = privateKeyFromProtobuf(keyBytes);
             console.log('🔑 Loaded persistent identity from disk.');
             return privateKey;
+        } catch (e) {
+            why = (e as Error).message;
         }
-
-        console.log('🔑 Generating new Ed25519 identity...');
-        const privateKey = await generateKeyPair('Ed25519');
-        fs.writeFileSync(KEY_PATH, privateKeyToProtobuf(privateKey));
-        console.log('🔑 Identity saved to disk.');
-        return privateKey;
-    } catch (e) {
-        console.error('[P2P] Failed to load/create identity:', e);
-        console.log('🔑 Falling back to ephemeral identity.');
-        return await generateKeyPair('Ed25519');
+        const msg = `${KEY_PATH} is this server's node key (its PeerId), and it can't be read (${why}). This server will not `
+            + 'start on a new random identity: its standbys, take-over bundles and federation links know it by this key. The file is '
+            + 'left as it is. Put back libp2p_key from a backup of this server\'s data dir (a sealed backup restores it too), then restart. '
+            + 'With no backup: move libp2p_key aside (rename it, for example to libp2p_key.old, and keep it) and restart. This server then '
+            + 'starts with a new node key and a new PeerId. The community (genesis.json, community.key) and its members, beans and '
+            + 'posts (state.db) stay. But everything that knows the server by this key must learn the new one. If its web address '
+            + 'is a name an address service holds (a .beanpool.org name, or another registrar\'s), that web address stops reaching '
+            + 'this server: the address service holds the name for the old key, sees this server answer with a '
+            + 'valid signature from a different key, counts that as an impostor and pauses the name. The name is not lost (nobody '
+            + 'else can claim it), but it comes back only when the address service\'s operator moves it to the new key (for a '
+            + '.beanpool.org name, ask the BeanPool project), so ask before you move the key aside. An address on your own domain, or no address, is not affected. Its standbys and federated '
+            + 'servers know it by the old PeerId (each standby is set up again, each link with another community made again on both '
+            + 'sides), and its notices to members\' apps are signed by a different key.';
+        console.error(`🛑 [P2P] ${msg}`);
+        throw new NodeKeyUnreadableError(msg);
     }
+
+    console.log('🔑 Generating new Ed25519 identity...');
+    const privateKey = await generateKeyPair('Ed25519');
+    try {
+        writeFileAtomic(KEY_PATH, privateKeyToProtobuf(privateKey), { mode: 0o600 });
+    } catch (e) {
+        const msg = `Could not save this server's new node key to ${KEY_PATH} (${(e as Error).message}). This server will not run `
+            + 'on an identity it would lose at its next start. Make the data dir writable for the node, then restart.';
+        console.error(`🛑 [P2P] ${msg}`);
+        throw new NodeKeyUnreadableError(msg);
+    }
+    console.log('🔑 Identity saved to disk.');
+    return privateKey;
 }
 
 export async function startP2P(tcpPort: number, wsPort: number): Promise<Libp2p> {

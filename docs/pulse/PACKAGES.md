@@ -120,7 +120,7 @@ hides items from a suspended member and from a de-syndicated channel; every SSRF
 refused.
 
 You are editing shared sync code and **can** break these — all must stay green:
-`test-creator-channels`, `test-schema-upgrade`, `test-backup-topology`, `test-sync-signature`.
+`test-creator-channels`, `test-schema-upgrade-fresh-shape`, `test-backup-topology`, `test-sync-signature`.
 
 **In your PR, call out that `getStateHash` changed**: a backup and primary on different binaries will
 see one canary mismatch and reconcile, so the backup is upgraded before or with its primary.

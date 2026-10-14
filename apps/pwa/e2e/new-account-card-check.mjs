@@ -37,7 +37,7 @@ const STANDING = {
             posts: { limit: 3, used: 3, remaining: 0, resetsAt: at(23) },
             photos: { limit: 5, used: 2, remaining: 3, resetsAt: at(5) },
             new_dm_recipients: { limit: 10, used: 10, remaining: 0, resetsAt: at(23) },
-            knocks: { limit: 1 },
+            knocks: { limit: 3 },
         },
     },
     mute: { muted: false, until: null },

@@ -31,9 +31,10 @@ import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { FEDERATION_SETTLEMENT_ENABLED, isVisitor, SETTLEMENT_REFUSED_CODE } from './federation-settlement.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
-const PORT = 8548;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -78,7 +79,8 @@ async function main() {
     console.log('Running cross-node settlement refusal tests (#102)...\n');
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // A visitor whose beans live on another node, and two local members.
     const visitor = makeIdentity('VisitingVal', 100, 'https://other.beanpool.org');
@@ -145,7 +147,7 @@ async function main() {
     };
     // Profile completeness is enforced on post creation; seed avatars directly.
     for (const pk of [local.pubKeyHex, visitor.pubKeyHex, payee.pubKeyHex]) {
-        db.prepare("UPDATE members SET avatar_url='data:image/png;base64,iVBORw0KGgo=' WHERE public_key=?").run(pk);
+        setMemberPhoto(db, pk, 'data:image/png;base64,iVBORw0KGgo=');
     }
     const localOffer = await mkOffer(local, 'Local fence fixing');
     await mkOffer(visitor, 'Visiting guitar lessons');   // satisfies the visitor's own covenant

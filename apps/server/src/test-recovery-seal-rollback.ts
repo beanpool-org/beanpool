@@ -40,7 +40,7 @@ import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import {
     CHILD, SEAL_CLI, KEY_FILE, CLEARED_KEY, type Sealed, type History, type StandbyScript, type ChildResult, fakeCopy, copiesFoundIn,
-    exportRow, tempDir, runChild, resultOf, child, check, section, finish, sealLines, bootParent, epochFixtures,
+    exportRow, tempDir, runChild, resultOf, child, check, section, finish, sealLines, bootParent, epochFixtures, sealDay, SEAL_SINCE_DAY,
 } from './recovery-seal-test-harness.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
@@ -74,7 +74,7 @@ async function main(): Promise<void> {
         // (1) This code: seeded with its main server's wrapped copies, the standby records its clear.
         const r1 = await runChild([SCRIPT], standbyDir, {
             RECOVERY_SEAL_CHILD: 'standby-script', NODE_ROLE: 'backup',
-            SEAL_SCRIPT: scriptFile('fleet-seed', { resyncFirst: true, reconcileMinutes: 0, pulls: 2, watch, steps: [wrapped(gen2, 2, '2026-06-02T00:00:00.000Z')] }),
+            SEAL_SCRIPT: scriptFile('fleet-seed', { resyncFirst: true, reconcileMinutes: 0, pulls: 2, watch, steps: [wrapped(gen2, 2, sealDay(2))] }),
         });
         const s1 = resultOf(r1);
         const afterSeed = s1.pulls?.[1]?.before;
@@ -85,7 +85,7 @@ async function main(): Promise<void> {
         // code there stores the re-deposits as the app sealed them, and the standby, on the older code too, imports both.
         // The main server's clock is behind the standby's: every stamp is before the clear the standby recorded.
         const batches = path.join(tempDir('fleet-batches'), 'batches.json');
-        fs.writeFileSync(batches, JSON.stringify([clientForm(gen2, 2, '2026-06-05T00:00:00.000Z'), clientForm(gen3, 3, '2026-06-06T00:00:00.000Z')]));
+        fs.writeFileSync(batches, JSON.stringify([clientForm(gen2, 2, sealDay(5)), clientForm(gen3, 3, sealDay(6))]));
         const older = resultOf(await runChild([SCRIPT], standbyDir, { RECOVERY_SEAL_CHILD: 'older-standby-import', NODE_ROLE: 'backup', SEAL_BATCHES: batches }));
         const olderInFiles = copiesFoundIn(standbyDir, watch);
         check(older.cleared === afterSeed?.cleared && older.rows === N && older.unwrapped === N && olderInFiles > 0,
@@ -95,7 +95,7 @@ async function main(): Promise<void> {
         // every pull this standby now makes is wrapped: no import shows it a copy in the client's form.
         const r3 = await runChild([SCRIPT], standbyDir, {
             RECOVERY_SEAL_CHILD: 'standby-script', NODE_ROLE: 'backup',
-            SEAL_SCRIPT: scriptFile('fleet-again', { resyncFirst: false, reconcileMinutes: 0, pulls: 3, watch, steps: [wrapped(gen3, 3, '2026-06-07T00:00:00.000Z')] }),
+            SEAL_SCRIPT: scriptFile('fleet-again', { resyncFirst: false, reconcileMinutes: 0, pulls: 3, watch, steps: [wrapped(gen3, 3, sealDay(7))] }),
         });
         const s3 = resultOf(r3);
         const [atWrapped, afterWrapped] = (s3.pulls ?? []).map((x: any) => x.before);
@@ -163,7 +163,7 @@ async function main(): Promise<void> {
         const h: History = { owners, gen1: owners.map(() => fakeCopy()), gen2: owners.map(() => fakeCopy()), deleted: [], real: [] };
         resultOf(await runChild([SCRIPT], dir, { RECOVERY_SEAL_CHILD: 'pre-seal-history', SEAL_HISTORY: jsonFile('epoch-main-history', h), SEAL_SIDE: 'main' }));
         const exportOf = async () => {
-            const r = await runChild([SCRIPT], dir, { RECOVERY_SEAL_CHILD: 'main-export', NODE_ROLE: 'primary', SEAL_SINCE: '2026-06-03T00:00:00.000Z' });
+            const r = await runChild([SCRIPT], dir, { RECOVERY_SEAL_CHILD: 'main-export', NODE_ROLE: 'primary', SEAL_SINCE: SEAL_SINCE_DAY });
             return { r, o: resultOf(r) };
         };
         const a = await exportOf();
@@ -268,7 +268,7 @@ async function main(): Promise<void> {
         const dir = tempDir('epoch-orphans');
         resultOf(await runChild([SCRIPT], dir, { RECOVERY_SEAL_CHILD: 'pre-seal-history', SEAL_HISTORY: jsonFile('epoch-orphans-history', h), SEAL_SIDE: 'standby' }));
         const sealed = eWrapped(eGen3, 2, T7, kept);
-        const o1 = await runStandby(dir, 'epoch-orphans-seal', { resyncFirst: false, since: '2026-06-03T00:00:00.000Z', reconcileMinutes: 0, pulls: 1, watch: [], steps: [sealed], epochs: [E1] });
+        const o1 = await runStandby(dir, 'epoch-orphans-seal', { resyncFirst: false, since: SEAL_SINCE_DAY, reconcileMinutes: 0, pulls: 1, watch: [], steps: [sealed], epochs: [E1] });
         const t1 = resultOf(o1);
         check(t1.pulls?.[0]?.route === 'delta' && epochOf(t1.final?.cleared) === E1 && t1.final?.unwrapped === deleted.length && vacuumsOf(o1) === 1,
             `control: the delta that brings the wrapped copies under E1 records its clear under E1, with the ${deleted.length} copies deleted before the seal still rows here (${briefE(t1.final)})`);
@@ -347,7 +347,7 @@ async function main(): Promise<void> {
         check(before > 0, `control: before the take-over its files hold ${before} of the ${eWatch.length} copies sent in the client's form`);
         const exportOf = async () => {
             const r = await runChild([SCRIPT], dir, {
-                RECOVERY_SEAL_CHILD: 'main-export', NODE_ROLE: 'primary', SEAL_SINCE: '2026-06-03T00:00:00.000Z', SEAL_WATCH: watchFile,
+                RECOVERY_SEAL_CHILD: 'main-export', NODE_ROLE: 'primary', SEAL_SINCE: SEAL_SINCE_DAY, SEAL_WATCH: watchFile,
             });
             return { r, o: resultOf(r) };
         };

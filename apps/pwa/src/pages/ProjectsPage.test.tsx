@@ -5,7 +5,8 @@ import { ProjectsPage } from './ProjectsPage';
 import { TreasuryDetailPage } from './TreasuryDetailPage';
 import type { BeanPoolIdentity } from '../lib/identity';
 import type { Treasury, BalanceInfo } from '../lib/api';
-import { getTreasuries, getBalance, getDecisions, createEnterprise } from '../lib/api';
+import { getTreasuries, getBalance, getDecisions, createEnterprise, getAllMembers } from '../lib/api';
+import * as apiModule from '../lib/api';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -128,6 +129,13 @@ vi.mock('../lib/api', () => ({
     proposeDecision: vi.fn(async () => ({ success: true })),
     castDecisionVote: vi.fn(async () => ({ success: true })),
     request: vi.fn(),
+    // The enterprise page's Decisions block (components/EnterpriseDecisions.tsx): no keepers' vote here.
+    getEnterpriseDecisions: vi.fn(async () => null),
+    getGroupDecisions: vi.fn(async () => null),
+    proposeGroupDecision: vi.fn(async () => ({ success: true })),
+    voteGroupDecision: vi.fn(async () => ({ success: true })),
+    proposeEnterpriseDecision: vi.fn(async () => ({ success: true })),
+    voteEnterpriseDecision: vi.fn(async () => ({ success: true })),
 }));
 
 const backerIdentity: BeanPoolIdentity = {
@@ -208,8 +216,10 @@ describe('ProjectsPage regression: Project Detail scroll container & pledge form
         });
 
         // Click propose button to open modal
-        const proposeBtn = screen.getByRole('button', { name: /\+ Propose/i });
-        fireEvent.click(proposeBtn);
+        // The one Create form hands over to the enterprise form when Beans are involved (§3.1).
+        fireEvent.click(screen.getByRole('button', { name: '+ Create Group' }));
+        expect(screen.queryByText('Project Team')).toBeNull();
+        fireEvent.click(screen.getByRole('button', { name: '🏛️ Start an enterprise' }));
 
         const modalHeading = screen.getByRole('heading', { name: 'Propose an Enterprise / Project' });
         expect(modalHeading).toBeInTheDocument();
@@ -316,10 +326,11 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
         const tabs = stickies[0] as HTMLElement;
         expect(tabs).toHaveAttribute('data-testid', 'commons-section-tabs');
         expect(within(tabs).getByText('Decide')).toBeInTheDocument();
-        expect(within(tabs).getByText('Enterprises')).toBeInTheDocument();
+        // One Groups list holds projects, enterprises and chat groups (pick 7): no Enterprises tab.
+        expect(within(tabs).queryByText('Enterprises')).toBeNull();
         expect(within(tabs).getByText('Groups')).toBeInTheDocument();
 
-        for (const text of ['The Commons', 'Commons Pool', 'Voice credits for money votes', 'All Enterprises', 'Bounded Projects']) {
+        for (const text of ['The Commons', 'Commons Pool', 'Voice credits for money votes', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']) {
             expect(screen.getByText(text).closest('.sticky')).toBeNull();
         }
     });
@@ -358,27 +369,32 @@ describe('ProjectsPage small screens (320x640 at 1.3x text)', () => {
         // The page scroller clips sideways overflow instead of dragging the whole page.
         expect(container.firstElementChild as HTMLElement).toHaveStyle({ overflowX: 'hidden' });
 
-        // Below `sm` each tab stacks its emoji over its label and may shrink, so all three fit.
+        // Below `sm` each tab stacks its emoji over its label and may shrink, so both fit.
         const tabs = within(screen.getByTestId('commons-section-tabs')).getAllByRole('button');
-        expect(tabs).toHaveLength(3);
+        expect(tabs).toHaveLength(2);
         for (const tab of tabs) {
             expect(tab).toHaveClass('flex-1', 'min-w-0', 'flex-col', 'sm:flex-row', 'px-1');
             expect(tab.className).not.toMatch(/(^|\s)px-3(\s|$)/);
         }
     });
 
-    it('lets the enterprise chips scroll on their own row without a visible scrollbar', async () => {
+    it('shows one Groups list: the kind chips pick projects, enterprises or chat groups', async () => {
         render(<ProjectsPage identity={backerIdentity} />);
 
         await waitFor(() => {
             expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument();
         });
-
-        const row = screen.getByTestId('enterprise-filter-chips');
-        expect(row).toHaveClass('overflow-x-auto', 'scrollbar-none');
-        for (const chip of within(row).getAllByRole('button')) {
-            expect(chip).toHaveClass('shrink-0', 'whitespace-nowrap');
-        }
+        const row = screen.getByTestId('group-filter-chips');
+        expect(within(row).getAllByRole('button').map(b => b.textContent)).toEqual(['All', 'My groups', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']);
+        // All: the enterprises and the chat groups together.
+        expect(screen.getByTestId('commons-chat-groups')).toBeInTheDocument();
+        fireEvent.click(within(row).getByText('👥 Chat groups'));
+        expect(screen.queryByText('Community Garden Solar Irrigation')).toBeNull();
+        expect(screen.getByTestId('commons-chat-groups')).toBeInTheDocument();
+        fireEvent.click(within(row).getByText('🌱 Projects'));
+        expect(screen.queryByTestId('commons-chat-groups')).toBeNull();
+        expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument();
+        expect(screen.queryByText(/Project Team|Bounded|Ongoing|Treasur/)).toBeNull();
     });
 
     it('lets the group chips scroll on their own row without a visible scrollbar', async () => {
@@ -485,10 +501,11 @@ describe('ProjectsPage: an enterprise photo goes through the canvas resize, neve
 
         render(<ProjectsPage identity={backerIdentity} />);
         await screen.findByText('Community Garden Solar Irrigation');
-        fireEvent.click(screen.getByRole('button', { name: /\+ Propose/i }));
+        fireEvent.click(screen.getByRole('button', { name: '+ Create Group' }));
+        fireEvent.click(screen.getByRole('button', { name: '🏛️ Start an enterprise' }));
         const dialog = screen.getByRole('dialog');
 
-        fireEvent.click(within(dialog).getByRole('button', { name: /Ongoing Enterprise/i }));
+        fireEvent.click(within(dialog).getByRole('button', { name: /^🏛️ Enterprise/ }));
         fireEvent.change(within(dialog).getByPlaceholderText(/Community Tool Shed/i), { target: { value: 'Shade House' } });
         fireEvent.change(within(dialog).getByPlaceholderText(/State clearly what this enterprise exists to do/i), { target: { value: 'We build a shade house' } });
 
@@ -544,9 +561,10 @@ describe('ProjectsPage: an enterprise photo goes through the canvas resize, neve
     async function openProposeFormAndPick(): Promise<HTMLElement> {
         render(<ProjectsPage identity={backerIdentity} />);
         await screen.findByText('Community Garden Solar Irrigation');
-        fireEvent.click(screen.getByRole('button', { name: /\+ Propose/i }));
+        fireEvent.click(screen.getByRole('button', { name: '+ Create Group' }));
+        fireEvent.click(screen.getByRole('button', { name: '🏛️ Start an enterprise' }));
         const dialog = screen.getByRole('dialog');
-        fireEvent.click(within(dialog).getByRole('button', { name: /Ongoing Enterprise/i }));
+        fireEvent.click(within(dialog).getByRole('button', { name: /^🏛️ Enterprise/ }));
         fireEvent.change(within(dialog).getByPlaceholderText(/Community Tool Shed/i), { target: { value: 'Shade House' } });
         fireEvent.change(within(dialog).getByPlaceholderText(/State clearly what this enterprise exists to do/i), { target: { value: 'We build a shade house' } });
         const raw = new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe1, 0x00, 0x08, 0x45, 0x78, 0x69, 0x66, 0x00, 0x00])], 'IMG_0001.jpg', { type: 'image/jpeg' });
@@ -597,8 +615,8 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         vi.mocked(communityInfoOnce).mockResolvedValueOnce(globalInfo);
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
         await waitFor(() => expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(false));
-        expect(sectionTabs()).toHaveLength(2);
-        expect(screen.getByText('Groups & Teams:')).toBeInTheDocument();
+        expect(sectionTabs()).toHaveLength(1);
+        expect(screen.getByText('Groups:')).toBeInTheDocument();
         expect(screen.queryByText(/Propose Community Action/)).toBeNull();
         expect(screen.queryByText(/Propose a Community Decision/)).toBeNull();
         expect(screen.getByRole('button', { name: '+ Create Group' })).toBeInTheDocument();
@@ -610,14 +628,95 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
         await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
         await waitFor(() => expect(screen.getByText(/Propose Community Action/)).toBeInTheDocument());
-        expect(sectionTabs()).toHaveLength(3);
+        expect(sectionTabs()).toHaveLength(2);
         expect(sectionTabs()[0]).toContain('Decide');
+    });
+
+    it('a node that shows previews with Decisions on and enterprises off: the real Decide tab, the sample enterprise, no sample Decision', async () => {
+        const info = { ...globalInfo, features: { ...globalInfo.features, decisions: true, enterprises: false, showcase: true } };
+        vi.mocked(communityInfoOnce).mockResolvedValueOnce(info);
+        render(<ProjectsPage identity={backerIdentity} />);
+        expect(await screen.findByTestId('sample-enterprise')).toBeInTheDocument();
+        expect(screen.queryByTestId('sample-decision')).toBeNull();
+        expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(true);
+    });
+
+    it('and with Decisions off and enterprises on: the sample Decision alone, no Decide tab, the real Commons pool', async () => {
+        const info = { ...globalInfo, features: { ...globalInfo.features, decisions: false, enterprises: true, showcase: true } };
+        vi.mocked(communityInfoOnce).mockResolvedValueOnce(info);
+        render(<ProjectsPage identity={backerIdentity} />);
+        expect(await screen.findByTestId('sample-decision')).toBeInTheDocument();
+        expect(screen.queryByTestId('sample-enterprise')).toBeNull();
+        expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(false);
+        expect(screen.getByText('Commons Pool')).toBeInTheDocument();
     });
 
     it('an unanswered read keeps Decide: the node refuses a vote itself where it has none', async () => {
         vi.mocked(communityInfoOnce).mockRejectedValueOnce(new Error('offline'));
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);
         await waitFor(() => expect(screen.getByText(/Propose Community Action/)).toBeInTheDocument());
-        expect(sectionTabs()).toHaveLength(3);
+        expect(sectionTabs()).toHaveLength(2);
+    });
+});
+
+describe('Commons with members on demand (review of #1861, N1)', () => {
+    const localInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local' as const, features: {} };
+    beforeEach(() => { vi.clearAllMocks(); });
+    afterEach(() => { vi.mocked(communityInfoOnce).mockImplementation(async () => localInfo as never); });
+
+    it('global: the whole directory is never read, at open or after', async () => {
+        const globalInfo = { ...localInfo, profile: 'global' as const, features: { beans: false, decisions: false, membersOnDemand: true } };
+        vi.mocked(communityInfoOnce).mockImplementation(async () => globalInfo as never);
+        render(<ProjectsPage identity={backerIdentity} />);
+        await waitFor(() => expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument());
+        await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
+        await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+        expect(getTreasuries).toHaveBeenCalled();
+        expect(getAllMembers).not.toHaveBeenCalled();
+    });
+
+    it('local: the directory is read once at open, as before', async () => {
+        render(<ProjectsPage identity={backerIdentity} />);
+        await waitFor(() => expect(getAllMembers).toHaveBeenCalledTimes(1));
+        await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+        expect(getAllMembers).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('Commons on global with previews AND members on demand (where #1853 meets #1861)', () => {
+    const localInfo = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local' as const, features: {} };
+    // The worldwide community as it answers: every showcase feature off, previews on, people asked for, not read whole.
+    const globalInfo = {
+        ...localInfo, profile: 'global' as const,
+        features: { beans: false, escrow: false, enterprises: false, decisions: false, invites: false, showcase: true, membersOnDemand: true },
+    };
+    const fetchSpy = vi.fn(async (..._args: unknown[]): Promise<Response> => { throw new TypeError('offline'); });
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(communityInfoOnce).mockImplementation(async () => globalInfo as never);
+        vi.stubGlobal('fetch', fetchSpy);
+    });
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        vi.mocked(communityInfoOnce).mockImplementation(async () => localInfo as never);
+    });
+
+    it('the sample enterprise and Decision draw, the whole directory is never read, and no press sends a sample id', async () => {
+        render(<ProjectsPage identity={backerIdentity} />);
+        expect(await screen.findByTestId('sample-enterprise')).toBeInTheDocument();
+        expect(screen.getByTestId('sample-decision')).toBeInTheDocument();
+        await waitFor(() => expect(screen.getByText('Community Garden Solar Irrigation')).toBeInTheDocument());
+        for (const name of ['Pledge', 'Pause', 'Vote']) {
+            fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${name}`) }));
+            const sheet = await screen.findByTestId('local-community-sheet');
+            fireEvent.click(within(sheet).getByRole('button', { name: 'Close' }));
+        }
+        await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+        expect(getAllMembers).not.toHaveBeenCalled();
+        // Every call the page made, to the node's api or to fetch: none names a sample id, and nothing was written.
+        const calls = [...(Object.values(apiModule) as unknown[]).filter(vi.isMockFunction).flatMap(f => f.mock.calls), ...fetchSpy.mock.calls];
+        expect(calls.length).toBeGreaterThan(0);
+        expect(calls.map(c => JSON.stringify(c)).filter(s => /\bsample-[a-z0-9]/.test(s))).toEqual([]);
+        expect(fetchSpy.mock.calls.filter(([, init]) => ((init as RequestInit | undefined)?.method ?? 'GET') !== 'GET')).toEqual([]);
     });
 });

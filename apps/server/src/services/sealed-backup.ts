@@ -3,7 +3,7 @@
  *
  * A backup is the tar.gz it always was — `state.db`, `node_config.json` — plus the take-over bundle
  * (`takeover-bundle.json`: node key, community key, genesis, connectors, the recovery-seal key that opens members'
- * sign-in recovery copies, admin and 2FA fields, roles, the public
+ * sign-in recovery copies, the open door's key, admin and 2FA fields, roles, the public
  * address), streamed through a `bpseal/v1` envelope of kind `backup` locked to the same people as the take-over
  * envelope: every owner, plus the printed recovery code. One file restores a whole community, and nobody who
  * finds the file can read it.
@@ -48,9 +48,10 @@
  * - A lost object leaves a node with no backup at all.
  * - An I/O error is reported as a known shortfall.
  * - A snapshot's keys are resolved against the LIVE store: a snapshot ships the objects it captured.
- * - A readable backup carries the node keys, or the recovery-seal key. The take-over bundle goes only into a locked
- *   file, so a server restored from a readable one cannot open members' sign-in recovery copies, and
- *   {@link NOT_LOCKED_MESSAGE} says so.
+ * - A readable backup carries the node keys, the recovery-seal key, or the open door's key. The take-over bundle goes
+ *   only into a locked file, so a server restored from a readable one cannot open members' sign-in recovery copies,
+ *   and {@link NOT_LOCKED_MESSAGE} says so; nor can it tell a returning sign-in from a new one at the open door, which
+ *   then refuses sign-ins until the key is back (services/open-join-key.ts).
  * - A restore trusts the archive inside the envelope. Opening only proves the file was locked to a key someone
  *   here holds; the tar inside goes through exactly the hostile-archive checks a legacy upload does.
  * - A restore takes a file signed by someone else when this server knows who should have signed it (966
@@ -74,7 +75,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { execFile, execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -84,17 +85,21 @@ import {
     type SealedEnvelopeHeader, type SealedEnvelopeKey, type CodeStanza,
 } from '@beanpool/core';
 import Database from 'better-sqlite3';
-import { getLocalConfig, redactLocalConfig } from '../config/local-config.js';
+import { getLocalConfig, redactLocalConfig, readLocalConfigFileIn, writeLocalConfigFileIn, type LocalConfig } from '../config/local-config.js';
+import { writeFileAtomic } from '../write-file-atomic.js';
+import { listBackupArchive } from './restore-checks.js';
 import { writeDbSnapshot } from './snapshot-scheduler.js';
+import { forgetAddressesInStoredCopy } from './address-retention.js';
 import {
     assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir, scanOurObjectsAsync, type ImageStore,
 } from '../storage/image-store.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
 import {
-    readSealingInputs, readNodeIdentity, peerIdOfKeyFile, BUNDLED_FILES, BUNDLED_LOCAL_CONFIG_FIELDS,
+    readSealingInputs, readNodeIdentity, peerIdOfKeyFile, BUNDLED_FILES, bundledLocalConfigUpdates,
     type TakeoverBundle,
 } from './takeover-envelope.js';
 import { installCarriedRecoverySealKey, RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
+import { installCarriedOpenJoinKey, OPEN_JOIN_KEY_FILE } from './open-join-key.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -501,6 +506,24 @@ function writeMissingManifest(stage: string, staged: StagedImages): void {
     }, null, 2), { mode: 0o600 });
 }
 
+/**
+ * The backup's node_config.json, without this server's credentials (redactLocalConfig): a readable backup is a file
+ * anyone who holds it can read, and a locked one's credentials travel in its take-over bundle instead. From the legacy
+ * data/node_config.json when one is still there (an older node's, which may carry a standby's plain-text admin
+ * password), else from the local config. Nothing reads this file back: a restore puts it beside the database, inert.
+ */
+function writeBackupConfig(stage: string): void {
+    let config: LocalConfig = getLocalConfig();
+    const legacy = path.join(dataDir(), 'node_config.json');
+    if (fs.existsSync(legacy)) {
+        try {
+            const parsed = JSON.parse(fs.readFileSync(legacy, 'utf8'));
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) config = parsed;
+        } catch { /* unreadable: the local config goes instead, never bytes nobody checked */ }
+    }
+    fs.writeFileSync(path.join(stage, 'node_config.json'), JSON.stringify(redactLocalConfig(config), null, 2), { mode: 0o600 });
+}
+
 /** What a backup was asked to carry, and where the database's objects are when it is not the live one. */
 export interface BackupSource {
     /** Seal this SQLite file as the database (a snapshot being downloaded) instead of a fresh copy of the live one. */
@@ -535,15 +558,12 @@ export async function createSealedBackup(opts: BackupSource = {}): Promise<Seale
         // Only these names go in the tar — the database, the config, the take-over bundle and the image
         // store — so it never swallows data/snapshots/ or anything else in data/.
         const dbPath = path.join(stage, 'state.db');
-        if (opts.dbFile) fs.copyFileSync(opts.dbFile, dbPath);
-        else writeDbSnapshot(dbPath);
-        const configPath = path.join(dataDir(), 'node_config.json');
-        if (fs.existsSync(configPath)) {
-            fs.copyFileSync(configPath, path.join(stage, 'node_config.json'));
-        } else {
-            // Without a standby's legacy plain-text admin password.
-            fs.writeFileSync(path.join(stage, 'node_config.json'), JSON.stringify(redactLocalConfig(getLocalConfig()), null, 2));
-        }
+        if (opts.dbFile) {
+            fs.copyFileSync(opts.dbFile, dbPath);
+            // A snapshot made before copies left internet addresses out still has them (services/address-retention.ts).
+            forgetAddressesInStoredCopy(dbPath);
+        } else writeDbSnapshot(dbPath);
+        writeBackupConfig(stage);
         fs.writeFileSync(path.join(stage, BUNDLE_MEMBER), JSON.stringify(inputs.bundle), { mode: 0o600 });
         // From the staged database, not the live one: what the archive carries is what the archive needs.
         const images = await stageImagesForBackup(stage, dbPath, opts);
@@ -605,14 +625,12 @@ export async function createPlainBackup(opts: BackupSource = {}): Promise<PlainB
     try {
         fs.mkdirSync(stage, { recursive: true, mode: 0o700 });
         const dbPath = path.join(stage, 'state.db');
-        if (opts.dbFile) fs.copyFileSync(opts.dbFile, dbPath);
-        else writeDbSnapshot(dbPath);
-        const configPath = path.join(dataDir(), 'node_config.json');
-        if (fs.existsSync(configPath)) {
-            fs.copyFileSync(configPath, path.join(stage, 'node_config.json'));
-        } else {
-            fs.writeFileSync(path.join(stage, 'node_config.json'), JSON.stringify(redactLocalConfig(getLocalConfig()), null, 2));
-        }
+        if (opts.dbFile) {
+            fs.copyFileSync(opts.dbFile, dbPath);
+            // A snapshot made before copies left internet addresses out still has them (services/address-retention.ts).
+            forgetAddressesInStoredCopy(dbPath);
+        } else writeDbSnapshot(dbPath);
+        writeBackupConfig(stage);
         const images = await stageImagesForBackup(stage, dbPath, opts);
         await execFileAsync('tar', ['-czf', tarPath, '-C', stage, '.']);
         fs.rmSync(stage, { recursive: true, force: true });
@@ -628,29 +646,16 @@ export async function createPlainBackup(opts: BackupSource = {}): Promise<PlainB
 }
 
 /**
- * The hostile-archive checks (SRV-9a) every backup tar goes through before a byte is extracted, whether it came
- * as a plain upload or out of a sealed file (opening only proves someone holding a key locked it). `tar -x` does
- * NOT sanitise member paths — GNU tar (the prod image) follows `../` and absolute names and materialises links —
- * so a crafted archive could write anywhere the process can reach. Refuses the whole archive on any member that
- * would escape, or that is a link. Also used by the harvester to check an old backup it sealed before it deletes
- * the plaintext. Returns the member list.
+ * The hostile-archive checks (SRV-9a) every backup tar goes through, whether it came as a plain upload or out of a
+ * sealed file (opening only proves someone holding a key locked it): services/restore-checks.ts reads it by its own
+ * headers, never through a `tar` listing (busybox's, in the server image, lists a hard link as a plain file), and
+ * refuses the whole archive on any member that would escape, is a link or anything but a plain file or folder, or is
+ * past the size and count limits. Unpacks nothing. Used by the harvester to check an old backup it sealed before it
+ * deletes the plaintext. Returns the member list, `./` dropped.
  */
-export function checkBackupArchive(tarPath: string, opts: { requireStateDb?: boolean } = {}): string[] {
-    const listing = execFileSync('tar', ['-tzf', tarPath], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
-        .split('\n').map((s: string) => s.trim()).filter(Boolean);
-    for (const entry of listing) {
-        // POSIX/Windows-absolute paths and any `..` traversal segment.
-        if (path.isAbsolute(entry) || /^[A-Za-z]:/.test(entry) || entry.split('/').some(seg => seg === '..')) {
-            throw new Error('Invalid backup archive: unsafe member path');
-        }
-    }
-    // Symlink/hardlink members (type char 'l'/'h' in the verbose listing), so a link can't redirect a later write.
-    const verbose = execFileSync('tar', ['-tvzf', tarPath], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
-        .split('\n').map((s: string) => s.trim()).filter(Boolean);
-    for (const line of verbose) {
-        if (line[0] === 'l' || line[0] === 'h') throw new Error('Invalid backup archive: links are not permitted');
-    }
-    if (opts.requireStateDb && !listing.some((e) => e === 'state.db' || e === './state.db')) {
+export async function checkBackupArchive(tarPath: string, opts: { requireStateDb?: boolean } = {}): Promise<string[]> {
+    const listing = await listBackupArchive(tarPath);
+    if (opts.requireStateDb && !listing.includes('state.db')) {
         throw new Error('Invalid backup archive: state.db missing');
     }
     return listing;
@@ -741,7 +746,7 @@ export async function sealFileVerified(
         const header = await openSealedFileTo(outFile, { type: 'dataKey', dataKey }, reopened);
         const got = crypto.createHash('sha256').update(fs.readFileSync(reopened)).digest('hex');
         if (got !== expected) throw new Error(`re-opened to different bytes (${got.slice(0, 12)} ≠ ${expected.slice(0, 12)})`);
-        checkBackupArchive(reopened, { requireStateDb });
+        await checkBackupArchive(reopened, { requireStateDb });
         return { header, sha256: expected };
     } catch (e) {
         try { fs.rmSync(tmp, { force: true }); } catch { /* ignore */ }
@@ -892,9 +897,7 @@ export function checkBundle(bundle: TakeoverBundle, header: SealedEnvelopeHeader
 }
 
 function writeAtomic(file: string, data: Buffer, mode: number): void {
-    const tmp = `${file}.tmp-${process.pid}`;
-    fs.writeFileSync(tmp, data, { mode });
-    fs.renameSync(tmp, file);
+    writeFileAtomic(file, data, { mode });
 }
 
 /**
@@ -905,8 +908,21 @@ function writeAtomic(file: string, data: Buffer, mode: number): void {
 export function applyBundle(bundle: TakeoverBundle): string[] {
     const dir = dataDir();
     const written: string[] = [];
+    // local-config.json: the community's admin and 2FA credentials, and its recovery code's public record, so this
+    // server signs owners in with the community's password and keeps locking to the same paper. Everything else
+    // in this server's config (its own replication token, callsign, gateway) stays.
+    // Read and merged BEFORE any identity file is written: a config that can't be read (broken, with no good last
+    // copy) stops the restore with nothing written, never half applied. A broken file is read from its last good
+    // copy, never as empty: that would drop this server's address and settings.
+    const config = readLocalConfigFileIn(dir);
+    // A retired password stays retired, and an older backup never brings it back (bundledLocalConfigUpdates).
+    Object.assign(config, bundledLocalConfigUpdates(bundle.localConfig as Record<string, unknown>, config));
+    if (bundle.recoveryCode) {
+        config.recoveryCode = bundle.recoveryCode;
+        config.recoveryCodeLastId = Math.max(Number(config.recoveryCodeLastId) || 0, bundle.recoveryCode.codeId);
+    }
     for (const f of BUNDLED_FILES) {
-        if (f === RECOVERY_SEAL_KEY_FILE) continue;
+        if (f === RECOVERY_SEAL_KEY_FILE || f === OPEN_JOIN_KEY_FILE) continue;
         const b64 = bundle.files[f];
         if (!b64) continue;
         writeAtomic(path.join(dir, f), Buffer.from(b64, 'base64'), f === 'genesis.json' || f === 'connectors.json' ? 0o644 : 0o600);
@@ -918,18 +934,12 @@ export function applyBundle(bundle: TakeoverBundle): string[] {
     const sealKey = installCarriedRecoverySealKey(bundle.files[RECOVERY_SEAL_KEY_FILE]);
     if (sealKey.outcome === 'installed' || sealKey.outcome === 'same') written.push(RECOVERY_SEAL_KEY_FILE);
     else if (sealKey.outcome === 'replaced') written.push(`${RECOVERY_SEAL_KEY_FILE} (this server's own kept as ${sealKey.retiredAs})`);
-    // local-config.json: the community's admin and 2FA credentials, and its recovery code's public record, so this
-    // server signs owners in with the community's password and keeps locking to the same paper. Everything else
-    // in this server's config (its own replication token, callsign, gateway) stays.
-    const configPath = path.join(dir, 'local-config.json');
-    let config: Record<string, unknown> = {};
-    try { config = JSON.parse(fs.readFileSync(configPath, 'utf-8')); } catch { config = {}; }
-    for (const f of BUNDLED_LOCAL_CONFIG_FIELDS) config[f] = (bundle.localConfig as any)[f] ?? null;
-    if (bundle.recoveryCode) {
-        config.recoveryCode = bundle.recoveryCode;
-        config.recoveryCodeLastId = Math.max(Number(config.recoveryCodeLastId) || 0, bundle.recoveryCode.codeId);
-    }
-    writeAtomic(configPath, Buffer.from(JSON.stringify(config, null, 2)), 0o600);
+    // The open door's key, the same way (services/open-join-key.ts). The database in this backup records which key its
+    // sign-in records were made with, so a backup that carries none, or another, leaves the door refusing sign-ins.
+    const doorKey = installCarriedOpenJoinKey(bundle.files[OPEN_JOIN_KEY_FILE]);
+    if (doorKey.outcome === 'installed' || doorKey.outcome === 'same') written.push(OPEN_JOIN_KEY_FILE);
+    else if (doorKey.outcome === 'replaced') written.push(`${OPEN_JOIN_KEY_FILE} (this server's own kept as ${doorKey.retiredAs})`);
+    writeLocalConfigFileIn(dir, config, 0o600);
     written.push('local-config.json (admin, 2FA, recovery code record)');
     return written;
 }

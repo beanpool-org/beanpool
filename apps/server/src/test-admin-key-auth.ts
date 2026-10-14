@@ -72,14 +72,14 @@ import {
     pruneExpiredAuthEntries,
     verifyEd25519Signature,
 } from './admin-key-auth.js';
-import { checkAdminAuth, resetAdminAuthTarpit } from './admin-auth.js';
+import { checkAdminAuth, resetAdminAuthTarpit, PASSWORD_NEEDS_2FA_CODE } from './admin-auth.js';
 import {
     getLocalConfig,
     updateLocalConfig,
     isBreakGlassMode,
     setBreakGlassMode,
 } from './config/local-config.js';
-import { generateTotpSecret, generateTotpCode, generateBackupCodes, hashBackupCode } from './totp.js';
+import { generateTotpSecret, generateTotpCode, generateBackupCodes, hashBackupCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { createAdminRoutes } from './routes/admin.js';
 import { createSettingsRoutes } from './routes/settings.js';
 import type { RouteDeps } from './routes/types.js';
@@ -135,6 +135,19 @@ async function main() {
 
     // Set up admin password in local config
     const testPassword = 'SuperSecretAdminPassword123!';
+    // Step 7c: with the node's 2FA off the password alone opens no admin route. The password checks below are about the
+    // password path, so each turns 2FA on for its own request and sends a code with the password, then turns it off again
+    // (the key sign-ins elsewhere in this suite run with 2FA off).
+    const pwTotpSecret = generateTotpSecret();
+    const fetchWithPasswordAndCode = async (url: string, init: { method?: string; headers: Record<string, string>; body?: string }): Promise<Response> => {
+        updateLocalConfig({ totpEnabled: true, totpSecret: pwTotpSecret });
+        forgetUsedTotpCodesForTests();
+        try {
+            return await fetch(url, { ...init, headers: { ...init.headers, 'x-admin-totp': generateTotpCode(pwTotpSecret) } });
+        } finally {
+            updateLocalConfig({ totpEnabled: false, totpSecret: null });
+        }
+    };
     const salt = randomBytes(16).toString('hex');
     const adminHash = scryptSync(testPassword, salt, 64).toString('hex');
     updateLocalConfig({
@@ -271,7 +284,9 @@ async function main() {
         assert(exchangeRes.status === 200, 'POST /api/local/admin/auth/exchange returns 200');
         const exchangeBody: any = await exchangeRes.json();
         assert(exchangeBody.success === true, 'Exchange response has success: true');
-        assert(typeof exchangeBody.sessionId === 'string', 'Returns sessionId');
+        // The session id travels in the httpOnly cookie only: in the body a script could read it and use it anywhere,
+        // without the cookie or a CSRF token (Fable's web review, L3). Until 2026-10-01 this asserted it was returned.
+        assert(exchangeBody.sessionId === undefined, 'Does not return the session id in the body');
         assert(typeof exchangeBody.csrfToken === 'string', 'Returns csrfToken');
         assert(exchangeBody.memberPubkey === aliceKeys.pub, 'Session is attributed to Alice');
         assert(exchangeBody.role === 'owner', "Session role is 'owner'");
@@ -280,7 +295,10 @@ async function main() {
 
         const sessionCookie = exchangeRes.headers.get('set-cookie');
         assert(Boolean(sessionCookie && sessionCookie.includes('admin_session=')), 'Exchange sets admin_session cookie');
-        const aliceSessionId = exchangeBody.sessionId;
+        assert(/httponly/i.test(sessionCookie || '') && /samesite=strict/i.test(sessionCookie || ''), 'The cookie is HttpOnly and SameSite=Strict');
+        const aliceSessionId = (sessionCookie || '').match(/admin_session=([0-9a-f]+)/)?.[1] ?? '';
+        assert(aliceSessionId.length === 64, 'The cookie carries the session id');
+        assert(!JSON.stringify(exchangeBody).includes(aliceSessionId), 'The body never mentions it');
 
         // Verify active session via GET /api/local/admin/auth/session
         const sessionCheckRes = await fetch(`${base}/api/local/admin/auth/session`, {
@@ -418,7 +436,7 @@ async function main() {
         const eveKeys = createKeyPair();
         seedMember(eveKeys.pub, 'EveMember');
 
-        const grantEveRes = await fetch(`${base}/api/local/admin/node-roles`, {
+        const grantEveRes = await fetchWithPasswordAndCode(`${base}/api/local/admin/node-roles`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -434,10 +452,16 @@ async function main() {
         console.log('Testing unchanged password path (breakGlassMode = false)...');
 
         assert(isBreakGlassMode() === false, 'breakGlassMode defaults to false');
-        const getRolesPassword = await fetch(`${base}/api/local/admin/node-roles`, {
+        const getRolesPasswordAlone = await fetch(`${base}/api/local/admin/node-roles`, {
             headers: { 'x-admin-password': testPassword },
         });
-        assert(getRolesPassword.status === 200, 'GET /api/local/admin/node-roles succeeds with password when breakGlassMode=false');
+        const aloneBody: any = await getRolesPasswordAlone.json().catch(() => ({}));
+        assert(getRolesPasswordAlone.status === 403 && aloneBody.code === PASSWORD_NEEDS_2FA_CODE,
+            `with 2FA off the password alone is refused on /api/local/admin/node-roles (step 7c) (got ${getRolesPasswordAlone.status} ${aloneBody.code})`);
+        const getRolesPassword = await fetchWithPasswordAndCode(`${base}/api/local/admin/node-roles`, {
+            headers: { 'x-admin-password': testPassword },
+        });
+        assert(getRolesPassword.status === 200, 'GET /api/local/admin/node-roles succeeds with password and a code when breakGlassMode=false');
 
         // ── 9. Break-Glass Mode Gating & Route Restriction ──
         console.log('Testing break-glass mode gating and route restriction...');
@@ -499,7 +523,7 @@ async function main() {
         };
         addWsClient(strangerWs);
 
-        const enrolRes = await fetch(`${base}/api/local/admin/auth/enrol`, {
+        const enrolRes = await fetchWithPasswordAndCode(`${base}/api/local/admin/auth/enrol`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -542,7 +566,7 @@ async function main() {
         removeWsClient(strangerWs);
 
         // Test that the distinct break-glass code works to authenticate
-        const verifyBgCodeDirect = verifyBreakGlassCode(replacementBreakGlassCode);
+        const verifyBgCodeDirect = await verifyBreakGlassCode(replacementBreakGlassCode);
         assert(verifyBgCodeDirect?.member_pubkey === replacementKeys.pub, 'verifyBreakGlassCode matches replacement owner');
 
         // Use break-glass code via x-break-glass-code header to enrol another owner
@@ -585,8 +609,9 @@ async function main() {
         assert(Boolean(dlCookie && dlCookie.includes('admin_session=')), 'Redirect sets admin_session cookie');
         assert(dlRes.headers.get('location') === '/settings', 'Redirects to /settings');
 
-        // ── 12. TOTP 2FA Verification during Challenge Solving ──
-        console.log('Testing TOTP 2FA verification during challenge solving...');
+        // ── 12. With 2FA on, a key sign-in asks for no code (decision D2, 2026-10-03) ──
+        // The node's code is the password's second factor; the phone's unlock is the key's. A backup code is not spent.
+        console.log('Testing that a key sign-in is not asked for the 2FA code...');
 
         const totpSecret = generateTotpSecret();
         const backupCodes = generateBackupCodes(4);
@@ -598,52 +623,31 @@ async function main() {
             totpBackupCodesHashes: backupHashes,
         });
 
-        const chalTotp = createAdminChallenge();
+        const solveKey = async (code?: string) => {
+            const chal = createAdminChallenge();
+            return fetch(`${base}/api/local/admin/auth/verify-challenge`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    challengeId: chal.challengeId,
+                    memberPubkey: aliceKeys.pub,
+                    signature: aliceKeys.sign(chal.challenge),
+                    ...(code ? { totpCode: code } : {}),
+                }),
+            });
+        };
 
-        // 1. Solving without TOTP code fails with totpRequired: true
-        const solveNoTotp = await fetch(`${base}/api/local/admin/auth/verify-challenge`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                challengeId: chalTotp.challengeId,
-                memberPubkey: aliceKeys.pub,
-                signature: aliceKeys.sign(chalTotp.challenge),
-            }),
-        });
-        assert(solveNoTotp.status === 401, 'Verify challenge without TOTP code returns 401');
+        // 1. Solving without a code succeeds
+        const solveNoTotp = await solveKey();
+        assert(solveNoTotp.status === 200, 'Verify challenge without a TOTP code returns 200 with 2FA on');
         const noTotpBody: any = await solveNoTotp.json();
-        assert(noTotpBody.totpRequired === true, 'Verify challenge response indicates totpRequired: true');
+        assert(typeof noTotpBody.handshakeToken === 'string' && noTotpBody.totpRequired === undefined, 'and hands over a token, asking for no code');
 
-        // 2. Solving with valid 6-digit TOTP code succeeds
-        const totpCode = generateTotpCode(totpSecret);
-        const solveWithTotp = await fetch(`${base}/api/local/admin/auth/verify-challenge`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                challengeId: chalTotp.challengeId,
-                memberPubkey: aliceKeys.pub,
-                signature: aliceKeys.sign(chalTotp.challenge),
-                totpCode,
-            }),
-        });
-        assert(solveWithTotp.status === 200, 'Verify challenge with valid TOTP code returns 200');
-
-        // 3. Solving with single-use backup code succeeds and consumes the backup code
-        const chalBackup = createAdminChallenge();
-        const firstBackupCode = backupCodes[0];
-        const solveWithBackup = await fetch(`${base}/api/local/admin/auth/verify-challenge`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                challengeId: chalBackup.challengeId,
-                memberPubkey: aliceKeys.pub,
-                signature: aliceKeys.sign(chalBackup.challenge),
-                totpCode: firstBackupCode,
-            }),
-        });
-        assert(solveWithBackup.status === 200, 'Verify challenge with backup code returns 200');
+        // 2. A code an older app still sends is not looked at, and a backup code sent that way is not spent
+        const solveWithBackup = await solveKey(backupCodes[0]);
+        assert(solveWithBackup.status === 200, 'Verify challenge carrying a backup code returns 200');
         const remainingHashes = getLocalConfig().totpBackupCodesHashes || [];
-        assert(remainingHashes.length === 3, 'Backup code was consumed and remaining backup hashes is 3');
+        assert(remainingHashes.length === 4, 'A backup code sent with a key sign-in is not spent (4 remain)');
 
         // Clean up TOTP
         updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
@@ -787,7 +791,7 @@ async function main() {
         // 12.7 Routine password enrolment when breakGlassMode=false does NOT emit alert (Comment 5)
         const graceKeys = createKeyPair();
         seedMember(graceKeys.pub, 'GraceMember');
-        const routineEnrol = await fetch(`${base}/api/local/admin/auth/enrol`, {
+        const routineEnrol = await fetchWithPasswordAndCode(`${base}/api/local/admin/auth/enrol`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -802,7 +806,7 @@ async function main() {
         // 12.7b Non-owner enrolment does NOT return breakGlassCode or populate break_glass_hash (Comment 4021421370)
         const henryKeys = createKeyPair();
         seedMember(henryKeys.pub, 'HenryAdmin');
-        const adminEnrol = await fetch(`${base}/api/local/admin/auth/enrol`, {
+        const adminEnrol = await fetchWithPasswordAndCode(`${base}/api/local/admin/auth/enrol`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -828,8 +832,11 @@ async function main() {
         assert(graceHashAfter === null, 'Demoting Grace to admin cleared break_glass_hash');
 
         // 12.9 verifyBreakGlassCode ownerPubkey branch requires owner role and active member (Comment 10)
-        const graceCodeCheck = verifyBreakGlassCode('any-code', graceKeys.pub);
+        const graceCodeCheck = await verifyBreakGlassCode('any-code', graceKeys.pub);
         assert(graceCodeCheck === null, 'verifyBreakGlassCode for non-owner Grace returns null');
+        // Grace's own code, from when she was an owner, is not an owner's code any more either.
+        const graceOwnCodeCheck = await verifyBreakGlassCode(routineBody.breakGlassCode, graceKeys.pub);
+        assert(typeof routineBody.breakGlassCode === 'string' && graceOwnCodeCheck === null, "verifyBreakGlassCode refuses Grace's own code once she is no longer an owner");
 
         // 12.10 Settings failed token exchange returns accessible HTML (Comment 13)
         const failTokenRes = await fetch(`${base}/settings?token=invalid_handshake_token`);
@@ -869,7 +876,7 @@ async function main() {
         assert(cookieMutateNoCsrf.status === 403, 'Cookie session mutating POST without CSRF token returns 403');
 
         // 12.13 Expired session cookie falls through to explicit password (Comment 9)
-        const expiredCookieWithPass = await fetch(`${base}/api/local/admin/node-roles`, {
+        const expiredCookieWithPass = await fetchWithPasswordAndCode(`${base}/api/local/admin/node-roles`, {
             headers: {
                 'Cookie': `admin_session=non_existent_or_expired_session_token`,
                 'x-admin-password': testPassword,

@@ -11,15 +11,17 @@
  *      - a body over 16 KB → 413 (declared, and streamed without a length); JSON or no form → 415
  *      - the 303's target, GET /app/auth/apple, is the web app itself
  *   2. the app document's CSP: /app, /app/…, /index.html and / carry the strict policy (no 'unsafe-inline' or
- *      third-party host in script-src) and `Referrer-Policy: strict-origin-when-cross-origin`; /settings, /manager
- *      and the invite page at /?invite= keep today's header; /api/community/info has no CSP
+ *      third-party host in script-src) and `Referrer-Policy: strict-origin-when-cross-origin`; so do Settings and the
+ *      manager (/settings, /manager: Fable's web review M2, they run no inline script); the invite page at /?invite=
+ *      keeps today's header; /api/community/info has no CSP
  *   3. no other spelling serves the web app under another policy (sent exactly as written, as `curl --path-as-is`
  *      would): an encoded separator, a double encoding, a backslash, a dot or empty segment outside /api and /ws is
  *      404 with no document; /ws and /api spellings never reach the static files; whatever else reaches index.html
  *      (a case variant on a case-insensitive disk, a query, a fragment) has the app document's policy
- *   4. the pages that need the older header still get it and render: Settings (and its deep links, its index.html
- *      and the old settings.html, and /settings-legacy), the manager, the /auth/ pages, the invite page and the Apple
- *      probe; the PWA's assets are still served, and /api routes still take an encoded `/` in a value
+ *   4. the pages that need the older header still get it and render: the old settings.html and /settings-legacy,
+ *      the /auth/ pages, the invite page and the Apple probe; Settings (and its deep links and its index.html) and the
+ *      manager render under the app document's policy; the PWA's assets are still served, and /api routes still take
+ *      an encoded `/` in a value
  *   5. the two rules underneath, on their own: which spellings are refused, and which public/ files keep the older
  *      header
  *
@@ -43,8 +45,8 @@ import { initStateEngine } from './state-engine.js';
 import { db } from './db/db.js';
 import { isDocumentPolicyFile, isNonCanonicalSpelling } from './app-document-csp.js';
 
-const PORT = 8734;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -52,11 +54,11 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
-/** The header every document had before G11, which the Settings UI, the manager and the invite page keep. */
-const TODAYS_DOCUMENT_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org https://api.qrserver.com; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'";
+/** The header every document had before G11, which the old Settings page, the /auth/ pages and the invite page keep. */
+const TODAYS_DOCUMENT_CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com https://static.cloudflareinsights.com; style-src 'self' 'unsafe-inline' https://unpkg.com; font-src 'self'; img-src 'self' data: https://unpkg.com https://*.tile.openstreetmap.org https://api.qrserver.com; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'";
 
 /** The app document's policy, as design G11 §3.6 change 3 states it, with the tile host the web app uses today. */
-const APP_DOCUMENT_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https://*.tile.openstreetmap.org; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'";
+const APP_DOCUMENT_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: blob: https://*.tile.openstreetmap.org; connect-src 'self' https://nominatim.openstreetmap.org wss: https:; frame-ancestors 'none'; base-uri 'none'; object-src 'none'; form-action 'self'";
 
 /** A GET with the path sent exactly as written. fetch() would normalise dot segments and backslashes first. */
 function rawGet(rawPath: string): Promise<{ status: number; type: string; csp: string | null; referrer: string | null; body: string }> {
@@ -126,7 +128,6 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(publicDir, 'settings', 'index.html'), '<!doctype html><title>Settings</title><script>window.page = "settings"</script>');
     fs.writeFileSync(path.join(publicDir, 'manager', 'index.html'), '<!doctype html><title>Manager</title><script>window.page = "manager"</script>');
     fs.writeFileSync(path.join(publicDir, 'settings.html'), '<!doctype html><title>Old settings</title><script>window.page = "old settings"</script>');
-    fs.writeFileSync(path.join(publicDir, 'auth', 'github.html'), '<!doctype html><title>GitHub return</title><script>window.page = "github"</script>');
     fs.writeFileSync(path.join(publicDir, 'auth', 'facebook.html'), '<!doctype html><title>Facebook return</title><script>window.page = "facebook"</script>');
     fs.writeFileSync(path.join(publicDir, 'assets', 'app.js'), 'window.app = "the web app\'s script";');
     // https-server.ts and routes/settings.ts take public/ from the working directory when it has one, as they load.
@@ -136,7 +137,8 @@ async function main(): Promise<void> {
     initStateEngine();
     process.env.APPLE_PROBE = '1'; // its routes register only when on, as the node starts (routes/apple-probe.ts)
     const { startHttpsServer } = await import('./https-server.js');
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // ── 1. the Apple return ──────────────────────────────────────────────────────────────────────
     console.log('── 1. POST /app/auth/apple ──');
@@ -262,12 +264,19 @@ async function main(): Promise<void> {
     const inviteHtml = await invite.text();
     assert(invite.status === 200 && inviteHtml.includes('<script>') && invite.headers.get('content-security-policy') === TODAYS_DOCUMENT_CSP,
         `GET /?invite= (the install page, an inline script of its own) keeps today's header (got ${invite.status} ${invite.headers.get('content-security-policy')})`);
+    // Settings and the manager are the admin's pages on the seed's origin and run no inline script (Fable's web review
+    // M2): the app document's policy, with no 'unsafe-inline' and no unpkg.com in script-src.
     for (const docPath of ['/settings', '/manager']) {
         const res = await fetch(`${BASE}${docPath}`);
         await res.text();
-        assert(res.status === 200 && res.headers.get('content-security-policy') === TODAYS_DOCUMENT_CSP,
-            `GET ${docPath} keeps today's header (got ${res.status} ${res.headers.get('content-security-policy')})`);
-        assert(res.headers.get('referrer-policy') === null, `GET ${docPath} gains no Referrer-Policy`);
+        const csp = res.headers.get('content-security-policy');
+        assert(res.status === 200 && csp === APP_DOCUMENT_CSP,
+            `GET ${docPath} carries the app document's policy (got ${res.status} ${policyName(csp)})`);
+        const scripts = directive(csp, 'script-src') ?? [];
+        assert(!scripts.includes("'unsafe-inline'") && !scripts.some(src => src.includes('unpkg.com')),
+            `GET ${docPath}: script-src has no 'unsafe-inline' and no unpkg.com (got ${scripts.join(' ')})`);
+        assert(res.headers.get('referrer-policy') === 'strict-origin-when-cross-origin',
+            `GET ${docPath} keeps its Referrer-Policy (got ${res.headers.get('referrer-policy')})`);
     }
     const api = await fetch(`${BASE}/api/community/info`);
     await api.text();
@@ -308,14 +317,10 @@ async function main(): Promise<void> {
     }
 
     // ── 4. the pages that keep the older header ───────────────────────────────────────────────────
-    console.log('\n── 4. the pages that need the older header still get it ──');
+    console.log('\n── 4. the pages that need the older header still get it; Settings and the manager do not ──');
     const pages: Array<[string, string]> = [
-        ['/settings', 'window.page = "settings"'], ['/settings/', 'window.page = "settings"'],
-        ['/settings/members', 'window.page = "settings"'], ['/settings/index.html', 'window.page = "settings"'],
         ['/settings.html', 'window.page = "old settings"'], ['/settings-legacy', '<script'],
-        ['/manager', 'window.page = "manager"'], ['/manager/fleet', 'window.page = "manager"'],
-        ['/manager/index.html', 'window.page = "manager"'],
-        ['/auth/github.html', 'window.page = "github"'], ['/auth/facebook.html', 'window.page = "facebook"'],
+        ['/auth/facebook.html', 'window.page = "facebook"'],
         ['/?invite=BP-TEST-0002', '<script>'], ['/apple-probe', '<script>'],
     ];
     for (const [pagePath, marker] of pages) {
@@ -324,6 +329,20 @@ async function main(): Promise<void> {
             `GET ${pagePath} renders its page, inline script and all (got ${res.status} ${res.type})`);
         assert(res.csp === TODAYS_DOCUMENT_CSP && res.referrer === null,
             `GET ${pagePath} keeps today's header, which lets that script run, and no Referrer-Policy (got ${policyName(res.csp)}, ${res.referrer})`);
+    }
+    // The manager's pages, every way they are reached: the route, a deep link, the file itself, the SPA fallback.
+    const managerPages: Array<[string, string]> = [
+        ['/settings', 'window.page = "settings"'], ['/settings/', 'window.page = "settings"'],
+        ['/settings/members', 'window.page = "settings"'], ['/settings/index.html', 'window.page = "settings"'],
+        ['/manager', 'window.page = "manager"'], ['/manager/fleet', 'window.page = "manager"'],
+        ['/manager/index.html', 'window.page = "manager"'],
+    ];
+    for (const [pagePath, marker] of managerPages) {
+        const res = await rawGet(pagePath);
+        assert(res.status === 200 && res.type.includes('html') && res.body.includes(marker) && !res.body.includes('the web app'),
+            `GET ${pagePath} renders its page (got ${res.status} ${res.type})`);
+        assert(res.csp === APP_DOCUMENT_CSP && res.referrer === 'strict-origin-when-cross-origin',
+            `GET ${pagePath} carries the app document's policy, under which no inline script runs (got ${policyName(res.csp)}, ${res.referrer})`);
     }
     const asset = await rawGet('/assets/app.js');
     assert(asset.status === 200 && asset.body.includes('the web app\'s script') && /javascript/.test(asset.type),
@@ -335,15 +354,16 @@ async function main(): Promise<void> {
     // ── 5. the rules underneath ──────────────────────────────────────────────────────────────────
     console.log('\n── 5. the rules underneath ──');
     const canonical = ['/', '/app', '/app/', '/app/auth/apple', '/index.html', '/settings/', '/settings/members/abc', '/assets/index-D1x.js',
-        '/avatars/avatar_bolt.jpg', '/auth/github.html', '/a%20b', '/%25'];
+        '/avatars/avatar_bolt.jpg', '/auth/facebook.html', '/a%20b', '/%25'];
     for (const p of canonical) assert(!isNonCanonicalSpelling(p), `${p} is a spelling the node answers`);
     for (const p of [...refused.map(r => r.split(/[?#]/)[0]), '/%', '/a/.', '/a/%2e']) {
         assert(isNonCanonicalSpelling(p), `${p} is refused as a spelling`);
     }
-    for (const f of ['settings.html', 'settings/index.html', 'manager/index.html', 'auth/github.html', 'auth/facebook.html', 'auth/github.html.gz']) {
+    for (const f of ['settings.html', 'auth/facebook.html', 'auth/facebook.html.gz']) {
         assert(isDocumentPolicyFile(f), `public/${f} keeps the older header`);
     }
-    for (const f of ['index.html', 'index.html.gz', 'index.html.br', 'assets/index.html', 'auth/../index.html', 'auth/x/index.html', 'settings/assets/app.js', 'manager/other.html', 'INDEX.HTML']) {
+    for (const f of ['index.html', 'index.html.gz', 'index.html.br', 'assets/index.html', 'auth/../index.html', 'auth/x/index.html', 'settings/assets/app.js', 'manager/other.html', 'INDEX.HTML',
+        'settings/index.html', 'settings/index.html.gz', 'manager/index.html']) {
         assert(!isDocumentPolicyFile(f), `public/${f} gets the app document's policy`);
     }
 

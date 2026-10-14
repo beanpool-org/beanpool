@@ -6,8 +6,15 @@
  * - Options list with live progress bars, vote counts, and percentages.
  * - Tap-to-vote: one member, one vote; re-voting overwrites choice.
  * - Total turnout count & close date.
- * - Public open ballot: collapsible list of who voted for what.
+ * - Anonymous by default (Marty, 2026-09-28): everyone sees the counts. On a poll its creator made an open vote
+ *   (`pollOpenVote`), members also get a collapsible list of who voted for what. The card says which.
  * - Author "Close Poll" action for early closure.
+ * - On the global community (`informal`), "An informal poll; it decides nothing", for members and visitors alike: anyone
+ *   may join there with a sign-in, so a count can be tipped by one person with several accounts (lib/informal-polls.ts).
+ * - Once an anonymous poll has closed, where the node says (the global community's public polls), how many votes came
+ *   from new or 12-word accounts (never while it is open, never on an open vote), and
+ *   under each answer how many of its own when the node gives that split (@beanpool/core poll-vote-origins). Every vote
+ *   still counts; the lines say where votes came from, never whose they are.
  */
 
 import { useState, useEffect, useMemo } from 'react';
@@ -15,6 +22,11 @@ import { type PollOption, type PollVoteRecord } from '../lib/marketplace';
 import { votePoll, closePoll, type MarketplacePost } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { INFORMAL_POLL_NOTE } from '../lib/informal-polls';
+import { marked, useFeatureMode } from '../lib/features';
+import { LocalCommunityLine, type LocalCommunityWays } from './LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown } from '@beanpool/core';
 
 interface PollCardProps {
     post: MarketplacePost;
@@ -28,9 +40,14 @@ interface PollCardProps {
      * sends none), no voting, and no voter list.
      */
     visitor?: boolean;
+    /** The global community's polls (lib/informal-polls.ts): the card says it decides nothing. */
+    informal?: boolean;
+    /** Where the 🏘️ line's sheet leads besides Start a community: Communities near you, How it works. */
+    localWays?: LocalCommunityWays;
 }
 
-export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMode, visitor = false }: PollCardProps) {
+export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMode, visitor = false, informal = false, localWays }: PollCardProps) {
+    const decisionsMarked = marked(useFeatureMode('decisions'));
     const [livePost, setLivePost] = useState<MarketplacePost>(post);
     const [votingOptionId, setVotingOptionId] = useState<string | null>(null);
     const [isClosing, setIsClosing] = useState(false);
@@ -45,6 +62,9 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
     // the full width of a page column, where a single answer column already fits: they are left exactly as they were.
     const isGrid = viewMode === 'grid';
 
+    // Only a poll its creator made an open vote names its voters; a node before the choice sends no flag, and its polls
+    // showed voters to members, so a list that comes with the poll is shown there as before.
+    const openVote = livePost.pollOpenVote === true || (livePost.pollOpenVote === undefined && Array.isArray(livePost.pollVotes) && livePost.pollVotes.length > 0);
     const isAuthor = Boolean(identity?.publicKey && livePost.authorPublicKey === identity.publicKey);
     const isClosed = livePost.status === 'completed' || (livePost.pollClosesAt ? new Date(livePost.pollClosesAt).getTime() <= Date.now() : false);
     const authorName = livePost.authorCallsign || (livePost.authorPublicKey ? livePost.authorPublicKey.slice(0, 6) : 'Anonymous');
@@ -63,6 +83,10 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
     }
 
     const totalVotes = livePost.totalVotes ?? options.reduce((sum, o) => sum + (o.votes || 0), 0);
+    // Where its votes came from: only once an anonymous poll has closed. While it is open the card says nothing about it,
+    // not even that it will (the node sends nothing then either: @beanpool/engine pollOriginsMayShow).
+    const showOrigins = pollOriginsShown(isClosed, openVote);
+    const originsLine = showOrigins ? pollVoteOriginsLine(totalVotes, livePost.pollNewOrWordsVotes) : null;
     const userVotedOptionId = livePost.userVotedOptionId;
     const votesList: PollVoteRecord[] = livePost.pollVotes || [];
 
@@ -139,7 +163,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                     <span
                         className={`text-[10px] font-extrabold uppercase tracking-wide px-2 py-0.5 rounded-lg border ${
                             isClosed
-                                ? 'bg-nature-100 text-nature-600 dark:bg-nature-800 dark:text-nature-400 border-nature-300/40'
+                                ? 'bg-nature-100 text-nature-600 dark:bg-nature-800 dark:text-nature-300 border-nature-300/40'
                                 : 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border-purple-200 dark:border-purple-800'
                         }`}
                     >
@@ -207,6 +231,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                     const isVotingThis = votingOptionId === opt.id;
                     const pct = opt.percentage ?? (totalVotes > 0 ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0);
                     const count = opt.votes ?? 0;
+                    const optionOrigins = showOrigins ? pollOptionOriginsLine(count, opt.newOrWordsVotes) : null;
 
                     const row = (
                         <>
@@ -247,11 +272,16 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                                     <span className="font-black text-nature-700 dark:text-nature-300">
                                         {isVotingThis ? 'Voting...' : `${pct}%`}
                                     </span>
-                                    <span className="text-[10px] text-nature-400 dark:text-nature-500">
+                                    <span className="text-[10px] text-nature-400 dark:text-nature-400">
                                         ({count})
                                     </span>
                                 </div>
                             </div>
+                            {optionOrigins && (
+                            <span className="relative z-10 mt-1 pl-6 block text-[0.625rem] font-semibold text-nature-500 dark:text-nature-400 break-words" data-testid="poll-option-origins">
+                                {optionOrigins}
+                            </span>
+                            )}
                         </>
                     );
                     // A visitor reads the answers and their counts; there is nothing to press.
@@ -282,12 +312,37 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                 })}
             </div>
 
-            {/* Polls are an open ballot — say so before anyone votes (Decisions, by contrast, are secret). */}
-            {!visitor && (
-            <p className="mb-2 text-[11px] font-semibold text-nature-500 dark:text-nature-400" data-testid="poll-open-ballot-note">
-                <span aria-hidden="true">👁️ </span>Your vote is visible to members
+            {/* On the global community: a show of opinion, never a decision. Said to visitors too, before they join to vote. */}
+            {informal && (
+            <p className="mb-1 text-[11px] font-semibold text-purple-700 dark:text-purple-300" data-testid="poll-informal-note">
+                <span aria-hidden="true">💬 </span>{INFORMAL_POLL_NOTE}
             </p>
             )}
+            {/* Decisions live in a local community here: where one would bind, said once under the note (design §1 row 7). */}
+            {decisionsMarked && (
+            <div className="mb-1" data-testid="poll-decision-line">
+                <LocalCommunityLine feature="decisions" text={LOCAL_COMMUNITY_LINES.poll} {...localWays} />
+            </div>
+            )}
+
+            {/* Where its votes came from, once it has closed, where the node says: all of them still count. In rem, so a
+                larger text setting makes it larger too. */}
+            {originsLine && (
+            <p className="mb-1 text-[0.6875rem] font-semibold text-nature-600 dark:text-nature-300 break-words" data-testid="poll-vote-origins">
+                <span aria-hidden="true">🌱 </span>{originsLine}
+            </p>
+            )}
+
+            {/* Which ballot this is, said before anyone votes: anonymous unless its creator made it an open vote. */}
+            {!visitor && (openVote ? (
+            <p className="mb-2 text-[11px] font-semibold text-nature-500 dark:text-nature-400" data-testid="poll-open-ballot-note">
+                <span aria-hidden="true">👁️ </span>Open vote: members can see who chose what
+            </p>
+            ) : (
+            <p className="mb-2 text-[11px] font-semibold text-nature-500 dark:text-nature-400" data-testid="poll-anonymous-note">
+                <span aria-hidden="true">🔒 </span>Anonymous: everyone sees only the totals
+            </p>
+            ))}
 
             {/* Error Message */}
             {error && (
@@ -302,7 +357,7 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
                     <span aria-hidden="true">📊 </span>{totalVotes} vote{totalVotes === 1 ? '' : 's'} cast
                 </span>
 
-                {!visitor && votesList.length > 0 && (
+                {!visitor && openVote && votesList.length > 0 && (
                     <button
                         type="button"
                         onClick={() => setShowVoters(v => !v)}
@@ -316,10 +371,10 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
             </div>
 
             {/* Collapsible Open Ballot Public Voter List */}
-            {!visitor && showVoters && votesList.length > 0 && (
+            {!visitor && openVote && showVoters && votesList.length > 0 && (
                 <div id="poll-voters-list" className="mt-2.5 pt-2 border-t border-purple-100 dark:border-purple-900/40 max-h-36 overflow-y-auto space-y-1 text-xs">
                     <p className="text-[10px] uppercase tracking-wider font-extrabold text-nature-400 mb-1">
-                        Public Village Ballot
+                        Open vote
                     </p>
                     {votesList.map((vote, idx) => {
                         const opt = optionsById.get(vote.optionId);
@@ -343,8 +398,8 @@ export function PollCard({ post, identity, onVoteSuccess, onOpenProfile, viewMod
 
             {/* Village Notice */}
             {!visitor && (
-            <p className="mt-2 text-[9px] text-nature-400 dark:text-nature-500 text-center">
-                <span aria-hidden="true">ℹ️ </span>Public signed village voting · Re-voting overwrites choice
+            <p className="mt-2 text-[9px] text-nature-400 dark:text-nature-400 text-center">
+                <span aria-hidden="true">ℹ️ </span>{openVote ? 'Open vote' : 'Anonymous vote'} · Re-voting overwrites choice
             </p>
             )}
         </div>

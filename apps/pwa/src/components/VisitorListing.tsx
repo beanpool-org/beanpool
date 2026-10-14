@@ -11,6 +11,7 @@ import type { MarketplacePost } from '../lib/api';
 import { formatEventWhen } from '../lib/events';
 import { PLACE_AFTER_JOIN, visitorDistanceText, visitorPriceText } from '../lib/visitor-lobby';
 import { PollCard } from './PollCard';
+import { listPhotoUrl } from '@beanpool/core';
 
 function typeLabel(post: MarketplacePost): string {
     return post.type === 'offer' ? 'Offer' : post.type === 'need' ? 'Need' : post.type === 'event' ? 'Event' : 'Poll';
@@ -62,7 +63,7 @@ export function VisitorCard({ post, beans, distanceKm, onOpen }: CardProps) {
         >
             <span className="w-20 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-nature-100 dark:bg-nature-800 flex items-center justify-center">
                 {photo
-                    ? <img src={photo} alt="" className="w-full h-full object-cover" />
+                    ? <img src={listPhotoUrl(photo)} alt="" className="w-full h-full object-cover" />
                     : <span className="text-3xl" aria-hidden="true">{cat?.emoji ?? '📦'}</span>}
             </span>
             <span className="flex-1 min-w-0 flex flex-col gap-1">
@@ -71,7 +72,7 @@ export function VisitorCard({ post, beans, distanceKm, onOpen }: CardProps) {
                     {visitorPriceText(post, beans)}
                 </span>
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span className="text-xs font-black uppercase tracking-wide" style={{ color: typeColor }}>{typeLabel(post)}</span>
+                    <span className="text-xs font-black uppercase tracking-wide" style={{ color: `var(--post-type-${post.type}, ${typeColor})` }}>{typeLabel(post)}</span>
                     <span data-testid="visitor-card-category" className="text-xs font-bold px-2 py-0.5 rounded-full bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-200 break-words">
                         {cat ? `${cat.emoji} ${cat.label}` : post.category}
                     </span>
@@ -92,13 +93,15 @@ interface DetailProps {
     distanceKm: number | null;
     onBack: () => void;
     onJoin: () => void;
+    /** A poll's card says it decides nothing (lib/informal-polls.ts). */
+    pollsInformal?: boolean;
 }
 
 /**
  * The visitor's detail sheet: the listing's photos (a row that swipes), its words and category, the rough distance,
  * an event's time with its place held back, and one full-width button to join. No chat, no accept, no profile link.
  */
-export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin }: DetailProps) {
+export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin, pollsInformal = false }: DetailProps) {
     const cat = MARKETPLACE_CATEGORIES_BY_ID.get(post.category);
     const typeColor = POST_TYPE_COLORS[post.type] || '#888';
     const photos = post.photos ?? [];
@@ -110,13 +113,13 @@ export function VisitorPostDetail({ post, beans, distanceKm, onBack, onJoin }: D
             <button
                 type="button"
                 onClick={onBack}
-                className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:text-nature-400 font-bold transition-colors cursor-pointer bg-transparent border-0 p-0"
+                className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:text-nature-400 dark:hover:text-nature-200 font-bold transition-colors cursor-pointer bg-transparent border-0 p-0"
             >
                 <span className="text-xl leading-none" aria-hidden="true">←</span> Back to Market
             </button>
 
             {post.type === 'poll' ? (
-                <PollCard post={post} visitor />
+                <PollCard post={post} visitor informal={pollsInformal} />
             ) : (
                 <div className="bg-white dark:bg-nature-950 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm overflow-hidden mb-4">
                     <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b" style={{ backgroundColor: `${typeColor}15`, borderBottomColor: `${typeColor}30` }}>

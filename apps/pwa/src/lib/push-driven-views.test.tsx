@@ -700,12 +700,23 @@ describe('Stage 4: Push-driven views and relaxed backstop timers', () => {
         });
 
         it('switches to Pulse and renders PulsePage without blanking', async () => {
+            // The Pulse is a card on Home now, its page one tap away (DESIGN-home-dashboard-fable.md §8, §13 Q1). Since the card
+            // frame (#1701) a newcomer's Home has no Pulse card until it is added, so this member's list holds it.
+            vi.spyOn(api, 'getHome').mockResolvedValue({ notModified: false, etag: null, answer: {
+                generatedAt: '2026-10-02T09:00:00.000Z', profile: 'local', features: {},
+                layout: { v: 2, cards: [{ id: 'pulse', type: 'pulse' }], dismissed: {}, updatedAt: '2026-10-01T00:00:00.000Z' },
+                me: { joinedAt: '2026-01-01T00:00:00.000Z', isKeeper: false, probation: null, interests: ['food'], area: null, firstOffer: false, standing: 'member' },
+                cards: {
+                    pulse: { items: [{ id: 'u1', title: 'How our LETS started', thumbnailUrl: null, platform: 'youtube', callsign: 'River Folk', category: 'education', url: null }] },
+                    community: { name: 'Test', members: 2 },
+                },
+            } });
             render(<App />);
             await act(async () => {
                 await vi.advanceTimersByTimeAsync(100);
             });
 
-            const pulseBtn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('Pulse'));
+            const pulseBtn = Array.from(document.querySelectorAll('button')).find(b => b.getAttribute('aria-label') === 'See all of the Pulse');
             expect(pulseBtn).toBeDefined();
 
             await act(async () => {
@@ -713,7 +724,8 @@ describe('Stage 4: Push-driven views and relaxed backstop timers', () => {
                 await vi.advanceTimersByTimeAsync(200);
             });
 
-            expect(document.body.textContent).toContain('The Pulse');
+            expect(document.querySelector('[data-testid="home-page"]')).toBeNull();
+            expect(Array.from(document.querySelectorAll('h1')).some(h => h.textContent?.trim() === 'The Pulse')).toBe(true);
         });
 
         it('MapPage does not throw and safely excludes polls from map pins', async () => {

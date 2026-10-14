@@ -5,7 +5,8 @@ import { MemberDetailModal, type MemberNodeRole } from './MemberDetailModal';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveAvatarUrl } from '../../lib/avatar';
 import { Avatar } from '../common/Avatar';
-import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, dismissNodeReport, type NodeTreasury } from '../../lib/node-client';
+import { fetchNodeTreasuries, createNodeTreasury, seedTreasuryOffer, dismissNodeReport, reportSubject, type NodeTreasury, fetchKnownFloorMarks } from '../../lib/node-client';
+import type { KnownFloorException } from './MemberKnownFloorPanel';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 
 export interface MemberItem {
@@ -246,13 +247,31 @@ export function MembersModule({
     const [offerDescription, setOfferDescription] = useState('');
     const [seedingOffer, setSeedingOffer] = useState(false);
 
+    // The known floor (community modes slice 4): which members an admin lowered or froze, marked in the list. Empty with
+    // the dial off or on a node older than it.
+    const [knownFloorMarks, setKnownFloorMarks] = useState<Record<string, KnownFloorException>>({});
+    React.useEffect(() => {
+        let mounted = true;
+        setKnownFloorMarks({});
+        if (!activeNodeUrl) return;
+        void fetchKnownFloorMarks(activeNodeUrl, adminPassword, tfaToken).then((marks) => { if (mounted) setKnownFloorMarks(marks); });
+        return () => { mounted = false; };
+    }, [activeNodeUrl, adminPassword, tfaToken]);
+    const onKnownFloorChanged = React.useCallback((pk: string, exception: KnownFloorException | null) => {
+        setKnownFloorMarks((prev) => {
+            const next = { ...prev };
+            if (exception) next[pk] = exception; else delete next[pk];
+            return next;
+        });
+    }, []);
+
     const reloadTreasuries = React.useCallback(async () => {
         if (!activeNodeUrl) return;
         try {
-            const list = await fetchNodeTreasuries(activeNodeUrl);
+            const list = await fetchNodeTreasuries(activeNodeUrl, adminPassword, tfaToken);
             setTreasuries(list);
         } catch {}
-    }, [activeNodeUrl]);
+    }, [activeNodeUrl, adminPassword, tfaToken]);
 
     React.useEffect(() => {
         reloadTreasuries();
@@ -653,11 +672,8 @@ export function MembersModule({
                                         </span>
                                         <span className="font-mono text-amber-300">
                                             {(() => {
-                                                const target = typeof report.targetPubkey === 'string'
-                                                    ? report.targetPubkey
-                                                    : (typeof report.target_pubkey === 'string'
-                                                        ? report.target_pubkey
-                                                        : '');
+                                                // On a post, its author as the node read it from the post (reportSubject).
+                                                const target = reportSubject(report);
                                                 return `Target: ${target ? `${target.slice(0, 12)}...` : 'Unknown'}`;
                                             })()}
                                         </span>
@@ -790,6 +806,15 @@ export function MembersModule({
                                                     <div className="min-w-0">
                                                         <div className="font-bold text-white truncate flex items-center gap-1.5 group-hover:text-terra-400 transition-colors">
                                                             <span>{displayName}</span>
+                                                            {knownFloorMarks[pubkey] && (
+                                                                <span
+                                                                    data-testid="known-floor-mark"
+                                                                    className="px-1.5 py-0.5 rounded text-[9px] font-bold border shrink-0 bg-amber-950/80 text-amber-200 border-amber-800/80"
+                                                                    title="An admin changed this member's known floor"
+                                                                >
+                                                                    {knownFloorMarks[pubkey].frozen ? 'Known floor frozen' : `Known floor ${(knownFloorMarks[pubkey].amount ?? 0).toLocaleString('en')}`}
+                                                                </span>
+                                                            )}
                                                             {m.platform && m.platform !== 'unknown' && (
                                                                 <span
                                                                     className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border shrink-0 ${
@@ -1027,6 +1052,7 @@ export function MembersModule({
                         onRefresh?.();
                     }}
                     onSuspensionChanged={() => onRefresh?.()}
+                    onKnownFloorChanged={onKnownFloorChanged}
                     onPrune={(pk) => handlePruneMember(pk)}
                     onPruneBranch={onPruneBranch}
                     onClose={() => setSelectedMember(null)}

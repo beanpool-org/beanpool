@@ -18,7 +18,7 @@ export type NeedsYouKind = 'admin' | 'deal' | 'vote' | 'message' | 'group';
  */
 export const NEEDS_YOU_PRIORITY: readonly NeedsYouKind[] = ['admin', 'deal', 'vote', 'message', 'group'];
 
-/** Where a tap lands. Resolved to a route by the component, so this file stays free of navigation. */
+/** Where a tap lands: {@link needsTargetHref} names the screen, and the component navigates there. */
 export type NeedsYouTarget =
     | { to: 'admin'; section: SettingsSection }
     | { to: 'deal'; postId: string; txId: string }
@@ -27,7 +27,50 @@ export type NeedsYouTarget =
     | { to: 'chat'; conversationId: string; event?: boolean; thread?: 'group' | 'enterprise' }
     | { to: 'unread-messages' }
     /** Talk → Groups (groups slice 2): group, enterprise and event chats are listed there, not under Messages. */
-    | { to: 'your-groups' };
+    | { to: 'your-groups' }
+    /**
+     * An enterprise's own screen, for its keepers' vote (DESIGN-group-decisions §2.8). The node sends it only to an app
+     * that asks with `lands=enterprise` (utils/home-store.ts homePath); the two ship together.
+     */
+    | { to: 'enterprise'; id: string }
+    /**
+     * A chat group, for its members' vote (slice S3): its chat with the info sheet open, where its Decisions block is. The
+     * node sends it only to an app that asks with `lands=group` (utils/home-store.ts homePath).
+     */
+    | { to: 'group'; id: string };
+
+/** A chat group's vote lands on the group: its chat screen, told it is a group, with its info sheet open (`info=1`). */
+export function groupVoteHref(groupId: string): { pathname: string; params: Record<string, string> } {
+    return { pathname: '/chat/[id]', params: { id: groupId, group: '1', info: '1' } };
+}
+
+/**
+ * The screen each landing opens, as `router.push` takes it (components/NeedsYouIcons.tsx `goToNeedsTarget`; Home's Needs
+ * you card too). Every landing but 'admin', which needs the phone unlock and sign-in link (useManageNode).
+ */
+export function needsTargetHref(target: Exclude<NeedsYouTarget, { to: 'admin' }>): { pathname: string; params?: Record<string, string> } {
+    switch (target.to) {
+        case 'deal': return { pathname: '/post/[id]', params: { id: target.postId, txId: target.txId } };
+        case 'my-deals': return { pathname: '/(tabs)/market', params: { tab: 'deals' } };
+        // Commons has no route or param for one Decision, so every vote lands on its Decide section. Only a node with
+        // Decisions sends a vote line (routes/home-answer.ts, the header's own read).
+        case 'decide': return { pathname: '/(tabs)/projects', params: { section: 'decide' } };
+        // The chat screen is told its kind on the way in, so it never waits on a lookup to decide.
+        case 'chat': return target.event
+            ? { pathname: '/chat/[id]', params: { id: target.conversationId, event: '1' } }
+            : target.thread
+                ? { pathname: '/chat/[id]', params: { id: target.conversationId, [target.thread]: '1' } }
+                : { pathname: '/chat/[id]', params: { id: target.conversationId } };
+        // Talk → Messages lists chats with people; the Unread filter narrows it to these.
+        case 'unread-messages': return { pathname: '/(tabs)/chats', params: { view: 'messages', filter: 'unread' } };
+        // Group, enterprise and event chats live in Talk → Groups (groups slice 2), with their counts.
+        case 'your-groups': return { pathname: '/(tabs)/chats', params: { view: 'groups' } };
+        // A keepers' vote is never in Commons → Decide: it lands on the enterprise, whose Decisions block lists it.
+        case 'enterprise': return { pathname: '/treasury-detail', params: { publicKey: target.id } };
+        // A group's vote: the group itself (its chat, the info sheet open on its Decisions block), never Talk's list.
+        case 'group': return groupVoteHref(target.id);
+    }
+}
 
 export interface NeedsYouEntry {
     kind: NeedsYouKind;

@@ -1,10 +1,11 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert, Image, FlatList, BackHandler, Platform, AppState, Animated } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { hapticTick } from '../utils/haptics';
 import { createIdentity, loadIdentity, getMnemonic, hasMnemonic, BeanPoolIdentity } from '../utils/identity';
 import { restoreFromWords, ReplaceNotSaved, type ConfirmReplace } from '../utils/restore-account';
 import { readWordsBehindLock } from '../utils/words-behind-lock';
+import { usePutAwayAfterLeave } from '../utils/words-put-away';
 import { authenticateUser } from '../utils/LocalAuth';
 import { importIdentity } from '../utils/identity';
 import { useIdentity } from './IdentityContext';
@@ -13,46 +14,68 @@ import {
     getPendingOnboarding, setPendingOnboarding, updatePendingOnboarding, clearPendingOnboarding, resumePlan, keyMadeForThisJoin,
     recordJoinKeyMade, type OnboardingFlow,
 } from '../utils/onboarding-state';
-import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile } from '../utils/node-profile';
+import { rekeySlotStore } from '../utils/rekey-slot-store';
+import { GLOBAL_NODE_URL, GLOBAL_DOOR_MESSAGES, beansOn, checkGlobalDoor, getCachedNodeProfile, wordsDoorOn } from '../utils/node-profile';
 import { askGlobalDoorOffer, globalDoorOffered } from '../utils/global-door-offer';
 import {
     MAX_JOIN_NAME, adoptJoinKey, checkNameAtDoor, commitJoinKey, doorMessage, doorWaysOut, joinKeyForThisPhone, joinedUnderNodeName,
-    keepJoinedIdentity, nameCheckMessage, nextStepFor, releaseJoinKey, signInAtDoor, submitJoin,
-    type DoorAnswer, type DoorPhase, type DoorSignIn, type JoinKey,
+    keepJoinedIdentity, nameCheckMessage, nextStepFor, releaseJoinKey, signInAtDoor, submitJoin, submitWordsJoin,
+    type DoorAnswer, type DoorPhase, type DoorSignIn, type DoorWay, type JoinKey,
 } from '../utils/global-join';
+import { useDoorWork } from '../utils/use-door-work';
+import { DOOR_WORK_MESSAGES, solutionUnlessLeft } from '../utils/door-work';
+import { DoorChoices, DoorWorkProgress, WordsBackupNote, WORDS_BACKUP_TEXT } from '../components/WordsDoor';
+import { LinkSignInSheet } from '../components/LinkSignInSheet';
+import { linkedNotice, type LinkAnswer } from '../utils/join-link';
+import { startOneWayBack } from '../utils/one-way-back';
+import { signInCopiesAt } from '../utils/vault-config';
 import { addSavedNode, clearGuestNode } from '../utils/nodes';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
-import { useGlobalSearchParams, router, useFocusEffect } from 'expo-router';
+import { useGlobalSearchParams, router, useFocusEffect, ErrorBoundary } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import * as WebBrowser from 'expo-web-browser';
+
+export { ErrorBoundary };
 import * as Linking from 'expo-linking';
 import * as ImagePicker from 'expo-image-picker';
 import { BUNDLED_AVATARS, BundledAvatar, resolveBundledAvatar } from '../utils/bundled-avatars';
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
 import { KeeperProtectionPanel } from '../components/KeeperProtectionPanel';
 import { SsoEnrolSheet } from '../components/SsoEnrolSheet';
-import { GoogleButton, AppleButton, FacebookButton, GitHubButton, GoogleLogo, AppleLogo, FacebookLogo, GitHubLogo } from '../components/SsoButton';
+import { CopyClearsNote, NoScreenCapture, NoScreenLockNote } from '../components/WordsOnScreen';
+import { RecoveryKitButtons } from '../components/RecoveryKitButtons';
+import { RecoveryWordsEntry } from '../components/RecoveryWordsEntry';
+import { copyWordsForAMinute } from '../utils/words-clipboard';
+import { GoogleButton, AppleButton, FacebookButton, GoogleLogo, AppleLogo, FacebookLogo } from '../components/SsoButton';
 import { enrolKeepers, type KeeperEnrolmentResult } from '../utils/keeper-enrolment';
 import { protectionFrom } from '../utils/protection-state';
-import { NO_WORDS_WAY_BACK, noWordsBeforeWipe } from '../utils/no-words-copy';
+import { NO_WORDS_WAY_BACK, noWordsBeforeWipe, signInReplacedNote } from '../utils/no-words-copy';
 import { updateMemberProfile, fetchNodeCallsign, recordOnboardingEvent } from '../utils/db';
 import { buildSignedHeaders, validateMnemonic } from '../utils/crypto';
-import { colors, palette } from '../constants/colors';
-import { recoverAccountWithSso, waitingOnGithub } from '../utils/sso-recovery';
-import { returnToApp, type GithubDevicePrompt } from '../utils/sso-signin';
-import { GithubCodeSteps } from '../components/GithubCodeSteps';
+import { palette, type AppColors } from '../constants/colors';
+import { useOnboardingColors } from './ThemeContext';
+import {
+    checkSsoRestore, finishSsoRestore, recoverAccountWithSso, startSsoRestore, stopSsoRestoreAfterWords, vaultKeepsNoCopyFor,
+    waitingSsoRestore, type PendingVaultRestore, type RestoredFromVault,
+} from '../utils/sso-recovery';
+import { hasVault, holdEndsText, VAULT_MESSAGES, VaultError } from '../utils/vault';
+import { landNextOn } from '../utils/member-landing';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { SavedNodePicker } from '../components/SavedNodePicker';
 import { getSavedNodes, type SavedNode } from '../utils/nodes';
-import { type SsoProvider } from '../utils/sso-signin';
+import { SSO_PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
+import { returnToApp } from '../utils/sso-signin';
 
 
 import { extractNodeOrigin, normaliseInviteCode } from '../utils/invite-parser';
+import { readConsentTerms, joinAsksConsent, type ConsentTerms } from '../utils/known-consent';
 import { latestInviteLink, inviteToApply } from '../utils/welcome-invite';
+import { MEMBER_TICKET_REFUSED_TEXT } from '../utils/invite-entries';
 import { normalizeNodeUrl, looksLikeNodeAddress, shouldBlockCleartextNodeUrl, isBareCommunityName, UnsafeNodeAddressError } from '../utils/node-url';
 import { checkCallsignAvailable, suggestCallsigns } from '../utils/callsign-suggest';
 import { NEXT_REQUEST_TIMEOUT_MS, afterSpentInvite, leaveUnlessNextIsOut, redeemRefusalMeansIn, runNext } from '../utils/invite-next';
+import { communitySwitched } from '../utils/community-switch';
+import { ConsentText } from '../components/ConsentText';
 
 // Some devices (custom ROMs, emulators) have no https handler — swallow the
 // rejection rather than crash with an unhandled promise warning.
@@ -68,6 +91,8 @@ function inviteProblemMessage(reason?: string): string {
             return 'This invite has expired — invites last 30 days. Ask whoever invited you to send a fresh one (it only takes them a minute).';
         case 'unknown_inviter':
             return "This community doesn't know the person who made this invite. Double-check you're joining the right community, or ask for a fresh invite.";
+        case 'admins_only':
+            return MEMBER_TICKET_REFUSED_TEXT;
         default:
             return "That invite wasn't recognised by your community. Double-check the code, or ask whoever invited you for a fresh one.";
     }
@@ -87,11 +112,17 @@ function joinedLabel(joinedAt: string | null | undefined): string {
 }
 
 export default function WelcomeScreen() {
+    // Onboarding follows light/dark like the rest of the app: the classic light tokens in light (exactly as before),
+    // the app's dark tokens in dark. See utils/onboarding-colors.ts.
+    const { colors, dark } = useOnboardingColors();
+    const { styles, profileStyles, stepperStyles, guideStyles } = useMemo(() => makeStyles(colors, dark), [colors, dark]);
+    // Accent ink for text and spinners on the page; filled blue buttons keep blue600 under white text in both.
+    const accentInk = dark ? palette.blue400 : palette.blue600;
     const params = useGlobalSearchParams();
     const incomingUrl = Linking.useURL();
     // Only a link that carries an invite concerns this screen (utils/welcome-invite.ts). `useURL()` also changes on a
-    // sign-in provider's return and on the `beanpool://foreground` after every Android sign-in, and the invite and
-    // resume effects below used to re-run for those in the middle of a recovery or of step 3.
+    // sign-in provider's return and on `beanpool://foreground`, and the invite and resume effects below used to re-run
+    // for those in the middle of a recovery or of step 3.
     const [inviteLink, setInviteLink] = useState<string | null>(null);
     const latestLink = latestInviteLink(inviteLink, incomingUrl);
     if (latestLink !== inviteLink) setInviteLink(latestLink);
@@ -109,7 +140,7 @@ export default function WelcomeScreen() {
             // Consume the param. Leaving it set meant any later re-render re-applied it,
             // so "← Back to Restore Options" out of SSO recovery snapped straight back
             // into SSO recovery. Cleared with '' rather than undefined, matching how the
-            // rest of the app retires a consumed param (index.tsx, map.tsx) — '' is
+            // rest of the app retires a consumed param (market.tsx, map.tsx) — '' is
             // falsy, so the guard above still short-circuits.
             router.setParams({ mode: '' });
         }
@@ -127,18 +158,32 @@ export default function WelcomeScreen() {
         getSavedNodes().then(setSavedNodes).catch(() => {});
     }, [mode]);
     const [createAnchorUrl, setCreateAnchorUrl] = useState('');
-    const [ssoCallsign, setSsoCallsign] = useState('');
+    // A known community's consent text, shown before joining (community modes slice 6), and the member's tick. Never
+    // required: unticked, the join goes on and the admins simply never see this member's balance.
+    const [joinTerms, setJoinTerms] = useState<ConsentTerms | null>(null);
+    // The version of the text the member ticked: a text that changes as they type the address is unticked again.
+    const [joinTickedVersion, setJoinTickedVersion] = useState<string | null>(null);
+    const joinConsentTicked = !!joinTerms && joinTickedVersion === joinTerms.version;
     const [ssoProgressMessage, setSsoProgressMessage] = useState<string | null>(null);
-    /** The GitHub device code, held so recovery can show it properly rather than as a sentence. */
-    const [recoveryCode, setRecoveryCode] = useState<GithubDevicePrompt | null>(null);
+    // A build without a key vault (utils/vault.ts `signInCopiesAt`) restores at the member's community, as before the
+    // vault: a callsign and the community's address, looked up as they type.
+    const [ssoCallsign, setSsoCallsign] = useState('');
+    /**
+     * In a build with a key vault: the provider the vault said, signed, that it keeps no copy for (utils/sso-recovery.ts
+     * `vaultKeepsNoCopyFor`, kept per provider, not per sign-in account), whose copy may still be at the member's
+     * community. The restore with that provider goes on there, on the same screen a build without a vault shows (PR
+     * #1336 review finding 3). Null otherwise.
+     */
+    const [ssoAtCommunity, setSsoAtCommunity] = useState<SsoProvider | null>(null);
     /** Accounts matching what has been typed so far, so a half-remembered callsign still finds you. */
     const [ssoCandidates, setSsoCandidates] = useState<any[]>([]);
     const [ssoLookupBusy, setSsoLookupBusy] = useState(false);
     /** Set when a candidate is tapped, so the write to ssoCallsign does not re-open the picker. */
     const skipNextSsoLookupRef = useRef(false);
 
-    // Look up as they type, on the prefix. A member given `paul12` because `paul` was taken has no
-    // reason to remember the digits months later, and being told "no account" reads as "it is gone".
+    // Look up as they type. A community answers only the whole name, case forgiven, with no photo or
+    // join date (every community since 2026-10-01, the global one before: a stranger must not list its
+    // members by typing a letter), so "Is this you?" appears once the name is complete.
     // Debounced because this fires per keystroke against a node that may be a Raspberry Pi.
     useEffect(() => {
         // Tapping a candidate writes the full callsign here, which matches itself on the server and
@@ -173,10 +218,76 @@ export default function WelcomeScreen() {
         }, 400);
         return () => { cancelled = true; clearTimeout(t); };
     }, [ssoCallsign, recoveryAnchorUrl]);
-    const [recoveryCodeCopied, setRecoveryCodeCopied] = useState(false);
-    /** Stops a GitHub recovery that is waiting on the member at GitHub. */
+    /**
+     * A sign-in restore waiting at BeanPool's key vault (utils/sso-recovery.ts), or null. No name and no address: the
+     * sign-in finds the copy. Every restore waits (D2) until the vault releases it.
+     */
+    const [ssoWaiting, setSsoWaiting] = useState<PendingVaultRestore | null>(null);
+    /** The account the vault released, checked and not yet saved: the member chooses its community next. */
+    const [ssoReleased, setSsoReleased] = useState<RestoredFromVault | null>(null);
+    /**
+     * Where a released account goes: the global community unless the member chooses another (design §1.3). Shown as its
+     * bare host (normalizeNodeUrl adds the https://): with the scheme, a 320 dp field showed only "://global.beanpool.org".
+     */
+    const [ssoCommunity, setSsoCommunity] = useState(GLOBAL_NODE_URL.replace(/^https:\/\//, ''));
+    const [ssoChecking, setSsoChecking] = useState(false);
+    /** Stops a sign-in restore whose sign-in has finished and not yet been sent, when this screen goes away. */
     const recoveryAbortRef = useRef<AbortController | null>(null);
     useEffect(() => () => recoveryAbortRef.current?.abort(), []);
+
+    // A restore that is waiting at the vault is picked up where it was left, even after a restart: the phone keeps it
+    // until the account is saved. Read from the phone only; nothing waits on the vault here.
+    useEffect(() => {
+        if (!hasVault()) return;
+        let cancelled = false;
+        waitingSsoRestore().then((waiting) => {
+            if (cancelled || !waiting) return;
+            setSsoWaiting(waiting);
+            if (waiting.holdId) setMode(m => (m === 'home' ? 'ssoRecover' : m));
+        }).catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
+
+    /** Ask the vault whether the waiting restore has gone through. `quiet`: a background check, which shows no error. */
+    const checkSsoWaiting = useCallback(async (quiet: boolean) => {
+        setSsoChecking(true);
+        if (!quiet) setError(null);
+        try {
+            const result = await checkSsoRestore();
+            if (!result) {
+                setSsoWaiting(null);
+            } else if (result.status === 'held') {
+                setSsoWaiting(w => (w ? { ...w, until: result.until } : w));
+            } else if (result.status === 'stopped') {
+                setSsoWaiting(null);
+                setError(VAULT_MESSAGES.stopped);
+            } else {
+                setSsoReleased(result.restored);
+                setError(null);
+            }
+        } catch (e) {
+            if (e instanceof VaultError && e.message === VAULT_MESSAGES.gone) setSsoWaiting(null);
+            if (!quiet || (e instanceof VaultError && e.reason === 'wrong_account')) setError((e as Error).message);
+        } finally {
+            setSsoChecking(false);
+        }
+    }, []);
+
+    // While a restore waits on this screen: asked now, every minute, and whenever the app comes back.
+    useEffect(() => {
+        if (mode !== 'ssoRecover' || !ssoWaiting?.holdId || ssoReleased) return;
+        checkSsoWaiting(true);
+        const timer = setInterval(() => {
+            if (AppState.currentState === 'active') checkSsoWaiting(true);
+        }, 60_000);
+        const sub = AppState.addEventListener('change', (next) => {
+            if (next === 'active') checkSsoWaiting(true);
+        });
+        return () => {
+            clearInterval(timer);
+            sub.remove();
+        };
+    }, [mode, ssoWaiting?.holdId, ssoReleased, checkSsoWaiting]);
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -216,13 +327,24 @@ export default function WelcomeScreen() {
     const [globalKey, setGlobalKey] = useState<JoinKey | null>(null);
     /** The sign-in the join will spend. Dropped once sent: a nonce is spent once. */
     const [doorSignIn, setDoorSignIn] = useState<DoorSignIn | null>(null);
+    /** Under the joining spinner while the door's sign-in is asked for once more (utils/global-join.ts `submitJoin`). */
+    const [doorNotice, setDoorNotice] = useState<string | null>(null);
     /** Whether the community being joined trades in Beans: the How it Works step leaves them out if not. */
     const [joinBeansOn, setJoinBeansOn] = useState(true);
-    const [globalCode, setGlobalCode] = useState<GithubDevicePrompt | null>(null);
-    const [globalCodeCopied, setGlobalCodeCopied] = useState(false);
-    /** Stops a GitHub sign-in at the door that is waiting on the member at GitHub. */
-    const globalAbortRef = useRef<AbortController | null>(null);
-    useEffect(() => () => globalAbortRef.current?.abort(), []);
+    /**
+     * The 12-words door (two-doors design §2): whether this door has it (`features.wordsDoor`), the way the member chose
+     * at it, its work (started when the door opens, utils/door-work.ts), and the way the member came in, for Safety
+     * Backup. A door without it looks exactly as before: the sign-in alone.
+     */
+    const [wordsDoor, setWordsDoor] = useState(false);
+    const [doorWay, setDoorWay] = useState<DoorWay>('sign-in');
+    const doorWork = useDoorWork();
+    /** Join tapped before the work was done: "Setting up your account…" while it finishes (the member can still leave). */
+    const [workWaiting, setWorkWaiting] = useState(false);
+    const [joinDoor, setJoinDoor] = useState<'words' | null>(null);
+    /** Safety Backup's "Add a sign-in as a second way back" (utils/join-link.ts), and what it added. */
+    const [showLinkSheet, setShowLinkSheet] = useState(false);
+    const [linked, setLinked] = useState<Extract<LinkAnswer, { kind: 'linked' }> | null>(null);
     /** Stops the name step's check when the member leaves it (Back to Home, Use a different sign-in). */
     const nameCheckRef = useRef<AbortController | null>(null);
     useEffect(() => () => nameCheckRef.current?.abort(), []);
@@ -341,6 +463,9 @@ export default function WelcomeScreen() {
         putPendingWordsAway();
         putOutgoingWordsAway();
     }, [putPendingWordsAway, putOutgoingWordsAway]));
+    // And when the member comes back to the app after 15 seconds or more away, App Lock on or off.
+    usePutAwayAfterLeave(pendingWords !== null, putPendingWordsAway);
+    usePutAwayAfterLeave(outgoingWords !== null, putOutgoingWordsAway);
 
     // Count step 3 being drawn — once per join, not once per render.
     //
@@ -353,6 +478,8 @@ export default function WelcomeScreen() {
     /** Whether a covered member has asked to see the words anyway. Never hides them once shown. */
     const [revealWords, setRevealWords] = useState(false);
     const protection = protectionFrom(enrolment);
+    /** In by 12 words and no sign-in added yet: Safety Backup speaks to that (two-doors design §2.5). */
+    const wordsMember = joinFlow === 'global' && joinDoor === 'words' && !linked;
 
     /**
      * Split the words and hand out the pieces, on the way into step 3.
@@ -600,6 +727,13 @@ export default function WelcomeScreen() {
         return () => { mounted = false; };
     }, [params?.invite, params?.t, inviteLink]);
 
+    // A re-key ask the app was closed in the middle of (utils/rekey-redeem.ts): back to its screen, which asks once more.
+    useEffect(() => {
+        let alive = true;
+        rekeySlotStore.get().then((held) => { if (alive && held) router.push('/rekey-code'); }).catch(() => {});
+        return () => { alive = false; };
+    }, []);
+
     // Resume a join wizard that was interrupted after the keypair was created
     // (Step 1). A fresh incoming invite link outranks a stale half-done wizard,
     // UNLESS the incoming link is for the exact invite code already in progress.
@@ -627,6 +761,7 @@ export default function WelcomeScreen() {
             if (plan.anchorUrl) setCreateAnchorUrl(plan.anchorUrl);
             if (plan.avatar) setPendingAvatar(plan.avatar);
             setJoinFlow(plan.flow);
+            setJoinDoor(plan.joinDoor);
             if (plan.flow === 'global') {
                 if (plan.joinEnrolment) setEnrolment(plan.joinEnrolment);
                 getCachedNodeProfile(plan.anchorUrl)
@@ -660,7 +795,10 @@ export default function WelcomeScreen() {
                     return;
                 }
                 setJoinBeansOn(beansOn(check.profile.features));
-                setGlobalPhase('signIn');
+                // Two ways in, side by side, where the door has the 12-words one; the sign-in alone where it doesn't.
+                const words = wordsDoorOn(check.profile.features);
+                setWordsDoor(words);
+                setGlobalPhase(words ? 'choose' : 'signIn');
             })
             .catch(() => {
                 if (cancelled) return;
@@ -669,6 +807,44 @@ export default function WelcomeScreen() {
             });
         return () => { cancelled = true; };
     }, [mode, globalPhase]);
+
+    // The 12-words door's work starts as the door opens, with the key the join will be signed by, and runs while the
+    // member reads the door and types their name: at ordinary levels it is done before they tap Join (design §3.4).
+    useEffect(() => {
+        if (mode !== 'globalJoin' || globalPhase !== 'choose') return;
+        let cancelled = false;
+        joinKeyForThisPhone(globalKey).then((key) => {
+            if (cancelled) return;
+            if (key.identity.publicKey !== globalKey?.identity.publicKey) setGlobalKey(key);
+            doorWork.start(GLOBAL_NODE_URL, key.identity, 'words');
+        }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [mode, globalPhase]);
+
+    // The community's consent text, read (public, no key) from the node the invite or the typed address names, as the
+    // member fills the step in. An older node, a plain community or no answer: nothing is shown.
+    useEffect(() => {
+        if (mode !== 'create') return;
+        let origin: string | null;
+        try { origin = extractNodeOrigin(inviteCode.trim()); } catch { origin = null; }
+        const nodeUrl = normalizeNodeUrl(origin || createAnchorUrl.trim());
+        if (!nodeUrl || !looksLikeNodeAddress(nodeUrl) || shouldBlockCleartextNodeUrl(nodeUrl)) { setJoinTerms(null); return; }
+        let cancelled = false;
+        const timer = setTimeout(() => {
+            const ctl = new AbortController();
+            const stop = setTimeout(() => ctl.abort(), NEXT_REQUEST_TIMEOUT_MS);
+            fetch(`${nodeUrl}/api/community/consent-terms`, { signal: ctl.signal })
+                .then((r) => (r.ok ? r.json() : null))
+                .then((body) => {
+                    if (cancelled) return;
+                    const terms = readConsentTerms(body);
+                    setJoinTerms(joinAsksConsent(terms) ? terms : null);
+                })
+                .catch(() => { if (!cancelled) setJoinTerms(null); })
+                .finally(() => clearTimeout(stop));
+        }, 600);
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [mode, inviteCode, createAnchorUrl]);
 
     async function handleCreate() {
         // A second tap while Next is out starts nothing, not even its checks below.
@@ -731,6 +907,8 @@ export default function WelcomeScreen() {
                         // node (its database, its sync, the recheck below), and the phone may have none ("Wipe & Join Fresh"
                         // removes it) or another community's.
                         await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);
+                        // The update screen asks the community now in use (utils/community-switch.ts).
+                        communitySwitched();
                         await clearPendingOnboarding();
                         await recheckNodeStatus().catch(() => {});
                         setIdentity(storedIdentity);
@@ -771,6 +949,8 @@ export default function WelcomeScreen() {
                 setCallsignSuggestions([]);
 
                 await AsyncStorage.setItem('beanpool_anchor_url', nodeUrl);
+                // The update screen asks the community now in use (utils/community-switch.ts).
+                communitySwitched();
 
                 const identity = storedIdentity
                     ? { ...storedIdentity, callsign: callsign.trim() }
@@ -797,7 +977,7 @@ export default function WelcomeScreen() {
                     } catch (redeemErr: any) {
                         // Refused because the node has this key already (e.g. retry): carry on. Refused because the code
                         // is spent: only when the node says this key is in, never a join it didn't take (invite-next.ts).
-                        if (!(await redeemRefusalMeansIn(redeemErr?.message, nodeUrl, identity.publicKey))) {
+                        if (!(await redeemRefusalMeansIn(redeemErr?.message, nodeUrl, identity))) {
                             throw redeemErr;
                         }
                     }
@@ -806,6 +986,13 @@ export default function WelcomeScreen() {
                 // Redemption is done — it just succeeded, or the node has this member already.
                 // Either way the final step has nothing left to do.
                 setInviteRedeemed(true);
+
+                // The consent the member ticked above, recorded now they are a member: signed with their key, on the anchor
+                // just set. Never in the way: a refusal (the lines changed meanwhile) or no answer leaves Settings to offer it.
+                if (joinTerms && joinConsentTicked) {
+                    const { signedRequestWithMethod } = await import('../utils/db');
+                    await signedRequestWithMethod('POST', '/api/names/consent', { version: joinTerms.version }).catch(() => null);
+                }
 
                 // Record wizard state so an interrupted setup (avatar/seed) resumes
                 await setPendingOnboarding({
@@ -943,8 +1130,10 @@ export default function WelcomeScreen() {
         try {
             const identity = await restoreFromWords(words, finalAnchorUrl, {
                 confirmReplace: askToReplace('recover'),
-                nameOnNode: (publicKey) => fetchNodeCallsign(finalAnchorUrl, publicKey),
+                nameOnNode: (publicKey, privateKey) => fetchNodeCallsign(finalAnchorUrl, publicKey, privateKey),
             });
+            // A sign-in restore this phone left waiting for this account is stopped now, with the account's own key.
+            void stopSsoRestoreAfterWords(identity);
             setOutgoingIdentity(null);
             setIdentity(identity);
         } catch (err) {
@@ -967,7 +1156,7 @@ export default function WelcomeScreen() {
      */
     function askToReplace(from: 'recover' | 'ssoRecover'): ConfirmReplace {
         return async (outgoing) => {
-            // A sign-in may still have its page in front of the app (GitHub on iOS): this screen must be seen.
+            // A sign-in may still have its page in front of the app: this screen must be seen.
             if (from === 'ssoRecover') await returnToApp();
             return new Promise<boolean>((resolve) => {
                 replaceAnswerRef.current?.(false);
@@ -1007,7 +1196,11 @@ export default function WelcomeScreen() {
         setOutgoingSeedCopied(false);
     }
 
-    async function handleSsoRecover(provider: SsoProvider) {
+    /**
+     * "Recover with …" in a build without a key vault: at the community the member names, with their callsign, exactly
+     * as before the vault (utils/sso-recovery.ts `recoverAccountWithSso`).
+     */
+    async function handleSsoRecoverAtCommunity(provider: SsoProvider) {
         const trimmedCallsign = ssoCallsign.trim();
         if (!trimmedCallsign) {
             setError('Please enter your callsign.');
@@ -1031,8 +1224,6 @@ export default function WelcomeScreen() {
         setLoading(true);
         setError(null);
         setSsoProgressMessage('Connecting to recovery session...');
-        setRecoveryCode(null);
-        setRecoveryCodeCopied(false);
         recoveryAbortRef.current?.abort();
         const abort = new AbortController();
         recoveryAbortRef.current = abort;
@@ -1041,36 +1232,37 @@ export default function WelcomeScreen() {
                 callsign: trimmedCallsign,
                 anchorUrl: finalAnchorUrl,
                 provider,
-                onProgress: (p) => {
-                    setSsoProgressMessage(p.message);
-                    // Past GitHub the code, Open GitHub and Cancel no longer apply: from the
-                    // release on a cancel can't be honoured. The steps that follow show instead.
-                    if (!waitingOnGithub(p.step)) setRecoveryCode(null);
-                },
-                // GitHub's device flow cannot finish unless the member sees this. Copy it and show it,
-                // with what to do on GitHub (GithubCodeSteps).
-                // - Android: the member opens GitHub with the button, as the Account Protection sheet has
-                //   done since 2026-08-28. Opened here at once, the tab hid the steps, and on Android
-                //   nothing brings the app back from GitHub unless the member knows to tap ✕.
-                // - iOS: unchanged. GitHub opens at once, and returnToApp dismisses it once GitHub says yes.
-                onDeviceCode: (prompt) => {
-                    setRecoveryCode(prompt);
-                    copyRecoveryCode(prompt);
-                    if (Platform.OS === 'ios') WebBrowser.openBrowserAsync(prompt.verificationUri).catch(() => {});
-                },
+                onProgress: (p) => setSsoProgressMessage(p.message),
                 signal: abort.signal,
                 // Onto a phone that holds another account: "Replace this phone's account?" first, as the
                 // 12-word restore does. Nothing is written until the member says yes; Keep changes nothing.
                 confirmReplace: askToReplace('ssoRecover'),
             });
-            // Same reason the enrolment sheet does it, and the same platform trap: GitHub's
-            // confirmation page says nothing about returning, and `dismissBrowser` is iOS-only.
+            // Same reason the enrolment sheet does it: a sign-in page may still be in front of the app.
             await returnToApp();
             await clearPendingOnboarding();
+            const vault = hasVault();
+            // Back in with a copy only the community keeps (the vault said it keeps none): straight to Settings, whose first
+            // card is the move (components/VaultMoveCard.tsx), not only when the member happens to open it (PR #1336 review
+            // finding 3). Asked of the root guard BEFORE the identity is set, and never navigated to from here: the guard's
+            // own landing from welcome is queued behind any replace made here, and wins (PR #1357 review;
+            // utils/member-landing.ts).
+            if (vault) {
+                landNextOn('/(tabs)/settings', result.identity.publicKey);
+                // The node's answer for this key, before the guard reads it: an old "stranger" for the account this phone
+                // held would keep the member on welcome until the app came back (PR #1357 confirmation, N2).
+                await recheckNodeStatus().catch(() => {});
+            }
             setOutgoingIdentity(null);
             setIdentity(result.identity);
             setMode('home');
-            router.replace('/');
+            if (vault) {
+                // A sign-in restore this phone left waiting is stopped with the account's own key, as after the 12 words.
+                setSsoAtCommunity(null);
+                void stopSsoRestoreAfterWords(result.identity);
+            } else {
+                router.replace('/');
+            }
         } catch (e: any) {
             // A replace this phone couldn't save has already taken the old account off it (its app storage and wizard, and
             // its key unless even that failed): the app must not go on as it.
@@ -1085,16 +1277,110 @@ export default function WelcomeScreen() {
             if (recoveryAbortRef.current === abort) recoveryAbortRef.current = null;
             setLoading(false);
             setSsoProgressMessage(null);
-            setRecoveryCode(null);
         }
     }
 
-    /** Dash stripped: GitHub renders eight separate cells (see SsoEnrolSheet). */
-    function copyRecoveryCode(prompt: GithubDevicePrompt) {
-        Clipboard.setStringAsync(prompt.userCode.replace(/-/g, '')).then(
-            () => setRecoveryCodeCopied(true),
-            () => setRecoveryCodeCopied(false),
-        );
+    /**
+     * "Recover with …": sign in, and the key vault finds the copy from the sign-in (utils/sso-recovery.ts). No name and
+     * no address. What comes back is a hold: the account returns when it ends, or sooner once a device that has it says
+     * "Yes, it's me".
+     */
+    async function handleSsoRecover(provider: SsoProvider) {
+        setLoading(true);
+        setError(null);
+        setSsoProgressMessage(`Signing in with ${SSO_PROVIDER_NAMES[provider]}...`);
+        recoveryAbortRef.current?.abort();
+        const abort = new AbortController();
+        recoveryAbortRef.current = abort;
+        try {
+            const held = await startSsoRestore(provider, {
+                signal: abort.signal,
+                onSignedIn: async () => {
+                    setSsoProgressMessage("Asking BeanPool's key vault...");
+                    // Same reason the enrolment sheet does it: a sign-in page may still be in front of the app.
+                    await returnToApp();
+                },
+            });
+            setSsoWaiting(held);
+        } catch (e: any) {
+            if (e?.reason === 'cancelled' || e?.message === 'Sign-in was cancelled.') {
+                setError(null);
+            } else if (vaultKeepsNoCopyFor(provider)) {
+                // The vault's signed "no copy": the copy may still be at the member's community (review finding 3).
+                setError(null);
+                setSsoAtCommunity(provider);
+            } else {
+                setError(e?.message || `Recovery failed: ${String(e)}`);
+            }
+            // A restore whose answer was lost stays on the phone, and the next try comes back to the same hold.
+            setSsoWaiting(await waitingSsoRestore().catch(() => null));
+        } finally {
+            if (recoveryAbortRef.current === abort) recoveryAbortRef.current = null;
+            setLoading(false);
+            setSsoProgressMessage(null);
+        }
+    }
+
+    /**
+     * The vault released the account: save it onto the community the member chose (global unless they typed another),
+     * through "Replace this phone's account?" when the phone holds a different one. The name comes from that community.
+     */
+    async function handleSsoFinish() {
+        if (!ssoReleased) return;
+        const raw = ssoCommunity.trim();
+        if (!raw) {
+            setError('Enter a community to open your account in. The global community works for everyone.');
+            return;
+        }
+        const finalAnchorUrl = normalizeNodeUrl(raw);
+        if (!looksLikeNodeAddress(finalAnchorUrl)) {
+            setError("That doesn't look right. Try your community name, like mullum, or its full address.");
+            return;
+        }
+        if (shouldBlockCleartextNodeUrl(finalAnchorUrl)) {
+            setError('That node address is insecure (http on a public host). Use https:// instead.');
+            return;
+        }
+        setLoading(true);
+        setError(null);
+        try {
+            const identity = await finishSsoRestore(ssoReleased, finalAnchorUrl, {
+                // Onto a phone that holds another account: "Replace this phone's account?" first, as the
+                // 12-word restore does. Nothing is written until the member says yes; Keep changes nothing.
+                confirmReplace: askToReplace('ssoRecover'),
+                nameOnNode: (publicKey, privateKey) => fetchNodeCallsign(finalAnchorUrl, publicKey, privateKey),
+            });
+            await clearPendingOnboarding();
+            setOutgoingIdentity(null);
+            setSsoReleased(null);
+            setSsoWaiting(null);
+            setIdentity(identity);
+            setMode('home');
+            router.replace('/');
+        } catch (e: any) {
+            // A replace this phone couldn't save has already taken the old account off it (its app storage and wizard, and
+            // its key unless even that failed): the app must not go on as it. The restore stays on the phone to try again.
+            if (e instanceof ReplaceNotSaved) setIdentity(null);
+            if (e?.reason !== 'cancelled') {
+                setError(e?.message || `Recovery failed: ${String(e)}`);
+                leaveReplace('ssoRecover');
+            }
+        } finally {
+            setLoading(false);
+        }
+    }
+
+    /**
+     * Leave the waiting screen, to start again or to use the 12 words instead. The restore stays on the phone, key and
+     * all: the same sign-in comes back to the same hold, and a words restore stops it at the vault once the account is
+     * back (utils/sso-recovery.ts `stopSsoRestoreAfterWords`). Throwing the key away would leave the member's own
+     * restore waiting where nothing can collect or replace it for up to two days (PR #1336 review finding 2).
+     */
+    async function handleSsoStartAgain(then: 'ssoRecover' | 'recover') {
+        setSsoWaiting(null);
+        setSsoReleased(null);
+        setError(null);
+        setMode(then);
     }
 
     // --- THE GLOBAL COMMUNITY'S DOOR (utils/global-join.ts; design §2.3) ---
@@ -1105,6 +1391,7 @@ export default function WelcomeScreen() {
         setGlobalMessage(null);
         setDoorSignIn(null);
         setCallsignSuggestions([]);
+        setDoorWay('sign-in');
         setGlobalPhase('checking');
         setMode('globalJoin');
     }
@@ -1112,45 +1399,47 @@ export default function WelcomeScreen() {
     /**
      * Back home from the door. The key stays in hand, so coming back uses the same one, unless the phone has
      * stored one since (an invite join makes its own when the phone has none): then that one (`joinKeyForThisPhone`).
+     * The door's work stops: it starts again with the door.
      */
     function leaveGlobalDoor() {
         // A tap that lands in the frame before the join's spinner replaces this button: the join is out, and its answer decides.
         if (joinSendingRef.current) return;
-        globalAbortRef.current?.abort();
         nameCheckRef.current?.abort();
+        doorWork.stop();
+        setWorkWaiting(false);
         setDoorSignIn(null);
-        setGlobalCode(null);
         setCallsignSuggestions([]);
         goBack();
     }
 
-    /** "Use a different sign-in" on the name step: open while its check runs, which stops it. */
+    /**
+     * "Use a different sign-in" on the name step, or "Choose another way" on the 12-words one: open while its check runs,
+     * and while the 12-words work finishes, which stops the step waiting on either. Back to the two ways where the door
+     * has both, with both ways and "← Back to Home" usable at once. The 12-words work keeps running in the hook.
+     */
     function signInAgainAtDoor() {
         if (joinSendingRef.current) return;
         nameCheckRef.current?.abort();
+        setLoading(false);
+        setWorkWaiting(false);
         setDoorSignIn(null);
         setCallsignSuggestions([]);
         setError(null);
-        setGlobalPhase('signIn');
+        setGlobalPhase(wordsDoor ? 'choose' : 'signIn');
     }
 
-    /** Dash stripped: GitHub renders eight separate cells (see SsoEnrolSheet). */
-    function copyGlobalCode(prompt: GithubDevicePrompt) {
-        Clipboard.setStringAsync(prompt.userCode.replace(/-/g, '')).then(
-            () => setGlobalCodeCopied(true),
-            () => setGlobalCodeCopied(false),
-        );
+    /** "Create an account with 12 secret words": on to the name, while the work goes on. */
+    function chooseWordsAtDoor() {
+        setError(null);
+        setDoorSignIn(null);
+        setDoorWay('words');
+        setGlobalPhase('name');
     }
 
     /** Step one at the door: sign in, with the key the join will be signed by. */
     async function handleGlobalSignIn(provider: SsoProvider) {
         setLoading(true);
         setError(null);
-        setGlobalCode(null);
-        setGlobalCodeCopied(false);
-        globalAbortRef.current?.abort();
-        const abort = new AbortController();
-        globalAbortRef.current = abort;
         try {
             // Asked again each time: the phone may have stored a key since this door made one (an invite join).
             const key = await joinKeyForThisPhone(globalKey);
@@ -1159,21 +1448,19 @@ export default function WelcomeScreen() {
             // sign-in, so the phone's lock first, as Account Protection's connect asks it. A check that doesn't pass starts
             // nothing (PR #1205 review 4112404429).
             if (!key.createdHere && !(await authenticateUser('Confirm authentication to link a sign-in to your account.'))) return;
-            const result = await signInAtDoor(provider, GLOBAL_NODE_URL, key.identity, {
-                // As GitHub recovery does: Android opens GitHub from the button; iOS at once.
-                onGithubPrompt: (prompt) => {
-                    setGlobalCode(prompt);
-                    copyGlobalCode(prompt);
-                    if (Platform.OS === 'ios') WebBrowser.openBrowserAsync(prompt.verificationUri).catch(() => {});
-                },
-                signal: abort.signal,
-            });
-            if (provider === 'github') await returnToApp();
+            const result = await signInAtDoor(provider, GLOBAL_NODE_URL, key.identity);
             if (result.kind === 'answered') {
                 await afterDoorAnswer(result.answer, key, { ...key.identity, callsign: callsign.trim() || key.identity.callsign }, 'signIn');
                 return;
             }
             setDoorSignIn(result.signin);
+            setDoorWay('sign-in');
+            // Signed in: the 12-words work stops (the phone's battery); "Choose another way" starts it again.
+            doorWork.stop('words');
+            // The sign-in door asks for work only from the 30th join an hour from one network: asked now, while the
+            // member types their name, so a busy network costs them nothing extra (a door with the 12-words door only:
+            // one from before it has no work to give).
+            if (wordsDoor) doorWork.start(GLOBAL_NODE_URL, key.identity, 'sign-in');
             if (!callsign.trim() && key.identity.callsign) setCallsign(key.identity.callsign);
             setGlobalPhase('name');
         } catch (e) {
@@ -1181,9 +1468,7 @@ export default function WelcomeScreen() {
             const failure = e as { reason?: string; message?: string } | null;
             setError(failure?.reason === 'cancelled' ? null : (failure?.message || 'Sign-in failed. Try again.'));
         } finally {
-            if (globalAbortRef.current === abort) globalAbortRef.current = null;
             setLoading(false);
-            setGlobalCode(null);
         }
     }
 
@@ -1220,15 +1505,75 @@ export default function WelcomeScreen() {
             joinSendingRef.current = true;
             setGlobalPhase('joining');
             const identity = await commitJoinKey(key, name);
-            const answer = await submitJoin(GLOBAL_NODE_URL, identity, name, signin);
+            // A door that refuses the vault's ticket gets the provider's sheet once more, with its own nonce, and says so.
+            // Door work only when the door asked for it (none at ordinary rates).
+            const answer = await submitJoin(GLOBAL_NODE_URL, identity, name, signin, { onSignInAgain: setDoorNotice, work: doorWork.runFor('sign-in') });
             setDoorSignIn(null);
             await afterDoorAnswer(answer, key, identity, 'join');
         } catch (err) {
             setDoorSignIn(null);
             setError((err as Error | null)?.message || 'Your join could not be completed. Please sign in and try again.');
-            setGlobalPhase('signIn');
+            setGlobalPhase(wordsDoor ? 'choose' : 'signIn');
         } finally {
             joinSendingRef.current = false;
+            setDoorNotice(null);
+            if (nameCheckRef.current === leave) nameCheckRef.current = null;
+            setLoading(false);
+        }
+    }
+
+    /**
+     * The 12-words way (design §2.1): the name, checked at the door; then the work, which is done already at ordinary
+     * levels, and otherwise finishes under "Setting up your account…" while the member can still leave; then the key
+     * goes onto the phone and the join is sent, with no sign-in at all.
+     */
+    async function handleWordsJoin() {
+        const name = callsign.trim().slice(0, MAX_JOIN_NAME).trim();
+        if (name.length < 2) {
+            setError('Please choose a name of at least 2 characters.');
+            return;
+        }
+        setLoading(true);
+        setError(null);
+        nameCheckRef.current?.abort();
+        const leave = new AbortController();
+        nameCheckRef.current = leave;
+        try {
+            // Asked again: the phone may have stored a key since the door made one (an invite join). The work names the
+            // key, so a different one starts its own.
+            const key = await joinKeyForThisPhone(globalKey);
+            setGlobalKey(key);
+            const run = doorWork.start(GLOBAL_NODE_URL, key.identity, 'words');
+            const check = await checkNameAtDoor(GLOBAL_NODE_URL, name, key, { signal: leave.signal });
+            if (check.kind === 'cancelled' || leave.signal.aborted) return;
+            if (check.kind !== 'free') {
+                setCallsignSuggestions(check.kind === 'taken' ? check.suggestions : []);
+                setError(nameCheckMessage(name, check));
+                return;
+            }
+            setCallsignSuggestions([]);
+            setWorkWaiting(run.state().phase !== 'ready');
+            // Stops waiting the moment the member leaves the step ("Choose another way", Back): PR #1452 review, finding 2.
+            const ready = await solutionUnlessLeft(run, leave.signal);
+            // Left while it finished: the way out they took has already drawn its screen.
+            if (leave.signal.aborted || ready.kind === 'cancelled') return;
+            setWorkWaiting(false);
+            if (ready.kind === 'refused') {
+                // Nothing was sent: a refusal before any join, like one at the sign-in. Every key and record stays.
+                await afterDoorAnswer(ready.answer, key, { ...key.identity, callsign: name }, 'signIn', 'words');
+                return;
+            }
+            joinSendingRef.current = true;
+            setGlobalPhase('joining');
+            const identity = await commitJoinKey(key, name);
+            const answer = await submitWordsJoin(GLOBAL_NODE_URL, identity, name, run);
+            await afterDoorAnswer(answer, key, identity, 'join', 'words');
+        } catch (err) {
+            setError((err as Error | null)?.message || 'Your join could not be completed. Please try again.');
+            setGlobalPhase('name');
+        } finally {
+            joinSendingRef.current = false;
+            setWorkWaiting(false);
             if (nameCheckRef.current === leave) nameCheckRef.current = null;
             setLoading(false);
         }
@@ -1236,19 +1581,28 @@ export default function WelcomeScreen() {
 
     /**
      * Where each answer from the door takes the member (utils/global-join.ts `nextStepFor`). `via` is what answered:
-     * the sign-in (the nonce) or the join itself.
+     * the sign-in (the nonce, or the 12-words door's work before any join) or the join itself. `way`: the door's way in.
      */
-    async function afterDoorAnswer(answer: DoorAnswer, key: JoinKey, identity: BeanPoolIdentity, via: 'signIn' | 'join') {
+    async function afterDoorAnswer(answer: DoorAnswer, key: JoinKey, identity: BeanPoolIdentity, via: 'signIn' | 'join', way: DoorWay = 'sign-in') {
         if (answer.kind === 'joined') {
             // Under the name the node kept: from the answer, or, for `already_member`, asked of the node.
-            await finishGlobalJoin(await joinedUnderNodeName(GLOBAL_NODE_URL, answer, identity), answer.enrolment, key);
+            await finishGlobalJoin(await joinedUnderNodeName(GLOBAL_NODE_URL, answer, identity), answer.enrolment, key, way);
             return;
         }
         const next = nextStepFor(answer);
-        if (next === 'retry') {
-            // The sign-in is spent or stale: the member signs in again to retry.
+        if (next === 'sign_in') {
+            // This door takes no 12-words joins now: the sign-in buttons, with why. Nothing was written.
+            setWordsDoor(false);
+            doorWork.stop('words');
             setError(doorMessage(answer));
             setGlobalPhase('signIn');
+            return;
+        }
+        if (next === 'retry') {
+            setError(doorMessage(answer));
+            // 12 words: the name step again, where Join tries again and "Choose another way" leads to the sign-in. A
+            // sign-in is spent or stale: the member signs in again to retry.
+            setGlobalPhase(way === 'words' ? 'name' : wordsDoor ? 'choose' : 'signIn');
             return;
         }
         // Refused for good. Only the join's own refusal puts the phone back as it was, and releaseJoinKey takes a key
@@ -1265,13 +1619,18 @@ export default function WelcomeScreen() {
     }
 
     /** In. From here it is an invite join's steps: photo, Safety Backup, How it Works, then the Market. */
-    async function finishGlobalJoin(joined: BeanPoolIdentity, joinEnrolment: KeeperEnrolmentResult | null, key: JoinKey) {
+    async function finishGlobalJoin(joined: BeanPoolIdentity, joinEnrolment: KeeperEnrolmentResult | null, key: JoinKey, way: DoorWay = 'sign-in') {
         // Whose words Safety Backup shows: a key the door made is the member's own new one; the phone's own account's wait
         // for its lock. Read before the record below replaces the door's.
         const keyIsNew = key.createdHere || keyMadeForThisJoin(await getPendingOnboarding(), joined.publicKey);
         // On the phone first, under the name the node kept: the wizard's record below means nothing without it.
         const identity = await keepJoinedIdentity(joined);
+        doorWork.stop();
+        // In by 12 words: one way back. Safety Backup says so, and afterwards the card does (utils/one-way-back.ts).
+        if (way === 'words') await startOneWayBack(identity.publicKey, GLOBAL_NODE_URL);
         await AsyncStorage.setItem('beanpool_anchor_url', GLOBAL_NODE_URL);
+        // The update screen asks the community now in use (utils/community-switch.ts).
+        communitySwitched();
         await addSavedNode(GLOBAL_NODE_URL, 'Global community').catch(() => {});
         await clearGuestNode(GLOBAL_NODE_URL);
         await setPendingOnboarding({
@@ -1283,8 +1642,11 @@ export default function WelcomeScreen() {
             redeemed: true,
             joinEnrolment,
             ...(keyIsNew ? { newKey: identity.publicKey } : {}),
+            ...(way === 'words' ? { joinDoor: 'words' as const } : {}),
         });
         setJoinFlow('global');
+        setJoinDoor(way === 'words' ? 'words' : null);
+        setLinked(null);
         setCallsign(identity.callsign);
         setInviteCode('');
         setPendingInviteCode('');
@@ -1324,7 +1686,7 @@ export default function WelcomeScreen() {
     async function handleCopyOutgoingSeed() {
         const words = outgoingWords;
         if (!words) return;
-        await Clipboard.setStringAsync(words.join(' '));
+        await copyWordsForAMinute(words.join(' '));
         hapticTick();
         setOutgoingSeedCopied(true);
         setTimeout(() => setOutgoingSeedCopied(false), 2000);
@@ -1407,7 +1769,7 @@ export default function WelcomeScreen() {
         // What the step shows: the member's new words, or the phone's own account's once its lock has passed.
         const words = pendingWords;
         if (!words) return;
-        await Clipboard.setStringAsync(words.join(' '));
+        await copyWordsForAMinute(words.join(' '));
         hapticTick();
         setSeedCopied(true);
         setTimeout(() => setSeedCopied(false), 2000);
@@ -1517,7 +1879,7 @@ export default function WelcomeScreen() {
     if (mode === 'profileSetup' && pendingIdentity) {
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={2} />
                     <View style={styles.card}>
@@ -1568,7 +1930,7 @@ export default function WelcomeScreen() {
 
                         {loading && (
                             <View style={{ alignItems: 'center', marginVertical: 12 }}>
-                                <ActivityIndicator color={palette.blue600} />
+                                <ActivityIndicator color={accentInk} />
                                 <Text style={{ color: colors.text.secondary, fontSize: 12, marginTop: 4 }}>Processing image...</Text>
                             </View>
                         )}
@@ -1609,6 +1971,7 @@ export default function WelcomeScreen() {
                 
                 <AvatarPickerSheet
                     visible={showAvatarPicker}
+                    colors={dark ? colors : undefined}
                     onClose={() => setShowAvatarPicker(false)}
                     onSelectImage={(uri) => setPendingAvatar(uri)}
                 />
@@ -1620,10 +1983,15 @@ export default function WelcomeScreen() {
     if (mode === 'seedBackup' && pendingIdentity) {
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={3} />
                     <View style={styles.card}>
+                        {/* In by 12 words (two-doors design §2.5): what the words are, first; a sign-in is offered below the
+                            tickbox, as a second way back. Once one is added, the panel every sign-in member sees. */}
+                        {wordsMember ? (
+                            <WordsBackupNote colors={colors} />
+                        ) : (
                         <KeeperProtectionPanel
                             protection={protection}
                             hasWords={hasMnemonic(pendingIdentity)}
@@ -1632,6 +2000,17 @@ export default function WelcomeScreen() {
                                 setShowSsoSheet(true);
                             } : undefined}
                         />
+                        )}
+                        {linked && (
+                            <Text style={[styles.fieldHint, { marginBottom: 12 }]} accessibilityLiveRegion="polite">✅ {linkedNotice(linked)}</Text>
+                        )}
+                        {/* The sign-in the member joined with used to protect another account: said here too, as the
+                            protection sheet says it (PR #1336 review finding 9). */}
+                        {enrolment?.replaced && enrolment.enrolledSso?.[0] && (
+                            <Text style={[styles.fieldHint, { marginBottom: 12 }]} accessibilityLiveRegion="polite">
+                                {signInReplacedNote(SSO_PROVIDER_NAMES[enrolment.enrolledSso[0] as SsoProvider] ?? enrolment.enrolledSso[0])}
+                            </Text>
+                        )}
 
                         {Platform.OS === 'web' && (
                             <View style={{ backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border, borderWidth: 1, borderRadius: 12, padding: 16, marginBottom: 16 }}>
@@ -1685,7 +2064,7 @@ export default function WelcomeScreen() {
                         ) : (
                         <>
                         <Text style={{ color: colors.text.secondary, fontSize: 13, marginBottom: 16, lineHeight: 18 }}>
-                            💡 Take a screenshot or write them down somewhere safe.
+                            💡 Write them down on paper and keep it somewhere safe.
                         </Text>
                         {/*
                           Says out loud that this screen is not the only chance. Without it,
@@ -1709,6 +2088,8 @@ export default function WelcomeScreen() {
                               hearing the phrase in order means twenty-four stops and working
                               out for yourself which number went with which word.
                             */}
+                            {/* No screenshots of the words (a screenshot is the copy most easily found by someone else): they wait for the block. */}
+                            <NoScreenCapture fallback={<ActivityIndicator color={accentInk} style={{ marginVertical: 24 }} />}>
                             {pendingWords ? pendingWords.map((word, i) => (
                                 <View
                                     key={i}
@@ -1720,13 +2101,16 @@ export default function WelcomeScreen() {
                                     <Text style={styles.seedWord} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{word}</Text>
                                 </View>
                             )) : (
-                                <ActivityIndicator color={palette.blue600} style={{ marginVertical: 24 }} />
+                                <ActivityIndicator color={accentInk} style={{ marginVertical: 24 }} />
                             )}
+                            </NoScreenCapture>
                         </View>
 
-                        {/* Copy to clipboard */}
+                        <NoScreenLockNote style={[styles.fieldHint, { marginTop: 0, marginBottom: 12 }]} />
+
+                        {/* Copy to clipboard: cleared from it a minute later (utils/words-clipboard.ts) */}
                         <Pressable
-                            style={[styles.secondaryBtn, { marginBottom: 12 }]}
+                            style={[styles.secondaryBtn, { marginBottom: 8 }]}
                             onPress={handleCopySeed}
                             accessibilityRole="button"
                         >
@@ -1734,6 +2118,10 @@ export default function WelcomeScreen() {
                                 {seedCopied ? '✅ Copied!' : '📋 Copy All Words'}
                             </Text>
                         </Pressable>
+                        <CopyClearsNote style={[styles.fieldHint, { marginTop: 0, marginBottom: 12 }]} />
+
+                        {/* Optional, like the tickbox below: Next never waits on the kit (utils/recovery-kit.ts). */}
+                        <RecoveryKitButtons words={pendingWords} colors={colors} />
 
                         {/*
                           The tick is now a claim the user makes, not a toll they pay.
@@ -1764,6 +2152,32 @@ export default function WelcomeScreen() {
                         </Pressable>
                         </>
                         )}
+
+                        {/* The one secondary action for a 12-words member: skippable, like the tickbox above. */}
+                        {wordsMember && Platform.OS !== 'web' && (
+                            <Pressable
+                                style={[styles.secondaryBtn, { marginTop: 8 }]}
+                                onPress={() => setShowLinkSheet(true)}
+                                accessibilityRole="button"
+                            >
+                                <Text style={styles.secondaryBtnText}>{WORDS_BACKUP_TEXT.addSignIn}</Text>
+                            </Pressable>
+                        )}
+                        <LinkSignInSheet
+                            colors={colors}
+                            visible={showLinkSheet}
+                            identity={pendingIdentity}
+                            url={GLOBAL_NODE_URL}
+                            askPhoneLock={!pendingWordsAreNew}
+                            onClose={() => setShowLinkSheet(false)}
+                            onLinked={(answer) => {
+                                setLinked(answer);
+                                if (answer?.enrolment) setEnrolment(answer.enrolment);
+                                // The record too: a restart comes back to the panel a sign-in member sees.
+                                updatePendingOnboarding({ joinDoor: undefined, ...(answer?.enrolment ? { joinEnrolment: answer.enrolment } : {}) }).catch(() => {});
+                                setJoinDoor(null);
+                            }}
+                        />
 
                         {error && <Text style={styles.error}>{error}</Text>}
 
@@ -1799,7 +2213,7 @@ export default function WelcomeScreen() {
     if (mode === 'onboardingGuide' && pendingIdentity) {
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <OnboardingStepper step={4} />
                     <View style={styles.card}>
@@ -1823,7 +2237,7 @@ export default function WelcomeScreen() {
                                 </Text>
                             </View>
                             <View style={[guideStyles.highlightBox, { backgroundColor: 'rgba(245, 158, 11, 0.12)', borderColor: 'rgba(245, 158, 11, 0.35)' }]}>
-                                <Text style={[guideStyles.highlightText, { color: palette.amber700 || '#b45309' }]}>
+                                <Text style={[guideStyles.highlightText, { color: dark ? palette.amber400 : (palette.amber700 || '#b45309') }]}>
                                     🫘 <Text style={{ fontWeight: 'bold' }}>Contributions First.</Text> To keep the credit pool healthy, list at least one Offer of what you can give back before you can post Needs or accept Offers.
                                 </Text>
                             </View>
@@ -1963,7 +2377,7 @@ export default function WelcomeScreen() {
     if (mode === 'create') {
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAvoidingView
                     behavior="padding"
                     style={{ flex: 1 }}
@@ -2060,12 +2474,30 @@ export default function WelcomeScreen() {
                             </View>
                         )}
 
+                        {joinTerms && (
+                            <View style={{ marginBottom: 12 }} testID="join-consent">
+                                <Text style={styles.checkboxText} accessibilityRole="header">What this community's admins can see</Text>
+                                <ConsentText text={joinTerms.text} />
+                                <Pressable
+                                    style={[styles.checkbox, { marginVertical: 8, minHeight: 48 }, joinConsentTicked && styles.checkboxActive]}
+                                    onPress={() => setJoinTickedVersion(joinConsentTicked ? null : joinTerms.version)}
+                                    disabled={loading}
+                                    accessibilityRole="checkbox"
+                                    accessibilityState={{ checked: joinConsentTicked }}
+                                    accessibilityLabel="I agree"
+                                >
+                                    <Text style={[styles.checkboxText, { flexShrink: 1 }]}>{joinConsentTicked ? '✅ ' : '⬜ '} I agree</Text>
+                                </Pressable>
+                                <Text style={{ color: colors.text.muted, fontSize: 13, lineHeight: 18 }}>Up to you: you join either way. If you don&apos;t agree, the admins never see your balance. You can agree later in Settings.</Text>
+                            </View>
+                        )}
+
                         {error && (
                             <View style={{ marginBottom: 12 }}>
                                 <Text style={styles.error}>{error}</Text>
                                 {(error.includes('already been used') || error.includes('already used')) && (
                                     <Pressable
-                                        style={{ marginTop: 8, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: palette.blue50 || '#eff6ff', borderRadius: 8, borderWidth: 1, borderColor: palette.blue200 || '#bfdbfe', alignItems: 'center' }}
+                                        style={{ marginTop: 8, paddingVertical: 10, paddingHorizontal: 14, backgroundColor: dark ? colors.feedback.info.bg : (palette.blue50 || '#eff6ff'), borderRadius: 8, borderWidth: 1, borderColor: dark ? colors.feedback.info.border : (palette.blue200 || '#bfdbfe'), alignItems: 'center' }}
                                         onPress={() => leaveUnlessNextIsOut(nextOutRef, () => {
                                             setError(null);
                                             setMode('recover');
@@ -2073,7 +2505,7 @@ export default function WelcomeScreen() {
                                         disabled={loading}
                                         accessibilityRole="button"
                                     >
-                                        <Text style={{ color: palette.blue600 || '#2563eb', fontWeight: 'bold', fontSize: 13 }}>
+                                        <Text style={{ color: dark ? palette.blue400 : (palette.blue600 || '#2563eb'), fontWeight: 'bold', fontSize: 13 }}>
                                             🔑 Recover an existing account with seed phrase →
                                         </Text>
                                     </Pressable>
@@ -2081,7 +2513,14 @@ export default function WelcomeScreen() {
                             </View>
                         )}
 
-                        <Pressable style={styles.primaryBtn} onPress={handleCreate} disabled={loading} accessibilityRole="button">
+                        <Pressable
+                            style={styles.primaryBtn}
+                            onPress={handleCreate}
+                            disabled={loading}
+                            accessibilityRole="button"
+                            accessibilityLabel={loading ? "Joining network..." : "Next"}
+                            accessibilityState={{ disabled: loading, busy: loading }}
+                        >
                             {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Next →</Text>}
                         </Pressable>
 
@@ -2125,13 +2564,16 @@ export default function WelcomeScreen() {
 
     // --- THE GLOBAL COMMUNITY'S DOOR: sign in once, choose a name, join (utils/global-join.ts) ---
     if (mode === 'globalJoin') {
-        const signedInWith = doorSignIn
-            ? { apple: 'Apple', google: 'Google', facebook: 'Facebook', github: 'GitHub' }[doorSignIn.provider]
-            : null;
-        const doorWays = doorWaysOut(globalPhase, loading, !!globalCode);
+        const signedInWith = doorSignIn ? SSO_PROVIDER_NAMES[doorSignIn.provider] : null;
+        const doorWays = doorWaysOut(globalPhase, loading);
+        const wordsWay = doorWay === 'words';
+        const wordsState = doorWork.state('words');
+        const signInNote = signInCopiesAt() === 'vault'
+            ? 'BeanPool keeps a locked copy of your account for that sign-in, and BeanPool can open that copy. BeanPool never sees your password and never posts anything for you.'
+            : 'The global community keeps a locked copy of your account for that sign-in, and the people who run it can open that copy. BeanPool never sees your password and never posts anything for you.';
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
                     <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                         <OnboardingStepper step={1} />
@@ -2140,7 +2582,7 @@ export default function WelcomeScreen() {
 
                             {globalPhase === 'checking' && (
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
-                                    <ActivityIndicator size="large" color={palette.blue600} />
+                                    <ActivityIndicator size="large" color={accentInk} />
                                     <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
                                         Connecting to the global community…
                                     </Text>
@@ -2185,6 +2627,30 @@ export default function WelcomeScreen() {
                                 </>
                             )}
 
+                            {/* Two ways in, side by side, words first (two-doors design §2.6). */}
+                            {globalPhase === 'choose' && (
+                                <>
+                                    <Text style={styles.subtitle}>
+                                        Meet people from everywhere and find a community near you. No invite needed.
+                                    </Text>
+                                    {loading && (
+                                        <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
+                                            <ActivityIndicator size="large" color={accentInk} />
+                                        </View>
+                                    )}
+                                    {error && <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text>}
+                                    <DoorChoices
+                                        onWords={chooseWordsAtDoor}
+                                        onSignIn={(provider) => { setDoorWay('sign-in'); handleGlobalSignIn(provider); }}
+                                        disabled={loading}
+                                        busy={doorWork.busy}
+                                        wordsProblem={wordsState?.phase === 'failed' ? DOOR_WORK_MESSAGES.solverUnavailable : null}
+                                        signInNote={signInNote}
+                                        colors={colors}
+                                    />
+                                </>
+                            )}
+
                             {globalPhase === 'signIn' && (
                                 <>
                                     <Text style={styles.subtitle}>
@@ -2192,72 +2658,14 @@ export default function WelcomeScreen() {
                                     </Text>
                                     <Text style={[styles.subtitle, { marginTop: -12 }]}>
                                         To keep out fake accounts, sign in once with an account you already have. That sign-in
-                                        also becomes a way back into BeanPool if you lose this phone. BeanPool never sees your
+                                        also becomes a way back into BeanPool if you lose this phone: BeanPool keeps a locked copy
+                                        of your account for it, and BeanPool can open that copy. BeanPool never sees your
                                         password and never posts anything for you.
                                     </Text>
 
                                     {loading && (
                                         <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
-                                            {globalCode ? (
-                                                <>
-                                                    <GithubCodeSteps />
-                                                    <Text style={{ color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                                        Enter this code at{' '}
-                                                        <Text style={{ fontWeight: 'bold', color: colors.text.heading }}>
-                                                            {globalCode.verificationUri.replace(/^https:\/\//, '')}
-                                                        </Text>
-                                                        {' '}to finish:
-                                                    </Text>
-                                                    <View style={{
-                                                        marginTop: 14, paddingVertical: 16, paddingHorizontal: 24,
-                                                        borderRadius: 12, borderWidth: 2, borderColor: palette.blue600,
-                                                        backgroundColor: colors.surface.subtle, alignSelf: 'stretch',
-                                                        alignItems: 'center',
-                                                    }}>
-                                                        {/* One line, shrunk to fit at 320dp and 1.3x, as on the recovery screen. */}
-                                                        <Text
-                                                            selectable
-                                                            numberOfLines={1}
-                                                            adjustsFontSizeToFit
-                                                            minimumFontScale={0.5}
-                                                            accessibilityLabel={`Code ${globalCode.userCode.split('').join(' ')}`}
-                                                            style={{ fontSize: 30, fontWeight: 'bold', letterSpacing: 5, color: colors.text.heading, textAlign: 'center' }}
-                                                        >{globalCode.userCode}</Text>
-                                                        <Pressable
-                                                            onPress={() => copyGlobalCode(globalCode)}
-                                                            accessibilityRole="button"
-                                                            accessibilityLabel={globalCodeCopied ? 'Code copied. Copy it again.' : 'Copy the code'}
-                                                            hitSlop={8}
-                                                            style={{ marginTop: 10, paddingVertical: 8, paddingHorizontal: 22, borderRadius: 8, borderWidth: 1, borderColor: palette.blue600 }}
-                                                        >
-                                                            <Text style={{ fontSize: 15, fontWeight: 'bold', color: palette.blue600 }}>
-                                                                {globalCodeCopied ? '✓ Copied' : 'Copy'}
-                                                            </Text>
-                                                        </Pressable>
-                                                    </View>
-                                                    <Pressable
-                                                        onPress={() => { WebBrowser.openBrowserAsync(globalCode.verificationUri).catch(() => {}); }}
-                                                        accessibilityRole="button"
-                                                        accessibilityLabel="Open GitHub to enter the code"
-                                                        style={[styles.primaryBtn, { marginTop: 14, alignSelf: 'stretch' }]}
-                                                    >
-                                                        <Text style={styles.primaryBtnText}>Open GitHub →</Text>
-                                                    </Pressable>
-                                                    <ActivityIndicator color={palette.blue600} style={{ marginTop: 14 }} />
-                                                    {/* Stops waiting here; the node's unfinished session runs out on its own. */}
-                                                    <Pressable
-                                                        onPress={() => globalAbortRef.current?.abort()}
-                                                        accessibilityRole="button"
-                                                        accessibilityLabel="Cancel the GitHub sign-in"
-                                                        hitSlop={8}
-                                                        style={{ marginTop: 10, paddingVertical: 12, alignSelf: 'stretch', alignItems: 'center' }}
-                                                    >
-                                                        <Text style={{ color: colors.text.secondary, fontSize: 16 }}>Cancel</Text>
-                                                    </Pressable>
-                                                </>
-                                            ) : (
-                                                <ActivityIndicator size="large" color={palette.blue600} />
-                                            )}
+                                            <ActivityIndicator size="large" color={accentInk} />
                                         </View>
                                     )}
 
@@ -2270,7 +2678,11 @@ export default function WelcomeScreen() {
                                             )}
                                             <GoogleButton title="Continue with Google" onPress={() => handleGlobalSignIn('google')} style={{ marginBottom: 10, width: '100%' }} />
                                             <FacebookButton title="Continue with Facebook" onPress={() => handleGlobalSignIn('facebook')} style={{ marginBottom: 10, width: '100%' }} />
-                                            <GitHubButton title="Continue with GitHub" onPress={() => handleGlobalSignIn('github')} style={{ marginBottom: 10, width: '100%' }} />
+                                            {wordsDoor && (
+                                                <Pressable style={styles.backBtn} onPress={() => { setError(null); setGlobalPhase('choose'); }} accessibilityRole="button">
+                                                    <Text style={styles.backBtnText}>Choose another way</Text>
+                                                </Pressable>
+                                            )}
                                         </>
                                     )}
                                 </>
@@ -2278,7 +2690,9 @@ export default function WelcomeScreen() {
 
                             {globalPhase === 'name' && (
                                 <>
-                                    {signedInWith && (
+                                    {wordsWay ? (
+                                        <Text style={[styles.subtitle, { marginBottom: 8 }]}>🔑 An account with 12 secret words. They come next, after your photo.</Text>
+                                    ) : signedInWith && (
                                         <Text style={[styles.subtitle, { marginBottom: 8 }]}>✅ Signed in with {signedInWith}</Text>
                                     )}
                                     <Text style={styles.callsignLabel}>What should we call you?</Text>
@@ -2316,7 +2730,21 @@ export default function WelcomeScreen() {
 
                                     {error && <Text style={[styles.error, { marginTop: 12 }]} accessibilityLiveRegion="polite">{error}</Text>}
 
-                                    <Pressable style={[styles.primaryBtn, { marginTop: 16 }]} onPress={handleGlobalJoin} disabled={loading} accessibilityRole="button">
+                                    {/* From level 3: the phone's own estimate, with the sign-in door one tap away. */}
+                                    {wordsWay && doorWork.busy && (
+                                        <Text style={[styles.fieldHint, { marginTop: 12 }]} accessibilityLiveRegion="polite">{doorWork.busy}</Text>
+                                    )}
+                                    {/* Join tapped before the work was done: it finishes here, and Back still works. */}
+                                    {wordsWay && workWaiting && <DoorWorkProgress state={wordsState} colors={colors} />}
+
+                                    <Pressable
+                                        style={[styles.primaryBtn, { marginTop: 16 }]}
+                                        onPress={wordsWay ? handleWordsJoin : handleGlobalJoin}
+                                        disabled={loading}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={loading ? "Joining global community..." : "Join"}
+                                        accessibilityState={{ disabled: loading, busy: loading }}
+                                    >
                                         {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Join →</Text>}
                                     </Pressable>
                                     <Pressable
@@ -2325,16 +2753,16 @@ export default function WelcomeScreen() {
                                         disabled={!doorWays.otherSignIn}
                                         accessibilityRole="button"
                                     >
-                                        <Text style={styles.backBtnText}>Use a different sign-in</Text>
+                                        <Text style={styles.backBtnText}>{wordsWay || wordsDoor ? 'Choose another way' : 'Use a different sign-in'}</Text>
                                     </Pressable>
                                 </>
                             )}
 
                             {globalPhase === 'joining' && (
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
-                                    <ActivityIndicator size="large" color={palette.blue600} />
+                                    <ActivityIndicator size="large" color={accentInk} />
                                     <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                        Joining the global community…
+                                        {doorNotice ?? 'Joining the global community…'}
                                     </Text>
                                 </View>
                             )}
@@ -2362,7 +2790,7 @@ export default function WelcomeScreen() {
     if (mode === 'member') {
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
                     <View style={styles.card}>
                         <Text style={styles.title} accessibilityRole="header">🔑 Restore your account</Text>
@@ -2379,19 +2807,23 @@ export default function WelcomeScreen() {
                             accessibilityRole="button"
                             accessibilityLabel="Recover with Social Sign-In"
                         >
-                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                            <View style={styles.ssoRecoverRow}>
                                 <Text style={styles.ssoRecoverBtnText}>🌐 Recover with Social</Text>
-                                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 2 }}>
-                                    {Platform.OS === 'ios' && <AppleLogo size={16} color="#1D4ED8" />}
+                                <View style={styles.ssoRecoverLogos}>
+                                    {Platform.OS === 'ios' && <AppleLogo size={16} color={dark ? palette.blue400 : '#1D4ED8'} />}
                                     <GoogleLogo size={16} />
                                     <FacebookLogo size={16} />
-                                    <GitHubLogo size={16} color="#24292F" />
                                 </View>
                             </View>
                         </Pressable>
 
                         <Pressable style={styles.recoverBtn} onPress={() => { setMode('recover'); setError(null); }} accessibilityRole="button">
                             <Text style={styles.recoverBtnText}>🔑 Recover with 12 Words</Text>
+                        </Pressable>
+
+                        {/* Lost the phone and the words: an admin's re-key code (app/rekey-code.tsx, #1768). */}
+                        <Pressable style={styles.recoverBtn} onPress={() => { setError(null); router.push('/rekey-code'); }} accessibilityRole="button">
+                            <Text style={styles.recoverBtnText}>🪪 An admin gave me a re-key code</Text>
                         </Pressable>
 
                         <Pressable style={styles.backBtn} onPress={goBack} accessibilityRole="button" accessibilityLabel="Back to Home">
@@ -2414,7 +2846,7 @@ export default function WelcomeScreen() {
         const hasOutgoingSeed = hasMnemonic(outgoingIdentity);
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
                     <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                         <View style={styles.card}>
@@ -2445,12 +2877,14 @@ export default function WelcomeScreen() {
                                     ) : (
                                         <>
                                             <View style={styles.seedGrid}>
+                                                <NoScreenCapture>
                                                 {outgoingWords?.map((word, i) => (
                                                     <View key={i} style={styles.seedCell}>
                                                         <Text style={styles.seedIndex}>{i + 1}.</Text>
                                                         <Text style={styles.seedWord} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{word}</Text>
                                                     </View>
                                                 ))}
+                                                </NoScreenCapture>
                                             </View>
                                             <Pressable
                                                 style={[styles.secondaryBtn, { marginBottom: 8 }]}
@@ -2459,9 +2893,11 @@ export default function WelcomeScreen() {
                                             >
                                                 <Text style={styles.secondaryBtnText}>{outgoingSeedCopied ? '✅ Copied!' : '📋 Copy All Words'}</Text>
                                             </Pressable>
+                                            <CopyClearsNote style={[styles.fieldHint, { marginTop: 0, marginBottom: 8 }]} />
                                             <Text style={styles.fieldHint}>
-                                                Write these 12 words down somewhere safe — they bring {outCallsign} back on any phone.
+                                                Write these 12 words down on paper and keep it somewhere safe. They bring {outCallsign} back on any phone.
                                             </Text>
+                                            <NoScreenLockNote style={[styles.fieldHint, { marginTop: 0 }]} />
                                         </>
                                     )}
                                 </>
@@ -2492,7 +2928,9 @@ export default function WelcomeScreen() {
                                 disabled={loading || replaceConfirmText !== 'WIPE'}
                                 onPress={handleReplaceAccount}
                                 accessibilityRole="button"
+                                accessibilityLabel={loading ? "Replacing account..." : "Replace Account"}
                                 accessibilityHint="Replaces the account currently stored on this phone"
+                                accessibilityState={{ disabled: loading || replaceConfirmText !== 'WIPE', busy: loading }}
                             >
                                 {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.dangerBtnText}>Replace Account</Text>}
                             </Pressable>
@@ -2516,7 +2954,7 @@ export default function WelcomeScreen() {
     if (mode === 'recover') {
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAvoidingView
                     behavior="padding"
                     style={{ flex: 1 }}
@@ -2524,55 +2962,7 @@ export default function WelcomeScreen() {
                     <ScrollView key={mode} contentContainerStyle={styles.scroll}>
                     <View style={styles.card}>
                         <Text style={styles.title}>🔑 Recover Identity</Text>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                            <Text style={[styles.subtitle, { flex: 1, marginBottom: 0 }]}>Enter your 12 recovery words.</Text>
-                            <Pressable
-                                style={styles.pasteBtn}
-                                onPress={async () => {
-                                    try {
-                                        const text = await Clipboard.getStringAsync();
-                                        const tokens = (text || '').trim().split(/\s+/).filter(Boolean);
-                                        if (tokens.length === 0) return;
-                                        const updated = Array(12).fill('');
-                                        tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = w.toLowerCase(); });
-                                        setRecoveryWords(updated);
-                                    } catch { /* clipboard unavailable — user can still type */ }
-                                }}
-                                accessibilityRole="button"
-                                accessibilityLabel="Paste 12 recovery words"
-                            >
-                                <Text style={styles.pasteBtnText}>📋 Paste</Text>
-                            </Pressable>
-                        </View>
-
-                        <View style={styles.recoveryGrid}>
-                            {recoveryWords.map((word, i) => (
-                                <TextInput
-                                    key={i}
-                                    accessibilityLabel={`Recovery word ${i + 1}`}
-                                    style={styles.recoveryInput}
-                                    value={word}
-                                    onChangeText={(t) => {
-                                        // Pasting the whole space-separated phrase into any box
-                                        // fans it out across all 12; a single word fills its box.
-                                        const tokens = t.trim().split(/\s+/).filter(Boolean);
-                                        if (tokens.length > 1) {
-                                            const updated = Array(12).fill('');
-                                            tokens.slice(0, 12).forEach((w, idx) => { updated[idx] = w.toLowerCase(); });
-                                            setRecoveryWords(updated);
-                                        } else {
-                                            const updated = [...recoveryWords];
-                                            updated[i] = t.toLowerCase().trim();
-                                            setRecoveryWords(updated);
-                                        }
-                                    }}
-                                    placeholder={`${i + 1}`}
-                                    placeholderTextColor={colors.text.muted}
-                                    autoCapitalize="none"
-                                    autoCorrect={false}
-                                />
-                            ))}
-                        </View>
+                        <RecoveryWordsEntry words={recoveryWords} onChange={setRecoveryWords} labelStyle={styles.subtitle} colors={colors} />
 
                         <TextInput
                             accessibilityLabel="Community name or node address"
@@ -2601,7 +2991,14 @@ export default function WelcomeScreen() {
 
                         {error && <Text style={styles.error}>{error}</Text>}
 
-                        <Pressable style={styles.primaryBtn} onPress={handleRecover} disabled={loading} accessibilityRole="button">
+                        <Pressable
+                            style={styles.primaryBtn}
+                            onPress={handleRecover}
+                            disabled={loading}
+                            accessibilityRole="button"
+                            accessibilityLabel={loading ? "Recovering identity..." : "Recover Identity"}
+                            accessibilityState={{ disabled: loading, busy: loading }}
+                        >
                             {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Recover Identity</Text>}
                         </Pressable>
 
@@ -2615,10 +3012,14 @@ export default function WelcomeScreen() {
         );
     }
 
-    if (mode === 'ssoRecover') {
+    // A build without a key vault: the restore at the member's community, as before the vault. In a build with one, the
+    // same restore for the one sign-in the vault said, signed, that it keeps no copy for (review finding 3).
+    if (mode === 'ssoRecover' && (!hasVault() || ssoAtCommunity)) {
+        /** The providers this screen offers: every one without a vault; with one, only the provider the vault has no copy for. */
+        const offeredHere = (p: SsoProvider) => !hasVault() || ssoAtCommunity === p;
         return (
             <SafeAreaView style={styles.container}>
-                <StatusBar style="dark" />
+                <StatusBar style={dark ? 'light' : 'dark'} />
                 <KeyboardAvoidingView
                     behavior="padding"
                     style={{ flex: 1 }}
@@ -2628,9 +3029,20 @@ export default function WelcomeScreen() {
                             <Text style={styles.title} accessibilityRole="header">
                                 🌐 Recover with Social Sign-In
                             </Text>
-                            <Text style={styles.subtitle}>
-                                Enter your callsign and node address to restore your account with any linked sign-in.
-                            </Text>
+                            {ssoAtCommunity ? (
+                                <>
+                                    <Text style={styles.subtitle}>
+                                        BeanPool's key vault keeps no copy for this {SSO_PROVIDER_NAMES[ssoAtCommunity]} account. Your community may still keep one.
+                                    </Text>
+                                    <Text style={styles.fieldHint}>
+                                        Enter your callsign and your community, then sign in with {SSO_PROVIDER_NAMES[ssoAtCommunity]} once more. Your 12 words work any time.
+                                    </Text>
+                                </>
+                            ) : (
+                                <Text style={styles.subtitle}>
+                                    Enter your callsign and node address to restore your account with any linked sign-in.
+                                </Text>
+                            )}
 
                             <TextInput
                                 accessibilityLabel="Callsign"
@@ -2644,10 +3056,10 @@ export default function WelcomeScreen() {
                                 editable={!loading}
                             />
 
-                            {/* Recognise, do not recall. Tapping a face is a far easier thing to ask
-                                of someone who has lost their phone than reproducing a string they
-                                chose months ago — and the node only lists accounts that actually
-                                have a sign-in fragment, so none of these is a dead end. */}
+                            {/* The account the whole name found, to confirm. The node only lists
+                                accounts that actually have a sign-in fragment, so none of these is a
+                                dead end. A community sends no photo or join date to a stranger, so the
+                                row falls back to the name's initial. */}
                             {!loading && ssoCandidates.length > 0 && (
                                 <View accessibilityLiveRegion="polite" style={{ marginTop: -6, marginBottom: 12 }}>
                                     <Text style={{ fontSize: 12, color: colors.text.secondary, marginBottom: 6, marginLeft: 4 }}>
@@ -2728,85 +3140,10 @@ export default function WelcomeScreen() {
 
                             {loading && (
                                 <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
-                                    {recoveryCode ? (
-                                        <>
-                                            {/* What to do on GitHub, first: Paste, then how to come back. */}
-                                            <GithubCodeSteps />
-                                            {/* Shown the way the enrolment sheet shows it. As a sentence inside the
-                                                progress line it could not be selected or copied, so it had to be
-                                                written down and retyped — reported from a real recovery. */}
-                                            <Text style={{ color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                                Enter this code at{' '}
-                                                <Text style={{ fontWeight: 'bold', color: colors.text.heading }}>
-                                                    {recoveryCode.verificationUri.replace(/^https:\/\//, '')}
-                                                </Text>
-                                                {' '}to finish:
-                                            </Text>
-                                            <View style={{
-                                                marginTop: 14, paddingVertical: 16, paddingHorizontal: 24,
-                                                borderRadius: 12, borderWidth: 2, borderColor: palette.blue600,
-                                                backgroundColor: colors.surface.subtle, alignSelf: 'stretch',
-                                                alignItems: 'center',
-                                            }}>
-                                                {/* One line, shrunk to fit: at 320dp this box is 170dp inside and
-                                                    WDJB-MJHT needs 221dp at 1.0x, 287dp at 1.3x (see SsoEnrolSheet).
-                                                    Android shrinks until it fits; iOS stops at 0.5, which fits any
-                                                    code but an all-M/W one at 1.3x (needs 0.49). */}
-                                                <Text
-                                                    selectable
-                                                    numberOfLines={1}
-                                                    adjustsFontSizeToFit
-                                                    minimumFontScale={0.5}
-                                                    accessibilityLabel={`Code ${recoveryCode.userCode.split('').join(' ')}`}
-                                                    style={{
-                                                        fontSize: 30, fontWeight: 'bold', letterSpacing: 5,
-                                                        color: colors.text.heading, textAlign: 'center',
-                                                    }}
-                                                >{recoveryCode.userCode}</Text>
-                                                <Pressable
-                                                    onPress={() => copyRecoveryCode(recoveryCode)}
-                                                    accessibilityRole="button"
-                                                    accessibilityLabel={recoveryCodeCopied ? 'Code copied. Copy it again.' : 'Copy the code'}
-                                                    hitSlop={8}
-                                                    style={{
-                                                        marginTop: 10, paddingVertical: 8, paddingHorizontal: 22,
-                                                        borderRadius: 8, borderWidth: 1, borderColor: palette.blue600,
-                                                    }}
-                                                >
-                                                    <Text style={{ fontSize: 15, fontWeight: 'bold', color: palette.blue600 }}>
-                                                        {recoveryCodeCopied ? '✓ Copied' : 'Copy'}
-                                                    </Text>
-                                                </Pressable>
-                                            </View>
-                                            <Pressable
-                                                onPress={() => { WebBrowser.openBrowserAsync(recoveryCode.verificationUri).catch(() => {}); }}
-                                                accessibilityRole="button"
-                                                accessibilityLabel="Open GitHub to enter the code"
-                                                style={[styles.primaryBtn, { marginTop: 14, alignSelf: 'stretch' }]}
-                                            >
-                                                <Text style={styles.primaryBtnText}>Open GitHub →</Text>
-                                            </Pressable>
-                                            <ActivityIndicator color={palette.blue600} style={{ marginTop: 14 }} />
-                                            {/* Stops waiting here. The session the node started is
-                                                left to run out on its own: unfinished, it proves nothing. */}
-                                            <Pressable
-                                                onPress={() => recoveryAbortRef.current?.abort()}
-                                                accessibilityRole="button"
-                                                accessibilityLabel="Cancel GitHub recovery"
-                                                hitSlop={8}
-                                                style={{ marginTop: 10, paddingVertical: 12, alignSelf: 'stretch', alignItems: 'center' }}
-                                            >
-                                                <Text style={{ color: colors.text.secondary, fontSize: 16 }}>Cancel</Text>
-                                            </Pressable>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <ActivityIndicator size="large" color={palette.blue600} />
-                                            <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
-                                                {ssoProgressMessage || 'Verifying sign-in...'}
-                                            </Text>
-                                        </>
-                                    )}
+                                    <ActivityIndicator size="large" color={accentInk} />
+                                    <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
+                                        {ssoProgressMessage || 'Verifying sign-in...'}
+                                    </Text>
                                 </View>
                             )}
 
@@ -2814,40 +3151,194 @@ export default function WelcomeScreen() {
 
                             {!loading && (
                                 <>
-                                    {Platform.OS === 'ios' && (
+                                    {Platform.OS === 'ios' && offeredHere('apple') && (
                                         <AppleButton
                                             title="Recover with Apple"
-                                            onPress={() => handleSsoRecover('apple')}
+                                            onPress={() => handleSsoRecoverAtCommunity('apple')}
                                             style={{ marginBottom: 10, width: '100%' }}
                                         />
                                     )}
-                                    <GoogleButton
-                                        title="Recover with Google"
-                                        onPress={() => handleSsoRecover('google')}
-                                        style={{ marginBottom: 10, width: '100%' }}
-                                    />
-                                    <FacebookButton
-                                        title="Recover with Facebook"
-                                        onPress={() => handleSsoRecover('facebook')}
-                                        style={{ marginBottom: 10, width: '100%' }}
-                                    />
-                                    <GitHubButton
-                                        title="Recover with GitHub"
-                                        onPress={() => handleSsoRecover('github')}
-                                        style={{ marginBottom: 10, width: '100%' }}
-                                    />
+                                    {offeredHere('google') && (
+                                        <GoogleButton
+                                            title="Recover with Google"
+                                            onPress={() => handleSsoRecoverAtCommunity('google')}
+                                            style={{ marginBottom: 10, width: '100%' }}
+                                        />
+                                    )}
+                                    {offeredHere('facebook') && (
+                                        <FacebookButton
+                                            title="Recover with Facebook"
+                                            onPress={() => handleSsoRecoverAtCommunity('facebook')}
+                                            style={{ marginBottom: 10, width: '100%' }}
+                                        />
+                                    )}
                                 </>
                             )}
 
                             <Pressable
                                 style={styles.backBtn}
-                                onPress={() => { setMode('member'); setError(null); }}
+                                onPress={() => { setMode('member'); setSsoAtCommunity(null); setError(null); }}
                                 disabled={loading}
                                 accessibilityRole="button"
                                 accessibilityLabel="Back to Restore Options"
                             >
                                 <Text style={styles.backBtnText}>← Back to Restore Options</Text>
                             </Pressable>
+                        </View>
+                    </ScrollView>
+                </KeyboardAvoidingView>
+            </SafeAreaView>
+        );
+    }
+
+    if (mode === 'ssoRecover') {
+        // Three steps, one screen (utils/sso-recovery.ts): sign in; wait for the key vault; choose a community.
+        const waitingUntil = !ssoReleased && ssoWaiting?.holdId && ssoWaiting.until ? ssoWaiting.until : null;
+        return (
+            <SafeAreaView style={styles.container}>
+                <StatusBar style={dark ? 'light' : 'dark'} />
+                <KeyboardAvoidingView
+                    behavior="padding"
+                    style={{ flex: 1 }}
+                >
+                    <ScrollView key={mode} contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+                        <View style={styles.card}>
+                            <Text style={styles.title} accessibilityRole="header">
+                                🌐 Recover with Social Sign-In
+                            </Text>
+
+                            {ssoReleased ? (
+                                <>
+                                    <Text style={styles.subtitle}>
+                                        Your account is back. Which community do you want to open it in? You can add your other communities afterwards.
+                                    </Text>
+                                    <SavedNodePicker
+                                        nodes={savedNodes}
+                                        onPick={(url) => { setSsoCommunity(url); setError(null); }}
+                                        disabled={loading}
+                                        selectedUrl={normalizeNodeUrl(ssoCommunity.trim())}
+                                        label="Your communities on this phone"
+                                        actionLabel="Open in"
+                                        hint="Or type a community's name or address below."
+                                    />
+                                    <TextInput
+                                        accessibilityLabel="Community name or node address"
+                                        accessibilityHint="The global community is filled in. Enter your community's name, like mullum, or its full address"
+                                        style={styles.input}
+                                        placeholder="Community name or address (e.g. mullum)"
+                                        placeholderTextColor={colors.text.muted}
+                                        value={ssoCommunity}
+                                        onChangeText={setSsoCommunity}
+                                        autoCapitalize="none"
+                                        autoCorrect={false}
+                                        keyboardType="url"
+                                        editable={!loading}
+                                    />
+                                    {isBareCommunityName(ssoCommunity) && (
+                                        <Text accessibilityLiveRegion="polite" style={{ fontSize: 12, color: colors.text.secondary, marginTop: -6, marginBottom: 10, marginLeft: 4 }}>
+                                            Will connect to {normalizeNodeUrl(ssoCommunity).replace('https://', '')} — if your
+                                            community is hosted elsewhere, enter its full address instead.
+                                        </Text>
+                                    )}
+                                    <Text style={styles.fieldHint}>
+                                        The global community is filled in. If you belong to a local community, type its name or address. Your name and picture come back from it.
+                                    </Text>
+                                    {error && <Text style={styles.error}>{error}</Text>}
+                                    <Pressable
+                                        style={styles.primaryBtn}
+                                        onPress={handleSsoFinish}
+                                        disabled={loading}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={loading ? "Finishing recovery..." : "Continue"}
+                                        accessibilityState={{ disabled: loading, busy: loading }}
+                                    >
+                                        {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Continue</Text>}
+                                    </Pressable>
+                                </>
+                            ) : waitingUntil ? (
+                                <>
+                                    <Text style={styles.subtitle} accessibilityLiveRegion="polite">
+                                        Your account comes back {holdEndsText(waitingUntil)}.
+                                    </Text>
+                                    <Text style={styles.fieldHint}>
+                                        For your safety, getting back in with a sign-in waits a day. If you still have a phone or computer with your BeanPool account on it, open BeanPool there and tap "Yes, it's me" to bring it back now. If it wasn't you, those devices can stop it.
+                                    </Text>
+                                    <Text style={styles.fieldHint}>
+                                        Keep BeanPool on this phone: it checks by itself. Your 12 words work any time, with no wait.
+                                    </Text>
+                                    {error && <Text style={styles.error}>{error}</Text>}
+                                    <Pressable
+                                        style={styles.primaryBtn}
+                                        onPress={() => checkSsoWaiting(false)}
+                                        disabled={ssoChecking}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={ssoChecking ? "Checking now..." : "Check now"}
+                                        accessibilityState={{ busy: ssoChecking, disabled: ssoChecking }}
+                                    >
+                                        {ssoChecking ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Check now</Text>}
+                                    </Pressable>
+                                    <Pressable style={[styles.recoverBtn, { marginTop: 12 }]} onPress={() => handleSsoStartAgain('recover')} accessibilityRole="button">
+                                        <Text style={styles.recoverBtnText}>🔑 Use my 12 words instead</Text>
+                                    </Pressable>
+                                    <Pressable style={styles.backBtn} onPress={() => handleSsoStartAgain('ssoRecover')} accessibilityRole="button" accessibilityLabel="Start again with a sign-in">
+                                        <Text style={styles.backBtnText}>Start again</Text>
+                                    </Pressable>
+                                </>
+                            ) : (
+                                <>
+                                    <Text style={styles.subtitle}>
+                                        Sign in with the account you linked to BeanPool. The sign-in finds your account: there's no name or address to type.
+                                    </Text>
+                                    <Text style={styles.fieldHint}>
+                                        For your safety it takes a day, or less if another phone or computer of yours says it's you.
+                                    </Text>
+
+                                    {loading && (
+                                        <View style={{ alignItems: 'center', marginVertical: 16 }} accessibilityLiveRegion="polite">
+                                            <ActivityIndicator size="large" color={accentInk} />
+                                            <Text style={{ marginTop: 12, color: colors.text.secondary, fontSize: 14, textAlign: 'center' }}>
+                                                {ssoProgressMessage || 'Verifying sign-in...'}
+                                            </Text>
+                                        </View>
+                                    )}
+
+                                    {error && <Text style={styles.error}>{error}</Text>}
+
+                                    {!loading && (
+                                        <>
+                                            {Platform.OS === 'ios' && (
+                                                <AppleButton
+                                                    title="Recover with Apple"
+                                                    onPress={() => handleSsoRecover('apple')}
+                                                    style={{ marginBottom: 10, width: '100%' }}
+                                                />
+                                            )}
+                                            <GoogleButton
+                                                title="Recover with Google"
+                                                onPress={() => handleSsoRecover('google')}
+                                                style={{ marginBottom: 10, width: '100%' }}
+                                            />
+                                            <FacebookButton
+                                                title="Recover with Facebook"
+                                                onPress={() => handleSsoRecover('facebook')}
+                                                style={{ marginBottom: 10, width: '100%' }}
+                                            />
+                                        </>
+                                    )}
+                                </>
+                            )}
+
+                            {!waitingUntil && (
+                                <Pressable
+                                    style={styles.backBtn}
+                                    onPress={() => { setMode('member'); setError(null); }}
+                                    disabled={loading}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Back to Restore Options"
+                                >
+                                    <Text style={styles.backBtnText}>← Back to Restore Options</Text>
+                                </Pressable>
+                            )}
                         </View>
                     </ScrollView>
                 </KeyboardAvoidingView>
@@ -2865,7 +3356,7 @@ export default function WelcomeScreen() {
     const pinnedTop = globalOffer ? homeTop : null;
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar style="dark" />
+            <StatusBar style={dark ? 'light' : 'dark'} />
             {/* Scrolls: at 320dp and 1.3x text, the button, the hint and the paste offer are taller than a small phone. */}
             <ScrollView contentContainerStyle={pinnedTop !== null ? [styles.homeContent, { paddingTop: pinnedTop }] : [styles.homeContent, styles.homeCentred]}>
                 <View style={styles.homeMain} onLayout={(e) => { if (!globalOffer) setHomeTop(e.nativeEvent.layout.y); }}>
@@ -2930,6 +3421,7 @@ export default function WelcomeScreen() {
     );
 }
 
+function makeStyles(colors: AppColors, dark: boolean) {
 const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface.page },
     homeContent: { flexGrow: 1, padding: 24, alignItems: 'center' },
@@ -2942,13 +3434,13 @@ const styles = StyleSheet.create({
     headerSubtitle: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', marginBottom: 32, lineHeight: 24 },
     card: { width: '100%', backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
     inviteVerifiedBox: { backgroundColor: 'rgba(34, 197, 94, 0.10)', borderWidth: 1, borderColor: 'rgba(34, 197, 94, 0.35)', borderRadius: 12, padding: 12, marginBottom: 16 },
-    inviteVerifiedText: { color: palette.green700 || '#15803d', fontSize: 14, lineHeight: 20 },
+    inviteVerifiedText: { color: dark ? palette.emerald400 : (palette.green700 || '#15803d'), fontSize: 14, lineHeight: 20 },
     clipboardHintBtn: { marginTop: 20, paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999, backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)' },
-    clipboardHintText: { color: palette.blue600, fontSize: 14, fontWeight: '600', textAlign: 'center' },
+    clipboardHintText: { color: dark ? palette.blue400 : palette.blue600, fontSize: 14, fontWeight: '600', textAlign: 'center' },
     clipboardHintBox: { marginTop: 20, paddingVertical: 14, paddingHorizontal: 16, borderRadius: 16, backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)', alignItems: 'center', width: '100%' },
     homePasteSystemBtn: { width: 170, height: 44, marginTop: 12 },
     tosText: { fontSize: 12, color: colors.text.secondary, textAlign: 'center', marginTop: 16, lineHeight: 17 },
-    tosLink: { color: palette.blue600, textDecorationLine: 'underline' },
+    tosLink: { color: dark ? palette.blue400 : palette.blue600, textDecorationLine: 'underline' },
     inviteOnlyHint: { fontSize: 16, color: colors.text.secondary, textAlign: 'center', lineHeight: 22, marginTop: 4 },
     restoreSecondaryBtn: {
         marginTop: 20,
@@ -2969,7 +3461,7 @@ const styles = StyleSheet.create({
         elevation: 1,
     },
     restoreSecondaryBtnText: {
-        color: palette.blue600,
+        color: dark ? palette.blue400 : palette.blue600,
         fontSize: 15,
         fontWeight: '700',
     },
@@ -3003,7 +3495,7 @@ const styles = StyleSheet.create({
         minHeight: 44,
     },
     restorePromptBtnText: {
-        color: palette.blue600,
+        color: dark ? palette.blue400 : palette.blue600,
         fontSize: 14,
         fontWeight: '700',
     },
@@ -3011,8 +3503,6 @@ const styles = StyleSheet.create({
     subtitle: { fontSize: 14, color: colors.text.secondary, marginBottom: 24, lineHeight: 20 },
     input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 16 },
     fieldHint: { fontSize: 13, color: colors.text.secondary, marginTop: -8, marginBottom: 16, lineHeight: 18 },
-    pasteBtn: { backgroundColor: colors.surface.subtle, paddingHorizontal: 16, paddingVertical: 12, borderLeftWidth: 1, borderColor: colors.border.strong, justifyContent: 'center' },
-    pasteBtnText: { color: palette.gray600, fontSize: 14, fontWeight: '600' },
     pasteCard: { backgroundColor: 'rgba(59, 130, 246, 0.08)', borderWidth: 1, borderColor: 'rgba(59, 130, 246, 0.3)', borderRadius: 12, padding: 14, marginBottom: 16, alignItems: 'center' },
     pasteCardText: { color: colors.text.body, fontSize: 14, lineHeight: 20, textAlign: 'center', marginBottom: 12 },
     pasteCardSystemBtn: { width: 170, height: 44 },
@@ -3029,19 +3519,23 @@ const styles = StyleSheet.create({
     memberBtn: { backgroundColor: palette.blue600, paddingVertical: 18, paddingHorizontal: 12, borderRadius: 14, alignItems: 'center', width: '100%', marginBottom: 12, shadowColor: palette.blue600, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 14, elevation: 6 },
     memberBtnText: { color: colors.text.inverse, fontSize: 18, fontWeight: '700' },
     secondaryBtn: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border.strong, padding: 16, borderRadius: 14, alignItems: 'center', width: '100%' },
-    secondaryBtnText: { color: palette.gray600, fontSize: 16, fontWeight: '600' },
+    secondaryBtnText: { color: dark ? colors.text.secondary : palette.gray600, fontSize: 16, fontWeight: '600' },
 
     // Member sub-options
-    ssoRecoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: '#93C5FD', backgroundColor: '#EFF6FF', alignItems: 'center', marginBottom: 10 },
-    ssoRecoverBtnText: { color: '#1D4ED8', fontSize: 16, fontWeight: '700' },
+    ssoRecoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: dark ? colors.feedback.info.border : '#93C5FD', backgroundColor: dark ? colors.feedback.info.bg : '#EFF6FF', alignItems: 'center', marginBottom: 10 },
+    // The label shrinks and wraps; the logos keep their size. A label that could not shrink made the row wider than
+    // the button at 320dp or with enlarged text, and the centred row spilled past both edges.
+    ssoRecoverRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, maxWidth: '100%' },
+    ssoRecoverBtnText: { color: dark ? palette.blue400 : '#1D4ED8', fontSize: 16, fontWeight: '700', flexShrink: 1, textAlign: 'center' },
+    ssoRecoverLogos: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
     recoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.onboarding.recoverBorder, backgroundColor: colors.onboarding.recoverBg, alignItems: 'center', marginBottom: 10 },
-    recoverBtnText: { color: palette.amber800, fontSize: 16, fontWeight: '700' },
+    recoverBtnText: { color: dark ? palette.amber400 : palette.amber800, fontSize: 16, fontWeight: '700' },
     socialRecoverBtn: { width: '100%', padding: 16, borderRadius: 14, borderWidth: 1, borderColor: colors.onboarding.socialRecoverBorder, backgroundColor: colors.onboarding.socialRecoverBg, alignItems: 'center', marginBottom: 10 },
-    socialRecoverBtnText: { color: palette.emerald700, fontSize: 16, fontWeight: '700' },
+    socialRecoverBtnText: { color: colors.brand.primary, fontSize: 16, fontWeight: '700' },
 
     primaryBtn: { backgroundColor: palette.blue600, padding: 16, borderRadius: 12, alignItems: 'center', marginTop: 8 },
     primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: 'bold' },
-    disabledBtn: { backgroundColor: palette.slate300 },
+    disabledBtn: { backgroundColor: dark ? palette.neutral700 : palette.slate300 },
     // Identity-overwrite guard (confirm-replace screen)
     emphasis: { fontWeight: '700', color: colors.text.heading },
     replaceWarnBox: { backgroundColor: colors.feedback.warning.bg, borderWidth: 1, borderColor: colors.feedback.warning.border, borderRadius: 12, padding: 14, marginBottom: 16 },
@@ -3056,16 +3550,14 @@ const styles = StyleSheet.create({
     /** A way off "Your Name" while Next is out: drawn faded, as well as disabled. */
     closedWhileNextIsOut: { opacity: 0.4 },
     backBtnText: { color: colors.text.secondary, fontSize: 14 },
-    error: { color: colors.feedback.danger.solid, fontSize: 14, marginBottom: 16, textAlign: 'center' },
+    error: { color: colors.feedback.danger.fg, fontSize: 14, marginBottom: 16, textAlign: 'center' },
     checkbox: { flexDirection: 'row', alignItems: 'center', marginVertical: 16, padding: 12, backgroundColor: colors.surface.subtle, borderRadius: 8 },
-    checkboxActive: { backgroundColor: palette.blue100 },
+    checkboxActive: { backgroundColor: dark ? colors.feedback.info.bg : palette.blue100 },
     checkboxText: { color: colors.text.heading, fontSize: 14, fontWeight: '600' },
     seedGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
     seedCell: { width: '31%', backgroundColor: colors.surface.subtle, borderRadius: 8, padding: 8, marginBottom: 8, alignItems: 'center' },
     seedIndex: { color: colors.text.muted, fontSize: 10 },
     seedWord: { color: colors.text.heading, fontSize: 14, fontWeight: 'bold', minHeight: 20 },
-    recoveryGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', marginBottom: 16 },
-    recoveryInput: { width: '31%', backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 8, padding: 8, color: colors.text.heading, fontSize: 12, marginBottom: 8, textAlign: 'center' }
 });
 
 // Styles for the "Who Are You?" profile setup gate
@@ -3130,7 +3622,7 @@ const profileStyles = StyleSheet.create({
     trinityLabel: {
         fontSize: 13,
         fontWeight: '600',
-        color: palette.gray600,
+        color: dark ? colors.text.secondary : palette.gray600,
     },
     avatarGrid: {
         flexDirection: 'row',
@@ -3203,7 +3695,8 @@ const stepperStyles = StyleSheet.create({
         justifyContent: 'center',
     },
     dotCheck: {
-        color: colors.text.inverse,
+        // Dark ink on the green dot in both schemes: white on green500 read 2.28:1, this reads 6.36:1.
+        color: palette.green950,
         fontSize: 9,
         fontWeight: '800',
     },
@@ -3245,7 +3738,7 @@ const guideStyles = StyleSheet.create({
     },
     cardText: {
         fontSize: 14,
-        color: palette.gray600,
+        color: dark ? colors.text.secondary : palette.gray600,
         lineHeight: 20,
     },
     highlightBox: {
@@ -3258,7 +3751,7 @@ const guideStyles = StyleSheet.create({
     },
     highlightText: {
         fontSize: 13,
-        color: palette.green800,
+        color: dark ? palette.emerald400 : palette.green800,
         lineHeight: 18,
     },
     bulletRow: {
@@ -3277,7 +3770,7 @@ const guideStyles = StyleSheet.create({
     bulletTitle: {
         fontSize: 14,
         fontWeight: '600',
-        color: palette.gray700,
+        color: dark ? colors.text.body : palette.gray700,
         marginBottom: 2,
     },
     bulletText: {
@@ -3287,8 +3780,11 @@ const guideStyles = StyleSheet.create({
     },
     bulletItem: {
         fontSize: 13,
-        color: palette.gray600,
+        color: dark ? colors.text.secondary : palette.gray600,
         lineHeight: 18,
         marginBottom: 8,
     }
 });
+
+return { styles, profileStyles, stepperStyles, guideStyles };
+}

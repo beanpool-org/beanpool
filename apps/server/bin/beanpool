@@ -1,0 +1,9 @@
+#!/bin/sh
+# The node's shell commands, run inside its container: docker compose exec beanpool-node beanpool recover --key <key>
+# As the node's own user (entrypoint.sh's PUID/PGID), so what it writes in /data stays the node's.
+set -e
+CLI=/app/apps/server/dist/recover-cli.js
+if [ "$(id -u)" = "0" ]; then
+  exec su-exec "${PUID:-1000}:${PGID:-1000}" node "$CLI" "$@"
+fi
+exec node "$CLI" "$@"

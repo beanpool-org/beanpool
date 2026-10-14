@@ -1,0 +1,19 @@
+# A new image, installed at the monthly restart into the slot not in use. The source is root's alone: only files root's
+# install step (src/install/install.ts) has checked from the pinned custodian keys are moved there; the API's inbox
+# (/var/lib/beanpool-vault/staged) is never read. The partition UUIDs are the halves of the UKI's roothash=, which is
+# how the new UKI finds its own partitions.
+[Transfer]
+ProtectVersion=%A
+
+[Source]
+Type=regular-file
+Path=/var/lib/beanpool-vault/install
+MatchPattern=beanpool-vault_@v_@u.root-verity.raw
+
+[Target]
+Type=partition
+Path=auto
+MatchPattern=beanpool-vault_@v_verity
+MatchPartitionType=root-verity
+PartitionFlags=0
+ReadOnly=1

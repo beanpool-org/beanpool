@@ -34,6 +34,7 @@ import { db, afterTransactionCommit } from './db/db.js';
 import { ledger } from './engine/ledger.js';
 import { initTls } from './services/tls.js';
 import { startHttpsServer } from './https-server.js';
+import { setMemberPhoto } from '@beanpool/engine';
 import {
     initStateEngine,
     moveToCommons,
@@ -55,8 +56,6 @@ import {
     persistCommonsBalance,
     reconcileLedgerFromDb,
 } from './state-engine.js';
-
-const HTTPS_PORT = 8558;
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -104,8 +103,9 @@ const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 function makeMember(callsign: string, initialBalance = 0): string {
     // A real member key: 64 hex characters in lower case (every door since #1195 refuses any other spelling).
     const pk = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`).run(pk, callsign, AVATAR);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pk, callsign);
+    setMemberPhoto(db, pk, AVATAR);
     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch)
                 VALUES (?, 0, 0)`).run(pk);
     ledger.initializeGenesisAccount(pk);
@@ -825,14 +825,15 @@ async function main() {
         // (d) The real route, over HTTPS, through the real signing middleware.
         {
             await initTls();
-            await startHttpsServer(HTTPS_PORT);
-            const base = `https://localhost:${HTTPS_PORT}`;
+            const httpsPort = await startHttpsServer(0);
+            const base = `https://localhost:${httpsPort}`;
             const path = '/api/ledger/transfer';
 
             const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
             const senderHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-            db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url)
-                        VALUES (?, 'AtomicRoute', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`).run(senderHex, AVATAR);
+            db.prepare(`INSERT INTO members (public_key, callsign, joined_at)
+                        VALUES (?, 'AtomicRoute', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(senderHex);
+            setMemberPhoto(db, senderHex, AVATAR);
             db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(senderHex);
             ledger.initializeGenesisAccount(senderHex);
             transfer('genesis', senderHex, 100, 'seed route sender', 'direct', true);

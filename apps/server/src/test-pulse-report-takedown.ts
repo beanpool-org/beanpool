@@ -22,6 +22,7 @@ import { db } from './db/db.js';
 import { initStateEngine, getMember, exportSyncState } from './state-engine.js';
 import { initAdminPassword } from './config/local-config.js';
 import { checkAdminAuth } from './admin-auth.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { addChannel } from './engine/creator-channels.js';
 import { getPulseThumbnailService } from './engine/pulse-thumbnail.js';
 import { createAdminRoutes } from './routes/admin.js';
@@ -117,7 +118,9 @@ async function main(): Promise<void> {
     const community = createCommunityRoutes(deps);
     const admin = createAdminRoutes(deps);
     const pulse = createPulseRoutes(deps);
-    const adminHeaders = { 'x-admin-password': ADMIN_PW };
+    // Step 7c: the password alone opens no admin route with 2FA off; the admin calls carry an owner's automation token
+    // (lower-cased: this suite's ctx looks its headers up that way).
+    const adminHeaders = Object.fromEntries(Object.entries(ownerTokenHeaders('admin')).map(([k, v]) => [k.toLowerCase(), v]));
 
     const owner = makeMember('Kayla');
     const reporter = makeMember('Reporter');

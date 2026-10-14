@@ -13,12 +13,13 @@ Beans come into it from:
 
 - the 1.5% market fee on every completed trade;
 - the circulation fee on large balances. See "The circulation fee".
+- members who pay in themselves, with **Pay the Commons** on the **Ledger**. A member paying back a debt to the Commons enters the pay-back code an admin shared, and the payment comes off the debt at once.
 
 ## Seeing it
 
 Tap **Commons**. At the top, **Commons Pool** shows how many beans it holds. Tap the **ⓘ** next to The Commons for how it works: **How It Works**, **Circulation Fees** and **Voting**.
 
-**Community Treasuries** are listed under **Enterprises**. Tap one to see its balance and every bean in and out. These accounts are open to every member.
+**The Commons' enterprises** are listed in **Commons**, under **Groups**. Tap one to see its balance and every bean in and out. Every member sees the amounts; who paid or was paid, and the note, only its keepers and that member see.
 
 ## Spending it
 

@@ -41,8 +41,11 @@
  * (event, member, offset), for the life of the event.
  */
 
+import { postPhotoUrl } from '@beanpool/engine';
+import type { PushNoticeKind } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getNodeRole } from './sync.js';
+import { postInSightSql } from './post-sight.js';
 
 /** The five offsets the picker offers, in minutes before the start. Nothing else is storable. */
 export const EVENT_REMINDER_OFFSETS = [10080, 1440, 120, 60, 30] as const;
@@ -72,6 +75,7 @@ type PushFn = (
     body: string,
     data: Record<string, any>,
     categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery',
+    kind: PushNoticeKind,
 ) => void;
 
 export const BAD_OFFSETS_MESSAGE =
@@ -156,13 +160,16 @@ export function setEventReminderOffsets(
 ): { offsets: number[] | null } {
     const stored = offsets === null ? null : JSON.stringify(offsets);
     // A visitor's row has no RSVP here, as a key with no row has none, whatever row it holds from before visitors were
-    // refused one.
+    // refused one. Nor has a member removed from the event's group, or who left it or was banned: their RSVP is kept but
+    // gives nothing while the event is out of their sight (engine/event-thread.ts canReadEventThread), and a key with no
+    // RSVP is answered as they are.
     const res = db.prepare(
         `UPDATE event_rsvps
             SET reminder_offsets = ?,
                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
           WHERE post_id = ? AND member_pubkey = ?
-            AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = event_rsvps.member_pubkey AND m.is_visitor = 1)`
+            AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = event_rsvps.member_pubkey AND m.is_visitor = 1)
+            AND EXISTS (SELECT 1 FROM posts p WHERE p.id = event_rsvps.post_id AND ${postInSightSql('p', 'event_rsvps.member_pubkey')})`
     ).run(stored, postId, memberPubkey);
     if (res.changes === 0) throw new Error(NO_RSVP_MESSAGE);
     return { offsets };
@@ -172,8 +179,9 @@ export function setEventReminderOffsets(
  * "Your events" — the signer's own RSVPs, soonest first.
  *
  * Upcoming and not cancelled only: an event that has ended or been called off is not something to show
- * under "★ For you". The photo is the same versioned URL `getPosts` builds for the event card, so the
- * client resolves it exactly as it does there, and the first photo is the card's photo.
+ * under "★ For you". The photo is the same versioned URL `getPosts` builds for the event card (keyed as the event's
+ * photos are, from its audience), so the client resolves it exactly as it does there, and the first photo is the
+ * card's photo.
  */
 export interface MyEvent {
     postId: string;
@@ -189,7 +197,7 @@ export interface MyEvent {
 export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[] {
     const nowIso = new Date(nowMs).toISOString();
     const rows = db.prepare(`
-        SELECT p.id, p.title, p.event_start_at, p.event_end_at, p.event_place_name,
+        SELECT p.id, p.title, p.event_start_at, p.event_end_at, p.event_place_name, p.audience_scope,
                r.status, r.reminder_offsets,
                (SELECT ph.order_num FROM post_photos ph
                  WHERE ph.post_id = p.id ORDER BY ph.order_num ASC LIMIT 1) AS photo_order,
@@ -204,6 +212,9 @@ export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[
            AND COALESCE(p.event_state, '') != 'cancelled'
            AND p.event_end_at > ?
            AND (p.hidden_by_reports_at IS NULL OR p.author_pubkey = ?)
+           -- A group's event after its member was removed, left or was banned: the RSVP is kept, the event is gone from
+           -- their feed (getPosts), and from here (engine/event-thread.ts canReadEventThread).
+           AND ${postInSightSql('p', 'r.member_pubkey')}
          ORDER BY p.event_start_at ASC
     `).all(memberPubkey, nowIso, memberPubkey) as any[];
 
@@ -216,7 +227,7 @@ export function listMyEvents(memberPubkey: string, nowMs = Date.now()): MyEvent[
         rsvp: r.status as 'going' | 'interested',
         photo: r.photo_order == null
             ? null
-            : `/api/marketplace/posts/${r.id}/photos/${r.photo_order}?v=${r.photo_updated_at ? new Date(r.photo_updated_at).getTime() : 0}`,
+            : postPhotoUrl(r.id, r.photo_order, r.photo_updated_at, r.audience_scope),
         reminderOffsets: readStoredOffsets(r.reminder_offsets),
     }));
 }
@@ -295,6 +306,9 @@ export function dueEventReminders(nowMs = Date.now()): DueReminder[] {
                -- A visitor's row has no RSVP here (setEventReminderOffsets), whatever row it holds from before visitors
                -- were refused one: its push token gets what is sent to it, its messages and Beans.
                AND NOT EXISTS (SELECT 1 FROM members m WHERE m.public_key = r.member_pubkey AND m.is_visitor = 1)
+               -- Nor a member removed from the event's group, or who left it or was banned: their RSVP is kept, and a
+               -- reminder would name the event (engine/event-thread.ts canReadEventThread).
+               AND ${postInSightSql('p', 'r.member_pubkey')}
              ORDER BY p.event_start_at ASC
         `).all(nowIso, horizonIso) as any[];
     } catch {
@@ -348,6 +362,8 @@ export function dueEventReminders(nowMs = Date.now()): DueReminder[] {
  */
 export function runEventReminderSweep(push: PushFn | undefined, nowMs = Date.now()): number {
     if (!push) return 0;
+    // A standby claims none: its marks are its main server's, copied (a plain table, design G4), and it sends no push.
+    if (getNodeRole() === 'backup') return 0;
     const due = dueEventReminders(nowMs);
     if (due.length === 0) return 0;
 
@@ -382,6 +398,7 @@ export function runEventReminderSweep(push: PushFn | undefined, nowMs = Date.now
                 reminderPushBody(b.offsetMin),
                 { screen: 'post', postId: b.postId },
                 REMINDER_PUSH_CATEGORY,
+                'event.reminder',
             );
         } catch (e) {
             // Same rule as every other event push: a delivery failure never becomes a node failure. The
@@ -396,8 +413,8 @@ export function runEventReminderSweep(push: PushFn | undefined, nowMs = Date.now
  * The scheduler, as one tick.
  *
  * Primary only, like every other background job here with a side effect out in the world: a backup node
- * holds the same RSVPs and the same push tokens by design, and a replica that reminded people on its own
- * would double every reminder the moment a mirror existed.
+ * holds the same RSVPs, the same push tokens and the same marks by design (design G4), and a replica that
+ * reminded people on its own would double every reminder the moment a mirror existed.
  */
 export function tickEventReminders(push: PushFn | undefined, nowMs = Date.now()): number {
     if (getNodeRole() !== 'primary') return 0;

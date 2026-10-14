@@ -5,11 +5,16 @@ import { fileURLToPath } from 'node:url';
 import { seedPricingGuideIfEmpty } from './pricing-guide-db.js';
 import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migration.js';
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
-import { isSelfAvatarUrl } from '@beanpool/core';
-import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL } from '@beanpool/engine';
+import { addDecisionScope } from './decision-scope-migration.js';
+import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount, replaceLoneSurrogates } from '@beanpool/core';
+import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
+import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
 import { createTableText, checkRules } from './table-rules.js';
+import { swapStagedCopyAtBoot } from './swap-at-boot.js';
+import { assertEnterpriseText } from '../engine/enterprise-text.js';
+import { upgradeBreakGlassHashes } from '../break-glass-code.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +27,11 @@ if (!fs.existsSync(DATA_DIR)) {
 const DB_PATH = path.join(DATA_DIR, 'state.db');
 const STATE_JSON_PATH = path.join(DATA_DIR, 'state.json');
 const STATE_BACKUP_PATH = path.join(DATA_DIR, `state.backup-${Date.now()}.json`);
+
+// A standby's whole copy made ready in data/staging is swapped in first (db/swap-at-boot.ts), by rename, before this
+// process opens the database, whichever module imported this one first: a rename under an open connection would leave
+// this process writing to the file it replaced.
+swapStagedCopyAtBoot(DATA_DIR);
 
 // Initialize Database connection
 export const db: Database.Database = new Database(DB_PATH);
@@ -60,6 +70,20 @@ function wrapTxnFn(origFn: any) {
     };
     return wrapped;
 }
+
+/**
+ * For a catch inside a transaction that leaves one row out and goes on (a copied row this table's rules refuse): rethrows
+ * unless the error is that row's own and the transaction is still open. SQLite rolls the WHOLE transaction back on some
+ * errors (a disk that is full or failing, a trigger's RAISE(ROLLBACK)), and every write after that would commit on its
+ * own, one by one: a standby's copy refused, and part of it landed anyway. A disk, memory or lock error is never one
+ * row's, whether or not the transaction survived it.
+ */
+export function rethrowUnlessRowRefused(e: unknown): void {
+    if (!(db as any).inTransaction) throw e;
+    const code = (e as { code?: unknown } | null)?.code;
+    if (typeof code === 'string' && NOT_A_ROWS_ERROR.test(code)) throw e;
+}
+const NOT_A_ROWS_ERROR = /^SQLITE_(IOERR|FULL|NOMEM|CORRUPT|NOTADB|READONLY|BUSY|LOCKED|INTERRUPT|CANTOPEN|PROTOCOL|ABORT|PERM)/;
 
 const origTransaction = db.transaction.bind(db);
 db.transaction = function (fn: any) {
@@ -129,6 +153,17 @@ export function getDbDataVersion(): number {
     if (!changeProbe) changeProbe = new Database(DB_PATH, { readonly: true });
     return changeProbe.pragma('data_version', { simple: true }) as number;
 }
+/**
+ * Close the probe, for a restore about to replace state.db (routes/backup.ts). While it is open, closing `db` is not the
+ * last close, so SQLite leaves state.db-wal behind unfolded, and the next open plays it over whatever file is put there.
+ * The wash analysis's read-only handle (engine trust.ts runWashAnalysisInSlices) closes with it, for the same reason: a
+ * refresh reading through it then lands nothing, and the next opens a new one.
+ */
+export function closeDbDataVersionProbe(): void {
+    try { changeProbe?.close(); } catch { /* closed either way */ }
+    changeProbe = null;
+    closeWashSnapshotHandle(db);
+}
 // A2-31 / SRV-7 — ACCEPTED RISK (documented, intentional): FK enforcement is OFF so
 // out-of-order P2P/backup sync can insert rows whose referenced parent hasn't
 // arrived yet (e.g. a transaction before its account, a message before its
@@ -149,6 +184,45 @@ export function writeTombstone(tableName: string, rowKey: string): void {
         `INSERT OR REPLACE INTO tombstones (table_name, row_key, deleted_at)
          VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`
     ).run(tableName, rowKey);
+}
+
+/**
+ * How long every server keeps a tombstone (design scratch/global-node/DESIGN-replica-flood-bounds-opus.md §6.3 T6). A delta
+ * carries a delete only as its tombstone, so a standby whose cursor is older than this has missed deletes its main server
+ * no longer holds: it takes a force-resync instead of a delta (services/backup-puller.ts).
+ */
+export const TOMBSTONE_RETENTION_DAYS = 30;
+export const TOMBSTONE_RETENTION_MS = TOMBSTONE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+/**
+ * Drops the tombstones older than TOMBSTONE_RETENTION_MS, whatever this server's role (connector-manager.ts, daily). No
+ * floor from the pull cursors: only this server's own puller writes one (`backup:primary`), so a promoted server's last
+ * pull kept every tombstone written after its take-over, for good, and a standby whose copies were refused for longer than
+ * this kept every one newer than its last copy that landed. Returns how many went.
+ */
+export function pruneTombstones(now = Date.now()): number {
+    return db.prepare('DELETE FROM tombstones WHERE deleted_at < ?').run(new Date(now - TOMBSTONE_RETENTION_MS).toISOString()).changes;
+}
+
+/**
+ * Deletes the rows of a plain table (engine/replication-manifest.ts PLAIN_TABLES) that `where` matches, each with a
+ * tombstone keyed by its primary key's values joined with `|` (engine/plain-tables.ts plainRowKey), so a standby deletes
+ * them too: a delta carries a delete only as its tombstone. A row the table's RowRule doesn't hold (a phone of a key that
+ * isn't a member's) never travelled, and goes with none, so no key can fill a copy with them. `table` and `where` are
+ * the caller's own SQL, never a value; `args` fill the `where`. Returns how many rows went.
+ */
+export function deletePlainRows(table: string, where: string, ...args: unknown[]): number {
+    const key = (db.prepare('SELECT name FROM pragma_table_info(?) WHERE pk > 0 ORDER BY pk').all(table) as { name: string }[]).map((c) => c.name);
+    const spec = PLAIN_TABLES.find((t) => t.table === table);
+    if (!spec || key.length === 0) throw new Error(`${table} is no plain table with a key`);
+    const travelled = spec.where ? `(${spec.where})` : '1';
+    return db.transaction(() => {
+        // Which rows travelled, read before the delete: the rule may read the row's own columns.
+        const rows = db.prepare(`SELECT ${key.join(', ')}, ${travelled} AS travelled FROM ${table} WHERE ${where}`).raw().all(...args) as unknown[][];
+        const gone = db.prepare(`DELETE FROM ${table} WHERE ${where}`).run(...args).changes;
+        for (const r of rows) if (r[key.length]) writeTombstone(table, r.slice(0, key.length).map((v) => String(v)).join('|'));
+        return gone;
+    })();
 }
 
 /**
@@ -176,7 +250,7 @@ const NO_RECORD_OF_JOINING = `
  * up its profile in the join wizard; these keep that person a member.
  */
 const USED_AS_A_MEMBER = `
-    COALESCE(m.avatar_url, '') != '' OR COALESCE(m.bio, '') != '' OR COALESCE(m.contact_value, '') != ''
+    m.avatar_ref IS NOT NULL OR COALESCE(m.bio, '') != '' OR COALESCE(m.contact_value, '') != ''
     OR m.profile_updated_at IS NOT NULL
     OR EXISTS (SELECT 1 FROM invite_codes c WHERE c.created_by = m.public_key)`;
 
@@ -224,15 +298,14 @@ export function noteWholeCopyOfVisitorMarks(): void {
  * still hold their account, Beans and history, and joining with an invite makes the same row a member's again. Each
  * marked row's updated_at is stamped, so delta sync takes the mark to a standby.
  *
- * Never on a standby (NODE_ROLE=backup, 4110268549): its copy lacks some of what the rule reads (profile_updated_at isn't
- * imported; invite_codes, node_roles and the activity feed don't replicate), and its stamp would outlive its main
- * server's answer. It writes no marker either: its main server's marks reach it by delta sync, with the main's word
+ * Never on a standby (NODE_ROLE=backup, 4110268549): its copy lacks the node roles the rule reads (the take-over bundle
+ * brings them, sealed), and its stamp would outlive its main server's answer. It writes no marker either: its main server's marks reach it by delta sync, with the main's word
  * that they are made (noteVisitorsMarkedByMainServer), then one whole copy for the rows it copied before it had the
  * column (visitorMarksWantWholeCopy); promoted before that whole copy, it logs so at boot. A standby promoted without
  * that word (its main server predates the column, so nobody ever marked) runs the pass at its first boot as the main
- * server, or when a take-over finishes at boot (services/takeover.ts), on what it holds: the members' own columns
- * (inviter, code, photo, bio, contact), the open door's record and, after a take-over, the node roles it brings; not
- * profile edits, invites made or used, or the activity feed.
+ * server, or when a take-over finishes at boot (services/takeover.ts), on what it holds: what that older main server
+ * copied of the members' rows, the open door's record, invites and the activity feed (a main server copies them all
+ * since designs G2a, G3 and G4, which came after the column), and, after a take-over, the node roles it brings.
  */
 export function markExistingVisitors(): void {
     try {
@@ -312,7 +385,7 @@ function backfillBoardStanding(): void {
 }
 
 /** node_config: this node's members rows keep the fresh schema's rules (bringMembersToSchemaRules). */
-const MEMBERS_SCHEMA_RULES = 'migration_members_schema_rules_v1';
+export const MEMBERS_SCHEMA_RULES = 'migration_members_schema_rules_v1';
 
 /**
  * Brings this node's members rows into the rules a fresh install's table has (schema.sql's CHECKs on members, read from its
@@ -351,7 +424,574 @@ function bringMembersToSchemaRules(schemaSql: string): void {
     }
 }
 
+/**
+ * Makes `accounts.balance` NOT NULL on a node whose table predates it (schema.sql), by rebuilding the table once.
+ *
+ * WHY (review FABLE-sec-input F1, 2026-10-01, measured). better-sqlite3 binds NaN as NULL, and the column was nullable, so
+ * a NaN balance — a listing priced "abc" poisoned every buyer approved for it — was written as NULL without a word. With
+ * NOT NULL an INSERT, an upsert or an UPDATE binding NaN fails inside its conservingTransaction, which rolls back and
+ * resyncs memory to the rows. Not an `INSERT OR REPLACE`: SQLite's REPLACE puts the column DEFAULT (0) in place of a
+ * NULL, so NaN is stored as 0 with no error. The one such balance write is the Commons pot's (engine audit.ts
+ * persistCommonsBalance), so that write refuses a pot that is not a finite number itself, before it binds anything.
+ *
+ * A NULL, text or infinite balance already here is NOT guessed at: there is no right value to put in its place (the
+ * account's history says what it should hold, and only an operator can decide that). Each is logged, loudly, with its
+ * key, and the rebuild does not happen; the next boot looks again, and the conservation check fails until it is fixed
+ * (engine audit.ts BROKEN_BALANCE_SQL). Idempotent: once the column is NOT NULL this reads one pragma row and returns.
+ * The table is the schema's own (createTableText), so the rebuilt table is exactly a fresh install's.
+ *
+ * Returns what it did, for the upgrade test: 'already' (nothing to do), 'rebuilt', 'refused' (broken rows logged), or
+ * 'failed' (logged; the node keeps its old table).
+ */
+export function makeAccountBalanceNotNull(schemaSql: string): 'already' | 'rebuilt' | 'refused' | 'failed' {
+    try {
+        const col = db.prepare(`SELECT "notnull" AS nn FROM pragma_table_info('accounts') WHERE name = 'balance'`).get() as { nn: number } | undefined;
+        if (!col || col.nn === 1) return 'already';
+        const broken = db.prepare(`SELECT public_key, balance, typeof(balance) AS t FROM accounts WHERE ${BROKEN_BALANCE_SQL}`)
+            .all() as { public_key: string; balance: unknown; t: string }[];
+        if (broken.length > 0) {
+            console.error('');
+            console.error('╔════════════════════════════════════════════════════════════════════════╗');
+            console.error('║ 🛑 LEDGER: ACCOUNTS WHOSE BALANCE IS NOT A NUMBER — MIGRATION STOPPED   ║');
+            console.error('╚════════════════════════════════════════════════════════════════════════╝');
+            console.error(`[DB] ${broken.length} account row(s) hold a balance that is not a finite number, so accounts.balance`);
+            console.error('[DB] was NOT made NOT NULL. Nothing was changed: no value is guessed for them. Work out what each');
+            console.error('[DB] should hold from its transactions, set it, and restart; this runs again at every boot.');
+            for (const r of broken.slice(0, 50)) console.error(`[DB]   ${r.public_key}  balance=${String(r.balance)} (${r.t})`);
+            if (broken.length > 50) console.error(`[DB]   … and ${broken.length - 50} more`);
+            return 'refused';
+        }
+        const fresh = createTableText(schemaSql, 'accounts');
+        if (!fresh || !/\bbalance\s+REAL\s+NOT\s+NULL\b/i.test(fresh)) throw new Error('schema.sql declares no accounts table with a NOT NULL balance');
+        const staged = 'accounts_balance_not_null';
+        const createStaged = fresh.replace(/^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?["`[]?accounts["`\]]?/i, `CREATE TABLE ${staged}`);
+        const oldCols = new Set((db.prepare(`SELECT name FROM pragma_table_info('accounts')`).all() as { name: string }[]).map((c) => c.name));
+        let copied = 0;
+        db.transaction(() => {
+            db.exec(`DROP TABLE IF EXISTS ${staged}`);
+            db.exec(createStaged);
+            const cols = (db.prepare(`SELECT name FROM pragma_table_info(?)`).all(staged) as { name: string }[])
+                .map((c) => c.name).filter((c) => oldCols.has(c)).map((c) => `"${c}"`).join(', ');
+            copied = db.prepare(`INSERT INTO ${staged} (${cols}) SELECT ${cols} FROM accounts`).run().changes;
+            db.exec(`DROP TABLE accounts`);
+            db.exec(`ALTER TABLE ${staged} RENAME TO accounts`);
+            db.exec(`CREATE INDEX IF NOT EXISTS idx_accounts_last_updated_at ON accounts(last_updated_at)`);
+        })();
+        console.log(`[DB] ✅ accounts.balance is now NOT NULL (${copied} account row(s) kept as they were)`);
+        return 'rebuilt';
+    } catch (e) {
+        // The old table stays, rows and all; the next boot tries again. Loud, because a NaN would still land as NULL.
+        console.error('[DB] ❌ Could not make accounts.balance NOT NULL; a balance that is not a number can still be stored as NULL:', e);
+        return 'failed';
+    }
+}
+
+/** node_config: the lines already here have their old conversation ids indexed (indexOldConversationIds). */
+const MESSAGE_OLD_CONVERSATION_IDS = 'migration_message_old_conversation_ids_v1';
+
+/**
+ * Fills message_old_conversation_ids (schema.sql) from the lines already here, once: the first boot with the table
+ * (node_config `migration_message_old_conversation_ids_v1`, written in the same transaction). From then on its triggers
+ * keep it. On a standby too: the table is each server's own and never copied, and a `migration_*` marker is per-server,
+ * so a standby fills its own from the lines it holds. Reads the metadata exactly as the triggers do. A failure writes
+ * no marker, and the next boot tries again; until then an old id of a folded DM that only such a line names isn't
+ * followed, and a send to it is answered as one to an id nobody has.
+ */
+function indexOldConversationIds(): void {
+    try {
+        if (db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(MESSAGE_OLD_CONVERSATION_IDS)) return;
+        db.transaction(() => {
+            const n = db.prepare(`
+                INSERT OR IGNORE INTO message_old_conversation_ids (old_conversation_id, message_id)
+                SELECT json_extract(m.metadata, '$.originalConversationId'), m.id FROM messages m
+                 WHERE instr(m.metadata, 'originalConversationId') > 0
+                   AND CASE WHEN json_valid(m.metadata) THEN json_type(m.metadata, '$.originalConversationId') END = 'text'
+                UNION ALL
+                SELECT j.value, m.id
+                  FROM messages m, json_each(CASE WHEN json_valid(m.metadata) THEN m.metadata END, '$.originalConversationIds') j
+                 WHERE instr(m.metadata, 'originalConversationId') > 0 AND j.type = 'text' AND typeof(j.key) = 'integer'
+            `).run().changes;
+            db.prepare("INSERT OR REPLACE INTO node_config (key, value) VALUES (?, '1')").run(MESSAGE_OLD_CONVERSATION_IDS);
+            if (n > 0) console.log(`[DB] Indexed ${n} old conversation id(s) named by chat lines`);
+        })();
+    } catch (e) {
+        console.error('[DB] ❌ Could not index the old conversation ids chat lines name:', e);
+    }
+}
+
+/** Where movePlainPushTablesAside puts a push_tokens from before, tokens in the clear, until the boot locks or drops its rows. */
+export const PLAIN_PUSH_TOKENS = 'push_tokens_plain';
+/** And its leave statements, which named each token in the clear too. */
+export const PLAIN_PUSH_LEAVES = 'push_token_leaves_plain';
+
+/**
+ * Before schema.sql runs: a push_tokens or push_token_leaves from before (a `token` column: each phone's token in the
+ * clear, and in the key) is moved aside as it is, into PLAIN_PUSH_TOKENS and PLAIN_PUSH_LEAVES, and dropped with its
+ * indexes and triggers, so schema.sql makes the new tables and stampPlainTables their triggers. One transaction: a server
+ * stopped part way has moved nothing. Needs no key and no role: the boot locks the rows under the key, on a main server,
+ * or drops them, on a standby (services/push-token-seal.ts installPushTokenSealAtBoot). Leaves anything else as it is.
+ */
+function movePlainPushTablesAside(): void {
+    const hasTable = (name: string) => !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?`).get(name);
+    const hasColumn = (table: string, column: string) => !!db.prepare('SELECT 1 FROM pragma_table_info(?) WHERE name = ?').get(table, column);
+    const tokens = hasTable('push_tokens') && hasColumn('push_tokens', 'token');
+    const leaves = hasTable('push_token_leaves') && hasColumn('push_token_leaves', 'token');
+    if (!tokens && !leaves) return;
+    db.transaction(() => {
+        if (tokens) {
+            db.exec(`CREATE TABLE IF NOT EXISTS ${PLAIN_PUSH_TOKENS} (public_key TEXT, token TEXT, platform TEXT, created_at TEXT, registered_at INTEGER)`);
+            const registered = hasColumn('push_tokens', 'registered_at') ? 'registered_at' : 'NULL';
+            db.exec(`INSERT INTO ${PLAIN_PUSH_TOKENS} (public_key, token, platform, created_at, registered_at)
+                SELECT public_key, token, platform, created_at, ${registered} FROM push_tokens`);
+            db.exec('DROP TABLE push_tokens');
+        }
+        if (leaves) {
+            db.exec(`CREATE TABLE IF NOT EXISTS ${PLAIN_PUSH_LEAVES} (public_key TEXT, token TEXT, left_at INTEGER, applied_at TEXT)`);
+            db.exec(`INSERT INTO ${PLAIN_PUSH_LEAVES} (public_key, token, left_at, applied_at)
+                SELECT public_key, token, left_at, applied_at FROM push_token_leaves`);
+            db.exec('DROP TABLE push_token_leaves');
+        }
+    })();
+    console.log('[DB] Moved the push tokens stored in the clear aside: the boot locks them (a standby drops them).');
+}
+
+/** Members whose photos move out of their rows in one transaction, at most (moveMemberPhotosOutOfRows); MEMBER_PHOTO_MOVE_BATCH. */
+export const MEMBER_PHOTO_MOVE_BATCH = 500;
+/**
+ * Photo bytes moved in one transaction, at most (moveMemberPhotosOutOfRows); MEMBER_PHOTO_MOVE_BYTES. A photo may be up
+ * to 2 MB, so 500 of them read at once held the event loop for 7.9 s and took 732 MB of heap (#1736's review, N4).
+ */
+export const MEMBER_PHOTO_MOVE_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Before schema.sql runs, on a database from before member_photos: each member's avatar (`members.avatar_url`, a photo
+ * inline as a data URL, ~27 KB) moved into member_photos, with its reference and size in the row (avatar_ref,
+ * avatar_bytes: @beanpool/engine members.ts memberPhotoColumnsOf, the one rule its writer uses), then the column dropped.
+ * A value the node does not serve (empty, or its own avatar URL sent back) is not moved: that member has no avatar, as
+ * every app already showed them. No row is stamped (members_touch_updated_at is dropped until schema.sql makes it again):
+ * a photo moved is not a change, and a standby moves its own the same way at its own boot.
+ *
+ * The move is in batches by rowid, each its own transaction, so no transaction of the move grows with the community (a
+ * 50,000-member database is 1.3 GB of photos), and its heap stays flat: at most `batch` rows and `batchBytes` of photos
+ * (never fewer than one row), each photo read on its own, as the groups' move does (moveGroupPicturesOutOfRows). Killed part way, the batches done stay done, the
+ * next boot carries on from the first row still holding its photo, and nothing reads half of one. Before the server
+ * listens, so no reader ever sees a member half moved.
+ *
+ * The DROP COLUMN after it is NOT batched: SQLite rewrites the whole members table in that one statement, and the
+ * rewrite grows with the number of members who had a photo. Each photo member's row shrank in place in the move (SQLite
+ * merges pages on a DELETE, never on an UPDATE that shrinks a row), so each still has a page of its own, and the drop
+ * rewrites every one of them. Measured on an M4 (27 KB photos; 2026-10-02, #1475): at 30,000 photo members the move's
+ * batches keep the WAL at about one batch (17 MB), and then the drop alone adds 100.5 MB of WAL in 0.74 s, and the file's
+ * pages grow from 835.8 to 955.6 MB (+14%); at 50,000 it adds 178.7 MB of WAL and the pages grow from 1,393 to
+ * 1,671 MB (+20%). The disk needs that much free for the drop, or it fails and the next boot tries it again. Afterwards
+ * `members` stays sparse until a VACUUM, which this does not run (it needs about the file's size free): at 30,000,
+ * 117.5 MB of pages, 110.8 MB of them empty, where a vacuumed copy is 7.2 MB. Nothing is lost, and the heap stays flat;
+ * a full member list reads those pages (112–147 ms, against 84–126 ms on the vacuumed copy). (The 50,000 figures, the
+ * vacuumed copy and the list times are the deciding review's; its 30,000 figures match these.) A one-off cost, only on
+ * a node upgraded with many photo members.
+ *
+ * A batch that throws (a full disk, an I/O error) stops the move, loudly, and the boot carries on rather than crash-loop
+ * a node whose disk is full; a main server's timer carries it on while the node runs (resumeMemberPhotoMove). Meanwhile
+ * every answer about a member not reached yet says the node holds their photo (memberHasPhoto, memberPhotoNotMovedYet,
+ * MEMBER_PHOTO_INLINE_REF), and a standby's copy still carries it (@beanpool/engine sync.ts withPhoto). The node runs
+ * meanwhile, and its members may set, change or remove their photos. Which rows a later boot may still move, the one rule (#1475's deciding review):
+ *
+ *   while `members.avatar_url` exists, a value in it means "this photo is not moved yet, and nobody has set or removed
+ *   this member's photo since the move began".
+ *
+ * It holds because every write that settles a member's photo clears that value in the same transaction: each batch here
+ * (a moved photo, or one that is no photo); setMemberPhoto, the one writer of a member's photo, on every call while the
+ * column exists (a set, a change, a removal, and a removal of a photo the move had not reached yet, which no app
+ * showed); and a standby's copy never writes the column (engine/sync.ts MEMBER_PHOTO_COLUMNS). So NULL needs no second
+ * marker: "moved", "never had one", "set since" and "removed since" all mean the same thing here, nothing left to move.
+ * A removal leaves nothing behind but that NULL, so no marker kept elsewhere (member_photos, avatar_ref) could tell it
+ * from "never had one"; the column itself is the marker. And should a row still hold a value while its member already
+ * has a member_photos row (a writer outside that rule), the move keeps the member_photos row, which is the newer: it
+ * clears the old value and never writes over a photo. Returns how many moved: only batches that committed count.
+ *
+ * A move stopped at boot is resumed while the node runs, by a main server's timer (resumeMemberPhotoMove, #1482).
+ */
+export function moveMemberPhotosOutOfRows(
+    batch = Number(process.env.MEMBER_PHOTO_MOVE_BATCH) || MEMBER_PHOTO_MOVE_BATCH,
+    batchBytes = Number(process.env.MEMBER_PHOTO_MOVE_BYTES) || MEMBER_PHOTO_MOVE_BYTES,
+): number {
+    return moveMemberPhotos(batch, batchBytes, Infinity, 0).moved;
+}
+
+/** Where the move resumed after boot carries on from (resumeMemberPhotoMove): the last row of its last committed batch. */
+let memberPhotoResumeAfter = 0;
+
+/**
+ * One turn of a members' photo move that stopped at boot, resumed while the node runs (#1482): at most one batch (each
+ * its own transaction, as at boot), then the old column dropped once no row holds a photo. A main server's timer calls
+ * it until it answers 'done' (state-engine.ts armMemberPhotoMoveResume): 'more' when rows are left, 'stopped' when a batch or
+ * the drop threw (tried again later, after a longer wait each time), 'done' when the old column is gone, at once on a
+ * node whose move finished at boot. Until then no answer tells a phone "no photo" for a photo still inline (the gates,
+ * the member's own redeem card and the members list read it, and /api/avatar serves it: memberHasPhoto,
+ * memberPhotoNotMovedYet, MEMBER_PHOTO_INLINE_REF), so no phone publishes its own older copy over it; a stop that
+ * lasts (a full disk) costs only the move's own progress. `cleared` counts the rows whose old value went, each a change
+ * to the members list (state-engine.ts bumps its version).
+ *
+ * The move's one rule holds as at boot: a value in the old column is a photo not moved yet that nobody has set or
+ * removed since, every writer clears it, and the move never writes over a member_photos row. One difference: after
+ * boot members_touch_updated_at is in place, so each row whose photo moves now is stamped, which brings it (now with its
+ * reference) to a standby's next delta. A phone's delta selects by joined_at and profile_updated_at (@beanpool/engine
+ * members.ts getMemberDirectoryRows), which a move does not change: a phone learns the photo's real URL at its next full
+ * list (at least hourly), and meanwhile holds the stand-in URL, which /api/avatar serves. A row whose value was no photo
+ * is cleared unstamped, as at boot.
+ *
+ * Its own cost is one batch's transaction a turn (at most MEMBER_PHOTO_MOVE_BATCH rows and MEMBER_PHOTO_MOVE_BYTES of
+ * photos) and, once, the DROP
+ * COLUMN, which rewrites the members table in one statement (measured at boot for #1475: 0.74 s at 30,000 photo
+ * members); both hold the event loop while they run, as any write does. Kept out of a list read (#1475's heap rule).
+ */
+export function resumeMemberPhotoMove(
+    batch = Number(process.env.MEMBER_PHOTO_MOVE_BATCH) || MEMBER_PHOTO_MOVE_BATCH,
+    batchBytes = Number(process.env.MEMBER_PHOTO_MOVE_BYTES) || MEMBER_PHOTO_MOVE_BYTES,
+): { moved: number; cleared: number; outcome: 'done' | 'more' | 'stopped' } {
+    const turn = moveMemberPhotos(batch, batchBytes, 1, memberPhotoResumeAfter);
+    memberPhotoResumeAfter = turn.after;
+    return { moved: turn.moved, cleared: turn.cleared, outcome: turn.outcome };
+}
+
+/**
+ * The move itself (moveMemberPhotosOutOfRows, resumeMemberPhotoMove): at most `maxBatches` batches, from rowid `from`.
+ * `cleared` counts every row whose old value was cleared (moved, no photo, or already in member_photos).
+ */
+function moveMemberPhotos(batch: number, batchBytes: number, maxBatches: number, from: number): { moved: number; cleared: number; after: number; outcome: 'done' | 'more' | 'stopped' } {
+    const columns = new Set((db.prepare('SELECT name FROM pragma_table_info(?)').all('members') as { name: string }[]).map((c) => c.name));
+    if (!columns.has('avatar_url')) return { moved: 0, cleared: 0, after: from, outcome: 'done' };
+    const started = Date.now();
+    let moved = 0, dropped = 0, kept = 0, after = from, batches = 0;
+    try {
+        db.exec(`CREATE TABLE IF NOT EXISTS member_photos (public_key TEXT PRIMARY KEY, photo TEXT NOT NULL)`);
+        // The rows still holding a value, and each one's size, without reading a photo.
+        const next = db.prepare(`SELECT rowid AS rid, octet_length(avatar_url) AS size FROM members
+                                 WHERE rowid > ? AND avatar_url IS NOT NULL ORDER BY rowid LIMIT ?`);
+        const read = db.prepare('SELECT public_key, avatar_url FROM members WHERE rowid = ?');
+        const hasPhoto = db.prepare('SELECT 1 FROM member_photos WHERE public_key = ?');
+        const putPhoto = db.prepare(`INSERT INTO member_photos (public_key, photo) VALUES (?, ?)`);
+        const setRow = db.prepare('UPDATE members SET avatar_url = NULL, avatar_ref = ?, avatar_bytes = ? WHERE rowid = ?');
+        const clearRow = db.prepare('UPDATE members SET avatar_url = NULL WHERE rowid = ?');
+        for (;;) {
+            const waiting = next.all(after, batch) as { rid: number; size: number }[];
+            if (waiting.length === 0) break;
+            if (batches === maxBatches) return { moved, cleared: moved + dropped + kept, after, outcome: 'more' };
+            batches++;
+            const rids: number[] = [];
+            let bytes = 0;
+            for (const w of waiting) {
+                if (rids.length > 0 && bytes + w.size > batchBytes) break;
+                rids.push(w.rid);
+                bytes += w.size;
+            }
+            const done = db.transaction(() => {
+                const n = { moved: 0, dropped: 0, kept: 0 };
+                for (const rid of rids) {
+                    const r = read.get(rid) as { public_key: string; avatar_url: string | null } | undefined;
+                    if (!r || r.avatar_url === null) continue;
+                    if (hasPhoto.get(r.public_key)) {
+                        clearRow.run(rid); // their photo is already in member_photos: theirs, and newer
+                        n.kept++;
+                        continue;
+                    }
+                    const photo = memberPhotoColumnsOf(r.avatar_url);
+                    if (photo) {
+                        putPhoto.run(r.public_key, photo.photo);
+                        setRow.run(photo.ref, photo.bytes, rid);
+                        n.moved++;
+                    } else {
+                        clearRow.run(rid);
+                        n.dropped++;
+                    }
+                }
+                return n;
+            })();
+            // Counted once the batch has committed: a batch that throws counts none of its rows.
+            moved += done.moved;
+            dropped += done.dropped;
+            kept += done.kept;
+            after = rids[rids.length - 1];
+            if (done.moved > 0 && moved % (batch * 20) < done.moved) console.log(`[DB] Members' photos moved out of their rows: ${moved} so far`);
+        }
+    } catch (e) {
+        console.error(`[DB] ❌ Members' photos: the move out of their rows stopped after ${moved}; it carries on later (a main server's timer, or the next boot):`, e);
+        return { moved, cleared: moved + dropped + kept, after, outcome: 'stopped' };
+    }
+    try {
+        db.exec('ALTER TABLE members DROP COLUMN avatar_url');
+        console.log(`[DB] Members' photos are in member_photos now: ${moved} moved, ${dropped} that were no photo left out${kept ? `, ${kept} already there kept` : ''}, in ${Date.now() - started} ms.`);
+    } catch (e) {
+        // Every photo is out; the column stays, empty and read by nothing, until it can be dropped.
+        console.error(`[DB] ❌ Members' photos are in member_photos (${moved} moved), but members.avatar_url could not be dropped; it is tried again later:`, e);
+        return { moved, cleared: moved + dropped + kept, after, outcome: 'stopped' };
+    }
+    return { moved, cleared: moved + dropped + kept, after, outcome: 'done' };
+}
+
+/**
+ * Whether a member has a photo this node serves, wherever it is held (#1482): its reference in the row (`avatar_ref`), or,
+ * while a move stopped part way (moveMemberPhotosOutOfRows) has left the old column, a photo still inline in it. By the
+ * move's rule a value there is a photo not moved yet that nobody has set or removed since, and it counts as one by the
+ * move's own test (memberPhotoColumnsOf): never this node's own avatar address sent back. The marketplace's photo gates
+ * read this, so a member the move has not reached is not told to set a photo they have.
+ */
+export function memberHasPhoto(publicKey: string): boolean {
+    const row = db.prepare('SELECT avatar_ref FROM members WHERE public_key = ?').get(publicKey) as { avatar_ref: string | null } | undefined;
+    if (!row) return false;
+    return !!row.avatar_ref || memberPhotoNotMovedYet(publicKey) !== null;
+}
+
+/**
+ * One member's photo still inline in their row, while a stopped move (moveMemberPhotosOutOfRows) has left the old column,
+ * when it is one the move would carry out (memberPhotoColumnsOf); otherwise null. For reads of ONE member only (the
+ * gates above, the member's own redeem card, /api/avatar and its key check): never in a list, whose rows no longer carry
+ * photos (#1475). The members list carries only a 0/1 for it (MEMBER_PHOTO_INLINE_REF).
+ */
+export function memberPhotoNotMovedYet(publicKey: string): string | null {
+    if (!db.prepare(`SELECT 1 FROM pragma_table_info('members') WHERE name = 'avatar_url'`).get()) return null;
+    const row = db.prepare('SELECT avatar_url FROM members WHERE public_key = ?').get(publicKey) as { avatar_url: string | null } | undefined;
+    return memberPhotoColumnsOf(row?.avatar_url)?.photo ?? null;
+}
+
+/**
+ * The reference a member's avatar URL is made with while their photo is still inline (memberPhotoNotMovedYet, #1482): the
+ * members list reads a 0/1 for it (@beanpool/engine getMemberDirectoryRows photo_inline), never the photo, so it has no
+ * content version to put in the URL, and this stands in for one. Any URL at all tells the member's phone the node holds
+ * a photo, so its offline-edit retry publishes nothing over it (native avatar-value.ts localRowHasNoAvatar). /api/avatar
+ * serves the inline photo at that URL, and its key check takes this reference (engine/avatar-keys.ts). Once the photo
+ * moves, its URL carries its real reference, so a phone fetches it again.
+ */
+export const MEMBER_PHOTO_INLINE_REF = 'inline';
+
+/** Image bytes of group pictures moved in one transaction, at most (moveGroupPicturesOutOfRows); GROUP_PICTURE_MOVE_BYTES. */
+export const GROUP_PICTURE_MOVE_BYTES = 16 * 1024 * 1024;
+
+/**
+ * Before schema.sql runs, on a database from before group_pictures (#1486): each group's own picture (`groups.avatar_url`,
+ * stored inline and sent with every list of groups) moved into group_pictures, with its reference and size in the row
+ * (avatar_ref, avatar_bytes: @beanpool/engine groups.ts groupPictureColumnsOf, the one rule its writer uses), then the
+ * column dropped and the table written again in fresh pages. The members move's rules (moveMemberPhotosOutOfRows), to the
+ * letter:
+ *  - A value the node does not serve (empty, a member's avatar URL) is not moved: that group has no picture.
+ *  - No row is stamped: groups_touch_updated_at is dropped until schema.sql makes it again. A standby moves its own the
+ *    same way at its own boot.
+ *  - In batches by rowid, each its own transaction, of at most `batchBytes` of pictures (never fewer than one row), each
+ *    picture read on its own: a group's picture may be up to 2 MB, so a batch of rows read at once could hold more than
+ *    a small heap has. Killed part way, the batches done stay done and the next boot carries on.
+ *  - While `groups.avatar_url` exists, a value in it means "not moved yet, and nobody has set or removed this group's
+ *    picture since the move began": setGroupPicture clears it on every call, and a standby's copy never writes it. The
+ *    move never writes over a group_pictures row that is already there (the newer).
+ *  - A batch that throws stops the move, loudly, and the boot carries on; the groups not reached show no picture until
+ *    a later boot finishes it.
+ *
+ * Then, once every picture is out, one transaction drops the column and writes the table again (repackGroups), rather
+ * than DROP COLUMN alone: SQLite merges pages on a DELETE, never on an UPDATE that shrinks a row, and DROP COLUMN rewrites
+ * each row in place, so every group that had a picture would keep a page of its own (measured on members in #1475: 117.5
+ * MB of pages, 110.8 of them empty, at 30,000). Written again, `groups` is dense; the old pages go to the free list for
+ * SQLite to reuse. Returns how many moved: only batches that committed count.
+ */
+export function moveGroupPicturesOutOfRows(batchBytes = Number(process.env.GROUP_PICTURE_MOVE_BYTES) || GROUP_PICTURE_MOVE_BYTES): number {
+    const columns = new Set((db.prepare('SELECT name FROM pragma_table_info(?)').all('groups') as { name: string }[]).map((c) => c.name));
+    if (!columns.has('avatar_url')) return 0;
+    const started = Date.now();
+    let moved = 0, dropped = 0, kept = 0, after = 0;
+    try {
+        db.exec(`CREATE TABLE IF NOT EXISTS group_pictures (group_id TEXT PRIMARY KEY, picture TEXT NOT NULL)`);
+        // The rows still holding a picture, and each one's size, without reading a picture.
+        const next = db.prepare(`SELECT rowid AS rid, octet_length(avatar_url) AS size FROM groups
+                                 WHERE rowid > ? AND avatar_url IS NOT NULL ORDER BY rowid LIMIT 500`);
+        const read = db.prepare('SELECT id, avatar_url FROM groups WHERE rowid = ?');
+        const hasPicture = db.prepare('SELECT 1 FROM group_pictures WHERE group_id = ?');
+        const putPicture = db.prepare('INSERT INTO group_pictures (group_id, picture) VALUES (?, ?)');
+        const setRow = db.prepare('UPDATE groups SET avatar_url = NULL, avatar_ref = ?, avatar_bytes = ? WHERE rowid = ?');
+        const clearRow = db.prepare('UPDATE groups SET avatar_url = NULL WHERE rowid = ?');
+        for (;;) {
+            const waiting = next.all(after) as { rid: number; size: number }[];
+            if (waiting.length === 0) break;
+            const batch: number[] = [];
+            let bytes = 0;
+            for (const w of waiting) {
+                if (batch.length > 0 && bytes + w.size > batchBytes) break;
+                batch.push(w.rid);
+                bytes += w.size;
+            }
+            const done = db.transaction(() => {
+                const n = { moved: 0, dropped: 0, kept: 0 };
+                for (const rid of batch) {
+                    const r = read.get(rid) as { id: string; avatar_url: string | null } | undefined;
+                    if (!r || r.avatar_url === null) continue;
+                    if (hasPicture.get(r.id)) {
+                        clearRow.run(rid); // its picture is already in group_pictures: set since, and newer
+                        n.kept++;
+                        continue;
+                    }
+                    const picture = groupPictureColumnsOf(r.avatar_url);
+                    if (picture) {
+                        putPicture.run(r.id, picture.photo);
+                        setRow.run(picture.ref, picture.bytes, rid);
+                        n.moved++;
+                    } else {
+                        clearRow.run(rid);
+                        n.dropped++;
+                    }
+                }
+                return n;
+            })();
+            // Counted once the batch has committed: a batch that throws counts none of its rows.
+            moved += done.moved;
+            dropped += done.dropped;
+            kept += done.kept;
+            after = batch[batch.length - 1];
+        }
+    } catch (e) {
+        console.error(`[DB] ❌ Groups' pictures: the move out of their rows stopped after ${moved}; the next boot carries on:`, e);
+        return moved;
+    }
+    try {
+        repackGroups();
+        console.log(`[DB] Groups' pictures are in group_pictures now: ${moved} moved, ${dropped} that were no picture left out${kept ? `, ${kept} already there kept` : ''}, in ${Date.now() - started} ms.`);
+    } catch (e) {
+        // Every picture is out; the column stays, empty and read by nothing, until a boot can drop it.
+        console.error(`[DB] ❌ Groups' pictures are in group_pictures (${moved} moved), but groups.avatar_url could not be dropped; the next boot tries again:`, e);
+    }
+    return moved;
+}
+
+/**
+ * `groups` without its `avatar_url` column, written again in fresh pages (moveGroupPicturesOutOfRows): in one transaction,
+ * the column dropped, a table made from the definition SQLite then holds, every row copied into it with its rowid, the old
+ * table dropped and the new one given its name. Its indexes and triggers went with the old table; schema.sql, which runs
+ * next, makes them again. Foreign keys are off on this database (above), so dropping the old table deletes no
+ * group_members or posts row. `legacy_alter_table` for the rename: no other table's trigger or view is read again while
+ * `groups` is briefly missing.
+ */
+function repackGroups(): void {
+    db.pragma('legacy_alter_table = ON');
+    try {
+        db.transaction(() => {
+            db.exec('ALTER TABLE groups DROP COLUMN avatar_url');
+            const ddl = (db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'groups'`).get() as { sql: string }).sql;
+            const fresh = ddl.replace(/^CREATE TABLE\s+(?:"groups"|groups)\s*\(/i, 'CREATE TABLE groups_repacked (');
+            if (fresh === ddl) throw new Error(`groups has a definition this does not know: ${ddl.slice(0, 60)}`);
+            const cols = (db.prepare('SELECT name FROM pragma_table_info(?)').all('groups') as { name: string }[])
+                .map((c) => `"${c.name.replace(/"/g, '""')}"`).join(', ');
+            db.exec('DROP TABLE IF EXISTS groups_repacked');
+            db.exec(fresh);
+            db.exec(`INSERT INTO groups_repacked (rowid, ${cols}) SELECT rowid, ${cols} FROM groups ORDER BY rowid`);
+            db.exec('DROP TABLE groups');
+            db.exec('ALTER TABLE groups_repacked RENAME TO groups');
+        })();
+    } finally {
+        db.pragma('legacy_alter_table = OFF');
+    }
+}
+
 // Function to initialize schema
+/** Rebuilds names_access_log when its CHECK lacks 'copy_restored', keeping every row; true when it rebuilt. Idempotent. */
+export function rebuildNamesAccessLogCheck(d: Database.Database): boolean {
+    const row = d.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='names_access_log'").get() as { sql?: string } | undefined;
+    if (!row?.sql || row.sql.includes('copy_restored')) return false;
+    d.transaction(() => {
+        d.exec(`
+            DROP TABLE IF EXISTS names_access_log_migration;
+            CREATE TABLE names_access_log_migration (
+                id              TEXT PRIMARY KEY,
+                actor_pubkey    TEXT NOT NULL,
+                action          TEXT NOT NULL CHECK (action IN ('read', 'export', 'add', 'edit', 'delete', 'confirm', 'second', 'revoke',
+                                                                'key_made', 'key_changed', 'key_shared', 'holder_dropped', 'settings',
+                                                                'copy_restored')),
+                entry_id        TEXT,
+                subject_pubkey  TEXT,
+                at              DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            INSERT INTO names_access_log_migration (id, actor_pubkey, action, entry_id, subject_pubkey, at, updated_at)
+                SELECT id, actor_pubkey, action, entry_id, subject_pubkey, at, updated_at FROM names_access_log;
+            DROP TABLE names_access_log;
+            ALTER TABLE names_access_log_migration RENAME TO names_access_log;
+            CREATE INDEX IF NOT EXISTS idx_names_access_log_at ON names_access_log(at);
+        `);
+    })();
+    return true;
+}
+
+/**
+ * Rebuilds health_access_log when its CHECK lacks 'stranded_escrows_read' (a table #1599 made, or one from before the
+ * stranded escrows had a look of their own), keeping every row, with its `detail` where it had one, and adding the
+ * `detail` column the trade looks write; true when it rebuilt. Idempotent.
+ */
+export function rebuildHealthAccessLogCheck(d: Database.Database): boolean {
+    const row = d.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='health_access_log'").get() as { sql?: string } | undefined;
+    if (!row?.sql || row.sql.includes('stranded_escrows_read')) return false;
+    const hadDetail = (d.prepare('PRAGMA table_info(health_access_log)').all() as { name: string }[]).some(c => c.name === 'detail');
+    const detail = hadDetail ? 'detail' : 'NULL';
+    d.transaction(() => {
+        d.exec(`
+            DROP TABLE IF EXISTS health_access_log_migration;
+            CREATE TABLE health_access_log_migration (
+                id             TEXT PRIMARY KEY,
+                actor_pubkey   TEXT NOT NULL,
+                action         TEXT NOT NULL CHECK (action IN ('exceptions_opened', 'offboard_preview', 'offboard_settled',
+                                                               'disputes_listed', 'dispute_opened', 'alerts_read',
+                                                               'stranded_escrows_read')),
+                subject_pubkey TEXT,
+                detail         TEXT,
+                at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            INSERT INTO health_access_log_migration (id, actor_pubkey, action, subject_pubkey, detail, at, updated_at)
+                SELECT id, actor_pubkey, action, subject_pubkey, ${detail}, at, updated_at FROM health_access_log;
+            DROP TABLE health_access_log;
+            ALTER TABLE health_access_log_migration RENAME TO health_access_log;
+        `);
+    })();
+    return true;
+}
+
+/**
+ * Rebuilds system_logs when its CHECK lacks the 'AGENT' category (an AI assistant's calls, agent/mcp-route.ts), keeping
+ * every row and its id; true when it rebuilt. Idempotent. The table is bounded (logger.ts LOG_KEEP_ROWS), so the copy is small.
+ */
+export function rebuildSystemLogsCheck(d: Database.Database): boolean {
+    const row = d.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='system_logs'").get() as { sql?: string } | undefined;
+    if (!row?.sql || row.sql.includes("'AGENT'")) return false;
+    d.transaction(() => {
+        d.exec(`
+            DROP TABLE IF EXISTS system_logs_migration;
+            CREATE TABLE system_logs_migration (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+                level TEXT NOT NULL CHECK (level IN ('INFO', 'WARN', 'ERROR', 'SECURITY', 'SYNC')),
+                category TEXT NOT NULL CHECK (category IN ('P2P', 'LEDGER', 'TLS', 'ADMIN', 'AUTH', 'DB', 'SYS', 'AGENT')),
+                message TEXT NOT NULL,
+                metadata TEXT
+            );
+            INSERT INTO system_logs_migration (id, timestamp, level, category, message, metadata)
+                SELECT id, timestamp, level, category, message, metadata FROM system_logs;
+            DROP TABLE system_logs;
+            ALTER TABLE system_logs_migration RENAME TO system_logs;
+            CREATE INDEX IF NOT EXISTS idx_system_logs_timestamp ON system_logs(timestamp DESC);
+            CREATE INDEX IF NOT EXISTS idx_system_logs_level ON system_logs(level);
+        `);
+    })();
+    return true;
+}
+
+/**
+ * Adds health_access_log's `token_id` and `token_name` (the automation token behind a look, #1613's actor survey) to a
+ * table from before them: ALTER TABLE ADD COLUMN, so every row is kept as it was, NULL in both (a person's look, or one
+ * from before the token was recorded). Nothing on a table that has them, or none; true when it added. Idempotent.
+ */
+export function addHealthAccessLogToken(d: Database.Database): boolean {
+    const cols = (d.prepare('PRAGMA table_info(health_access_log)').all() as { name: string }[]).map(c => c.name);
+    if (!cols.length) return false;
+    const missing = ['token_id', 'token_name'].filter(c => !cols.includes(c));
+    if (!missing.length) return false;
+    d.transaction(() => { for (const c of missing) d.exec(`ALTER TABLE health_access_log ADD COLUMN ${c} TEXT`); })();
+    return true;
+}
+
 export function initSchema() {
     const userVersion = db.pragma('user_version', { simple: true }) as number;
     if (userVersion < 3) {
@@ -405,6 +1045,13 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE message_attachments ADD COLUMN storage_key TEXT`).run(); } catch { }
     // A push registration's stamp from the phone (state-engine.ts registerPushToken); NULL on rows from before it.
     try { db.prepare(`ALTER TABLE push_tokens ADD COLUMN registered_at INTEGER`).run(); } catch { }
+    // Push tokens locked at rest (services/push-token-seal.ts): the tables from before, each token in the clear, go aside
+    // for the boot to lock (a main server) or drop (a standby), and schema.sql makes the new ones.
+    try {
+        movePlainPushTablesAside();
+    } catch (e) {
+        console.error('[DB] ❌ Could not move the push tokens stored in the clear aside; the next boot tries again:', e);
+    }
     try {
         const ddl = (db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='post_photos'").get() as any)?.sql as string | undefined;
         if (ddl && /photo_data\s+TEXT\s+NOT\s+NULL/i.test(ddl)) {
@@ -490,10 +1137,16 @@ export function initSchema() {
     // A report can target a Pulse item. Before schema.sql like its neighbours, so any later index
     // or trigger naming it compiles on already-live DBs.
     try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN target_pulse_item_id TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE abuse_reports ADD COLUMN suspended_member INTEGER`).run(); } catch { }
     try { db.prepare(`ALTER TABLE conversation_participants ADD COLUMN updated_at DATETIME`).run(); } catch { }
     // The open door's replication watermark (engine/open-join.ts). Before schema.sql, which indexes it; a node that has
     // no open_joins table yet gets the column from schema.sql itself. Backfilled from joined_at after the exec.
     try { db.prepare(`ALTER TABLE open_joins ADD COLUMN updated_at TEXT`).run(); } catch { }
+    // The door's label for joins from one address within a day (engine/open-join.ts, engine/auto-moderation.ts). NULL on
+    // every existing row: each of those members is a circle of their own.
+    try { db.prepare(`ALTER TABLE open_joins ADD COLUMN join_cohort TEXT`).run(); } catch { }
+    // A removed newcomer's address hash kept 7 days (engine/door-signal.ts noteRemovedNewcomer). Local, never copied.
+    try { db.prepare(`ALTER TABLE open_joins ADD COLUMN ip_kept_until TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE pulse_items ADD COLUMN curated INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
 
     // #104 step 3b: the settlement exchange needs four more columns on `settlements`.
@@ -539,7 +1192,7 @@ export function initSchema() {
     // build we ship rather than a documented guarantee, and "if schema.sql names it, add it before the exec"
     // is a cheaper rule to keep than an exception list.
     //
-    // test-schema-upgrade.ts enforces this statically for EVERY late-added column — separating the fatal
+    // test-schema-upgrade-fresh-shape.ts enforces this statically for EVERY late-added column — separating the fatal
     // index case from the defensive trigger one — so a column added below the exec fails in CI rather than on
     // somebody's node.
     try {
@@ -577,7 +1230,7 @@ export function initSchema() {
     // before federation existed agreed to their listing travelling.
     //
     // MUST BE HERE, BEFORE the schema.sql exec below, because schema.sql defines idx_posts_reach over these
-    // columns and CREATE INDEX on a missing column is a hard error, not a no-op. test-schema-upgrade caught
+    // columns and CREATE INDEX on a missing column is a hard error, not a no-op. test-schema-upgrade-fresh-shape caught
     // exactly that when these two lines sat with the other posts migrations further down — the suite exists
     // for this failure and earned its keep.
     //
@@ -636,6 +1289,8 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE transactions ADD COLUMN auth_payload TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN genesis_type TEXT DEFAULT 'standard'`).run(); } catch { }
     try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN issued_by TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_entry_id TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN names_bind_outcome TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN cash_also_needed INTEGER DEFAULT 0`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN last_reminded_at DATETIME`).run(); } catch { }
     try { db.prepare(`ALTER TABLE messages ADD COLUMN edited_at DATETIME`).run(); } catch { }
@@ -667,8 +1322,12 @@ export function initSchema() {
     // Community Polls (§3.2, §8): JSON array of {id, text} options, and expiration timestamp
     try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_options TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_closes_at DATETIME`).run(); } catch { }
+    // A poll's ballot: 0 anonymous (every poll made before the choice existed), 1 an open vote (schema.sql).
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN poll_open_vote INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
     try { db.exec(`DROP INDEX IF EXISTS idx_poll_votes_post_id;`); } catch { }
     try { db.exec(`CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);`); } catch { }
+    // Whether a vote came from a new or 12-word account, stamped when it is cast (schema.sql; NULL on every older vote).
+    try { db.prepare(`ALTER TABLE poll_votes ADD COLUMN voter_new_or_words INTEGER`).run(); } catch { }
     try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_posts_author_active_poll ON posts(author_pubkey) WHERE type = 'poll' AND status = 'active';`); } catch { }
 
     // Events (docs/events-on-the-map.md §2.1). Before the schema.sql exec, which indexes event_end_at.
@@ -775,6 +1434,12 @@ export function initSchema() {
         console.error('[DB] ❌ Failed to migrate node_roles table for moderator role:', err?.message || err);
     }
 
+    // node_roles: when, and from which kind of session, each owner's break-glass code was last made (#1531). After the
+    // rebuild above, which copies only the columns it knows. Existing rows keep NULL in both (Settings: "made before
+    // this was recorded"); a fresh install gets them from schema.sql, and the ALTER fails harmlessly with no table yet.
+    try { db.prepare(`ALTER TABLE node_roles ADD COLUMN break_glass_made_at TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE node_roles ADD COLUMN break_glass_made_by TEXT`).run(); } catch { }
+
     // group_members: the status CHECK gains 'removed', so a convenor's removal is kept as a record instead of a
     // deleted row that an open group's Join button re-creates. A CHECK cannot be altered in place, so the table
     // is rebuilt. BEFORE the schema.sql exec on purpose: dropping the table drops its touch trigger and indexes,
@@ -817,6 +1482,59 @@ export function initSchema() {
     // No backfill: the reader takes joined_at for a row that has none.
     try { db.prepare(`ALTER TABLE group_members ADD COLUMN role_since DATETIME`).run(); } catch { }
 
+    // group_key_wraps: its key gains the wrapper and it gains rejected_at (group chats step 2b, DESIGN-group-chat-epochs-
+    // over-time-fable.md §1): a recipient refuses a wrap that does not open, the row stays flagged, and another member's
+    // wrap fills the slot. A key cannot be altered in place, so a table from step 2 is rebuilt, every row kept as it was,
+    // before the schema.sql exec, which makes its indexes again (stampPlainTables its triggers).
+    try {
+        const wrapsSql = (db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'group_key_wraps'").get() as { sql: string } | undefined)?.sql;
+        if (wrapsSql && !wrapsSql.includes('rejected_at')) {
+            db.transaction(() => {
+                db.exec(`
+                    DROP TABLE IF EXISTS group_key_wraps_migration;
+                    CREATE TABLE group_key_wraps_migration (
+                        group_id TEXT NOT NULL, epoch INTEGER NOT NULL, recipient_pubkey TEXT NOT NULL, wrapper_pubkey TEXT NOT NULL,
+                        eph_pub TEXT NOT NULL, nonce TEXT NOT NULL, wrapped TEXT NOT NULL, sig TEXT, created_at TEXT NOT NULL,
+                        updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')), rejected_at TEXT,
+                        PRIMARY KEY (group_id, epoch, recipient_pubkey, wrapper_pubkey)
+                    );
+                    INSERT INTO group_key_wraps_migration (group_id, epoch, recipient_pubkey, wrapper_pubkey, eph_pub, nonce, wrapped, sig, created_at, updated_at)
+                        SELECT group_id, epoch, recipient_pubkey, wrapper_pubkey, eph_pub, nonce, wrapped, sig, created_at, updated_at FROM group_key_wraps;
+                    DROP TABLE group_key_wraps;
+                    ALTER TABLE group_key_wraps_migration RENAME TO group_key_wraps;
+                `);
+            })();
+            console.log('[DB] ✅ Migrated group_key_wraps: a refused wrap is kept beside the one that replaces it');
+        }
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate group_key_wraps:', err?.message || err);
+    }
+
+    // group_members.from_epoch: the first epoch of the group's chat a membership holds keys from, by number (group chats
+    // step 2b; engine/group-keys.ts). Once, with the column: every active row gets the epoch the old stored_at rule gave
+    // it, or the next one when that gave none. A group with no epoch, which is every group on a node from before the
+    // chat's keys, starts at 1. No row is stamped: the touch trigger is dropped here and schema.sql makes it again.
+    try {
+        db.transaction(() => {
+            db.prepare(`ALTER TABLE group_members ADD COLUMN from_epoch INTEGER`).run();
+            db.exec('DROP TRIGGER IF EXISTS group_members_touch_updated_at');
+            const hasEpochs = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'group_key_epochs'").get();
+            db.prepare(hasEpochs
+                ? `UPDATE group_members SET from_epoch = COALESCE(
+                       (SELECT MIN(e.epoch) FROM group_key_epochs e WHERE e.group_id = group_members.group_id AND e.stored_at >= group_members.joined_at),
+                       (SELECT MAX(e.epoch) + 1 FROM group_key_epochs e WHERE e.group_id = group_members.group_id),
+                       1)
+                   WHERE status = 'active'`
+                : `UPDATE group_members SET from_epoch = 1 WHERE status = 'active'`).run();
+        })();
+    } catch { /* the column is there already, or no table yet (schema.sql makes it with the column) */ }
+
+    // invalidated_keys: a completed re-key's succession statement, signed by the new key (group chats,
+    // DESIGN-group-chat-line-display-fable.md §5). NULL on every row from before: a re-key nobody has attested yet.
+    try { db.prepare(`ALTER TABLE invalidated_keys ADD COLUMN succession_sig TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE invalidated_keys ADD COLUMN succession_at TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE invalidated_keys ADD COLUMN succession_stored_at TEXT`).run(); } catch { }
+
     // Escrow dispute arbitration (§5 item 2, §6 correction 2)
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolution TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE marketplace_transactions ADD COLUMN dispute_resolved_at DATETIME`).run(); } catch { }
@@ -853,6 +1571,66 @@ export function initSchema() {
         console.error('[DB] ❌ Failed to migrate activity_feed table for dispute_resolved:', err?.message || err);
     }
 
+    // names_access_log: ensure its CHECK allows 'copy_restored' (a table #1411 made has the old CHECK; the locked copy's
+    // restore writes that line). Before schema.sql, which makes its index; the watermark triggers come after, as for any table.
+    try {
+        if (rebuildNamesAccessLogCheck(db)) console.log('[DB] ✅ Migrated names_access_log CHECK constraint to allow copy_restored');
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate names_access_log for copy_restored:', err?.message || err);
+    }
+    // health_access_log: its CHECK allows the looks at disputes and alerts, and it has `detail` (a table #1599 made has
+    // neither). Before schema.sql, as names_access_log above; the watermark triggers come after.
+    try {
+        if (rebuildHealthAccessLogCheck(db)) console.log('[DB] ✅ Migrated health_access_log for the looks at disputes, stranded escrows and alerts');
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate health_access_log for the looks at disputes and alerts:', err?.message || err);
+    }
+    // system_logs: its CHECK allows the AI assistants' category (a table from before has the old CHECK, so their lines
+    // would fail to write). Before schema.sql, as the access logs above.
+    try {
+        if (rebuildSystemLogsCheck(db)) console.log("[DB] ✅ Migrated system_logs CHECK constraint to allow the AI assistants' AGENT category");
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to migrate system_logs for the AGENT category:', err?.message || err);
+    }
+    try {
+        if (addHealthAccessLogToken(db)) console.log('[DB] ✅ Migrated health_access_log to name the automation token behind a look');
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to add the token to health_access_log:', err?.message || err);
+    }
+
+    // In-flight money and governance replicate to a standby as plain tables (engine/replication-manifest.ts, design G3):
+    // each one's `updated_at` is its watermark. schema.sql declares it with its default for a new table; a table from
+    // before it gets the column here, NULL on every row, stamped after the exec by stampPlainTables. decisions,
+    // decision_votes and recovery_releases have always had it.
+    try { db.prepare(`ALTER TABLE invite_codes ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE suspended_node_roles ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE deferred_wage_claims ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE federation_links ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE group_convenor_proposals ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE group_convenor_votes ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE rekey_requests ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    // The member’s status before a re-key code suspended them, so a cancelled code puts it back (member-wizards cancelRekeyCode).
+    try { db.prepare(`ALTER TABLE rekey_requests ADD COLUMN prior_status TEXT`).run(); } catch { }
+    // Wrong numbers typed on a code's phones (engine/rekey-redeem.ts bindRekeyByMatch): the third stops the code.
+    try { db.prepare(`ALTER TABLE rekey_requests ADD COLUMN wrong_matches INTEGER NOT NULL DEFAULT 0`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE enterprise_keeper_requests ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE enterprise_succession_proposals ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE enterprise_succession_votes ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE enterprise_keeper_changes ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    // Whose account a recovery release is of (review 4122266731): filled for the rows here by fillReleaseOwners.
+    try { db.prepare(`ALTER TABLE recovery_releases ADD COLUMN owner_pubkey TEXT`).run(); } catch { }
+    // Members' devices and conveniences replicate to a standby as plain tables too (design G4), the same way.
+    // pricing_guide_items has always had it.
+    try { db.prepare(`ALTER TABLE push_tokens ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE push_token_leaves ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE chat_mutes ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE thread_read_cursors ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE event_reminders_sent ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE activity_feed ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE pricing_reports ADD COLUMN updated_at DATETIME`).run(); } catch { }
+    // A deep-link shortener's table nothing ever read or wrote (design G4, day zero).
+    try { db.prepare(`DROP TABLE IF EXISTS invite_links`).run(); } catch { }
+
     // posts_au gained a WHEN guard (#878: the posts_touch_updated_at nested UPDATE fired it a second time and
     // desynced posts_fts). CREATE TRIGGER IF NOT EXISTS is a no-op against the old unguarded trigger, so drop
     // it here and let schema.sql create the guarded one. Keyed on the trigger's own text, so this only ever
@@ -867,7 +1645,24 @@ export function initSchema() {
         console.error('[DB] ❌ Could not replace posts_au:', e);
     }
 
+    // Members' photos out of their rows (schema.sql member_photos): the reference first, before the exec, whose members
+    // trigger names it; then each photo moved, with members_touch_updated_at still dropped above, so no row is stamped.
+    try { db.prepare(`ALTER TABLE members ADD COLUMN avatar_ref TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE members ADD COLUMN avatar_bytes INTEGER`).run(); } catch { }
+    moveMemberPhotosOutOfRows();
+
+    // Groups' own pictures out of their rows (schema.sql group_pictures, #1486), the same way: the reference first, then
+    // each picture moved with groups_touch_updated_at dropped (schema.sql makes it again), so no group is stamped.
+    try { db.prepare(`ALTER TABLE groups ADD COLUMN avatar_ref TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE groups ADD COLUMN avatar_bytes INTEGER`).run(); } catch { }
+    try { db.prepare(`DROP TRIGGER IF EXISTS groups_touch_updated_at`).run(); } catch { }
+    moveGroupPicturesOutOfRows();
+
     const schemaSql = fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8');
+    // Verified channels (#1830): the badge carries the account the platform named. Badges set before
+    // these columns proved nothing and are cleared at boot by clearUnprovenOauthBadges (state-engine.ts).
+    try { db.prepare(`ALTER TABLE creator_channels ADD COLUMN platform_account_id TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE creator_channels ADD COLUMN verified_handle TEXT`).run(); } catch { }
     db.exec(schemaSql);
 
     // signature_audiences: its CHECK allows `lost` (refusals for a name another community holds, engine/member-signature.ts).
@@ -963,6 +1758,8 @@ export function initSchema() {
     markExistingVisitors();
     backfillBoardStanding();
     bringMembersToSchemaRules(schemaSql);
+    makeAccountBalanceNotNull(schemaSql);
+    indexOldConversationIds();
 
     // Slice 6 lead succession (PR #838 B2): a lead becomes replaceable after 30 days with no recorded
     // activity, falling back to joined_at when last_active_at is NULL. Activity used to be recorded only
@@ -1111,6 +1908,7 @@ export function initSchema() {
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at)`).run(); } catch { }
 
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_updated_at ON marketplace_transactions(updated_at)`).run(); } catch { }
+    try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_status ON marketplace_transactions(post_id, status)`).run(); } catch { }
 
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON projects(updated_at)`).run(); } catch { }
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by)`).run(); } catch { }
@@ -1156,9 +1954,10 @@ export function initSchema() {
                     amount            REAL NOT NULL,
                     status            TEXT NOT NULL DEFAULT 'pending',
                     created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-                    paid_at           DATETIME
+                    paid_at           DATETIME,
+                    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
                 );
-                INSERT INTO deferred_wage_claims_new SELECT id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status, created_at, paid_at FROM deferred_wage_claims;
+                INSERT INTO deferred_wage_claims_new SELECT id, enterprise_pubkey, keeper_pubkey, post_id, transaction_id, amount, status, created_at, paid_at, updated_at FROM deferred_wage_claims;
                 DROP TABLE deferred_wage_claims;
                 ALTER TABLE deferred_wage_claims_new RENAME TO deferred_wage_claims;
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_deferred_claims_tx_active
@@ -1193,9 +1992,13 @@ export function initSchema() {
     } catch (err) {
         console.error('[DB] ⚠️ Could not remove retired voting data:', err);
     }
-    // One open Decision per member author; the node's own "Keep this suspension?" votes (author SYSTEM) are exempt.
-    try { db.exec(`DROP INDEX IF EXISTS idx_decisions_author_open;`); } catch { }
-    try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_member_author_open ON decisions(author_pubkey) WHERE status = 'open' AND author_pubkey != 'SYSTEM';`); } catch { }
+    // A scope on a Decision (community or one enterprise), and one open Decision per member author per scope; the node's
+    // own "Keep this suspension?" votes (author SYSTEM) are exempt.
+    try {
+        if (addDecisionScope(db, schemaSql) === 'rebuilt') console.log('[DB] ✅ Migrated decisions to carry a scope');
+    } catch (err: any) {
+        console.error('[DB] ❌ Failed to give decisions a scope:', err?.message || err);
+    }
     try {
         db.exec(`
             DROP TRIGGER IF EXISTS posts_cleanup_on_group_delete;
@@ -1213,17 +2016,154 @@ export function initSchema() {
 
     seedTreasuryOperatorsFromLegacyFlag();
     seedNodeRolesFromGenesis();
-
-    try {
-        seedPricingGuideIfEmpty(false, db);
-    } catch (err) {
-        console.error('[DB] ⚠️ Could not seed pricing guide items:', err);
-    }
+    upgradeBreakGlassHashesAtBoot();
+    seedPricingGuideOnMainServer();
 
     try {
         migrateProjectsAndCommonsToEnterprises(db);
     } catch (err) {
         console.error('[DB] ⚠️ Could not run unify projects migration:', err);
+    }
+
+    // Last: a rebuild above (deferred_wage_claims' unique index, ripOutLegacyVoting's decisions) drops a table's triggers.
+    stampPlainTables();
+    markLinkTreasuries();
+    fillReleaseOwners();
+}
+
+/**
+ * Break-glass codes' hashes still in the old unsalted SHA-256 form become salted scrypt (break-glass-code.ts), at this boot
+ * rather than on each code's next use, which may be never; a suspended member's too on a main server.
+ */
+function upgradeBreakGlassHashesAtBoot(): void {
+    try {
+        const upgraded = upgradeBreakGlassHashes(db, { suspendedToo: getNodeRole() !== 'backup' });
+        if (upgraded) console.log(`[DB] ✅ ${upgraded} break-glass code hash(es) moved from unsalted SHA-256 to scrypt`);
+    } catch (e) {
+        console.error('[DB] ❌ Could not upgrade the break-glass code hashes (they still work, and the next boot tries again):', e);
+    }
+}
+
+/**
+ * On a main server only: a standby's guide is its main server's, copied (a plain table, design G4), and a server that
+ * takes over boots as a main server, which seeds one if the copy brought none.
+ */
+function seedPricingGuideOnMainServer(): void {
+    if (getNodeRole() === 'backup') return;
+    try {
+        seedPricingGuideIfEmpty(false, db);
+    } catch (err) {
+        console.error('[DB] ⚠️ Could not seed pricing guide items:', err);
+    }
+}
+
+/**
+ * What initSchema runs only on a main server, run now: for a standby a take-over made the main server in this process, after
+ * its database booted as a standby's (services/takeover.ts resumeTakeoverAtBoot, through state-engine.ts
+ * becomeMainServerInPlace). The same passes, each idempotent and each its own guard: the visitors' marks, the members'
+ * schema rules, the break-glass hashes of suspended members, the pricing guide, the plain tables' unstamped rows, the link
+ * treasuries' markers and the recovery releases' owners. Nothing on a standby. Never throws.
+ */
+export function runMainServerSchemaPasses(): void {
+    if (getNodeRole() === 'backup') return;
+    markExistingVisitors();
+    try {
+        bringMembersToSchemaRules(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf-8'));
+    } catch (e) {
+        console.error('[DB] ❌ Could not read schema.sql for the members\' schema rules:', e);
+    }
+    upgradeBreakGlassHashesAtBoot();
+    seedPricingGuideOnMainServer();
+    for (const t of PLAIN_TABLES) stampUnstampedRows(t);
+    markLinkTreasuries();
+    fillReleaseOwners();
+}
+
+/** A plain table's rows the ALTER left with no stamp, stamped now, on a main server only (stampPlainTables). */
+function stampUnstampedRows(t: (typeof PLAIN_TABLES)[number]): void {
+    if (getNodeRole() === 'backup') return;
+    try {
+        db.prepare(`UPDATE ${t.table} SET ${t.watermark} = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE ${t.watermark} IS NULL`).run();
+    } catch (e) {
+        console.error(`[DB] ❌ Could not stamp ${t.table}'s unstamped rows:`, e);
+    }
+}
+
+/**
+ * A recovery release made before its row named its owner (recovery_releases.owner_pubkey) gets the owner from its
+ * session, where the session is on this server; on a main server only (a standby's rows are its main server's, and its
+ * import alone writes them). The touch trigger stamps each row filled, so the next copy carries the owner to the standbys.
+ * Idempotent: a row that names its owner, or whose session isn't here, is left alone.
+ */
+function fillReleaseOwners(): void {
+    if (getNodeRole() === 'backup') return;
+    try {
+        const filled = db.prepare(`UPDATE recovery_releases
+                                   SET owner_pubkey = (SELECT c.owner_pubkey FROM recovery_collections c WHERE c.id = recovery_releases.collection_id)
+                                   WHERE owner_pubkey IS NULL AND collection_id IN (SELECT id FROM recovery_collections)`).run().changes;
+        if (filled > 0) console.log(`[DB] ${filled} recovery release(s) now name their owner`);
+    } catch (e) {
+        console.error("[DB] ❌ Could not fill the recovery releases' owners:", e);
+    }
+}
+
+/**
+ * Every link's treasury carries its peer's marker (federation_link_treasuries, which ensureFederationLink writes when it
+ * makes one): a link made before the marker gets it here, from its link row, on a main server only (a standby's rows are
+ * its main server's, and its import alone writes them). Every link row this server holds was made by
+ * ensureFederationLink, so each names a treasury made for its peer. Idempotent: a treasury already marked is left alone.
+ */
+function markLinkTreasuries(): void {
+    if (getNodeRole() === 'backup') return;
+    try {
+        const marked = db.prepare(`INSERT OR IGNORE INTO federation_link_treasuries (treasury_pubkey, peer_id)
+                                   SELECT treasury_pubkey, peer_id FROM federation_links`).run().changes;
+        if (marked > 0) console.log(`[DB] Marked ${marked} link treasur${marked === 1 ? 'y' : 'ies'} with its peer`);
+    } catch (e) {
+        console.error('[DB] ❌ Could not mark the link treasuries with their peers:', e);
+    }
+}
+
+/**
+ * The watermark of every plain table (engine/replication-manifest.ts PLAIN_TABLES, design G3): a delta finds each write
+ * by it, so every write moves it. For each table, at every boot and after every rebuild above, the #878 drop-and-recreate
+ * pattern: its two triggers are dropped and made again from here, so the ones in force are always these (CREATE TRIGGER
+ * IF NOT EXISTS would keep an older shape). An insert that leaves the stamp NULL (a table whose column came from the
+ * ALTER above, which has no default) is stamped; an update that leaves it as it was is stamped, as the Phase 2 triggers
+ * do (schema.sql). A standby's import sets both aside while it writes its main server's rows, stamps and all
+ * (engine/sync.ts IMPORT_KEEPS_STAMPS). A row left NULL by the ALTER is stamped now, on a main server only: a standby's
+ * rows are its main server's, and its import alone writes them.
+ */
+function stampPlainTables(): void {
+    const now = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`;
+    for (const t of PLAIN_TABLES) {
+        const { table, watermark } = t;
+        const { insert, touch } = plainTableTriggers(t);
+        try {
+            if (getNodeRole() !== 'backup') db.prepare(`UPDATE ${table} SET ${watermark} = ${now} WHERE ${watermark} IS NULL`).run();
+            db.exec(`
+                CREATE INDEX IF NOT EXISTS idx_${table}_${watermark} ON ${table}(${watermark});
+                DROP TRIGGER IF EXISTS ${insert};
+                CREATE TRIGGER ${insert}
+                AFTER INSERT ON ${table}
+                FOR EACH ROW
+                WHEN NEW.${watermark} IS NULL
+                BEGIN
+                    UPDATE ${table} SET ${watermark} = ${now} WHERE rowid = NEW.rowid;
+                END;
+                DROP TRIGGER IF EXISTS ${touch};
+                CREATE TRIGGER ${touch}
+                AFTER UPDATE ON ${table}
+                FOR EACH ROW
+                WHEN NEW.${watermark} IS OLD.${watermark}
+                BEGIN
+                    UPDATE ${table} SET ${watermark} = ${now} WHERE rowid = NEW.rowid;
+                END;
+            `);
+        } catch (e) {
+            // A delta would miss this table's writes until the next boot makes them; a whole copy still carries them.
+            console.error(`[DB] ❌ Could not stamp ${table}'s writes for its standbys:`, e);
+        }
     }
 }
 
@@ -1348,8 +2288,8 @@ export function migrateLegacyState() {
     const insertMember = db.prepare(`
         INSERT OR IGNORE INTO members (
             public_key, callsign, joined_at, invited_by, invite_code, home_node_url,
-            avatar_url, bio, contact_value, contact_visibility, status, last_active_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            bio, contact_value, contact_visibility, status, last_active_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     const insertInviteCode = db.prepare(`
@@ -1430,12 +2370,13 @@ export function migrateLegacyState() {
                 const contactValue = profile.contact?.value || null;
                 const contactVis = profile.contact?.visibility || null;
 
-                insertMember.run(
+                const inserted = insertMember.run(
                     m.publicKey, m.callsign, m.joinedAt,
                     m.invitedBy || 'genesis', m.inviteCode || 'legacy', m.homeNodeUrl || null,
-                    profile.avatar || null, profile.bio || null, contactValue, contactVis,
+                    profile.bio || null, contactValue, contactVis,
                     profile.status || 'active', profile.lastActiveAt || null
-                );
+                ).changes > 0;
+                if (inserted) setMemberPhoto(db, m.publicKey, profile.avatar || null);
             }
         }
 
@@ -1596,11 +2537,15 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
         currentAmount = Number(legacyP.current_amount);
     }
     try {
+        // Pledges in, less any sent back out of the escrow to a backer (a pledge made after the goal, returned at boot by
+        // engine/stranded-pledges.ts): those never reached the project. The sweep to the enterprise is neither.
         const txSum = (db.prepare(`
-            SELECT COALESCE(SUM(amount), 0) as s FROM transactions 
-            WHERE project_id = ? AND (to_pubkey = ? OR to_pubkey = 'escrow_' || ?)
-              AND id NOT LIKE 'sweep_%' AND from_pubkey NOT LIKE 'escrow_%'
-        `).get(e.public_key, e.public_key, e.public_key) as any)?.s || 0;
+            SELECT COALESCE(SUM(CASE WHEN from_pubkey = 'escrow_' || ? THEN -amount ELSE amount END), 0) as s FROM transactions
+            WHERE project_id = ? AND (
+                ((to_pubkey = ? OR to_pubkey = 'escrow_' || ?) AND id NOT LIKE 'sweep_%' AND from_pubkey NOT LIKE 'escrow_%')
+                OR (from_pubkey = 'escrow_' || ? AND to_pubkey != ?)
+            )
+        `).get(e.public_key, e.public_key, e.public_key, e.public_key, e.public_key, e.public_key) as any)?.s || 0;
         const accBal = (db.prepare(`SELECT balance FROM accounts WHERE public_key = ?`).get(e.public_key) as any)?.balance || 0;
         currentAmount = Math.max(currentAmount, txSum, accBal);
     } catch { }
@@ -1622,9 +2567,24 @@ function rowToProjectRow(e: any, legacyP?: any): ProjectRow {
     };
 }
 
+/**
+ * A project's row as the list reads it: every column rowToProjectRow takes but `photos`, which the list never reads.
+ */
+const PROJECT_LIST_COLUMNS = 'id, creator_pubkey, description, goal_amount, current_amount, deadline_at, status, created_at, enterprise_pubkey';
+
+/**
+ * Every project, newest first (200 at most), its `photos` the enterprise's photo as its URL (avatarUrlOf, from the row's
+ * avatar_ref) or none, never a photo: a list reads no photo (#1486, as the member list since #1475 and the rosters since
+ * #1478). Every crowdfund the apps make has a projects row whose `photos` holds the photo itself (a bounded
+ * POST /api/enterprise copies it there; POST /api/crowdfund/projects keeps up to ten), and the list sent those as stored.
+ * The first is the enterprise's photo, so its URL stands for it. The others have no URL and no app draws them (the phone
+ * stores the list's `photos` and never shows them; the web app and the manager don't read them), so the list leaves them
+ * out. Only the listed enterprises' projects rows are read, and never their photos. The one project's read
+ * (getCrowdfundProject) still hands every photo out as stored: a read of one.
+ */
 export function getCrowdfundProjects(): ProjectRow[] {
-    const enterprises = db.prepare(`
-        SELECT m.public_key, m.callsign, m.avatar_url, m.bio, m.purpose,
+    const enterprises = (db.prepare(`
+        SELECT m.public_key, m.callsign, m.avatar_ref, m.bio, m.purpose,
                m.goal_amount, m.deadline_at, m.status, m.joined_at,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
@@ -1632,24 +2592,27 @@ export function getCrowdfundProjects(): ProjectRow[] {
         WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded' AND m.status NOT IN ('pruned', 'deleted')
         ORDER BY m.joined_at DESC
         LIMIT 200
-    `).all() as any[];
+    `).all() as any[]).map(e => ({ ...e, avatar_url: avatarUrlOf(e.public_key, e.avatar_ref) }));
 
     const projectMap = new Map<string, any>();
     try {
-        const pRows = db.prepare("SELECT * FROM projects WHERE status NOT IN ('pruned', 'deleted', 'PRUNED', 'DELETED')").all() as any[];
+        const pRows = db.prepare(`SELECT ${PROJECT_LIST_COLUMNS} FROM projects
+            WHERE id IN (SELECT value FROM json_each(?)) AND status NOT IN ('pruned', 'deleted', 'PRUNED', 'DELETED')`)
+            .all(JSON.stringify(enterprises.map(e => e.public_key))) as any[];
         for (const p of pRows) projectMap.set(p.id, p);
     } catch { }
 
+    // No `photos` in the projects row read: rowToProjectRow takes the enterprise's photo, its URL here, or none.
     return enterprises.map(e => rowToProjectRow(e, projectMap.get(e.public_key)));
 }
 
 export function getCrowdfundProject(id: string): ProjectRow | undefined {
     const e = db.prepare(`
-        SELECT m.public_key, m.callsign, m.avatar_url, m.bio, m.purpose,
+        SELECT m.public_key, m.callsign, mp.photo AS avatar_url, m.bio, m.purpose,
                m.goal_amount, m.deadline_at, m.status, m.joined_at,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key AND role = 'lead' LIMIT 1) as lead_keeper,
                (SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = m.public_key LIMIT 1) as any_keeper
-        FROM members m
+        FROM members m LEFT JOIN member_photos mp ON mp.public_key = m.public_key
         WHERE m.public_key = ? AND m.is_treasury = 1 AND m.status NOT IN ('pruned', 'deleted')
     `).get(id) as any;
 
@@ -1713,6 +2676,65 @@ export function raiseCreatorOperatorSwitch(creatorPubkey: string, newEnterpriseP
     `).run(creatorPubkey, creatorPubkey, newEnterprisePubkey);
 }
 
+export const PROJECT_ID_TAKEN_ERROR = 'A new project needs an id nothing else has';
+
+/** A pledge to a project that has reached its goal: refused before anything moves (pledgeToProject). */
+export const PROJECT_FUNDED_NO_PLEDGES_ERROR = 'This project has already reached its goal, so it is not taking more pledges. Your Beans have not moved.';
+
+/**
+ * Is `id` free for a new crowdfund project? A project's id is its enterprise's key, its account's and its escrow's
+ * (`escrow_<id>`), so it must name nothing already there: no member, visitor or enterprise row, no account, no project,
+ * none of the ledger's own accounts (the Commons, an escrow, a bridge), and no escrow named after it. Before
+ * POST /api/crowdfund/projects made ids itself, one naming a member's key had pledges paid into that member's balance
+ * and their status changed to funded; one naming a deal's escrow would have swept that deal's Beans into the project.
+ */
+export function isFreshProjectId(id: unknown): id is string {
+    if (typeof id !== 'string' || id.length === 0 || isSyntheticAccount(id)) return false;
+    return !db.prepare(`
+        SELECT 1 FROM members WHERE public_key = @id
+        UNION ALL SELECT 1 FROM accounts WHERE public_key = @id OR public_key = 'escrow_' || @id
+        UNION ALL SELECT 1 FROM projects WHERE id = @id
+        LIMIT 1
+    `).get({ id });
+}
+
+/**
+ * Does `id` name money already on this node: one of the ledger's own accounts (the Commons, an escrow, a bridge), any
+ * account or member row, the escrow `escrow_<id>`, a crowdfund project, a deal, or a cross-community settlement?
+ *
+ * For ids a caller chooses. A cross-community settlement holds its Beans in `escrow_<key>`, so a key naming a project's
+ * or a deal's escrow had that escrow paid out to whoever abandoned the settlement (federation-settlement-exchange.ts
+ * beginOutboundSettlement). A post's id once named `escrow_<post id>` too. Every other id that names an account is made
+ * by the node (a deal's, a pledge's, a project's, an enterprise's key), so it names nothing until the node makes it.
+ * Only an outbound settlement counts: an inbound one's key is the peer's choice and names no account here (the seller's
+ * side has no escrow), so counting it would let a trading peer take ids the node makes itself, like `pulse_<date>`.
+ */
+export function idNamesMoney(id: string): boolean {
+    if (isSyntheticAccount(id)) return true;
+    return !!db.prepare(`
+        SELECT 1 FROM members WHERE public_key = @id
+        UNION ALL SELECT 1 FROM accounts WHERE public_key = @id OR public_key = 'escrow_' || @id
+        UNION ALL SELECT 1 FROM projects WHERE id = @id
+        UNION ALL SELECT 1 FROM marketplace_transactions WHERE id = @id
+        UNION ALL SELECT 1 FROM settlements WHERE key = @id AND direction = 'outbound'
+        LIMIT 1
+    `).get({ id });
+}
+
+/**
+ * Does `id` name something that is never a crowdfund project: a person (a member's or visitor's row that isn't an
+ * enterprise), or one of the ledger's own accounts (the Commons, an escrow, a bridge)? Every project is its own
+ * enterprise row (createCrowdfundProject, a bounded POST /api/enterprise, the Slice 3 migration), or an older projects
+ * row with none. But the crowdfund route took ids from callers before it made them itself, and a projects row under a
+ * person's key paid pledges into their balance, set their status to funded, and let its "creator" rename or prune them:
+ * such a row is no project here.
+ */
+function namesNoProject(id: string): boolean {
+    if (isSyntheticAccount(id)) return true;
+    const row = db.prepare('SELECT is_treasury FROM members WHERE public_key = ?').get(id) as { is_treasury: number | null } | undefined;
+    return !!row && row.is_treasury !== 1;
+}
+
 export function createCrowdfundProject(
     id: string,
     creator_pubkey: string,
@@ -1722,13 +2744,18 @@ export function createCrowdfundProject(
     goal_amount: number,
     deadline_at: string | null
 ) {
+    if (!isFreshProjectId(id)) throw new Error(PROJECT_ID_TAKEN_ERROR);
     if (!isAcceptableGoal(goal_amount)) throw new Error(GOAL_AMOUNT_ERROR);
+    // The title is the enterprise's name and the description its purpose: each held to its limit (#1493).
+    title = typeof title === 'string' ? replaceLoneSurrogates(title) : title;
+    description = typeof description === 'string' ? replaceLoneSurrogates(description) : description;
+    assertEnterpriseText(title, description);
     if (creator_pubkey && !isMemberActive(creator_pubkey)) throw new Error(INACTIVE_MEMBER_CREATE_ERROR);
     if (creator_pubkey && isOperatorSwitchedOff(creator_pubkey)) throw new Error(OPERATOR_SWITCHED_OFF_CREATE_ERROR);
     // Every photo is served to anyone who asks (/api/crowdfund/projects, /api/avatar/:pubkey), so each is stored
     // without its metadata (G9a-3). Anything that is not an image comes back exactly as given.
     photos = Array.isArray(photos) ? photos.map(stripImageValue) : photos;
-    // photos[0] becomes the enterprise's members.avatar_url, served by /api/avatar/:pubkey. An
+    // photos[0] becomes the enterprise's avatar (member_photos), served by /api/avatar/:pubkey. An
     // editor that read the enterprise back from the node holds THIS node's own avatar URL
     // there, not the photo; storing it would point the avatar at itself. Same rule as
     // updateProfile: read it as "no photo" rather than rejecting the whole save.
@@ -1741,32 +2768,49 @@ export function createCrowdfundProject(
     ).get(baseCallsign, id) as any;
     const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${id.slice(0, 6)}` : baseCallsign;
 
+    // A fresh id (isFreshProjectId, above): every row below is new, so a clash throws rather than writing over another's.
     db.transaction(() => {
-        const existing = db.prepare("SELECT 1 FROM members WHERE public_key = ?").get(id);
-        if (!existing) {
+        db.prepare(`
+            INSERT INTO members (
+                public_key, callsign, joined_at, bio, status,
+                is_treasury, earned_credit, earned_surplus,
+                purpose, goal_amount, deadline_at, lifecycle, paused, updated_at
+            ) VALUES (?, ?, ?, ?, 'active', 1, 0, 0, ?, ?, ?, 'bounded', 0, ?)
+        `).run(id, callsign, now, description || '', description || title.trim(), goal_amount, deadline_at, now);
+        setMemberPhoto(db, id, photoUrl || null);
+        db.prepare("INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)").run(id);
+        if (creator_pubkey) {
             db.prepare(`
-                INSERT INTO members (
-                    public_key, callsign, joined_at, avatar_url, bio, status,
-                    is_treasury, earned_credit, earned_surplus,
-                    purpose, goal_amount, deadline_at, lifecycle, paused, updated_at
-                ) VALUES (?, ?, ?, ?, ?, 'active', 1, 0, 0, ?, ?, ?, 'bounded', 0, ?)
-            `).run(id, callsign, now, photoUrl, description || '', description || title.trim(), goal_amount, deadline_at, now);
-            db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)").run(id);
-            if (creator_pubkey) {
-                db.prepare(`
-                    INSERT OR IGNORE INTO treasury_operators (
-                        treasury_pubkey, member_pubkey, role, granted_at, granted_by
-                    ) VALUES (?, ?, 'lead', ?, 'creator')
-                `).run(id, creator_pubkey, now);
-                raiseCreatorOperatorSwitch(creator_pubkey, id);
-            }
+                INSERT OR IGNORE INTO treasury_operators (
+                    treasury_pubkey, member_pubkey, role, granted_at, granted_by
+                ) VALUES (?, ?, 'lead', ?, 'creator')
+            `).run(id, creator_pubkey, now);
+            raiseCreatorOperatorSwitch(creator_pubkey, id);
         }
 
         db.prepare(`
-            INSERT OR REPLACE INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
+            INSERT INTO projects (id, creator_pubkey, title, description, photos, goal_amount, deadline_at, status, migrated_at, enterprise_pubkey, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), ?, ?, ?)
         `).run(id, creator_pubkey, title, description, JSON.stringify(photos), goal_amount, deadline_at, id, now, now);
     })();
+}
+
+/**
+ * A project's photos as an edit sends them, with this node's own avatar URL read as the photo it stands for, never stored
+ * as itself (#1475's rule for a member's photo). The crowdfund list sends each project's photo as that URL (#1486), and
+ * an older phone's edit screen (before #792) sends back the photos it read from the list. Sent back alone, the photos are
+ * unchanged: every one kept as stored, the ones the list leaves out included. Beside new ones, the URL is the
+ * enterprise's photo, the one it opens.
+ */
+function ownAvatarUrlsAsStored(enterpriseId: string, storedJson: string | undefined, sent: string[]): string[] {
+    if (!Array.isArray(sent) || !sent.some((p) => isSelfAvatarUrl(p))) return sent;
+    if (sent.every((p) => isSelfAvatarUrl(p))) {
+        let stored: unknown = [];
+        try { stored = JSON.parse(storedJson || '[]'); } catch { /* none */ }
+        return Array.isArray(stored) ? stored.filter((p): p is string => typeof p === 'string') : [];
+    }
+    const own = (db.prepare('SELECT photo FROM member_photos WHERE public_key = ?').get(enterpriseId) as { photo: string } | undefined)?.photo;
+    return sent.flatMap((p) => (isSelfAvatarUrl(p) ? (own ? [own] : []) : [p]));
 }
 
 export function updateCrowdfundProject(
@@ -1779,9 +2823,15 @@ export function updateCrowdfundProject(
     deadline_at?: string | null
 ) {
     if (!isAcceptableGoal(goal_amount)) throw new Error(GOAL_AMOUNT_ERROR);
+    // Never a person's row (namesNoProject): a projects row under a member's key renamed that member.
+    if (namesNoProject(id)) throw new Error("Project not found");
     const project = getCrowdfundProject(id);
     if (!project) throw new Error("Project not found");
     if (project.creator_pubkey !== creator_pubkey) throw new Error("Unauthorized: You do not own this project");
+    // As on a create (#1493); the title and description it already holds, sent back unchanged, are kept.
+    title = typeof title === 'string' ? replaceLoneSurrogates(title) : title;
+    description = typeof description === 'string' ? replaceLoneSurrogates(description) : description;
+    assertEnterpriseText(title, description, { name: project.title, purpose: project.description });
 
     if (project.current_amount > 0 && Number(goal_amount) !== project.goal_amount) {
         throw new Error("Cannot change funding goal after receiving pledges");
@@ -1790,10 +2840,11 @@ export function updateCrowdfundProject(
     const now = new Date().toISOString();
     photos = Array.isArray(photos) ? photos.map(stripImageValue) : photos; // as in createCrowdfundProject (G9a-3)
     // As in createCrowdfundProject: this node's own avatar URL, sent back by an editor that
-    // loaded the enterprise from the node, means "unchanged" — the UPDATEs below COALESCE a
-    // null onto the existing avatar_url, so the stored photo survives the edit.
+    // loaded the enterprise from the node, means "unchanged": read as no photo, which leaves the
+    // stored one as it is (setMemberPhoto is called only for a photo given), so it survives the edit.
     const rawPhotoUrl = photos && photos.length > 0 ? photos[0] : '';
     const photoUrl = isSelfAvatarUrl(rawPhotoUrl) ? '' : rawPhotoUrl;
+    photos = ownAvatarUrlsAsStored(id, project.photos, photos);
 
     db.transaction(() => {
         if (deadline_at !== undefined) {
@@ -1805,9 +2856,9 @@ export function updateCrowdfundProject(
 
             db.prepare(`
                 UPDATE members
-                SET callsign = ?, purpose = ?, bio = ?, avatar_url = COALESCE(?, avatar_url), goal_amount = ?, deadline_at = ?, updated_at = ?
+                SET callsign = ?, purpose = ?, bio = ?, goal_amount = ?, deadline_at = ?, updated_at = ?
                 WHERE public_key = ?
-            `).run(title.trim(), description, description, photoUrl || null, goal_amount, deadline_at, now, id);
+            `).run(title.trim(), description, description, goal_amount, deadline_at, now, id);
         } else {
             db.prepare(`
                 UPDATE projects
@@ -1817,14 +2868,16 @@ export function updateCrowdfundProject(
 
             db.prepare(`
                 UPDATE members
-                SET callsign = ?, purpose = ?, bio = ?, avatar_url = COALESCE(?, avatar_url), goal_amount = ?, updated_at = ?
+                SET callsign = ?, purpose = ?, bio = ?, goal_amount = ?, updated_at = ?
                 WHERE public_key = ?
-            `).run(title.trim(), description, description, photoUrl || null, goal_amount, now, id);
+            `).run(title.trim(), description, description, goal_amount, now, id);
         }
+        if (photoUrl) setMemberPhoto(db, id, photoUrl);
     })();
 }
 
 export function pledgeToProject(txId: string, projectId: string, fromPubkey: string, amount: number, memo: string, auth?: { signer: string; signature: string; payload: string }) {
+    if (typeof memo === 'string') memo = replaceLoneSurrogates(memo);
     // SECURITY (SRV-8): defense-in-depth — reject non-positive amounts at the data
     // layer. A negative amount would otherwise debit-as-credit the backer before the
     // transactions CHECK(amount > 0) aborts the surrounding transaction.
@@ -1832,6 +2885,9 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
     assertMoneyMayMove?.();
     // Nor on a standby, whose ledger is its main server's (config/node-role.ts): before the project row below.
     assertLedgerWritable();
+    // Never into a person's account (namesNoProject): a projects row under a member's key paid the pledge into their
+    // balance and set their status to funded.
+    if (namesNoProject(projectId)) throw new Error("Project not found");
 
     let project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
     if (!project) {
@@ -1844,12 +2900,23 @@ export function pledgeToProject(txId: string, projectId: string, fromPubkey: str
         `).run(projectId, lead, memberEnterprise.callsign, memberEnterprise.purpose || memberEnterprise.bio || '', memberEnterprise.goal_amount || 0, memberEnterprise.deadline_at, projectId);
         project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow;
     }
-    if (project.status === 'COMPLETED' || project.status === 'FAILED') throw new Error("Project is not accepting pledges");
+    // Only an ACTIVE project takes a pledge. A FUNDED one used to take it too: the Beans went into its escrow, but only
+    // the pledge that reached the goal sweeps the escrow to the enterprise, and nothing else ever drains it (delete
+    // refuses a project that isn't ACTIVE), so a later pledge sat there for good (FABLE-sec-money MEDIUM 1). Before
+    // anything moves, so a refused pledge leaves every balance as it was. The ones already stranded go back to their
+    // backers at boot (engine/stranded-pledges.ts).
+    if (project.status !== 'ACTIVE') {
+        throw new Error(project.status === 'FUNDED'
+            ? PROJECT_FUNDED_NO_PLEDGES_ERROR
+            : 'This project is no longer taking pledges. Your Beans have not moved.');
+    }
     const entPub = (project as any).enterprise_pubkey || project.id;
     const ent = db.prepare('SELECT is_treasury, paused, status FROM members WHERE public_key = ?').get(entPub) as any;
     if (ent?.is_treasury) {
         if (ent.paused === 1) throw new Error("Enterprise is paused — not accepting pledges");
         if (ent.status === 'winding_up' || ent.status === 'completed') throw new Error("Enterprise is not accepting pledges");
+        // The goal also marks the enterprise's own row (below): read that too, for a projects row made above from it.
+        if (ent.status === 'funded') throw new Error(PROJECT_FUNDED_NO_PLEDGES_ERROR);
     }
 
     // #138: close the creator's demurrage window before this pledge can complete the goal and sweep escrow
@@ -1934,7 +3001,8 @@ export function deleteCrowdfundProject(projectId: string, requesterPubkey: strin
     // It refunds the backers from the project's escrow (raw SQL below): never on a standby (config/node-role.ts).
     assertLedgerWritable();
     const project = db.prepare(`SELECT * FROM projects WHERE id = ?`).get(projectId) as ProjectRow | undefined;
-    if (!project) throw new Error("Project not found");
+    // Never a person's row (namesNoProject): a projects row under a member's key pruned that member.
+    if (!project || namesNoProject(projectId)) throw new Error("Project not found");
     if (project.creator_pubkey !== requesterPubkey) throw new Error("Unauthorized to delete this project");
 
     // Guard against deleting funded/completed projects

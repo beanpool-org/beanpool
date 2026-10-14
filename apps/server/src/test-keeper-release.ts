@@ -22,7 +22,7 @@ import {
     openCollection, getCollection, collectionState, collectionProgress,
     releaseSsoFragment, releaseHubFragment,
     hubReleaseEligibleAt, cancelCollection, openCollectionsFor, listReleases,
-    isReleasableType, HUB_DELAY_MS, COLLECTION_TTL_MS,
+    isReleasableType, HUB_DELAY_MS, COLLECTION_TTL_MS, SIGN_IN_WINDOW_MS,
     RecoveryReleaseError,
 } from './engine/recovery-release.js';
 
@@ -312,46 +312,69 @@ function main(): void {
     assert(listReleases(evidence.id).length === 1, '...with its release record intact');
 
     // The cap. Opening a session is unauthenticated by necessity, so a hard refusal would let
-    // anyone lock a member out of their own recovery — the oldest is evicted instead.
+    // anyone lock a member out of their own recovery — the oldest IDLE session is evicted instead:
+    // past its sign-in window, having released nothing (defence review FABLE-sec-sso finding 5,
+    // 2026-10-01). Until then the oldest of ALL live sessions went, and these checks held a burst of
+    // fresh opens to 10 — which is exactly how a stranger pushed out the member's own sign-in in
+    // progress: open ten while the member is on Google's sheet.
     const flooded = member();
     split(flooded, crypto.randomBytes(32).toString('base64url'));
     const opened: string[] = [];
     for (let i = 0; i < 14; i++) opened.push(openCollection(flooded, EPH).id);
+    assert(openCollectionsFor(flooded).length === 14,
+        'a flood of opens evicts nothing still in its sign-in window — any one of them could be the member, mid sign-in');
 
-    const stillLive = openCollectionsFor(flooded);
-    assert(stillLive.length <= 10, `a flood is capped at 10 live sessions (got ${stillLive.length})`);
-    const newest = opened[opened.length - 1];
-    assert(stillLive.some(x => x.id === newest),
-        'and the NEWEST survives — the person actually recovering opens one and uses it immediately');
-    assert(!stillLive.some(x => x.id === opened[0]),
-        '...while the oldest was evicted, so a flood pushes out its own earlier attempts');
+    // The same fourteen, all past their window: idle, and the cap applies.
+    const pastTheWindow = (id: string) => db.prepare('UPDATE recovery_collections SET created_at = ? WHERE id = ?')
+        .run(new Date(Date.now() - SIGN_IN_WINDOW_MS - 1000).toISOString(), id);
+    opened.forEach(pastTheWindow);
     // The point of evicting rather than refusing: the member can always still start a recovery.
     const afterFlood = openCollection(flooded, EPH);
+    const stillLive = openCollectionsFor(flooded);
+    const idle = stillLive.filter(x => x.id !== afterFlood.id);
+    assert(idle.length <= 10, `idle sessions are capped at 10 (got ${idle.length})`);
+    const newest = opened[opened.length - 1];
+    assert(idle.some(x => x.id === newest), 'and the NEWEST idle one survives');
+    assert(!stillLive.some(x => x.id === opened[0]),
+        '...while the oldest was evicted, so a flood pushes out its own earlier attempts');
+    assert(getCollection(opened[0]) === null,
+        '...and gone in the same pass, having released nothing: its device has no session left to use');
     assert(collectionState(afterFlood.id)!.live === true,
         'CRITICAL: a flood never locks the real member out — they can always open a fresh session');
 
-    // An EVICTED session must be dead (CR).
+    // A session that released something is never the one evicted, however old: its device is about
+    // to fetch the copy (only a live session hands it over), and it is the owner's evidence.
     const victimOwner = member();
     const victimHash = crypto.randomBytes(32).toString('base64url');
     split(victimOwner, victimHash);
-    const evictedId = openCollection(victimOwner, EPH).id;
-    releaseSsoFragment(evictedId, victimHash);
-    for (let i = 0; i < 12; i++) openCollection(victimOwner, EPH);
+    const releasedId = openCollection(victimOwner, EPH).id;
+    releaseSsoFragment(releasedId, victimHash);
+    pastTheWindow(releasedId);
+    const victimFlood: string[] = [];
+    for (let i = 0; i < 12; i++) victimFlood.push(openCollection(victimOwner, EPH).id);
+    victimFlood.forEach(pastTheWindow);
+    openCollection(victimOwner, EPH);
+    assert(collectionState(releasedId)!.live === true,
+        'a session that released its copy survives a flood of idle ones');
+    assert(openCollectionsFor(victimOwner).some(x => x.id === releasedId), '...and the owner still sees it, and can stop it');
 
+    // A non-open status must be dead (CR). Eviction writes 'expired' and leaves `expires_at` in
+    // the future; a session in that state once stayed live, invisible and uncancellable.
+    db.prepare("UPDATE recovery_collections SET status = 'expired' WHERE id = ?").run(releasedId);
     const evictedRow = db.prepare('SELECT status, expires_at FROM recovery_collections WHERE id = ?')
-        .get(evictedId) as { status: string; expires_at: string } | undefined;
+        .get(releasedId) as { status: string; expires_at: string } | undefined;
     assert(evictedRow?.status === 'expired' && Date.parse(evictedRow.expires_at) > Date.now(),
-        "the evicted session is marked 'expired' while its expiry is still in the FUTURE...");
-    assert(!openCollectionsFor(victimOwner).some(x => x.id === evictedId),
-        '...and the owner can no longer see it, so they could not cancel it either...');
-    const evictedState = collectionState(evictedId)!;
+        "a session marked 'expired', as eviction marks one, while its expiry is still in the FUTURE...");
+    assert(!openCollectionsFor(victimOwner).some(x => x.id === releasedId),
+        '...is not listed to the owner, so they could not cancel it either...');
+    const evictedState = collectionState(releasedId)!;
     assert(evictedState.live === false && evictedState.reason === 'expired',
         '...so it had BETTER be dead — liveness is default-closed, not a list of statuses to remember');
-    rejects(() => releaseSsoFragment(evictedId, victimHash),
+    rejects(() => releaseSsoFragment(releasedId, victimHash),
         '...and nothing more can be released into it');
-    assert(collectionProgress(evictedId)!.hubEligibleAt === null,
+    assert(collectionProgress(releasedId)!.hubEligibleAt === null,
         '...and it shows no hub countdown');
-    assert(listReleases(evictedId).length === 1,
+    assert(listReleases(releasedId).length === 1,
         '...while the fragment it already took is still on record as evidence');
 
     // ── expiry ────────────────────────────────────────────────────────────────────────────────

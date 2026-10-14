@@ -25,8 +25,9 @@ import { createPost } from '../state-engine.js';
  * @param author    the event's host: the signer, or the enterprise from the URL path
  * @param createdBy the member who really did it, when that is not the author (a keeper acting for an
  *                  enterprise). Recorded as `created_by`, exactly as the enterprise's Offer and Need are.
+ * @param beforeWrite the route's own limit on new posts (W-main), which the engine runs once every refusal has passed
  */
-export function createEventFromBody(body: any, author: string, createdBy?: string) {
+export function createEventFromBody(body: any, author: string, createdBy?: string, beforeWrite?: () => void) {
     const b = body || {};
     return createPost(
         'event', 'community', b.title, b.description || '',
@@ -45,6 +46,7 @@ export function createEventFromBody(body: any, author: string, createdBy?: strin
             eventStartAt: b.eventStartAt, eventEndAt: b.eventEndAt,
             eventPlaceName: b.eventPlaceName, eventPrivateNote: b.eventPrivateNote,
             createdBy,
+            beforeWrite,
         }
     );
 }

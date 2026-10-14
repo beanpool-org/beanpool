@@ -4,7 +4,7 @@
  * Dedicated tests per consumer:
  * 1. Public feed isolation (GET /api/marketplace/posts & getPosts)
  * 2. Map pins isolation
- * 3. Search isolation (posts_fts, getPosts({ query }), getPostCount({ query }))
+ * 3. Search isolation (posts_fts, getPosts({ query }))
  * 4. Peer/federation sync isolation (listingsForPeer in federation-listings.ts)
  * 5. Daily Pulse gate isolation (daily-pulse active member listing count)
  * 6. Activity feed isolation (activity_feed table entries)
@@ -22,7 +22,6 @@ import {
     createPost,
     updatePost,
     getPosts,
-    getPostCount,
     getActivePostCount,
     getCommunityInfo,
     createGroup,
@@ -48,6 +47,7 @@ import {
 } from './state-engine.js';
 import { listingsForPeer } from './federation-listings.js';
 import crypto from 'node:crypto';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0;
 let passed = 0;
@@ -67,9 +67,10 @@ function makeMember(baseCallsign: string): { pubKeyHex: string; callsign: string
     const pubKeyHex = crypto.randomBytes(32).toString('hex');
     const callsign = `${baseCallsign}_${crypto.randomBytes(4).toString('hex')}`;
     db.prepare(`
-        INSERT INTO members (public_key, callsign, avatar_url, status, earned_credit, joined_at)
-        VALUES (?, ?, 'bundled://sprout', 'active', 50, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+        INSERT INTO members (public_key, callsign, status, earned_credit, joined_at)
+        VALUES (?, ?, 'active', 50, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     `).run(pubKeyHex, callsign);
+    setMemberPhoto(db, pubKeyHex, 'bundled://sprout');
 
     // Give member an initial offer to satisfy the contribution covenant
     createPost('offer', 'other', `${callsign}'s Seed Offer`, 'Offer for covenant', 10, 'fixed', pubKeyHex, undefined, undefined, [], false);
@@ -181,17 +182,14 @@ async function runTests() {
         // Anonymous search
         const anonResults = getPosts({ query: secretTerm });
         assert(anonResults.length === 0, '3b. Anonymous FTS search returns 0 results for group post');
-        assert(getPostCount({ query: secretTerm }) === 0, '3c. Anonymous getPostCount for term is 0');
 
         // Non-member search
         const carolResults = getPosts({ query: secretTerm, viewerPubkey: carol.pubKeyHex });
         assert(carolResults.length === 0, '3d. Non-member Carol FTS search returns 0 results');
-        assert(getPostCount({ query: secretTerm, viewerPubkey: carol.pubKeyHex }) === 0, '3e. Carol getPostCount for term is 0');
 
         // Group member search
         const bobResults = getPosts({ query: secretTerm, viewerPubkey: bob.pubKeyHex });
         assert(bobResults.length === 1 && bobResults[0].id === secretPost!.id, '3f. Active group member Bob finds the group post via search');
-        assert(getPostCount({ query: secretTerm, viewerPubkey: bob.pubKeyHex }) === 1, '3g. Bob getPostCount for term is 1');
     }
 
     console.log('\n─── CONSUMER 4: Peer / Federation Sync Isolation ───');
@@ -608,23 +606,24 @@ async function runTests() {
         }
         assert(observerAcceptFailed, '10s-observer-accept. Observer Dave CANNOT accept a group-scoped post');
 
-        // Direct post to Dave cannot be requested or accepted by Carol
+        // Direct post to Dave cannot be requested or accepted by Carol — and, as for a group post above, she is told what an
+        // unknown post id gets (engine/post-sight.ts): "This direct post is not addressed to you" confirmed it was one.
         const directOffer = createPost('offer', 'tools', 'Special Book', 'For Dave only', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, { audienceScope: 'direct', targetPubkey: dave.pubKeyHex });
         let nonTargetReqFailed = false;
         try {
             requestPost(directOffer!.id, carol.pubKeyHex);
         } catch (e: any) {
-            nonTargetReqFailed = e.message.includes('UNAUTHORIZED');
+            nonTargetReqFailed = e.message === 'Post not found';
         }
-        assert(nonTargetReqFailed, '10t. Non-target Carol CANNOT request a direct-scoped post');
+        assert(nonTargetReqFailed, '10t. Non-target Carol CANNOT request a direct-scoped post (told "Post not found")');
 
         let nonTargetAcceptFailed = false;
         try {
             acceptPost(directOffer!.id, carol.pubKeyHex);
         } catch (e: any) {
-            nonTargetAcceptFailed = e.message.includes('UNAUTHORIZED');
+            nonTargetAcceptFailed = e.message === 'Post not found or not active';
         }
-        assert(nonTargetAcceptFailed, '10t-accept. Non-target Carol CANNOT accept a direct-scoped post');
+        assert(nonTargetAcceptFailed, '10t-accept. Non-target Carol CANNOT accept a direct-scoped post (told "Post not found or not active")');
 
         // 7. Public posts clear foreign target fields:
         const taintedPublic = createPost('offer', 'tools', 'Public Shovel', 'Everyone can see', 5, 'fixed', alice.pubKeyHex, undefined, undefined, [], false, undefined, false, {
@@ -744,14 +743,15 @@ async function runTests() {
             pollOptions: [{ id: 'opt_yes', text: 'Yes' }, { id: 'opt_no', text: 'No' }]
         })!;
 
-        // Bob (not target or assigned) attempts to vote on direct poll -> MUST fail
+        // Bob (not target or assigned) attempts to vote on direct poll -> MUST fail, told what an unknown poll id gets
+        // (engine/post-sight.ts): "This direct poll is not addressed to you" confirmed it was one.
         let nonTargetVoteFailed = false;
         try {
             votePoll(directPoll.id, bob.pubKeyHex, 'opt_yes');
         } catch (e: any) {
-            nonTargetVoteFailed = e.message.includes('UNAUTHORIZED') && e.message.includes('direct poll is not addressed to you');
+            nonTargetVoteFailed = e.message === 'Poll not found';
         }
-        assert(nonTargetVoteFailed, '10dd. Non-target Bob CANNOT vote on direct-scoped poll');
+        assert(nonTargetVoteFailed, '10dd. Non-target Bob CANNOT vote on direct-scoped poll (told "Poll not found")');
 
         // Target Dave votes on direct poll -> MUST succeed
         const targetVote = votePoll(directPoll.id, dave.pubKeyHex, 'opt_yes');

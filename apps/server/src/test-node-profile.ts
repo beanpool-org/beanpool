@@ -16,7 +16,7 @@
  *      nearly empty Market, global only), and every field it had before
  *   5. node_config overrides change the configured switch (and the boot log reports them), an override of a built
  *      switch (openJoin, distanceSortDefault, directoryMirror, publishToDirectory, knocks) reaches the code, bad ones
- *      are ignored with a log line, and a switch this build doesn't have yet (ssoRequiredForJoin=false, a door without
+ *      are ignored with a log line, and a switch this build doesn't have yet (none since the 12-words door; was ssoRequiredForJoin=false, a door without
  *      a sign-in) stays pinned, so the API never advertises it
  *   6. the two operator escape hatches that would undo the visitors' view: with `guestListingsOnly` on, a main server
  *      refuses to start with ENFORCE_READ_AUTH=false or ENFORCE_WS_AUTH=false (each alone, and both), says which and
@@ -32,8 +32,8 @@ delete process.env.NODE_PROFILE;
 
 import crypto from 'node:crypto';
 
-const PORT = 8719;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -67,17 +67,33 @@ async function getInfo(id?: Id): Promise<{ status: number; body: any }> {
     return { status: res.status, body: await res.json() };
 }
 
+/** A signed GET of any path, as getInfo signs one. */
+async function getSigned(path: string, id: Id): Promise<{ status: number; body: any }> {
+    const ts = Date.now();
+    const nonce = crypto.randomBytes(16).toString('hex');
+    const headers: Record<string, string> = {
+        'X-Public-Key': id.pubKeyHex,
+        'X-Signature': crypto.sign(null, Buffer.from(`GET\n${path}\n${ts}\n${nonce}\n`), id.privateKey).toString('base64'),
+        'X-Timestamp': String(ts),
+        'X-Nonce': nonce,
+    };
+    const res = await fetch(`${BASE}${path}`, { headers });
+    return { status: res.status, body: await res.json().catch(() => null) };
+}
+
 // What this build does on each profile. G2 built open join: on for the global profile, off for local. G1 built Beans
 // off: on global, Beans, escrow and enterprises are off (this database's ledger has never moved; test-global-no-beans
 // covers one that has). G3 built probation, auto-hide and auto-mute: on for global only (test-global-moderation).
 // G4 built distance search: every profile answers it (test-distance-search). G6 built knocks: on for a local
 // community (D4), off on the lobby (test-knock). G9a built the visitors' view of the listings: global only
 // (test-guest-view). Formal Decisions: on for a local community, off on the lobby (test-decisions-off). The example
-// cards on a nearly empty Market: global only (drawn by the apps, nothing stored). The PR that builds one of these
-// changes its line here, with the test that proves it.
+// cards on a nearly empty Market: global only (drawn by the apps, nothing stored). Invites: on for a local community,
+// off on the lobby, whose door is the only way in (test-invites-off). The 12-words door: open beside the sign-in on the
+// lobby only (test-door-work). A member's set of nearby listings: global only, 250 km and 500 (test-sync-nearby). Members on demand (the phone holds the cards it needs): global only (test-members-on-demand). The
+// showcase (DESIGN-global-showcase-fable.md W1): reported on the lobby only, so a local node's features are unchanged. The PR that builds one of these changes its line here, with the test that proves it.
 const BUILT_TODAY = {
-    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true },
-    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false },
+    local: { beans: true, escrow: true, enterprises: true, openJoin: false, knocks: true, distanceSearch: true, probation: false, autoHideReports: false, autoMute: false, guestListingsOnly: false, exampleListings: false, decisions: true, invites: true, wordsDoor: false, door: 'members' },
+    global: { beans: false, escrow: false, enterprises: false, openJoin: true, knocks: false, distanceSearch: true, probation: true, autoHideReports: true, autoMute: true, guestListingsOnly: true, exampleListings: true, decisions: false, invites: false, wordsDoor: true, nearbyListings: { radiusKm: 250, max: 500 }, membersOnDemand: true, showcase: true, door: 'open' },
 };
 
 async function main() {
@@ -126,11 +142,18 @@ async function main() {
     assert(local.publishToDirectory && !global.publishToDirectory, 'listed in the directory: local as the operator decides; the lobby never');
     assert(!local.probation && !local.autoHideReports && !local.autoMute, 'local: no probation, auto-hide or auto-mute');
     assert(global.probation && global.autoHideReports && global.autoMute, 'global: probation, auto-hide and auto-mute on');
-    assert(local.ssoRequiredForJoin && global.ssoRequiredForJoin, 'the open door needs a sign-in (D1 = a)');
+    assert(local.ssoRequiredForJoin && !global.ssoRequiredForJoin,
+        'a sign-in is optional at the lobby\'s door, with the 12-words door beside it (the two-doors design, 2026-10-01); required wherever else a door is opened');
     assert(!local.guestListingsOnly && global.guestListingsOnly, 'a visitor sees the listings, not the people: global only (G9a)');
     assert(local.exampleListings === false && global.exampleListings === true,
         'example cards on a nearly empty Market: global only (Marty, 2026-09-27)');
     assert(local.decisions && !global.decisions, 'formal Decisions: on for a local community, off on the lobby (anyone may join it)');
+    assert(local.showcase === false && global.showcase === true,
+        'showcase: the lobby previews what lives in a local community; a local node hides what its operator turned off (Marty, 2026-10-13)');
+    assert(local.invites === true && global.invites === false,
+        'invites: on for a local community, off on the lobby, whose open door is the only way in (Marty, 2026-10-01)');
+    assert(local.announceJoins === true && global.announceJoins === false,
+        'member_joined to every member socket: a local community, as before; on the lobby only to the joiner (test-global-server-limits)');
     profileDefaults('local').openJoin = true;
     assert(profileDefaults('local').openJoin === false, 'profileDefaults hands out a copy: a caller cannot change the table');
 
@@ -163,7 +186,8 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const { startHttpsServer } = await import('./https-server.js');
     await initTls();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const alice: Id = { pubKeyHex: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), privateKey };
     db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
@@ -192,6 +216,36 @@ async function main() {
     await checkInfo('local', 'NODE_PROFILE=lobby (unrecognised)');
     delete process.env.NODE_PROFILE;
 
+    // One effective set per reader (W1, config/features-for.ts): /api/community/me and /api/home say the reader's own
+    // features, which today are the node's, exactly, on both profiles.
+    for (const want of ['local', 'global'] as const) {
+        if (want === 'global') process.env.NODE_PROFILE = 'global'; else delete process.env.NODE_PROFILE;
+        const info = (await getInfo(alice)).body.features;
+        const me = await getSigned('/api/community/me', alice);
+        const home = await getSigned('/api/home', alice);
+        assert(me.status === 200 && JSON.stringify(me.body?.features) === JSON.stringify(info),
+            `${want}: /api/community/me's features are the node's, exactly (${me.status} ${JSON.stringify(me.body?.features)})`);
+        assert(home.status === 200 && JSON.stringify(home.body?.features) === JSON.stringify(info),
+            `${want}: /api/home's features are the node's, exactly (${home.status} ${JSON.stringify(home.body?.features)})`);
+        assert(want === 'global' ? info.showcase === true : !('showcase' in info),
+            `${want}: showcase ${want === 'global' ? 'reported on' : 'absent, so a local node answers exactly as before'}`);
+    }
+    delete process.env.NODE_PROFILE;
+
+    // Where Start a community leads (config/start-community.ts): beanpool.org's page unless an owner names their own.
+    const start = await import('./config/start-community.js');
+    assert((await getInfo()).body.startCommunityUrl === 'https://beanpool.org/#run-a-node', 'Start a community leads to beanpool.org/#run-a-node by default');
+    assert(start.setStartCommunityUrl('https://start.example.org/how').ok && (await getInfo()).body.startCommunityUrl === 'https://start.example.org/how',
+        'a self-hoster names their own page, and /api/community/info says it');
+    for (const bad of ['javascript:alert(1)', 'ftp://start.example.org', 'http://start.example.org/how', 'https://user:pw@start.example.org', 'not a url', 'https://start.example.org/a b', `https://start.example.org/${'a'.repeat(300)}`, 42, {}]) {
+        assert(!start.setStartCommunityUrl(bad).ok && (await getInfo()).body.startCommunityUrl === 'https://start.example.org/how',
+            `${JSON.stringify(bad).slice(0, 40)} is refused, and the page named stays`);
+    }
+    db.prepare("UPDATE node_config SET value = 'javascript:alert(1)' WHERE key = 'startCommunityUrl'").run();
+    assert((await getInfo()).body.startCommunityUrl === 'https://beanpool.org/#run-a-node', 'a stored row that is not a web address is ignored for the default');
+    assert(start.setStartCommunityUrl(null).ok && !db.prepare("SELECT 1 FROM node_config WHERE key = 'startCommunityUrl'").get()
+        && (await getInfo()).body.startCommunityUrl === 'https://beanpool.org/#run-a-node', 'null goes back to the default, and leaves no row');
+
     // A backup restored at runtime replaces state.db, mirror included, and restarts. Before that restart, or if the
     // mirror is edited by hand, nothing reads it as the profile.
     db.prepare('UPDATE node_config SET value = ? WHERE key = ?').run('global', NODE_PROFILE_KEY);
@@ -218,6 +272,15 @@ async function main() {
         '/api/community/info says a community that opted out takes no knocks');
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.knocks`);
     assert(getProfileSwitches().knocks === true && (await getInfo()).body.features.knocks === true, 'and without it, a local community takes knocks (D4)');
+    setOverride('invites', 'false');
+    const noInvites = (await getInfo()).body.features;
+    assert(getConfiguredSwitches().invites === false && getProfileSwitches().invites === false && noInvites.invites === false,
+        'local + nodeProfile.invites=false: invites are built, so the switch the code reads and /api/community/info follow the override');
+    assert(getConfiguredSwitches().knocks === true && getProfileSwitches().knocks === false && noInvites.knocks === false,
+        'and a knock is answered with an invite, so the node takes no knocks either, though their own switch is on');
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.invites`);
+    assert(getProfileSwitches().invites === true && getProfileSwitches().knocks === true && (await getInfo()).body.features.invites === true,
+        'and without it, a local community takes invites and knocks again');
     assert(getProfileSwitches().distanceSortDefault === false, 'local: a post listing with a point keeps today\'s order by default');
     setOverride('distanceSortDefault', 'true');
     assert(getProfileSwitches().distanceSortDefault === true,
@@ -241,9 +304,26 @@ async function main() {
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.directoryMirror`);
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.publishToDirectory`);
     setOverride('ssoRequiredForJoin', 'false');
-    assert(getProfileSwitches().ssoRequiredForJoin === true,
-        'the door without a sign-in (D1 b) is not built, so nodeProfile.ssoRequiredForJoin=false changes nothing');
+    assert(getProfileSwitches().ssoRequiredForJoin === false,
+        'the door without a sign-in is built (the 12-words door), so nodeProfile.ssoRequiredForJoin=false reaches the code');
+    assert(getProfileSwitches().openJoin === true && (await getInfo()).body.features.wordsDoor === true,
+        'with the door opened here (nodeProfile.openJoin=true above), /api/community/info offers the 12-words door');
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.ssoRequiredForJoin`);
+    assert((await getInfo()).body.features.wordsDoor === false,
+        'and without the override, a local community\'s open door needs a sign-in, so it offers none');
+
+    setOverride('showcase', 'true');
+    assert(getProfileSwitches().showcase === true && (await getInfo()).body.features.showcase === true,
+        'local + nodeProfile.showcase=true: an operator may preview what they switched off, and /api/community/info says so');
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.showcase`);
+    assert(!('showcase' in (await getInfo()).body.features), 'and without it, a local community reports no showcase');
+    process.env.NODE_PROFILE = 'global';
+    setOverride('showcase', 'false');
+    assert(getProfileSwitches().showcase === false && !('showcase' in (await getInfo()).body.features),
+        'global + nodeProfile.showcase=false: hidden as before, and /api/community/info reports no showcase');
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.showcase`);
+    assert((await getInfo()).body.features.showcase === true, 'and without it, the lobby previews');
+    delete process.env.NODE_PROFILE;
 
     process.env.NODE_PROFILE = 'global';
     setOverride('probation', 'false');
@@ -257,14 +337,21 @@ async function main() {
     const overridesLine = reported.logs.find(l => l.includes('Node profile: global')) ?? '';
     assert(/overrides: .*openJoin=true/.test(overridesLine) && /probation=false/.test(overridesLine) && /knocks=true/.test(overridesLine),
         `the boot log reports every override in effect (got ${JSON.stringify(overridesLine)})`);
-    const notBuilt = reported.logs.find(l => l.includes('Not built yet, so these overrides do nothing')) ?? '';
-    assert(notBuilt.includes('ssoRequiredForJoin=false') && !notBuilt.includes('knocks'),
-        `the boot log says which overrides ask for something this build does not have yet, and knocks (built in G6) is not one (${notBuilt})`);
+    const notBuilt = reported.logs.find(l => l.includes('Not built yet')) ?? '';
+    assert(notBuilt === '',
+        `every switch is built now, so the boot log names none as not built, ssoRequiredForJoin=false included (${notBuilt})`);
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.ssoRequiredForJoin`);
     assert(mirror() === 'global', 'the mirror follows NODE_PROFILE=global at boot');
+    // A knock is answered with an invite, so on global, whose invites are off, the operator's knocks=true alone leaves knocks
+    // off (a member answering one would mint an invite nothing here takes). With invites turned on as well, it reaches the API.
+    assert(JSON.stringify((await getInfo()).body.features) === JSON.stringify({ ...BUILT_TODAY.global, probation: false, knocks: false }),
+        'global + knocks=true while invites are off: /api/community/info still says knocks false (and probation off)');
+    setOverride('invites', 'true');
     // Probation (G3) and knocks (G6) are built, so the operator's nodeProfile.probation=false and knocks=true reach the API.
-    assert(JSON.stringify((await getInfo()).body.features) === JSON.stringify({ ...BUILT_TODAY.global, probation: false, knocks: true }),
-        'global with overrides: /api/community/info reports what this build does, the built overrides (probation off, knocks on) included');
+    // With invites on, the door (config/door.ts) is who makes them, `members` by default, not the sign-in door alone.
+    assert(JSON.stringify((await getInfo()).body.features) === JSON.stringify({ ...BUILT_TODAY.global, probation: false, knocks: true, invites: true, door: 'members' }),
+        'global with overrides: /api/community/info reports what this build does, the built overrides (probation off, knocks on, invites on) included');
+    db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.invites`);
     assert(getProfileSwitches().probation === false && getProfileSwitches().autoHideReports === true,
         'probation is built (G3), so nodeProfile.probation=false turns it off; auto-hide keeps the global default');
     assert(getProfileSwitches().distanceSortDefault === true, 'global: nearest first by default, no longer pinned off (G4)');

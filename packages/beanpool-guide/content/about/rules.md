@@ -10,7 +10,7 @@ related: decisions, proposing-a-decision, polls, keepers, groups, people
 - A **Poll** is a question in the feed, like "Market on Sunday?". It shows what people think. It never changes anything by itself.
 - A **Decision** is binding. If it passes, your community's server carries it out by itself. Nobody has to press a button, and nobody can quietly ignore it.
 
-The global community has Polls but no Decisions: anyone can join it with one sign-in, so one person with several accounts could swing a vote. Everything below about Decisions is about local communities.
+The global community has Polls but no Decisions: anyone can join it, with 12 words or a sign-in, so one person with several accounts could swing a vote. Everything below about Decisions is about local communities.
 
 ## What a Decision can do
 
@@ -19,14 +19,14 @@ About a member:
 - Suspend a member, or lift a suspension.
 - Freeze a member's credit, or unfreeze it.
 - Give a member the right to vouch for newcomers, or take it away.
-- Remove a lead keeper from an enterprise.
+- Remove a lead keeper from an enterprise, or a leader from a project.
 - Remove a member from the community, or reinstate them.
 
 About the Commons:
 
-- Give beans from the Commons to an enterprise.
+- Give beans from the Commons to a project or an enterprise.
 - Give a hardship grant from the Commons to a member.
-- Pay off an enterprise's debt from the Commons.
+- Pay off a project's or an enterprise's debt from the Commons.
 
 ## Who can start a Decision
 
@@ -47,7 +47,7 @@ Any active member whose credit is not frozen, and who joined **before** the Deci
 
 The app never shows anyone how you voted, admins included. Everyone sees the totals, and you see your own vote. Your vote is stored on your community's server with your account, so that it can be counted and checked. The owners and admins who run the server can take a copy of its files, and could look up your vote there.
 
-Polls are different: a Poll is an open show of hands, and everyone can see who picked what.
+Polls are anonymous too, unless the person who starts one makes it an **open vote**: then members can see who picked what. The poll says which it is.
 
 ## How long a vote runs
 
@@ -84,7 +84,7 @@ If too few people vote, nothing happens. The Decision closes as "unresolved".
 - After 7 more days they are removed for good. In those 7 days, a Decision to reinstate them cancels the removal.
 - A member who deletes their own account cannot be reinstated, even after a removal. They can join again with a new invite.
 - When a member is removed, their posts are taken down. If they owed beans, the Commons pays the debt. If they had beans, those beans go to the Commons.
-- The community can vote to remove anyone except the only owner of your community's server.
+- The community can vote to remove or suspend any member except an owner or admin of your community's server. They run the server itself, so a vote cannot take that away; the app says so if you try. An owner can take an admin's role away first, and after that they are a member like any other.
 
 ## Emergency suspension
 
@@ -102,7 +102,7 @@ On the global community there is no vote. The suspension lasts 7 days and then l
 Your community's server has owners and admins. They look after it.
 
 - An admin can stop an open Decision, but must give a written reason. Members can read it on the Decision.
-- If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away. If the member being removed is an owner or admin of the server, only an owner can do either.
+- If a removal has passed and is in its 7-day wait, an admin can stop it, or make it happen straight away.
 - Admins can give members the right to vouch for newcomers.
 - Admins can give a member a trust badge. This also gives that member the trust that badge needs, so it deepens their credit line.
 - Admins sort out stuck trades, but never one they are part of.
@@ -113,6 +113,7 @@ Your community's server has owners and admins. They look after it.
 - You can have one open Poll at a time. Your community can have 5 open Polls at once.
 - A Poll posted to a group can only be answered by that group's members and convenors. Observers can read it but not answer.
 - Answering a Poll also needs credit that is not frozen. You can change your answer until the Poll closes. The person who started it can close it early.
+- A Poll is anonymous: everyone sees only the totals. The person who starts it can make it an **open vote** instead, so members see who chose what. That choice is made when the Poll starts and cannot change once anyone has voted.
 
 ## Enterprises and keepers
 
@@ -124,7 +125,8 @@ An enterprise is run by its keepers. One of them is the lead keeper.
 - **Community admins:** an admin of your community who is not a keeper of the enterprise can approve a keeper, or remove an ordinary keeper, at once, with no 3-day window. This is so a stuck enterprise can be helped.
 - **Stepping down:** any keeper can step down. If the enterprise is in debt and your pledge is needed to cover it, you must wait until the debt is smaller or other keepers pledge more. The only keeper cannot step down; they add another keeper first, or wind the enterprise up.
 - **Your pledge** backs the enterprise's credit line. It is never taken from your own balance or your own credit line.
-- **A quiet lead:** if the lead keeper has done nothing in the app for 30 days, the other keepers can choose a new lead from among themselves. The vote runs up to 14 days, with Yes and No. It passes when more than half of the other keepers say Yes. If the lead comes back and does anything in the app, the vote is cancelled. Keeper votes cannot be changed.
+- **A quiet lead:** if the lead keeper has done nothing in the app for 30 days, the other keepers can choose a new lead from among themselves. The vote runs up to 14 days, with Yes and No. It passes when more than half of the other keepers say Yes. If the lead comes back and does anything in the app, the vote is cancelled. While the lead's account is suspended, nothing they do counts as coming back. Keeper votes cannot be changed.
+- **Votes among the keepers:** in an enterprise with two or more keepers, any keeper can propose paying Beans out of the enterprise's own account (never more than it holds, never to themselves, and to a keeper only out of what it has earned, with the 1.5% trade fee), removing a keeper, or, in an enterprise but not a project, making another keeper the lead. The keepers at the time it opens vote; more than half must vote; 60% Yes to pay out or remove, more than half to choose a lead. It runs 7 days or ends sooner once the answer can't change, and is carried out by itself. Only the keepers see it. While it is open it shows how many have voted; Yes and No show once it closes. Nobody sees who voted how, but in a very small group the result and who has voted can show it. These votes never touch the Commons or anyone's standing in the community: those are community Decisions.
 - **If the lead leaves or is removed,** the longest-serving keeper becomes lead at once, and the other keepers can replace them straight away. If no keeper is left, the enterprise is paused.
 - **Winding up:** the lead keeper, or the only keeper, can start closing an enterprise. So can a community admin. There is then a 7-day wait, and any keeper or a community admin can cancel it. An enterprise in debt cannot close until the debt is paid or the community writes it off. When it closes, any beans left go to the Commons.
 
@@ -134,13 +136,14 @@ A group is run by its convenors, and one of them is its **lead convenor**. Whoev
 
 - Some groups are open to anyone. Some need a convenor to approve you. Some are by invitation only.
 - **Any convenor** can approve and invite members, remove a member or an observer, change a member's or an observer's role, make someone a convenor, remove posts and messages, and edit the group and who can join it.
-- **Only the lead convenor** can remove a convenor, or take the convenor role off someone.
-- **Nobody can remove the lead convenor, or take the lead off them.** Not another convenor, and not a community admin — admins have no say inside a group.
+- **Only the lead convenor** can remove a convenor, or take the convenor role off someone. The group's own vote can also do that.
+- **Nobody can remove the lead convenor, or take the lead off them.** Not another convenor, and not a community admin — admins have no say inside a group. Apart from the lead handing it over, only the group's own vote can choose a new lead.
+- **A suspended convenor:** while a convenor's account is suspended, they cannot use any convenor power, and their own powers as lead wait too. They stay a convenor, and the lead stays the lead; it all works again when the suspension ends. Other convenors carry on as usual, and members keep chatting and posting. A suspended member cannot start or join a group either, until the suspension ends.
 - **Handing the lead over:** the lead can make someone else the lead. It can be another convenor, or a member, who becomes a convenor at the same time. Once it is done, the lead cannot take it back.
 - **Leaving, as the lead:** hand the lead over first. If nobody else is in the group, the lead can simply leave.
 - The last convenor cannot step down or be removed while the group still has other members.
-- Groups do not hold binding votes. To ask a group what it thinks, post a Poll to the group.
-- **A quiet lead convenor:** if a group's lead convenor has done nothing in the app for 30 days, the group can choose a new one. Its **other convenors** vote — or its **members**, when none of the other convenors was made a convenor by the day the lead was last active. Only people who were already there on that day take part: members who joined the group by then, or convenors made convenors by then. Anyone who joined, or was made a convenor, after that cannot propose, be proposed or vote, and is not counted. If you leave the group and join again, you count from when you joined again. If nobody who was there is left, no vote can open, and the group's screen says so. Any of those who take part can propose someone from among them, themselves included. The vote runs up to 14 days, Yes or No, in secret. It passes when more than half of those who answer say Yes. If the lead comes back and does anything in the app, the vote is cancelled. The person chosen becomes a convenor and the group's lead. The quiet lead stays a convenor when it was the convenors who voted, and becomes an ordinary member when it was the members. You will find the vote on the group's own screen, above the roster.
+- **A group's own vote.** A group's members and convenors can vote on the group's own things: choose a new lead convenor, make someone a convenor, make a convenor a member, remove someone from the group, change who can join it, or close it. Any member or convenor can propose one; observers watch but do not vote. Everyone who was a member or convenor when it opened can vote. More than half of them must vote. Removing someone and closing the group need 60% Yes; the rest need more than half. It runs 7 days, or ends sooner once the answer can't change, and then the app carries it out by itself. Votes are secret and cannot be changed. A group's vote never moves Beans and never changes anyone's standing in the community, and admins cannot stop it. You will find it on the group's page, under **Decisions**. To ask a group what it thinks without changing anything, post a Poll to the group.
+- **A quiet lead convenor:** if a group's lead convenor has done nothing in the app for 30 days, the group can choose a new one. Its **other convenors** vote — or its **members**, when none of the other convenors was made a convenor by the day the lead was last active. Only people who were already there on that day take part: members who joined the group by then, or convenors made convenors by then. Anyone who joined, or was made a convenor, after that cannot propose, be proposed or vote, and is not counted. If you leave the group and join again, you count from when you joined again. If nobody who was there is left, no vote can open, and the group's screen says so. Any of those who take part can propose someone from among them, themselves included. The vote runs up to 14 days, Yes or No, in secret. It passes when more than half of those who answer say Yes. If the lead comes back and does anything in the app, the vote is cancelled. While the lead's account is suspended, nothing they do counts as coming back. The person chosen becomes a convenor and the group's lead. The quiet lead stays a convenor when it was the convenors who voted, and becomes an ordinary member when it was the members. You will find the vote on the group's own screen, above the roster.
 - **A rogue lead convenor** can be removed by a community Decision. This is coming in a later update.
 
 ## Vouching

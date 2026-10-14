@@ -35,9 +35,10 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, createTreasury, adminAssignTreasuryOperator } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
-const PORT = 8697;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRg==';
 const HOUR = 60 * 60 * 1000;
@@ -55,9 +56,10 @@ type Id = { pubKeyHex: string; privateKey: crypto.KeyObject };
 function makeIdentity(callsign: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, avatar_url, status, joined_at, updated_at)
-                VALUES (?, ?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
-      .run(pubKeyHex, callsign, AVATAR);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, status, joined_at, updated_at)
+                VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+      .run(pubKeyHex, callsign);
+    setMemberPhoto(db, pubKeyHex, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
@@ -85,7 +87,8 @@ async function main(): Promise<void> {
     console.log('\nAn enterprise hosting an event, over real HTTP\n');
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const keeper = makeIdentity('KeeperKim');
     const stranger = makeIdentity('StrangerSam');

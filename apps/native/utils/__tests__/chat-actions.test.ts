@@ -213,6 +213,17 @@ describe('what a deleted message says', () => {
         expect(REMOVED_BY_HOST_TEXT).toBe(EVENT_CHAT_REMOVED_TEXT);
     });
 
+    it('reads as the author\'s own delete in every kind of chat once they deleted their account', () => {
+        // The node blanks every line of a deleted account (apps/server/src/engine/message-tombstone.ts): that is the
+        // author's act, not a host's or a keeper's, wherever the line was.
+        const gone = { senderId: THEM, metadata: { removed: true, removedBy: THEM, accountDeleted: true } };
+        for (const kind of ['event', 'enterprise', 'group', 'dm'] as const) expect(tombstoneText(gone, kind)).toBe(DELETED_BY_AUTHOR_TEXT);
+        expect(tombstoneText(gone)).toBe(DELETED_BY_AUTHOR_TEXT);
+        // A host's removal of a line already blanked keeps the mark (the node keeps the metadata it finds), and reads the same.
+        expect(tombstoneText({ senderId: THEM, metadata: { removed: true, removedBy: 'host-key', accountDeleted: true } }, 'event'))
+            .toBe(DELETED_BY_AUTHOR_TEXT);
+    });
+
     it('reads as the author\'s own delete in a DM, which has no moderator', () => {
         expect(tombstoneText({ senderId: ME, metadata: { removed: true, removedBy: ME } }, 'dm')).toBe(DELETED_BY_AUTHOR_TEXT);
         expect(tombstoneText({ senderId: THEM, metadata: { removed: true, removedBy: THEM } }, 'dm')).toBe(DELETED_BY_AUTHOR_TEXT);

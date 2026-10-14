@@ -25,6 +25,9 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 vi.mock('../db', () => ({
     applyDelta: vi.fn().mockResolvedValue(undefined),
+    communityCachesRenamed: vi.fn().mockResolvedValue(true),
+    copyGenerationNow: vi.fn(() => 0),
+    newCopyGeneration: vi.fn(),
     fetchFriendsFromServer: vi.fn().mockResolvedValue([]),
     getDb: vi.fn().mockResolvedValue({ getFirstAsync: vi.fn().mockResolvedValue({ count: 0 }) }),
 }));
@@ -164,6 +167,6 @@ describe('an author a guest view hides is never opened', () => {
     });
 
     it('a post opened on its own (getPost) never writes a guest view over a member\'s row', () => {
-        expect(read('utils/db.ts')).toMatch(/if \(viewOf\(res\) === 'guest' && await postsViewRefusal\(res, anchorUrl, \(await loadIdentity\(\)\)\?\.publicKey\)\) return null;/);
+        expect(read('utils/db.ts')).toMatch(/if \(viewOf\(res\) === 'guest' && await postsViewRefusal\(res, anchorUrl, \(await loadIdentity\(\)\)\?\.publicKey\)\) return false;/);
     });
 });

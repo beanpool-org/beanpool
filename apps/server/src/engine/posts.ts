@@ -2,17 +2,22 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount, parseReachPeers, type PostReach, type AudienceScope } from '@beanpool/core';
-import { db, writeTombstone, afterTransactionCommit } from '../db/db.js';
+import { isSyntheticAccount, isBeanAmount, parseReachPeers, type PostReach, type AudienceScope, type PushNoticeKind } from '@beanpool/core';
+import { db, writeTombstone, deletePlainRows, afterTransactionCommit, idNamesMoney, memberHasPhoto } from '../db/db.js';
+import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
 import { bumpPostsVersion } from './versions.js';
-import { isServableAvatarValue } from '@beanpool/core';
 import { ensureEventThread, syncEventThreadMembership } from './event-thread.js';
 import { assertNotMuted } from './auto-moderation.js';
+import { pollVoterNewOrWords } from './probation.js';
 import { assertNodeMember } from './members.js';
+import { postOutOfSight, marketplacePostOutOfSight, postInSightSql } from './post-sight.js';
 import { isAcceptablePhotoValue } from './avatar.js';
-import { getImageStore, postPhotoKey } from '../storage/image-store.js';
+import { getImageStore, isKeySafeId, postPhotoKey } from '../storage/image-store.js';
+import { hasBlocked } from './member-blocks.js';
+import { readMemberArea } from './member-area.js';
+import { getProfileSwitches } from '../config/node-profile.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
 import {
     getMember,
@@ -24,6 +29,8 @@ import {
     generateSearchKeywords,
     hasListedOffer,
     isEventHost,
+    convenorHostPaused,
+    CONVENOR_POWERS_PAUSED,
     EVENT_READABLE_AFTER_END_MS,
     publicBroadcastPost,
     CONTRIBUTION_REQUIRED_ERROR,
@@ -31,11 +38,32 @@ import {
     type EventRsvpStatus
 } from '@beanpool/engine';
 
-type BroadcastFn = (event: any, recipients?: string[]) => void;
+type BroadcastFn = (event: any, recipients?: string[], opts?: { listingParties?: string[] }) => void;
+
+/**
+ * Both sides of a listing's open deals (asked for, or taken and not yet done). A removal closes those deals before its
+ * `post_removed` goes out, so it names them to the broadcast, which then reaches them wherever they are on a node that
+ * syncs listings by area (state-engine.ts listingReach). Read before the removal's transaction.
+ */
+function openDealSides(postId: string): string[] {
+    const rows = db.prepare("SELECT buyer_pubkey, seller_pubkey FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending')")
+        .all(postId) as { buyer_pubkey: string; seller_pubkey: string }[];
+    return [...new Set(rows.flatMap(r => [r.buyer_pubkey, r.seller_pubkey]))];
+}
+
+/**
+ * A listing with a keeper's wage owed on it (deferred_wage_claims, pending): taking it down cancels the claim, a row a
+ * standby never writes (config/node-role.ts assertPlainTablesWritable), so there it is refused before anything is written.
+ */
+export function assertPostWagesWritable(postId: string): void {
+    if (getNodeRole() !== 'backup') return;
+    if (db.prepare("SELECT 1 FROM deferred_wage_claims WHERE post_id = ? AND status = 'pending' LIMIT 1").get(postId)) assertPlainTablesWritable();
+}
 
 /**
  * The post as the member who acted gets it back in the route's response. Each write below reads its post WITH the
- * voters, because the broadcast goes to member sockets (deliverBroadcast takes them off for any other socket); the one
+ * voters of an open-vote poll (an anonymous poll never carries them, getPosts), because the broadcast goes to member
+ * sockets (deliverBroadcast takes them off for any other socket); the one
  * who acted keeps them only if they read as a member of this node (readsAsMember) — a pruned author can still sign a
  * close, and a suspended one or a visitor can still vote, close or edit.
  */
@@ -69,6 +97,8 @@ function storedPhotoColumns(postId: string, photos: string[]): PhotoColumns[] {
 }
 
 const POST_PHOTO_FORMAT_ERROR = 'Each photo must be a JPEG, PNG or WebP image';
+export const POST_ID_TAKEN_ERROR = 'A new post needs an id nothing else has. Send it without one and this community makes one.';
+export const POST_ID_SHAPE_ERROR = 'A post id is up to 128 lowercase letters, digits, dots, dashes and underscores. Send it without one and this community makes one.';
 const HOLIDAY_MODE_ERROR = 'HOLIDAY_MODE: turn off holiday mode in Settings before trading.';
 
 /**
@@ -85,14 +115,13 @@ function assertMemberActive(publicKey: string): void {
 }
 
 function assertProfileComplete(publicKey: string): void {
-    const member = db.prepare("SELECT avatar_url, callsign FROM members WHERE public_key = ?").get(publicKey) as any;
+    const member = db.prepare("SELECT callsign FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!member) return;
-    // `isServableAvatarValue`, not a truthiness test. A row whose avatar_url is this node's own
-    // /api/avatar/ URL (written before updateProfile refused to store one) holds no photo at
-    // all — GET /api/avatar/<pk> 404s for it. Counting it as "has a photo" meant the gate stayed
-    // open on a photo nobody could see, and the phone's self-heal never got the signal to
-    // republish the real one.
-    if (!isServableAvatarValue(member.avatar_url)) {
+    // An avatar the node serves (@beanpool/core avatarRefOf): never this node's own /api/avatar/ URL sent back, which
+    // holds no photo at all. Counting that as "has a photo" kept the gate open on a photo nobody could see, and the
+    // phone's self-heal never got the signal to republish the real one. Held either way: moved (the row's reference) or
+    // still inline while a stopped move leaves the old column (db.ts memberHasPhoto, #1482).
+    if (!memberHasPhoto(publicKey)) {
         throw new Error('Please set a profile photo before using the marketplace. Tap your profile to add one.');
     }
     if (!member.callsign || member.callsign.trim().length < 2) {
@@ -169,6 +198,7 @@ type PushFn = (
     body: string,
     data: Record<string, any>,
     categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery',
+    kind: PushNoticeKind,
 ) => void;
 
 export const EVENT_PUSH_CATEGORY = 'marketplace' as const;
@@ -182,11 +212,16 @@ export function eventPushBody(kind: 'updated' | 'cancelled', eventTitle: string)
         : `${name} has a new time or place.`;
 }
 
-/** Everyone marked Going. Interested is deliberately not notified (decision 10). */
+/**
+ * Everyone marked Going who can still see the event. Interested is deliberately not notified (decision 10). A member
+ * removed from the event's group, or who left it or was banned, keeps their RSVP, and is told nothing of the event
+ * (engine/event-thread.ts canReadEventThread).
+ */
 export function eventGoingPubkeys(postId: string): string[] {
-    return (db.prepare(
-        "SELECT member_pubkey FROM event_rsvps WHERE post_id = ? AND status = 'going'"
-    ).all(postId) as any[]).map(r => r.member_pubkey as string);
+    return (db.prepare(`
+        SELECT r.member_pubkey FROM event_rsvps r JOIN posts p ON p.id = r.post_id
+         WHERE r.post_id = ? AND r.status = 'going' AND ${postInSightSql('p', 'r.member_pubkey')}
+    `).all(postId) as any[]).map(r => r.member_pubkey as string);
 }
 
 /**
@@ -215,6 +250,7 @@ function notifyEventChange(
             eventPushBody(kind, eventTitle),
             { screen: 'post', postId },
             EVENT_PUSH_CATEGORY,
+            'event.update',
         );
     } catch (e) {
         console.warn('[Events] change notification not sent:', e);
@@ -279,6 +315,23 @@ function normaliseReach(rawReach: unknown, rawPeers: unknown): { reach: PostReac
     return { reach: 'local', reachPeers: null };
 }
 
+/**
+ * Where a listing with no place stands on a node that syncs by area (DESIGN-global-sync-by-area §3.4, Q4): at its
+ * author's area, which was rounded to 0.1° when it was stored, so visibly rough. Placeless, it would be in nobody's set
+ * but its author's. A poll too: poll isolation drops any pin it is sent, and the area is how the polls a member sees are
+ * the ones made near them. An event carries its own pin. Null where the node doesn't sync by area or the author has no
+ * area: the listing stays placeless. createPost and updatePost both place by it, so an edit that takes the pin away
+ * puts the listing back at the area.
+ */
+function placelessListingArea(authorPublicKey: string): { lat: number; lng: number } | null {
+    if (!getProfileSwitches().nearbyListings) return null;
+    const area = readMemberArea(authorPublicKey);
+    return area ? { lat: area.lat, lng: area.lng } : null;
+}
+
+/** What a closed group answers a new post (state-engine GROUP_CLOSED is its chat's and its door's words). */
+export const GROUP_CLOSED_TO_POSTS = 'This group was closed by a vote of its members. It takes no new posts.';
+
 export function createPost(
     broadcast: BroadcastFn,
     type: 'offer' | 'need' | 'poll' | 'event',
@@ -300,6 +353,8 @@ export function createPost(
         createdBy?: string;
         pollOptions?: Array<{ id: string; text: string }>;
         durationDays?: number;
+        /** A poll's ballot: true for an open vote (members see who chose what). Anything else, or absent, is anonymous. */
+        pollOpenVote?: unknown;
         audienceScope?: AudienceScope;
         targetGroupId?: string;
         targetPubkey?: string;
@@ -308,6 +363,12 @@ export function createPost(
         eventEndAt?: unknown;
         eventPlaceName?: unknown;
         eventPrivateNote?: unknown;
+        /**
+         * A caller's own limit on new posts (a route's 100 a day, W-main): run once every refusal below has passed (an
+         * inactive or unfinished account, a group the author may not post to, a poll or event that is not valid, a Need
+         * with no Offer) and before anything is stored, so a limit never answers for a post that may not be made at all.
+         */
+        beforeWrite?: () => void;
     },
 ): MarketplacePost | null {
     const now = Date.now();
@@ -318,6 +379,20 @@ export function createPost(
     assertProfileComplete(authorPublicKey);
     assertNotOnHoliday(authorPublicKey);
     assertEnterpriseCanPost(authorPublicKey);
+    // A post's id, when the caller sends one (the phone app makes its own, a UUID, so a post made offline keeps it), is
+    // text that names no money: no account, member, escrow, project, deal or settlement (db.ts idNamesMoney). Nothing turns
+    // a post's id into an account now; the boot migration that read `escrow_<post id>` moved Beans out of whichever
+    // escrow a chosen id named, and nothing should be able to again.
+    //
+    // It names the post's photos in the image store as well (storage/image-store.ts postPhotoKey: `posts/<id>/…`), and
+    // they are stored before the row is written. So it is never a post's that is here already, whose photos those writes
+    // would land beside or over; and it is a key segment as it stands, in lowercase as every id the node and the apps
+    // make is. An id that a strip, a cut or a disk that folds case turned into another post's put its photos under that
+    // post's keys, and its edit or delete then took the other post's photos (review FABLE-sec-images, HIGH).
+    if (id) {
+        if (typeof id !== 'string' || idNamesMoney(id) || db.prepare('SELECT 1 FROM posts WHERE id = ?').get(id)) throw new Error(POST_ID_TAKEN_ERROR);
+        if (!isKeySafeId(id) || id !== id.toLowerCase()) throw new Error(POST_ID_SHAPE_ERROR);
+    }
 
     const audienceScope: AudienceScope = (options?.audienceScope as AudienceScope) || 'public';
     if (!['public', 'group', 'direct'].includes(audienceScope)) {
@@ -351,19 +426,26 @@ export function createPost(
         if (!isMem) {
             throw new Error('UNAUTHORIZED: Must be an active convenor or member to post to a group');
         }
+        // A group its members closed by a vote takes no new post: offers, needs, polls and events (close_group, §2.3).
+        if (db.prepare('SELECT 1 FROM group_closures WHERE group_id = ?').get(options.targetGroupId)) {
+            throw new Error(GROUP_CLOSED_TO_POSTS);
+        }
     } else if (audienceScope === 'direct') {
         if (!options?.targetPubkey && !options?.assignedTo) {
             throw new Error('targetPubkey or assignedTo is required when audienceScope is direct');
         }
         if (options?.targetPubkey) {
             const targetMem = db.prepare("SELECT status FROM members WHERE public_key = ?").get(options.targetPubkey) as any;
-            if (!targetMem || targetMem.status === 'pruned') {
+            // A listing addressed to someone who has blocked its author (engine/member-blocks.ts) would put their words
+            // and photos in that person's feed: refused in the words a target who isn't here gets. No app addresses a
+            // listing to one member; only a request made by hand meets this.
+            if (!targetMem || targetMem.status === 'pruned' || hasBlocked(options.targetPubkey, authorPublicKey)) {
                 throw new Error('Target member not found or pruned');
             }
         }
         if (options?.assignedTo) {
             const assignedMem = db.prepare("SELECT status FROM members WHERE public_key = ?").get(options.assignedTo) as any;
-            if (!assignedMem || assignedMem.status === 'pruned') {
+            if (!assignedMem || assignedMem.status === 'pruned' || hasBlocked(options.assignedTo, authorPublicKey)) {
                 throw new Error('Assigned member not found or pruned');
             }
         }
@@ -445,7 +527,10 @@ export function createPost(
         validatePostPhotos(photos);
     }
 
+    if (type !== 'event' && (lat == null || lng == null)) ({ lat, lng } = placelessListingArea(authorPublicKey) ?? { lat, lng });
+
     if (type === 'need' && !hasListedOffer(db, authorPublicKey)) throw new Error(CONTRIBUTION_REQUIRED_ERROR);
+    options?.beforeWrite?.();
 
     const finalId = id || crypto.randomUUID();
     const createdAt = new Date(now).toISOString();
@@ -483,14 +568,17 @@ export function createPost(
         }
 
         db.prepare(`INSERT INTO posts (
-            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, audience_scope, target_group_id, target_pubkey, assigned_to,
+            id, type, category, title, description, credits, price_type, author_pubkey, created_at, active, status, repeatable, lat, lng, updated_at, search_keywords, cash_also_needed, reach, reach_peers, created_by, poll_options, poll_closes_at, poll_open_vote, audience_scope, target_group_id, target_pubkey, assigned_to,
             event_start_at, event_end_at, event_place_name, event_private_note, event_state
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'active', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
             finalId, type, category, title, description, credits, priceType, authorPublicKey, createdAt,
             repeatable ? 1 : 0, lat ?? null, lng ?? null, createdAt, searchKeywords,
             cashAlsoNeeded ? 1 : 0, reach, reachPeers, options?.createdBy ?? null,
             cleanPollOptions ? JSON.stringify(cleanPollOptions) : null,
             pollClosesAt,
+            // Polls are anonymous unless their creator chose an open vote (Marty, 2026-09-28). Only `true` opens one: an
+            // app that predates the choice sends nothing, and its poll is anonymous.
+            type === 'poll' && options?.pollOpenVote === true ? 1 : 0,
             audienceScope,
             audienceScope === 'group' ? (options?.targetGroupId ?? null) : null,
             audienceScope === 'direct' ? (options?.targetPubkey ?? null) : null,
@@ -555,9 +643,22 @@ export function isOwnListing(postId: unknown, publicKey: string): boolean {
     return !!row && row.author_pubkey === publicKey && (row.type === 'offer' || row.type === 'need') && row.origin_node == null;
 }
 
+/** The code a suspended convenor's refusal carries, for routes that answer 403 by code (routes/marketplace.ts). */
+export const CONVENOR_PAUSED_CODE = 'convenor_suspended';
+
+/**
+ * Refuse a suspended convenor acting on someone else's group post or event (@beanpool/engine convenorHostPaused): 403,
+ * in the words the group routes use. Their convenor power is resting until the suspension ends, not gone.
+ */
+function assertConvenorHostNotPaused(row: { author_pubkey: string; audience_scope?: string | null; target_group_id?: string | null }, actor: string): void {
+    if (!convenorHostPaused(db, row, actor)) return;
+    throw Object.assign(new Error(CONVENOR_POWERS_PAUSED), { status: 403, statusCode: 403, code: CONVENOR_PAUSED_CODE });
+}
+
 export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: string, push?: PushFn): boolean {
     const postRow = db.prepare("SELECT id, type, title, author_pubkey, target_group_id, audience_scope, target_pubkey, assigned_to FROM posts WHERE id = ?").get(id) as any;
     if (!postRow) return false;
+    assertPostWagesWritable(id);
 
     const isDirectAuthor = postRow.author_pubkey === callerPublicKey;
     const isTreasuryAuthor = !isDirectAuthor && !!db.prepare(
@@ -576,11 +677,14 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
     if (!isAuthor && !isConvenor) {
         return false;
     }
+    // Someone else's group post, as a convenor whose account is suspended: refused, saying why.
+    if (!isAuthor) assertConvenorHostNotPaused(postRow, callerPublicKey);
     // Someone else's post, as a keeper or a convenor: only from a member of this node. Both rows read above outlast a
     // prune, and a pending re-key leaves them on the old key.
     if (!isDirectAuthor) assertNodeMember(callerPublicKey);
 
     const pendingTx = db.prepare(`SELECT COUNT(*) as c FROM marketplace_transactions WHERE post_id = ? AND status = 'pending'`).get(id) as any;
+    const dealSides = openDealSides(id);
     if (pendingTx && pendingTx.c > 0) throw new Error('This post has a deal in escrow — complete or cancel the deal before deleting it');
 
     let removed = false;
@@ -602,14 +706,27 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
         `).run(id, callerPublicKey, callerPublicKey, callerPublicKey);
         if (result.changes === 0) return;
         removed = true;
-        // Removing an event is cancelling it: the card shows CANCELLED to anyone who can still open it.
-        db.prepare(`UPDATE posts SET event_state = 'cancelled' WHERE id = ? AND type = 'event'`).run(id);
-        db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND status='requested'`).run(id);
-        db.prepare(`UPDATE deferred_wage_claims SET status = 'cancelled' WHERE post_id = ? AND status = 'pending'`).run(id);
+        cancelPostFollowOns(id);
     })();
     if (!removed) return false;
     bumpPostsVersion();
+    announcePostCancelled(broadcast, postRow, dealSides, push, callerPublicKey);
+    return true;
+}
 
+/** What a cancelled post takes with it, in the caller's transaction (removePost; a group's close, cancelClosedGroupPosts). */
+function cancelPostFollowOns(id: string): void {
+    // Removing an event is cancelling it: the card shows CANCELLED to anyone who can still open it.
+    db.prepare(`UPDATE posts SET event_state = 'cancelled' WHERE id = ? AND type = 'event'`).run(id);
+    db.prepare(`UPDATE marketplace_transactions SET status='rejected', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE post_id=? AND status='requested'`).run(id);
+    db.prepare(`UPDATE deferred_wage_claims SET status = 'cancelled' WHERE post_id = ? AND status = 'pending'`).run(id);
+}
+
+type CancelledPostRow = { id: string; type: string; title: string; author_pubkey: string; target_group_id: string | null; audience_scope: string | null; target_pubkey: string | null; assigned_to: string | null };
+
+/** After the commit: the post's audience hears it went, and an event's goers are told it is cancelled. */
+function announcePostCancelled(broadcast: BroadcastFn, postRow: CancelledPostRow, dealSides: string[], push: PushFn | undefined, actorPubkey: string): void {
+    const id = postRow.id;
     let recipients: string[] | undefined;
     if (postRow.audience_scope === 'group' && postRow.target_group_id) {
         const rows = db.prepare("SELECT member_pubkey FROM group_members WHERE group_id = ? AND status = 'active'").all(postRow.target_group_id) as any[];
@@ -621,13 +738,60 @@ export function removePost(broadcast: BroadcastFn, id: string, callerPublicKey: 
     // The audience rides along so the apps can tell a public removal, which they apply without fetching, from a
     // group or direct one, which keeps the doorbell (@beanpool/core `livePostChange`). A socket without a member
     // gets the bare `{ type }` doorbell either way. NULL is a row from before audience scoping: public.
-    broadcast({ type: 'post_removed', id, audienceScope: postRow.audience_scope ?? 'public' }, recipients);
+    broadcast({ type: 'post_removed', id, audienceScope: postRow.audience_scope ?? 'public' }, recipients, { listingParties: dealSides });
     // Cancelling an event tells everyone who said they were going (§2.2). The chat turns read-only on its
     // own: event-thread.ts reads `event_state`, which the transaction above has already set to 'cancelled'.
     if (postRow.type === 'event') {
-        notifyEventChange(push, 'cancelled', id, postRow.title, callerPublicKey);
+        notifyEventChange(push, 'cancelled', id, postRow.title, actorPubkey);
     }
-    return true;
+}
+
+/**
+ * close_group (DESIGN-group-decisions §2.3): every live post of the group (paused ones too) is cancelled as removePost
+ * cancels one, in the vote's transaction. A deal already in escrow is left to finish (it holds the Beans); a deal only
+ * asked for is declined. The posts keep their group, so nobody outside it ever sees them. Hand the result to
+ * announceClosedGroupPosts after the commit.
+ */
+export function cancelClosedGroupPosts(groupId: string): Array<{ row: CancelledPostRow; dealSides: string[] }> {
+    const rows = db.prepare(
+        "SELECT id, type, title, author_pubkey, target_group_id, audience_scope, target_pubkey, assigned_to FROM posts WHERE target_group_id = ? AND active = 1"
+    ).all(groupId) as CancelledPostRow[];
+    const cancelled: Array<{ row: CancelledPostRow; dealSides: string[] }> = [];
+    for (const row of rows) {
+        const dealSides = openDealSides(row.id);
+        const res = db.prepare("UPDATE posts SET active = 0, status = 'cancelled', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ? AND active = 1").run(row.id);
+        if (res.changes === 0) continue;
+        cancelPostFollowOns(row.id);
+        cancelled.push({ row, dealSides });
+    }
+    return cancelled;
+}
+
+/** After a close's commit: the posts version moves (a cached feed revalidates to the change), and each post's removal is heard. */
+export function announceClosedGroupPosts(broadcast: BroadcastFn, cancelled: Array<{ row: CancelledPostRow; dealSides: string[] }>, push?: PushFn): void {
+    if (cancelled.length === 0) return;
+    bumpPostsVersion();
+    for (const { row, dealSides } of cancelled) announcePostCancelled(broadcast, row, dealSides, push, 'SYSTEM');
+}
+
+export const PRICE_FROZEN_ERROR = 'This post has a deal in progress, so its price can’t change until that deal is finished. To change the price, cancel or decline the deal first.';
+
+/**
+ * A listing's price holds while any deal on it is open: asked for and waiting ('requested'), or with the Beans held
+ * ('pending'). The deal was struck at that price and its row keeps it (credits for its hours); a price edited under it
+ * told the other side something they never agreed to (FABLE-sec-money MEDIUM 2). Completion no longer reads the
+ * listing's price at all (engine/escrow.ts completePostTransaction); this keeps what the post shows true to the deal.
+ * Every kind of listing a deal can be made on, Offer or Need, the author's side either way. Only a real change is
+ * refused: an edit that sends the same price back (every edit form does) goes through. Before anything is written.
+ */
+function assertPriceNotFrozen(id: string, existingPost: MarketplacePost, updates: Partial<MarketplacePost>): void {
+    const creditsChange = updates.credits !== undefined && Number(updates.credits) !== Number(existingPost.credits);
+    const unitChange = updates.priceType !== undefined && updates.priceType !== existingPost.priceType;
+    if (!creditsChange && !unitChange) return;
+    const open = db.prepare(
+        "SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending') LIMIT 1"
+    ).get(id);
+    if (open) throw Object.assign(new Error(PRICE_FROZEN_ERROR), { status: 409, statusCode: 409, code: 'price_frozen' });
 }
 
 export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, push?: PushFn, actorPubkey?: string): MarketplacePost | null {
@@ -638,6 +802,9 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     const actorPublicKey = actorPubkey || authorPublicKey;
     const eventRow = db.prepare("SELECT type, active, status, event_state, event_end_at, author_pubkey, audience_scope, target_group_id FROM posts WHERE id = ?").get(id) as any;
     if (eventRow?.type === 'event') {
+        // A convenor whose account is suspended hosts none of their group's events until it ends: refused, saying why,
+        // rather than answered as someone who never hosted it.
+        assertConvenorHostNotPaused(eventRow, authorPublicKey);
         // Every host may edit, not only the author (§2.2) — so the author check below is the host check.
         if (!isEventHost(db, eventRow, authorPublicKey)) return null;
         // Only from a member of this node, whichever host: the edit goes out under the author's name and moves everyone
@@ -684,6 +851,10 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             }
             if (updates.pollOptions !== undefined) {
                 throw new Error('Cannot edit poll options once votes have been cast');
+            }
+            // Whether it is an open vote is what every voter was told when they voted: never changed after the first.
+            if (updates.pollOpenVote !== undefined && (updates.pollOpenVote === true) !== !!existingPost.pollOpenVote) {
+                throw new Error('Cannot change whether a poll is an open vote once votes have been cast');
             }
         }
         // Enforce poll isolation during updates
@@ -757,6 +928,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         }
     }
 
+    assertPriceNotFrozen(id, existingPost, updates);
+
     if (updates.photos !== undefined && Array.isArray(updates.photos)) {
         // A client that is not changing a photo sends back the URL it was given, and this turns it into the
         // photo again. Once the row is evacuated the bytes come from the store — `photoDataOf` rebuilds the
@@ -794,6 +967,13 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         validatePostPhotos(updates.photos);
     }
 
+    // An edit that takes the pin away, on a node that syncs by area, puts the listing at its author's area, as a new one
+    // with no place is (placelessListingArea). An event can't lose its pin (assertEventPin); a poll's place is never edited.
+    if (existingPost.type !== 'event' && (updates.lat === null || updates.lng === null)) {
+        const area = placelessListingArea(existingPost.authorPublicKey);
+        if (area) { updates.lat = area.lat; updates.lng = area.lng; }
+    }
+
     const fields: string[] = [];
     const values: any[] = [];
 
@@ -808,6 +988,12 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     if (updates.cashAlsoNeeded !== undefined) { fields.push('cash_also_needed = ?'); values.push((updates.cashAlsoNeeded === true || (updates.cashAlsoNeeded as any) === 'true') ? 1 : 0); }
     if (updates.lat !== undefined) { fields.push('lat = ?'); values.push(updates.lat); }
     if (updates.lng !== undefined) { fields.push('lng = ?'); values.push(updates.lng); }
+
+    // The creator may still change the ballot while nobody has voted (refused above once anyone has). Only `true` opens it.
+    if (existingPost.type === 'poll' && updates.pollOpenVote !== undefined) {
+        fields.push('poll_open_vote = ?');
+        values.push(updates.pollOpenVote === true ? 1 : 0);
+    }
 
     if (existingPost.type === 'poll' && updates.pollOptions !== undefined) {
         const rawOpts = updates.pollOptions;
@@ -888,7 +1074,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
             );
             nextPhotoColumns.forEach((c, idx) => insertPhoto.run(id, c.photo_data, idx, now, c.storage_key, c.sha256, c.bytes, c.mime));
-            if (doomed.length > 0) afterTransactionCommit(() => deleteStoredObjects(doomed));
+            if (doomed.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, doomed));
         }
     })();
 
@@ -934,10 +1120,12 @@ export function rsvpEvent(
         throw new Error('Only active members can RSVP to events');
     }
 
-    const row = db.prepare("SELECT id, type, active, status, event_state, event_end_at, author_pubkey, audience_scope, target_group_id, hidden_by_reports_at FROM posts WHERE id = ?").get(postId) as any;
+    const row = db.prepare("SELECT id, type, active, status, event_state, event_end_at, author_pubkey, audience_scope, target_group_id, target_pubkey, assigned_to, hidden_by_reports_at FROM posts WHERE id = ?").get(postId) as any;
     // An event hidden by reports (G3) is not there for anyone but its author, here as when read by id: an RSVP
-    // would hand back the whole event.
-    if (!row || row.type !== 'event' || (row.hidden_by_reports_at && row.author_pubkey !== memberPublicKey)) {
+    // would hand back the whole event. Nor is a group's event for anyone outside the group (engine/post-sight.ts), before
+    // its cancellation or its end can say it exists.
+    if (!row || row.type !== 'event' || (row.hidden_by_reports_at && row.author_pubkey !== memberPublicKey)
+        || postOutOfSight(row, memberPublicKey)) {
         throw new Error('Event not found');
     }
     if (!row.active || row.status !== 'active' || row.event_state === 'cancelled') {
@@ -1015,9 +1203,24 @@ export function rsvpEvent(
     return { success: true, post: updatedPost };
 }
 
+/**
+ * Closes, for good, every poll past its closing time (status `completed`, with a new updated_at), so a phone's delta sync
+ * and a cached board read (the posts version in the ETag) get its closed result: an anonymous poll says where its votes
+ * came from only once it has closed (@beanpool/engine pollOriginsMayShow), and a read before this ran was answered open.
+ * Run each minute on a main server (state-engine armMainServerTimers). One pass over the open posts' index.
+ */
+export function closeExpiredPolls(nowIso: string = new Date().toISOString()): number {
+    const res = db.prepare(
+        "UPDATE posts SET status = 'completed', updated_at = ? WHERE status = 'active' AND type = 'poll' AND poll_closes_at IS NOT NULL AND poll_closes_at <= ?"
+    ).run(nowIso, nowIso);
+    if (res.changes > 0) bumpPostsVersion();
+    return res.changes;
+}
+
 export function closePoll(broadcast: BroadcastFn, postId: string, authorPublicKey: string): MarketplacePost | null {
     const post = getPosts(db, { id: postId, includeAllScopes: true, includeVoters: true })[0];
-    if (!post || post.type !== 'poll') {
+    // A group's or a direct poll this caller can't see is an id nobody has (engine/post-sight.ts), not "only the author".
+    if (!post || post.type !== 'poll' || marketplacePostOutOfSight(post, authorPublicKey)) {
         throw new Error('Poll not found');
     }
     if (post.authorPublicKey !== authorPublicKey) {
@@ -1061,8 +1264,10 @@ export function votePoll(
 
     const post = getPosts(db, { id: postId, includeAllScopes: true })[0];
     // A poll hidden by reports (G3) is not there for anyone but its author, here as when read by id: a vote would
-    // hand back the whole poll.
-    if (!post || post.type !== 'poll' || (post.hiddenByReportsAt && post.authorPublicKey !== voterPublicKey)) {
+    // hand back the whole poll. Nor is a group's or a direct poll for anyone who can't see it (engine/post-sight.ts),
+    // before its being closed can say it exists. An observer sees a group's poll, and is refused the vote below.
+    if (!post || post.type !== 'poll' || (post.hiddenByReportsAt && post.authorPublicKey !== voterPublicKey)
+        || marketplacePostOutOfSight(post, voterPublicKey)) {
         throw new Error('Poll not found');
     }
     if (post.status !== 'active') {
@@ -1129,14 +1334,19 @@ export function votePoll(
             throw new Error('This poll is closed');
         }
 
+        // Whether the voter is a new or 12-word account now, kept with the vote (engine/probation.ts pollVoterNewOrWords).
+        // A changed vote keeps the first one's: nothing the voter does later moves where the poll says its votes came from.
+        // Not on an open vote: it names its voters, so it never says where its votes came from, and keeps no kind to say it
+        // with (whether a poll is an open vote can't change once a vote is in).
         db.prepare(`
-            INSERT INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO poll_votes (post_id, voter_pubkey, option_id, signature, created_at, voter_new_or_words)
+            VALUES (?, ?, ?, ?, ?, ?)
             ON CONFLICT(post_id, voter_pubkey) DO UPDATE SET
                 option_id = excluded.option_id,
                 signature = excluded.signature,
-                created_at = excluded.created_at
-        `).run(postId, voterPublicKey, optionId, signature || '', nowIso);
+                created_at = excluded.created_at,
+                voter_new_or_words = COALESCE(poll_votes.voter_new_or_words, excluded.voter_new_or_words)
+        `).run(postId, voterPublicKey, optionId, signature || '', nowIso, post.pollOpenVote === true ? null : pollVoterNewOrWords(voterPublicKey));
     })();
 
     bumpPostsVersion();
@@ -1197,15 +1407,26 @@ type ConservingTxnFn = <T>(fn: () => T) => T;
  * whole when the post was removed. Reported rather than swallowed: the shortfall is a real discrepancy
  * between the deal rows and the ledger, and the only honest thing to do is refund what is actually there
  * and say so. See `ESCROW_FLOOR` in @beanpool/core for how the node got into that state.
+ *
+ * Also reported, with `owed: null`, for a trade row that holds no valid amount (text struck from a listing priced
+ * "abc" before #1379): nobody can say what it owed, so the buyer gets everything its escrow held and the moderator is
+ * told (describeRefundShortfall).
  */
 export interface EscrowRefundShortfall {
     transactionId: string;
     postId: string;
     buyerPubkey: string;
-    /** What the trade row said the buyer paid in. */
-    owed: number;
+    /** What the trade row said the buyer paid in; null when the row holds no valid amount of Beans. */
+    owed: number | null;
     /** What the escrow actually held, and therefore all that could be returned. */
     refunded: number;
+}
+
+/** A shortfall in words, for the moderator who made the removal. */
+export function describeRefundShortfall(s: EscrowRefundShortfall): string {
+    return s.owed === null
+        ? `trade ${s.transactionId} held no valid amount, so its buyer got back what its escrow held, ${s.refunded}`
+        : `trade ${s.transactionId} owed ${s.owed}, refunded ${s.refunded}`;
 }
 
 /** How much this escrow account actually holds. Supplied by the host, which owns the ledger. */
@@ -1235,7 +1456,12 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
     const eventRow = db.prepare("SELECT title FROM posts WHERE id = ? AND type = 'event'").get(postId) as { title: string } | undefined;
     // Same audience as removePost: a group or direct post's removal goes to the people who could see it.
     const audienceRow = db.prepare('SELECT audience_scope, target_group_id, author_pubkey, target_pubkey, assigned_to FROM posts WHERE id = ?').get(postId) as any;
-    const runTx = conservingTxn ? (fn: () => void) => conservingTxn(fn) : (fn: () => void) => db.transaction(fn)();
+    // The conservingTransaction only when a pending deal's escrow may be refunded: that is the one Bean move here. A
+    // listing with none is rows alone, so a moderator can take it down while the Commons pot is unknown, when every
+    // conservingTransaction refuses at its pre-flush (#1465 re-review, NB-3). One with a held deal still refuses then.
+    const holdsDeal = !!transferFn && !!db.prepare("SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status = 'pending' LIMIT 1").get(postId);
+    const dealSides = openDealSides(postId);
+    const runTx = conservingTxn && holdsDeal ? (fn: () => void) => conservingTxn(fn) : (fn: () => void) => db.transaction(fn)();
     runTx(() => {
         if (transferFn) {
             const pending = db.prepare("SELECT * FROM marketplace_transactions WHERE post_id=? AND status='pending'").all(postId) as any[];
@@ -1246,21 +1472,29 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
                 // held nothing paid the buyer out of thin air — measured on the test node (2026-09-24):
                 // two escrow accounts left at -5 and -10 by a single moderator removal, each with no hold
                 // ever recorded against it. A removal is a tidy-up; it must never create Beans.
-                const held = hooks?.balanceOf ? hooks.balanceOf(escrowAccount) : tx.credits;
-                const refund = Math.max(0, Math.min(tx.credits, held));
+                //
+                // Every figure here is a number of Beans or treated as none (isBeanAmount). A row holding text ("abc",
+                // struck before #1379) made Math.min NaN, so `refund > 0` was false and nothing went back: the buyer's
+                // Beans stayed in an escrow of a cancelled deal, which nothing else can reach (sync check F1,
+                // 2026-10-02). Nobody can say what such a row owed, so its buyer gets everything the escrow holds. An
+                // escrow that isn't a number of Beans itself (NaN, NULL, below 0) gives back nothing.
+                const owed = isBeanAmount(tx.credits) ? tx.credits : null;
+                const rawHeld = hooks?.balanceOf ? hooks.balanceOf(escrowAccount) : owed ?? 0;
+                const held = isBeanAmount(rawHeld) ? rawHeld : 0;
+                const refund = owed === null ? held : Math.min(owed, held);
                 if (refund > 0) {
                     const refunded = transferFn(escrowAccount, tx.buyer_pubkey, refund, `Escrow refund for removed post`, 'escrow', true);
                     // Inside the caller's conservingTransaction, so this unwinds the whole removal rather
                     // than leaving a cancelled trade beside an escrow that never paid out.
                     if (!refunded) throw new Error(`Escrow refund failed for trade ${tx.id} (${refund} from ${escrowAccount})`);
                 }
-                if (refund < tx.credits) {
-                    console.warn(`[Moderation] Escrow short on trade ${tx.id} (post ${postId}): row says ${tx.credits}, escrow held ${held}, refunded ${refund}`);
+                if (owed === null || refund < owed) {
+                    console.warn(`[Moderation] Escrow short on trade ${tx.id} (post ${postId}): row says ${String(tx.credits)}, escrow held ${String(rawHeld)}, refunded ${refund}`);
                     hooks?.onRefundShortfall?.({
                         transactionId: tx.id,
                         postId,
                         buyerPubkey: tx.buyer_pubkey,
-                        owed: tx.credits,
+                        owed,
                         refunded: refund,
                     });
                 }
@@ -1278,7 +1512,7 @@ export function adminDeletePost(broadcast: BroadcastFn, postId: string, transfer
     if (!deleted) return false;
     broadcast({ type: 'post_removed', id: postId, audienceScope: audienceRow?.audience_scope ?? 'public' }, audienceRow?.audience_scope === 'direct'
         ? Array.from(new Set([audienceRow.author_pubkey, audienceRow.target_pubkey, audienceRow.assigned_to].filter(Boolean) as string[]))
-        : audienceRecipients(audienceRow ?? {}));
+        : audienceRecipients(audienceRow ?? {}), { listingParties: dealSides });
     if (eventRow) notifyEventChange(push, 'cancelled', postId, eventRow.title, 'SYSTEM');
     return true;
 }
@@ -1348,10 +1582,9 @@ export function scrubEndedEvents(nowMs = Date.now()): number {
                 db.prepare('DELETE FROM event_rsvps WHERE post_id = ?').run(id);
                 for (const r of rsvps) writeTombstone('event_rsvps', `${id}|${r.member_pubkey}`);
 
-                // The reminder marks for this event go with them, and with NO tombstone: they are this
-                // node's own delivery log, never replicated, and an event 30 days gone will not remind
-                // anybody again whether the marks are here or not (docs/events-on-the-map.md §2.2).
-                try { db.prepare('DELETE FROM event_reminders_sent WHERE post_id = ?').run(id); } catch { }
+                // The reminder marks for this event go with them, each with a tombstone: they are copied to a
+                // standby (a plain table, design G4), which drops them too.
+                deletePlainRows('event_reminders_sent', 'post_id = ?', id);
 
                 // The chat's id IS the post id (§2.1). The conversation row itself stays: it is the empty
                 // shell of a chat nobody can open any more, and deleting it would cascade nothing useful

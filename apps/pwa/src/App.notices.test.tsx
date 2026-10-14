@@ -49,12 +49,14 @@ vi.mock('./lib/sync', () => ({
 }));
 
 vi.mock('./lib/api', () => ({
+    // The page's own server unless Settings points it elsewhere: App reads it for the web app's update banner.
+    getNodeApiUrl: vi.fn(() => ''),
     registerMember: vi.fn(async () => ({ ok: true })),
     checkMembership: vi.fn(async () => ({ isMember: true })),
     getConversations: vi.fn(async () => ({ conversations: [], totalUnread: 0 })),
     getMyMarketplaceTransactions: vi.fn(async () => []),
     getCommunityHealth: vi.fn(async () => ({ online: true, version: '1.2.26' })),
-    getMyActiveRecoveryCollections: vi.fn(async () => []),
+    getMyActiveRecoveryCollections: vi.fn(async () => ({ count: 0, collections: [] })),
     getCommunityMe: vi.fn(),
     getUnseenNotices: vi.fn(),
     markNoticesSeen: vi.fn(),
@@ -141,7 +143,7 @@ describe('The web app shows moderation notices kept while it was closed', () => 
 
     it('a live notice the node also kept is shown once, and marked seen when acknowledged, so the next open does not show it again', async () => {
         render(<App />);
-        await screen.findByTestId('marketplace-page');
+        await screen.findByTestId('home-page');
         await waitFor(() => expect(hooks.announce).not.toBeNull());
         await announce({ type: 'system_announcement', title: REMOVED.title, body: REMOVED.body, severity: 'info', kind: 'post_removed', noticeId: REMOVED.id });
         const shown = await screen.findByRole('alertdialog');
@@ -161,7 +163,7 @@ describe('The web app shows moderation notices kept while it was closed', () => 
         vi.mocked(api.getUnseenNotices).mockRejectedValue(Object.assign(new Error('Request failed: 404'), { status: 404 }));
         vi.mocked(api.markNoticesSeen).mockRejectedValue(new Error('offline'));
         render(<App />);
-        expect(await screen.findByTestId('marketplace-page')).toBeInTheDocument();
+        expect(await screen.findByTestId('home-page')).toBeInTheDocument();
         await waitFor(() => expect(api.getUnseenNotices).toHaveBeenCalled());
         expect(alertDialog()).toBeNull();
         await waitFor(() => expect(hooks.announce).not.toBeNull());
@@ -172,7 +174,7 @@ describe('The web app shows moderation notices kept while it was closed', () => 
     it('a guest reads no notices and gets no pause card', async () => {
         vi.mocked(api.checkMembership).mockResolvedValue({ isMember: false } as any);
         render(<App />);
-        await screen.findByTestId('marketplace-page');
+        await screen.findByTestId('home-page');
         await waitFor(() => expect(api.checkMembership).toHaveBeenCalled());
         await new Promise(r => setTimeout(r, 50));
         expect(api.getUnseenNotices).not.toHaveBeenCalled();
@@ -201,7 +203,7 @@ describe('A paused member sees it plainly', () => {
     it('nothing when not paused', async () => {
         vi.mocked(api.getCommunityMe).mockResolvedValue(NOT_PAUSED);
         render(<App />);
-        await screen.findByTestId('marketplace-page');
+        await screen.findByTestId('home-page');
         await waitFor(() => expect(api.getCommunityMe).toHaveBeenCalled());
         expect(screen.queryByTestId('moderation-pause-card')).toBeNull();
     });
@@ -209,7 +211,7 @@ describe('A paused member sees it plainly', () => {
     it('a pause shown live puts the card up at once, and its lift takes it down', async () => {
         vi.mocked(api.getCommunityMe).mockResolvedValue(NOT_PAUSED);
         render(<App />);
-        await screen.findByTestId('marketplace-page');
+        await screen.findByTestId('home-page');
         await waitFor(() => expect(hooks.announce).not.toBeNull());
         vi.mocked(api.getCommunityMe).mockResolvedValue(PAUSED);
         await announce({ type: 'system_announcement', title: '🛡️ Posting paused', body: 'You can’t post.', severity: 'info', kind: 'moderation_muted', noticeId: 'n-muted' });

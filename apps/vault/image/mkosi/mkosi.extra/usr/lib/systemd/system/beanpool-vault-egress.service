@@ -1,0 +1,32 @@
+# The custodians' off-box store, webhook and mail server (src/shared/settings.ts) for the firewall: root reads the
+# settings file the API keeps and writes their names into the resolver's extra config (/run/beanpool-vault-egress.conf,
+# src/egress), which lets the API reach them and nothing else of theirs. At boot before the resolver starts; again,
+# through beanpool-vault-egress.path, whenever the settings change, and then the resolver restarts to read them.
+[Unit]
+Description=BeanPool key vault: let out to the custodians' backup store and alert channels
+After=local-fs.target systemd-tmpfiles-setup.service
+Before=beanpool-vault-dns.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/node/bin/node --disable-sigusr1 /usr/lib/beanpool-vault/vault-egress.mjs --reload
+LimitCORE=0
+IPAddressDeny=any
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_UNIX
+ProtectSystem=strict
+ReadWritePaths=/run
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

@@ -56,6 +56,8 @@ process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
+import { localFetch } from './keepalive-test-fetch.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -84,7 +86,7 @@ function signedHeaders(method: string, path: string, body: string, id: Id): Reco
 }
 
 async function getText(path: string, id: Id): Promise<string> {
-    const res = await fetch(`${BASE}${path}`, { headers: signedHeaders('GET', path, '', id) });
+    const res = await localFetch(`${BASE}${path}`, { headers: signedHeaders('GET', path, '', id) });
     if (res.status !== 200) throw new Error(`GET ${path} → ${res.status} ${await res.text()}`);
     return res.text();
 }
@@ -93,16 +95,20 @@ async function getJson(path: string, id: Id): Promise<any[]> {
     return JSON.parse(await getText(path, id));
 }
 
-/** A read nobody signs: what any stranger gets. */
+/**
+ * A read by a member with no tie to anyone here (no listing, deal or enterprise): what any stranger got while the board
+ * was public on every node. A local community's board is its members' since 2026-09-28, so a stranger reads none of it
+ * (test-privacy-defaults); this bystander stands where the stranger stood.
+ */
+let BYSTANDER: Id | null = null;
 async function getUnsigned(path: string): Promise<any[]> {
-    const res = await fetch(`${BASE}${path}`);
-    if (res.status !== 200) throw new Error(`GET ${path} → ${res.status} ${await res.text()}`);
-    return res.json() as Promise<any[]>;
+    if (!BYSTANDER) throw new Error('setup: no bystander');
+    return getJson(path, BYSTANDER);
 }
 
 async function postJson(path: string, payload: unknown, id: Id): Promise<{ status: number; body: any }> {
     const body = JSON.stringify(payload);
-    const res = await fetch(`${BASE}${path}`, {
+    const res = await localFetch(`${BASE}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...signedHeaders('POST', path, body, id) },
         body,
@@ -211,7 +217,7 @@ class Phone {
     async openEventDetail(postId: string): Promise<any> {
         const path = `/api/marketplace/posts?id=${encodeURIComponent(postId)}`;
         const stored = this.httpCache.get(path);
-        const res = await fetch(`${BASE}${path}`, {
+        const res = await localFetch(`${BASE}${path}`, {
             headers: { ...signedHeaders('GET', path, '', this.id), ...(stored ? { 'If-None-Match': stored.etag } : {}) },
         });
         let raw: string;
@@ -272,6 +278,11 @@ async function main() {
     se.initStateEngine();
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
+    // The pricing guide's first cycle runs 5 s after the server starts and walks every listing. On a slow CI runner it ran
+    // inside the window where the plan check below records every statement, and failed it (main CI 36717592816). Stopped:
+    // this suite asks what the phone's delta read runs, and nothing here reads the pricing guide.
+    const { stopPricingAggregatorWorker } = await import('./pricing-aggregator.js');
+    stopPricingAggregatorWorker();
 
     // Time passing, for a member: their row last changed at `at`, whatever changed it. On a node from before
     // members.board_standing_changed_at there is only updated_at.
@@ -284,9 +295,10 @@ async function main() {
     const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
     const seed = (callsign: string): Id => {
         const id = keypair();
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
-                    VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?, ?)`)
-            .run(id.pubKeyHex, callsign, `INV-${callsign.toUpperCase()}`, AVATAR);
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                    VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', ?)`)
+            .run(id.pubKeyHex, callsign, `INV-${callsign.toUpperCase()}`);
+        setMemberPhoto(db, id.pubKeyHex, AVATAR);
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
     };
@@ -302,6 +314,7 @@ async function main() {
 
     // ── Who is who ──
     const carol = seed('ReaderCarol');   // reads the board, and syncs her phone
+    BYSTANDER = seed('BystanderBea');    // reads the board as a stranger once could: no listing, deal or enterprise
     const hana = seed('HolidayHana');    // goes on holiday
     const olly = seed('OtherOlly');      // nobody changes: his listing is in no delta
     const bob = seed('BuyerBob');        // has an open deal on the paused enterprise's listing
@@ -356,7 +369,8 @@ async function main() {
     const shift = se.createPost('need', 'work', 'Bake shift', '', 20, 'fixed', bakery)!.id;
     const doraBid = se.requestPost(shift, dora.pubKeyHex);
     let refused = false;
-    try { se.approvePostRequest(doraBid.id, bakery); } catch { refused = true; }
+    // Approved by Pat, the other keeper, as the routes sign it: a wage claim is recorded only on a keeper's say-so.
+    try { se.approvePostRequest(doraBid.id, bakery, { authSigner: pat.pubKeyHex }); } catch { refused = true; }
     const claim = db.prepare('SELECT status FROM deferred_wage_claims WHERE post_id = ?').get(shift) as any;
     assert(refused && claim?.status === 'pending', 'the bakery can\'t pay Dora yet: a deferred wage claim on its Bake shift');
 
@@ -466,9 +480,9 @@ async function main() {
     assert(!reopened.has(seedSwap), 'Hana\'s event is off her phone\'s Market again');
     // Only that read skips the 304: asked twice with nothing written in between, every other read is confirmed.
     const revalidated = async (path: string, id: Id | null): Promise<number> => {
-        const first = await fetch(`${BASE}${path}`, { headers: id ? signedHeaders('GET', path, '', id) : {} });
+        const first = await localFetch(`${BASE}${path}`, { headers: id ? signedHeaders('GET', path, '', id) : {} });
         await first.text();
-        const again = await fetch(`${BASE}${path}`, {
+        const again = await localFetch(`${BASE}${path}`, {
             headers: { ...(id ? signedHeaders('GET', path, '', id) : {}), 'If-None-Match': first.headers.get('etag') ?? '' },
         });
         return again.status;
@@ -477,18 +491,22 @@ async function main() {
         ['the board', `/api/marketplace/posts?limit=200&${TYPES}`, carol],
         ['a delta', `/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(new Date(Date.now() - 300_000).toISOString())}`, carol],
         ['the by-id refresh of a sync (getPost)', `/api/marketplace/posts?id=${encodeURIComponent(seedSwap)}&sync=true`, carol],
-        ['an unsigned read of the event by id', `/api/marketplace/posts?id=${encodeURIComponent(seedSwap)}`, null],
     ];
     for (const [what, path, id] of stillConfirmed) {
         const status = await revalidated(path, id);
         assert(status === 304, `${what}, asked again with its ETag and nothing changed, is still a 304 (got ${status})`);
     }
-    // The node notes a read only for a key with a member row, so a key that merely signs can't fill what it keeps.
+    // An unsigned read of the event by id was confirmed with a 304 here too. A local community's listings are its
+    // members' since 2026-09-28: it is refused, and nothing is confirmed to it.
+    const unsignedById = await localFetch(`${BASE}/api/marketplace/posts?id=${encodeURIComponent(seedSwap)}`);
+    assert(unsignedById.status === 401, `an unsigned read of the event by id is refused (got ${unsignedById.status})`);
+    // The node notes a read only for a key with a member row, so a key that merely signs can't fill what it keeps. Such a
+    // key read the event page and was noted nothing; now the signature gate refuses it the page before any handler runs,
+    // so nothing can be noted for it.
     const stranger = keypair();
-    const strangerRead = (await getJson(`/api/marketplace/posts?id=${encodeURIComponent(seedSwap)}`, stranger))[0];
-    const strangerDelta = await getJson(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(new Date(Date.now() - 300_000).toISOString())}`, stranger);
-    assert(strangerRead?.id === seedSwap && !strangerDelta.some(r => r.id === seedSwap),
-        'a key with no member row reads the event page too, and nothing is noted for it: its next delta doesn\'t carry the event');
+    const strangerPath = `/api/marketplace/posts?id=${encodeURIComponent(seedSwap)}`;
+    const strangerRead = await localFetch(`${BASE}${strangerPath}`, { headers: signedHeaders('GET', strangerPath, '', stranger) });
+    assert(strangerRead.status === 403, `a key with no member row is refused the event page (got ${strangerRead.status})`);
 
     // A vote in Hana's poll writes the vote route's answer over the held row the same way (votePoll). The vote moves the
     // poll's updated_at, so the next delta carries it for that alone; it has to go as paused.
@@ -638,7 +656,7 @@ async function main() {
     const adaSession = adaSolved.ok ? consumeHandshakeToken(adaSolved.handshakeToken!).sessionId : undefined;
     assert(!!adaSession, 'Ada signs in as an admin with her key');
     const asAdmin = async (method: 'POST' | 'DELETE', path: string, payload?: unknown): Promise<number> => {
-        const res = await fetch(`${BASE}${path}`, {
+        const res = await localFetch(`${BASE}${path}`, {
             method, headers: { 'Content-Type': 'application/json', 'x-admin-session': adaSession ?? '' },
             ...(payload === undefined ? {} : { body: JSON.stringify(payload) }),
         });
@@ -704,7 +722,7 @@ async function main() {
     assert(shutPosts.every(id => !kimAfter.has(id)), 'the orchard\'s listings are off Kim\'s Market');
     const strangerSaw = await deltaFrom(kimSince);
     assert(shutPosts.every(id => strangerSaw.some(r => r.id === id && r.status === 'paused')) && !strangerSaw.some(r => r.authorPublicKey === shut && r.status !== 'paused'),
-        'an unsigned delta from just before gets them too, as paused only');
+        'a bystander\'s delta from just before gets them too, as paused only');
 
     // An admin binds Nell (over HTTP): her next delta carries them as they are.
     const bound = await asAdmin('POST', `/api/local/admin/treasury/${shut}/operators`, { pubkey: nell.pubKeyHex });
@@ -761,7 +779,7 @@ async function main() {
         const kimOpen = await kimPhone.sync();
         const unsigned = await deltaFrom(since);
         assert(!carolDelta.some(r => r.id === pears) && !kimOpen.some(r => r.id === pears) && !unsigned.some(r => r.id === pears),
-            `${what}: neither Carol's next delta, nor Kim's, nor an unsigned delta from just before carries its Pears`);
+            `${what}: neither Carol's next delta, nor Kim's, nor a bystander's delta from just before carries its Pears`);
     }
     await matchesBoard(phone, 'keepers changed on both orchards, Carol\'s next delta');
 
@@ -816,7 +834,7 @@ async function main() {
     const modSession = solved.ok ? consumeHandshakeToken(solved.handshakeToken!).sessionId : undefined;
     assert(!!modSession, 'Mo signs in as a moderator with his key');
     const moderator = async (path: string): Promise<number> => {
-        const res = await fetch(`${BASE}${path}`, {
+        const res = await localFetch(`${BASE}${path}`, {
             method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-session': modSession ?? '' }, body: JSON.stringify({ reasonCategory: 'spam' }),
         });
         await res.text();
@@ -855,7 +873,7 @@ async function main() {
         const delta = await phone.sync();
         assert(!delta.some(r => r.id === ollyPost), `${what}: Carol's next delta doesn't carry his listing (${delta.filter(r => r.authorPublicKey === olly.pubKeyHex).map(r => r.title).join(', ') || 'none of his'})`);
         const open = await getUnsigned(`/api/marketplace/posts?limit=1000&sync=true&${TYPES}&updatedAfter=${encodeURIComponent(since)}`);
-        assert(!open.some(r => r.id === ollyPost), `${what}: nor does an unsigned delta from just before it`);
+        assert(!open.some(r => r.id === ollyPost), `${what}: nor does a bystander's delta from just before it`);
         await matchesBoard(phone, `${what}, next delta`);
     }
 

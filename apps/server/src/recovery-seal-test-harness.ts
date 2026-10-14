@@ -32,6 +32,20 @@ export const CHILD = process.env.RECOVERY_SEAL_CHILD;
 export const SENTENCE = 'This server holds sign-in recovery copies it cannot open: data/recovery-seal.key is missing.';
 export const KEY_FILE = 'recovery-seal.key';
 
+/**
+ * The fixtures' days, dated from now: day 1 is 20 days ago (UTC midnight), so the deposits (days 1–10) and the standby's
+ * cursor (day 3) keep their order and gaps and stay inside the 29 days a standby's cursor may be old before its puller
+ * takes the retention force-resync instead of a delta (services/backup-puller.ts PAST_RETENTION_MS). A fixed calendar date
+ * turns into that force-resync 29 days after it. Picked once, by the parent, and read by its children (SEAL_DAY1, which
+ * runChild passes on), so a run across midnight dates alike.
+ */
+const SEAL_DAY1 = process.env.SEAL_DAY1 ??= new Date((Math.floor(Date.now() / 86_400_000) - 20) * 86_400_000).toISOString();
+export function sealDay(n: number): string {
+    return new Date(Date.parse(SEAL_DAY1) + (n - 1) * 86_400_000).toISOString();
+}
+/** Where the standby's last pull before the seal left its cursor: after the first two deposits (days 1 and 2). */
+export const SEAL_SINCE_DAY = sealDay(3);
+
 // ── fixtures (test-sso-recovery-roundtrip.ts) ─────────────────────────────────────────────────────
 export const GOOGLE_KID = 'test-recovery-seal-google-kid';
 export const GOOGLE_AUD = '653933790375-vkedasi9cs2aeoo2968ttmscqno484jd.apps.googleusercontent.com';
@@ -86,7 +100,7 @@ export function fakeCopy(): Sealed {
  */
 export interface History {
     owners: string[]; gen1: Sealed[]; gen2: Sealed[]; deleted: number[]; real: { i: number; seedHex: string }[];
-    /** When each deposit was stamped, by the main server's clock (default: 2026-06-01 and 2026-06-02). */
+    /** When each deposit was stamped, by the main server's clock (default: sealDay(1) and sealDay(2)). */
     at?: [string, string];
 }
 
@@ -119,11 +133,14 @@ export function needlesOf(sealed: Sealed): { label: string; bytes: Buffer }[] {
 }
 
 /** How many of these copies a data directory's state.db, -wal and -shm hold any piece of, as the files are right now. */
-export function copiesFoundIn(dir: string, copies: Sealed[]): number {
-    const files = Buffer.concat(['state.db', 'state.db-wal', 'state.db-shm']
+export function copiesFoundIn(dir: string, copies: Sealed[], base = 'state.db'): number {
+    const files = Buffer.concat([base, `${base}-wal`, `${base}-shm`]
         .map(f => path.join(dir, f)).filter(p => fs.existsSync(p)).map(p => fs.readFileSync(p)));
     return copies.filter(c => needlesOf(c).some(n => files.includes(n.bytes))).length;
 }
+
+/** The database a whole copy swapped in replaced (db/swap-at-boot.ts), kept until the next copy lands. */
+export const PREVIOUS_DB_FILE = 'state.previous.db';
 
 /** A copy as a main server's export sends it (engine/sync.ts exportSyncState), for the rows pre-seal-history writes. */
 export function exportRow(owner: string, i: number, c: { encryptedShare: string; shareIv: string; shareTag: string; kdfParams: string | null },
@@ -168,7 +185,25 @@ export function tempDir(label: string): string {
 }
 
 export interface ChildResult { code: number | null; stdout: string; stderr: string }
-export function runChild(args: string[], dataDir: string, env: Record<string, string>): Promise<ChildResult> {
+/**
+ * Where a standby child keeps its pulls so far when it ends to restart, as a standby does to swap in a whole copy built in a
+ * staging database (services/stager.ts): runChild starts it again on the same data dir, and the next takes them up.
+ */
+export const SEAL_CONTINUE_FILE = 'seal-continue.json';
+
+export async function runChild(args: string[], dataDir: string, env: Record<string, string>): Promise<ChildResult> {
+    let stdout = '', stderr = '', code: number | null = null;
+    for (let starts = 0; starts < 5; starts++) {
+        const r = await runChildOnce(args, dataDir, env);
+        stdout += r.stdout;
+        stderr += r.stderr;
+        code = r.code;
+        if (code !== 0 || !fs.existsSync(path.join(dataDir, SEAL_CONTINUE_FILE))) break;
+    }
+    return { code, stdout, stderr };
+}
+
+function runChildOnce(args: string[], dataDir: string, env: Record<string, string>): Promise<ChildResult> {
     const child = spawn(process.execPath, [...process.execArgv, ...args], {
         env: { ...process.env, BEANPOOL_DATA_DIR: dataDir, ...env } as NodeJS.ProcessEnv,
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -276,7 +311,7 @@ export async function child(mode: string): Promise<void> {
         const owners = Array.from({ length: N }, () => crypto.randomBytes(32).toString('hex'));
         const gen1 = owners.map(() => fakeCopy());
         const gen2 = owners.map(() => fakeCopy());
-        const T = '2026-06-01T00:00:00.000Z';
+        const T = sealDay(1);
         const dropOlder = db.prepare('DELETE FROM recovery_shares WHERE owner_pubkey = ? AND generation < ?');
         // A main server stored a deposit with a plain INSERT (putShareGeneration).
         const put = db.prepare(`INSERT INTO recovery_shares
@@ -340,8 +375,8 @@ export async function child(mode: string): Promise<void> {
             }))();
             db.pragma('wal_checkpoint(TRUNCATE)');
         };
-        stage(h.gen1, 1, h.at?.[0] ?? '2026-06-01T00:00:00.000Z');
-        stage(h.gen2, 2, h.at?.[1] ?? '2026-06-02T00:00:00.000Z');
+        stage(h.gen1, 1, h.at?.[0] ?? sealDay(1));
+        stage(h.gen2, 2, h.at?.[1] ?? sealDay(2));
         if (standby && process.env.SEAL_NO_REPLICA_FORMAT !== '1') {
             // A copy the current importer made (engine/sync.ts REPLICA_FORMAT), so the pulls these suites drive are the
             // seal's own: the path of any later update that doesn't raise the format. Without the record (the release that
@@ -404,97 +439,56 @@ export async function child(mode: string): Promise<void> {
         out.full = full.recoveryShares ?? [];
         out.deltaEpoch = delta.sealEpoch ?? null;
         out.epoch = full.sealEpoch ?? null;
-    } else if (mode === 'standby-pull') {
-        // A standby (NODE_ROLE=backup) running its real puller against its main server's two pull routes, served here on
-        // localhost: each answers with the main server's own rows (SEAL_MAIN_EXPORT) in a payload signed by the key this
-        // standby trusts as its mirror, and records what the puller asked for and what the standby held at that moment.
-        // Routine whole copies are off (as on a large database), so the pull after the seal is a delta.
-        const { initStateEngine, exportSyncState, signSyncPayload, setSyncCursor } = await import('./state-engine.js');
-        initStateEngine();
-        const { db } = await import('./db/db.js');
-        const state = () => {
-            const kdfs = db.prepare('SELECT kdf_params FROM recovery_shares').pluck().all() as (string | null)[];
-            return {
-                cleared: (db.prepare('SELECT value FROM node_config WHERE key = ?').get(CLEARED_KEY) as any)?.value ?? null,
-                rows: kdfs.length,
-                unwrapped: kdfs.filter(k => !k?.includes('node-wrap-xc20p-v1')).length,
-                owners: db.prepare('SELECT owner_pubkey FROM recovery_shares ORDER BY owner_pubkey').pluck().all(),
-            };
-        };
-        out.secureDelete = db.pragma('secure_delete', { simple: true });
-        out.keyExists = fs.existsSync(path.join(dataDir, KEY_FILE));
-        out.atBoot = state();
-        const main: { delta: unknown[]; full: unknown[] } = JSON.parse(fs.readFileSync(process.env.SEAL_MAIN_EXPORT!, 'utf-8'));
-        const { startP2P } = await import('./p2p.js');
-        const { addConnector } = await import('./connector-manager.js');
-        const { updateLocalConfig } = await import('./config/local-config.js');
-        const puller = await import('./services/backup-puller.js');
-        const http = await import('node:http');
-        const node = await startP2P(0, 0);
-        const nodeId = node.peerId.toString();
-        const pulls: { route: string; since: string | null; snapshotCursor: string | null; at: number; before: ReturnType<typeof state> }[] = [];
-        const server = http.createServer((req, res) => {
-            const route = (req.url ?? '').split('?')[0];
-            const which = route === '/api/local/admin/sync-delta' ? 'delta' : route === '/api/local/admin/sync-snapshot' ? 'snapshot' : null;
-            if (!which) { res.writeHead(404).end(); return; }
-            pulls.push({
-                route: which, since: (req.headers['x-since-cursor'] as string) ?? null,
-                snapshotCursor: (req.headers['x-snapshot-cursor'] as string) ?? null, at: Date.now(), before: state(),
-            });
-            void (async () => {
-                const payload: any = await exportSyncState(nodeId);
-                payload.recoveryShares = which === 'delta' ? main.delta : main.full;
-                delete payload.signature;
-                delete payload.publicKey;
-                res.writeHead(200, { 'Content-Type': 'application/json', 'X-Node-Role': 'primary' })
-                    .end(JSON.stringify(await signSyncPayload(payload)));
-            })();
-        });
-        await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
-        try {
-            addConnector(`/ip4/127.0.0.1/tcp/1/p2p/${nodeId}`, 'mirror', 'main-server');
-            updateLocalConfig({
-                backupPrimaryUrl: `http://localhost:${(server.address() as { port: number }).port}`,
-                backupReplicationToken: 'test-replication-token', backupPullSeconds: 5, backupReconcileMinutes: 0,
-            });
-            // Where its last pull before the seal left it: the puller resumes deltas from here.
-            setSyncCursor('backup:primary', process.env.SEAL_SINCE!);
-            puller.initBackupPuller();
-            const deadline = Date.now() + 45_000;
-            while (Date.now() < deadline && !(pulls.length >= 3 && (puller.getBackupStatus().lastSuccessAt ?? 0) >= pulls[2].at)) {
-                await new Promise(r => setTimeout(r, 100));
-            }
-        } finally {
-            puller.stopBackupPuller();
-            server.close();
-            await node.stop();
-        }
-        out.pulls = pulls.map(p => ({ route: p.route, since: p.since, snapshotCursor: p.snapshotCursor, before: p.before }));
-        out.final = state();
-    } else if (mode === 'standby-script') {
-        // A standby (NODE_ROLE=backup) running its real puller against a localhost stand-in for its main server, which
-        // answers the puller's requests in turn with SEAL_SCRIPT's steps (then with no copy), in a payload signed by the
-        // key this standby trusts as its mirror. At each request, and at the end, it records what the standby holds and
-        // how many of the watched copies its state.db, -wal and -shm hold as they are while it runs: a clean close would
-        // fold the WAL away, and a node that is stopped does not close its database (engine/shutdown-recovery.ts).
-        const script: StandbyScript = JSON.parse(fs.readFileSync(process.env.SEAL_SCRIPT!, 'utf-8'));
-        if (process.env.SEAL_FREE_BYTES) {
+    } else if (mode === 'standby-pull' || mode === 'standby-script') {
+        // A standby (NODE_ROLE=backup) running its real puller against a localhost stand-in for its main server, which answers
+        // each copy it opens (routes/backup.ts sync-copy: a whole one, or a delta `since` a cursor) with one page of one copy,
+        // signed by the key this standby trusts as its mirror, and records what the puller asked for and what the standby held
+        // at that moment. `standby-pull` answers with the main server's own rows (SEAL_MAIN_EXPORT: its delta, or its whole
+        // copy); routine whole copies are off (as on a large database), so the pull after the seal is a delta.
+        // `standby-script` answers the puller's copies in turn with SEAL_SCRIPT's steps (then with no copy), and at each
+        // request, and at the end, records how many of the watched copies its state.db, -wal and -shm hold as they are while
+        // it runs: a clean close would fold the WAL away, and a node that is stopped does not close its database
+        // (engine/shutdown-recovery.ts).
+        // A whole copy built in a staging database (a force-resync) is swapped in at a restart (services/stager.ts): this
+        // process then keeps its pulls in SEAL_CONTINUE_FILE and ends, and runChild starts it again to take them up.
+        const scripted = mode === 'standby-script';
+        const script: StandbyScript | null = scripted ? JSON.parse(fs.readFileSync(process.env.SEAL_SCRIPT!, 'utf-8')) : null;
+        if (scripted && process.env.SEAL_FREE_BYTES) {
             const seal = await import('./services/recovery-seal-key.js');
             seal._setFreeBytesForTests(Number(process.env.SEAL_FREE_BYTES));
         }
+        const continueFile = path.join(dataDir, SEAL_CONTINUE_FILE);
+        const carried: { pulls: any[]; out: Record<string, unknown> } | null = fs.existsSync(continueFile)
+            ? JSON.parse(fs.readFileSync(continueFile, 'utf-8')) : null;
+        if (carried) fs.rmSync(continueFile);
         const { initStateEngine, exportSyncState, signSyncPayload, setSyncCursor } = await import('./state-engine.js');
         initStateEngine();
         const { db } = await import('./db/db.js');
+        const { asOnePageCopy } = await import('./copy-test-support.js');
         const state = () => {
             const kdfs = db.prepare('SELECT kdf_params FROM recovery_shares').pluck().all() as (string | null)[];
             return {
                 cleared: (db.prepare('SELECT value FROM node_config WHERE key = ?').get(CLEARED_KEY) as any)?.value ?? null,
                 rows: kdfs.length,
                 unwrapped: kdfs.filter(k => !k?.includes('node-wrap-xc20p-v1')).length,
-                inFiles: copiesFoundIn(dataDir, script.watch),
+                ...(scripted
+                    ? {
+                        inFiles: copiesFoundIn(dataDir, script!.watch),
+                        previous: fs.existsSync(path.join(dataDir, PREVIOUS_DB_FILE)),
+                        inPrevious: copiesFoundIn(dataDir, script!.watch, PREVIOUS_DB_FILE),
+                    }
+                    : { owners: db.prepare('SELECT owner_pubkey FROM recovery_shares ORDER BY owner_pubkey').pluck().all() }),
             };
         };
-        out.atBoot = state();
+        if (carried) Object.assign(out, carried.out);
+        else {
+            if (!scripted) {
+                out.secureDelete = db.pragma('secure_delete', { simple: true });
+                out.keyExists = fs.existsSync(path.join(dataDir, KEY_FILE));
+            }
+            out.atBoot = state();
+        }
+        const main: { delta: unknown[]; full: unknown[] } | null = scripted ? null : JSON.parse(fs.readFileSync(process.env.SEAL_MAIN_EXPORT!, 'utf-8'));
         const { startP2P } = await import('./p2p.js');
         const { addConnector } = await import('./connector-manager.js');
         const { updateLocalConfig } = await import('./config/local-config.js');
@@ -502,40 +496,56 @@ export async function child(mode: string): Promise<void> {
         const http = await import('node:http');
         const node = await startP2P(0, 0);
         const nodeId = node.peerId.toString();
-        const pulls: { route: string; snapshotCursor: string | null; at: number; before: ReturnType<typeof state> }[] = [];
+        let restarting = false;
+        puller.setSwapRestartForTests(() => { restarting = true; });
+        const pulls: { route: string; since: string | null; snapshotCursor: string | null; at: number; before: ReturnType<typeof state> }[] = carried?.pulls ?? [];
         const server = http.createServer((req, res) => {
-            const route = (req.url ?? '').split('?')[0];
-            const which = route === '/api/local/admin/sync-delta' ? 'delta' : route === '/api/local/admin/sync-snapshot' ? 'snapshot' : null;
-            if (!which) { res.writeHead(404).end(); return; }
-            const rows = script.steps[pulls.length] ?? [];
-            const epoch = script.epochs?.length ? script.epochs[Math.min(pulls.length, script.epochs.length - 1)] : null;
-            pulls.push({ route: which, snapshotCursor: (req.headers['x-snapshot-cursor'] as string) ?? null, at: Date.now(), before: state() });
+            const url = new URL(req.url ?? '/', 'http://main');
+            if (req.method === 'DELETE' && url.pathname.startsWith('/api/local/admin/sync-copy/')) {
+                res.writeHead(200, { 'Content-Type': 'application/json' }).end('{"closed":false}');
+                return;
+            }
+            if (req.method !== 'POST' || url.pathname !== '/api/local/admin/sync-copy') { res.writeHead(404).end(); return; }
+            const since = url.searchParams.get('since');
+            const which = since ? 'delta' : 'snapshot';
+            const rows = scripted ? (script!.steps[pulls.length] ?? []) : which === 'delta' ? main!.delta : main!.full;
+            const epoch = scripted && script!.epochs?.length ? script!.epochs[Math.min(pulls.length, script!.epochs.length - 1)] : null;
+            pulls.push({ route: which, since, snapshotCursor: (req.headers['x-snapshot-cursor'] as string) ?? null, at: Date.now(), before: state() });
             void (async () => {
                 const payload: any = await exportSyncState(nodeId);
                 // What this standby's own export names: a standby names no epoch of its own.
-                if (!('ownEpoch' in out)) out.ownEpoch = payload.sealEpoch ?? null;
+                if (scripted && !('ownEpoch' in out)) out.ownEpoch = payload.sealEpoch ?? null;
                 payload.recoveryShares = rows;
-                if (epoch) payload.sealEpoch = epoch; else delete payload.sealEpoch;
+                if (scripted) {
+                    if (epoch) payload.sealEpoch = epoch; else delete payload.sealEpoch;
+                }
                 delete payload.signature;
                 delete payload.publicKey;
                 res.writeHead(200, { 'Content-Type': 'application/json', 'X-Node-Role': 'primary' })
-                    .end(JSON.stringify(await signSyncPayload(payload)));
+                    .end(JSON.stringify(await signSyncPayload(asOnePageCopy(payload, since) as any)));
             })();
         });
         await new Promise<void>(resolve => server.listen(0, '127.0.0.1', () => resolve()));
+        const wanted = scripted ? script!.pulls : 3;
         try {
             addConnector(`/ip4/127.0.0.1/tcp/1/p2p/${nodeId}`, 'mirror', 'main-server');
             updateLocalConfig({
                 backupPrimaryUrl: `http://localhost:${(server.address() as { port: number }).port}`,
-                backupReplicationToken: 'test-replication-token', backupPullSeconds: 5, backupReconcileMinutes: script.reconcileMinutes,
+                backupReplicationToken: 'test-replication-token', backupPullSeconds: 5, backupReconcileMinutes: scripted ? script!.reconcileMinutes : 0,
             });
-            if (script.since) setSyncCursor('backup:primary', script.since);
-            if (script.resyncFirst) out.resync = await puller.requestResync();
-            if (pulls.length < script.pulls) {
-                puller.initBackupPuller();
+            if (!carried) {
+                // Where its last pull before the seal left it: the puller resumes deltas from here.
+                if (!scripted) setSyncCursor('backup:primary', process.env.SEAL_SINCE!);
+                else if (script!.since) setSyncCursor('backup:primary', script!.since);
+                if (scripted && script!.resyncFirst) out.resync = await puller.requestResync();
+            }
+            // Started as index.ts starts it at every boot, even with no pull left to wait for: the first start on a copy
+            // swapped in reads what that copy left it (services/backup-puller.ts restoreFromDatabase).
+            puller.initBackupPuller();
+            if (!restarting && pulls.length < wanted) {
                 const deadline = Date.now() + 45_000;
-                while (Date.now() < deadline && !(pulls.length >= script.pulls
-                    && (puller.getBackupStatus().lastSuccessAt ?? 0) >= pulls[script.pulls - 1].at)) {
+                while (Date.now() < deadline && !restarting
+                    && !(pulls.length >= wanted && (puller.getBackupStatus().lastSuccessAt ?? 0) >= pulls[wanted - 1].at)) {
                     await new Promise(r => setTimeout(r, 100));
                 }
             }
@@ -544,7 +554,13 @@ export async function child(mode: string): Promise<void> {
             server.close();
             await node.stop();
         }
-        out.pulls = pulls.map(p => ({ route: p.route, snapshotCursor: p.snapshotCursor, before: p.before }));
+        if (restarting) {
+            // Swapped in at the next start: this one keeps its pulls, and ends.
+            fs.writeFileSync(continueFile, JSON.stringify({ pulls, out }));
+            process.exit(0);
+        }
+        out.pulls = pulls.map(p => (scripted ? { route: p.route, snapshotCursor: p.snapshotCursor, before: p.before }
+            : { route: p.route, since: p.since, snapshotCursor: p.snapshotCursor, before: p.before }));
         out.final = state();
     } else if (mode === 'takeover-open') {
         // The standby promoted (NODE_ROLE=primary), then every member's copy read through the server's own reader.
@@ -861,7 +877,7 @@ export async function epochFixtures(suite: string) {
         fs.cpSync(dir, d, { recursive: true });
         return d;
     };
-    const T2 = '2026-06-02T00:00:00.000Z', T5 = '2026-06-05T00:00:00.000Z', T6 = '2026-06-06T00:00:00.000Z', T7 = '2026-06-07T00:00:00.000Z';
+    const T2 = sealDay(2), T5 = sealDay(5), T6 = sealDay(6), T7 = sealDay(7);
     // 26–28: the member who removes their copy while the rollback lasts, and what the standby says about it.
     const REMOVER = 3;
     const allBut = (skip: number[]) => eOwners.map((_, i) => i).filter(i => !skip.includes(i));

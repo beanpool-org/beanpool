@@ -19,10 +19,15 @@ import {
 import { resolveAvatarUrl } from '../lib/avatar';
 import { imageFromTransfer, dragCarriesFile } from '../lib/chat-image-transfer';
 import type { BeanPoolIdentity } from '../lib/identity';
+import { sendRouteOf, GROUP_HOLD_EVENT_TEXT, GROUP_HOLD_UNREAD_TEXT } from '../lib/group-hold';
+import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from '../lib/chat-tombstone';
 
-/** Messages are stored base64 `plaintext-v1`: node-readable by design, not end-to-end encrypted. */
-export function decodeEventChatText(ciphertext: string, type: string): string {
-    if (type === 'removed') return 'removed by the host';
+/**
+ * Messages are stored base64 `plaintext-v1`: node-readable by design, not end-to-end encrypted. A removed one is the
+ * host's removal, or its author's own delete when they deleted their account (lib/chat-tombstone.ts).
+ */
+export function decodeEventChatText(ciphertext: string, type: string, metadata?: string): string {
+    if (type === 'removed') return blankedWithAccount(metadata) ? ACCOUNT_DELETED_TEXT : 'removed by the host';
     try {
         const binString = atob(ciphertext);
         const bytes = Uint8Array.from(binString, (m) => m.charCodeAt(0));
@@ -130,6 +135,13 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
         setPosting(true);
         setPostError(null);
         try {
+            // This screen sends readable: never for a group held locked here, nor while the record of those can't be read
+            // (lib/group-hold.ts; review of #1816, findings 2 and 3).
+            const route = identity ? await sendRouteOf(identity.publicKey, postId) : 'refuse';
+            if (route !== 'as-typed') {
+                setPostError(route === 'group' ? GROUP_HOLD_EVENT_TEXT : GROUP_HOLD_UNREAD_TEXT);
+                return;
+            }
             await postEventChatMessage(postId, text);
             setDraft('');
             setImageNotice(null);
@@ -235,8 +247,8 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                                             <span className="flex-1 min-w-0 truncate text-sm font-bold text-nature-900 dark:text-white">{author}</span>
                                             <span className="flex-shrink-0 text-[11px] text-nature-400">{formatTime(m.timestamp)}</span>
                                         </div>
-                                        <p className={`m-0 mt-1 text-sm leading-relaxed whitespace-pre-wrap break-words ${isRemoved ? 'italic text-nature-400 dark:text-nature-500' : 'text-nature-800 dark:text-nature-200'}`}>
-                                            {decodeEventChatText(m.ciphertext, m.type)}
+                                        <p className={`m-0 mt-1 text-sm leading-relaxed whitespace-pre-wrap break-words ${isRemoved ? 'italic text-nature-400 dark:text-nature-400' : 'text-nature-800 dark:text-nature-200'}`}>
+                                            {decodeEventChatText(m.ciphertext, m.type, m.metadata)}
                                         </p>
                                         {view.isHost && !isRemoved && (
                                             <button
@@ -322,12 +334,12 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                         maxLength={EVENT_CHAT_MESSAGE_MAX}
                         placeholder="Message everyone going…"
                         aria-label="Message everyone going"
-                        className="flex-1 min-w-0 min-h-[48px] resize-y rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 px-3 py-3 text-sm text-nature-900 dark:text-white"
+                        className="flex-1 min-w-0 min-h-[48px] resize-y rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 px-3 py-3 text-sm text-nature-900 dark:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
                     />
                     <button
                         type="submit"
                         disabled={posting || !draft.trim()}
-                        className="flex-shrink-0 min-h-[48px] px-4 rounded-xl bg-violet-700 text-white font-bold text-sm disabled:opacity-60"
+                        className="flex-shrink-0 min-h-[48px] px-4 rounded-xl bg-violet-700 text-white font-bold text-sm disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
                     >
                         {posting ? 'Sending…' : 'Send'}
                     </button>

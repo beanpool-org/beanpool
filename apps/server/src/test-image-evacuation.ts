@@ -26,12 +26,13 @@
  *  10. The database is measurably smaller afterwards.
  *  11. An import writes a peer's photos to disk BEFORE it opens its write transaction, so a big resync
  *      never holds the write lock across one fsync per photo.
- *  12. A FORCE-RESYNC does not destroy the replica's only good copy. The export omits a row whose object the
- *      primary cannot read, and names it in the payload; `clearReplicatedTables` keeps exactly those rows, so
- *      the row and its object survive the wipe that used to delete both. LAST, because it empties the tables.
- *  13. And it holds at the size that actually happens: a lost images directory omits EVERY evacuated photo,
- *      so a keep list of thousands spares exactly those rows rather than hitting SQLite's expression-depth
- *      limit — and a failure there aborts the resync instead of committing a table that was never cleared.
+ *  12. The export omits a row whose object the primary cannot read, and names it in the payload, so a replica
+ *      keeps its own good copy. (A standby's whole copy is built from nothing in a staging database since P2,
+ *      and the stager carries the rows a copy names over from the standby's live copy, thousands of them in one
+ *      statement: test-standby-paged-copies.ts step 7. The force-resync's clear this section and a 13th
+ *      checked, which spared the named rows, is gone with it.)
+ *  13. An evacuation whose move lands in the same millisecond does not disturb updated_at (an update that
+ *      changes nothing re-fires the touch trigger).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-image-evacuation.ts
  */
@@ -42,9 +43,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
+import { setMemberPhoto } from '@beanpool/engine';
 
-const PORT = 8571;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 
 let run = 0, passed = 0;
@@ -168,7 +170,8 @@ async function main(): Promise<void> {
 
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
     const store = getImageStore();
 
     // The posts the fixture's photos belong to. `posts` is created by schema.sql, so it could not exist in
@@ -217,8 +220,9 @@ async function main(): Promise<void> {
     // ── 2. a new photo goes straight to the store ──────────────────────────────────────────────
     const author = crypto.randomBytes(32).toString('hex');
     // An avatar, because the marketplace gate requires a profile photo before a member may post.
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_url) VALUES (?, 'Ayla', strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?)`)
-        .run(author, dataUrl(makePhoto('avatar')));
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'Ayla', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+        .run(author);
+    setMemberPhoto(db, author, dataUrl(makePhoto('avatar')));
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(author);
     const freshBytes = makePhoto('fresh');
     const freshValue = dataUrl(freshBytes);
@@ -233,14 +237,25 @@ async function main(): Promise<void> {
     assert(store.get(freshRow.storage_key)!.equals(freshBytes), 'the store holds exactly those bytes');
 
     // ── 3. serving, before evacuation ──────────────────────────────────────────────────────────
-    const legacyUrl = `${BASE}/api/marketplace/posts/${fixture.photos[0].postId}/photos/0`;
+    // A photo's URL is the one a read of its listing hands out, its key included where its listing's photos are keyed
+    // (engine/photo-keys.ts): the URL of the photo as its row is now. Evacuation keeps the row's
+    // `updated_at`, so the URL a member already holds keeps working.
+    const { postPhotoUrl } = await import('@beanpool/engine');
+    const photoUrlOf = (postId: string, orderNum: number): string => {
+        const row = db.prepare(`SELECT pp.updated_at, p.audience_scope FROM post_photos pp LEFT JOIN posts p ON p.id = pp.post_id
+                                WHERE pp.post_id = ? AND pp.order_num = ?`).get(postId, orderNum) as { updated_at: string | null; audience_scope: string | null } | undefined;
+        return `${BASE}${postPhotoUrl(postId, orderNum, row?.updated_at, row?.audience_scope)}`;
+    };
+    const legacyUrl = photoUrlOf(fixture.photos[0].postId, 0);
     const beforeRes = await fetch(legacyUrl);
     const beforeBytes = Buffer.from(await beforeRes.arrayBuffer());
     assert(beforeRes.status === 200, 'an inline photo still serves 200 before it is evacuated');
     assert(beforeBytes.equals(makePhoto('photo-0')), 'the bytes served are the photo');
     const beforeType = beforeRes.headers.get('content-type');
     const beforeCache = beforeRes.headers.get('cache-control');
-    assert(beforeCache === 'public, max-age=31536000, immutable', 'the immutable cache header is what it always was');
+    // A local community's photo is keyed, so members' only: the member's own cache keeps it as long, no shared cache does
+    // (routes/marketplace.ts; it was `public` until review FABLE-sec-images, MEDIUM). Evacuation must not change it (3b).
+    assert(beforeCache === 'private, max-age=31536000, immutable', `the immutable cache header is a member's (${beforeCache})`);
 
     // ── 5a. the sync export, before evacuation ─────────────────────────────────────────────────
     const exportBefore = await exportSyncState('test-node');
@@ -351,7 +366,7 @@ async function main(): Promise<void> {
     assert(afterBytes.equals(beforeBytes), 'the bytes served are BYTE-IDENTICAL after evacuation');
     assert(afterRes.headers.get('content-type') === beforeType, 'the content type is unchanged');
     assert(afterRes.headers.get('cache-control') === beforeCache, 'the cache headers are unchanged');
-    const wrappedRes = await fetch(`${BASE}/api/marketplace/posts/legacy-post-wrapped/photos/0`);
+    const wrappedRes = await fetch(photoUrlOf('legacy-post-wrapped', 0));
     assert(wrappedRes.status === 200, 'the photo that stayed inline still serves');
 
     // ── 5b. the sync export, after evacuation ──────────────────────────────────────────────────
@@ -425,9 +440,11 @@ async function main(): Promise<void> {
 
     // ── 6. the row decides, never the store ────────────────────────────────────────────────────
     const doomed = db.prepare('SELECT storage_key FROM post_photos WHERE post_id = ?').get(fixture.photos[2].postId) as any;
+    const doomedUrl = photoUrlOf(fixture.photos[2].postId, 0);
+    assert((await fetch(doomedUrl)).status === 200, 'setup: the photo about to be deleted serves at its URL');
     db.prepare('DELETE FROM post_photos WHERE post_id = ?').run(fixture.photos[2].postId);
     assert(store.get(doomed.storage_key) !== null, 'the file is still on disk (the post-commit delete has not run)');
-    const goneRes = await fetch(`${BASE}/api/marketplace/posts/${fixture.photos[2].postId}/photos/0`);
+    const goneRes = await fetch(doomedUrl);
     assert(goneRes.status === 404, 'a deleted photo 404s even though its file lingers — the route reads the row');
     // And the reverse: an object with no row is never reachable.
     const orphanKey = postPhotoKey('no-such-post', 0, sha256Hex(freshBytes), 'image/jpeg');
@@ -500,7 +517,7 @@ async function main(): Promise<void> {
         const { signSyncPayload, importRemoteState, setNodeRole } = await import('./state-engine.js');
         const { startP2P } = await import('./p2p.js');
         const { addConnector } = await import('./connector-manager.js');
-        const p2pNode = await startP2P(4072, 4073);
+        const p2pNode = await startP2P(0, 0);
         addConnector(`/ip4/127.0.0.1/tcp/4073/p2p/${p2pNode.peerId.toString()}`, 'mirror', 'imgstore-self-test-peer');
 
         // Watch every put the import makes and record whether a transaction was open at the time.
@@ -511,6 +528,13 @@ async function main(): Promise<void> {
             putCount++;
             if (db.inTransaction) putsInsideTransaction.push(key);
             return realPut(key, bytes, meta);
+        };
+        // On disk the import's writes go through the non-blocking put (writeObject → putAsync): watched the same way.
+        const realPutAsync = store.putAsync?.bind(store);
+        if (realPutAsync) (store as any).putAsync = (key: string, bytes: Buffer, meta: any) => {
+            putCount++;
+            if (db.inTransaction) putsInsideTransaction.push(key);
+            return realPutAsync(key, bytes, meta);
         };
 
         const incomingId = crypto.randomUUID();
@@ -532,6 +556,7 @@ async function main(): Promise<void> {
         try { await importRemoteState(payload as any); } catch (e) { importErr = e; }
         setNodeRole('primary');
         (store as any).put = realPut;
+        if (realPutAsync) delete (store as any).putAsync;
         try { await p2pNode.stop(); } catch { /* the suite is finishing anyway */ }
 
         assert(importErr === null, `an import carrying photos does not throw${importErr ? ': ' + String(importErr) : ''}`);
@@ -603,7 +628,7 @@ async function main(): Promise<void> {
     execFileSync('tar', ['-czf', oldTar, '-C', oldStyle, '.']);
     const { checkBackupArchive } = await import('./services/sealed-backup.js');
     let preChangeOk = true;
-    try { checkBackupArchive(oldTar, { requireStateDb: true }); } catch { preChangeOk = false; }
+    try { await checkBackupArchive(oldTar, { requireStateDb: true }); } catch { preChangeOk = false; }
     assert(preChangeOk, 'a pre-change backup (state.db and node_config.json only) still passes the archive checks');
     const preChangeMembers = execFileSync('tar', ['-tzf', oldTar], { encoding: 'utf8' });
     assert(!preChangeMembers.includes('images/'), 'and it carries no images/ member, as it did not before this change');
@@ -622,29 +647,17 @@ async function main(): Promise<void> {
     );
     assert(sizeAfter < sizeBeforeUpgrade / 2, 'the database is less than half the size it was');
 
-    // ── 12. a force-resync keeps the rows the primary could not send ───────────────────────────
+    // ── 12. the export names the rows it could not send ─────────────────────────────────────────
     //
-    // This is LAST because it empties the replicated tables, and nothing may run after it.
-    //
-    // "What the importer does not receive it keeps" is true of a delta or a full pull, and FALSE of a
-    // force-resync: `pullOnce('resync')` calls `clearReplicatedTables()` — which lists `post_photos` — before
-    // importing. So the one case the export's omission exists for (§5: the replica holds the only readable
-    // copy) was the case a resync destroyed: the row went, its object became an orphan, and the daily sweep
-    // reclaimed the bytes after the grace period. And a resync is the natural thing an operator does when a
-    // replica "looks wrong".
-    //
-    // Here the LOCAL node plays both parts — it exports as the primary would, then clears as the replica
-    // does — because `clearReplicatedTables` works on this process's one database handle.
-    const { clearReplicatedTables } = await import('./state-engine.js');
-    const { referencedStorageKeys } = await import('./storage/image-columns.js');
-
+    // "What the importer does not receive it keeps" is true of a delta, and FALSE of a whole copy built from nothing in
+    // a staging database (services/stager.ts): the one case the export's omission exists for (§5: the replica holds the
+    // only readable copy) needs the payload to NAME the rows it left out, so the stager carries the replica's own rows
+    // over (test-standby-paged-copies.ts step 7, at a thousand rows and more).
     const kept = db.prepare('SELECT post_id, order_num, storage_key FROM post_photos WHERE storage_key IS NOT NULL LIMIT 1')
         .get() as { post_id: string; order_num: number; storage_key: string } | undefined;
     assert(!!kept, 'setup: there is an evacuated photo row to lose');
     const keptRowKey = `${kept!.post_id}|${kept!.order_num}`;
     const keptBytes = store.get(kept!.storage_key)!;
-    const rowsBefore = (db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c as number;
-    assert(rowsBefore > 1, `setup: and other photo rows a resync SHOULD clear (${rowsBefore} in all)`);
 
     // The primary cannot read that one object, so the export leaves the row out — and says which.
     store.delete(kept!.storage_key);
@@ -654,85 +667,67 @@ async function main(): Promise<void> {
         `the payload NAMES the row it left out, additively (${JSON.stringify(omitExport.photosOmitted)})`);
     assert(!((omitExport as any).photos as any[]).some(ph => ph.post_id === kept!.post_id && ph.order_num === kept!.order_num),
         'and does not carry it, as §5 requires');
-
-    // The replica's copy is the good one. It has the bytes; the primary does not.
     store.put(kept!.storage_key, keptBytes, { mime: 'image/jpeg' });
 
-    clearReplicatedTables(omitExport.photosOmitted);
-    const survivor = db.prepare('SELECT storage_key FROM post_photos WHERE post_id = ? AND order_num = ?')
-        .get(kept!.post_id, kept!.order_num) as any;
-    assert(survivor?.storage_key === kept!.storage_key,
-        'a force-resync KEEPS the row the incoming payload could not carry — the only copy of it left');
-    assert((db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c === 1,
-        'while every other photo row is cleared, as a resync must, so the import rebuilds them 1:1');
-    assert((db.prepare('SELECT COUNT(*) AS c FROM members').get() as any).c === 0,
-        'and the rest of the replicated tables are cleared exactly as before');
-    assert(store.get(kept!.storage_key)?.equals(keptBytes) === true,
-        'the object is still on disk, byte for byte');
-    assert(referencedStorageKeys(db).includes(kept!.storage_key),
-        'and still REFERENCED, so the daily orphan sweep leaves it alone rather than reclaiming it');
+    // ── 13. same-millisecond watermark restore keeps updated_at (#1547) ─────────────────────────
+    // When a photo's move happens to land in the same millisecond as the row's existing updated_at watermark,
+    // restoreWatermark's UPDATE without a guard is an update that changes nothing. The schema's touch trigger
+    // (WHEN NEW.updated_at IS OLD.updated_at) fires AGAIN and stamps a later time: the photo's watermark moves,
+    // and every peer re-downloads it.
+    {
+        const sameMsPostId = crypto.randomUUID();
+        db.prepare(`
+            INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status)
+            VALUES (?, 'offer', 'food', 'Same-ms watermark', 'test', 1, ?, '2026-01-01T00:00:00.000Z', 1, 'active')
+        `).run(sameMsPostId, authorKey);
 
-    // Nothing named: the wipe is total, exactly as it was. This is the behaviour a resync needs when the
-    // primary CAN read everything, and the line above is the one exception to it.
-    clearReplicatedTables();
-    assert((db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c === 0,
-        'with nothing named, a resync clears post_photos outright — the exception is only for omitted rows');
+        const W = '2026-03-01T12:00:00.000Z';
+        const W_plus_1 = '2026-03-01T12:00:00.001Z';
+        const sameMsPhotoBytes = makePhoto('same-ms');
+        db.prepare(`
+            INSERT INTO post_photos (post_id, order_num, photo_data, updated_at)
+            VALUES (?, 0, ?, ?)
+        `).run(sameMsPostId, dataUrl(sameMsPhotoBytes), W);
 
-    // ── 13. the keep list has no ceiling, and a failure aborts instead of committing half a clear ──
-    //
-    // §12 spares ONE row, which is the comfortable case. The case this argument exists for is not: a primary
-    // whose images directory is lost or unmounted can read none of its evacuated photos, so it omits every
-    // one of them — thousands of rows on a live node. Built as one `OR`-ed predicate per spared pair, that
-    // statement is parsed left-deep and throws "Expression tree is too large (maximum depth 1000)" from about
-    // 999 pairs on; the catch beside it logged and let the transaction COMMIT, so `post_photos` was not
-    // cleared at all — every orphan row survived, not only the spared ones — and the log said "KEEPING 0 of
-    // N". Self-contained: §12 left both tables empty, so this seeds its own rows.
-    const BULK = 5000;
-    const insertBulk = db.prepare(
-        `INSERT OR REPLACE INTO post_photos (post_id, photo_data, order_num) VALUES (?, ?, ?)`);
-    const bulkKeep: string[] = [];
-    db.transaction(() => {
-        for (let i = 0; i < BULK * 2; i++) {
-            const postId = `bulk-post-${String(i).padStart(6, '0')}`;
-            insertBulk.run(postId, dataUrl(Buffer.from([0xff, 0xd8, 0xff, 0xd9])), 0);
-            if (i % 2 === 0) bulkKeep.push(`${postId}|0`); // spare every other row, so position proves identity
+        db.exec(`
+            CREATE TABLE IF NOT EXISTS _test_evac_watermark_clock (tick INTEGER NOT NULL DEFAULT 0, w0 TEXT NOT NULL, w1 TEXT NOT NULL);
+            DELETE FROM _test_evac_watermark_clock;
+            INSERT INTO _test_evac_watermark_clock (tick, w0, w1) VALUES (0, '${W}', '${W_plus_1}');
+            DROP TRIGGER IF EXISTS post_photos_touch_updated_at;
+            CREATE TRIGGER post_photos_touch_updated_at
+            AFTER UPDATE ON post_photos
+            FOR EACH ROW
+            WHEN NEW.updated_at IS OLD.updated_at
+            BEGIN
+                UPDATE _test_evac_watermark_clock SET tick = tick + 1;
+                UPDATE post_photos
+                   SET updated_at = (SELECT CASE WHEN tick = 1 THEN w0 ELSE w1 END FROM _test_evac_watermark_clock)
+                 WHERE rowid = NEW.rowid;
+            END;
+        `);
+
+        try {
+            evacuateImagesOnce(10);
+            const row = db.prepare('SELECT updated_at, storage_key FROM post_photos WHERE post_id = ? AND order_num = 0')
+                .get(sameMsPostId) as { updated_at: string | null; storage_key: string | null } | undefined;
+            assert(typeof row?.storage_key === 'string', 'the same-millisecond test photo was evacuated to the store');
+            assert(row?.updated_at === W, `an evacuation whose move lands in the same millisecond keeps updated_at (expected ${W}, got ${row?.updated_at})`);
+        } finally {
+            db.exec('DROP TRIGGER IF EXISTS post_photos_touch_updated_at');
+            db.exec(`
+                CREATE TRIGGER IF NOT EXISTS post_photos_touch_updated_at
+                AFTER UPDATE ON post_photos
+                FOR EACH ROW
+                WHEN NEW.updated_at IS OLD.updated_at
+                BEGIN
+                    UPDATE post_photos SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE rowid = NEW.rowid;
+                END;
+            `);
+            db.exec('DROP TABLE IF EXISTS _test_evac_watermark_clock');
+            assert(!!db.prepare("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='post_photos_touch_updated_at'").get(),
+                'the real post_photos_touch_updated_at trigger was restored afterwards');
         }
-    })();
-    assert((db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c === BULK * 2,
-        `setup: ${BULK * 2} photo rows, of which the payload names ${BULK} it could not carry`);
-
-    // Throwing here is the FIXED behaviour for a statement that fails; on the unfixed tree it returns
-    // quietly. Either way the assertions below are what report, rather than the run dying.
-    try { clearReplicatedTables(bulkKeep); } catch (e: any) { console.error(`  (threw: ${e?.message})`); }
-    const survivors = (db.prepare('SELECT post_id FROM post_photos').all() as { post_id: string }[])
-        .map(r => Number(r.post_id.slice('bulk-post-'.length)));
-    const unnamedSurvivor = survivors.find(n => !Number.isInteger(n) || n % 2 !== 0);
-    assert(survivors.length === BULK,
-        `a keep list of ${BULK} rows spares exactly that many — the spared-rows filter has no depth ceiling `
-        + `(${survivors.length} survived)`);
-    assert(unnamedSurvivor === undefined,
-        'and the survivors are the NAMED rows, not merely the right number of them'
-        + (unnamedSurvivor === undefined ? '' : ` (bulk-post-${String(unnamedSurvivor).padStart(6, '0')} survived)`));
-
-    // A failure in that statement must abort the WHOLE resync. Committing past it is worse than failing:
-    // the replica would be left with a table half-cleared of the very rows the payload cannot replace.
-    // The trigger fires on the DELETE, so there have to be rows for it to delete: the 5,000 spared ones
-    // above are all the table holds now, and a clear that matches nothing would never reach the trigger.
-    const DOOMED = 10;
-    for (let i = 0; i < DOOMED; i++) {
-        insertBulk.run(`abort-extra-${i}`, dataUrl(Buffer.from([0xff, 0xd8, 0xff, 0xd9])), 0);
     }
-    db.prepare(`INSERT INTO members (public_key, callsign) VALUES ('abort-canary', 'AbortCanary')`).run();
-    db.exec(`CREATE TRIGGER zz_block_photo_delete BEFORE DELETE ON post_photos
-             BEGIN SELECT RAISE(ABORT, 'forced failure in the spared-rows clear'); END;`);
-    let aborted = false;
-    try { clearReplicatedTables(bulkKeep); } catch { aborted = true; }
-    db.exec('DROP TRIGGER zz_block_photo_delete');
-    assert(aborted, 'a failure clearing the spared rows THROWS, so the caller fails the resync');
-    assert((db.prepare('SELECT COUNT(*) AS c FROM post_photos').get() as any).c === BULK + DOOMED,
-        'and rolls back: post_photos is exactly as it was, neither cleared nor half-cleared');
-    assert((db.prepare(`SELECT COUNT(*) AS c FROM members WHERE public_key = 'abort-canary'`).get() as any).c === 1,
-        'along with the tables cleared before it — the whole resync aborted, not just this one table');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

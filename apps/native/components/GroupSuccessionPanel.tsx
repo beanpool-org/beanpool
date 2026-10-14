@@ -125,7 +125,7 @@ export function GroupSuccessionPanel({ groupId, members, myPubkey, onLeadChanged
             borderWidth: 1, borderColor: colors.feedback.warning.border,
             backgroundColor: colors.feedback.warning.solid,
         },
-        proposeBtnText: { fontSize: 12, fontWeight: '800', color: colors.text.inverse },
+        proposeBtnText: { fontSize: 12, fontWeight: '800', color: colors.text.onGold },
     }));
 
     const view = buildSuccessionView(data, members);

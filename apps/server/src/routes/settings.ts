@@ -3,31 +3,39 @@
  */
 
 import Router from '@koa/router';
-import { getVersion } from '../version.js';
+import { getVersion, getCommit } from '../version.js';
+import { backgroundUpdateCheck, cachedNodeUpdateInfo, lookUpNewestNodeRelease, semverGreater } from '../node-release-check.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'url';
-import { execFileSync } from 'node:child_process';
 import {
     getNodeConfig, updateNodeConfig, getDirectoryInfo, exportLedgerAudit,
-    getNodeRole, getMemberStats, type NodeConfig,
+    getNodeRole, getMemberStats, isNodeMember, type NodeConfig,
 } from '../state-engine.js';
+import { isPrivatePreview } from '../config/private-preview.js';
 import {
     getLocalConfig, saveLocalConfig, updateLocalConfig,
-    getThresholds, updateThresholds, DEFAULT_THRESHOLDS,
-    getGatewayConfig, isBreakGlassMode,
+    getThresholds, updateThresholds, DEFAULT_THRESHOLDS, thresholdProblem,
+    getGatewayConfig, isBreakGlassMode, isPasswordRetired,
 } from '../config/local-config.js';
-import { consumeHandshakeToken, validateAdminSession } from '../admin-key-auth.js';
-import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
-import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, type AdminRole } from '../admin-auth.js';
+import { consumeHandshakeToken, PHONE_HANDOFF_IDLE_TTL_MS, validateAdminSession, setAdminSessionCookie, restampPasswordSession } from '../admin-key-auth.js';
+import { generateTotpSecret, generateTotpCode, verifyTotpCode, useTotpCode, generateBackupCodes, generateOtpauthUri, hashBackupCode } from '../totp.js';
+import { issue2faSessionToken, requireAdminRole, requireCurrentSecondFactor, PASSWORD_RETIRED_CODE, type AdminRole } from '../admin-auth.js';
+import { logger } from '../logger.js';
+import { noteSecurityEvent } from '../services/security-signal.js';
 import qrcode from 'qrcode';
 import { initDirectoryPublisher, pushDirectoryNow, NOT_LISTED_MESSAGE } from '../services/directory-publisher.js';
 import { getConfiguredSwitches, setSwitchOverride } from '../config/node-profile.js';
+import { getDoor, setDoor, doorSettingRefusal, type CommunityDoor } from '../config/door.js';
+import { HealthError, healthSummary, readHealthAccessLog, setHealthSettings } from '../engine/community-health.js';
+import { KnownFloorError, knownFloorSettings, setKnownFloorSettings, knownFloorExceptions, readKnownFloorLog, setKnownFloorException, knownFloorForMember } from '../config/known-floor.js';
 import { isDirectoryPushInterval, MAX_DIRECTORY_PUSH_INTERVAL_HOURS } from '../config/community-settings.js';
 import { renderInviteTrampoline } from './invite-trampoline.js';
 import { useAppDocumentPolicy, useDocumentPolicy } from '../app-document-csp.js';
+import { countWebAppPageLoad } from '../engine/web-visits.js';
 import type { RouteDeps } from './types.js';
 import { PROTOCOL_CONSTANTS } from '@beanpool/core';
+import { setStartCommunityUrl, START_COMMUNITY_URL_MAX } from '../config/start-community.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +46,11 @@ const resolveServerPath = (subpath: string): string => {
     return path.join(SERVER_ROOT, subpath);
 };
 const PUBLIC_DIR = resolveServerPath('public');
+
+/** Text into the HTML of the sign-in error pages below. Every value is a fixed server string today; escaped anyway. */
+function escapeHtml(text: string): string {
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
 
 export function createSettingsRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -115,26 +128,24 @@ router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
     if (ctx.path !== '/settings' && ctx.path !== '/settings/' && path.extname(ctx.path)) {
         return next();
     }
-    // The Settings UI and its sign-in pages run inline scripts (app-document-csp.ts).
-    useDocumentPolicy(ctx);
+    // The manager (the React Settings) and these error pages run no inline script: the web app's strict policy
+    // (app-document-csp.ts, Fable's web review M2). Only the old static settings.html, served below when no manager
+    // build is there, keeps the older one.
+    useAppDocumentPolicy(ctx);
 
-    // 1. Deep-link Handshake Token Exchange (phone button flow)
+    // 1. Deep-link Handshake Token Exchange (an older phone app's Manage button): a page in the phone's in-app
+    //    browser, so the phone hand-off's short idle limit (admin-key-auth.ts PHONE_HANDOFF_IDLE_TTL_MS).
     const token = ctx.query.token as string | undefined;
     if (token) {
-        const exchangeRes = consumeHandshakeToken(token);
+        const exchangeRes = consumeHandshakeToken(token, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
         if (exchangeRes.ok && exchangeRes.sessionId) {
-            ctx.cookies.set('admin_session', exchangeRes.sessionId, {
-                httpOnly: true,
-                sameSite: 'lax',
-                maxAge: 12 * 3600 * 1000,
-                path: '/',
-            });
+            setAdminSessionCookie(ctx, exchangeRes.sessionId);
             ctx.redirect('/settings');
             return;
         } else {
             ctx.status = exchangeRes.replay ? 401 : (exchangeRes.expired ? 401 : 400);
             ctx.type = 'text/html';
-            ctx.body = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Sign-In Failed — BeanPool</title></head><body style="background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif;padding:3rem;text-align:center;"><main role="alert"><h1 style="font-size:1.5rem;font-weight:600;margin-bottom:1rem;"><span aria-hidden="true">⚠️</span> Sign-In Failed</h1><p style="color:#94a3b8;max-width:480px;margin:0 auto 1.5rem;line-height:1.5;">${exchangeRes.error || 'The authentication token is invalid or has expired.'}</p><a href="/settings" style="display:inline-block;background:#3b82f6;color:#ffffff;padding:0.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:500;">Return to Settings</a></main></body></html>`;
+            ctx.body = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Sign-In Failed — BeanPool</title></head><body style="background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif;padding:3rem;text-align:center;"><main role="alert"><h1 style="font-size:1.5rem;font-weight:600;margin-bottom:1rem;"><span aria-hidden="true">⚠️</span> Sign-In Failed</h1><p style="color:#94a3b8;max-width:480px;margin:0 auto 1.5rem;line-height:1.5;">${escapeHtml(exchangeRes.error || 'The authentication token is invalid or has expired.')}</p><a href="/settings" style="display:inline-block;background:#3b82f6;color:#ffffff;padding:0.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:500;">Return to Settings</a></main></body></html>`;
             return;
         }
     }
@@ -156,7 +167,7 @@ router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
             const isExpired = sessionRes?.expired || sessionRes?.idleTimeout || sessionRes?.hardLimit;
             const heading = isExpired ? 'Admin Session Expired' : 'Break-Glass Mode Active';
             const message = isExpired
-                ? (sessionRes?.error || 'Your admin session has expired. Please sign in again with your key.')
+                ? escapeHtml(sessionRes?.error || 'Your admin session has expired. Please sign in again with your key.')
                 : 'Settings access is restricted to enrolled key sessions. Password access is disabled except for key enrolment.';
             ctx.body = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${heading} — BeanPool</title></head><body style="background:#0f172a;color:#f8fafc;font-family:system-ui,sans-serif;padding:3rem;text-align:center;"><main role="alert"><h1 style="font-size:1.5rem;font-weight:600;margin-bottom:1rem;"><span aria-hidden="true">${isExpired ? "⏱️" : "🔒"}</span> ${heading}</h1><p style="color:#94a3b8;max-width:480px;margin:0 auto 1.5rem;line-height:1.5;">${message}</p><a href="/settings" style="display:inline-block;background:#3b82f6;color:#ffffff;padding:0.6rem 1.2rem;border-radius:8px;text-decoration:none;font-weight:500;">Sign In with Key</a></main></body></html>`;
             return;
@@ -167,6 +178,8 @@ router.get(['/settings', '/settings/(.*)'], async (ctx, next) => {
     const publicPath = resolveServerPath('public/settings.html');
     const staticPath = resolveServerPath('static/settings.html');
     const resolvedPath = fs.existsSync(managerPath) ? managerPath : (fs.existsSync(publicPath) ? publicPath : staticPath);
+    // The old page runs inline handlers and unpkg's Leaflet.
+    if (resolvedPath !== managerPath) useDocumentPolicy(ctx);
 
     if (fs.existsSync(resolvedPath)) {
         ctx.type = 'html';
@@ -238,7 +251,7 @@ router.get('/', async (ctx) => {
 // contact), which no reader of this route uses. Who reads what:
 //   - serviceRadius: the web app's map and marketplace, the phone's map (unsigned), the manager, static/settings.js
 //   - the directory switches, push interval and last push: the manager's Node Identity screen and static/settings.js
-//   - acceptKnocks (withKnockSetting, below): the manager's Node Identity screen
+//   - acceptKnocks and door (withKnockSetting, below): the manager's Node Identity screen and People & Safety → Invites
 // The operator's public address is read from the admin route /api/local/admin/public-address/status.
 function publicNodeConfig(config: NodeConfig) {
     const r = config.serviceRadius;
@@ -246,7 +259,8 @@ function publicNodeConfig(config: NodeConfig) {
         serviceRadius: r && typeof r === 'object' ? { lat: r.lat, lng: r.lng, radiusKm: r.radiusKm } : r,
         publishLocation: config.publishLocation,
         publishMembers: config.publishMembers,
-        publishContacts: config.publishContacts,
+        publishContactEmail: config.publishContactEmail,
+        publishContactPhone: config.publishContactPhone,
         publishHealth: config.publishHealth,
         directoryPushIntervalHours: config.directoryPushIntervalHours,
         lastDirectoryPush: config.lastDirectoryPush,
@@ -257,13 +271,114 @@ function publicNodeConfig(config: NodeConfig) {
 // the `knocks` profile switch as configured, so it travels with the profile record (config/node-profile.ts), and it
 // is said here beside the directory settings because Settings shows them together. Public, like the switch itself in
 // /api/community/info; how many requests are waiting is the operator's only (/api/local/admin/knocks).
-function withKnockSetting<T extends object>(config: T): T & { acceptKnocks: boolean } {
-    return { ...config, acceptKnocks: getConfiguredSwitches().knocks };
+// `door`: who may invite here (config/door.ts): `members`, `admins`, or `open` where the profile opens the door and takes
+// no invites. Public, as `features.door` in /api/community/info is.
+function withKnockSetting<T extends object>(config: T): T & { acceptKnocks: boolean; door: ReturnType<typeof getDoor> } {
+    return { ...config, acceptKnocks: getConfiguredSwitches().knocks, door: getDoor() };
 }
 
 router.get('/api/node/config', async (ctx) => {
     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    ctx.body = withKnockSetting(publicNodeConfig(getNodeConfig()));
+    const config = publicNodeConfig(getNodeConfig());
+    // A private preview (config/private-preview.ts): the phone map reads this unsigned for the community's service area
+    // (apps/native map.tsx, which can't change here), so it is open, and a reader who is no member here (as that read
+    // is) gets the area alone: the place the community serves, no member's anything, and none of the other settings.
+    if (isPrivatePreview() && !isNodeMember(ctx.state.actor as string | undefined)) {
+        ctx.body = { serviceRadius: config.serviceRadius ?? null };
+        return;
+    }
+    ctx.body = withKnockSetting(config);
+});
+
+// The known floor (config/known-floor.ts, community modes slice 4): every owner and admin reads the settings, the
+// exceptions and the log; only an owner changes the dial, the known floor or the cap; an owner or admin sets one member's
+// exception. Every change is a line in the log.
+/** The owner's or admin's own key behind this session, or null: the node password and an automation token name nobody. */
+function ownKeySessionActor(ctx: any): string | null {
+    const actor = ctx.state?.actor;
+    return !ctx.state?.automationTokenId && typeof actor === 'string' && /^[0-9a-f]{64}$/.test(actor) ? actor : null;
+}
+
+function knownFloorRefusal(ctx: any, e: unknown): void {
+    if (!(e instanceof KnownFloorError)) throw e;
+    ctx.status = e.status;
+    ctx.body = { error: e.message, code: e.code };
+}
+
+router.get('/api/local/admin/known-floor', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.body = { ...knownFloorSettings(), exceptions: knownFloorExceptions(), log: readKnownFloorLog(100) };
+});
+
+router.post('/api/local/admin/known-floor', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this community can change the known floor or the cap.')) return;
+    try {
+        ctx.body = setKnownFloorSettings((ctx.state as any)?.actor || 'owner:password', (ctx as any).requestBody || {});
+    } catch (e) { knownFloorRefusal(ctx, e); }
+});
+
+// The Community health panel in Settings (engine/community-health.ts): every owner and admin reads the totals, the two
+// lines and who opened the exceptions; only an owner moves the lines. The exceptions themselves open on an admin's phone,
+// where the names list is (GET /api/names/health/exceptions, signed with their key, logged).
+router.get('/api/local/admin/community-health', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can open Community health.')) return;
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { ...healthSummary(), log: readHealthAccessLog(100, 'balance'), tradeLog: readHealthAccessLog(100, 'trades') };
+});
+
+// Where the 🏘️ Local community sheet's Start a community leads (config/start-community.ts). Owner only: it is the
+// community's own word to strangers. `{ url }`: an https address; null, empty or the default goes back to beanpool.org's.
+router.post('/api/local/admin/start-community-url', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this community can change where Start a community leads.')) return;
+    const set = setStartCommunityUrl(((ctx as any).requestBody || {}).url);
+    if (!set.ok) {
+        ctx.status = 400;
+        ctx.body = { error: `Send url as a web address starting https:// (at most ${START_COMMUNITY_URL_MAX} characters), or null for the default.` };
+        return;
+    }
+    ctx.body = { startCommunityUrl: set.startCommunityUrl };
+});
+
+router.post('/api/local/admin/community-health', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this community can change what the admins see.')) return;
+    try {
+        ctx.body = setHealthSettings((ctx.state as any)?.actor || 'owner:password', (ctx as any).requestBody || {});
+    } catch (e) {
+        if (!(e instanceof HealthError)) throw e;
+        ctx.status = e.status;
+        ctx.body = { error: e.message, code: e.code };
+    }
+});
+
+// One member's line for the Manager's member screen (owner or admin): confirmed, their exception, the known grant. Never
+// their balance.
+router.get('/api/local/admin/known-floor/member/:pubkey', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can see a member\'s known floor.')) return;
+    ctx.set('Cache-Control', 'no-store');
+    try {
+        ctx.body = knownFloorForMember(ctx.params.pubkey, ownKeySessionActor(ctx));
+    } catch (e) { knownFloorRefusal(ctx, e); }
+});
+
+router.post('/api/local/admin/known-floor/exception', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner', 'admin'], 'Only an owner or admin of this community can change a member\'s known floor.')) return;
+    // One member's credit is money, and nobody sets their own: only an owner's or admin's own key session, which names the
+    // person. Never an automation token (it acts as whoever issued it) nor the node password (it names nobody).
+    const actor = ownKeySessionActor(ctx);
+    if (!actor) {
+        ctx.status = 403;
+        ctx.body = { error: 'Sign in with your own key to change a member\'s known floor.', code: 'key_session_only' };
+        return;
+    }
+    try {
+        ctx.body = setKnownFloorException(actor, (ctx as any).requestBody || {});
+    } catch (e) { knownFloorRefusal(ctx, e); }
 });
 
 router.post('/api/local/admin/node/config', async (ctx) => {
@@ -271,12 +386,33 @@ router.post('/api/local/admin/node/config', async (ctx) => {
         console.log("Auth failed for updateNodeConfig");
         return;
     }
-    const { publishLocation, publishMembers, publishContacts, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks } = (ctx as any).requestBody || {};
+    // `publishContacts`, the old single switch for both contacts, is not read: a page that still sends it turns nothing on.
+    const { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks, door } = (ctx as any).requestBody || {};
     // Only when sent, and only true or false: a Settings page from before G6 doesn't send it, and must not turn it back on.
     if (acceptKnocks !== undefined && typeof acceptKnocks !== 'boolean') {
         ctx.status = 400;
         ctx.body = { error: 'acceptKnocks must be true or false' };
         return;
+    }
+    // Who may invite (config/door.ts): only when sent, only by an owner (the node password is an owner's), and only a door
+    // this node can have; refused before anything in this request is written. An admin runs the community day to day
+    // but doesn't decide who may bring people into it (design §5: "an owner can also set each dial").
+    if (door !== undefined) {
+        if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this community can change who may invite.')) return;
+        const refusal = doorSettingRefusal(door);
+        if (refusal) {
+            ctx.status = refusal.status;
+            ctx.body = { error: refusal.error, code: refusal.code };
+            return;
+        }
+    }
+    // The contact switches are an owner's choice to publish, so only a real true or false is taken.
+    for (const [name, v] of [['publishContactEmail', publishContactEmail], ['publishContactPhone', publishContactPhone]] as const) {
+        if (v !== undefined && typeof v !== 'boolean') {
+            ctx.status = 400;
+            ctx.body = { error: `${name} must be true or false` };
+            return;
+        }
     }
     // Whole hours up to what the publisher's timer can hold (config/community-settings.ts isDirectoryPushInterval): past
     // it, below zero or a sliver of an hour, the timer fires every millisecond at the directory registry.
@@ -285,14 +421,21 @@ router.post('/api/local/admin/node/config', async (ctx) => {
         ctx.body = { error: `directoryPushIntervalHours must be a whole number of hours from 0 (never) to ${MAX_DIRECTORY_PUSH_INTERVAL_HOURS}` };
         return;
     }
-    console.log("Updating node config:", { publishLocation, publishMembers, publishContacts, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks });
+    console.log("Updating node config:", { publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours, acceptKnocks, door });
     if (typeof acceptKnocks === 'boolean') setSwitchOverride('knocks', acceptKnocks);
-    // Only the fields sent. One left out and passed on as undefined would be dropped from the stored object, and each
-    // directory switch reads unset as "publish": a request that changed one switch published the contacts and member
-    // count the community had turned off. Settings sends every field (null clears the service area).
-    const sent = Object.fromEntries(Object.entries({ publishLocation, publishMembers, publishContacts, publishHealth, serviceRadius, directoryPushIntervalHours })
+    if (door !== undefined && door !== getDoor()) {
+        setDoor(door as CommunityDoor);
+        // Who changed who may bring people in, for the owners: a member key under a key session, the password otherwise.
+        console.log(`🚪 Who may invite is now ${door === 'admins' ? 'only admins' : 'any member'}, set by ${(ctx.state as any)?.actor || 'owner:password'}.`);
+    }
+    // Only the fields sent. One left out and passed on as undefined would be dropped from the stored object, and the
+    // location, member count and health switches read unset as "publish": a request that changed one switch published
+    // the member count the community had turned off. Settings sends every field (null clears the service area).
+    const sent = Object.fromEntries(Object.entries({ publishLocation, publishMembers, publishContactEmail, publishContactPhone, publishHealth, serviceRadius, directoryPushIntervalHours })
         .filter(([, v]) => v !== undefined));
-    ctx.body = withKnockSetting(updateNodeConfig(sent));
+    // The public fields only, as GET /api/node/config answers: the stored config also holds the tunnel token, and an admin
+    // (who may save these switches) must never read it. No caller reads more from this answer than ok or error.
+    ctx.body = withKnockSetting(publicNodeConfig(updateNodeConfig(sent)));
     
     // Re-initialize the publisher with the new interval
     if (directoryPushIntervalHours !== undefined) {
@@ -311,96 +454,37 @@ router.post('/api/local/admin/directory/push', async (ctx) => {
     ctx.body = result;
 });
 
-// Local directory info endpoint (used by settings preview)
+// Local directory info endpoint (used by settings preview): what a push sends, which holds only what the switches publish.
 // No CORS headers - should only be called from same origin (admin PWA)
 router.get('/api/directory/info', async (ctx) => {
-    const info = getDirectoryInfo();
-    if (!info) {
-        ctx.status = 403;
-        ctx.body = { error: 'This node has opted out of the directory' };
-        return;
-    }
-    ctx.body = info;
+    ctx.body = getDirectoryInfo();
 });
 
 
 // ===================== VERSION & UPDATES =====================
 
 // Version now lives in ../version.js so /api/version and /api/community/health
-// cannot drift apart again.
-
-// Get git commit hash
-function getCommitHash(): string {
-    try {
-        return execFileSync('git', ['rev-parse', '--short', 'HEAD'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
-    } catch { return 'unknown'; }
-}
+// cannot drift apart again. So does the commit, asked of git once rather than on every request.
 
 // ===================== BACKGROUND UPDATE CHECKER =====================
-let cachedUpdateInfo: {
-    updateAvailable: boolean;
-    latestVersion: string;
-    releaseNotes: string;
-    releaseUrl: string;
-    publishedAt: string;
-    lastChecked: string;
-} | null = null;
+// The lookup and its cache live in ../node-release-check.ts: only v<semver> releases are node releases (a vault-v* or
+// native-v* release never reads as a newer node).
 
-async function backgroundUpdateCheck() {
-    try {
-        const response = await fetch(
-            'https://api.github.com/repos/beanpool-org/beanpool/releases/latest',
-            { headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'BeanPool-Node' } }
-        );
-        if (response.ok) {
-            const release = await response.json() as any;
-            const latestVersion = (release.tag_name || '').replace(/^v/, '');
-            const currentVersion = getVersion();
-            cachedUpdateInfo = {
-                updateAvailable: semverGreater(latestVersion, currentVersion),
-                latestVersion,
-                releaseNotes: release.body || '',
-                releaseUrl: release.html_url || '',
-                publishedAt: release.published_at || '',
-                lastChecked: new Date().toISOString(),
-            };
-        } else {
-            // Fallback to tags
-            const tagsResponse = await fetch(
-                'https://api.github.com/repos/beanpool-org/beanpool/tags?per_page=1',
-                { headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'BeanPool-Node' } }
-            );
-            if (tagsResponse.ok) {
-                const tags = await tagsResponse.json() as any[];
-                const latestTag = tags[0]?.name?.replace(/^v/, '') || '';
-                const currentVersion = getVersion();
-                cachedUpdateInfo = {
-                    updateAvailable: semverGreater(latestTag, currentVersion),
-                    latestVersion: latestTag,
-                    releaseNotes: '',
-                    releaseUrl: '',
-                    publishedAt: '',
-                    lastChecked: new Date().toISOString(),
-                };
-            }
-        }
-        if (cachedUpdateInfo?.updateAvailable) {
-            console.log(`[Update] New version available: v${cachedUpdateInfo.latestVersion} (current: v${getVersion()})`);
-        }
-    } catch (e: any) {
-        console.log(`[Update] Background check failed: ${e.message || 'unknown error'}`);
-    }
+// Run initial check after 30s startup delay, then every 6 hours (unref'd so timers don't block process exit).
+// DISABLE_UPDATE_CHECK=true turns the background lookup off (the server-suites runner sets it: a test node must never
+// ask GitHub, and a slow run used to outlive the 30s delay and trip the suites' "nothing leaves this machine" check).
+// Unset, a real node behaves exactly as before. The manual "check for updates" route is unaffected.
+if (process.env.DISABLE_UPDATE_CHECK !== 'true') {
+    setTimeout(() => backgroundUpdateCheck(), 30000).unref();
+    setInterval(() => backgroundUpdateCheck(), 6 * 60 * 60 * 1000).unref();
 }
-
-// Run initial check after 30s startup delay, then every 6 hours (unref'd so timers don't block process exit)
-setTimeout(() => backgroundUpdateCheck(), 30000).unref();
-setInterval(() => backgroundUpdateCheck(), 6 * 60 * 60 * 1000).unref();
 
 router.get('/api/version', (ctx) => {
     ctx.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    const cachedUpdateInfo = cachedNodeUpdateInfo();
     ctx.body = {
         version: getVersion(),
-        commit: getCommitHash(),
+        commit: getCommit(),
         buildTime: new Date().toISOString(),
         node: process.env.CF_RECORD_NAME || 'local',
         // Include cached update info if available
@@ -418,11 +502,18 @@ router.post('/api/admin/thresholds', async (ctx) => {
     const { password, totpCode, ...updates } = (ctx as any).requestBody || {};
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can change its thresholds')) return;
-    // Only allow known threshold keys
+    // Only allow known threshold keys. A number out of its range (negative, Infinity, a fraction of a day) is refused
+    // and nothing is saved; anything that isn't a number (an emptied field arrives as null) is left out, as before.
     const allowed = Object.keys(DEFAULT_THRESHOLDS);
     const filtered: Record<string, number> = {};
     for (const [k, v] of Object.entries(updates)) {
         if (allowed.includes(k) && typeof v === 'number') {
+            const problem = thresholdProblem(k, v);
+            if (problem) {
+                ctx.status = 400;
+                ctx.body = { error: problem };
+                return;
+            }
             filtered[k] = v;
         }
     }
@@ -435,65 +526,30 @@ router.post('/api/admin/thresholds/get', async (ctx) => {
     ctx.body = { thresholds: getThresholds(), defaults: DEFAULT_THRESHOLDS };
 });
 
-function semverGreater(a: string, b: string): boolean {
-    const pa = a.split('.').map(Number);
-    const pb = b.split('.').map(Number);
-    for (let i = 0; i < 3; i++) {
-        if ((pa[i] || 0) > (pb[i] || 0)) return true;
-        if ((pa[i] || 0) < (pb[i] || 0)) return false;
-    }
-    return false;
-}
-
 router.post('/api/admin/check-update', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!requireAdminRole(ctx, OWNER_OR_ADMIN, 'Only an owner or admin of this node can check for updates')) return;
     try {
-        const response = await fetch(
-            'https://api.github.com/repos/beanpool-org/beanpool/releases/latest',
-            { headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'BeanPool-Node' } }
-        );
-        if (response.ok) {
-            const release = await response.json() as any;
-            const latestVersion = (release.tag_name || '').replace(/^v/, '');
+        const release = await lookUpNewestNodeRelease();
+        if (release) {
             const currentVersion = getVersion();
-            const isNewer = semverGreater(latestVersion, currentVersion);
             ctx.body = {
                 currentVersion,
-                latestVersion,
-                updateAvailable: isNewer,
-                releaseUrl: release.html_url || '',
-                releaseNotes: release.body || '',
-                publishedAt: release.published_at || '',
+                latestVersion: release.latestVersion,
+                updateAvailable: semverGreater(release.latestVersion, currentVersion),
+                releaseUrl: release.releaseUrl,
+                releaseNotes: release.releaseNotes,
+                publishedAt: release.publishedAt,
             };
         } else {
-            // No releases yet — check tags instead
-            const tagsResponse = await fetch(
-                'https://api.github.com/repos/beanpool-org/beanpool/tags?per_page=1',
-                { headers: { 'Accept': 'application/vnd.github.v3+json', 'User-Agent': 'BeanPool-Node' } }
-            );
-            if (tagsResponse.ok) {
-                const tags = await tagsResponse.json() as any[];
-                const latestTag = tags[0]?.name?.replace(/^v/, '') || '';
-                const currentVersion = getVersion();
-                ctx.body = {
-                    currentVersion,
-                    latestVersion: latestTag,
-                    updateAvailable: semverGreater(latestTag, currentVersion),
-                    releaseUrl: '',
-                    releaseNotes: '',
-                    publishedAt: '',
-                };
-            } else {
-                // Return Bad Gateway if upstream update source (GitHub API) is unreachable
-                ctx.status = 502;
-                ctx.body = {
-                    currentVersion: getVersion(),
-                    latestVersion: '',
-                    updateAvailable: false,
-                    error: 'Could not reach GitHub',
-                };
-            }
+            // Return Bad Gateway if upstream update source (GitHub API) is unreachable
+            ctx.status = 502;
+            ctx.body = {
+                currentVersion: getVersion(),
+                latestVersion: '',
+                updateAvailable: false,
+                error: 'Could not reach GitHub',
+            };
         }
     } catch (e: any) {
         // Return Internal Server Error on unhandled update check exceptions
@@ -508,6 +564,20 @@ router.post('/api/admin/check-update', async (ctx) => {
 });
 
 // ===================== TOTP 2FA ENDPOINTS (#135) =====================
+
+/**
+ * Once an owner retired the admin password (admin.ts retire-password) the 2FA that guarded it was deleted with it, and
+ * setup, verify and backup codes refuse: a 2FA turned on again would guard nothing but these routes, and a later
+ * take-over or sealed restore would clear it without a word (takeover-envelope.ts bundledLocalConfigUpdates). Off
+ * stays open, so a 2FA turned on before this check existed can still be turned off.
+ */
+const NO_SERVER_2FA = "This server has no admin password, so it has no server 2FA: your phone's lock is your second factor";
+function refuse2faWhileRetired(ctx: any): boolean {
+    if (!isPasswordRetired()) return false;
+    ctx.status = 403;
+    ctx.body = { error: NO_SERVER_2FA, code: PASSWORD_RETIRED_CODE, passwordRetired: true };
+    return true;
+}
 
 /**
  * GET /api/local/admin/2fa/status — Returns current 2FA status (enabled/disabled).
@@ -525,6 +595,8 @@ router.get('/api/local/admin/2fa/status', async (ctx) => {
         hasSecret: !!config.totpSecret,
         pendingSetup: !!config.totpPendingSecret,
         backupCodesRemaining: config.totpBackupCodesHashes ? config.totpBackupCodesHashes.length : 0,
+        // Settings draws one line instead of the 2FA card (refuse2faWhileRetired). Absent on a node from before.
+        passwordRetired: !!config.passwordRetired,
     };
 });
 
@@ -533,7 +605,10 @@ router.get('/api/local/admin/2fa/status', async (ctx) => {
  * Does NOT disarm existing active 2FA or overwrite totpSecret until verified via /2fa/verify.
  */
 router.post('/api/local/admin/2fa/setup', async (ctx) => {
+    // First, so a refusal is never cached either: the answer carries the new secret and backup codes (#1531).
+    ctx.set('Cache-Control', 'no-store');
     if (!(await checkAdminAuth(ctx as any))) return;
+    if (refuse2faWhileRetired(ctx)) return;
     if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can set up 2FA')) return;
     const config = getLocalConfig();
     const secret = generateTotpSecret();
@@ -582,6 +657,7 @@ router.post('/api/local/admin/2fa/setup', async (ctx) => {
 router.post('/api/local/admin/2fa/verify', async (ctx) => {
     if (!rateLimit(ctx)) return;
     if (!(await checkAdminAuth(ctx as any))) return;
+    if (refuse2faWhileRetired(ctx)) return;
     if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can turn 2FA on')) return;
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     const code = body.code || body.totpCode;
@@ -627,6 +703,10 @@ router.post('/api/local/admin/2fa/verify', async (ctx) => {
         }
     }
 
+    // The code that confirmed the new authenticator is spent like any accepted code (totp.ts useTotpCode): once this
+    // secret is the node's, it signs nobody in during the 90 seconds it stays right. Checked as right above.
+    useTotpCode(String(code).trim(), secretToVerify);
+
     // Promote pending secret & backup code hashes to active configuration
     // #135 CR2 fix: Check array length (Boolean([]) is truthy in JS, so [] would overwrite active hashes!)
     const activeBackupHashes = (config.totpPendingBackupCodesHashes && config.totpPendingBackupCodesHashes.length > 0)
@@ -640,6 +720,8 @@ router.post('/api/local/admin/2fa/verify', async (ctx) => {
         totpPendingSecret: null,
         totpPendingBackupCodesHashes: [],
     });
+    // Every password session opened without this authenticator ends; the one that turned it on carries on.
+    restampPasswordSession(ctx);
     const tfaSessionToken = issue2faSessionToken();
     ctx.set('X-Admin-2FA-Session', tfaSessionToken);
     console.log(alreadyOn
@@ -674,8 +756,50 @@ router.post('/api/local/admin/2fa/disable', async (ctx) => {
         totpPendingSecret: null,
         totpPendingBackupCodesHashes: [],
     });
+    restampPasswordSession(ctx);
     console.log('🔓 [AdminAuth] TOTP 2FA disabled for admin account');
     ctx.body = { success: true, message: '2FA disabled successfully', totpEnabled: false };
+});
+
+/**
+ * POST /api/local/admin/2fa/backup-codes — eight new backup codes, shown once; the old ones stop working. Owner only,
+ * and only with the 6-digit code the authenticator shows right now in `code` or `totpCode`: not a backup code (one of
+ * those must never buy eight more), and not a code this request already spent signing in, so `secondFactorJustVerified`
+ * is not taken here. Stored as SHA-256 hashes like every backup code; the log line never carries a code.
+ */
+router.post('/api/local/admin/2fa/backup-codes', async (ctx) => {
+    // First, so a refusal is never cached either (#1531).
+    ctx.set('Cache-Control', 'no-store');
+    if (!rateLimit(ctx)) return;
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (refuse2faWhileRetired(ctx)) return;
+    if (!requireAdminRole(ctx, OWNER_ONLY, 'Only an owner of this node can see new 2FA backup codes')) return;
+    const config = getLocalConfig();
+    if (!config.totpEnabled || !config.totpSecret) {
+        ctx.status = 409;
+        ctx.body = { error: 'Two-factor sign-in is off, so there are no backup codes. Turn it on first.' };
+        return;
+    }
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const code = String(body.code ?? body.totpCode ?? '').trim();
+    if (!/^\d{6}$/.test(code)) {
+        ctx.status = 401;
+        ctx.body = { error: 'Enter the 6-digit code your authenticator app shows now to see new backup codes', totpRequired: true };
+        return;
+    }
+    (ctx.state as any).secondFactorJustVerified = false;
+    if (!(await requireCurrentSecondFactor(ctx, code, 'to see new backup codes'))) return;
+    const backupCodes = generateBackupCodes(8);
+    updateLocalConfig({ totpBackupCodesHashes: backupCodes.map(hashBackupCode) });
+    const by = (ctx.state as any).isKeySession ? `owner ${String((ctx.state as any).actor).slice(0, 12)}…` : 'the admin password';
+    logger.security('AUTH', `New 2FA backup codes were made by ${by}; the old ones no longer work`);
+    noteSecurityEvent({
+        key: 'sec.keys',
+        detail: `New 2FA backup codes for the admin password were made, ${(ctx.state as any).isKeySession ? 'by an owner' : 'with the admin password'}; the old ones no longer work.`,
+        actor: (ctx.state as any).isKeySession ? String((ctx.state as any).actor) : 'owner:password',
+        actorRole: (ctx.state as any).isKeySession ? 'owner' : 'admin password',
+    });
+    ctx.body = { success: true, backupCodes };
 });
 
 // NOTE: /api/admin/update (signal-file approach) has been removed.
@@ -687,6 +811,9 @@ router.post('/api/local/admin/2fa/disable', async (ctx) => {
 router.get('/app', async (ctx) => {
     const indexPath = path.join(PUBLIC_DIR, 'index.html');
     if (fs.existsSync(indexPath)) {
+        // One visit when a person opens it (engine/web-visits.ts): a count a day, nobody identified. /app/… is counted in
+        // https-server.ts's SPA fallback.
+        countWebAppPageLoad(ctx);
         useAppDocumentPolicy(ctx);
         ctx.type = 'html';
         ctx.body = fs.createReadStream(indexPath);

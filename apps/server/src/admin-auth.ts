@@ -1,9 +1,14 @@
 import crypto from 'node:crypto';
-import { getLocalConfig, updateLocalConfig, verifyPasswordAsync, isBreakGlassMode } from './config/local-config.js';
-import { verifyTotpCode, verifyAndFindBackupCodeHash } from './totp.js';
-import { validateAdminSession, verifyBreakGlassCode } from './admin-key-auth.js';
+import { getLocalConfig, updateLocalConfig, verifyPasswordAsync, isBreakGlassMode, isPasswordRetired } from './config/local-config.js';
+import { useTotpCode, verifyAndFindBackupCodeHash, TOTP_CODE_REUSED } from './totp.js';
+import { validateAdminSession, verifyBreakGlassCode, clearAdminSessionCookie, phoneStepUpDue, STEP_UP_REQUIRED_CODE, STEP_UP_REQUIRED_ERROR, adminSessionBinding, adminSessionBindingLive, passwordCredentialBinding, passwordCredentialStamp, type AdminSessionBinding } from './admin-key-auth.js';
 import { acquirePasswordAttempt, settlePasswordAttempt, notePasswordFailure, notePasswordSuccess, refundNodeCheck, refuseBraked, resetPasswordBrake, type Admission } from './password-brake.js';
 import { clientLimiterKey } from './client-ip.js';
+import { isBreakGlassCodeShape } from './break-glass-code.js';
+import { logger } from './logger.js';
+import { logAddressTag } from './log-address.js';
+import { isNodeOwner, nodeRoleOf } from './engine/node-roles.js';
+import { looksLikeAutomationToken, verifyAutomationToken, noteAutomationTokenUse, isRefusedToEveryToken, isBackupsScopeRoute } from './automation-tokens.js';
 
 // A2-4 / A2-21: admin auth verifies the password with ASYNC scrypt (off the
 // event loop — concurrent dashboard admin POSTs no longer serialize on a
@@ -23,7 +28,12 @@ function getBearerToken(ctx: any): string | null {
     return null;
 }
 
-export async function checkAdminAuth(ctx: any): Promise<boolean> {
+export async function checkAdminAuth(ctx: any, opts: PasswordAuthOptions = {}): Promise<boolean> {
+    // 0. An owner's automation token (automation-tokens.ts), before any session or the password: a bearer value that
+    // starts bp_ is decided here alone, and never falls through to another credential.
+    const bearer = getBearerToken(ctx);
+    if (looksLikeAutomationToken(bearer)) return checkAutomationToken(ctx, bearer!);
+
     // 1. Key-Based Session Authentication (docs/admin-surface.md §2.1, §2.3)
     const keySessionToken =
         (ctx.cookies && typeof ctx.cookies.get === 'function' ? ctx.cookies.get('admin_session') : null) ||
@@ -35,13 +45,34 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
     if (keySessionToken) {
         const sessionRes = validateAdminSession(keySessionToken);
         if (sessionRes.valid && sessionRes.session) {
-            // Attribution: every admin action performed under a key session is attributed
-            // to that member (auth_signer = their pubkey), replacing 'owner:password'
             if (!ctx.state) ctx.state = {};
-            ctx.state.actor = sessionRes.session.memberPubkey;
-            ctx.state.auth_signer = sessionRes.session.memberPubkey;
-            ctx.state.adminRole = sessionRes.session.role;
-            ctx.state.isKeySession = true;
+            // Which session this request rides: CSRF tokens are bound to it (below), and a route that changes the
+            // password or the 2FA keeps it signed in (restampPasswordSession).
+            ctx.state.adminSessionId = keySessionToken;
+            if (sessionRes.session.kind === 'password') {
+                // The admin password, exchanged once for this session (POST /api/local/admin/auth/password): to every
+                // route it is the password, owner level and attributed as the password is, with no member's key.
+                ctx.state.adminRole = 'owner';
+                ctx.state.isPasswordSession = true;
+                // Design step 6 (D3): the password needs a second factor. With the node's 2FA off, this session opens
+                // the 2FA setup routes and nothing else until a code is confirmed (a soft gate: the node serves its
+                // members, the card that lifts it always opens, and a key session is never asked).
+                if (passwordSessionNeedsTotpSetup() && !isTotpSetupRoute(ctx)) {
+                    ctx.status = 403;
+                    ctx.body = { error: TOTP_SETUP_REQUIRED_ERROR, code: TOTP_SETUP_REQUIRED_CODE, totpSetupRequired: true };
+                    return false;
+                }
+            } else {
+                // Attribution: every admin action performed under a key session is attributed
+                // to that member (auth_signer = their pubkey), replacing 'owner:password'
+                ctx.state.actor = sessionRes.session.memberPubkey;
+                ctx.state.auth_signer = sessionRes.session.memberPubkey;
+                ctx.state.adminRole = sessionRes.session.role;
+                ctx.state.isKeySession = true;
+                // A phone hand-off whose unlock is older than PHONE_STEP_UP_WINDOW_MS: owner-only changes wait for
+                // Manage again (requirePhoneStepUp).
+                ctx.state.phoneStepUpDue = phoneStepUpDue(sessionRes.session);
+            }
 
             // A moderator's session reaches the moderator routes and nothing else (MODERATOR_ROUTES, below).
             // Checked here, before any route runs, so an admin route that never names a role is still closed to them.
@@ -57,13 +88,15 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
             const hasCookieSession = Boolean(ctx.cookies && typeof ctx.cookies.get === 'function' && ctx.cookies.get('admin_session'));
             const csrfHeader = (typeof ctx.get === 'function' ? ctx.get('x-csrf-token') : null) ||
                 ctx.request?.headers?.['x-csrf-token'] || ctx.headers?.['x-csrf-token'];
+            // A token counts only for the session it was issued to (Fable's web review, L4): a moderator's token
+            // is no use on an owner's cookie.
             if (hasCookieSession && isMutatingMethod && reqPath !== '/api/local/admin/csrf-token') {
-                if (!csrfHeader || !validateCsrfToken(ctx)) {
+                if (!csrfHeader || !validateCsrfToken(ctx, keySessionToken)) {
                     ctx.status = 403;
                     ctx.body = { error: 'Invalid or missing CSRF token' };
                     return false;
                 }
-            } else if (csrfHeader && !validateCsrfToken(ctx)) {
+            } else if (csrfHeader && !validateCsrfToken(ctx, keySessionToken)) {
                 ctx.status = 403;
                 ctx.body = { error: 'Invalid or expired CSRF token' };
                 return false;
@@ -83,7 +116,7 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
                 ctx.request?.body?.breakGlassCode;
 
             if (hasExplicitCreds) {
-                if (ctx.cookies?.set) ctx.cookies.set('admin_session', '', { maxAge: 0, path: '/' });
+                clearAdminSessionCookie(ctx);
             } else {
                 ctx.status = 401;
                 ctx.body = { error: sessionRes.error || 'Invalid or expired admin session', sessionExpired: true };
@@ -92,14 +125,166 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         }
     }
 
+    return checkAdminPasswordAuth(ctx, opts);
+}
+
+/**
+ * Design step 7c (D3: an owner needs a second factor). With the node's 2FA off, the password sent with a request (the
+ * X-Admin-Password or X-Break-Glass-Code header, or `password` / `breakGlassCode` in the body) is one factor, so every
+ * admin route refuses it: 403 PASSWORD_NEEDS_2FA_CODE, after the password is checked (a wrong one is answered, braked and
+ * tarpitted as before). Three things still take it:
+ *   - the password sign-in (POST /api/local/admin/auth/password, `opensSession`), whose session #1537 holds to the 2FA
+ *     setup card until a code is confirmed;
+ *   - a break-glass code on the enrol routes: the code is the recovery factor itself (an owner who lost their phone),
+ *     shown once and made by an owner; the password alone on those routes is refused like anywhere else;
+ *   - a legacy standby's copy routes (backup.ts replicationAuth, `legacyCopy`), only while the operator has not made
+ *     the replication token the only way, as before.
+ * With 2FA on, the password needs the code (or a 2FA session) exactly as before. A key session and an automation token
+ * never reach this.
+ */
+export const PASSWORD_NEEDS_2FA_CODE = 'password_needs_2fa';
+
+/**
+ * The answer on every password path once an owner retired the password (POST /api/local/admin/auth/retire-password):
+ * the header, a body password, the password sign-in, verify-password, change-password. No route sets one again.
+ */
+export const PASSWORD_RETIRED_CODE = 'password_retired';
+export const PASSWORD_RETIRED_ERROR =
+    "This community's admin password was retired: it signs nobody in, and no route sets one again. " +
+    'Sign in with your phone (Manage in the app, or "Sign in with your phone" on a computer); scripts use an owner automation token. ' +
+    'Locked out: your break-glass code, a second owner, or "beanpool recover" on the server.';
+
+export function refusePasswordRetired(ctx: any): void {
+    ctx.status = 403;
+    ctx.body = { error: PASSWORD_RETIRED_ERROR, code: PASSWORD_RETIRED_CODE, passwordRetired: true };
+}
+
+/** The password (or break-glass code) a request carries: a header or the body, never the URL (#130). */
+function sentPassword(ctx: any): string | null {
+    const headerPass = (typeof ctx.get === 'function' ? ctx.get('x-admin-password') : null) ||
+        (typeof ctx.get === 'function' ? ctx.get('x-break-glass-code') : null) ||
+        ctx.request?.headers?.['x-admin-password'] ||
+        ctx.headers?.['x-admin-password'] ||
+        ctx.request?.headers?.['x-break-glass-code'] ||
+        ctx.headers?.['x-break-glass-code'];
+    const rawPass = ctx.requestBody?.password || ctx.request?.body?.password ||
+                    ctx.requestBody?.breakGlassCode || ctx.request?.body?.breakGlassCode || headerPass;
+    return rawPass ? String(rawPass).trim() : null;
+}
+export const PASSWORD_NEEDS_2FA_ERROR = 'Turn on two-factor sign-in in Settings, or use an automation token made from your phone';
+
+export interface PasswordAuthOptions {
+    /** The password sign-in, which opens a session (held to the 2FA setup card while 2FA is off). */
+    opensSession?: boolean;
+    /** A copy route's legacy password (backup.ts replicationAuth), taken while replicationTokenOnly is off. */
+    legacyCopy?: boolean;
+}
+
+export const TOKEN_REFUSED_CODE = 'token_not_allowed';
+export const AGENT_TOKEN_ELSEWHERE_ERROR = "An AI assistant's token reaches this server's assistant endpoint (/mcp) and nothing else";
+export const TOKEN_OWNER_ONLY_ERROR = 'An automation token never makes owner-only changes: sign in to Settings as an owner';
+
+/**
+ * An automation token's request (design step 7, D8). The token is a credential on its own, as a key session is: it asks
+ * for no 2FA code, because an owner made it with their key (never the password: routes/automation-tokens.ts); and a 2FA
+ * code sent with it changes nothing. Its scope is checked here, before any route runs:
+ *   read     GET/HEAD, and the POSTs that only read (READ_ONLY_POSTS); admin level.
+ *   backups  BACKUPS_SCOPE_ROUTES and nothing else; owner level on those routes alone.
+ *   admin    every route an admin may use; admin level, so every owner-only route refuses it.
+ *   agent    no route here at all: an AI assistant's token reaches `/mcp` alone, which reads it itself (agent/mcp-route.ts).
+ * No scope reaches signing in, sessions or the tokens themselves (isRefusedToEveryToken), nor an owner-only change
+ * (requireAdminRole, requirePhoneStepUp). What it does is the issuing owner's (ctx.state.actor), marked with the
+ * token's id (ctx.state.viaToken), and every use is logged with the route, never the secret.
+ */
+/**
+ * The automation token behind this request, for a look log (its id and name, never its secret), or null for a person's
+ * own session: its actor is its maker, so without this a script's look reads as the maker's own.
+ */
+export function lookTokenOf(ctx: any): { id: string; name: string } | null {
+    const id = ctx?.state?.automationTokenId;
+    return typeof id === 'string' && id ? { id, name: typeof ctx.state.tokenName === 'string' ? ctx.state.tokenName : '' } : null;
+}
+
+function checkAutomationToken(ctx: any, presented: string): boolean {
+    const method = String(ctx.method || ctx.request?.method || 'GET').toUpperCase();
+    const reqPath = String(ctx.path || ctx.request?.path || '');
+    const record = verifyAutomationToken(presented);
+    if (!record) {
+        ctx.status = 401;
+        ctx.body = { error: 'Invalid, revoked or expired automation token' };
+        logger.warn('AUTH', 'Automation token refused', { route: `${method} ${reqPath}`, from: logAddressTag(ctx) });
+        return false;
+    }
+    // A token lives only as long as its maker is an owner: an owner removed or demoted takes their tokens with them. A
+    // record whose maker is not a member's key ('owner:password', from before only a key could make one) is refused alike.
+    // An AI assistant's (agent) token is an owner's or an admin's own (agent/grants-route.ts), so it lives while its maker
+    // is either, as /mcp reads it; here it is refused 403 below whatever its maker.
+    const makerRole = typeof record.createdBy === 'string' ? nodeRoleOf(record.createdBy) : null;
+    const makerLive = record.scope === 'agent' ? makerRole === 'owner' || makerRole === 'admin'
+        : typeof record.createdBy === 'string' && isNodeOwner(record.createdBy);
+    if (!makerLive) {
+        ctx.status = 401;
+        ctx.body = { error: 'Invalid, revoked or expired automation token' };
+        logger.warn('AUTH', record.scope === 'agent' ? 'Automation token refused: its maker is no longer an owner or admin'
+            : 'Automation token refused: its maker is no longer an owner', { tokenId: record.id, route: `${method} ${reqPath}` });
+        return false;
+    }
+    const refuse = (error: string): false => {
+        ctx.status = 403;
+        ctx.body = { error, code: TOKEN_REFUSED_CODE, scope: record.scope };
+        logger.warn('AUTH', 'Automation token outside its scope', { tokenId: record.id, scope: record.scope, route: `${method} ${reqPath}` });
+        return false;
+    };
+    if (record.scope === 'agent') return refuse(AGENT_TOKEN_ELSEWHERE_ERROR);
+    if (isRefusedToEveryToken(method, reqPath)) return refuse('An automation token cannot sign in, open a session or manage tokens');
+    if (record.scope === 'read' && !isReadRequest(ctx)) return refuse('This token can only read');
+    if (record.scope === 'backups' && !isBackupsScopeRoute(method, reqPath)) return refuse('This token can only take and read backups');
+    if (!ctx.state) ctx.state = {};
+    ctx.state.automationTokenId = record.id;
+    ctx.state.viaToken = record.id;
+    ctx.state.tokenName = typeof record.name === 'string' ? record.name : '';
+    ctx.state.tokenScope = record.scope;
+    ctx.state.tokenOwnerRoute = record.scope === 'backups';
+    ctx.state.adminRole = record.scope === 'backups' ? 'owner' : 'admin';
+    ctx.state.actor = record.createdBy;
+    logger.info('AUTH', 'Automation token used', {
+        tokenId: record.id, issuedBy: String(record.createdBy).slice(0, 16), scope: record.scope, route: `${method} ${reqPath}`,
+    });
+    noteAutomationTokenUse(record.id, `${method} ${reqPath}`);
+    return true;
+}
+
+/**
+ * checkAdminAuth's second half: the node password (or a break-glass code, on the enrol routes only) in a header or
+ * the body, with the brake, the tarpit, break-glass mode and the 2FA code. No session is looked at: the password
+ * sign-in (POST /api/local/admin/auth/password) calls this alone, so a session cookie the browser still holds plays
+ * no part in opening a new one.
+ */
+export async function checkAdminPasswordAuth(ctx: any, opts: PasswordAuthOptions = {}): Promise<boolean> {
     // 2. Break-glass mode enforcement (docs/admin-surface.md §2.2, §2.4)
     // When breakGlassMode is enabled, password and break-glass credentials can ONLY reach key enrolment!
     const isBreakGlass = isBreakGlassMode();
     const reqPath = ctx.path || ctx.request?.path || '';
+
+    // Retired for good (design step 10): whatever is sent as the password is refused before it is looked at. A
+    // break-glass code on the enrol routes is still the owners' recovery factor.
+    if (isPasswordRetired()) {
+        const sent = sentPassword(ctx);
+        const breakGlassEnrol = reqPath === '/api/local/admin/auth/enrol' || reqPath === '/api/local/admin/auth/break-glass/enrol';
+        if (sent && !(breakGlassEnrol && isBreakGlassCodeShape(sent))) {
+            refusePasswordRetired(ctx);
+            return false;
+        }
+    }
     const isEnrolment = reqPath === '/api/local/admin/auth/enrol' ||
                         reqPath === '/api/local/admin/auth/break-glass/enrol' ||
                         reqPath === '/api/local/admin/auth/break-glass/status' ||
                         reqPath === '/api/local/admin/auth/break-glass-status';
+
+    // The only routes a break-glass code opens, whatever the mode (§2.2: "can do exactly one thing: enrol a new admin
+    // key"). Until 2026-10-01 a code was tried for any password on any route while the mode was off (the default), so it
+    // was a second owner password that never changed (Fable's security review, MEDIUM 1).
+    const isBreakGlassEnrolment = reqPath === '/api/local/admin/auth/enrol' || reqPath === '/api/local/admin/auth/break-glass/enrol';
 
     if (isBreakGlass && !isEnrolment) {
         ctx.status = 403;
@@ -112,16 +297,7 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
 
     // 3. Password / Break-glass Code Authentication
     const config = getLocalConfig();
-    const headerPass = (typeof ctx.get === 'function' ? ctx.get('x-admin-password') : null) ||
-        (typeof ctx.get === 'function' ? ctx.get('x-break-glass-code') : null) ||
-        ctx.request?.headers?.['x-admin-password'] ||
-        ctx.headers?.['x-admin-password'] ||
-        ctx.request?.headers?.['x-break-glass-code'] ||
-        ctx.headers?.['x-break-glass-code'];
-    // #130: Password must travel in headers or request body only, NEVER in URL query params.
-    const rawPass = ctx.requestBody?.password || ctx.request?.body?.password ||
-                    ctx.requestBody?.breakGlassCode || ctx.request?.body?.breakGlassCode || headerPass;
-    const password = rawPass ? String(rawPass).trim() : null;
+    const password = sentPassword(ctx);
 
     let ok = false;
     let breakGlassOwner: string | null = null;
@@ -140,20 +316,33 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         else chargedAt = admission.chargedAt;
         let pwOk = false;
         try {
-            // While the source is braked the password is not checked at all; a break-glass code still is (64 random
-            // bits: not guessable online, and how an owner enrols a key while the password is under attack).
+            // While the source is braked the password is not checked at all. On the enrol routes a break-glass code
+            // still is (64 random bits: not guessable online, and how an owner enrols a key while the password is under
+            // attack), at most once every BREAK_GLASS_WHILE_BRAKED_MS per source and BREAK_GLASS_WHILE_BRAKED_PER_MIN a
+            // minute across the node, since each check is an scrypt per owner. On every other route a code is a wrong
+            // password: the same answer, counted by the same brake.
             if (admitted && config.adminHash && config.salt && await verifyPasswordAsync(password, config.adminHash, config.salt)) {
                 pwOk = true;
                 // Which password this request proved, so a route that must also be sent the current password (change
                 // password) need not run scrypt, and take the brake, a second time for the same string.
                 if (!ctx.state) ctx.state = {};
                 ctx.state.verifiedAdminPassword = password;
-            } else {
-                const ownerMatch = verifyBreakGlassCode(password);
-                if (ownerMatch) {
-                    pwOk = true;
-                    breakGlassOwner = ownerMatch.member_pubkey;
+            } else if (isBreakGlassEnrolment && isBreakGlassCodeShape(password)) {
+                const wait = admitted ? 0 : admitBreakGlassWhileBraked(brakeKey);
+                if (wait > 0 && refusal) {
+                    refusal = { ...refusal, retryAfter: wait };
+                } else {
+                    const ownerMatch = await verifyBreakGlassCode(password);
+                    if (ownerMatch) {
+                        pwOk = true;
+                        breakGlassOwner = ownerMatch.member_pubkey;
+                    }
+                    logger.security('AUTH', ownerMatch
+                        ? `Break-glass code of ${breakGlassOwner!.slice(0, 12)}… accepted to enrol an admin key (${reqPath}, from ${logAddressTag(brakeKey)})`
+                        : `A wrong break-glass code was refused at ${reqPath} (from ${logAddressTag(brakeKey)})`);
                 }
+            } else if (isBreakGlassCodeShape(password) && admitted) {
+                logger.security('AUTH', `A break-glass code was sent to ${reqPath}; it only enrols an admin key, so it was answered as a wrong password (from ${logAddressTag(brakeKey)})`);
             }
         } finally {
             if (admitted) settlePasswordAttempt(brakeKey, pwOk, !totpOn);
@@ -166,6 +355,16 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         return false;
     }
 
+    if (!ok && !password) {
+        // Nothing was sent: no session, no password, no code. That is no guess, so it is not tarpitted and the
+        // tarpit doesn't count it: most often it is a manager whose browser no longer holds its session cookie,
+        // polling on, and counting those would slow the owner's own next sign-in. `sessionExpired` sends that
+        // manager back to its sign-in card (App.tsx sessionEndedRef); a client that never signed in ignores it.
+        ctx.status = 401;
+        ctx.body = { error: 'Not signed in: no admin session or password was sent', sessionExpired: true, notSignedIn: true };
+        return false;
+    }
+
     if (!ok) {
         const now = Date.now();
         if (now - adminFailWindowStart > ADMIN_FAIL_WINDOW_MS) { adminAuthFailures = 0; adminFailWindowStart = now; }
@@ -174,6 +373,16 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         await new Promise(r => setTimeout(r, Math.min(adminAuthFailures * 250, 5000)));
         ctx.status = 401;
         ctx.body = { error: 'Invalid password' };
+        return false;
+    }
+
+    // Step 7c (PASSWORD_NEEDS_2FA_CODE, above): with the node's 2FA off (read now, after the wait), the password alone opens
+    // no admin route. Only a break-glass code on the enrol routes sets breakGlassOwner.
+    if (passwordSessionNeedsTotpSetup() && !opts.opensSession && !opts.legacyCopy && !breakGlassOwner) {
+        if (ctx.state) delete ctx.state.verifiedAdminPassword;
+        logger.security('AUTH', `The admin password was sent to ${reqPath} on a node with two-factor sign-in off: refused (from ${logAddressTag(brakeKey)})`);
+        ctx.status = 403;
+        ctx.body = { error: PASSWORD_NEEDS_2FA_ERROR, code: PASSWORD_NEEDS_2FA_CODE };
         return false;
     }
 
@@ -192,7 +401,7 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         (typeof ctx.get === 'function' ? ctx.get('x-csrf-token') : null) ||
         ctx.request?.headers?.['x-csrf-token'] ||
         ctx.headers?.['x-csrf-token'];
-    if (csrfHeader && !validateCsrfToken(ctx)) {
+    if (csrfHeader && !validateCsrfToken(ctx, PASSWORD_CSRF_BINDING)) {
         ctx.status = 403;
         ctx.body = { error: 'Invalid or expired CSRF token' };
         return false;
@@ -218,6 +427,8 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
             // node-wide check it took (password-brake.ts, 3). Otherwise, after one wrong current code, the owner's
             // own dashboard polling spends the whole allowance and is refused (Fable's review of #955, B1). A code
             // this request goes on to check (requireCurrentSecondFactor) is admitted afresh, so it still costs one.
+            // If this request goes on to change the password or the 2FA, its own 2FA session carries on (restamp2faSessions).
+            ctx.state.tfaSessionInUse = sessionToken;
             if (admitted) {
                 refundNodeCheck(chargedAt);
                 ctx.state.passwordBrakeKey = undefined;
@@ -236,7 +447,9 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
         }
 
         const cleanCode = String(totpHeader).trim();
-        let totpValid = verifyTotpCode(cleanCode, currentConfig.totpSecret);
+        // Once only: a code this server already accepted opens nothing again (totp.ts useTotpCode).
+        const totpUse = useTotpCode(cleanCode, currentConfig.totpSecret);
+        let totpValid = totpUse === 'ok';
 
         // Check backup code SHA-256 hashes using timingSafeEqual if 6-digit TOTP code check didn't match
         const backupHashes = currentConfig.totpBackupCodesHashes || [];
@@ -257,7 +470,7 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
             adminAuthFailures++;
             if (admitted) notePasswordFailure(brakeKey);
             ctx.status = 401;
-            ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
+            ctx.body = { error: totpUse === 'reused' ? TOTP_CODE_REUSED : 'Invalid 2FA code', totpRequired: true };
             return false;
         }
 
@@ -286,6 +499,38 @@ export async function checkAdminAuth(ctx: any): Promise<boolean> {
     return true;
 }
 
+/**
+ * Design step 6 (D3): a second factor is mandatory on the password path. A password session (POST
+ * /api/local/admin/auth/password) on a node whose 2FA is off reaches only TOTP_SETUP_ROUTES until a code from a new
+ * authenticator is confirmed (/2fa/verify turns 2FA on and keeps this session signed in); every other admin route
+ * answers 403 TOTP_SETUP_REQUIRED_CODE. Soft: nothing else is refused, key sessions (Manage, a computer by QR) are never
+ * gated, and with 2FA on the password already needs the code. The password sent on each request instead is refused
+ * outright while 2FA is off (step 7c, PASSWORD_NEEDS_2FA_CODE): such callers use an owner automation token.
+ */
+export const TOTP_SETUP_REQUIRED_CODE = 'totp_setup_required';
+export const TOTP_SETUP_REQUIRED_ERROR =
+    'Set up two-factor sign-in to open Settings: the admin password alone is not enough.';
+
+/** What a gated password session may still do: read and set up the node's 2FA, and fetch its CSRF token. */
+export const TOTP_SETUP_ROUTES: ReadonlyArray<{ method: 'GET' | 'POST'; path: string }> = [
+    { method: 'GET', path: '/api/local/admin/2fa/status' },
+    { method: 'POST', path: '/api/local/admin/2fa/setup' },
+    { method: 'POST', path: '/api/local/admin/2fa/verify' },
+    { method: 'POST', path: '/api/local/admin/csrf-token' },
+];
+
+/** Whether the node's 2FA is off, so a password session is held to the 2FA setup card. */
+export function passwordSessionNeedsTotpSetup(): boolean {
+    const config = getLocalConfig();
+    return !(config.totpEnabled && config.totpSecret);
+}
+
+function isTotpSetupRoute(ctx: any): boolean {
+    const method = String(ctx.method || '').toUpperCase();
+    const path = ctx.path || ctx.request?.path || '';
+    return TOTP_SETUP_ROUTES.some(r => r.method === method && r.path === path);
+}
+
 export type AdminRole = 'owner' | 'admin' | 'moderator';
 
 /**
@@ -308,6 +553,12 @@ export const MODERATOR_ROUTES: ReadonlyArray<{ method: 'GET' | 'POST'; path: str
     { method: 'POST', path: '/api/local/admin/posts/:id/restore' },
     { method: 'GET', path: '/api/local/admin/members/muted' },
     { method: 'POST', path: '/api/local/admin/members/:pubkey/unmute' },
+    // Clean-up by burst (engine/burst-cleanup.ts, S9): the digest, one account's burst, hiding its posts and the undo.
+    // Removing its accounts is not here: that stays with owners and admins.
+    { method: 'GET', path: '/api/local/admin/bursts' },
+    { method: 'GET', path: '/api/local/admin/members/:pubkey/burst' },
+    { method: 'POST', path: '/api/local/admin/members/:pubkey/burst/hide' },
+    { method: 'POST', path: '/api/local/admin/bursts/:id/undo' },
     { method: 'POST', path: '/api/local/admin/csrf-token' },
     { method: 'POST', path: '/api/local/admin/auth/revoke-all' },
 ];
@@ -334,9 +585,62 @@ export function isModeratorRoute(ctx: any): boolean {
  */
 export function requireAdminRole(ctx: any, allowed: readonly AdminRole[], error: string): boolean {
     const role = ctx.state?.adminRole;
-    if (allowed.includes(role)) return true;
+    // An owner-only route, for an automation token: refused, except the backups scope's own routes (checkAdminAuth).
+    if (ctx.state?.automationTokenId && !allowed.includes('admin') && !ctx.state.tokenOwnerRoute) {
+        ctx.status = 403;
+        ctx.body = { error: TOKEN_OWNER_ONLY_ERROR, code: TOKEN_REFUSED_CODE };
+        return false;
+    }
+    if (allowed.includes(role)) {
+        // An owner-only change from the phone's Manage hand-off asks for the phone's unlock again (requirePhoneStepUp).
+        // Reads are not asked: Settings must keep showing what it shows.
+        if (!allowed.includes('admin') && !isReadRequest(ctx) && !requirePhoneStepUp(ctx)) return false;
+        return true;
+    }
     ctx.status = 403;
     ctx.body = { error };
+    return false;
+}
+
+/**
+ * Owner-only reads that Settings sends as POST (the body says which store, or nothing): they change nothing, so the
+ * step-up does not ask for them. Named one by one; every other POST is a change.
+ */
+const READ_ONLY_POSTS: readonly string[] = [
+    '/api/local/admin/offbox-backups/status',
+    '/api/local/admin/offbox-backups/list',
+    '/api/local/admin/standby-health',
+    '/api/local/admin/alerts/status',
+];
+
+function requestPathOf(ctx: any): string {
+    return String(ctx.path || ctx.request?.path || '').toLowerCase().replace(/\/+$/, '');
+}
+
+function isReadRequest(ctx: any): boolean {
+    const method = String(ctx.method || ctx.request?.method || '').toUpperCase();
+    if (method === 'GET' || method === 'HEAD') return true;
+    return method === 'POST' && READ_ONLY_POSTS.includes(requestPathOf(ctx));
+}
+
+/**
+ * The step-up of decision D2 (2026-10-03): a key sign-in asks for no 2FA code, the phone's lock being the factor, so a
+ * session the phone's Manage hand-off opened may make owner-only changes only within PHONE_STEP_UP_WINDOW_MS of that
+ * unlock (admin-key-auth.ts phoneStepUpDue). After it, 403 `step_up_required` until Manage is pressed again. Every
+ * other session (the password's, a computer's) passes. Answers 403 and returns false when the step-up is due.
+ */
+export function requirePhoneStepUp(ctx: any): boolean {
+    // Every owner-only change asks this, so an automation token stops here: no token satisfies a step-up, and none makes
+    // an owner-only change (the backups scope's routes only are owner level, and are taken before this).
+    if (ctx.state?.automationTokenId) {
+        if (ctx.state.tokenOwnerRoute) return true;
+        ctx.status = 403;
+        ctx.body = { error: TOKEN_OWNER_ONLY_ERROR, code: TOKEN_REFUSED_CODE };
+        return false;
+    }
+    if (!ctx.state?.phoneStepUpDue) return true;
+    ctx.status = 403;
+    ctx.body = { error: STEP_UP_REQUIRED_ERROR, code: STEP_UP_REQUIRED_CODE };
     return false;
 }
 
@@ -375,11 +679,14 @@ export async function requireCurrentSecondFactor(ctx: any, code: unknown, action
         }
     }
     let ok = false;
+    let reused = false;
     try {
         // Read after the wait: another request may have spent a backup code, or changed the secret, meanwhile.
         const config = getLocalConfig();
         if (config.totpEnabled && config.totpSecret) {
-            ok = verifyTotpCode(clean, config.totpSecret);
+            const use = useTotpCode(clean, config.totpSecret);
+            ok = use === 'ok';
+            reused = use === 'reused';
             if (!ok) {
                 const hashes = config.totpBackupCodesHashes || [];
                 const i = hashes.length > 0 ? verifyAndFindBackupCodeHash(clean, hashes) : -1;
@@ -402,16 +709,45 @@ export async function requireCurrentSecondFactor(ctx: any, code: unknown, action
         adminAuthFailures++;
         await new Promise(r => setTimeout(r, Math.min(adminAuthFailures * 250, 5000)));
         ctx.status = 401;
-        ctx.body = { error: 'Invalid 2FA code', totpRequired: true };
+        ctx.body = { error: reused ? TOTP_CODE_REUSED : 'Invalid 2FA code', totpRequired: true };
         return false;
     }
     return true;
+}
+
+/**
+ * A break-glass code from a source the password brake holds (checkAdminAuth, enrol routes only): at most one check per
+ * source every BREAK_GLASS_WHILE_BRAKED_MS, and BREAK_GLASS_WHILE_BRAKED_PER_MIN a minute across the node. Each check is
+ * an scrypt per owner (break-glass-code.ts), and a held source is otherwise checked for nothing, so without this bound a
+ * few addresses sending well-formed junk could keep the node's threadpool busy. An owner recovering sends one or two;
+ * a source the brake admits is not held here (its attempt is already counted), so another network always works.
+ */
+export const BREAK_GLASS_WHILE_BRAKED_MS = 10_000;
+export const BREAK_GLASS_WHILE_BRAKED_PER_MIN = 30;
+const breakGlassWhileBraked = new Map<string, number>();
+let breakGlassWhileBrakedNode: number[] = [];
+
+/** 0 when this held source may have its code checked now; otherwise the seconds to wait. */
+function admitBreakGlassWhileBraked(key: string, now = Date.now()): number {
+    const last = breakGlassWhileBraked.get(key);
+    if (last !== undefined && now - last < BREAK_GLASS_WHILE_BRAKED_MS) return Math.ceil((BREAK_GLASS_WHILE_BRAKED_MS - (now - last)) / 1000);
+    breakGlassWhileBrakedNode = breakGlassWhileBrakedNode.filter(t => now - t < 60_000);
+    if (breakGlassWhileBrakedNode.length >= BREAK_GLASS_WHILE_BRAKED_PER_MIN) {
+        return Math.max(1, Math.ceil((breakGlassWhileBrakedNode[0] + 60_000 - now) / 1000));
+    }
+    breakGlassWhileBrakedNode.push(now);
+    breakGlassWhileBraked.delete(key);
+    breakGlassWhileBraked.set(key, now);
+    if (breakGlassWhileBraked.size > 10_000) breakGlassWhileBraked.delete(breakGlassWhileBraked.keys().next().value!);
+    return 0;
 }
 
 export function resetAdminAuthTarpit(): void {
     adminAuthFailures = 0;
     adminFailWindowStart = Date.now();
     resetPasswordBrake();
+    breakGlassWhileBraked.clear();
+    breakGlassWhileBrakedNode = [];
 }
 
 // ===================== CSRF TOKEN STORE =====================
@@ -419,37 +755,45 @@ export function resetAdminAuthTarpit(): void {
 // Tokens are 32 random hex bytes, expire after 4 hours, and must be echoed
 // back in the X-CSRF-Token header on all admin state-mutation requests.
 // This provides defence-in-depth against XSS-based CSRF attacks.
+//
+// Each token is bound to what it was issued to (Fable's web review, L4): an admin session's id, or
+// PASSWORD_CSRF_BINDING for a caller sending the password itself. It validates only for that: a token one session
+// fetched (a moderator's, say) is refused on another's cookie, and every token of a session goes with it
+// (revokeCsrfTokensBoundTo, from revokeAdminSession).
 
 const CSRF_TOKEN_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
-const csrfTokens = new Map<string, number>(); // token → expiry timestamp
+/** The binding of a token issued to a caller authenticated by the password itself (no session). */
+export const PASSWORD_CSRF_BINDING = 'password';
+const csrfTokens = new Map<string, { expiry: number; binding: string }>();
 
-/** Issue a new CSRF token (called after successful password authentication). */
-export function issueCsrfToken(): string {
+/** Issue a new CSRF token, for the session `binding` names (or PASSWORD_CSRF_BINDING). */
+export function issueCsrfToken(binding: string = PASSWORD_CSRF_BINDING): string {
     const token = crypto.randomBytes(32).toString('hex');
-    csrfTokens.set(token, Date.now() + CSRF_TOKEN_TTL_MS);
+    csrfTokens.set(token, { expiry: Date.now() + CSRF_TOKEN_TTL_MS, binding });
     // Prune expired tokens opportunistically (hoist now to avoid repeated calls)
     const now = Date.now();
-    for (const [t, exp] of csrfTokens) {
-        if (now > exp) csrfTokens.delete(t);
+    for (const [t, entry] of csrfTokens) {
+        if (now > entry.expiry) csrfTokens.delete(t);
     }
     return token;
 }
 
-/** Validate a CSRF token from the request's X-CSRF-Token header. */
-export function validateCsrfToken(ctx: any): boolean {
+/** Validate a CSRF token from the request's X-CSRF-Token header, for the session `binding` names. */
+export function validateCsrfToken(ctx: any, binding: string = PASSWORD_CSRF_BINDING): boolean {
     const token: string | undefined =
         (typeof ctx.get === 'function' ? ctx.get('x-csrf-token') : null) ||
         ctx.request?.headers?.['x-csrf-token'] ||
         ctx.headers?.['x-csrf-token'];
     if (!token) return false;
-    const expiry = csrfTokens.get(token);
-    if (!expiry) return false;
-    if (Date.now() > expiry) {
+    const entry = csrfTokens.get(token);
+    if (!entry) return false;
+    if (Date.now() > entry.expiry) {
         csrfTokens.delete(token); // eagerly remove expired entries on encounter
         return false;
     }
+    if (entry.binding !== binding) return false;
     // Sliding window: refresh TTL on valid use
-    csrfTokens.set(token, Date.now() + CSRF_TOKEN_TTL_MS);
+    entry.expiry = Date.now() + CSRF_TOKEN_TTL_MS;
     return true;
 }
 
@@ -458,68 +802,107 @@ export function revokeCsrfToken(token: string): void {
     csrfTokens.delete(token);
 }
 
+/** Revoke every CSRF token bound to `binding` (a session that ended). */
+export function revokeCsrfTokensBoundTo(binding: string): void {
+    for (const [t, entry] of csrfTokens) {
+        if (entry.binding === binding) csrfTokens.delete(t);
+    }
+}
+
 // ===================== WS TICKET STORE =====================
 // Ephemeral single-use tickets for WebSocket connection upgrades.
 // Prevents transmitting raw admin passwords in URL query parameters.
+// A ticket asked for by a session (the admin_session cookie) is bound to it: redeemed only while that session is live
+// at the same session_epoch, and the log socket it opens is closed when the session ends (https-server.ts). One asked
+// for with the password itself (no session) is bound to that password and its second factor: redeemed, and its socket
+// kept open, only while both are still in force and break-glass is off, so turning 2FA off, break-glass on, or
+// changing the password (what an owner does about a leaked password) ends the stream opened with it.
 const WS_TICKET_TTL_MS = 30_000; // 30 seconds
-const wsTickets = new Map<string, number>(); // ticket -> expiry timestamp
+const wsTickets = new Map<string, { expiry: number; binding: AdminSessionBinding }>();
 
 // Periodic background cleanup for expired WebSocket tickets
 if (typeof setInterval !== 'undefined') {
     const wsCleanupTimer = setInterval(() => {
         const now = Date.now();
-        for (const [t, exp] of wsTickets) {
-            if (now > exp) wsTickets.delete(t);
+        for (const [t, entry] of wsTickets) {
+            if (now > entry.expiry) wsTickets.delete(t);
         }
     }, 60_000);
     if (wsCleanupTimer.unref) wsCleanupTimer.unref();
 }
 
-export function issueWsTicket(): string {
+/**
+ * A ticket for the session `sessionId` (ctx.state.adminSessionId), or for the password in force now (no session); null
+ * if that session has ended, or (no session) in break-glass mode.
+ */
+export function issueWsTicket(sessionId?: string | null): string | null {
+    const binding = sessionId ? adminSessionBinding(sessionId) : passwordCredentialBinding();
+    if (!binding) return null;
     const ticket = crypto.randomBytes(32).toString('hex');
-    wsTickets.set(ticket, Date.now() + WS_TICKET_TTL_MS);
+    wsTickets.set(ticket, { expiry: Date.now() + WS_TICKET_TTL_MS, binding });
     const now = Date.now();
-    for (const [t, exp] of wsTickets) {
-        if (now > exp) wsTickets.delete(t);
+    for (const [t, entry] of wsTickets) {
+        if (now > entry.expiry) wsTickets.delete(t);
     }
     return ticket;
 }
 
-export function isValidWsTicket(ticket: string): boolean {
-    const expiry = wsTickets.get(ticket);
-    if (!expiry) return false;
+/**
+ * Spends a ticket: what it is bound to, or null if it is unknown, spent, expired, or its session has ended or been
+ * signed out everywhere since it was issued (or, asked for with the password itself, the password or its 2FA has
+ * changed or break-glass is on).
+ */
+export function redeemWsTicket(ticket: string): { binding: AdminSessionBinding } | null {
+    const entry = wsTickets.get(ticket);
+    if (!entry) return null;
     wsTickets.delete(ticket); // Single-use: consume immediately
-    return Date.now() <= expiry;
+    if (Date.now() > entry.expiry) return null;
+    if (!adminSessionBindingLive(entry.binding)) return null;
+    return { binding: entry.binding };
 }
 
 // ===================== 2FA SESSION TOKEN STORE =====================
 // After successful password + TOTP login, a session token is issued so the
 // frontend doesn't need to re-enter TOTP on every API call. Tokens expire
 // after 4 hours (same as CSRF tokens). Multi-use within the session.
+// Each one holds the password and 2FA it was issued under (passwordCredentialStamp): once either changes (the
+// authenticator replaced, 2FA turned off and on, a new password), it is refused and the caller is asked for a code
+// again, as a password session is (#1577's review). Backup codes are not part of it: using or remaking them ends none.
 const TFA_SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
-const tfaSessionTokens = new Map<string, number>(); // token → expiry
+const tfaSessionTokens = new Map<string, { expiry: number; credentialStamp: string }>();
 
 export function issue2faSessionToken(): string {
     const token = crypto.randomBytes(32).toString('hex');
-    tfaSessionTokens.set(token, Date.now() + TFA_SESSION_TTL_MS);
+    tfaSessionTokens.set(token, { expiry: Date.now() + TFA_SESSION_TTL_MS, credentialStamp: passwordCredentialStamp() });
     // Prune expired tokens opportunistically
     const now = Date.now();
-    for (const [t, exp] of tfaSessionTokens) {
-        if (now > exp) tfaSessionTokens.delete(t);
+    for (const [t, entry] of tfaSessionTokens) {
+        if (now > entry.expiry) tfaSessionTokens.delete(t);
     }
     return token;
 }
 
 export function isValid2faSession(token: string): boolean {
-    const expiry = tfaSessionTokens.get(token);
-    if (!expiry) return false;
-    if (Date.now() > expiry) {
+    const entry = tfaSessionTokens.get(token);
+    if (!entry) return false;
+    if (Date.now() > entry.expiry || entry.credentialStamp !== passwordCredentialStamp() || isPasswordRetired()) {
         tfaSessionTokens.delete(token);
         return false;
     }
     // Sliding window: refresh TTL on valid use
-    tfaSessionTokens.set(token, Date.now() + TFA_SESSION_TTL_MS);
+    entry.expiry = Date.now() + TFA_SESSION_TTL_MS;
     return true;
+}
+
+/**
+ * After a route changed the admin password or the 2FA in force (restampPasswordSession): the 2FA session this request
+ * came with, or was just handed, carries on under the new ones; every other ends on its next use.
+ */
+export function restamp2faSessions(ctx: any): void {
+    for (const token of [ctx?.state?.tfaSessionInUse, ctx?.state?.tfaSessionToken]) {
+        const entry = typeof token === 'string' ? tfaSessionTokens.get(token) : undefined;
+        if (entry) entry.credentialStamp = passwordCredentialStamp();
+    }
 }
 
 export function revoke2faSession(token: string): void {

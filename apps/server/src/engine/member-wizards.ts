@@ -22,7 +22,8 @@
  */
 
 import crypto from 'node:crypto';
-import { db } from '../db/db.js';
+import { db, deletePlainRows, writeTombstone } from '../db/db.js';
+import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import {
     conservingTransaction,
     moveToCommons,
@@ -31,23 +32,28 @@ import {
     adminPruneUser,
     assertMayPrune,
     isSoleOwner,
+    heldPrivilegedRole,
+    isOwnerLevelActor,
     broadcast,
     getBalance,
     getCommonsBalanceExact,
     reconcileLedgerFromDb,
     countOpenTrades,
+    dispatchPushNotification,
 } from '../state-engine.js';
 import { ledger } from './ledger.js';
 import { isMemberKeySpelling } from './member-key.js';
-import { logger } from '../logger.js';
+import { logger, sanitizeMessage } from '../logger.js';
 import { revokeAllMemberSessions, purgeMemberSessions } from '../admin-key-auth.js';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
 import { movePlaceWatches } from './place-watches.js';
-import { moveRecoverySharesToNewKey } from './recovery-shares.js';
+import { deleteAllShares, moveKeeperCopiesToNewKey } from './recovery-shares.js';
 import { moveKnocks } from './knocks.js';
 import { moveKeptNotices } from './kept-notices.js';
 import { moveBlocks } from './member-blocks.js';
 import { moveMemberKeyRows } from './key-move.js';
+import { roleKeyReplacedAlert } from './node-roles.js';
+import { escapeLike } from '@beanpool/engine';
 
 // ===================== TYPES =====================
 
@@ -61,6 +67,8 @@ export interface RekeyRequestRow {
     created_at: string;
     expires_at: string;
     completed_at: string | null;
+    /** The member's status before the code suspended them (cancelRekeyCode); null on a code made before it was kept. */
+    prior_status?: string | null;
 }
 
 export interface RekeyAuditLogRow {
@@ -106,6 +114,11 @@ export interface OffboardOptions {
 }
 
 export const REKEY_CODE_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/** A key whose ask on this code the admins declined (completeRekey). */
+export const REKEY_DECLINED_PHONE = 'That phone was declined for this code, so it can’t be bound with it. Make a new code with the member there.';
+/** issueRekeyCode's refusal of a code on the operator's own key (only an owner re-keys an owner or admin: assertMayRekey). */
+export const REKEY_OWN_KEY = 'You can’t make a re-key code for your own account: it would end your session, and nobody would be left to confirm your new phone. To move to a new phone while you still have this one, restore your 12 words on it (Settings shows them). If your key is lost or exposed, ask another owner to make the code.';
 
 /** completeRekey's refusal for an account deleted or removed after its code was issued. */
 export const REKEY_ACCOUNT_GONE = 'This account was deleted or removed from this community, so it can’t be moved to a new key.';
@@ -167,11 +180,30 @@ function assertNotMisspeltRow(key: string | null | undefined): void {
     if (db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(key)) throw new Error(MISSPELT_ROW_ERROR);
 }
 
+/** A key as a log line names it: its first 10 characters. Anything else (`owner:password`) as it is. */
+function shortKey(key: string): string {
+    return /^[0-9a-f]{64}$/i.test(key) ? `${key.slice(0, 10)}...` : key;
+}
+
+/**
+ * A re-key moves the member's node role to the new key, and only an owner may change an owner's or admin's role
+ * (node-roles): an owner's or admin's re-key (a role held aside while suspended counts) by anyone but an owner, the
+ * password or the member themselves is refused, 403, before any write. Both steps ask it: a code an owner issued is
+ * no licence for an admin to bind the new key. An admin re-keying a member or a moderator is untouched.
+ */
+export function assertMayRekey(cleanOld: string, cleanOperator: string): void {
+    if (!heldPrivilegedRole(cleanOld) || cleanOperator === cleanOld || isOwnerLevelActor(cleanOperator)) return;
+    const err: any = new Error('Only an owner can re-key an owner or admin');
+    err.status = 403;
+    throw err;
+}
+
 export function issueRekeyCode(
     oldPublicKey: string,
     operatorPubkey: string,
     opts?: { ttlMs?: number }
 ): { code: string; oldPubkey: string; callsign: string; expiresAt: string } {
+    assertPlainTablesWritable();
     assertNotMisspeltRow(oldPublicKey);
     const cleanOld = oldPublicKey ? oldPublicKey.trim().toLowerCase() : '';
     const cleanOperator = operatorPubkey ? operatorPubkey.trim().toLowerCase() : 'owner:password';
@@ -182,6 +214,12 @@ export function issueRekeyCode(
     if (member.status === 'pruned') {
         throw new Error('Cannot re-key a pruned member');
     }
+    assertMayRekey(cleanOld, cleanOperator);
+    // Never a code on the operator's own key. Since #1768 a phone's ask binds nothing: an operator who may binds the number
+    // it shows. The code ends this operator's sessions and suspends them, so nobody would be left to bind it, and their
+    // account would be held until it expired (24 h). A phone they still have moves by restoring its 12 words on the new
+    // one; a lost or exposed key is re-keyed by another owner (assertMayRekey; REKEY_OWN_KEY says the same).
+    if (cleanOperator === cleanOld) throw refusal(409, REKEY_OWN_KEY);
     if (isKeyInvalidated(cleanOld)) {
         const info = getInvalidatedKeyInfo(cleanOld);
         if (info?.rekeyed_to) {
@@ -196,6 +234,18 @@ export function issueRekeyCode(
 
     // Atomic issuance & invalidation
     db.transaction(() => {
+        // The status a cancel puts back (cancelRekeyCode). A code made while an earlier one still holds the member
+        // suspended (pending, or expired with its key still 'rekey_pending') keeps that earlier code's: the 'suspended'
+        // the earlier code wrote is not the member's own.
+        const stillHeld = getInvalidatedKeyInfo(cleanOld)?.reason === 'rekey_pending';
+        const earlier = stillHeld
+            ? (db.prepare(`
+                SELECT prior_status FROM rekey_requests WHERE old_pubkey = ? AND status IN ('pending', 'expired')
+                ORDER BY created_at DESC, id DESC LIMIT 1
+            `).get(cleanOld) as { prior_status: string | null } | undefined)
+            : undefined;
+        const priorStatus = earlier ? earlier.prior_status : (member.status || 'active');
+
         // Cancel any existing pending requests for this member
         db.prepare("UPDATE rekey_requests SET status = 'cancelled' WHERE old_pubkey = ? AND status = 'pending'").run(cleanOld);
 
@@ -213,18 +263,22 @@ export function issueRekeyCode(
 
         // Insert new pending rekey request
         db.prepare(`
-            INSERT INTO rekey_requests (code, old_pubkey, operator_pubkey, status, created_at, expires_at)
-            VALUES (?, ?, ?, 'pending', ?, ?)
-        `).run(code, cleanOld, cleanOperator, nowIso, expiresAtIso);
+            INSERT INTO rekey_requests (code, old_pubkey, operator_pubkey, status, created_at, expires_at, prior_status)
+            VALUES (?, ?, ?, 'pending', ?, ?, ?)
+        `).run(code, cleanOld, cleanOperator, nowIso, expiresAtIso, priorStatus);
 
-        // Write system log
+        // Write system log: that a code was made, for whom and when, never the code (FABLE-sec-errors M1). It binds any
+        // new key to this member for a day; the operator who made it has it in the answer, and a log is read by other
+        // admins, a standby's replication token and whoever holds the host's Docker log or a copy of the database. In
+        // this transaction, so the record lands with the code; through the sanitizer, as every logger line is.
         db.prepare(`
             INSERT INTO system_logs (timestamp, level, category, message, metadata)
             VALUES (?, 'INFO', 'AUTH', ?, ?)
         `).run(
             nowIso,
-            `Re-enrolment code issued for member ${member.callsign} (${cleanOld.slice(0, 10)}...) by operator ${cleanOperator}`,
-            JSON.stringify({ oldPubkey: cleanOld, operatorPubkey: cleanOperator, code, expiresAt: expiresAtIso })
+            sanitizeMessage(`Re-enrolment code issued for member ${member.callsign} (${shortKey(cleanOld)}) by operator ${shortKey(cleanOperator)}`),
+            // Short key prefixes: the sanitizer blanks a whole 64-hex key. rekey_requests keeps both keys whole.
+            sanitizeMessage(JSON.stringify({ member: shortKey(cleanOld), operator: shortKey(cleanOperator), issuedAt: nowIso, expiresAt: expiresAtIso }))
         );
     })();
 
@@ -240,7 +294,24 @@ export function issueRekeyCode(
     noteTakeoverInputsChanged('member re-key started');
 
     broadcast({ type: 'profile_updated', publicKey: cleanOld });
-    logger.info('AUTH', `[Rekey] Re-enrolment code ${code} issued for ${member.callsign} by ${cleanOperator}`);
+    logger.info('AUTH', `[Rekey] Re-enrolment code issued for ${member.callsign} (${shortKey(cleanOld)}) by ${shortKey(cleanOperator)}, valid until ${expiresAtIso}`);
+
+    // The old phone hears it, while its push tokens are still here (the move deletes them): an admin acting without the
+    // member is seen (design DESIGN-rekey-redeem-fable.md §3, Marty's pick 4). The push's words are fixed by its kind;
+    // the details kept for the old key name no code, ever.
+    try {
+        dispatchPushNotification(
+            [cleanOld],
+            cleanOperator,
+            'Your account is being moved to a new phone',
+            'An admin started moving your account to a new phone. If you still have this phone and didn’t ask for this, tell an owner now.',
+            { screen: 'settings', kind: 'rekey_started' },
+            'recovery',
+            'account.rekey-started',
+        );
+    } catch (e) {
+        logger.warn('AUTH', `[Rekey] could not tell the old phone: ${(e as Error)?.message || e}`);
+    }
 
     return {
         code,
@@ -259,7 +330,8 @@ export function completeRekey(
     newPublicKey: string,
     code: string,
     operatorPubkey: string
-): { success: boolean; oldPubkey: string; newPubkey: string; callsign: string } {
+): { success: boolean; oldPubkey: string; newPubkey: string; callsign: string; signInCopiesRemoved: number } {
+    assertPlainTablesWritable();
     const cleanOld = oldPublicKey.trim().toLowerCase();
     const cleanNew = newPublicKey.trim().toLowerCase();
 
@@ -284,6 +356,15 @@ export function completeRekey(
     if (req.status !== 'pending') {
         throw new Error(`Re-enrolment code is no longer active (status: ${req.status})`);
     }
+    // A phone the admins said is not the member's (declineRekeyProposal) is never bound with this code, by its number or
+    // by a pasted key: a stale card on a second dashboard or a second admin can't undo a decline, and the declined phone
+    // has already let its key go (#1783 review N1).
+    if (db.prepare('SELECT 1 FROM rekey_proposals WHERE code = ? AND new_pubkey = ? AND declined_at IS NOT NULL').get(req.code, cleanNew)) {
+        throw refusal(409, REKEY_DECLINED_PHONE);
+    }
+    // The operator as this call names it: the admin route's session, or the issuer the member's own completion reads
+    // from the code (routes/community.ts), which is the old key itself when a member re-keyed themselves.
+    assertMayRekey(cleanOld, (operatorPubkey || '').trim().toLowerCase());
     // An account deleted by its owner (purgeMemberSelf) or removed (adminPruneUser, by an admin or a community vote)
     // since the code was issued stays that way: issueRekeyCode refuses a pruned member, and this is its other half.
     // Completing used to set the row back to 'active' and hand it to the new key: a deleted account came back emptied
@@ -302,9 +383,17 @@ export function completeRekey(
         throw new Error('Old member record not found');
     }
 
+    // A suspension the code didn't make (a report's, before or while it waited) stays on the new key. The key move
+    // makes the new key 'active' unless 'disabled', which is right only for the code's own 'suspended'.
+    const keepSuspended = member.status === 'suspended' && !suspendedOnlyByRekeyCode(cleanOld);
     const nowIso = new Date().toISOString();
     /** The members whose block lists the re-key changed (moveBlocks), told after the commit. */
     let blockListsMoved: string[] = [];
+    // An owner's or admin's role moves to the new key: the owners hear of it once this commits (sec.keys). Read now.
+    const privileged = heldPrivilegedRole(cleanOld);
+    const tellOwners = privileged ? roleKeyReplacedAlert(privileged, cleanOld, (operatorPubkey || '').trim().toLowerCase()) : null;
+    /** The member's own recovery copies deleted (they hold the replaced seed). */
+    let signInCopiesRemoved = 0;
 
     // Atomic execution inside conservingTransaction
     conservingTransaction(() => {
@@ -321,14 +410,18 @@ export function completeRekey(
         // 2. Enumerate and transfer ALL 32 consumers of members.public_key (engine/key-move.ts, which a standby's copy
         // follows with too), each row stamped so the standby's next copy carries the move.
         moveMemberKeyRows(cleanOld, cleanNew, nowIso, { keepStamps: false });
+        if (keepSuspended) db.prepare("UPDATE members SET status = 'suspended', updated_at = ? WHERE public_key = ?").run(nowIso, cleanNew);
 
         // What the main server moves by rules of its own, each stamped so the move replicates.
         // (n2) place watches (G5): the places the member watches are theirs, whatever device holds the key.
         movePlaceWatches(cleanOld, cleanNew);
-        // (p) recovery shares
-        // The owner is what a wrapped copy is bound to, so the move opens and re-wraps each copy the member owns. Without
-        // the recovery-seal key it throws and this whole re-key rolls back (engine/recovery-shares.ts).
-        moveRecoverySharesToNewKey(cleanOld, cleanNew);
+        // (p) recovery shares. The member's own sign-in copies rebuild the OLD seed (recovery-model: seed = A ⊕ B), so
+        // moved to the new key, a sign-in restore would land on the key just replaced: they go, with a tombstone so a
+        // standby drops them too, and the member links their sign-in again from the new phone (design
+        // DESIGN-rekey-redeem-fable.md §4, Marty's pick 2, 2026-10-11). Nothing is opened, so no seal key is needed.
+        // The copies they keep for someone else are that person's, and only renamed to the new key.
+        signInCopiesRemoved = deleteAllShares(cleanOld);
+        moveKeeperCopiesToNewKey(cleanOld, cleanNew);
         // (p2) Requests to join (G6): a knock the member made before they joined, and the knocks they answered. Left on
         // the invalidated key, the old knock would be back on the members' list and an approval would let that key in
         // as a second member; deleting the account would miss what they wrote. Stamped, so the move replicates
@@ -358,6 +451,8 @@ export function completeRekey(
                 callsign: member.callsign,
                 operatorPubkey,
                 completedAt: nowIso,
+                // Kept with the move, so the phone that asks again is told to link a sign-in only when one was removed.
+                signInCopiesRemoved,
             })
         );
 
@@ -368,7 +463,8 @@ export function completeRekey(
         `).run(
             nowIso,
             `Member ${member.callsign} re-keyed: ${cleanOld.slice(0, 10)}... -> ${cleanNew.slice(0, 10)}... bound to new key by operator ${operatorPubkey}`,
-            JSON.stringify({ oldPubkey: cleanOld, newPubkey: cleanNew, operatorPubkey, code })
+            // No code: spent by now, but a log is not where codes go (M1).
+            JSON.stringify({ oldPubkey: cleanOld, newPubkey: cleanNew, operatorPubkey })
         );
     });
 
@@ -386,6 +482,7 @@ export function completeRekey(
     // node_roles.member_pubkey moved to the new key above: an owner's take-over lock must follow it now, not at the
     // next periodic check (sealed-keys.md §4).
     noteTakeoverInputsChanged('member re-keyed');
+    tellOwners?.();
 
     broadcast({ type: 'profile_updated', publicKey: cleanNew });
     broadcast({ type: 'member_rekeyed', oldPublicKey: cleanOld, newPublicKey: cleanNew });
@@ -399,39 +496,230 @@ export function completeRekey(
         oldPubkey: cleanOld,
         newPubkey: cleanNew,
         callsign: member.callsign,
+        signInCopiesRemoved,
     };
 }
 
 /**
- * Gets the current rekey status for a member.
+ * For a code made before codes kept the member's earlier status: whether a report may have suspended this member. A
+ * report's action records whether it suspended them (abuse_reports.suspended_member, state-engine.ts actionReport): one
+ * that did counts, one that didn't doesn't, and one actioned before that was kept isn't known, so it counts. Its member
+ * is read as actionReport's reportSubjectOf reads it, more widely: the reported key, a reported post's author or a
+ * reported Pulse item's owner.
  */
-export function getRekeyStatus(publicKey: string): {
+function reportMaySuspend(publicKey: string): boolean {
+    return !!db.prepare(`
+        SELECT 1 FROM abuse_reports r
+        WHERE r.status = 'actioned' AND (r.suspended_member IS NULL OR r.suspended_member = 1)
+          AND (r.target_pubkey = ?
+               OR r.target_post_id IN (SELECT id FROM posts WHERE author_pubkey = ?)
+               OR r.target_pulse_item_id IN (SELECT id FROM pulse_items WHERE owner_pubkey = ?))
+        LIMIT 1
+    `).get(publicKey, publicKey, publicKey);
+}
+
+/**
+ * Whether a member's 'suspended' is a re-key code's alone: their key is held for the re-key (a code waiting, or expired
+ * with the hold left), and the status the code recorded from before it isn't a report's 'suspended' (for a code made
+ * before that was kept, no report may have suspended them, reportMaySuspend). An admin's emergency suspension may be made
+ * over it (decisions-engine.ts adminEmergencySuspend): its 'disabled' replaces the code's 'suspended', and a cancel
+ * leaves it alone.
+ */
+export function suspendedOnlyByRekeyCode(publicKey: string): boolean {
+    const cleanPub = publicKey.trim().toLowerCase();
+    const member = db.prepare('SELECT status FROM members WHERE public_key = ?').get(cleanPub) as { status: string } | undefined;
+    if (member?.status !== 'suspended') return false;
+    if (!db.prepare("SELECT 1 FROM invalidated_keys WHERE public_key = ? AND reason = 'rekey_pending' AND rekeyed_to IS NULL").get(cleanPub)) return false;
+    const req = db.prepare(`
+        SELECT prior_status FROM rekey_requests WHERE old_pubkey = ? AND status IN ('pending', 'expired')
+        ORDER BY created_at DESC, id DESC LIMIT 1
+    `).get(cleanPub) as { prior_status: string | null } | undefined;
+    if (!req) return false;
+    return req.prior_status === null ? !reportMaySuspend(cleanPub) : req.prior_status !== 'suspended';
+}
+
+/** A refusal with the HTTP status its route answers. */
+function refusal(status: number, message: string): Error {
+    const err: any = new Error(message);
+    err.status = status;
+    return err;
+}
+
+/**
+ * Undoes issueRekeyCode for a code nobody has used: the code is cancelled, the member's key is no longer stopped
+ * ('rekey_pending' row gone), and the member's status is what it was before the code (rekey_requests.prior_status).
+ * Who may make the code may cancel it (assertMayRekey: an owner for an owner's or admin's). A code made before the
+ * prior status was kept puts the member back to 'active' only if the code is what suspended them ('suspended' with the
+ * key held for the re-key) and no report on them may have (reportMaySuspend), and the answer says so. A member a report
+ * suspended, before or while the code waited, stays suspended (the answer says why), and Lift suspension on their page
+ * lifts it (decisions-engine.ts adminLiftSuspension). The sessions issue ended stay ended; the key signs in again.
+ *
+ * One transaction, and each write must touch exactly the rows it expects, or nothing is changed. A used ('completed')
+ * or expired code is refused: there is nothing waiting to cancel.
+ */
+export function cancelRekeyCode(
+    oldPublicKey: string,
+    operatorPubkey: string,
+): { cancelled: true; oldPubkey: string; callsign: string; status: string; note?: string } {
+    assertPlainTablesWritable();
+    assertNotMisspeltRow(oldPublicKey);
+    const cleanOld = oldPublicKey ? oldPublicKey.trim().toLowerCase() : '';
+    const cleanOperator = operatorPubkey ? operatorPubkey.trim().toLowerCase() : 'owner:password';
+    const req = db.prepare(`
+        SELECT * FROM rekey_requests WHERE old_pubkey = ? ORDER BY created_at DESC, id DESC LIMIT 1
+    `).get(cleanOld) as RekeyRequestRow | undefined;
+    // Asked before the member: a used code moved the member’s row to the new key.
+    if (req?.status === 'completed') {
+        throw refusal(409, 'This code was already used: the member has moved to their new key, so it can’t be cancelled.');
+    }
+    const member = getMember(cleanOld);
+    if (!member) throw refusal(404, 'Member not found');
+    assertMayRekey(cleanOld, cleanOperator);
+    if (!req) throw refusal(404, 'There is no re-key code for this member to cancel.');
+    if (req.status === 'pending' && new Date(req.expires_at).getTime() < Date.now()) {
+        db.prepare("UPDATE rekey_requests SET status = 'expired' WHERE id = ?").run(req.id);
+        req.status = 'expired';
+    }
+    // An expired code's hold stays until a new code replaces it (which inherits the status recorded before it), so the
+    // way out is that new code's cancel (review 4176372949).
+    if (req.status === 'expired') {
+        throw refusal(409, 'This code has expired, so it can’t be cancelled, and their key is still held for it. Make a new code on Re-Key, then cancel it: that frees their key and puts back their status from before the first code.');
+    }
+    if (req.status !== 'pending') throw refusal(409, 'This code was already cancelled.');
+
+    const nowIso = new Date().toISOString();
+    let restored = member.status || 'active';
+    let note: string | undefined;
+    db.transaction(() => {
+        const exactly = (changed: number, what: string) => {
+            if (changed !== 1) throw refusal(409, `Nothing was changed: ${what}. Open the member again and check.`);
+        };
+        exactly(db.prepare("UPDATE rekey_requests SET status = 'cancelled' WHERE id = ? AND status = 'pending'").run(req.id).changes,
+            'the code is no longer waiting');
+        exactly(db.prepare("DELETE FROM invalidated_keys WHERE public_key = ? AND reason = 'rekey_pending' AND rekeyed_to IS NULL").run(cleanOld).changes,
+            'the member’s key isn’t held for this re-key');
+        // A standby only adds replaced keys, so the hold's delete reaches it as a tombstone (engine/sync.ts
+        // applyTombstoneLocally), and a server that takes over lets the key in, as this one now does.
+        writeTombstone('invalidated_keys', cleanOld);
+        // issueRekeyCode wrote 'suspended' unless the member was 'disabled'; only that 'suspended' is put back. A report's
+        // suspension writes the same 'suspended' (state-engine.ts actionReport), and records it on a waiting code's
+        // prior_status, so the recorded status is the answer: a report's action that suspended nobody changes nothing.
+        // Any other suspension (an admin's, a Decision's, an offboarding) writes another status, which is left alone. A
+        // code made before prior_status was kept has only the reports to go on (reportMaySuspend), and on doubt the
+        // member stays suspended, which Lift suspension lifts.
+        const now = (db.prepare('SELECT status FROM members WHERE public_key = ?').get(cleanOld) as { status: string } | undefined)?.status;
+        let target: string | null = req.prior_status ?? null;
+        if (now === 'suspended' && target === 'suspended') {
+            target = null;
+            note = 'They stay suspended: a report suspended them, before or while the code waited. Lift the suspension on their page if that’s no longer right.';
+        } else if (now === 'suspended' && target === null && reportMaySuspend(cleanOld)) {
+            note = 'They stay suspended: this code was made before the node kept the member’s earlier status, and a report actioned on them may have suspended them. Lift the suspension on their page if that’s no longer right.';
+        } else if (target === null && now === 'suspended') {
+            target = 'active';
+            note = 'This code was made before the node kept the member’s earlier status, so they are back to active.';
+        }
+        if (now === 'suspended' && target && target !== 'suspended') {
+            exactly(db.prepare('UPDATE members SET status = ?, updated_at = ? WHERE public_key = ? AND status = \'suspended\'').run(target, nowIso, cleanOld).changes,
+                'the member’s status changed meanwhile');
+            restored = target;
+        }
+        exactly(db.prepare(`
+            INSERT INTO system_logs (timestamp, level, category, message, metadata)
+            VALUES (?, 'INFO', 'AUTH', ?, ?)
+        `).run(
+            nowIso,
+            sanitizeMessage(`Re-enrolment code cancelled for member ${member.callsign} (${shortKey(cleanOld)}) by operator ${shortKey(cleanOperator)}; status ${restored}`),
+            sanitizeMessage(JSON.stringify({ member: shortKey(cleanOld), operator: shortKey(cleanOperator), cancelledAt: nowIso, status: restored })),
+        ).changes, 'the log line wasn’t written');
+    })();
+
+    noteTakeoverInputsChanged('member re-key cancelled');
+    broadcast({ type: 'profile_updated', publicKey: cleanOld });
+    logger.info('AUTH', `[Rekey] Re-enrolment code cancelled for ${member.callsign} (${shortKey(cleanOld)}) by ${shortKey(cleanOperator)}`);
+    return { cancelled: true, oldPubkey: cleanOld, callsign: member.callsign, status: restored, ...(note ? { note } : {}) };
+}
+
+/**
+ * A pending re-key as the status answer gives it: the code only to whoever may have it (getRekeyStatus). Without it,
+ * `codeNeedsStepUp` says the viewer may read it after Manage again (the phone's step-up).
+ */
+export type RekeyRequestView = Omit<RekeyRequestRow, 'code'> & { code?: string; codeNeedsStepUp?: true };
+/**
+ * A phone that asked on the pending code (engine/rekey-redeem.ts): its key (the card shows a prefix, and "Not theirs"
+ * names it) and when it asked. Never its digits: the admin types the number on the member's phone and the node finds the
+ * phone (bindRekeyByMatch), so a card can't be bound by a press (#1783 review B2).
+ */
+export interface RekeyProposalRow { newPubkey: string; proposedAt: string }
+/** A finished re-key as the status answer gives it: its spent code stays in the audit log. */
+export type RekeyAuditLogView = Omit<RekeyAuditLogRow, 'reenrollment_code'>;
+
+/**
+ * Gets the current rekey status for a member, as `viewer` (the admin route's session actor) may read it.
+ *
+ * A pending code is the whole credential on /api/member/re-enroll, which binds the new key with the code's issuer as
+ * operator. For a member who holds or has held aside an owner or admin role, the code goes only to its issuer (the
+ * manager's RekeyMemberWizard re-shows it from here) or an owner, who could re-key them anyway: given to any admin, it
+ * let them finish an owner's re-key with a key they chose and hold the owner role (confirm 3, 4172310632). For any other
+ * member, any admin may re-key them, so their code is read as before. Each answer is an explicit field list.
+ *
+ * Reading such a code is as strong as completing the re-key, which a phone session past its step-up window is asked to
+ * confirm (routes/admin.ts stepUpIfOwnerOnly 'rekey'). So with `viewerStepUpDue` (the route's ctx.state.phoneStepUpDue)
+ * that code is left out too, and `codeNeedsStepUp` is set: the wizard asks for Manage again and reads it then (#1534,
+ * confirm 4 of #1530, 4172426084). Everything else in the answer is unchanged.
+ */
+export function getRekeyStatus(publicKey: string, viewer?: string, opts: { viewerStepUpDue?: boolean } = {}): {
     isInvalidated: boolean;
     invalidatedInfo: InvalidatedKeyRow | null;
-    pendingRequest: RekeyRequestRow | null;
-    history: RekeyAuditLogRow[];
+    pendingRequest: RekeyRequestView | null;
+    /** The phones waiting on the pending code, oldest first: only beside the code itself, to a viewer who may read it. */
+    proposals: RekeyProposalRow[];
+    /** Wrong numbers typed on the pending code so far (bindRekeyByMatch stops it at REKEY_MATCH_TRIES); beside the code only. */
+    wrongNumbers: number;
+    history: RekeyAuditLogView[];
 } {
     const cleanPub = publicKey.trim().toLowerCase();
     const isInvalidated = isKeyInvalidated(cleanPub);
     const invalidatedInfo = getInvalidatedKeyInfo(cleanPub);
 
-    let pendingRequest: RekeyRequestRow | null = (db.prepare(
-        "SELECT * FROM rekey_requests WHERE old_pubkey = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1"
-    ).get(cleanPub) as RekeyRequestRow | undefined) || null;
+    const pending = (db.prepare(`
+        SELECT id, code, old_pubkey, new_pubkey, operator_pubkey, status, created_at, expires_at, completed_at
+        FROM rekey_requests WHERE old_pubkey = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1
+    `).get(cleanPub) as RekeyRequestRow | undefined) || null;
 
-    if (pendingRequest && new Date(pendingRequest.expires_at).getTime() < Date.now()) {
-        db.prepare("UPDATE rekey_requests SET status = 'expired' WHERE id = ?").run(pendingRequest.id);
-        pendingRequest = null;
+    let pendingRequest: RekeyRequestView | null = null;
+    if (pending && new Date(pending.expires_at).getTime() < Date.now()) {
+        // Marked on a main server. A standby's codes are its main server's (config/node-role.ts assertPlainTablesWritable):
+        // it answers one past its time as none, and writes nothing.
+        if (getNodeRole() !== 'backup') db.prepare("UPDATE rekey_requests SET status = 'expired' WHERE id = ?").run(pending.id);
+    } else if (pending) {
+        const { code, ...rest } = pending;
+        const cleanViewer = (viewer || '').trim().toLowerCase();
+        const privileged = !!heldPrivilegedRole(cleanPub);
+        const mayReadCode = !privileged || (!!cleanViewer && cleanViewer === pending.operator_pubkey) || isOwnerLevelActor(cleanViewer);
+        if (mayReadCode && privileged && opts.viewerStepUpDue) pendingRequest = { ...rest, codeNeedsStepUp: true };
+        else pendingRequest = mayReadCode ? { ...rest, code } : rest;
     }
+    // The phones that asked, for the wizard's "Bind this phone" cards: to whoever reads the code, as binding asks the same.
+    const proposals: RekeyProposalRow[] = pendingRequest?.code
+        ? (db.prepare('SELECT new_pubkey, proposed_at FROM rekey_proposals WHERE code = ? AND declined_at IS NULL ORDER BY proposed_at, new_pubkey')
+            .all(pendingRequest.code) as { new_pubkey: string; proposed_at: string }[])
+            .map((p) => ({ newPubkey: p.new_pubkey, proposedAt: p.proposed_at }))
+        : [];
+    const wrongNumbers = pendingRequest?.code
+        ? ((db.prepare('SELECT wrong_matches FROM rekey_requests WHERE id = ?').get(pending!.id) as { wrong_matches: number | null } | undefined)?.wrong_matches ?? 0)
+        : 0;
 
-    const history = (db.prepare(
-        'SELECT * FROM rekey_audit_log WHERE old_pubkey = ? OR new_pubkey = ? ORDER BY performed_at DESC'
-    ).all(cleanPub, cleanPub) as RekeyAuditLogRow[]) || [];
+    const history = (db.prepare(`
+        SELECT id, old_pubkey, new_pubkey, operator_pubkey, performed_at, completed_at, details
+        FROM rekey_audit_log WHERE old_pubkey = ? OR new_pubkey = ? ORDER BY performed_at DESC
+    `).all(cleanPub, cleanPub) as RekeyAuditLogView[]) || [];
 
     return {
         isInvalidated,
         invalidatedInfo,
         pendingRequest,
+        proposals,
+        wrongNumbers,
         history,
     };
 }
@@ -505,10 +793,10 @@ function getPreviousOffboardResult(
             WHERE category = 'ADMIN'
               AND (
                   json_extract(metadata, '$.memberPubkey') = ?
-                  OR message LIKE ?
+                  OR message LIKE ? ESCAPE '\\'
               )
             ORDER BY timestamp DESC LIMIT 1
-        `).get(cleanPub, `%Member ${callsign}%offboarded%`) as { metadata?: string } | undefined;
+        `).get(cleanPub, `%Member ${escapeLike(callsign)}%offboarded%`) as { metadata?: string } | undefined;
 
         if (row?.metadata) {
             const meta = JSON.parse(row.metadata);
@@ -666,9 +954,10 @@ export function executeOffboard(
         // Execute the formal prune path (scrubs roles, channels, cancels posts, sets status pruned)
         adminPruneUser(cleanPub, cleanOperator);
 
-        // Purge device push tokens to prevent leaked notifications
+        // Purge device push tokens to prevent leaked notifications, with a tombstone each so a standby drops them too
+        // (a plain table, design G4)
         try {
-            db.prepare('DELETE FROM push_tokens WHERE public_key = ?').run(cleanPub);
+            deletePlainRows('push_tokens', 'public_key = ?', cleanPub);
         } catch {
             // Non-blocking
         }
@@ -680,7 +969,9 @@ export function executeOffboard(
             VALUES (?, 'INFO', 'ADMIN', ?, ?)
         `).run(
             nowIso,
-            `Member ${member.callsign} (${cleanPub.slice(0, 10)}...) offboarded with resolution '${resolution}' (settled balance: ${balance}) by operator ${cleanOperator}`,
+            // No balance in the message: every admin reads this log (routes/admin.ts /logs, which answers without the
+            // metadata's balanceSettled too). It stays in the metadata for the idempotent retry (getPreviousOffboardResult).
+            `Member ${member.callsign} (${cleanPub.slice(0, 10)}...) offboarded with resolution '${resolution}' by operator ${cleanOperator}`,
             JSON.stringify({
                 memberPubkey: cleanPub,
                 callsign: member.callsign,

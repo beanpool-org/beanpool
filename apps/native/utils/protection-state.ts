@@ -28,6 +28,7 @@
 
 import { TWO_LAYER_THRESHOLD } from '@beanpool/core';
 import type { KeeperEnrolmentResult } from './keeper-enrolment';
+import { offeredProviders } from './sso-providers';
 
 export type ProtectionState =
     /** Covered: the split happened and enough keepers hold a piece. */
@@ -52,7 +53,7 @@ export interface Protection {
     tier: ProtectionTier;
     /** Keepers actually holding a piece. Empty in every state but `covered`. */
     holding: string[];
-    /** Specific SSO providers enrolled (e.g. ['google', 'github']). */
+    /** Specific SSO providers enrolled (e.g. ['google', 'apple']): only ones this app offers. */
     enrolledSso?: string[];
     /** How many more keepers are needed before a split can happen at all. */
     stillNeeded: number;
@@ -117,7 +118,8 @@ function tierFrom(enrolled: readonly string[]): ProtectionTier {
  * must never sit in front of a screen that is waiting to find out whether they are safe.
  */
 export function protectionFrom(result: KeeperEnrolmentResult | null): Protection {
-    const enrolledSso = result?.enrolledSso ?? [];
+    // A node's answer: a provider name this app does not offer is never shown or counted.
+    const enrolledSso: string[] = offeredProviders(result?.enrolledSso);
     if (!result || result.enrolled.length === 0) {
         const available = result?.available ?? 0;
         const threshold = TWO_LAYER_THRESHOLD;

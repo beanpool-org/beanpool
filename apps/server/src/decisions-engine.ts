@@ -38,11 +38,18 @@
  *   themselves after the same 7 days.
  */
 
+import { debtRecord, forgiveDebt } from './engine/names-debts.js';
 import crypto from 'node:crypto';
 import * as engine from '@beanpool/engine';
-import { db } from './db/db.js';
+import { DECISION_DESCRIPTION_LIMIT, DECISION_TITLE_LIMIT, fitsTextLimit, isSyntheticAccount, replaceLoneSurrogates, textTooLongMessage } from '@beanpool/core';
+import { isNameableAccount } from './engine/member-key.js';
+import { db, writeTombstone } from './db/db.js';
 import { ledger } from './engine/ledger.js';
-import { isNodeOwner } from './engine/node-roles.js';
+import { COMMONS_POT_PAUSED, CommonsPotUnknownError } from './engine/audit.js';
+import { isNodeOwner, noteNodeRoleBack, type NodeRole, type RoleChangeBy } from './engine/node-roles.js';
+import { unmutedRecipients } from './engine/chat-mutes.js';
+import { suspendedOnlyByRekeyCode } from './engine/member-wizards.js';
+import { assertPlainTablesWritable } from './config/node-role.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { getProfileSwitches, BeansOffError, FeatureOffError, FEATURE_OFF, featureOffMessage, type ProfileSwitch } from './config/node-profile.js';
 import {
@@ -56,7 +63,11 @@ import {
     COMMUNITY_DECISION_ACTOR,
     isOwnerLevelActor,
     heldPrivilegedRole,
+    pruneNeedsOwner,
+    inviteBranchOf,
+    reportSuspensionTakesPrivilegedRole,
     broadcast,
+    dispatchPushNotification,
     isNodeAdmin,
     isSoleOwner,
     persistDecayEvents,
@@ -66,9 +77,30 @@ import {
     clearEnterpriseFloorCache,
     isDeletedByOwner,
     OWNER_DELETED_REFUSAL,
+    transfer,
+    keeperRemovalByVoteRefusal,
+    removeKeeperByVote,
+    replaceLeadByVote,
+    getGroupLead,
+    groupClosedAt,
+    GROUP_CLOSED,
+    setGroupRoleByVote,
+    replaceGroupLeadByVote,
+    removeGroupMemberByVote,
+    setGroupJoinPolicyByVote,
+    closeGroupByVote,
+    afterGroupVote,
 } from './state-engine.js';
 
-export type DecisionTouch = 'member' | 'pool';
+/** What a Decision touches: a member, the Commons pool, or only its own scope's things (an enterprise's account and keepers). */
+export type DecisionTouch = 'member' | 'pool' | 'scope';
+
+/**
+ * Whose Decision it is (DESIGN-group-decisions §2.1): the whole community, one enterprise's keepers (`scopeId` = the
+ * enterprise's pubkey), or one chat group's members and convenors (`scopeId` = the group's id, slice S3). A scoped
+ * Decision's roll is frozen when it opens (decision_electors).
+ */
+export type DecisionScopeKind = 'community' | 'enterprise' | 'group';
 
 export type DecisionFranchise = '1m1v' | 'quadratic_trade';
 
@@ -101,7 +133,74 @@ export type DecisionEffect =
     // Pool money
     | 'grant_enterprise'
     | 'grant_hardship'
-    | 'write_off_deficit';
+    | 'write_off_deficit'
+    // A departed member's debt (engine/names-debts.ts), written off: no Beans move (the Commons took it when they left)
+    | 'forgive_debt'
+    // An enterprise's keepers only (scope 'enterprise', DESIGN-group-decisions §2.3): pay Beans out of its own account,
+    // remove a keeper, make another keeper the lead (an ongoing enterprise only, never a project)
+    | 'pay_out'
+    | 'remove_keeper'
+    | 'replace_lead'
+    // A chat group's members only (scope 'group', DESIGN-group-decisions §2.3, slice S3): make or unmake a convenor, choose
+    // the lead convenor, remove someone from the group (never from the community), set who may join, close the group.
+    // No money, no trust, no node role: a group holds none of them.
+    | 'set_group_role'
+    | 'replace_lead_convenor'
+    | 'remove_group_member'
+    | 'set_join_policy'
+    | 'close_group';
+
+/**
+ * The effects that move Beans, all of them out of the Commons pot. Only these need the pot to be a finite number: while
+ * it isn't (its COMMONS_POOL row holds text, NULL, a BLOB or ±Infinity), every conservingTransaction refuses at its
+ * pre-flush, and no Beans move anywhere (#1465 review, NB-1). A removal moves Beans too, but at the end of its grace
+ * window (adminPruneUser), so its start is not here: the suspension is a plain row change.
+ */
+const POT_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['grant_enterprise', 'grant_hardship', 'write_off_deficit']);
+
+/** What a Decision waiting on an unknown pot says, to members and in the log. */
+export const WAITING_FOR_POT = 'Waiting: payments are paused on this community while its admins fix a problem with its accounts. '
+    + 'This is carried out once they are working again.';
+
+function potIsUnknown(): boolean {
+    return !Number.isFinite(getCommonsBalanceExact());
+}
+
+/**
+ * A due Decision that needs the pot, while the pot is unknown: left in its status (passed, queued for funds, or a
+ * removal's grace window), so the tick carries it out on its first run after the row is mended. It used to go to
+ * execution_blocked, which the tick never retries: a vote the community passed was lost to a broken row, and a removal
+ * left its member suspended for good (#1465 review, NB-1, measured on a real main server). Says so once, on the Decision
+ * and in the log.
+ */
+function waitForPot(decision: { id: string; effect: string; executionReason?: string | null; execution_reason?: string | null }, now: string): void {
+    const reason = decision.executionReason ?? decision.execution_reason ?? null;
+    if (reason === WAITING_FOR_POT) return;
+    db.prepare('UPDATE decisions SET execution_reason = ?, updated_at = ? WHERE id = ?').run(WAITING_FOR_POT, now, decision.id);
+    console.warn(`[Decisions] ${decision.id} (${decision.effect}) waits: the Commons pot is not a number. It is carried out on the first `
+        + 'tick after the COMMONS_POOL row is mended.');
+    announceDecisionUpdated(decision.id);
+}
+
+/**
+ * A removal whose grace window ended while payments were paused gets this many hours more once they work again, before it
+ * is carried out. 24: the window exists so an admin can halt the removal, and the end of it fell in a pause the
+ * admins were busy mending; one day after the mend is enough to see it on the next visit to Settings, and short
+ * against the 7-day window the community already granted, so the vote's outcome isn't held up for long.
+ */
+export const REOPENED_GRACE_HOURS = 24;
+
+/** What such a removal says while its reopened window runs. */
+export const REOPENED_GRACE = `Payments were paused when the grace window ended, so it was reopened for ${REOPENED_GRACE_HOURS} hours `
+    + 'after they worked again. An admin can still halt the removal until then.';
+
+/** The log line when a Decision that waited on the pot is carried out after all. */
+function noteCarriedOutAfterWait(decision: { id: string; effect: string; executionReason?: string | null; execution_reason?: string | null }): void {
+    const reason = decision.executionReason ?? decision.execution_reason ?? null;
+    if (reason === WAITING_FOR_POT || reason === REOPENED_GRACE) {
+        console.log(`[Decisions] ${decision.id} (${decision.effect}) carried out now that the Commons pot is a number again.`);
+    }
+}
 
 export interface Decision {
     id: string;
@@ -125,6 +224,9 @@ export interface Decision {
     adminHaltedBy: string | null;
     adminHaltReason: string | null;
     updatedAt: string;
+    scopeKind: DecisionScopeKind;
+    /** The enterprise's pubkey for scope 'enterprise'; null for the community. */
+    scopeId: string | null;
 }
 
 export interface DecisionVote {
@@ -189,6 +291,8 @@ function rowToDecision(r: any): Decision {
         adminHaltedBy: r.admin_halted_by || null,
         adminHaltReason: r.admin_halt_reason || null,
         updatedAt: r.updated_at,
+        scopeKind: (r.scope_kind || 'community') as DecisionScopeKind,
+        scopeId: r.scope_id || null,
     };
 }
 
@@ -196,17 +300,59 @@ function rowToDecision(r: any): Decision {
 export type PublicDecision = Omit<Decision, 'adminHaltedBy'>;
 
 /**
+ * The params of a Decision that are a member's balance: a vote to remove someone records their balance and debt when it
+ * opens (createDecision), so its voters can weigh them. Balances are private (Marty, 2026-09-28): those voters see them,
+ * inside that Decision only (decisionForReader), and nobody else does.
+ */
+const MEMBER_BALANCE_PARAMS = ['balance', 'debt'] as const;
+
+function carriesMemberBalance(params: unknown): params is Record<string, unknown> {
+    return !!params && typeof params === 'object' && MEMBER_BALANCE_PARAMS.some(k => k in (params as object));
+}
+
+/**
  * A Decision as members see it — every route and broadcast that is not admin-only. Which admin halted a vote
  * or made an emergency suspension is an admin key: members get the public reason on the card, not the key.
- * Admin routes (/api/local/admin/*) serve the full Decision.
+ * A member's balance recorded in its params is left off too: decisionForReader gives it to the Decision's voters.
+ * Admin routes (/api/local/admin/*) serve decisionForAdmin.
  */
 export function publicDecision(decision: Decision): PublicDecision {
     const { adminHaltedBy: _haltedBy, ...rest } = decision;
-    if (rest.params && typeof rest.params === 'object' && 'suspendedBy' in rest.params) {
-        const { suspendedBy: _suspendedBy, ...params } = rest.params;
+    if (rest.params && typeof rest.params === 'object' && ('suspendedBy' in rest.params || carriesMemberBalance(rest.params))) {
+        const { suspendedBy: _suspendedBy, balance: _balance, debt: _debt, ...params } = rest.params;
         return { ...rest, params };
     }
     return rest;
+}
+
+/**
+ * A Decision as `reader`, the verified signer, sees it: publicDecision, and for a Decision about a member that records
+ * their balance, that balance and debt to those who may vote in it (checkVoterEligibility for this Decision: active,
+ * not frozen, joined before it opened) and to the member themselves. Nowhere else: not the list's other cards, not a
+ * broadcast, not a visitor, a non-member or an unsigned reader.
+ */
+export function decisionForReader(decision: Decision, reader: string | null | undefined): PublicDecision {
+    const shown = publicDecision(decision);
+    if (!reader || !carriesMemberBalance(decision.params)) return shown;
+    if (reader !== decision.subject && !checkVoterEligibility(reader, decision).ok) return shown;
+    const params: Record<string, unknown> = { ...(shown.params || {}) };
+    for (const k of MEMBER_BALANCE_PARAMS) if (k in decision.params) params[k] = decision.params[k];
+    return { ...shown, params };
+}
+
+/**
+ * A Decision as an admin route (/api/local/admin/*) serves it to `reader`, the key of the admin's key session: the full
+ * Decision, except a member's balance and debt recorded in its params. Those go only where decisionForReader sends them:
+ * to an admin who may vote in this Decision, or is its subject. Being an admin or the owner is not a reason to see them.
+ * The route passes no reader for a password session or an automation token (a token's actor is its maker's key, but a
+ * token is not a voter), so neither ever does. balanceHidden says they were left off.
+ */
+export function decisionForAdmin(decision: Decision, reader: string | null | undefined): Decision & { balanceHidden?: true } {
+    if (!carriesMemberBalance(decision.params)) return decision;
+    if (reader && (reader === decision.subject || checkVoterEligibility(reader, decision).ok)) return decision;
+    const params: Record<string, unknown> = { ...decision.params };
+    for (const k of MEMBER_BALANCE_PARAMS) delete params[k];
+    return { ...decision, params, balanceHidden: true };
 }
 
 /**
@@ -223,6 +369,7 @@ export const TOUCHES_FOR_EFFECT: Record<DecisionEffect, DecisionTouch> = {
     grant_enterprise: 'pool',
     grant_hardship: 'pool',
     write_off_deficit: 'pool',
+    forgive_debt: 'pool',
     suspend_member: 'member',
     unsuspend_member: 'member',
     freeze_credit: 'member',
@@ -233,10 +380,42 @@ export const TOUCHES_FOR_EFFECT: Record<DecisionEffect, DecisionTouch> = {
     revoke_voucher: 'member',
     remove_lead_keeper: 'member',
     keep_suspension: 'member',
+    pay_out: 'scope',
+    remove_keeper: 'scope',
+    replace_lead: 'scope',
+    set_group_role: 'scope',
+    replace_lead_convenor: 'scope',
+    remove_group_member: 'scope',
+    set_join_policy: 'scope',
+    close_group: 'scope',
 };
+
+/** The effects only a scoped Decision carries out (TOUCHES_FOR_EFFECT 'scope'); a community Decision never does. */
+export const SCOPED_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>([
+    'pay_out', 'remove_keeper', 'replace_lead',
+    'set_group_role', 'replace_lead_convenor', 'remove_group_member', 'set_join_policy', 'close_group',
+]);
+/** The effects an enterprise's keepers' vote carries out (slice S1). */
+export const ENTERPRISE_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['pay_out', 'remove_keeper', 'replace_lead']);
+/** The effects a chat group's vote carries out (slice S3). */
+export const GROUP_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>([
+    'set_group_role', 'replace_lead_convenor', 'remove_group_member', 'set_join_policy', 'close_group',
+]);
 
 /** Effects the node opens by itself; a member can never propose one. */
 const SYSTEM_ONLY_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['keep_suspension']);
+
+/**
+ * "The node admin cannot be voted out — say so plainly" (docs/the-commons.md §3.8). An owner or an admin holds the
+ * server itself, and any admin can halt an open vote — the subject included — so a Decision that removed or suspended
+ * one would be theatre: it worked only on an admin who did not notice, and a faction with the quorum could strip the
+ * people running the node one by one. Neither effect names an owner or an admin, one whose role a suspension holds
+ * aside included (heldPrivilegedRole: a suspended owner is still an owner). An owner takes the role away first, and
+ * then they are a member like any other. Moderators are members with a job, and a vote can still remove one.
+ */
+const NODE_OPERATOR_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>(['remove_member', 'suspend_member']);
+export const NODE_OPERATOR_VOTE_REFUSAL = "A community vote can't remove or suspend an owner or admin of this community's "
+    + "server: they run the server itself. An owner can take that role away first; after that, they are a member like any other.";
 
 /**
  * The node profile switch an effect needs (config/node-profile.ts), or null. Every effect needs `decisions`: with
@@ -246,8 +425,8 @@ const SYSTEM_ONLY_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>
 function switchOffFor(effect: DecisionEffect): ProfileSwitch | null {
     const s = getProfileSwitches();
     if (!s.decisions) return 'decisions';
-    if (TOUCHES_FOR_EFFECT[effect] === 'pool' && !s.beans) return 'beans';
-    if (effect === 'remove_lead_keeper' && !(s.enterprises && s.treasuries)) return 'enterprises';
+    if ((TOUCHES_FOR_EFFECT[effect] === 'pool' || effect === 'pay_out') && !s.beans) return 'beans';
+    if ((effect === 'remove_lead_keeper' || ENTERPRISE_EFFECTS.has(effect)) && !(s.enterprises && s.treasuries)) return 'enterprises';
     return null;
 }
 
@@ -287,7 +466,11 @@ export function madeWithoutVote(decision: Pick<Decision, 'effect' | 'params'>): 
 
 function assertEffectAllowedHere(effect: DecisionEffect): void {
     const off = switchOffFor(effect);
-    if (off === 'beans') throw new BeansOffError('Beans are switched off on this node, so the Commons has nothing to grant or write off.');
+    if (off === 'beans') {
+        throw new BeansOffError(effect === 'pay_out'
+            ? 'Beans are switched off on this node, so an enterprise has nothing to pay out.'
+            : 'Beans are switched off on this node, so the Commons has nothing to grant or write off.');
+    }
     if (off) throw new FeatureOffError(off);
 }
 
@@ -417,14 +600,14 @@ export function getQuorumRequired(decision: Decision | { effect: DecisionEffect;
  * Check if a member is eligible to author a decision (§3.2, §10):
  * - Active member, not frozen, not treasury.
  * - earnedCredit > 0 (or qualified trade value > 0, or node admin).
- * - Max 1 open decision per author.
+ * - Max 1 open community decision per author; an enterprise's keepers' vote is that enterprise's, not this (§2.1).
  */
 export function checkCanProposeDecision(authorPubkey: string): { ok: boolean; error?: string } {
     const standing = checkProposalStanding(authorPubkey);
     if (!standing.ok) return standing;
 
     const openCount = (db.prepare(
-        "SELECT COUNT(*) AS c FROM decisions WHERE author_pubkey = ? AND status = 'open'"
+        "SELECT COUNT(*) AS c FROM decisions WHERE author_pubkey = ? AND status = 'open' AND scope_kind = 'community'"
     ).get(authorPubkey) as any)?.c || 0;
     if (openCount >= 1) {
         return { ok: false, error: 'Member already has an open decision (limit 1)' };
@@ -591,8 +774,13 @@ export function commonsGrantCap(asOfMs: number = grantCapClock()): CommonsGrantC
     return { heldCents, inflowCents, capCents: heldCents + inflowCents };
 }
 
+/** What a member reads when the Commons figures aren't numbers, so there is no cap to quote. */
+export const GRANT_CAP_UNKNOWN = "Grants can't be proposed until the Commons figures are fixed. Nothing has moved.";
+
 /** The sentence a member sees when their grant is over the cap. */
 export function grantCapRefusal(cap: CommonsGrantCap): string {
+    // A cap that isn't a finite number has no figure to quote ("Infinity Beans"); say what is wrong instead.
+    if (!Number.isFinite(cap.capCents)) return GRANT_CAP_UNKNOWN;
     const holds = cap.heldCents < 0 ? `owes ${beansText(cap.heldCents)} Beans` : `holds ${beansText(cap.heldCents)} Beans`;
     return `This grant is bigger than the Commons could pay: it ${holds} and took in ${beansText(cap.inflowCents)} Beans `
         + `over the last ${GRANT_CAP_WINDOW_DAYS} days, so the most you can ask for now is ${beansText(Math.max(0, cap.capCents))} Beans.`;
@@ -607,11 +795,19 @@ export function grantCapRefusal(cap: CommonsGrantCap): string {
 function assertGrantWithinCap(params: any): void {
     const amount = Number(params?.amount);
     if (!Number.isFinite(amount) || amount <= 0) throw new Error(GRANT_AMOUNT_ERROR);
+    // While the pot is unknown there is no cap to measure against: NaN or Infinity made both tests below false, and a
+    // grant of any size was opened for a vote (#1465 re-review, NB-1). Refused in the pause words, and nothing is written.
+    if (potIsUnknown()) throw new CommonsPotUnknownError();
     const cap = commonsGrantCap();
-    if (cap.capCents <= 0 || amount * 100 > cap.capCents + 1e-6) throw new Error(grantCapRefusal(cap));
+    // Fails closed: a cap that isn't a finite number refuses, never lets through.
+    if (!Number.isFinite(cap.capCents) || cap.capCents <= 0 || amount * 100 > cap.capCents + 1e-6) throw new Error(grantCapRefusal(cap));
 }
 
 // ── Decision Lifecycle ──────────────────────────────────────────────────
+
+/** A Decision's title or description over its limit, in the words both apps show (#1493). */
+export const DECISION_TITLE_TOO_LONG = textTooLongMessage("A Decision's title", DECISION_TITLE_LIMIT);
+export const DECISION_DESCRIPTION_TOO_LONG = textTooLongMessage("A Decision's description", DECISION_DESCRIPTION_LIMIT);
 
 export interface CreateDecisionOptions {
     authorPubkey: string;
@@ -632,6 +828,7 @@ export interface CreateDecisionOptions {
  * - Fixed 7-day duration (closes on tick).
  */
 export function createDecision(opts: CreateDecisionOptions): Decision {
+    assertPlainTablesWritable();
     // First: a node with formal Decisions off opens none, whatever the effect (an unknown one included). Then a
     // Decision this node can't carry out gets the plain answer, whoever proposes it. An unknown effect falls through
     // to the checks below as before.
@@ -641,6 +838,13 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     if (!check.ok) {
         throw new Error(check.error || 'Cannot propose decision');
     }
+    // The list of Decisions sends every one's title and description whole, unpaged (#1493): each held to its limit.
+    const title = typeof opts.title === 'string' ? replaceLoneSurrogates(opts.title) : opts.title;
+    if (typeof title === 'string' && !fitsTextLimit(title, DECISION_TITLE_LIMIT)) throw new Error(DECISION_TITLE_TOO_LONG);
+    const description = typeof opts.description === 'string' ? replaceLoneSurrogates(opts.description) : opts.description;
+    if (typeof description === 'string' && !fitsTextLimit(description, DECISION_DESCRIPTION_LIMIT)) {
+        throw new Error(DECISION_DESCRIPTION_TOO_LONG);
+    }
 
     if (!Object.prototype.hasOwnProperty.call(TOUCHES_FOR_EFFECT, opts.effect)) {
         throw new Error(`Unknown decision effect '${opts.effect}'`);
@@ -648,6 +852,8 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     if (SYSTEM_ONLY_EFFECTS.has(opts.effect)) {
         throw new Error(`'${opts.effect}' Decisions are opened by the node when an admin suspends someone, not proposed`);
     }
+    // An enterprise's own vote is opened in that enterprise (createScopedDecision), never as a community Decision.
+    if (SCOPED_EFFECTS.has(opts.effect)) throw new Error(SCOPED_EFFECT_NOT_COMMUNITY);
 
     if (opts.touches !== TOUCHES_FOR_EFFECT[opts.effect]) {
         throw new Error(`Invalid touch '${opts.touches}' for effect '${opts.effect}'. Expected '${TOUCHES_FOR_EFFECT[opts.effect]}'.`);
@@ -656,6 +862,17 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     // a new invite. A vote already open when they deleted it closes without doing anything (preflightAssert).
     if (opts.effect === 'reinstate_member' && opts.subject && isDeletedByOwner(opts.subject)) {
         throw new Error(OWNER_DELETED_REFUSAL);
+    }
+    // Refused before anyone votes on it, not after (NODE_OPERATOR_EFFECTS). One whose role comes after it opens is
+    // caught when it would be carried out (preflightAssert).
+    if (NODE_OPERATOR_EFFECTS.has(opts.effect) && opts.subject && heldPrivilegedRole(opts.subject)) {
+        throw new Error(NODE_OPERATOR_VOTE_REFUSAL);
+    }
+
+    // A debt is forgiven only while it is open (design §4.2 (c)); its subject is the record's id, never a name.
+    if (opts.effect === 'forgive_debt') {
+        const debt = typeof opts.subject === 'string' ? debtRecord(opts.subject) : undefined;
+        if (!debt || debt.status !== 'open') throw new Error('Name an open debt record to forgive.');
     }
 
     // Before anything is written: a grant bigger than the Commons could pay is refused now, not after a vote.
@@ -693,8 +910,8 @@ export function createDecision(opts: CreateDecisionOptions): Decision {
     `).run(
         id,
         opts.authorPubkey,
-        opts.title,
-        opts.description,
+        title,
+        description,
         opts.touches,
         opts.effect,
         opts.subject || null,
@@ -716,12 +933,16 @@ export function getDecision(id: string): Decision | null {
     return row ? rowToDecision(row) : null;
 }
 
+/**
+ * The community's Decisions, newest first. A scoped one (an enterprise's keepers' vote) is never here: its readers are
+ * its keepers (getScopedDecisions), and an app from before scopes shows nothing it can't place.
+ */
 export function getAllDecisions(status?: DecisionStatus): Decision[] {
     if (status) {
-        const rows = db.prepare('SELECT * FROM decisions WHERE status = ? ORDER BY created_at DESC').all(status);
+        const rows = db.prepare("SELECT * FROM decisions WHERE status = ? AND scope_kind = 'community' ORDER BY created_at DESC").all(status);
         return rows.map(rowToDecision);
     }
-    const rows = db.prepare('SELECT * FROM decisions ORDER BY created_at DESC').all();
+    const rows = db.prepare("SELECT * FROM decisions WHERE scope_kind = 'community' ORDER BY created_at DESC").all();
     return rows.map(rowToDecision);
 }
 
@@ -739,12 +960,15 @@ export function castDecisionVote(
     voterPubkey: string,
     support: boolean,
     voteCount = 1,
-    signature?: string
+    signature?: string,
+    /** The scope the calling route serves: a Decision of any other scope is answered as one that doesn't exist. */
+    scope?: Decision['scopeKind'],
 ): { success: boolean; creditsUsed: number; error?: string; code?: typeof FEATURE_OFF } {
+    assertPlainTablesWritable();
     // A node with formal Decisions off takes no vote, on any Decision, open or not (routes answer 404 feature_off).
     if (!decisionsOn()) return { success: false, creditsUsed: 0, error: featureOffMessage('decisions'), code: FEATURE_OFF };
     const decision = getDecision(decisionId);
-    if (!decision) return { success: false, creditsUsed: 0, error: 'Decision not found' };
+    if (!decision || (scope && decision.scopeKind !== scope)) return { success: false, creditsUsed: 0, error: 'Decision not found' };
     if (madeWithoutVote(decision)) {
         return {
             success: false,
@@ -757,6 +981,8 @@ export function castDecisionVote(
     if (parseDbTime(decision.closesAt) <= Date.now()) {
         return { success: false, creditsUsed: 0, error: 'Voting window has closed' };
     }
+
+    if (decision.scopeKind !== 'community') return castScopedVote(decision, voterPubkey, support, signature);
 
     const elig = checkVoterEligibility(voterPubkey, decision);
     if (!elig.ok) return { success: false, creditsUsed: 0, error: elig.error };
@@ -864,6 +1090,7 @@ export function getDecisionVotes(decisionId: string): DecisionVote[] {
 export function tallyDecision(decisionId: string, asOfTime?: number): DecisionTally {
     const decision = getDecision(decisionId);
     if (!decision) throw new Error(`Decision ${decisionId} not found`);
+    if (decision.scopeKind !== 'community') return tallyScopedDecision(decision);
 
     const votes = getDecisionVotes(decisionId);
     const totalVoters = votes.length;
@@ -913,9 +1140,10 @@ export function tallyDecision(decisionId: string, asOfTime?: number): DecisionTa
  * - 'blocked': invalid state/parameters -> transition to execution_blocked.
  */
 export function preflightAssert(decision: Decision): {
-    status: 'ok' | 'void' | 'insufficient_funds' | 'blocked';
+    status: 'ok' | 'void' | 'insufficient_funds' | 'blocked' | 'wait';
     reason?: string;
 } {
+    if (decision.scopeKind !== 'community') return preflightScoped(decision);
     // 0. A switch this node runs with off: nothing to execute (config/node-profile.ts).
     const off = switchOffFor(decision.effect);
     if (off === 'decisions') return { status: 'blocked', reason: DECISIONS_OFF_NOT_CARRIED_OUT };
@@ -937,10 +1165,11 @@ export function preflightAssert(decision: Decision): {
         }
     }
 
-    if (decision.effect === 'remove_member' || decision.effect === 'suspend_member') {
+    if (NODE_OPERATOR_EFFECTS.has(decision.effect)) {
         if (!decision.subject) return { status: 'blocked', reason: 'Missing member subject' };
-        if (isSoleOwner(decision.subject)) {
-            return { status: 'blocked', reason: 'Cannot remove or suspend sole node owner via community vote per §3.8' };
+        // An owner or admin now, whatever they were when it opened: the sole owner, a co-owner, an admin (§3.8).
+        if (heldPrivilegedRole(decision.subject)) {
+            return { status: 'blocked', reason: `${NODE_OPERATOR_VOTE_REFUSAL} (§3.8)` };
         }
     }
 
@@ -974,6 +1203,12 @@ export function preflightAssert(decision: Decision): {
         }
     }
 
+    if (decision.effect === 'forgive_debt') {
+        const debt = decision.subject ? debtRecord(decision.subject) : undefined;
+        if (!debt) return { status: 'void', reason: 'The debt record is gone' };
+        if (debt.status !== 'open') return { status: 'void', reason: `The debt is ${debt.status} already` };
+    }
+
     if (decision.effect === 'write_off_deficit') {
         if (!decision.subject) return { status: 'blocked', reason: 'Missing enterprise subject' };
         const enterprise = getMember(decision.subject);
@@ -1000,6 +1235,7 @@ export function preflightAssert(decision: Decision): {
  * Destructive removal sets 7-day grace period and suspends member.
  */
 export function executeDecision(decisionId: string): { success: boolean; status: DecisionStatus; error?: string } {
+    assertPlainTablesWritable();
     const decision = getDecision(decisionId);
     if (!decision) return { success: false, status: 'execution_blocked', error: 'Decision not found' };
 
@@ -1019,8 +1255,15 @@ export function executeDecision(decisionId: string): { success: boolean; status:
     if (decision.effect === 'keep_suspension' && (!decisionsOn() || madeWithoutVote(decision))
         && (decision.status === 'open' || decision.status === 'passed')) {
         const why = decisionsOn() ? NO_VOTE_SUSPENSION_MADE_ENDED : NO_VOTE_SUSPENSION_ENDED;
-        closeUnkeptSuspension(decision, 'unresolved', why, now);
+        closeUnkeptSuspension(decision, 'unresolved', why, now, { actor: 'SYSTEM', how: 'the suspension ended' });
         return { success: false, status: 'unresolved', error: why };
+    }
+
+    // Needs the pot, and the pot is unknown: waits in its status, before the preflight (which reads the pot) and before
+    // anything is written. Retried by the tick. A Decision that moves no Beans goes on below whatever the pot is.
+    if ((POT_EFFECTS.has(decision.effect) || decision.effect === 'pay_out') && potIsUnknown()) {
+        waitForPot(decision, now);
+        return { success: false, status: decision.status, error: WAITING_FOR_POT };
     }
 
     const preflight = preflightAssert(decision);
@@ -1029,7 +1272,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         db.prepare(
             "UPDATE decisions SET status = 'execution_void', executed_at = ?, execution_reason = ?, updated_at = ? WHERE id = ?"
         ).run(now, preflight.reason || 'Subject dead', now, decisionId);
-        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
+        announceDecisionUpdated(decisionId);
         return { success: false, status: 'execution_void', error: preflight.reason };
     }
 
@@ -1042,22 +1285,39 @@ export function executeDecision(decisionId: string): { success: boolean; status:
             db.prepare(
                 "UPDATE decisions SET status = 'execution_blocked', execution_error = 'Funding queue full: maximum 1 queued grant permitted per §3.7', updated_at = ? WHERE id = ?"
             ).run(now, decisionId);
-            broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
+            announceDecisionUpdated(decisionId);
             return { success: false, status: 'execution_blocked', error: 'Funding queue is full (max 1 queued grant per §3.7)' };
         }
 
         db.prepare(
             "UPDATE decisions SET status = 'passed_queued_for_funds', execution_reason = ?, updated_at = ? WHERE id = ?"
         ).run(preflight.reason || 'Queued for pool funds', now, decisionId);
-        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
+        announceDecisionUpdated(decisionId);
         return { success: true, status: 'passed_queued_for_funds' };
+    }
+
+    // An enterprise an admin suspended or disabled: a keepers' vote outlives a temporary brake (§2.6). It stays passed and
+    // the tick retries it, until 90 days after it closed.
+    if (preflight.status === 'wait') {
+        if (Date.now() - parseDbTime(decision.closesAt) > SCOPED_WAIT_DAYS * DAY_MS) {
+            db.prepare(
+                "UPDATE decisions SET status = 'execution_void', executed_at = ?, execution_reason = ?, updated_at = ? WHERE id = ?"
+            ).run(now, `${preflight.reason}. It waited ${SCOPED_WAIT_DAYS} days, so it is not carried out.`, now, decisionId);
+            announceDecisionUpdated(decisionId);
+            return { success: false, status: 'execution_void', error: preflight.reason };
+        }
+        if (decision.executionReason !== preflight.reason) {
+            db.prepare("UPDATE decisions SET execution_reason = ?, updated_at = ? WHERE id = ?").run(preflight.reason, now, decisionId);
+            announceDecisionUpdated(decisionId);
+        }
+        return { success: false, status: decision.status, error: preflight.reason };
     }
 
     if (preflight.status === 'blocked') {
         db.prepare(
             "UPDATE decisions SET status = 'execution_blocked', execution_error = ?, updated_at = ? WHERE id = ?"
         ).run(preflight.reason || 'Preflight blocked', now, decisionId);
-        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
+        announceDecisionUpdated(decisionId);
         return { success: false, status: 'execution_blocked', error: preflight.reason };
     }
 
@@ -1065,7 +1325,9 @@ export function executeDecision(decisionId: string): { success: boolean; status:
     if (decision.effect === 'remove_member') {
         const graceEndsAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
         try {
-            conservingTransaction(() => {
+            // A plain transaction, not a conservingTransaction: the suspension moves no Beans, so it must not wait on the
+            // pot's pre-flush (#1465 review, NB-1). The Beans move at the end of the grace window (adminPruneUser).
+            db.transaction(() => {
                 // Hold the member's node role aside before the suspension deletes it, so halting the removal
                 // in its grace window gives it back exactly (as an emergency suspension does).
                 db.prepare(`
@@ -1074,7 +1336,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     FROM node_roles WHERE member_pubkey = ?
                 `).run(decisionId, decision.subject!);
                 // Immediately suspend and freeze member
-                setUserStatusRow(decision.subject!, 'disabled');
+                setUserStatusRow(decision.subject!, 'disabled', { actor: COMMUNITY_DECISION_ACTOR, how: 'suspended for removal' });
                 db.prepare('UPDATE members SET credit_frozen = 1 WHERE public_key = ?').run(decision.subject!);
                 db.prepare(`
                     UPDATE decisions SET
@@ -1084,9 +1346,9 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                         updated_at = ?
                     WHERE id = ?
                 `).run(graceEndsAt, now, decisionId);
-            });
+            })();
             broadcast({ type: 'profile_updated', publicKey: decision.subject! });
-            broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
+            announceDecisionUpdated(decisionId);
             return { success: true, status: 'execution_pending_grace' };
         } catch (e: any) {
             db.prepare(
@@ -1102,8 +1364,15 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         const cancelledDecisionIds: string[] = [];
         const touchedEnterprises: string[] = [];
         const touchedProfiles: string[] = [];
+        // A chat group's vote: the chat's lines and the group's live updates, once the change has committed.
+        const afterCommit: Array<() => void> = [];
 
-        conservingTransaction(() => {
+        // Beans move only for POT_EFFECTS, which need the pot's pre-flush and the in-memory unwind. Every other effect is
+        // row changes alone, so it runs in a plain transaction and is carried out whatever the pot is (#1465 review, NB-1).
+        const inTransaction = POT_EFFECTS.has(decision.effect) || decision.effect === 'pay_out'
+            ? (fn: () => void) => conservingTransaction(fn)
+            : (fn: () => void) => db.transaction(fn)();
+        inTransaction(() => {
             // Re-verify status under write lock to guard against concurrent execution
             const current = db.prepare("SELECT status FROM decisions WHERE id = ?").get(decision.id) as { status: DecisionStatus } | undefined;
             if (!current || current.status === 'executed' || current.status === 'execution_void') {
@@ -1115,7 +1384,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
 
             switch (decision.effect) {
                 case 'suspend_member': {
-                    setUserStatusRow(decision.subject!, 'disabled');
+                    setUserStatusRow(decision.subject!, 'disabled', { actor: COMMUNITY_DECISION_ACTOR, how: 'suspended' });
                     break;
                 }
                 case 'unsuspend_member':
@@ -1138,7 +1407,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     for (const cd of cancelledDecisions) {
                         cancelledDecisionIds.push(cd.id);
                         // The community reinstated them: the role the removal held aside comes back too.
-                        restoreSuspendedNodeRole(cd.id);
+                        restoreSuspendedNodeRole(cd.id, { actor: COMMUNITY_DECISION_ACTOR, how: 'reinstated' });
                     }
                     break;
                 }
@@ -1161,7 +1430,7 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                 case 'keep_suspension': {
                     // The admin's emergency suspension is already in force; passing keeps it. The node role it
                     // held aside is gone for good — the community kept the suspension.
-                    db.prepare('DELETE FROM suspended_node_roles WHERE decision_id = ?').run(decision.id);
+                    dropSuspendedNodeRole(decision.id);
                     break;
                 }
                 case 'remove_lead_keeper': {
@@ -1241,6 +1510,10 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     persistCommonsBalance();
                     break;
                 }
+                case 'forgive_debt': {
+                    forgiveDebt(authSigner, decision.subject!, { ref: decision.id });
+                    break;
+                }
                 case 'write_off_deficit': {
                     const entPubkey = decision.subject!;
                     const entAccount = ledger.getAccount(entPubkey);
@@ -1264,6 +1537,82 @@ export function executeDecision(decisionId: string): { success: boolean; status:
                     }
                     break;
                 }
+                case 'pay_out': {
+                    // Out of the enterprise's own account only, through transfer() at floor 0 (a direct send never
+                    // reaches its credit line), with the trade fee; the ledger line carries this Decision's signer.
+                    const ent = decision.scopeId!;
+                    const to = decision.subject!;
+                    const amount = floorCents(Number(decision.params.amount)) / 100;
+                    const wage = isEnterpriseKeeper(ent, to);
+                    const txn = transfer(ent, to, amount, decision.title, 'direct', false, { signer: authSigner, decisionPayOut: true });
+                    if (!txn) throw new Error(`The enterprise could not pay ${beansText(amount * 100)} Beans now`);
+                    // A wage comes out of earned surplus (Rules 5 and 6), as a deferred wage claim's does.
+                    if (wage) {
+                        db.prepare('UPDATE members SET earned_surplus = COALESCE(earned_surplus, 0) - ? WHERE public_key = ?').run(amount, ent);
+                    }
+                    touchedEnterprises.push(ent);
+                    touchedProfiles.push(to);
+                    break;
+                }
+                case 'remove_keeper': {
+                    const ent = decision.scopeId!;
+                    removeKeeperByVote(ent, decision.subject!, authSigner);
+                    touchedEnterprises.push(ent);
+                    break;
+                }
+                case 'replace_lead': {
+                    const ent = decision.scopeId!;
+                    replaceLeadByVote(ent, decision.subject!);
+                    touchedEnterprises.push(ent);
+                    break;
+                }
+                case 'set_group_role': {
+                    const gid = decision.scopeId!;
+                    const subject = decision.subject!;
+                    const role = decision.params?.role === 'convenor' ? 'convenor' : 'member';
+                    setGroupRoleByVote(gid, subject, role);
+                    afterCommit.push(() => afterGroupVote(gid, { kind: 'role', target: subject,
+                        text: `By the group's vote, ${nameOf(subject)} is now ${role === 'convenor' ? 'a convenor' : 'a member'}` }));
+                    break;
+                }
+                case 'replace_lead_convenor': {
+                    const gid = decision.scopeId!;
+                    const subject = decision.subject!;
+                    replaceGroupLeadByVote(gid, subject);
+                    afterCommit.push(() => afterGroupVote(gid, { kind: 'lead', target: subject,
+                        text: `By the group's vote, ${nameOf(subject)} is now the group's lead convenor` }));
+                    break;
+                }
+                case 'remove_group_member': {
+                    const gid = decision.scopeId!;
+                    const subject = decision.subject!;
+                    removeGroupMemberByVote(gid, subject);
+                    afterCommit.push(() => afterGroupVote(gid, { kind: 'removed', target: subject,
+                        text: `By the group's vote, ${nameOf(subject)} was removed from the group` }));
+                    break;
+                }
+                case 'set_join_policy': {
+                    const gid = decision.scopeId!;
+                    setGroupJoinPolicyByVote(gid, decision.params.policy as engine.JoinPolicy);
+                    afterCommit.push(() => afterGroupVote(gid, { kind: 'policy', text: '' }));
+                    break;
+                }
+                case 'close_group': {
+                    const gid = decision.scopeId!;
+                    const cancelledPosts = closeGroupByVote(gid, decision.id);
+                    // Every other open vote on the group is void: nothing is left to act on (§2.6).
+                    const others = db.prepare(`
+                        SELECT id FROM decisions WHERE scope_kind = 'group' AND scope_id = ? AND id != ?
+                          AND status IN ('open', 'passed', 'execution_pending_grace', 'passed_queued_for_funds')
+                    `).all(gid, decision.id) as Array<{ id: string }>;
+                    for (const o of others) {
+                        db.prepare("UPDATE decisions SET status = 'execution_void', executed_at = ?, execution_reason = ?, updated_at = ? WHERE id = ?")
+                            .run(now, GROUP_CLOSED_VOID, now, o.id);
+                        cancelledDecisionIds.push(o.id);
+                    }
+                    afterCommit.push(() => afterGroupVote(gid, { kind: 'closed', text: GROUP_CLOSED_LINE, cancelledPosts }));
+                    break;
+                }
                 default:
                     throw new Error(`Unsupported effect: ${decision.effect}`);
             }
@@ -1282,6 +1631,8 @@ export function executeDecision(decisionId: string): { success: boolean; status:
             const current = getDecision(decisionId);
             return { success: true, status: current?.status || 'executed' };
         }
+        noteCarriedOutAfterWait(decision);
+        for (const fn of afterCommit) fn();
 
         for (const ent of touchedEnterprises) {
             clearEnterpriseFloorCache(ent);
@@ -1289,19 +1640,19 @@ export function executeDecision(decisionId: string): { success: boolean; status:
         }
         for (const pk of touchedProfiles) broadcast({ type: 'profile_updated', publicKey: pk });
         for (const cid of cancelledDecisionIds) {
-            broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(cid)!) });
+            announceDecisionUpdated(cid);
         }
 
         if (decision.subject) {
             broadcast({ type: 'profile_updated', publicKey: decision.subject });
         }
-        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
+        announceDecisionUpdated(decisionId);
         return { success: true, status: 'executed' };
     } catch (e: any) {
         db.prepare(
             "UPDATE decisions SET status = 'execution_blocked', execution_error = ?, updated_at = ? WHERE id = ?"
         ).run(e?.message || String(e), now, decisionId);
-        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
+        announceDecisionUpdated(decisionId);
         return { success: false, status: 'execution_blocked', error: e?.message };
     }
 }
@@ -1313,6 +1664,13 @@ export function executeDecision(decisionId: string): { success: boolean; status:
  * Requires an authenticated admin pubkey and a signed, public reason (§3.7).
  */
 export function adminHaltDecision(decisionId: string, adminPubkey: string, reason: string): { success: boolean; error?: string; status?: number } {
+    assertPlainTablesWritable();
+    if (getDecision(decisionId)?.scopeKind === 'enterprise') {
+        return { success: false, status: 403, error: SCOPED_NO_ADMIN_HALT };
+    }
+    if (getDecision(decisionId)?.scopeKind === 'group') {
+        return { success: false, status: 403, error: GROUP_NO_ADMIN_HALT };
+    }
     if (!isAdminActor(adminPubkey)) {
         return { success: false, status: 403, error: 'Unauthorized: admin required to halt decision' };
     }
@@ -1327,15 +1685,16 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
     }
     // Halting a removal in its grace window, or the vote on an emergency suspension, gives the member back
     // the node role held aside for it — and only an owner may grant an owner or admin role.
-    const restoresRole = (decision.status === 'execution_pending_grace' && decision.effect === 'remove_member')
-        || decision.effect === 'keep_suspension';
-    if (restoresRole && !isOwnerLevelActor(adminPubkey)) {
+    if (haltRestoresRole(decision) && !isOwnerLevelActor(adminPubkey)) {
         const held = heldRoleFor([decisionId]);
         if (held) return { success: false, status: 403, error: roleRestoreRefusal(held) };
     }
 
     const now = new Date().toISOString();
-    conservingTransaction(() => {
+    // A plain transaction: a halt moves no Beans (the Decision's status, the member's status and credit_frozen, the held
+    // role), so it must not wait on the pot's pre-flush. While the pot was unknown no Decision could be halted, not even a
+    // removal in its grace window (#1465 re-review, NB-2), as adminLiftSuspension and closeUnkeptSuspension already do.
+    db.transaction(() => {
         db.prepare(`
             UPDATE decisions SET
                 status = 'admin_halted',
@@ -1352,14 +1711,14 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
             && getMember(decision.subject)?.status === 'disabled') {
             setUserStatusRow(decision.subject, 'active');
             db.prepare('UPDATE members SET credit_frozen = 0 WHERE public_key = ?').run(decision.subject);
-            restoreSuspendedNodeRole(decision.id);
+            restoreSuspendedNodeRole(decision.id, { actor: adminPubkey, how: 'a removal halted' });
         }
         // Halting the ratifying vote takes away the only thing that could keep an emergency suspension,
         // so it lifts — an admin can't park a suspension forever by stopping its vote.
         if (decision.effect === 'keep_suspension') {
-            liftEmergencySuspensionRow(decision);
+            liftEmergencySuspensionRow(decision, { actor: adminPubkey, how: "the suspension's vote halted" });
         }
-    });
+    })();
 
     if (decision.subject) {
         broadcast({ type: 'profile_updated', publicKey: decision.subject });
@@ -1372,6 +1731,13 @@ export function adminHaltDecision(decisionId: string, adminPubkey: string, reaso
  * Admin accelerate: fires a pending grace removal immediately (§3.7).
  */
 export function adminAccelerateDecision(decisionId: string, adminPubkey: string): { success: boolean; error?: string; status?: number } {
+    assertPlainTablesWritable();
+    if (getDecision(decisionId)?.scopeKind === 'enterprise') {
+        return { success: false, status: 403, error: SCOPED_NO_ADMIN_HALT };
+    }
+    if (getDecision(decisionId)?.scopeKind === 'group') {
+        return { success: false, status: 403, error: GROUP_NO_ADMIN_HALT };
+    }
     if (!isAdminActor(adminPubkey)) {
         return { success: false, status: 403, error: 'Unauthorized: admin required to accelerate decision' };
     }
@@ -1397,6 +1763,9 @@ export function adminAccelerateDecision(decisionId: string, adminPubkey: string)
         };
     }
 
+    // The prune moves Beans: refused in plain words while the pot is unknown, and the removal stays in its grace window.
+    if (potIsUnknown()) return { success: false, status: 503, error: COMMONS_POT_PAUSED };
+
     const now = new Date().toISOString();
     try {
         adminPruneUser(decision.subject, COMMUNITY_DECISION_ACTOR);
@@ -1408,7 +1777,7 @@ export function adminAccelerateDecision(decisionId: string, adminPubkey: string)
                 updated_at = ?
             WHERE id = ?
         `).run(now, now, decisionId);
-        broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decisionId)!) });
+        announceDecisionUpdated(decisionId);
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e?.message || String(e) };
@@ -1445,23 +1814,72 @@ function roleRestoreRefusal(role: 'owner' | 'admin'): string {
     return `This member held the ${role} role, which comes back with them, and only an owner can give back an owner or admin role. Ask an owner to do this`;
 }
 
+/** Halting this Decision gives the member back the node role held aside for it (adminHaltDecision). */
+function haltRestoresRole(decision: { status: string; effect: string }): boolean {
+    return (decision.status === 'execution_pending_grace' && decision.effect === 'remove_member')
+        || decision.effect === 'keep_suspension';
+}
+
+export type OwnerOnlyAdminAction = 'suspend' | 'lift' | 'halt' | 'accelerate' | 'prune' | 'prune-branch' | 'report-suspend' | 'rekey';
+
+/**
+ * Whether this admin action on this member (suspend, lift, prune, prune-branch: its root), Decision (halt,
+ * accelerate) or report (report-suspend: actioning it with suspendUser, which takes the subject's role) is one only an
+ * owner may make: the conditions on which the engine refuses it to an admin
+ * (adminEmergencySuspend, adminLiftSuspension, adminHaltDecision, adminAccelerateDecision, state-engine assertMayPrune
+ * for adminPruneUser, adminPruneBranch and member-wizards executeOffboard, member-wizards assertMayRekey for rekey),
+ * whoever is acting. A re-key of an owner or admin is asked even of themselves: the code it answers binds a key of the
+ * caller's choosing to that role. No role gate sees these,
+ * since they turn on the target, so the routes ask the phone's step-up on exactly these (routes/admin.ts
+ * stepUpIfOwnerOnly). `actor` is the authenticated actor, as the engine is given it (a member may prune themselves).
+ */
+export function adminActionNeedsOwner(action: OwnerOnlyAdminAction, target: string, actor = ''): boolean {
+    if (!target) return false;
+    if (action === 'suspend') return isNodeOwner(target);
+    if (action === 'prune') return pruneNeedsOwner(target, actor);
+    if (action === 'prune-branch') return inviteBranchOf(target).some(pk => pruneNeedsOwner(pk, actor));
+    if (action === 'report-suspend') return reportSuspensionTakesPrivilegedRole(target);
+    if (action === 'rekey') return !!heldPrivilegedRole(target);
+    if (action === 'lift') {
+        const openKeeps = db.prepare(
+            "SELECT id FROM decisions WHERE subject = ? AND effect = 'keep_suspension' AND status = 'open'"
+        ).all(target) as { id: string }[];
+        return !!heldRoleFor(openKeeps.map(k => k.id));
+    }
+    const decision = getDecision(target);
+    if (!decision) return false;
+    if (action === 'halt') return haltRestoresRole(decision) && !!heldRoleFor([target]);
+    return decision.effect === 'remove_member' && !!decision.subject && !!heldPrivilegedRole(decision.subject);
+}
+
+/**
+ * A role a Decision held aside, no longer held: its row goes, and its tombstone takes the delete to a standby
+ * (suspended_node_roles is a plain table, engine/replication-manifest.ts).
+ */
+function dropSuspendedNodeRole(decisionId: string): void {
+    if (db.prepare('DELETE FROM suspended_node_roles WHERE decision_id = ?').run(decisionId).changes > 0) {
+        writeTombstone('suspended_node_roles', decisionId);
+    }
+}
+
 /**
  * Give back the node role a suspension (emergency, or a removal's grace window) held aside — the same role, grant record and break-glass
  * hash. The session epoch moves on by one, so admin sessions opened before the suspension stay dead and the
- * member signs in again. Call inside a transaction, after the member is active again.
+ * member signs in again. Call inside a transaction, after the member is active again. The owners are told, as by `by`.
  */
-function restoreSuspendedNodeRole(decisionId: string): void {
+function restoreSuspendedNodeRole(decisionId: string, by: RoleChangeBy): void {
     const held = db.prepare('SELECT * FROM suspended_node_roles WHERE decision_id = ?').get(decisionId) as {
         member_pubkey: string; role: string; granted_at: string | null; granted_by: string | null;
         session_epoch: number; break_glass_hash: string | null;
     } | undefined;
-    db.prepare('DELETE FROM suspended_node_roles WHERE decision_id = ?').run(decisionId);
+    dropSuspendedNodeRole(decisionId);
     if (!held) return;
-    db.prepare(`
+    const back = db.prepare(`
         INSERT INTO node_roles (member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash)
         VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(member_pubkey) DO NOTHING
     `).run(held.member_pubkey, held.role, held.granted_at, held.granted_by, held.session_epoch + 1, held.break_glass_hash);
+    if (back.changes > 0) noteNodeRoleBack(held.member_pubkey, held.role as NodeRole, by);
     noteTakeoverInputsChanged(`${held.role} role given back`);
 }
 
@@ -1472,7 +1890,7 @@ function restoreSuspendedNodeRole(decisionId: string): void {
  * role they held. Held by a pending removal, the role moves to that removal, so halting it gives the role
  * back; held by a passed suspension, the community has acted and the role stays gone.
  */
-function liftEmergencySuspensionRow(decision: Decision): boolean {
+function liftEmergencySuspensionRow(decision: Decision, by: RoleChangeBy): boolean {
     if (!decision.subject) return false;
     const row = db.prepare('SELECT status FROM members WHERE public_key = ?').get(decision.subject) as { status: string } | undefined;
     const heldElsewhere = row?.status === 'disabled' && db.prepare(`
@@ -1493,30 +1911,32 @@ function liftEmergencySuspensionRow(decision: Decision): boolean {
         const removalHolds = pendingRemoval
             && db.prepare('SELECT 1 FROM suspended_node_roles WHERE decision_id = ?').get(pendingRemoval.id);
         if (pendingRemoval && !removalHolds) {
-            db.prepare('UPDATE suspended_node_roles SET decision_id = ? WHERE decision_id = ?').run(pendingRemoval.id, decision.id);
+            // The row's key moves, so the old key's row goes on a standby with a tombstone (a plain table).
+            const moved = db.prepare('UPDATE suspended_node_roles SET decision_id = ? WHERE decision_id = ?').run(pendingRemoval.id, decision.id);
+            if (moved.changes > 0) writeTombstone('suspended_node_roles', decision.id);
         } else {
-            db.prepare('DELETE FROM suspended_node_roles WHERE decision_id = ?').run(decision.id);
+            dropSuspendedNodeRole(decision.id);
         }
         return false;
     }
     setUserStatusRow(decision.subject, 'active');
-    restoreSuspendedNodeRole(decision.id);
+    restoreSuspendedNodeRole(decision.id, by);
     return true;
 }
 
 /**
  * Close a "Keep this suspension?" Decision that did not pass and lift the suspension, atomically.
  */
-function closeUnkeptSuspension(decision: Decision, status: 'failed' | 'unresolved', why: string, nowIso: string): void {
+function closeUnkeptSuspension(decision: Decision, status: 'failed' | 'unresolved', why: string, nowIso: string, by: RoleChangeBy): void {
     let lifted = false;
     db.transaction(() => {
-        lifted = liftEmergencySuspensionRow(decision);
+        lifted = liftEmergencySuspensionRow(decision, by);
         db.prepare(`
             UPDATE decisions SET status = ?, execution_reason = ?, updated_at = ? WHERE id = ?
         `).run(status, `${why}. ${lifted ? 'The suspension has been lifted.' : 'The member was already restored or is held by another Decision.'}`, nowIso, decision.id);
     })();
     if (lifted && decision.subject) broadcast({ type: 'profile_updated', publicKey: decision.subject });
-    broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(decision.id)!) });
+    announceDecisionUpdated(decision.id);
 }
 
 export interface EmergencySuspendResult {
@@ -1539,8 +1959,12 @@ export interface EmergencySuspendResult {
  * as a new Decision. At its end the tick lifts it (executeDecision); an admin can lift it sooner as anywhere. A
  * moderator who wants the member kept out longer suspends them again, or removes the account. Its params carry
  * `noVote`, so it stays so if the switch goes back on before it ends (madeWithoutVote).
+ *
+ * A member whom only a re-key code holds suspended is not suspended by anyone (member-wizards.ts
+ * suspendedOnlyByRekeyCode): they can be suspended, and its 'disabled' outlasts the code's cancel or completion.
  */
 export function adminEmergencySuspend(subjectPubkey: string, adminActor: string, reason: string): EmergencySuspendResult {
+    assertPlainTablesWritable();
     // Guards first, outside any transaction.
     if (!isAdminActor(adminActor)) return { success: false, status: 403, error: 'Only a node admin can suspend a member' };
     const cleanReason = String(reason || '').trim();
@@ -1552,13 +1976,15 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
     const member = getMember(subjectPubkey);
     if (!member) return { success: false, status: 404, error: 'Member not found' };
     if (member.isTreasury) return { success: false, status: 400, error: 'An enterprise account cannot be suspended this way' };
-    if (member.status !== 'active') return { success: false, status: 409, error: `Member is already ${member.status === 'disabled' ? 'suspended' : member.status}` };
+    if (member.status !== 'active' && !(member.status === 'suspended' && suspendedOnlyByRekeyCode(subjectPubkey))) {
+        return { success: false, status: 409, error: `Member is already ${member.status === 'disabled' ? 'suspended' : member.status}` };
+    }
     if (isSoleOwner(subjectPubkey)) return { success: false, status: 400, error: "The node's only owner cannot be suspended" };
     if (adminActor === subjectPubkey) return { success: false, status: 400, error: 'You cannot suspend yourself' };
     // node_roles: only an owner may take away an owner's role, and suspending removes it. A plain admin
-    // who thinks an owner must go proposes a member-removal Decision instead.
+    // who thinks an owner must go asks another owner: no community vote removes an owner (§3.8, NODE_OPERATOR_EFFECTS).
     if (isNodeOwner(subjectPubkey) && !isOwnerLevelActor(adminActor)) {
-        return { success: false, status: 403, error: 'Only an owner can suspend an owner. Propose a Decision to remove them instead' };
+        return { success: false, status: 403, error: 'Only an owner can suspend an owner' };
     }
 
     const id = crypto.randomUUID();
@@ -1582,7 +2008,7 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
             SELECT ?, member_pubkey, role, granted_at, granted_by, session_epoch, break_glass_hash
             FROM node_roles WHERE member_pubkey = ?
         `).run(id, subjectPubkey);
-        setUserStatusRow(subjectPubkey, 'disabled');
+        setUserStatusRow(subjectPubkey, 'disabled', { actor: adminActor, how: 'suspended' });
         db.prepare(`
             INSERT INTO decisions (
                 id, author_pubkey, title, description, touches, effect, subject, params,
@@ -1612,12 +2038,31 @@ export function adminEmergencySuspend(subjectPubkey: string, adminActor: string,
 /**
  * An admin lifts a suspension by hand. An open "Keep this suspension?" vote about it has nothing left to
  * decide, so it closes as halted, with the lift recorded as the reason.
+ *
+ * It lifts a report's 'suspended' as well as an admin's or a Decision's 'disabled': a cancelled re-key code leaves a
+ * member a report may have suspended 'suspended', and tells the admin to lift it here (member-wizards.ts
+ * cancelRekeyCode). Not while a re-key code holds their key: its cancel decides their status, and a lift under it would
+ * be undone by the code (the code is cancelled first).
  */
 export function adminLiftSuspension(subjectPubkey: string, adminActor: string): { success: boolean; error?: string; status?: number } {
+    assertPlainTablesWritable();
     if (!isAdminActor(adminActor)) return { success: false, status: 403, error: 'Only a node admin can lift a suspension' };
     const member = getMember(subjectPubkey);
     if (!member) return { success: false, status: 404, error: 'Member not found' };
-    if (member.status !== 'disabled') return { success: false, status: 409, error: 'Member is not suspended' };
+    if (member.status !== 'disabled' && member.status !== 'suspended') return { success: false, status: 409, error: 'Member is not suspended' };
+    if (member.status === 'suspended'
+        && db.prepare("SELECT 1 FROM invalidated_keys WHERE public_key = ? AND reason = 'rekey_pending' AND rekeyed_to IS NULL").get(subjectPubkey)) {
+        // An expired code can't be cancelled (member-wizards.ts cancelRekeyCode): a new code over its hold can.
+        const latest = db.prepare('SELECT status, expires_at FROM rekey_requests WHERE old_pubkey = ? ORDER BY created_at DESC, id DESC LIMIT 1')
+            .get(subjectPubkey) as { status: string; expires_at: string } | undefined;
+        const ranOut = latest?.status === 'expired' || (latest?.status === 'pending' && new Date(latest.expires_at).getTime() < Date.now());
+        return {
+            success: false, status: 409,
+            error: ranOut
+                ? 'Their key is held for a re-key code that has run out: make a new code on Re-Key and cancel it, then lift the suspension if they are still suspended'
+                : 'Their key is held for a re-key: cancel the code on Re-Key first, then lift the suspension',
+        };
+    }
     const pendingRemoval = db.prepare(
         "SELECT 1 FROM decisions WHERE subject = ? AND effect = 'remove_member' AND status = 'execution_pending_grace'"
     ).get(subjectPubkey);
@@ -1636,7 +2081,7 @@ export function adminLiftSuspension(subjectPubkey: string, adminActor: string): 
     db.transaction(() => {
         setUserStatusRow(subjectPubkey, 'active');
         for (const k of openKeeps) {
-            restoreSuspendedNodeRole(k.id);
+            restoreSuspendedNodeRole(k.id, { actor: adminActor, how: 'the suspension lifted' });
             db.prepare(`
                 UPDATE decisions SET status = 'admin_halted', admin_halted_at = ?, admin_halted_by = ?,
                     admin_halt_reason = 'An admin lifted the suspension before the vote closed', updated_at = ?
@@ -1645,7 +2090,7 @@ export function adminLiftSuspension(subjectPubkey: string, adminActor: string): 
         }
     })();
     broadcast({ type: 'profile_updated', publicKey: subjectPubkey });
-    for (const k of openKeeps) broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(k.id)!) });
+    for (const k of openKeeps) announceDecisionUpdated(k.id);
     return { success: true };
 }
 
@@ -1661,11 +2106,15 @@ export function tickDecisions(asOfTime?: number): {
     graceExpired: number;
     queuedEvaluated: number;
 } {
+    assertPlainTablesWritable();
     const nowIso = asOfTime ? new Date(asOfTime).toISOString() : new Date().toISOString();
     let evaluated = 0;
     let executed = 0;
     let graceExpired = 0;
     let queuedEvaluated = 0;
+
+    // 0. A keepers' vote closes early the moment its result can no longer change, and is void once its enterprise winds up.
+    settleOpenScopedDecisions(nowIso);
 
     // 1. Close open decisions whose window expired, or retry stranded passed decisions
     const openExpired = db.prepare(
@@ -1700,7 +2149,8 @@ export function tickDecisions(asOfTime?: number): {
                 const why = !tally.quorumMet
                     ? `Quorum not met (${tally.totalVoters}/${tally.quorumRequired})`
                     : `Threshold not met (${(tally.supportRatio * 100).toFixed(1)}% < ${(tally.thresholdRequired * 100).toFixed(1)}%)`;
-                closeUnkeptSuspension(getDecision(r.id)!, tally.quorumMet ? 'failed' : 'unresolved', why, now);
+                closeUnkeptSuspension(getDecision(r.id)!, tally.quorumMet ? 'failed' : 'unresolved', why, now,
+                    { actor: COMMUNITY_DECISION_ACTOR, how: 'the suspension not kept' });
                 continue;
             }
 
@@ -1712,7 +2162,7 @@ export function tickDecisions(asOfTime?: number): {
                         updated_at = ?
                     WHERE id = ?
                 `).run(`Quorum not met (${tally.totalVoters}/${tally.quorumRequired})`, now, r.id);
-                broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(r.id)!) });
+                announceDecisionUpdated(r.id);
                 continue;
             }
 
@@ -1728,7 +2178,7 @@ export function tickDecisions(asOfTime?: number): {
                     now,
                     r.id
                 );
-                broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(r.id)!) });
+                announceDecisionUpdated(r.id);
                 continue;
             }
 
@@ -1748,7 +2198,7 @@ export function tickDecisions(asOfTime?: number): {
                     updated_at = ?
                 WHERE id = ?
             `).run(err?.message || String(err), now, r.id);
-            broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(r.id)!) });
+            announceDecisionUpdated(r.id);
         }
     }
 
@@ -1776,8 +2226,28 @@ export function tickDecisions(asOfTime?: number): {
                 continue;
             }
 
+            // The prune settles the member's balance with the Commons, so it waits for an unknown pot, still in its grace
+            // window with the member suspended, and completes on the first tick after the row is mended. It went to
+            // execution_blocked, which nothing retries or halts: the member stayed suspended for good (#1465 review, NB-1).
+            if (potIsUnknown()) {
+                waitForPot(r, now);
+                continue;
+            }
+            // The pot is a number again, and this removal's grace window ended while it wasn't: the brake gets a fresh
+            // window of REOPENED_GRACE_HOURS before the removal is carried out, because the first tick after a mend runs
+            // 30 s after boot, which no admin could use (#1465 re-review, NB-2).
+            if (r.execution_reason === WAITING_FOR_POT) {
+                const endsAt = new Date(Date.parse(nowIso) + REOPENED_GRACE_HOURS * 3600_000).toISOString();
+                db.prepare('UPDATE decisions SET grace_period_ends_at = ?, execution_reason = ?, updated_at = ? WHERE id = ?')
+                    .run(endsAt, REOPENED_GRACE, now, r.id);
+                console.log(`[Decisions] ${r.id} (remove_member): payments work again; the grace window reopens until ${endsAt} so an admin `
+                    + 'can still halt it.');
+                announceDecisionUpdated(r.id);
+                continue;
+            }
             try {
                 adminPruneUser(r.subject, COMMUNITY_DECISION_ACTOR);
+                noteCarriedOutAfterWait(r);
                 db.prepare(`
                     UPDATE decisions SET
                         status = 'executed',
@@ -1786,7 +2256,7 @@ export function tickDecisions(asOfTime?: number): {
                         updated_at = ?
                     WHERE id = ?
                 `).run(now, now, r.id);
-                broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(r.id)!) });
+                announceDecisionUpdated(r.id);
             } catch (e: any) {
                 db.prepare(`
                     UPDATE decisions SET
@@ -1795,7 +2265,7 @@ export function tickDecisions(asOfTime?: number): {
                         updated_at = ?
                     WHERE id = ?
                 `).run(e?.message || String(e), now, r.id);
-                broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(r.id)!) });
+                announceDecisionUpdated(r.id);
             }
         }
     }
@@ -1812,8 +2282,42 @@ export function tickDecisions(asOfTime?: number): {
         const closesAtDate = new Date(top.closes_at);
         const ageDays = (now.getTime() - closesAtDate.getTime()) / (1000 * 60 * 60 * 24);
 
-        if (ageDays > 90) {
-            // Expired after 90 days
+        // What the queued Decision needs from the pot, and why it can't be waited on if it can't.
+        let requiredAmount: number;
+        let unusable: string | null = null;
+        if (top.effect === 'write_off_deficit' && top.subject) {
+            const entAccount = ledger.getAccount(top.subject);
+            // No deficit left is 0: the write-off completes without moving anything.
+            requiredAmount = entAccount && entAccount.balance < 0 ? Math.abs(entAccount.balance) : 0;
+            if (!Number.isFinite(requiredAmount)) unusable = `deficit ${requiredAmount}`;
+        } else {
+            let parsed: any = {};
+            try {
+                parsed = JSON.parse(top.params || '{}');
+            } catch (e: any) {
+                unusable = `params unreadable: ${e?.message || e}`;
+            }
+            requiredAmount = Number(parsed?.amount);
+            if (!unusable && !(Number.isFinite(requiredAmount) && requiredAmount > 0)) {
+                unusable = `amount ${String(parsed?.amount).slice(0, 40)}`;
+            }
+        }
+
+        // Funding is tried BEFORE the 90-day expiry (#1465 re-review, NB-5): the days the pot was unknown counted
+        // towards the 90, and at the first tick after a mend a grant the mended pot covered was failed with "expired
+        // ... without sufficient pool funds", which was false. Only a finite amount above 0 is worth waiting for.
+        // Anything else goes straight to executeDecision, whose preflight blocks it and frees the one slot. Left here,
+        // it would hold the slot for 90 days while every other underfunded grant was turned away as "Funding queue is full".
+        if (unusable) {
+            console.warn(`[Decisions] Queued decision ${top.id} can't be funded as stored (${unusable}); handing it to preflight`);
+        }
+        if (unusable || requiredAmount === 0 || getCommonsBalanceExact() >= requiredAmount) {
+            const res = executeDecision(top.id);
+            if (res.success && res.status === 'executed') {
+                executed++;
+            }
+        } else if (ageDays > 90 && !potIsUnknown()) {
+            // Expired after 90 days. Never while the pot is unknown: then it waited for a broken row, not for funds.
             db.prepare(`
                 UPDATE decisions SET
                     status = 'failed',
@@ -1821,43 +2325,704 @@ export function tickDecisions(asOfTime?: number): {
                     updated_at = ?
                 WHERE id = ?
             `).run(nowIso, top.id);
-            broadcast({ type: 'decision_updated', decision: publicDecision(getDecision(top.id)!) });
-        } else {
-            // What the queued Decision needs from the pot, and why it can't be waited on if it can't.
-            let requiredAmount: number;
-            let unusable: string | null = null;
-            if (top.effect === 'write_off_deficit' && top.subject) {
-                const entAccount = ledger.getAccount(top.subject);
-                // No deficit left is 0: the write-off completes without moving anything.
-                requiredAmount = entAccount && entAccount.balance < 0 ? Math.abs(entAccount.balance) : 0;
-                if (!Number.isFinite(requiredAmount)) unusable = `deficit ${requiredAmount}`;
-            } else {
-                let parsed: any = {};
-                try {
-                    parsed = JSON.parse(top.params || '{}');
-                } catch (e: any) {
-                    unusable = `params unreadable: ${e?.message || e}`;
-                }
-                requiredAmount = Number(parsed?.amount);
-                if (!unusable && !(Number.isFinite(requiredAmount) && requiredAmount > 0)) {
-                    unusable = `amount ${String(parsed?.amount).slice(0, 40)}`;
-                }
-            }
-
-            // Only a finite amount above 0 is worth waiting for. Anything else goes straight to executeDecision,
-            // whose preflight blocks it and frees the one slot. Left here, it would hold the slot for 90 days
-            // while every other underfunded grant was turned away as "Funding queue is full".
-            if (unusable) {
-                console.warn(`[Decisions] Queued decision ${top.id} can't be funded as stored (${unusable}); handing it to preflight`);
-            }
-            if (unusable || requiredAmount === 0 || getCommonsBalanceExact() >= requiredAmount) {
-                const res = executeDecision(top.id);
-                if (res.success && res.status === 'executed') {
-                    executed++;
-                }
-            }
+            announceDecisionUpdated(top.id);
         }
     }
 
     return { evaluated, executed, graceExpired, queuedEvaluated };
+}
+
+// ── Scoped Decisions: an enterprise's keepers (DESIGN-group-decisions §2, slice S1) ─────────────────
+
+/** Why a scoped effect is refused as a community Decision. */
+export const SCOPED_EFFECT_NOT_COMMUNITY = "That is decided by an enterprise's keepers, in that enterprise, not by the whole community.";
+/** A roll of one holds no vote (§2.2): arithmetic, not a gate. */
+export const ROLL_OF_ONE = 'Nobody else keeps this enterprise, so there is nobody to vote.';
+export const NOT_ENOUGH_LEFT = 'Not enough people left to decide';
+export const WINDING_UP_VOID = 'The enterprise is winding up';
+export const SCOPED_ALREADY_VOTED = "You have already voted on this. A keepers' vote can't be changed.";
+export const NOT_ON_ROLL = "Only the keepers on this vote's roll can vote on it.";
+export const SCOPED_NO_ADMIN_HALT = "An enterprise's keepers' vote has no admin halt: an admin may pause the enterprise or unbind a keeper instead.";
+export const PROJECT_LEADER_STAYS = "A project's leader can't be voted out by its collaborators: the project is the leader's goal.";
+export const PAY_SELF_REFUSAL = "You can't propose paying yourself. Another keeper can propose it.";
+export const SCOPED_ONE_OPEN = 'You already have an open vote in this enterprise. Wait for it to close first.';
+/** A replace_lead or remove_keeper subject off the roll at execution (§2.3): suspended, barred from operating, or a visitor. */
+export const SUBJECT_OFF_ROLL = 'They are not on this enterprise’s roll now (their account is not active, or they may not act for it)';
+/** A pay-out to an enterprise that has wound up (its account is closed: state-engine transfer refuses it). */
+export const RECIPIENT_WOUND_UP = 'That enterprise has wound up and its account is closed, so it can’t be paid.';
+export const WAGE_NEEDS_SURPLUS = 'Paying a keeper is a wage, and a wage comes only out of what the enterprise has earned above its costs (its earned surplus)';
+/** How long a passed vote waits on an enterprise an admin suspended or disabled before it is void (§2.6). */
+export const SCOPED_WAIT_DAYS = 90;
+
+/** A thrown refusal the routes answer as missing (404): the reader may not know the enterprise or the vote exists. */
+export class ScopedNotFoundError extends Error {
+    status = 404;
+    constructor() { super('Not found'); }
+}
+
+interface EnterpriseRow { public_key: string; is_treasury: number; status: string; lifecycle: string | null; earned_surplus: number | null }
+
+function enterpriseRow(pubkey: string): EnterpriseRow | null {
+    const r = db.prepare('SELECT public_key, is_treasury, status, lifecycle, earned_surplus FROM members WHERE public_key = ?').get(pubkey) as EnterpriseRow | undefined;
+    return r && r.is_treasury ? r : null;
+}
+
+function isEnterpriseKeeper(enterprisePubkey: string, memberPubkey: string): boolean {
+    return !!db.prepare('SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?').get(enterprisePubkey, memberPubkey);
+}
+
+/**
+ * An enterprise's roll now (§2.2): its keepers, the lead included, whose account is active, who may operate, and who is
+ * no visitor (the isActiveKeeperOf test). The enterprise itself never votes; a keeper votes once as a person.
+ */
+export function enterpriseRollNow(enterprisePubkey: string): Array<{ pubkey: string; role: string }> {
+    return (db.prepare(`
+        SELECT o.member_pubkey AS pubkey, o.role AS role FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ? AND COALESCE(m.can_operate, 0) = 1 AND m.status = 'active' AND m.is_visitor = 0
+          AND COALESCE(m.is_treasury, 0) = 0
+        ORDER BY o.granted_at ASC
+    `).all(enterprisePubkey) as Array<{ pubkey: string; role: string }>);
+}
+
+/**
+ * The roll of a scoped Decision as it stands: the electors frozen at opening who are still 'on' and whose account is
+ * active. One who stepped down is 'left' (state-engine dropFromOpenScopedRolls); one whose account is suspended counts
+ * as gone while it is (settleOpenScopedDecisions writes it down). One removed by the lead or a vote stays on.
+ */
+function liveRoll(decisionId: string): Set<string> {
+    const rows = db.prepare(`
+        SELECT e.member_pubkey AS pubkey FROM decision_electors e
+        JOIN members m ON m.public_key = e.member_pubkey
+        WHERE e.decision_id = ? AND e.status = 'on' AND m.status = 'active'
+    `).all(decisionId) as Array<{ pubkey: string }>;
+    return new Set(rows.map(r => r.pubkey));
+}
+
+/**
+ * Who may see an enterprise's votes (§2.5): its keepers now see every one of them. Anyone else sees only the votes whose
+ * roll they were on, matched by the vote, never by the enterprise: a keeper who stepped down, was unbound or was removed
+ * took part in those, and sees nothing opened after they left.
+ */
+function keepsEnterpriseNow(enterprisePubkey: string, reader: string): boolean {
+    return enterpriseRollNow(enterprisePubkey).some(k => k.pubkey === reader);
+}
+
+/** An enterprise's votes, newest first, as `reader` may see them; a reader who may see none gets ScopedNotFoundError. */
+export function getScopedDecisions(enterprisePubkey: string, reader: string | null | undefined): Decision[] {
+    if (!reader || !enterpriseRow(enterprisePubkey)) throw new ScopedNotFoundError();
+    if (keepsEnterpriseNow(enterprisePubkey, reader)) {
+        return (db.prepare("SELECT * FROM decisions WHERE scope_kind = 'enterprise' AND scope_id = ? ORDER BY created_at DESC")
+            .all(enterprisePubkey) as any[]).map(rowToDecision);
+    }
+    const theirs = db.prepare(`
+        SELECT d.* FROM decisions d JOIN decision_electors e ON e.decision_id = d.id AND e.member_pubkey = ?
+        WHERE d.scope_kind = 'enterprise' AND d.scope_id = ? ORDER BY d.created_at DESC
+    `).all(reader, enterprisePubkey) as any[];
+    if (theirs.length === 0) throw new ScopedNotFoundError();
+    return theirs.map(rowToDecision);
+}
+
+/** One of an enterprise's votes, as `reader` may see it; anything else is ScopedNotFoundError (never a refusal). */
+export function getScopedDecision(enterprisePubkey: string, decisionId: string, reader: string | null | undefined): Decision {
+    const d = getDecision(decisionId);
+    if (!reader || !d || d.scopeKind !== 'enterprise' || d.scopeId !== enterprisePubkey || !enterpriseRow(enterprisePubkey)) throw new ScopedNotFoundError();
+    if (keepsEnterpriseNow(enterprisePubkey, reader)) return d;
+    if (!db.prepare('SELECT 1 FROM decision_electors WHERE decision_id = ? AND member_pubkey = ?').get(d.id, reader)) throw new ScopedNotFoundError();
+    return d;
+}
+
+/**
+ * The pass rule for a roll of 2–10 (§2.4): more than half the roll must vote, floor 2; 60% yes for money and a removal,
+ * a simple majority to replace the lead; ties fail. One member, one vote.
+ */
+export function scopedQuorum(rollSize: number): number {
+    return Math.max(2, Math.floor(rollSize / 2) + 1);
+}
+
+/** A simple majority puts someone in or sets a rule; money and a removal or a closing need 60% (§2.4). */
+const SCOPED_MAJORITY_EFFECTS: ReadonlySet<DecisionEffect> = new Set<DecisionEffect>([
+    'replace_lead', 'set_group_role', 'replace_lead_convenor', 'set_join_policy',
+]);
+
+export function scopedThreshold(effect: DecisionEffect): number {
+    return SCOPED_MAJORITY_EFFECTS.has(effect) ? 0.50 : 0.60;
+}
+
+function scopedCounts(decision: Decision): { roll: Set<string>; yes: number; no: number; voters: number } {
+    const roll = liveRoll(decision.id);
+    let yes = 0;
+    let no = 0;
+    for (const v of getDecisionVotes(decision.id)) {
+        if (!roll.has(v.voterPubkey)) continue; // left the roll: their vote is dropped
+        if (v.support === 1) yes++;
+        else no++;
+    }
+    return { roll, yes, no, voters: yes + no };
+}
+
+function passes(yes: number, no: number, voters: number, quorum: number, threshold: number): boolean {
+    const total = yes + no;
+    return voters >= quorum && total > 0 && yes / total >= threshold && yes > no;
+}
+
+function tallyScopedDecision(decision: Decision): DecisionTally {
+    const { roll, yes, no, voters } = scopedCounts(decision);
+    const quorumRequired = scopedQuorum(roll.size);
+    const thresholdRequired = scopedThreshold(decision.effect);
+    const total = yes + no;
+    return {
+        decisionId: decision.id,
+        status: decision.status,
+        totalVoters: voters,
+        electorate: roll.size,
+        quorumRatio: 0.5,
+        quorumRequired,
+        quorumMet: voters >= quorumRequired,
+        yesWeight: yes,
+        noWeight: no,
+        totalWeight: total,
+        supportRatio: total > 0 ? yes / total : 0,
+        thresholdRequired,
+        passed: roll.size >= 2 && passes(yes, no, voters, quorumRequired, thresholdRequired),
+    };
+}
+
+/**
+ * Whether a scoped vote's result can no longer change (§2.4, the group-succession rule): it passes even if everyone yet
+ * to vote says no, or it can't pass even if they all say yes. A roll that has all voted is decided.
+ */
+export function scopedOutcomeSettled(decision: Decision): boolean {
+    const { roll, yes, no, voters } = scopedCounts(decision);
+    const outstanding = Math.max(0, roll.size - voters);
+    const quorum = scopedQuorum(roll.size);
+    const threshold = scopedThreshold(decision.effect);
+    if (passes(yes, no + outstanding, voters, quorum, threshold)) return true;
+    return !passes(yes + outstanding, no, voters + outstanding, quorum, threshold);
+}
+
+/**
+ * What a member's turnout card may show while a scoped vote is open (§2.5, Marty's pick 3): how many of the roll have
+ * voted, never the split; Yes and No once it has closed. A closed vote's split is the tally's.
+ */
+export function scopedTallyForReader(decision: Decision): { voted: number; roll: number; quorumRequired: number; yes?: number; no?: number; thresholdRequired: number } {
+    const t = tallyScopedDecision(decision);
+    const base = { voted: t.totalVoters, roll: t.electorate, quorumRequired: t.quorumRequired, thresholdRequired: t.thresholdRequired };
+    return decision.status === 'open' ? base : { ...base, yes: t.yesWeight, no: t.noWeight };
+}
+
+export interface CreateScopedDecisionOptions {
+    scopeKind: 'enterprise' | 'group';
+    scopeId: string;
+    authorPubkey: string;
+    title: string;
+    description: string;
+    effect: DecisionEffect;
+    subject?: string | null;
+    params?: any;
+}
+
+/**
+ * Opens an enterprise's keepers' vote (§2.1–§2.4). The proposer is a keeper on its roll (no earned-standing gate inside a
+ * scope); the roll, frozen now, needs two people; one open vote per proposer per enterprise; 7 days, closing early.
+ * A refusal a non-keeper could learn from is ScopedNotFoundError.
+ */
+/** What sends a push (state-engine dispatchPushNotification); a suite passes a spy (test-decisions-scoped-push). */
+export type ScopedVotePush = (
+    targets: string[], actor: string, title: string, body: string, data: Record<string, any>, category: 'chat', kind: 'decision.open',
+) => unknown;
+
+/**
+ * A vote opened: one push to each keeper on its roll but the proposer (the dispatcher drops the actor), in one batch
+ * (DESIGN-group-decisions §2.8). The push names nobody: the lock screen shows the kind's fixed words, and the notice's
+ * details carry the enterprise's name and nothing about the vote (not its title, whom it pays or whom it removes),
+ * since a push leaves the trust boundary of the device. The details (only the recipient reads them) name the
+ * enterprise's screen, so a tap lands on it (the app's noticeRoute). The member's own notify_chat setting applies, and a
+ * keeper who muted the enterprise's chat (the thread keyed by its key) isn't told: the vote waits on Home's Needs-you line.
+ */
+export function noticeScopedVoteOpened(d: Decision, electors: string[], push: ScopedVotePush): void {
+    const name = (db.prepare('SELECT callsign FROM members WHERE public_key = ?').get(d.scopeId) as { callsign?: string } | undefined)?.callsign
+        || 'Your enterprise';
+    try {
+        const told = unmutedRecipients(d.scopeId ?? '', electors);
+        if (!told.some(pk => pk !== d.authorPubkey)) return;
+        push(told, d.authorPubkey, `🗳️ ${name}`, 'A vote opened. Open the enterprise to see it.', { screen: 'enterprise', publicKey: d.scopeId }, 'chat', 'decision.open');
+    } catch (err) {
+        // A push that fails never undoes the vote it announces.
+        console.warn('[Decisions] vote-opened push failed:', err);
+    }
+}
+
+export function createScopedDecision(opts: CreateScopedDecisionOptions, push: ScopedVotePush = dispatchPushNotification): Decision {
+    assertPlainTablesWritable();
+    assertDecisionsOn();
+    if (opts.scopeKind === 'group') return createGroupDecision(opts, push);
+    if (opts.scopeKind !== 'enterprise') throw new Error('Unknown scope');
+    const ent = enterpriseRow(opts.scopeId);
+    if (!ent) throw new ScopedNotFoundError();
+    const roll = enterpriseRollNow(opts.scopeId);
+    if (!roll.some(k => k.pubkey === opts.authorPubkey)) throw new ScopedNotFoundError();
+    if (!SCOPED_EFFECTS.has(opts.effect)) throw new Error(`Unknown decision effect '${opts.effect}'`);
+    assertEffectAllowedHere(opts.effect);
+    if (ent.status === 'winding_up' || ent.status === 'completed') throw new Error(`${WINDING_UP_VOID}, so it takes no new votes.`);
+    if (ent.status !== 'active') throw new Error('This enterprise is not active, so it takes no new votes.');
+    if (roll.length < 2) throw new Error(ROLL_OF_ONE);
+
+    const title = typeof opts.title === 'string' ? replaceLoneSurrogates(opts.title).trim() : '';
+    const description = typeof opts.description === 'string' ? replaceLoneSurrogates(opts.description).trim() : '';
+    if (!title) throw new Error('A vote needs a title.');
+    if (description.length < 10) throw new Error('Say why, in at least 10 characters.');
+    if (!fitsTextLimit(title, DECISION_TITLE_LIMIT)) throw new Error(DECISION_TITLE_TOO_LONG);
+    if (!fitsTextLimit(description, DECISION_DESCRIPTION_LIMIT)) throw new Error(DECISION_DESCRIPTION_TOO_LONG);
+
+    let subject: string | null = null;
+    let params: Record<string, unknown> | null = null;
+    if (opts.effect === 'pay_out') {
+        const to = typeof opts.params?.to === 'string' ? opts.params.to : '';
+        // A number only: "40", true or [5] is the wrong shape, never read as one.
+        const cents = typeof opts.params?.amount === 'number' ? floorCents(opts.params.amount) : NaN;
+        if (!Number.isFinite(cents) || cents <= 0) throw new Error('A pay-out needs an amount in Beans above 0.');
+        if (!to || isSyntheticAccount(to) || !isNameableAccount(to) || to === opts.scopeId) throw new Error('Name a member or an enterprise of this community to pay.');
+        const recipient = getMember(to);
+        if (!recipient || recipient.status === 'pruned' || isDeletedByOwner(to)) throw new Error('Name a member or an enterprise of this community to pay.');
+        if (recipient.status === 'completed') throw new Error(RECIPIENT_WOUND_UP);
+        if (to === opts.authorPubkey) throw new Error(PAY_SELF_REFUSAL);
+        const held = floorCents(getBalance(opts.scopeId).balance);
+        if (cents > held) throw new Error(`The enterprise holds ${beansText(Math.max(0, held))} Beans, so it can't pay ${beansText(cents)}.`);
+        if (isEnterpriseKeeper(opts.scopeId, to) && cents > floorCents(Math.max(0, Number(ent.earned_surplus) || 0))) {
+            throw new Error(`${WAGE_NEEDS_SURPLUS}: ${beansText(floorCents(Math.max(0, Number(ent.earned_surplus) || 0)))} Beans now.`);
+        }
+        const memo = typeof opts.params?.memo === 'string' ? replaceLoneSurrogates(opts.params.memo).slice(0, 280) : '';
+        // The recipient is the subject, so a re-key mid-vote moves it with every other subject (engine/key-move.ts).
+        subject = to;
+        params = { amount: cents / 100, ...(memo ? { memo } : {}) };
+    } else {
+        subject = typeof opts.subject === 'string' ? opts.subject : null;
+        if (!subject || !roll.some(k => k.pubkey === subject)) throw new Error('Name a keeper on this enterprise’s roll.');
+        if (opts.effect === 'remove_keeper') {
+            if (subject === opts.authorPubkey) throw new Error('To leave, step down instead.');
+            const why = keeperRemovalByVoteRefusal(opts.scopeId, subject);
+            if (why) throw new Error(why);
+        } else {
+            if (ent.lifecycle === 'bounded') throw new Error(PROJECT_LEADER_STAYS);
+            if (roll.find(k => k.pubkey === subject)!.role === 'lead') throw new Error('They are already the lead keeper.');
+        }
+    }
+
+    if (db.prepare("SELECT 1 FROM decisions WHERE author_pubkey = ? AND status = 'open' AND scope_kind = 'enterprise' AND scope_id = ?")
+        .get(opts.authorPubkey, opts.scopeId)) {
+        throw new Error(SCOPED_ONE_OPEN);
+    }
+
+    const decision = insertScopedDecision('enterprise', opts.scopeId, opts.authorPubkey, title, description, opts.effect, subject, params, roll);
+    noticeScopedVoteOpened(decision, roll.map(k => k.pubkey), push);
+    return decision;
+}
+
+/** The row and its roll, frozen now, in one transaction; told to the roll alone (§2.5). 7 days, closing early. */
+function insertScopedDecision(
+    kind: 'enterprise' | 'group', scopeId: string, author: string, title: string, description: string, effect: DecisionEffect,
+    subject: string | null, params: Record<string, unknown> | null, roll: Array<{ pubkey: string; role: string }>,
+): Decision {
+    const id = crypto.randomUUID();
+    const opensAt = new Date().toISOString();
+    const closesAt = new Date(Date.now() + 7 * DAY_MS).toISOString();
+    db.transaction(() => {
+        db.prepare(`
+            INSERT INTO decisions (
+                id, author_pubkey, title, description, touches, effect, subject, params,
+                franchise, status, opens_at, closes_at, created_at, updated_at, scope_kind, scope_id
+            ) VALUES (?, ?, ?, ?, 'scope', ?, ?, ?, '1m1v', 'open', ?, ?, ?, ?, ?, ?)
+        `).run(id, author, title, description, effect, subject, params ? JSON.stringify(params) : null,
+            opensAt, closesAt, opensAt, opensAt, kind, scopeId);
+        const elector = db.prepare(
+            "INSERT INTO decision_electors (decision_id, member_pubkey, role_at_open, status, created_at, updated_at) VALUES (?, ?, ?, 'on', ?, ?)"
+        );
+        for (const k of roll) elector.run(id, k.pubkey, k.role, opensAt, opensAt);
+    })();
+
+    const decision = getDecision(id)!;
+    broadcast({ type: 'decision_created', decision: publicDecision(decision), scopeKind: kind, scopeId }, roll.map(k => k.pubkey));
+    return decision;
+}
+
+/**
+ * A keeper's vote on their enterprise's open vote: only from someone on its roll (frozen at opening; a keeper who stepped
+ * down or whose account is suspended is off it), one vote each, and final. A replay of the same vote counts once.
+ */
+function castScopedVote(decision: Decision, voterPubkey: string, support: boolean, signature?: string): { success: boolean; creditsUsed: number; error?: string } {
+    if (!liveRoll(decision.id).has(voterPubkey)) {
+        return { success: false, creditsUsed: 0, error: decision.scopeKind === 'group' ? GROUP_NOT_ON_ROLL : NOT_ON_ROLL };
+    }
+    const now = new Date().toISOString();
+    const wrote = db.prepare(`
+        INSERT INTO decision_votes (decision_id, voter_pubkey, support, weight, credits_used, signature, created_at, updated_at)
+        VALUES (?, ?, ?, 1, 0, ?, ?, ?)
+        ON CONFLICT(decision_id, voter_pubkey) DO NOTHING
+    `).run(decision.id, voterPubkey, support ? 1 : 0, signature || null, now, now);
+    if (wrote.changes === 0) return { success: false, creditsUsed: 0, error: decision.scopeKind === 'group' ? GROUP_ALREADY_VOTED : SCOPED_ALREADY_VOTED };
+    broadcast({ type: 'decision_vote_cast', decisionId: decision.id }, electorsOf(decision.id));
+    return { success: true, creditsUsed: 0 };
+}
+
+/**
+ * Whether `reader` may vote on this scoped vote now, as castScopedVote will judge it: it is open, and they are on its roll as
+ * it was frozen when it opened (§2.6) with their account active. Someone a convenor removed or made an observer since is still
+ * on it; someone who joined since never is. The apps draw Yes / No from this, never from who is in the group now.
+ */
+export function canVoteOnScoped(d: Decision, reader: string): boolean {
+    return decisionsOn() && d.scopeKind !== 'community' && d.status === 'open' && parseDbTime(d.closesAt) > Date.now()
+        && !madeWithoutVote(d) && liveRoll(d.id).has(reader);
+}
+
+/** Who hears a scoped vote's live changes: its electors, less those who left its roll (they read it, unannounced). */
+function electorsOf(decisionId: string): string[] {
+    return (db.prepare("SELECT member_pubkey FROM decision_electors WHERE decision_id = ? AND status != 'left'").all(decisionId) as Array<{ member_pubkey: string }>)
+        .map(r => r.member_pubkey);
+}
+
+/**
+ * A Decision's change, announced: a community one to everyone, as before; a scoped one only to its roll (§2.5), so
+ * nobody else learns it exists.
+ */
+function announceDecisionUpdated(decisionId: string): void {
+    const d = getDecision(decisionId);
+    if (!d) return;
+    if (d.scopeKind === 'community') broadcast({ type: 'decision_updated', decision: publicDecision(d) });
+    else broadcast({ type: 'decision_updated', decision: publicDecision(d), scopeKind: d.scopeKind, scopeId: d.scopeId }, electorsOf(d.id));
+}
+
+/**
+ * Before a scoped Decision is carried out (§2.3, §2.6): only its own enterprise's account and keepers, never past them.
+ * 'wait' while an admin has the enterprise suspended or disabled.
+ */
+function preflightScoped(decision: Decision): { status: 'ok' | 'void' | 'blocked' | 'wait'; reason?: string } {
+    const off = switchOffFor(decision.effect);
+    if (off === 'decisions') return { status: 'blocked', reason: DECISIONS_OFF_NOT_CARRIED_OUT };
+    if (off) return { status: 'blocked', reason: `${off} is switched off on this node` };
+    if (decision.scopeKind === 'group') return preflightGroup(decision);
+    const ent = decision.scopeId ? enterpriseRow(decision.scopeId) : null;
+    if (!ent || ent.status === 'pruned' || ent.status === 'deleted') return { status: 'void', reason: 'The enterprise no longer exists' };
+    if (ent.status === 'winding_up' || ent.status === 'completed') return { status: 'void', reason: WINDING_UP_VOID };
+    if (ent.status === 'suspended' || ent.status === 'disabled') {
+        return { status: 'wait', reason: 'Waiting: an admin has paused this enterprise’s account, so this is carried out once it is back' };
+    }
+    if (decision.effect === 'pay_out') {
+        const to = decision.subject || '';
+        const recipient = to ? getMember(to) : null;
+        // A suspended recipient is paid: their balance is theirs (as a hardship grant behaves).
+        if (!recipient || recipient.status === 'pruned' || isDeletedByOwner(to)) return { status: 'void', reason: 'The member to be paid no longer has an account here' };
+        // Here, not by transfer's throw inside the conserving transaction (validation before the transaction).
+        if (recipient.status === 'completed') return { status: 'void', reason: RECIPIENT_WOUND_UP };
+        if (to === decision.authorPubkey) return { status: 'blocked', reason: PAY_SELF_REFUSAL };
+        const cents = floorCents(Number(decision.params?.amount));
+        if (!Number.isFinite(cents) || cents <= 0) return { status: 'blocked', reason: 'Invalid pay-out amount' };
+        const held = floorCents(getBalance(decision.scopeId!).balance);
+        if (held < cents) return { status: 'blocked', reason: `The enterprise holds ${beansText(Math.max(0, held))} Beans now, less than the ${beansText(cents)} voted` };
+        if (isEnterpriseKeeper(decision.scopeId!, to) && cents > floorCents(Math.max(0, Number(ent.earned_surplus) || 0))) {
+            return { status: 'blocked', reason: WAGE_NEEDS_SURPLUS };
+        }
+        return { status: 'ok' };
+    }
+    const subject = decision.subject || '';
+    if (!isEnterpriseKeeper(decision.scopeId!, subject)) return { status: 'void', reason: 'They no longer keep this enterprise' };
+    // The subject is on the roll at execution, by the roll's own test (§2.3): a suspension mid-vote voids it. It is the
+    // brake pick 6 counts on in place of an admin halt.
+    if (!enterpriseRollNow(decision.scopeId!).some(k => k.pubkey === subject)) return { status: 'void', reason: SUBJECT_OFF_ROLL };
+    if (decision.effect === 'remove_keeper') {
+        const why = keeperRemovalByVoteRefusal(decision.scopeId!, subject);
+        if (why) return { status: why.startsWith('Not yet') ? 'blocked' : 'void', reason: why };
+        return { status: 'ok' };
+    }
+    if (ent.lifecycle === 'bounded') return { status: 'blocked', reason: PROJECT_LEADER_STAYS };
+    const role = (db.prepare('SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?').get(decision.scopeId!, subject) as any)?.role;
+    if (role === 'lead') return { status: 'void', reason: 'They are already the lead keeper' };
+    return { status: 'ok' };
+}
+
+/** Why an enterprise's open votes can no longer be carried out (it winds up or is gone), or null. */
+function enterpriseGoneReason(scopeId: string | null): string | null {
+    const ent = scopeId ? enterpriseRow(scopeId) : null;
+    if (!ent || ent.status === 'pruned' || ent.status === 'deleted') return 'The enterprise no longer exists';
+    if (ent.status === 'winding_up' || ent.status === 'completed') return WINDING_UP_VOID;
+    return null;
+}
+
+/**
+ * The tick's first step for scoped votes (§2.4, §2.6): a member whose account is suspended leaves the roll and their vote
+ * is dropped; a vote on an enterprise winding up is void; a roll below two closes unresolved; a vote whose result can no
+ * longer change closes now (its closes_at is brought forward, and step 1 tallies and carries it out).
+ */
+function settleOpenScopedDecisions(nowIso: string): void {
+    const open = db.prepare("SELECT * FROM decisions WHERE status = 'open' AND scope_kind != 'community'").all() as any[];
+    for (const r of open) {
+        const d = rowToDecision(r);
+        db.prepare(`
+            UPDATE decision_electors SET status = 'left', updated_at = ?
+            WHERE decision_id = ? AND status = 'on'
+              AND member_pubkey NOT IN (SELECT public_key FROM members WHERE status = 'active')
+        `).run(nowIso, d.id);
+        const gone = d.scopeKind === 'group' ? groupGoneReason(d.scopeId) : enterpriseGoneReason(d.scopeId);
+        if (gone) {
+            db.prepare("UPDATE decisions SET status = 'execution_void', executed_at = ?, execution_reason = ?, updated_at = ? WHERE id = ?")
+                .run(nowIso, gone, nowIso, d.id);
+            announceDecisionUpdated(d.id);
+            continue;
+        }
+        if (liveRoll(d.id).size < 2) {
+            db.prepare("UPDATE decisions SET status = 'unresolved', execution_reason = ?, updated_at = ? WHERE id = ?")
+                .run(NOT_ENOUGH_LEFT, nowIso, d.id);
+            announceDecisionUpdated(d.id);
+            continue;
+        }
+        if (parseDbTime(d.closesAt) > parseDbTime(nowIso) && scopedOutcomeSettled(d)) {
+            db.prepare('UPDATE decisions SET closes_at = ?, updated_at = ? WHERE id = ?').run(nowIso, nowIso, d.id);
+        }
+    }
+}
+
+/**
+ * The open scoped votes `member` is on the live roll of (home's Needs-you line and Decide card, routes/home-answer.ts):
+ * nobody off the roll ever has one counted, so the count tells them nothing about an enterprise they don't keep.
+ */
+export function openScopedDecisionsFor(member: string): Decision[] {
+    return (db.prepare(`
+        SELECT d.* FROM decisions d
+        JOIN decision_electors e ON e.decision_id = d.id AND e.member_pubkey = ? AND e.status = 'on'
+        JOIN members m ON m.public_key = e.member_pubkey AND m.status = 'active'
+        WHERE d.status = 'open' AND d.scope_kind != 'community'
+        ORDER BY d.closes_at ASC
+    `).all(member) as any[]).map(rowToDecision);
+}
+
+// ── Scoped Decisions: a chat group's members (DESIGN-group-decisions §2.2–§2.6, slice S3) ───────────────────────────
+
+/** A group's vote has no admin halt (§5, pick 6): node admins hold no power over groups. */
+export const GROUP_NO_ADMIN_HALT = "A group's vote has no admin halt: node admins hold no power over groups.";
+export const GROUP_ROLL_OF_ONE = 'Nobody else in this group can vote, so there is nobody to vote with.';
+/** Off a group vote's roll: an observer, someone who joined after it opened, or who left during it. */
+export const GROUP_NOT_ON_ROLL = "Only the group's members and convenors on this vote's roll can vote on it. Observers watch.";
+export const GROUP_ALREADY_VOTED = "You have already voted on this. A group's vote can't be changed.";
+export const GROUP_OBSERVER_NO_VOTE = 'Observers watch a group’s votes. Only its members and convenors vote.';
+export const GROUP_ONE_OPEN = 'You already have an open vote in this group. Wait for it to close first.';
+export const GROUP_CLOSED_VOID = 'The group is closed';
+/** The line a group's chat takes when its members close it by a vote. */
+export const GROUP_CLOSED_LINE = 'The group was closed by its members’ vote. Its chat stays to read.';
+export const GROUP_GONE = 'The group no longer exists';
+export const GROUP_SUBJECT_OFF_ROLL = 'They are not a member or convenor of this group now';
+export const GROUP_LEAD_UNTOUCHED = 'This vote never changes the lead convenor’s role. To choose a new lead, vote for one.';
+const JOIN_POLICIES = new Set(['open', 'request_to_join', 'invite_only']);
+
+function nameOf(pubkey: string): string {
+    return getMember(pubkey)?.callsign || 'A member';
+}
+
+function groupExists(groupId: string | null | undefined): boolean {
+    return !!groupId && !!db.prepare('SELECT 1 FROM groups WHERE id = ?').get(groupId);
+}
+
+function groupGoneReason(groupId: string | null): string | null {
+    if (!groupExists(groupId)) return GROUP_GONE;
+    if (groupClosedAt(groupId!)) return GROUP_CLOSED_VOID;
+    return null;
+}
+
+/**
+ * A chat group's roll now (§2.2): its active members and convenors, the lead included, whose account is active and who is
+ * no visitor. Observers watch and are off it (the group poll rule, engine/posts.ts). The lead's role reads 'lead'.
+ */
+export function groupRollNow(groupId: string): Array<{ pubkey: string; role: string }> {
+    const lead = getGroupLead(groupId);
+    return (db.prepare(`
+        SELECT gm.member_pubkey AS pubkey, gm.role AS role FROM group_members gm
+        JOIN members m ON m.public_key = gm.member_pubkey
+        WHERE gm.group_id = ? AND gm.status = 'active' AND gm.role IN ('convenor', 'member')
+          AND m.status = 'active' AND m.is_visitor = 0 AND COALESCE(m.is_treasury, 0) = 0
+        ORDER BY gm.joined_at ASC
+    `).all(groupId) as Array<{ pubkey: string; role: string }>).map(r => (r.pubkey === lead ? { ...r, role: 'lead' } : r));
+}
+
+/** Whether `reader` is in the group now, any role: they see every one of its votes (the post-sight rule, §2.5). */
+/** In the group now, as engine/group-thread.ts asks it: a visitor key has no group, whatever seat it holds from before. */
+function inGroupNow(groupId: string, reader: string): boolean {
+    return !!db.prepare(`
+        SELECT 1 FROM group_members gm JOIN members m ON m.public_key = gm.member_pubkey
+        WHERE gm.group_id = ? AND gm.member_pubkey = ? AND gm.status = 'active' AND m.status = 'active' AND m.is_visitor = 0
+    `).get(groupId, reader);
+}
+
+/**
+ * Everyone a vote may name (the propose form's pickers, #1784 review N2): in the group now, any role, account active and no
+ * visitor. A suspended member is on no roll and can be named in no vote, so the apps never offer one.
+ */
+export function groupNameableNow(groupId: string): string[] {
+    return (db.prepare(`
+        SELECT gm.member_pubkey AS pubkey FROM group_members gm JOIN members m ON m.public_key = gm.member_pubkey
+        WHERE gm.group_id = ? AND gm.status = 'active' AND m.status = 'active' AND m.is_visitor = 0
+        ORDER BY gm.joined_at ASC
+    `).all(groupId) as Array<{ pubkey: string }>).map(r => r.pubkey);
+}
+
+/** An observer of the group now: they watch its votes. Whether they vote on one is that vote's roll (canVoteOnScoped). */
+export function observesGroupNow(groupId: string, reader: string): boolean {
+    return !!db.prepare(`
+        SELECT 1 FROM group_members gm JOIN members m ON m.public_key = gm.member_pubkey
+        WHERE gm.group_id = ? AND gm.member_pubkey = ? AND gm.status = 'active' AND gm.role = 'observer'
+          AND m.status = 'active' AND m.is_visitor = 0
+    `).get(groupId, reader);
+}
+
+/**
+ * A group's votes, newest first, as `reader` may see them. Its members now (observers included) see them all; anyone else
+ * only the votes whose roll they were on, matched by the vote: someone who left or was removed sees nothing opened after.
+ */
+export function getGroupDecisions(groupId: string, reader: string | null | undefined): Decision[] {
+    if (!reader || !groupExists(groupId)) throw new ScopedNotFoundError();
+    if (inGroupNow(groupId, reader)) {
+        return (db.prepare("SELECT * FROM decisions WHERE scope_kind = 'group' AND scope_id = ? ORDER BY created_at DESC")
+            .all(groupId) as any[]).map(rowToDecision);
+    }
+    const theirs = db.prepare(`
+        SELECT d.* FROM decisions d JOIN decision_electors e ON e.decision_id = d.id AND e.member_pubkey = ?
+        WHERE d.scope_kind = 'group' AND d.scope_id = ? ORDER BY d.created_at DESC
+    `).all(reader, groupId) as any[];
+    if (theirs.length === 0) throw new ScopedNotFoundError();
+    return theirs.map(rowToDecision);
+}
+
+/** One of a group's votes, as `reader` may see it; anything else is ScopedNotFoundError (never a refusal). */
+export function getGroupDecision(groupId: string, decisionId: string, reader: string | null | undefined): Decision {
+    const d = getDecision(decisionId);
+    if (!reader || !d || d.scopeKind !== 'group' || d.scopeId !== groupId || !groupExists(groupId)) throw new ScopedNotFoundError();
+    if (inGroupNow(groupId, reader)) return d;
+    if (!db.prepare('SELECT 1 FROM decision_electors WHERE decision_id = ? AND member_pubkey = ?').get(d.id, reader)) throw new ScopedNotFoundError();
+    return d;
+}
+
+/**
+ * A group's vote opened: one push to each person on its roll but the proposer, unless they muted the group's chat (its
+ * conversation id is the group's id). The push names nobody; the details name the group's screen and nothing about the vote.
+ */
+export function noticeGroupVoteOpened(d: Decision, electors: string[], push: ScopedVotePush): void {
+    const name = (db.prepare('SELECT name FROM groups WHERE id = ?').get(d.scopeId) as { name?: string } | undefined)?.name || 'Your group';
+    try {
+        const told = unmutedRecipients(d.scopeId ?? '', electors);
+        if (!told.some(pk => pk !== d.authorPubkey)) return;
+        push(told, d.authorPubkey, `🗳️ ${name}`, 'A vote opened. Open the group to see it.', { screen: 'group', groupId: d.scopeId }, 'chat', 'decision.open');
+    } catch (err) {
+        console.warn('[Decisions] group vote-opened push failed:', err);
+    }
+}
+
+/**
+ * Opens a chat group's vote (§2.2–§2.4): the proposer is on its roll (an observer watches and proposes nothing); the roll,
+ * frozen now, needs two people; one open vote per proposer per group; a closed group takes none. Anyone not in the group
+ * is answered as if it were missing.
+ */
+function createGroupDecision(opts: CreateScopedDecisionOptions, push: ScopedVotePush): Decision {
+    const groupId = opts.scopeId;
+    if (!groupExists(groupId) || !inGroupNow(groupId, opts.authorPubkey)) throw new ScopedNotFoundError();
+    const roll = groupRollNow(groupId);
+    if (!roll.some(k => k.pubkey === opts.authorPubkey)) throw new Error(GROUP_OBSERVER_NO_VOTE);
+    if (!GROUP_EFFECTS.has(opts.effect)) throw new Error(`Unknown decision effect '${opts.effect}'`);
+    assertEffectAllowedHere(opts.effect);
+    if (groupClosedAt(groupId)) throw new Error(GROUP_CLOSED);
+    if (roll.length < 2) throw new Error(GROUP_ROLL_OF_ONE);
+
+    const title = typeof opts.title === 'string' ? replaceLoneSurrogates(opts.title).trim() : '';
+    const description = typeof opts.description === 'string' ? replaceLoneSurrogates(opts.description).trim() : '';
+    if (!title) throw new Error('A vote needs a title.');
+    if (description.length < 10) throw new Error('Say why, in at least 10 characters.');
+    if (!fitsTextLimit(title, DECISION_TITLE_LIMIT)) throw new Error(DECISION_TITLE_TOO_LONG);
+    if (!fitsTextLimit(description, DECISION_DESCRIPTION_LIMIT)) throw new Error(DECISION_DESCRIPTION_TOO_LONG);
+
+    const lead = getGroupLead(groupId);
+    let subject: string | null = null;
+    let params: Record<string, unknown> | null = null;
+    const onRoll = (pk: string | null) => !!pk && roll.some(k => k.pubkey === pk);
+    switch (opts.effect) {
+        case 'set_group_role': {
+            subject = typeof opts.subject === 'string' ? opts.subject : null;
+            const role = opts.params?.role;
+            if (role !== 'convenor' && role !== 'member') throw new Error('Choose convenor or member.');
+            if (!onRoll(subject)) throw new Error('Name a member or convenor of this group.');
+            if (subject === lead) throw new Error(GROUP_LEAD_UNTOUCHED);
+            if (roll.find(k => k.pubkey === subject)!.role === role) throw new Error(role === 'convenor' ? 'They are already a convenor.' : 'They are already a member.');
+            params = { role };
+            break;
+        }
+        case 'replace_lead_convenor': {
+            subject = typeof opts.subject === 'string' ? opts.subject : null;
+            if (!onRoll(subject)) throw new Error('Name a member or convenor of this group.');
+            if (subject === lead) throw new Error('They already lead this group.');
+            break;
+        }
+        case 'remove_group_member': {
+            subject = typeof opts.subject === 'string' ? opts.subject : null;
+            if (!subject || !inGroupNow(groupId, subject)) throw new Error('Name someone in this group.');
+            if (subject === opts.authorPubkey) throw new Error('To leave, leave the group instead.');
+            if (subject === lead) throw new Error('The lead convenor is replaced, not removed. Vote for a new lead first.');
+            break;
+        }
+        case 'set_join_policy': {
+            const policy = opts.params?.policy;
+            if (typeof policy !== 'string' || !JOIN_POLICIES.has(policy)) throw new Error('Choose open, ask to join, or invite only.');
+            const now = (db.prepare('SELECT join_policy FROM groups WHERE id = ?').get(groupId) as { join_policy: string }).join_policy;
+            if (now === policy) throw new Error('The group already has that join policy.');
+            params = { policy };
+            break;
+        }
+        case 'close_group':
+            break;
+    }
+
+    if (db.prepare("SELECT 1 FROM decisions WHERE author_pubkey = ? AND status = 'open' AND scope_kind = 'group' AND scope_id = ?")
+        .get(opts.authorPubkey, groupId)) {
+        throw new Error(GROUP_ONE_OPEN);
+    }
+
+    const decision = insertScopedDecision('group', groupId, opts.authorPubkey, title, description, opts.effect, subject, params, roll);
+    noticeGroupVoteOpened(decision, roll.map(k => k.pubkey), push);
+    return decision;
+}
+
+/**
+ * Before a group's vote is carried out (§2.3, §2.6): only the group's own rows. The subject must be where the vote left
+ * them, by the roll's own test; the lead is never unmade by a role vote; a closed or missing group voids it.
+ */
+function preflightGroup(decision: Decision): { status: 'ok' | 'void' | 'blocked'; reason?: string } {
+    const gid = decision.scopeId!;
+    const gone = groupGoneReason(gid);
+    if (gone) return { status: 'void', reason: gone };
+    const subject = decision.subject || '';
+    const lead = getGroupLead(gid);
+    const roll = groupRollNow(gid);
+    switch (decision.effect) {
+        case 'set_group_role': {
+            const now = roll.find(k => k.pubkey === subject);
+            if (!now) return { status: 'void', reason: GROUP_SUBJECT_OFF_ROLL };
+            if (subject === lead) return { status: 'void', reason: GROUP_LEAD_UNTOUCHED };
+            if (now.role === decision.params?.role) return { status: 'void', reason: 'They already hold that role' };
+            return { status: 'ok' };
+        }
+        case 'replace_lead_convenor':
+            if (!roll.some(k => k.pubkey === subject)) return { status: 'void', reason: GROUP_SUBJECT_OFF_ROLL };
+            if (subject === lead) return { status: 'void', reason: 'They already lead this group' };
+            return { status: 'ok' };
+        case 'remove_group_member':
+            if (!db.prepare("SELECT 1 FROM group_members WHERE group_id = ? AND member_pubkey = ? AND status = 'active'").get(gid, subject)) {
+                return { status: 'void', reason: 'They are no longer in this group' };
+            }
+            if (subject === lead) return { status: 'void', reason: 'They lead the group now; the lead is replaced, not removed' };
+            return { status: 'ok' };
+        case 'set_join_policy': {
+            const policy = decision.params?.policy;
+            if (typeof policy !== 'string' || !JOIN_POLICIES.has(policy)) return { status: 'blocked', reason: 'Invalid join policy' };
+            return { status: 'ok' };
+        }
+        case 'close_group':
+            return { status: 'ok' };
+        default:
+            return { status: 'blocked', reason: 'That is not a group’s vote' };
+    }
 }

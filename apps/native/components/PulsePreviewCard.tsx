@@ -234,7 +234,7 @@ export const makeStyles = ({ colors, theme }: { colors: typeof lightColors; them
             width: 14,
             height: 14,
             borderRadius: 7,
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             alignItems: 'center',
             justifyContent: 'center',
         },
@@ -327,7 +327,7 @@ export const makeStyles = ({ colors, theme }: { colors: typeof lightColors; them
         },
         duplicateText: {
             fontSize: 12,
-            color: theme === 'dark' ? '#fbbf24' : '#92400e',
+            color: colors.feedback.warning.fg, // ink.warning: amber-800 light, amber-400 dark
             flex: 1,
             lineHeight: 16,
             fontWeight: '500',

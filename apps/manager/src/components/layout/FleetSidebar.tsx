@@ -1,26 +1,20 @@
 import React, { useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { IS_FLEET_MODE } from '../../lib/mode';
+import { isAutomationToken } from '../../lib/node-client';
+import { TOKEN_REPLACE_ADVICE } from '../../lib/token-guard';
 import { useManual } from '../manual/Manual';
 import { SECTION_SUB_TABS, isSettingsSection } from '../../lib/sections';
 import type { SidebarMode } from '../../lib/sidebar-mode';
 import { ReturnLinks, type ReturnLinksValue } from './ReturnLinks';
 
-export type TabId =
-    | 'home'
-    | 'people'
-    | 'economy'
-    | 'bulletin'
-    | 'appliance'
-    | 'overview'
-    | 'analytics'
-    | 'gateway'
-    | 'members'
-    | 'topology'
-    | 'invites'
-    | 'onboarding'
-    | 'logs'
-    | 'ai';
+/** Every section the manager draws. A tab saved by an older version that is not here (the copilot's 'ai') is ignored. */
+export const TAB_IDS = [
+    'home', 'people', 'economy', 'bulletin', 'appliance', 'overview', 'analytics', 'gateway', 'members', 'topology', 'invites',
+    'onboarding', 'logs',
+] as const;
+export type TabId = typeof TAB_IDS[number];
+export const isTabId = (v: unknown): v is TabId => typeof v === 'string' && (TAB_IDS as readonly string[]).includes(v);
 
 /**
  * `auth_required` is kept apart from `offline` because the two need different actions from
@@ -120,7 +114,6 @@ export function FleetSidebar({
         { id: 'invites', label: 'Invites & Codes', icon: '🎫' },
         { id: 'onboarding', label: 'Onboarding Funnel', icon: '🚪' },
         { id: 'logs', label: 'System Streamer', icon: '📜' },
-        { id: 'ai', label: 'Sovereign AI Copilot', icon: '🤖', badge: 'PRO' },
     ];
 
     // The drawer's open section: the current one to start with, when it has screens.
@@ -436,7 +429,7 @@ export function FleetSidebar({
                                                 // Static amber: not red, because the node is up and answering — it is
                                                 // this manager that has the wrong password. Not the pulsing amber of
                                                 // `warning` either, since nothing is in progress; it waits on a person.
-                                                <span title="Admin password needed" className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                                                <span title={isAutomationToken(p.automationToken) ? `Token refused. ${TOKEN_REPLACE_ADVICE}` : 'Admin password needed'} className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
                                             ) : (
                                                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500 animate-pulse"></span>
                                             )}

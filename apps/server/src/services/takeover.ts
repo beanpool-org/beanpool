@@ -22,6 +22,38 @@
  *    (`finishTakeoverAfterBoot`). The opened bundle waits in data/takeover-bundle.json (0600) until the last step;
  *    by then every secret in it is in the files it was written to anyway.
  *
+ * ## A step before the restart that fails: rolled back
+ *
+ * A step that throws (a disk that refuses a write, a bundle whose roles break a constraint) is not left half done. The
+ * take-over is rolled back at once (`rollBackTakeover`): the standby's own identity files, settings, roles, web address,
+ * community settings and copy cursor are put back from the copy `undo-copy` made of them (data/pre-takeover-…, with
+ * standby-state.json for the database's part), the opened keys are deleted, and the journal ends 'failed' with
+ * `rolledBack` set: finished, not under way. The server is the standby it was, copying its main server, and a new
+ * take-over can start (the code typed again). A crash mid-way through the roll-back leaves the journal 'rolling-back',
+ * and the next start finishes it. While it is 'rolling-back' (a crash, or a write the roll-back could not make) the server
+ * runs as a standby whatever local-config.json says, with no tunnel and no copies, and the journal says why
+ * (`rollBackStopped`); an undo copy that is gone is never "put back" from (checkUndoCopy). Before this (F2 of the
+ * 2026-10-01 standby review), a 'failed' journal counted as under
+ * way for good: no new take-over, and every whole copy the standby built was thrown away at the restart that swapped it
+ * in, the next one too. A crash is still resumed, not rolled back: only a step that fails, at the confirm or at the
+ * start that resumes it, rolls back; so does a resumed take-over whose opened keys are gone.
+ *
+ * Until a start has decided a take-over stopped before its restart (gone on past every step before it, or rolled back),
+ * this server's role is a standby's (config/node-role.ts takeoverMayRollBack). One stopped after `role` wrote
+ * `nodeRole: primary` is decided before the database boots (settleTakeoverBeforeDatabaseBoot): the database boots as the
+ * main server only once the take-over has gone on, never as the main server and then rolled back, which left a main
+ * server's records (the photo URLs' shape, the recovery seal's clear, the schema passes) and its timers behind (the
+ * 2026-10-02 review of #1433). The roll-back puts those records back too, should a start have written them.
+ *
+ * ## Two standbys, one set of keys
+ *
+ * Every standby of a community holds the same locked keys, so two of them could each take over (MEDIUM-2 of the
+ * 2026-10-01 replication review). Before anything is written, the preview and the confirm ask the community's web address,
+ * and the main server's, for its identity epoch (services/identity-epoch.ts newerTakeoverAnswering): a server holding
+ * these keys that answers a higher epoch than they were locked at already took over, and this standby refuses. When
+ * neither answered in time and both took over anyway, the split-brain guard tells them apart by when each took over:
+ * the later one goes read-only.
+ *
  * ## What is kept, and why (§1.3)
  *
  * The old scripts/restore-primary.mjs (deleted in slice 8) deleted libp2p_key and connectors.json "for a fresh
@@ -43,41 +75,65 @@
  * envelope may carry none. When the web address is a tunnel with no token, the take-over looks in the older held
  * envelopes the same code opens, for the same name, and uses the newest token found, saying so. None found: the
  * result says the tunnel did not come back and what brings it back. An owner's phone opens one envelope only (it
- * re-wraps that one data key), so after a take-over by phone there is no older copy to look in. public-address-agent.ts now keeps the last
+ * re-wraps that one data key), so after a take-over by phone there is no older copy to look in. tunnel-connector.ts now keeps the last
  * token when the registrar leaves it out, so new envelopes stop losing it.
  */
 
 import fs from 'node:fs';
+import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {
     parseRecoveryCode, checkRecoveryCode, openEnvelope, RecoveryCodeError,
     type CodeStanza, type OwnerStanza, type SealedEnvelopeHeader, type SealedEnvelopeKey,
 } from '@beanpool/core';
-import { db, markExistingVisitors } from '../db/db.js';
+import { db, MEMBERS_SCHEMA_RULES } from '../db/db.js';
 import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
 import { logger } from '../logger.js';
 import {
-    getNodeRole, setNodeRole, updateNodeConfig, getNodeConfig, promotionSanityCheck, adminBroadcastAnnouncement,
+    getNodeRole, setNodeRole, updateNodeConfig, getNodeConfig, promotionSanityCheck, adminBroadcastAnnouncement, becomeMainServerInPlace,
 } from '../state-engine.js';
 import { listHeldEnvelopes, readHeldEnvelope, checkEnvelopeFromMirror, HELD_ENVELOPES_DIR } from './standby-envelopes.js';
 import {
-    BUNDLED_FILES, BUNDLED_LOCAL_CONFIG_FIELDS, ensureTakeoverEnvelope, type TakeoverBundle,
+    BUNDLED_FILES, BUNDLED_LOCAL_CONFIG_FIELDS, bundledLocalConfigUpdates, ensureTakeoverEnvelope, nodeIdentityOfKeyFile, type TakeoverBundle,
 } from './takeover-envelope.js';
 import { checkBundle } from './sealed-backup.js';
 import { ledgerAgainstLastCopy } from '../engine/audit.js';
 import { loadConnectors } from '../connector-manager.js';
-import { stopBackupPuller, getBackupStatus } from './backup-puller.js';
-import { copyCheckForPreview } from './standby-copy-record.js';
-import { restartSidecar } from './public-address-agent.js';
-import { parseRegistrarNames } from '../engine/registrar-names.js';
-import { getReplacedInfo, forgetSyncEpochHeaderValue, type ReplacedInfo } from './identity-epoch.js';
 import {
-    getNodeProfile, readProfileRecord, writeProfileRecord, takeoverProfileRefusal, type NodeProfile,
+    stopBackupPuller, getBackupStatus, forgetPullCursor, stopPullInFlight, savedPullCursor, putPullCursorBack, restartBackupPullerIfStopped,
+} from './backup-puller.js';
+import { abortStagedCopy, PREVIOUS_DB } from './stager.js';
+import { deletePreviousDatabase, previousDatabaseThere } from '../db/swap-at-boot.js';
+import { copyCheckForPreview } from './standby-copy-record.js';
+import { startTunnelForTakeover } from './tunnel-connector.js';
+import { parseRegistrarNames } from '../engine/registrar-names.js';
+import {
+    getReplacedInfo, forgetSyncEpochHeaderValue, newerTakeoverAnswering, type NewerTakeover, type ReplacedInfo,
+} from './identity-epoch.js';
+import {
+    getNodeProfile, readProfileRecord, writeProfileRecord, takeoverProfileRefusal, isMainServerBootRefusal, NODE_PROFILE_KEY,
+    type NodeProfile,
 } from '../config/node-profile.js';
+import {
+    resolveNodeRole, roleFromSettings, takeoverMayRollBack, isTakeoverJournal, journalMayRollBack, TAKEOVER_STEPS_BEFORE_RESTART,
+} from '../config/node-role.js';
 import { writeOpenJoinRecord } from '../engine/open-join.js';
-import { installCarriedRecoverySealKey, noCarriedKeyLine, RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
-import { installCommunitySettings, keptCommunitySettings } from '../config/community-settings.js';
+import { bumpMembersVersion } from '../engine/versions.js';
+import {
+    installCarriedRecoverySealKey, noCarriedKeyLine, RECOVERY_SEAL_KEY_FILE, CLEARED_KEY, MAIN_EPOCH_KEY, REOPENED_KEY,
+} from './recovery-seal-key.js';
+import {
+    adoptCarriedOpenJoinKey, installCarriedOpenJoinKey, liveOpenJoinRecords, openJoinKeyOffLine, openJoinKeyState, OPEN_JOIN_KEY_FILE,
+    OPEN_JOIN_KEY_ID_ROW,
+} from './open-join-key.js';
+import {
+    installCommunitySettings, keptCommunitySettings, COMMUNITY_DIRECTORY_FIELDS, COMMUNITY_LOCAL_CONFIG_FIELDS, COMMUNITY_NODE_CONFIG_KEYS,
+    KEPT_COMMUNITY_SETTINGS_KEY,
+} from '../config/community-settings.js';
+import { restartScheduler } from './snapshot-scheduler.js';
+import { notePhotoUrlShapeNow, PHOTO_KEYS_SHAPE_ROW, PHOTO_KEYS_SINCE_ROW } from '../engine/photo-keys.js';
+import { AVATAR_KEYS_SHAPE_ROW, AVATAR_KEYS_SINCE_ROW, noteFaceUrlShapeNow } from '../engine/avatar-keys.js';
 
 export const TAKEOVER_JOURNAL_FILE = 'takeover-journal.json';
 export const TAKEOVER_BUNDLE_FILE = 'takeover-bundle.json';
@@ -92,22 +148,27 @@ function dataPath(name: string): string {
 }
 
 function writeAtomic(file: string, data: string | Buffer, mode: number): void {
-    const tmp = `${file}.tmp-${process.pid}`;
-    fs.writeFileSync(tmp, data, { mode });
-    fs.renameSync(tmp, file);
+    writeFileAtomic(file, data, { mode });
 }
 
 // ── What a take-over will not have (§5.5; the standby's list, #958) ─────────────────────────
 
-/** What a standby does not copy, so a take-over from it does not have. Roles are not here: the bundle carries them. */
+/**
+ * What a standby does not copy (engine/replication-manifest.ts: the tables and settings not yet copied), so a take-over
+ * from it does not have, however recent its last copy. Roles are not here: the bundle carries them. Enterprises, their
+ * keepers and pledges, and members' holiday and notification settings, vouches, granted credit and freezes are copied
+ * (design G2); so are Decisions and their votes, keepers' wages owed, keeper and succession votes, invites, re-key codes,
+ * recovery releases and links with other communities (G3); and the phones members get notifications on, muted chats,
+ * enterprise thread read marks, event reminders already sent, the activity list and the pricing guide with its members'
+ * reports (G4). A price report without a member's key stays on the main server (engine/replication-manifest.ts
+ * MEMBERS_REPORTS, #1295 review 4126894855). The last line is the one thing a fresher copy changes.
+ */
 export const WHAT_WILL_BE_MISSING: readonly string[] = [
-    'Decisions and their votes',
-    'enterprise pledges and keeper changes',
-    'invites',
-    "members' notification settings",
+    'photos sent in chats',
     'Commons project proposals still waiting for a decision',
+    "price reports sent without signing in, or by someone who hadn't joined",
     "the admin IP allowlist, if the community had one: it names addresses on the old server's network, so this server keeps its own",
-    'anything that changed on the main server after this standby last copied it',
+    'and, on top of everything above, whatever changed on the main server after this standby last copied it',
 ];
 
 /** What the people running the community do afterwards. Shown with the result. */
@@ -142,18 +203,31 @@ export const TAKEOVER_STEPS = [
     ['done', 'Finished'],
 ] as const;
 export type TakeoverStep = (typeof TAKEOVER_STEPS)[number][0];
-const PRE_RESTART: TakeoverStep[] = ['undo-copy', 'identity-files', 'admin-settings', 'roles', 'public-address', 'profile', 'open-door', 'community-settings', 'role', 'pull-config'];
+/** Until each of these is recorded, a start may roll the take-over back (config/node-role.ts reads the same list). */
+const PRE_RESTART: readonly TakeoverStep[] = TAKEOVER_STEPS_BEFORE_RESTART;
 const AFTER_BOOT: TakeoverStep[] = ['announcement', 'reseal', 'tunnel', 'done'];
 
 /**
  * Tests only: BEANPOOL_TEST_TAKEOVER_CRASH_AFTER=<step> kills this process the moment that step is recorded, with
- * no cleanup, as a power cut would. Unset in every real deployment.
+ * no cleanup, as a power cut would; so do the roll-back's own points ('rolling-back': the journal says it is rolling
+ * back, nothing put back yet; 'rollback-files': the identity files put back, the settings and database not yet).
+ * Unset in every real deployment.
  */
-function crashPoint(step: TakeoverStep): void {
+function crashPoint(step: TakeoverStep | RollbackPoint): void {
     if (process.env.BEANPOOL_TEST_TAKEOVER_CRASH_AFTER === step) {
         logger.warn('SYS', `[Takeover] Test crash after step "${step}"`);
         process.kill(process.pid, 'SIGKILL');
     }
+}
+type RollbackPoint = 'rolling-back' | 'rollback-files';
+
+/**
+ * Tests only: BEANPOOL_TEST_TAKEOVER_FAIL_AT=<step> makes that step throw once its own writes are done and before it is
+ * recorded, as a disk that refuses its last write would: the worst a failure leaves to roll back. Every time the step
+ * runs, at the confirm and at a start that resumes it. Unset in every real deployment.
+ */
+function failPoint(step: TakeoverStep): void {
+    if (process.env.BEANPOOL_TEST_TAKEOVER_FAIL_AT === step) throw new Error(`a test failure at step "${step}", after its writes`);
 }
 
 // ── The journal ────────────────────────────────────────────────────────────────────────────
@@ -167,7 +241,19 @@ export type TunnelOutcome =
 interface Journal {
     v: 1;
     id: string;
-    state: 'running' | 'restarting' | 'complete' | 'failed';
+    /**
+     * 'failed' with `rolledBack` set: a step failed and the standby was put back as it was; finished, like 'complete'.
+     * 'rolling-back': being put back; the next start finishes it. 'failed' without `rolledBack` is only ever an older
+     * build's (it was retried at every start); the next start resumes it, and rolls it back if it fails again.
+     */
+    state: 'running' | 'restarting' | 'complete' | 'failed' | 'rolling-back';
+    /** When the standby was put back as it was, and what was put back. Absent until then. */
+    rolledBack?: { at: string; detail: string } | null;
+    /**
+     * While 'rolling-back': why the last try to put the standby back stopped, in words for Settings. `undoCopyMissing`: the
+     * copy `undo-copy` made is gone or incomplete, so nothing was put back or deleted, and a restart alone won't finish it.
+     */
+    rollBackStopped?: { at: string; why: string; undoCopyMissing?: boolean } | null;
     startedAt: string;
     completedAt: string | null;
     envelopeId: string;
@@ -188,7 +274,12 @@ interface Journal {
         // `ok` only when the ledger adds up (`addsUp`) AND is the main server's as this server last copied it (`copy`), so
         // the result can say which failed: an all-zero or empty copy adds up. Both are absent from a journal written before.
         audit: {
-            ok: boolean; drift: number; strandedEscrows: number; addsUp?: boolean;
+            /** `drift` and the counts are null when the record held something that isn't a finite number (finiteOrNull). */
+            ok: boolean; drift: number | null; strandedEscrows: number | null; addsUp?: boolean;
+            /** Balances that are not a finite number; absent from a journal written before (decide N3, 2026-10-02). */
+            badBalances?: number | null;
+            /** The audit could not run: why. Absent when it ran. */
+            error?: string;
             copy?: NonNullable<ReturnType<typeof getLocalConfig>['lastPromotionAudit']>['copy'] | null;
         } | null;
         announcement: string | null;
@@ -222,9 +313,10 @@ function readJson<T>(name: string): T | null {
     }
 }
 
+/** The journal, or null for none and for one this code does not read (config/node-role.ts isTakeoverJournal, which the role reads by). */
 function readJournal(): Journal | null {
-    const j = readJson<Journal>(TAKEOVER_JOURNAL_FILE);
-    return j && j.v === 1 && typeof j.id === 'string' && j.steps ? j : null;
+    const j = readJson<unknown>(TAKEOVER_JOURNAL_FILE);
+    return isTakeoverJournal(j) ? j as unknown as Journal : null;
 }
 
 function writeJournal(j: Journal): void {
@@ -237,6 +329,19 @@ function mark(j: Journal, step: TakeoverStep, detail?: string): void {
     writeJournal(j);
     logger.info('SYS', `[Takeover] ✔ ${step}${detail ? `: ${detail}` : ''}`);
     crashPoint(step);
+}
+
+/**
+ * A take-over that has restarted this server but not yet reached its tunnel step: the tunnel waits for it
+ * (services/tunnel-connector.ts), so the web address comes back after the community is told and the keys are locked again.
+ * And one being rolled back: the server runs as a standby until it is put back (resumeTakeoverAtBoot), and a standby runs
+ * no tunnel; this holds it too, should anything set the role otherwise.
+ */
+export function takeoverHoldsTunnel(): boolean {
+    const j = readJournal();
+    if (!j) return false;
+    if (j.state === 'rolling-back') return true;
+    return j.state !== 'complete' && !!j.steps.restart && !j.steps.tunnel;
 }
 
 function readPlan(journalId: string): Plan | null {
@@ -257,13 +362,17 @@ function ownCommunityId(): string | null {
     return typeof g?.communityId === 'string' ? g.communityId : null;
 }
 
-function inProgress(j: Journal | null): boolean {
-    return !!j && j.state !== 'complete';
+/**
+ * A take-over under way on this server: neither finished nor rolled back (db/swap-at-boot.ts takeoverUnderWay reads the
+ * same from the file). One that stopped and was rolled back is over: a new one can start, and copies land again.
+ */
+function journalUnderWay(j: Journal | null): boolean {
+    return !!j && j.state !== 'complete' && !(j.state === 'failed' && j.rolledBack);
 }
 
 /** Checks that do not need the code: this is a standby, nothing is under way, and it holds something to open. */
 export function takeoverPreconditions(): void {
-    if (inProgress(readJournal())) {
+    if (journalUnderWay(readJournal())) {
         throw new TakeoverError(409, 'A take-over is already under way on this server. Follow it under Take over as the main server.', { inProgress: true });
     }
     if (getNodeRole() !== 'backup') {
@@ -558,11 +667,14 @@ async function startSession(
         logger.warn('SYS', `[Takeover] Refused: ${refusal}`);
         throw new TakeoverError(409, refusal, { profileMismatch: true, communityProfile: community, thisServerProfile: getNodeProfile() });
     }
+    // Another server holding these keys may have taken over already (another standby): asked at the same time as the main
+    // server, so the preview waits no longer than it did.
+    const [main, newer] = await Promise.all([mainServerAnswers(), newerTakeoverFor(bundle, candidate.header.nodePeerId, publicAddress)]);
+    if (newer) refuseNewerTakeover(newer);
     const id = crypto.randomBytes(32).toString('hex');
     session = { id, expiresAt: Date.now() + SESSION_TTL_MS, candidate, bundle, publicAddress, tunnel, authorisedBy };
 
     const connectors = connectorsFrom(bundle);
-    const main = await mainServerAnswers();
     // From this standby's record when the puller has none in memory: after a restart, its last copy is still known.
     const copy = copyCheckForPreview(getBackupStatus().lastSuccessAt);
     const lastCopyAt = copy.lastCopyAt;
@@ -594,7 +706,11 @@ async function startSession(
                 : null,
         },
         copy,
-        missing: [...WHAT_WILL_BE_MISSING, ...(carriesSealKey(bundle) ? [] : [MISSING_SEAL_KEY]), ...(keptCommunitySettings() ? [] : [MISSING_SETTINGS])],
+        missing: [
+            ...WHAT_WILL_BE_MISSING, ...(carriesSealKey(bundle) ? [] : [MISSING_SEAL_KEY]),
+            ...(carriedOpenJoinKey(bundle) || !holdsOpenJoinRecords() ? [] : [MISSING_OPEN_JOIN_KEY]),
+            ...(keptCommunitySettings() ? [] : [MISSING_SETTINGS]),
+        ],
         afterwards: AFTER_A_TAKEOVER,
     };
 }
@@ -609,6 +725,26 @@ function carriesSealKey(bundle: TakeoverBundle): boolean {
 const MISSING_SEAL_KEY = "members' sign-in recovery copies: these keys were locked before they carried the key that opens them, so "
     + 'members connect their sign-in again (their 12 words still work)';
 
+/**
+ * The open door's key an opened bundle carries (services/open-join-key.ts), as base64: the `open-join.key` file, or, in a
+ * bundle sealed before the key was a file, the old record's `salt` (base64url). Null when it carries none.
+ */
+function carriedOpenJoinKey(bundle: TakeoverBundle): string | null {
+    const file = bundle.files[OPEN_JOIN_KEY_FILE];
+    if (typeof file === 'string' && file) return file;
+    const legacy = bundle.openJoins?.salt;
+    return typeof legacy === 'string' && /^[A-Za-z0-9_-]+$/.test(legacy) ? Buffer.from(legacy, 'base64url').toString('base64') : null;
+}
+
+/** Whether this standby holds open-door records a sign-in could match, with no key here they were made with. */
+function holdsOpenJoinRecords(): boolean {
+    return !openJoinKeyState({ create: false }).on && liveOpenJoinRecords() > 0;
+}
+
+/** In the preview's list of what will be missing, when the keys carry no open-door key and this standby holds records. */
+const MISSING_OPEN_JOIN_KEY = 'joining through the open door with a sign-in: these keys were locked before they carried the key its records '
+    + 'are made with, so the door refuses sign-ins until that key is back (members already here are not affected)';
+
 /** In the preview's list of what will be missing, when this standby holds no copy of the community's settings. */
 const MISSING_SETTINGS = "the community's own settings (its name, place, contacts, thresholds and directory choices): the main server never "
     + 'sent them to this standby, so this server keeps its own';
@@ -621,6 +757,56 @@ export async function mainServerStatus(): Promise<{ answers: boolean | null; las
 
 export function discardTakeoverSession(): void {
     session = null;
+}
+
+/**
+ * A server holding these keys that answers, at the community's web address or at the main server's, a take-over newer
+ * than the keys were locked at (services/identity-epoch.ts newerTakeoverAnswering): another standby took over already.
+ * Null when none does, or nothing answers in time: no hard gate, the main server is most likely gone with its address.
+ */
+async function newerTakeoverFor(bundle: TakeoverBundle, peerId: string, publicAddress: unknown): Promise<NewerTakeover | null> {
+    const b64 = bundle.files['libp2p_key'];
+    if (!b64) return null;
+    let identity: ReturnType<typeof nodeIdentityOfKeyFile>;
+    try {
+        identity = nodeIdentityOfKeyFile(Buffer.from(b64, 'base64'));
+    } catch {
+        return null;
+    }
+    if (identity.peerId !== peerId) return null; // checkBundle held them equal; never ask on behalf of another key
+    const config = getLocalConfig();
+    return newerTakeoverAnswering({
+        identity, sealedEpoch: bundleEpoch(bundle), publicAddress, registrarNames: bundle.registrarNames ?? null,
+        mainServerUrl: config.backupPrimaryUrl || process.env.BACKUP_PRIMARY_URL || null, timeoutMs: MAIN_SERVER_PROBE_MS,
+    });
+}
+
+function refuseNewerTakeover(n: NewerTakeover): never {
+    const when = n.statement.since ? ` on ${n.statement.since.slice(0, 19).replace('T', ' ')} UTC` : '';
+    const message = `Another server already took over this community with these keys${when}: ${n.where} answers as its main server `
+        + `(identity epoch ${n.statement.epoch}; the keys this standby holds were locked at ${n.sealedEpoch}). Taking over here too would make `
+        + "two main servers, with members' changes split between them, so this standby won't. If that server is the community's main "
+        + 'server now, make this standby copy it instead: make a replication token on it and paste it here under Live Backup Server. '
+        + 'Nothing has been changed here.';
+    logger.warn('SYS', `[Takeover] Refused: ${message}`);
+    throw new TakeoverError(409, message, { alreadyTakenOver: true, epoch: n.statement.epoch, since: n.statement.since, url: n.url });
+}
+
+/**
+ * The confirm, as the route makes it: asks again whether another server took over with these keys since the preview (up
+ * to ten minutes ago: a second standby may have been confirmed meanwhile), then confirmTakeover. Refused, the session
+ * goes, and nothing is written.
+ */
+export async function confirmTakeoverAfterCheck(sessionId: unknown): Promise<{ progressToken: string; journalId: string }> {
+    const s = session;
+    if (s && typeof sessionId === 'string' && sessionId === s.id && Date.now() <= s.expiresAt) {
+        const newer = await newerTakeoverFor(s.bundle, s.candidate.header.nodePeerId, s.publicAddress);
+        if (newer) {
+            if (session === s) session = null;
+            refuseNewerTakeover(newer);
+        }
+    }
+    return confirmTakeover(sessionId);
 }
 
 // ── The promotion ──────────────────────────────────────────────────────────────────────────
@@ -642,9 +828,10 @@ function bundleEpoch(bundle: TakeoverBundle): number {
     return Number.isSafeInteger(n) && n > 0 ? n : 0;
 }
 
-// recovery-seal.key: a standby holds none of its own unless it was once a main server; then its key is kept here too,
-// byte for byte (and beside the carried one, installCarriedRecoverySealKey), so undoing puts back exactly what was there.
-const UNDO_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'local-config.json', 'tunnel-token', RECOVERY_SEAL_KEY_FILE];
+// recovery-seal.key and open-join.key: a standby holds neither of its own unless it was once a main server; then each is
+// kept here too, byte for byte (and beside the carried one, installCarried…Key), so undoing puts back exactly what was there.
+// No tunnel-token: the tunnel runs from publicAddress in node_config (services/tunnel-connector.ts), which is kept below.
+const UNDO_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', 'local-config.json', RECOVERY_SEAL_KEY_FILE, OPEN_JOIN_KEY_FILE];
 
 function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined {
     const bundle = plan.bundle;
@@ -662,12 +849,14 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
                 }
             }
             const pa = (getNodeConfig() as any).publicAddress ?? null;
-            fs.writeFileSync(path.join(dir, 'public-address.json'), JSON.stringify(pa), { mode: 0o600 });
-            return `data/${j.undoDir}: ${copied.join(', ') || 'no files'}`;
+            writeFileAtomic(path.join(dir, 'public-address.json'), JSON.stringify(pa), { mode: 0o600 });
+            // And what the steps change in the database, so a take-over that stops can put it all back (rollBackTakeover).
+            writeFileAtomic(path.join(dir, UNDO_STATE_FILE), JSON.stringify(readStandbyState()), { mode: 0o600 });
+            return `data/${j.undoDir}: ${copied.join(', ') || 'no files'}; the roles, web address and settings in the database`;
         }
         case 'identity-files': {
             for (const f of BUNDLED_FILES) {
-                if (f === 'connectors.json' || f === RECOVERY_SEAL_KEY_FILE) continue;
+                if (f === 'connectors.json' || f === RECOVERY_SEAL_KEY_FILE || f === OPEN_JOIN_KEY_FILE) continue;
                 const b64 = bundle.files[f];
                 if (!b64) continue;
                 writeAtomic(dataPath(f), Buffer.from(b64, 'base64'), f === 'genesis.json' ? 0o644 : 0o600);
@@ -681,9 +870,10 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
             return `node key kept (${j.peerId}); ${connectors.length} link(s) with other communities; ${installSealKey(bundle)}`;
         }
         case 'admin-settings': {
-            const updates: Record<string, unknown> = {};
-            for (const f of BUNDLED_LOCAL_CONFIG_FIELDS) updates[f] = (bundle.localConfig as any)[f] ?? null;
             const config = getLocalConfig();
+            // The password's retirement is sticky (bundledLocalConfigUpdates): an envelope sealed before it never brings
+            // the password back.
+            const updates = bundledLocalConfigUpdates(bundle.localConfig as Record<string, unknown>, config as any);
             if (bundle.recoveryCode) {
                 updates.recoveryCode = bundle.recoveryCode;
                 updates.recoveryCodeLastId = Math.max(Number(config.recoveryCodeLastId) || 0, bundle.recoveryCode.codeId);
@@ -748,17 +938,19 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
         }
         case 'open-door': {
             // Who joined through the open door, and the key their records are hashed with (engine/open-join.ts), so
-            // the promoted server refuses a sign-in account that already joined. Merged over what this standby
-            // copied: per member the newer row stands, and a row for a member this standby never copied is left
-            // out, so that account can join again rather than be locked out of an identity that is not here.
+            // the promoted server refuses a sign-in account that already joined. The key is installed as the file
+            // data/open-join.key (services/open-join-key.ts), never over a different key this standby holds, which is
+            // kept beside it. The rows are merged over what this standby copied: per member the newer row stands, and a
+            // row for a member this standby never copied is left out, so that account can join again rather than be
+            // locked out of an identity that is not here. Safe to run again.
             const record = bundle.openJoins;
-            if (!record) return 'the keys were sealed before the open door\'s record travelled with them; kept what this standby copied';
-            const merged = writeOpenJoinRecord(record.salt ?? undefined, record.joins);
+            const merged = record ? writeOpenJoinRecord(record.joins) : null;
+            const key = installOpenJoinKey(bundle);
+            if (!record || !merged) return `the keys were sealed before the open door's record travelled with them; kept what this standby copied; ${key}`;
             const held = (db.prepare('SELECT COUNT(*) AS n FROM open_joins').get() as { n: number }).n;
             return `${held} sign-in account(s) on record here (the main server had ${Number(record.total) || 0} when it sealed); `
                 + `${merged.written} brought from the keys, ${merged.kept} already copied`
-                + `${merged.skipped ? `, ${merged.skipped} for members this standby never copied (they can join again)` : ''}`
-                + `${merged.saltWritten ? '; the key for their hashes brought from the keys' : ''}`;
+                + `${merged.skipped ? `, ${merged.skipped} for members this standby never copied (they can join again)` : ''}; ${key}`;
         }
         case 'community-settings': {
             // The community's own settings, as this standby last copied them from the main server (config/community-
@@ -784,6 +976,8 @@ function runStep(j: Journal, plan: Plan, step: TakeoverStep): string | undefined
         case 'pull-config': {
             stopBackupPuller();
             updateLocalConfig({ backupPrimaryUrl: null, backupReplicationToken: null, backupAdminPassword: null });
+            // And where its copies had reached: no pull follows that cursor (design §6.3 T6).
+            forgetPullCursor();
             return 'no longer copies from the old main server';
         }
         default:
@@ -809,20 +1003,290 @@ function installSealKey(bundle: TakeoverBundle): string {
     return line;
 }
 
-function runPreRestartSteps(j: Journal, plan: Plan): void {
+/**
+ * The open door's key, from the keys (services/open-join-key.ts), recorded as the key this database's records were made
+ * with. Safe to run again. Keys that carry none promote anyway: the door then refuses sign-ins while this server holds
+ * records it cannot check, and says so. Never logs or returns the key's bytes.
+ */
+function installOpenJoinKey(bundle: TakeoverBundle): string {
+    const carried = carriedOpenJoinKey(bundle);
+    const done = installCarriedOpenJoinKey(carried);
+    if (done.outcome === 'absent' || done.outcome === 'invalid') {
+        const state = openJoinKeyState({ create: false });
+        const records = liveOpenJoinRecords();
+        if (state.on || records === 0) return 'no key for the open door\'s hashes in the keys, and none needed here';
+        const line = openJoinKeyOffLine(records, state.why, 'envelope');
+        logger.warn('SYS', `[Takeover] ${line}`);
+        return line;
+    }
+    const kept = done.outcome === 'replaced' ? ` (this server's own is kept as data/${done.retiredAs})` : '';
+    if (done.outcome === 'replaced') {
+        logger.warn('SYS', `[Takeover] This server already had an open-door key of its own; it is kept as data/${done.retiredAs}`);
+    }
+    if (adoptCarriedOpenJoinKey(carried!) === 'other-key-recorded') {
+        const state = openJoinKeyState({ create: false });
+        const line = state.on ? null : openJoinKeyOffLine(liveOpenJoinRecords(), state.why);
+        if (line) logger.warn('SYS', `[Takeover] ${line}`);
+        return `the key for the open door's hashes brought from the keys${kept}; ${line ?? 'it is the key its records were made with'}`;
+    }
+    return `the key for the open door's hashes brought from the keys${kept}`;
+}
+
+/**
+ * The steps before the restart, from the first not recorded. One that throws rolls the take-over back (rollBackTakeover)
+ * and throws a TakeoverError saying so. `inProcess`: at the confirm, in a server that runs on as the standby after a roll
+ * back; false at boot, before anything else has started.
+ */
+function runPreRestartSteps(j: Journal, plan: Plan, inProcess: boolean): void {
     for (const step of PRE_RESTART) {
         if (j.steps[step]) continue;
         try {
             const detail = runStep(j, plan, step);
+            failPoint(step);
             mark(j, step, detail);
         } catch (e: any) {
-            j.state = 'failed';
             j.error = { step, message: e?.message || String(e), at: new Date().toISOString() };
-            writeJournal(j);
-            logger.error('SYS', `[Takeover] Step "${step}" failed: ${j.error.message}. It is tried again when the server restarts.`);
-            throw new TakeoverError(500, `The take-over stopped at "${labelOf(step)}": ${j.error.message}. Nothing after that step was done. `
-                + 'Restart the server to try that step again; this standby\'s own files from before are in data/' + j.undoDir + '.', { failedStep: step });
+            logger.error('SYS', `[Takeover] Step "${step}" failed: ${j.error.message}. The take-over is rolled back: this server stays the standby it was.`);
+            const back = rollBackTakeover(j, inProcess);
+            const stopped = `The take-over stopped at "${labelOf(step)}": ${j.error.message}.`;
+            throw new TakeoverError(500, back.ok
+                ? `${stopped} Nothing of it was kept: this server is the standby it was, with its own keys, settings and copy of the main server, `
+                    + 'and it goes on copying. Fix what stopped it, then take over again (the recovery code, or an owner\'s phone, opens the keys again).'
+                : back.undoCopyMissing
+                    ? `${stopped} It could not be undone: ${back.why}`
+                    : `${stopped} Putting this standby back as it was did not finish (${back.why}). Restart the server: it finishes putting itself back `
+                        + `before anything else. Its own files from before are in data/${j.undoDir}.`,
+            { failedStep: step, rolledBack: back.ok });
         }
+    }
+}
+
+// ── Rolling back a take-over that stopped ──────────────────────────────────────────────────
+
+/** What `undo-copy` keeps of the database, beside the standby's own files: whatever the steps before the restart change. */
+const UNDO_STATE_FILE = 'standby-state.json';
+/**
+ * node_config rows the steps write: the community's settings and their record, the profile, the open door's key id. And
+ * those a main server's boot writes and a standby's does not (MAIN_BOOT_ROWS), which no start the take-over could still roll
+ * back boots to write (config/node-role.ts takeoverMayRollBack): should one have been written anyway (a start on a build
+ * from before that), the roll-back puts it back too.
+ */
+const UNDO_ROW_KEYS: readonly string[] = [
+    ...COMMUNITY_NODE_CONFIG_KEYS, KEPT_COMMUNITY_SETTINGS_KEY, NODE_PROFILE_KEY, OPEN_JOIN_KEY_ID_ROW,
+    // The listing-photo URLs' shape and when it changed (engine/photo-keys.ts): a main server's shape kept would leave
+    // photoKeysSince at the start that wrote it, and a take-over tried again would not heal a phone that synced after it.
+    PHOTO_KEYS_SHAPE_ROW, PHOTO_KEYS_SINCE_ROW,
+    // The face URLs' shape and when it changed (engine/avatar-keys.ts), for the same reason.
+    AVATAR_KEYS_SHAPE_ROW, AVATAR_KEYS_SINCE_ROW,
+    // The members' schema-rules pass (db.ts), never on a standby.
+    MEMBERS_SCHEMA_RULES,
+    // The recovery seal's clear (a main server's names its own epoch), the epoch its main server last sent, and a clear it
+    // waits to make again (services/recovery-seal-key.ts): a standby's, as its main server's copies left them.
+    CLEARED_KEY, MAIN_EPOCH_KEY, REOPENED_KEY,
+];
+/** The profile's switch overrides (config/node-profile.ts): rows named `nodeProfile.<switch>`. */
+const PROFILE_OVERRIDE_PREFIX = `${NODE_PROFILE_KEY}.`;
+/** Fields of the `node_config` row the steps write: the web address and its names, and the community's directory choices. */
+const UNDO_NODE_CONFIG_FIELDS: readonly string[] = ['publicAddress', 'ownerAddresses', 'registrarNames', ...COMMUNITY_DIRECTORY_FIELDS];
+/** local-config.json fields the steps write, through `role` and `pull-config`. Nothing else in the file is touched. */
+const UNDO_LOCAL_CONFIG_FIELDS: readonly string[] = [
+    ...BUNDLED_LOCAL_CONFIG_FIELDS, 'recoveryCode', 'recoveryCodeLastId', 'recoveryCodeUsed', ...COMMUNITY_LOCAL_CONFIG_FIELDS,
+    'nodeRole', 'promotionAuditPending', 'identityEpoch', 'identityEpochSince', 'identityReplaced',
+    'backupPrimaryUrl', 'backupReplicationToken', 'backupAdminPassword',
+];
+/** The files put back: each one the undo copy holds is copied back; one it does not hold was not here, and goes. */
+const RESTORED_FILES = UNDO_FILES.filter((f) => f !== 'local-config.json');
+
+interface StandbyState {
+    v: 1;
+    nodeRoles: Record<string, unknown>[];
+    /** node_config rows by key (UNDO_ROW_KEYS); null for a row that was not there. */
+    rows: Record<string, string | null>;
+    profileOverrides: Record<string, string>;
+    /** The UNDO_NODE_CONFIG_FIELDS the `node_config` row held; a field left out was not there. */
+    nodeConfig: Record<string, unknown>;
+    pullCursor: string | null;
+}
+
+function nodeConfigRowValue(key: string): string | null {
+    const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(key) as { value: string | null } | undefined;
+    return row?.value ?? null;
+}
+
+/** The `node_config` row as stored (getNodeConfig adds defaults and migrates; a roll-back puts back what was there). */
+function storedNodeConfig(): Record<string, unknown> {
+    try {
+        const value = nodeConfigRowValue('node_config');
+        const parsed = value ? JSON.parse(value) : {};
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+        return {};
+    }
+}
+
+function readStandbyState(): StandbyState {
+    const rows: Record<string, string | null> = {};
+    for (const key of UNDO_ROW_KEYS) rows[key] = nodeConfigRowValue(key);
+    const profileOverrides: Record<string, string> = {};
+    const overrides = db.prepare('SELECT key, value FROM node_config WHERE substr(key, 1, ?) = ?')
+        .all(PROFILE_OVERRIDE_PREFIX.length, PROFILE_OVERRIDE_PREFIX) as { key: string; value: string }[];
+    for (const r of overrides) profileOverrides[r.key] = r.value;
+    const stored = storedNodeConfig();
+    const nodeConfig: Record<string, unknown> = {};
+    for (const f of UNDO_NODE_CONFIG_FIELDS) if (f in stored) nodeConfig[f] = stored[f];
+    return {
+        v: 1, nodeRoles: db.prepare('SELECT * FROM node_roles').all() as Record<string, unknown>[], rows, profileOverrides, nodeConfig,
+        pullCursor: savedPullCursor(),
+    };
+}
+
+/** The database's part, as `undo-copy` kept it. One transaction; the copy cursor after it. */
+function putStandbyStateBack(state: StandbyState): void {
+    const columns = new Set((db.prepare('PRAGMA table_info(node_roles)').all() as { name: string }[]).map((c) => c.name));
+    const upsert = db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+    const remove = db.prepare('DELETE FROM node_config WHERE key = ?');
+    db.transaction(() => {
+        db.prepare('DELETE FROM node_roles').run();
+        for (const row of state.nodeRoles ?? []) {
+            const cols = Object.keys(row).filter((c) => columns.has(c));
+            if (!cols.length) continue;
+            db.prepare(`INSERT INTO node_roles (${cols.map((c) => `"${c}"`).join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`)
+                .run(...cols.map((c) => row[c] as string | number | null));
+        }
+        // Each key named where test-replication-manifest.ts can read it: the rows by UNDO_ROW_KEYS (the keys readStandbyState
+        // read, a row the undo copy does not name left as it is), the overrides as `nodeProfile.<switch>`.
+        const rows = state.rows ?? {};
+        for (const key of UNDO_ROW_KEYS) {
+            if (!Object.prototype.hasOwnProperty.call(rows, key)) continue;
+            const value = rows[key];
+            if (value === null || value === undefined) remove.run(key);
+            else upsert.run(key, value);
+        }
+        db.prepare('DELETE FROM node_config WHERE substr(key, 1, ?) = ?').run(PROFILE_OVERRIDE_PREFIX.length, PROFILE_OVERRIDE_PREFIX);
+        for (const [key, value] of Object.entries(state.profileOverrides ?? {})) {
+            if (!key.startsWith(PROFILE_OVERRIDE_PREFIX)) continue;
+            upsert.run(`${PROFILE_OVERRIDE_PREFIX}${key.slice(PROFILE_OVERRIDE_PREFIX.length)}`, value);
+        }
+        const stored = storedNodeConfig();
+        for (const f of UNDO_NODE_CONFIG_FIELDS) {
+            if (state.nodeConfig && f in state.nodeConfig) stored[f] = state.nodeConfig[f];
+            else delete stored[f];
+        }
+        upsert.run('node_config', JSON.stringify(stored));
+    })();
+    // The roles are in the member directory (each member's nodeRole), so its shared answer is rebuilt (members-snapshot.ts).
+    bumpMembersVersion();
+    putPullCursorBack(state.pullCursor ?? null);
+}
+
+/** The settings the steps wrote, as the undo copy of local-config.json had them; read back, since a failed save only logs. */
+function putLocalConfigBack(dir: string): void {
+    const file = path.join(dir, 'local-config.json');
+    const saved: Record<string, unknown> = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf-8')) : {};
+    const updates: Record<string, unknown> = {};
+    for (const f of UNDO_LOCAL_CONFIG_FIELDS) updates[f] = saved[f]; // undefined: not there before, so not saved now
+    updateLocalConfig(updates as Partial<ReturnType<typeof getLocalConfig>>);
+    const now = JSON.parse(fs.readFileSync(dataPath('local-config.json'), 'utf-8')) as Record<string, unknown>;
+    const unsaved = UNDO_LOCAL_CONFIG_FIELDS.filter((f) => JSON.stringify(now[f]) !== JSON.stringify(saved[f]));
+    if (unsaved.length) throw new Error(`local-config.json could not be written (${unsaved.join(', ')} not put back)`);
+}
+
+/**
+ * The copy `undo-copy` made is gone, or incomplete: public-address.json, which it always writes (after the files), is not
+ * in it. Then "not in the copy" says nothing about what was here before, and putting back from it would delete the
+ * identity files the take-over wrote (the node key, genesis, links) and wipe settings, with nothing of the standby's own to
+ * put in their place. So nothing is put back or deleted, and the journal says why (rollBackTakeover).
+ */
+class UndoCopyMissing extends Error {}
+
+function checkUndoCopy(j: Journal, dir: string): void {
+    const gone = !fs.existsSync(dir);
+    if (!gone && fs.existsSync(path.join(dir, 'public-address.json'))) return;
+    throw new UndoCopyMissing(`the copy of this standby's own files from before the take-over, data/${j.undoDir}, `
+        + `${gone ? 'is gone' : 'is incomplete (public-address.json is not in it)'}, so nothing was put back and nothing was deleted. `
+        + "This server still holds the community's keys, settings and roles as the take-over left them; it runs as a standby and "
+        + 'copies nothing. Restarting alone will not change that: put that folder back (from a backup of the data directory), then '
+        + 'restart the server and it finishes putting itself back.');
+}
+
+/** The identity files as the undo copy holds them; one it does not hold was not here before the take-over, and goes. */
+function putFilesBack(dir: string): void {
+    for (const f of RESTORED_FILES) {
+        const kept = path.join(dir, f);
+        if (fs.existsSync(kept)) writeAtomic(dataPath(f), fs.readFileSync(kept), fs.statSync(kept).mode & 0o777);
+        else fs.rmSync(dataPath(f), { force: true });
+    }
+}
+
+/**
+ * Put the standby back as it was before a take-over that stopped, and end the journal 'failed' with `rolledBack` set.
+ * Safe to run again: a crash part way leaves it 'rolling-back', and the next start (resumeTakeoverAtBoot) runs it again.
+ *
+ * - Before `undo-copy` was recorded nothing of the community's was written: the partial copy and the opened keys go.
+ * - After it: the identity files (the community's node key, links, recovery-seal.key and open-join.key go; the standby's
+ *   own come back, byte for byte), the settings the steps wrote in local-config.json, and the roles, web address,
+ *   community settings, profile, open door's key id and copy cursor in the database (standby-state.json; a copy made by an
+ *   older build has none, and then only the web address comes back, from public-address.json). The undo copy stays.
+ * - The opened keys (data/takeover-bundle.json) go last of all.
+ * - An undo copy that is gone or incomplete (checkUndoCopy): nothing is put back or deleted; the journal stays
+ *   'rolling-back' and says why (`rollBackStopped`), and the server runs as a standby (resumeTakeoverAtBoot).
+ *
+ * What a step merged from the main server's own records (open-door records it had newer) stays: they are the main server's,
+ * as the next copy brings them. Never throws: says whether it finished, and why not.
+ */
+function rollBackTakeover(j: Journal, inProcess: boolean): { ok: true } | { ok: false; why: string; undoCopyMissing: boolean } {
+    try {
+        j.state = 'rolling-back';
+        writeJournal(j);
+        crashPoint('rolling-back');
+        const dir = dataPath(j.undoDir);
+        let detail: string;
+        if (j.steps['undo-copy']) {
+            checkUndoCopy(j, dir);
+            putFilesBack(dir);
+            crashPoint('rollback-files');
+            putLocalConfigBack(dir);
+            const stateFile = path.join(dir, UNDO_STATE_FILE);
+            if (fs.existsSync(stateFile)) {
+                putStandbyStateBack(JSON.parse(fs.readFileSync(stateFile, 'utf-8')) as StandbyState);
+                detail = `put back this standby's own keys, links, settings, roles and web address from data/${j.undoDir}`;
+            } else {
+                const paFile = path.join(dir, 'public-address.json');
+                if (fs.existsSync(paFile)) updateNodeConfig({ publicAddress: JSON.parse(fs.readFileSync(paFile, 'utf-8')) } as any);
+                detail = `put back this standby's own keys, links, settings and web address from data/${j.undoDir}; the take-over started on `
+                    + "an older version, which kept no copy of the standby's roles, so the community's owners and admins stay on it";
+            }
+        } else {
+            fs.rmSync(dir, { recursive: true, force: true });
+            detail = 'nothing of the community\'s had been written yet';
+        }
+        fs.rmSync(dataPath(TAKEOVER_BUNDLE_FILE), { force: true });
+        forgetSyncEpochHeaderValue();
+        // The photo URLs' shape as this process answers by it, from the rows put back (engine/photo-keys.ts): a standby's,
+        // with when it last changed. Does nothing before the state engine's boot.
+        notePhotoUrlShapeNow();
+        noteFaceUrlShapeNow();
+        if (inProcess) {
+            // This process runs on as the standby: what it holds in memory follows the files put back.
+            loadConnectors();
+            restartScheduler();
+            restartBackupPullerIfStopped();
+        }
+        j.state = 'failed';
+        j.rolledBack = { at: new Date().toISOString(), detail: `${detail}; deleted the opened keys` };
+        j.rollBackStopped = null;
+        writeJournal(j);
+        logger.warn('SYS', `[Takeover] Rolled back: ${j.rolledBack.detail}. This server is the standby it was.`);
+        return { ok: true };
+    } catch (e: any) {
+        const why = e?.message || String(e);
+        const undoCopyMissing = e instanceof UndoCopyMissing;
+        if (undoCopyMissing) logger.error('SYS', `[Takeover] Rolling back cannot start: ${why}`);
+        else logger.error('SYS', `[Takeover] Rolling back did not finish: ${why}. The next start tries again; this standby's own files are in data/${j.undoDir}.`);
+        // For Settings: the journal is still 'rolling-back', and says why. A journal that can't be written either is said in the log.
+        j.rollBackStopped = { at: new Date().toISOString(), why, ...(undoCopyMissing ? { undoCopyMissing: true } : {}) };
+        try { writeJournal(j); } catch { /* said above */ }
+        return { ok: false, why, undoCopyMissing };
     }
 }
 
@@ -851,6 +1315,17 @@ export function confirmTakeover(sessionId: unknown): { progressToken: string; jo
         throw new TakeoverError(400, 'This take-over session ran out (10 minutes). Type the recovery code again.', { sessionGone: true });
     }
     takeoverPreconditions();
+    // A whole copy being built in a staging database, or one made ready to swap in at the next start, goes first: the
+    // promoted server's copy is the last one that landed, and a copy made before the take-over must never replace what
+    // the take-over writes (services/stager.ts, db/swap-at-boot.ts).
+    if (abortStagedCopy('a take-over was confirmed')) {
+        logger.warn('SYS', '[Takeover] A whole copy of the old main server being built here was stopped and deleted: this server takes over on the copy it had.');
+    }
+    // And any pull under way, a delta's or a one-page whole copy's too: nothing more is asked of the old main server, and
+    // nothing of it is imported (services/backup-puller.ts stopPullInFlight).
+    if (stopPullInFlight('a take-over was confirmed')) {
+        logger.warn('SYS', '[Takeover] A copy of the old main server under way here was stopped: nothing more is asked of it.');
+    }
 
     const now = new Date();
     const progressToken = crypto.randomBytes(32).toString('hex');
@@ -878,7 +1353,7 @@ export function confirmTakeover(sessionId: unknown): { progressToken: string; jo
     logger.warn('SYS', `[Takeover] Taking over as the main server, authorised by ${describeAuthority(s.authorisedBy)} (keys sealed ${j.sealedAt})`);
     mark(j, 'opened', `${describeAuthority(s.authorisedBy)}; keys sealed ${j.sealedAt}; envelope ${j.envelopeId.slice(0, 8)}`);
 
-    runPreRestartSteps(j, plan);
+    runPreRestartSteps(j, plan, true);
     j.state = 'restarting';
     mark(j, 'restart', 'restarting now');
     setTimeout(() => {
@@ -891,12 +1366,90 @@ export function confirmTakeover(sessionId: unknown): { progressToken: string; jo
 // ── Boot ───────────────────────────────────────────────────────────────────────────────────
 
 /**
+ * The steps before the restart, at a start: a roll-back a crash (or a refused write) stopped part way finished; the steps a
+ * crash interrupted resumed, and rolled back if one fails now or the opened keys are gone; then the restart recorded, once
+ * every one of them is. A failure is in the journal and the log, never thrown from a step.
+ */
+function settleStepsBeforeRestart(j: Journal | null): { resumed: boolean; rolledBackNow: boolean } {
+    let resumed = false;
+    let rolledBackNow = false;
+    if (j && j.state === 'rolling-back') {
+        // A roll-back a crash (or a refused write) stopped part way: finished before anything reads the role or the keys.
+        logger.warn('SYS', '[Takeover] Finishing the roll-back of a take-over that stopped');
+        rolledBackNow = rollBackTakeover(j, false).ok;
+    } else if (j && journalMayRollBack(j)) {
+        // Under way, its restart not recorded, a step before it missing (config/node-role.ts journalMayRollBack, by which the
+        // database's boot read a standby's role). One that recorded its restart is past every step its own build had: a
+        // journal from a build without a later step is never resumed on the main server it made.
+        const plan = readPlan(j.id);
+        if (!plan) {
+            j.error = { step: PRE_RESTART.find((s) => !j.steps[s])!, message: 'the opened keys are gone from data/takeover-bundle.json, so the take-over cannot go on by itself', at: new Date().toISOString() };
+            logger.error('SYS', `[Takeover] Cannot resume: ${j.error.message}. It is rolled back: this server stays the standby it was.`);
+            rolledBackNow = rollBackTakeover(j, false).ok;
+        } else {
+            // A crash part way (or a step an older build left failed): resumed. A step that fails now rolls it back.
+            logger.warn('SYS', `[Takeover] Resuming an interrupted take-over at "${PRE_RESTART.find((s) => !j.steps[s])}"`);
+            j.state = 'running';
+            try {
+                runPreRestartSteps(j, plan, false);
+                resumed = true;
+            } catch {
+                rolledBackNow = !journalUnderWay(j); // said in the log; a roll-back that didn't finish is finished at the next start
+            }
+        }
+    }
+    if (j && journalUnderWay(j) && j.state !== 'rolling-back' && PRE_RESTART.every((s) => j.steps[s]) && !j.steps.restart) {
+        j.state = 'restarting';
+        mark(j, 'restart', 'finished at boot, after an interruption');
+    }
+    return { resumed, rolledBackNow };
+}
+
+/** What settleTakeoverBeforeDatabaseBoot did at this start, for resumeTakeoverAtBoot's answer; null when it did nothing. */
+let settledBeforeDatabaseBoot: { resumed: boolean } | null = null;
+
+/**
+ * At boot, BEFORE the database's boot reads the role (index.ts, before initStateEngine): a take-over stopped after its
+ * `role` step wrote `nodeRole: primary` to local-config.json, before the restart (killed between `role` and `pull-config`,
+ * or a journal an older build left 'failed' there). This start resumes it, or rolls it back if the step fails or the opened
+ * keys are gone, and the role depends on which. So it is decided here, first: the database then boots as the main server
+ * only when the take-over went on (exactly as a start that resumed it always has), and as the standby when it was rolled
+ * back, never as the main server first. Until a start decides it, the role is a standby's (config/node-role.ts
+ * takeoverMayRollBack), so a database that boots before this, or after it failed, boots as a standby's.
+ *
+ * Only when every step before `role` is recorded: those steps are left to resumeTakeoverAtBoot, after the database's boot as
+ * a standby, as before (their writes go through what that boot sets up), and a take-over they finish promotes this process
+ * there. A journal 'rolling-back' too: its start runs as a standby whatever the config says, and resumeTakeoverAtBoot
+ * finishes it. Never throws; never stops the boot.
+ */
+export function settleTakeoverBeforeDatabaseBoot(): void {
+    try {
+        if (!takeoverMayRollBack() || roleFromSettings() !== 'primary') return;
+        const j = readJournal();
+        if (!j || j.state === 'rolling-back' || !journalUnderWay(j)) return;
+        if (PRE_RESTART.slice(0, PRE_RESTART.indexOf('role')).some((s) => !j.steps[s])) return;
+        logger.warn('SYS', '[Takeover] A take-over stopped after making this server the main server, before its restart: deciding it before the database starts');
+        settledBeforeDatabaseBoot = { resumed: settleStepsBeforeRestart(j).resumed };
+    } catch (e: any) {
+        logger.error('SYS', `[Takeover] Deciding the take-over before the database starts failed: ${e?.message || e}. The database starts as a standby's; the take-over is looked at again after it.`);
+    } finally {
+        // Anything that read the role meanwhile read a standby's, while the take-over was undecided: the role as it now stands.
+        try {
+            const role = resolveNodeRole();
+            if (getNodeRole() !== role) setNodeRole(role);
+        } catch { /* the database's boot reads it */ }
+    }
+}
+
+/**
  * At boot, after the database is open and BEFORE the node key is loaded or the role read for anything else: finish
- * any step before the restart that a crash interrupted, take the role from the config, and run the promotion audit
- * once if it is pending. Never throws; never stops the boot.
+ * any step before the restart that a crash interrupted (settleTakeoverBeforeDatabaseBoot decided one stopped after `role`
+ * before the database's boot), take the role from the config, and run the promotion audit once if it is pending. Never
+ * stops the boot, except as a main server's boot stops: a promotion in place on settings the node profile refuses throws
+ * that refusal (config/node-profile.ts isMainServerBootRefusal), and the start exits as index.ts main().catch does.
  */
 export function resumeTakeoverAtBoot(): { resumed: boolean; auditRan: boolean } {
-    let resumed = false;
+    let resumed = settledBeforeDatabaseBoot?.resumed ?? false;
     let auditRan = false;
     try {
         const j = readJournal();
@@ -905,41 +1458,117 @@ export function resumeTakeoverAtBoot(): { resumed: boolean; auditRan: boolean } 
             fs.rmSync(dataPath(TAKEOVER_BUNDLE_FILE), { force: true });
             logger.warn('SYS', '[Takeover] Removed keys from a take-over that never started');
         }
-        if (j && j.state !== 'complete' && PRE_RESTART.some((s) => !j.steps[s])) {
-            const plan = readPlan(j.id);
-            if (!plan) {
-                j.state = 'failed';
-                j.error = { step: PRE_RESTART.find((s) => !j.steps[s])!, message: 'the opened keys are gone from data/takeover-bundle.json, so the take-over cannot go on by itself', at: new Date().toISOString() };
-                writeJournal(j);
-                logger.error('SYS', `[Takeover] Cannot resume: ${j.error.message}`);
-            } else {
-                logger.warn('SYS', `[Takeover] Resuming an interrupted take-over at "${PRE_RESTART.find((s) => !j.steps[s])}"`);
-                j.state = 'running';
-                try {
-                    runPreRestartSteps(j, plan);
-                    resumed = true;
-                } catch { /* recorded in the journal; the next boot tries again */ }
-            }
+        const settled = settleStepsBeforeRestart(j);
+        resumed ||= settled.resumed;
+        if (j && j.state === 'rolling-back') {
+            // A roll-back that did not finish here (a refused write, an undo copy that is gone), by any path into it: a journal
+            // left 'rolling-back', a resumed step that failed, opened keys that are gone. A take-over only ever starts on a
+            // standby (takeoverPreconditions), and one that did not finish never made this server the main one, whatever
+            // local-config.json says by now (its `role` step may have run): it runs as a standby, the tunnel held
+            // (takeoverHoldsTunnel), and copies held (swap-at-boot takeoverUnderWay, the puller), until a start finishes it.
+            holdAsStandby();
+            return { resumed, auditRan };
         }
-        if (j && j.state !== 'complete' && PRE_RESTART.every((s) => j.steps[s]) && !j.steps.restart) {
-            j.state = 'restarting';
-            mark(j, 'restart', 'finished at boot, after an interruption');
+        if (settled.rolledBackNow) {
+            // Rolled back here: this process is the standby, as local-config.json, or NODE_ROLE, now says. The database's boot
+            // read a standby's role already (config/node-role.ts takeoverMayRollBack); this holds should anything have set it.
+            const role = resolveNodeRole();
+            if (getNodeRole() !== role) {
+                setNodeRole(role);
+                // A roll-back that leaves local-config.json saying primary (only a journal no build writes reaches this): a
+                // main server in place, as below.
+                if (role === 'primary') becomeMainServerInPlace();
+            }
         }
 
         const configured = getLocalConfig().nodeRole;
         if ((configured === 'primary' || configured === 'backup') && getNodeRole() !== configured) {
             setNodeRole(configured);
-            // Promoted here, in this process (a take-over finished at boot after an interruption), after the database's
-            // boot left the visitors' rows to a main server as a standby's does: the pass runs now, not at the next
-            // restart. It does nothing if the main server's marks were copied (db.ts markExistingVisitors).
-            if (configured === 'primary') markExistingVisitors();
+            // Promoted here, in this process (a take-over a crash stopped before `role`, finished at boot), after the
+            // database booted as a standby's: everything a main server's boot runs and a standby's skipped runs now, not at
+            // the next restart (state-engine.ts becomeMainServerInPlace): the visitors' marks and the other main-server
+            // passes, the listing-photo URLs' shape (a main server's now, so a phone that synced from the server it
+            // replaced is answered whole at once), and the main server's timers.
+            if (configured === 'primary') becomeMainServerInPlace();
+            // Made a standby: the photo and face URLs' shapes are a standby's again.
+            else { notePhotoUrlShapeNow(); noteFaceUrlShapeNow(); }
         }
 
         auditRan = runPendingPromotionAudit(j);
+        deletePreviousDatabaseOnMainServer(j);
     } catch (e: any) {
+        if (isMainServerBootRefusal(e)) {
+            // Made the main server in place on settings every main server's boot refuses (state-engine.ts
+            // becomeMainServerInPlace): this start stops as such a boot does, before anything serves. The take-over is kept,
+            // its steps up to the restart recorded: the next start boots as the main server, refuses with the same words
+            // until the setting is fixed, and then goes on.
+            logger.error('SYS', `[Takeover] This server took over, but as the main server it may not start: ${e.message} `
+                + 'The take-over goes on at the first start these settings allow.');
+            throw e;
+        }
         logger.error('SYS', `[Takeover] Boot check failed: ${e?.message || e}`);
+        // Whatever stopped it, a take-over that is being rolled back still never leaves this server the main one.
+        if (readJournal()?.state === 'rolling-back') holdAsStandby();
     }
     return { resumed, auditRan };
+}
+
+/** This process runs as a standby while a take-over's roll-back is unfinished (resumeTakeoverAtBoot). Never throws. */
+function holdAsStandby(): void {
+    try {
+        if (getNodeRole() !== 'backup') setNodeRole('backup');
+        logger.error('SYS', '[Takeover] A take-over that stopped is not yet rolled back: this server runs as a standby, with no tunnel, '
+            + 'and copies nothing until it is. Settings (Take over as the main server) says why.');
+    } catch (e: any) {
+        logger.error('SYS', `[Takeover] Could not hold this server as a standby: ${e?.message || e}`);
+    }
+}
+
+/** How long a promoted server keeps the database its last swap replaced after the take-over's audit found trouble. */
+const PREVIOUS_KEPT_AFTER_TROUBLE_MS = 30 * 86_400_000;
+
+/**
+ * On a main server, the database a swap replaced when this server was a standby (db/swap-at-boot.ts): a take-over promoted
+ * it with the database that replaced it, and its puller, which deletes it on a standby, never runs again. It holds rows
+ * members deleted since that swap (#1334 review 4144658979), so it goes here, at boot, once the database this server runs on
+ * is known good:
+ * - the swap that made it is final: this start's swap did not fail part way, and `state.db` is there (swap-at-boot's
+ *   deletePreviousDatabase keeps it otherwise, as the only whole database there may be). A copy staged before the take-over
+ *   never swaps in after it: the confirm deletes it, and the swap at boot discards one while a take-over is under way;
+ * - a take-over's audit has read it and found the ledger adds up and is the main server's as last copied. Until its audit
+ *   has run it stays. When the audit found trouble it stays PREVIOUS_KEPT_AFTER_TROUBLE_MS (30 days) from the audit, the
+ *   database before that swap being what an operator may need to look at, each start saying the date it goes; then the
+ *   first start after that deletes it. Most servers are strangers' installs, where nobody acts on a warning: it never
+ *   stays for good.
+ * A main server with no take-over (its role set by hand) has only that database to run on: the file goes.
+ */
+function deletePreviousDatabaseOnMainServer(j: Journal | null): void {
+    // Its -wal or -shm alone too: a delete an older build left part done.
+    if (getNodeRole() !== 'primary' || !previousDatabaseThere(dataDir())) return;
+    // A -wal or -shm with no database is nothing anyone can look at: it goes now.
+    const leftOver = !fs.existsSync(dataPath(PREVIOUS_DB));
+    if (j && !j.steps.audit && !leftOver) return; // this take-over's audit hasn't read the database yet: a later start deletes it
+    let troubleExpired = false;
+    if (j && j.result.audit && !j.result.audit.ok && !leftOver) {
+        const auditedMs = Date.parse(j.steps.audit!.at);
+        const goesMs = (Number.isFinite(auditedMs) ? auditedMs : 0) + PREVIOUS_KEPT_AFTER_TROUBLE_MS;
+        if (Date.now() < goesMs) {
+            logger.warn('SYS', `[Takeover] ${PREVIOUS_DB}, the database this server's last swap as a standby replaced, is kept until `
+                + `${new Date(goesMs).toISOString().slice(0, 10)}: the take-over's audit found trouble, and it may be needed to look into it. `
+                + 'It holds rows members deleted since that swap, so the first start after that date deletes it.');
+            return;
+        }
+        troubleExpired = true;
+    }
+    const r = deletePreviousDatabase(dataDir());
+    for (const e of r.errors) logger.warn('SYS', `[Takeover] ${e}`);
+    if (r.kept) logger.warn('SYS', `[Takeover] ${PREVIOUS_DB}, the database this server's last swap as a standby replaced, is kept: ${r.kept}.`);
+    else if (r.deleted) {
+        logger.info('SYS', `[Takeover] ${PREVIOUS_DB}, the database this server's last swap as a standby replaced, deleted: `
+            + (leftOver ? 'its -wal or -shm was left on its own by a delete stopped part way.'
+                : troubleExpired ? `it was kept ${PREVIOUS_KEPT_AFTER_TROUBLE_MS / 86_400_000} days after the take-over's audit found trouble.`
+                : j ? "this server is the main server now, on the database the take-over's audit checked." : 'this server is a main server, which never swaps its database.'));
+    }
 }
 
 /**
@@ -954,39 +1583,79 @@ function runPendingPromotionAudit(j: Journal | null): boolean {
     if (config.promotionAuditPending) {
         // The copy first: the conservation check writes the demurrage any read has applied since boot, and the rows are
         // held to the main server's as they were copied.
-        const copy = ledgerAgainstLastCopy();
-        const r = promotionSanityCheck();
+        //
+        // Neither check may stop the take-over (#1445 re-review, BLOCKING 1): a check that throws is recorded as an audit
+        // that could not run, which is not "ok", and the take-over goes on to say so.
+        const failed = (e: unknown) => (e instanceof Error ? e.message : String(e));
+        let copy: ReturnType<typeof ledgerAgainstLastCopy> | null = null;
+        let copyError: string | null = null;
+        try { copy = ledgerAgainstLastCopy(); } catch (e) { copyError = failed(e); }
+        let r: ReturnType<typeof promotionSanityCheck> | null = null;
+        let checkError: string | null = null;
+        try { r = promotionSanityCheck(); } catch (e) { checkError = failed(e); }
+        const error = [checkError, copyError && `the copy check: ${copyError}`].filter(Boolean).join('; ') || undefined;
         const record = {
-            at: new Date().toISOString(), ok: r.ok && copy.match, sumBalances: r.sumBalances, drift: r.drift, strandedEscrows: r.strandedEscrows,
-            copy: {
+            at: new Date().toISOString(), ok: !!r?.ok && !!copy?.match && !error,
+            sumBalances: finiteOrNull(r?.sumBalances), drift: finiteOrNull(r?.drift),
+            strandedEscrows: r ? finiteOrNull(r.strandedEscrows) : null, badBalances: r ? finiteOrNull(r.badBalances) : null,
+            ...(error ? { error } : {}),
+            copy: copy ? {
                 match: copy.match,
                 here: { accounts: copy.here.accounts, holdings: copy.here.holdings },
                 lastCopy: copy.lastCopy ? { accounts: copy.lastCopy.accounts, holdings: copy.lastCopy.holdings, generatedAt: copy.lastCopy.generatedAt } : null,
-            },
+            } : null,
         };
-        if (!copy.match) logger.error('SYS', `[Takeover] ${ledgerCopyTrouble(record.copy)}`);
+        if (error) logger.error('SYS', `[Takeover] The ledger audit could not run: ${error}`);
+        if (record.copy && !record.copy.match) logger.error('SYS', `[Takeover] ${ledgerCopyTrouble(record.copy)}`);
         updateLocalConfig({ promotionAuditPending: false, lastPromotionAudit: record });
         ran = true;
     }
     const recorded = getLocalConfig().lastPromotionAudit;
     if (j && j.steps.restart && !j.steps.audit && recorded) {
-        const adds = Math.abs(recorded.drift) < 0.01 && recorded.strandedEscrows === 0;
-        j.result.audit = { ok: recorded.ok, drift: recorded.drift, strandedEscrows: recorded.strandedEscrows, addsUp: adds, copy: recorded.copy ?? null };
+        // A balance that is not a finite number is the conservation check failing too (engine audit.ts), so it is counted
+        // here and named, as the boot log names it: a promotion that failed only for such rows read "adds up" (N3).
+        //
+        // The record is read back from local-config.json, where a drift of Infinity (one balance of 9e999) is null: every
+        // figure from it is taken as it may be, never assumed a number. `null.toFixed` threw here and stalled the
+        // take-over at `restarting` (#1445 review, BLOCKING 1).
+        const badBalances = recorded.badBalances === undefined ? 0 : finiteOrNull(recorded.badBalances);
+        const stranded = finiteOrNull(recorded.strandedEscrows);
+        const drift = finiteOrNull(recorded.drift);
+        const howMany = (n: number | null) => (n === null ? 'an unknown number of' : String(n));
+        const adds = drift !== null && Math.abs(drift) < 0.01 && stranded === 0 && badBalances === 0;
+        const error = typeof recorded.error === 'string' ? recorded.error : null;
+        j.result.audit = {
+            ok: recorded.ok === true && adds && !error, drift, strandedEscrows: stranded, addsUp: adds && !error,
+            ...(recorded.badBalances === undefined ? {} : { badBalances }), copy: recorded.copy ?? null,
+            ...(error ? { error } : {}),
+        };
         const troubles = [
-            ...(adds ? [] : [`the ledger does NOT add up (drift ${recorded.drift.toFixed(4)}, ${recorded.strandedEscrows} stranded escrow(s))`]),
+            ...(error ? [`the ledger audit could not run (${error}), so it can't say the ledger adds up`]
+                : adds ? [] : [`the ledger does NOT add up (drift ${auditFigure(drift, 4)}, ${howMany(stranded)} stranded escrow(s)`
+                + `${badBalances !== 0 ? `, ${howMany(badBalances)} balance(s) that are not a finite number` : ''})`]),
             ...(recorded.copy && !recorded.copy.match ? [ledgerCopyTrouble(recorded.copy)] : []),
         ];
-        mark(j, 'audit', recorded.ok
+        mark(j, 'audit', j.result.audit.ok
             ? 'the ledger adds up'
             : `${troubles.join('; ') || 'the ledger does NOT add up'}: check before members trade`);
     }
     return ran;
 }
 
+/** A figure from the audit record, which JSON may have turned into null: the number, or null when it isn't a finite one. */
+function finiteOrNull(v: unknown): number | null {
+    return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+/** A figure for the audit's words: to `digits` places, or "not a number". Never throws. */
+function auditFigure(v: unknown, digits: number): string {
+    return typeof v === 'number' && Number.isFinite(v) ? v.toFixed(digits) : 'not a number';
+}
+
 /** What a take-over's audit says when the ledger isn't the main server's as this server last copied it. */
 function ledgerCopyTrouble(copy: NonNullable<NonNullable<ReturnType<typeof getLocalConfig>['lastPromotionAudit']>['copy']>): string {
     if (!copy.lastCopy) return "this server has no record of the main server's ledger, so it can't say the ledger is the main server's";
-    const held = (s: { accounts: number; holdings: number }) => `${s.accounts} account(s) holding ${s.holdings.toFixed(2)} Beans`;
+    const held = (s: { accounts: number; holdings: number }) => `${s.accounts} account(s) holding ${auditFigure(s.holdings, 2)} Beans`;
     return `the ledger is NOT the main server's as this server last copied it (here ${held(copy.here)}; `
         + `the main server's ${held(copy.lastCopy)}${copy.lastCopy.generatedAt ? `, as of ${copy.lastCopy.generatedAt}` : ''})`;
 }
@@ -1019,9 +1688,11 @@ export async function finishTakeoverAfterBoot(): Promise<void> {
             } else if (step === 'tunnel') {
                 const token = tunnelTokenOf((getNodeConfig() as any).publicAddress);
                 if (token) {
-                    writeAtomic(dataPath('tunnel-token'), token.trim(), 0o644);
-                    void restartSidecar(); // a no-op without Docker's socket
-                    detail = 'tunnel token written for the cloudflared sidecar';
+                    // Until this step the journal holds the tunnel back (takeoverHoldsTunnel), so it starts here, in order.
+                    const t = await startTunnelForTakeover();
+                    detail = t.state === 'missing' || t.state === 'off'
+                        ? `the tunnel did not start: ${t.reason || t.state}`
+                        : 'the tunnel for the web address runs inside this server';
                 } else {
                     detail = j.result.tunnel?.message || 'no tunnel token';
                 }
@@ -1054,7 +1725,11 @@ export function progressTokenMatches(token: unknown): boolean {
 
 export interface TakeoverProgress {
     role: 'primary' | 'backup';
-    state: 'none' | 'running' | 'restarting' | 'complete' | 'failed';
+    /** 'failed' with `rolledBack`: stopped, and this server is the standby it was; a new take-over can start. */
+    state: 'none' | 'running' | 'restarting' | 'complete' | 'failed' | 'rolling-back';
+    rolledBack: { at: string; detail: string } | null;
+    /** 'rolling-back': why putting it back stopped, if it did (Journal.rollBackStopped). */
+    rollBackStopped: { at: string; why: string; undoCopyMissing?: boolean } | null;
     startedAt: string | null;
     completedAt: string | null;
     authorisedBy: string | null;
@@ -1081,6 +1756,8 @@ export function getTakeoverProgress(): TakeoverProgress {
     return {
         role: getNodeRole(),
         state: j ? j.state : 'none',
+        rolledBack: j?.rolledBack ?? null,
+        rollBackStopped: j?.state === 'rolling-back' ? (j.rollBackStopped ?? null) : null,
         startedAt: j?.startedAt ?? null,
         completedAt: j?.completedAt ?? null,
         authorisedBy: j ? describeAuthority(j.authorisedBy) : null,

@@ -2,6 +2,7 @@
 slug: appearance
 title: Light and dark
 summary: The app starts light. Make it dark, or follow your phone.
+help: Make the app light or dark, or follow your phone.
 related: privacy, notifications, the-bean, web-app
 ---
 
@@ -13,7 +14,7 @@ related: privacy, notifications, the-bean, web-app
 - **Light:** always light. This is how the app starts.
 - **Dark:** always dark.
 
-When the app is light, **Light Color Scheme** lets you choose **Classic**, **Earth** or **Slate**.
+There is one set of colours for light and one for dark.
 
 The map has its own light and dark button, on the left of the map.
 

@@ -1,0 +1,117 @@
+import React from 'react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { AlertsPanel } from './AlertsPanel';
+import type { NodeProfile } from '../../lib/profiles';
+import type { AlertsStatus } from '../../lib/node-client';
+
+const node: NodeProfile = { id: 'node-1', name: 'Node', url: 'https://node.example.com', adminPassword: 'pw-owner' };
+
+function status(over: Partial<AlertsStatus>): AlertsStatus {
+    return {
+        channel: null, channelProblem: null, lastOkAt: null, lastTriedAt: null, failedInARow: 0, error: null, nextTryAt: null,
+        waiting: 0, dropped: 0, sentLastHour: 0, hourlyCap: 20, active: [], history: [], ...over,
+    };
+}
+
+const json = (body: unknown, ok = true, code = 200) => ({ ok, status: code, statusText: '', json: async () => body });
+
+describe('AlertsPanel', () => {
+    beforeEach(() => { vi.restoreAllMocks(); });
+    afterEach(() => { vi.unstubAllGlobals(); });
+
+    it("today's AI assistant calls, counts only, once one is connected; nothing when none ever was", async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => json(status({ assistants: { calls: 12, connected: 2 } }))));
+        const { unmount } = render(<AlertsPanel activeNode={node} />);
+        expect(await screen.findByTestId('alerts-assistants')).toHaveTextContent('AI assistants today: 12 calls · 2 connected.');
+        unmount();
+        vi.stubGlobal('fetch', vi.fn(async () => json(status({ assistants: { calls: 0, connected: 0 } }))));
+        render(<AlertsPanel activeNode={node} />);
+        expect(await screen.findByText('Nothing needs you.')).toBeInTheDocument();
+        expect(screen.queryByTestId('alerts-assistants')).toBeNull();
+    });
+
+    it("says in one line when the node answers that it is an owner's card", async () => {
+        const words = "Only an owner of this node can see or change its alerts and where they're sent";
+        vi.stubGlobal('fetch', vi.fn(async () => json({ error: words }, false, 403)));
+        render(<AlertsPanel activeNode={node} />);
+        expect(await screen.findByText(words)).toBeInTheDocument();
+        expect(screen.queryByText('Send a test')).toBeNull();
+    });
+
+    it('shows what is active, the channel by its host only, and sends a test', async () => {
+        const s = status({
+            channel: { source: 'settings', format: 'ntfy', where: 'https://ntfy.sh/…', tokenSet: true },
+            active: [{ key: 'disk.90', title: 'disk 90% full', priority: 4, since: Date.UTC(2026, 9, 10, 1), detail: 'The disk is 91% full.' }],
+        });
+        const calls: string[] = [];
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+            calls.push(String(url));
+            if (String(url).endsWith('/alerts/test')) return json({ ok: true, status: s });
+            return json(s);
+        }));
+        render(<AlertsPanel activeNode={node} />);
+        expect(await screen.findByText(/The disk is 91% full\./)).toBeInTheDocument();
+        expect(screen.getByText('High')).toBeInTheDocument();
+        expect(screen.getByText(/ntfy topic at https:\/\/ntfy\.sh\/…, with a token\./)).toBeInTheDocument();
+        await userEvent.click(screen.getByText('Send a test'));
+        await waitFor(() => expect(calls.some((c) => c.endsWith('/api/local/admin/alerts/test'))).toBe(true));
+    });
+
+    it('shows a security event of the last day, and "Seen" acknowledges it', async () => {
+        const s = status({
+            recent: [{ key: 'sec.role', title: 'a role changed', priority: 4, at: Date.UTC(2026, 9, 11, 1), detail: 'Someone was made an admin, by an owner. Open Settings to see who.' }],
+            acknowledge: true,
+        });
+        const calls: string[] = [];
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+            calls.push(String(url));
+            if (String(url).endsWith('/alerts/acknowledge')) return json({ success: true, status: status({ recent: [], acknowledge: false }) });
+            return json(s);
+        }));
+        render(<AlertsPanel activeNode={node} />);
+        expect(await screen.findByText(/Someone was made an admin, by an owner./)).toBeInTheDocument();
+        expect(screen.queryByText('Nothing needs you.')).toBeNull();
+        await userEvent.click(screen.getByText('Seen'));
+        await waitFor(() => expect(calls.some((c) => c.endsWith('/api/local/admin/alerts/acknowledge'))).toBe(true));
+        expect(await screen.findByText('Marked as seen.')).toBeInTheDocument();
+        expect(screen.queryByText('Seen')).toBeNull();
+        expect(screen.getByText('Nothing needs you.')).toBeInTheDocument();
+    });
+
+    it('shows how many times a line was told, in the card and the history, as the channel does', async () => {
+        const s = status({
+            recent: [{ key: 'sec.role', title: 'a role changed', priority: 4, at: Date.UTC(2026, 9, 11, 1), detail: 'A moderator lost that role, suspended by an admin. Open Settings to see who.', count: 2 }],
+            history: [
+                { key: 'sec.log', title: 'a security log line', kind: 'raised', at: Date.UTC(2026, 9, 11, 2), since: Date.UTC(2026, 9, 11, 1), priority: 1, detail: "A line was written to the server's security log (sign-in, keys and codes).", count: 1002 },
+                { key: 'disk.90', title: 'disk 90% full', kind: 'raised', at: Date.UTC(2026, 9, 11, 0), since: Date.UTC(2026, 9, 11, 0), priority: 4, detail: 'The disk is 91% full.' },
+            ],
+            acknowledge: true,
+        });
+        vi.stubGlobal('fetch', vi.fn(async () => json(s)));
+        render(<AlertsPanel activeNode={node} />);
+        expect(await screen.findByText(/suspended by an admin. Open Settings to see who. \(×2\)/)).toBeInTheDocument();
+        expect(screen.getByText(/\(sign-in, keys and codes\)\. \(×1002\)/)).toBeInTheDocument();
+        expect(screen.getByText(/The disk is 91% full\.$/)).toBeInTheDocument();
+    });
+
+    it('says the owners still get the app alerts when no channel is set', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => json(status({}))));
+        render(<AlertsPanel activeNode={node} />);
+        expect(await screen.findByText('No channel: alerts reach the owners in the app only.')).toBeInTheDocument();
+        expect(screen.getByText('Nothing needs you.')).toBeInTheDocument();
+        expect(screen.getByText('Add a channel')).toBeInTheDocument();
+    });
+
+    it('shows a loading state while fetching initial alerts status', async () => {
+        let resolveFetch!: (res: any) => void;
+        vi.stubGlobal('fetch', vi.fn(() => new Promise((resolve) => { resolveFetch = resolve; })));
+        render(<AlertsPanel activeNode={node} />);
+        expect(screen.getByTestId('alerts-loading')).toBeInTheDocument();
+        expect(screen.getByText('Loading alerts status…')).toBeInTheDocument();
+        resolveFetch(json(status({})));
+        expect(await screen.findByText('Nothing needs you.')).toBeInTheDocument();
+        expect(screen.queryByTestId('alerts-loading')).toBeNull();
+    });
+});

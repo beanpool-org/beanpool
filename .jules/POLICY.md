@@ -507,3 +507,300 @@ intentional; do not open PRs or issues attempting to alter them:
   PR the stray's. The scan it replaces runs only when the exact lookup misses. Bolt: in any lookup rewrite, an exact key
   must still win over a normalised one when two keys collide, and name the loop the lookup runs in and how large the
   list can grow (#1034).
+
+### 2026-09-29 — Vault: `credentials: 'same-origin'` on the manager's dispute helpers (#1294) — CLOSED, NO-OP
+- **Category:** PHANTOM VULNERABILITY, RECURRING (the earlier `deleteNodePost` filing in `.jules/vault.md` made the same claim)
+- **Claim:** `fetchEscrowDisputes` and `resolveEscrowDisputeApi` in `apps/manager/src/lib/node-client.ts` omit
+  `credentials: 'same-origin'`, so cookie-authenticated admin sessions get 401.
+- **Why not to re-file:** `'same-origin'` is the Fetch standard's DEFAULT credentials mode in every browser the manager
+  supports, and every manager call goes to a same-origin URL: either the node directly, or through the manager's proxy
+  when the node is elsewhere (`resolveNodeApiUrl`). The cookie is already sent, so there's no 401 to fix. Writing the
+  default out changes nothing. Vault: a missing `credentials` option is a defect only for a CROSS-origin call that needs
+  cookies (`'include'`). Show the request going cross-origin, and the 401 it gets, before filing one.
+
+### 2026-09-30 — Bolt: single-pass status grouping in `offBoardPostsToResend` (#1320) — CLOSED, NO BENEFIT
+- **Category:** CLAIM FALSE (no measurable gain), RECURRING (the #745, #1018, #1034 shape)
+- **Claim:** three `.filter().map()` passes over `deals` in `packages/beanpool-engine/src/posts.ts` should be one loop.
+- **Why not to re-file:** `deals` is capped at the member's last 50 deals (`HEALED_DEALS = 50`, ties included), and the rewrite is
+  behaviour-identical (20,000 random inputs: 0 mismatches), so the saving is microseconds on at most 50 rows. Bolt: only file a
+  loop rewrite for a list that grows with the community, and name the loop and the list size.
+
+### 2026-10-01 — Scout: test-viewer-helpers pins local nodes' member reads open (#1363) — CLOSED, CONTRADICTS #1376
+- **Category:** DELIBERATE DECISION
+- **Claim:** `apps/server/src/routes/viewer.ts` (`viewerTier`, `seesGuestView`, `membersOnlyHere`, `memberReadsOnlyHere`) has no
+  unit coverage.
+- **Why not to re-file as-is:** one of its 28 checks asserts `memberReadsOnlyHere` answers `true` to a stranger on a local node.
+  #1376 (merged 2026-10-01, 0644f910) made that deliberately false: a local community's people reads are members-only on every
+  node, since any key could walk the invite tree from one name. Measured: 28/28 on the old main, 27/28 on main with #1376
+  (`✗ memberReadsOnlyHere returns true when NODE_PROFILE=local`). **Coverage of viewer.ts is still welcome**, filed once against
+  current main, asserting #1376's rule: a stranger, a visitor and a suspended member are refused 403 `members_only` by
+  `memberReadsOnlyHere` on a local node too.
+
+### 2026-10-01 — Bolt: batch keepers and pledges in listTreasuriesHandler (#1364) — CLOSED, NO MEANINGFUL GAIN
+- **Category:** CLAIM FALSE (no meaningful gain), RECURRING (the #745, #1018, #1034, #1320 shape)
+- **Claim:** `treasuryKeepers()` and `getEnterprisePledges()` per enterprise make `/api/treasuries` run 2N queries.
+- **Why not to re-file as-is:** both are indexed primary-key lookups. Measured on the handler, 20 calls each: 30 enterprises
+  8.8-9.4 ms on main vs 7.8 ms on the PR, 600 enterprises 171-174 ms vs 153-155 ms. So it saves about 1 ms on a real
+  community's Commons list. The price: a second hand-kept copy of the keeper and pledge shaping inside a treasury route,
+  which must now change in step with `treasuryKeepers()` (its suspended and visitor rule, `lastActiveForViewer`) and
+  `getEnterprisePledges()` forever. It also reorders keepers whose `granted_at` ties (34 of 40 enterprises in a tie-heavy
+  fixture), for example the rows `seedTreasuryOperatorsFromLegacyFlag` writes in one transaction. Bolt: a batched read has to
+  live in `state-engine.ts` beside the per-enterprise one and share its row shaping. Only file one when a timing at a realistic
+  enterprise count shows a gain a member would notice.
+
+### 2026-10-01 — Shield: vault push-token record into SecureStore (#1367) — CLOSED, BREAKS SIGN-OUT'S TOKEN WITHDRAWAL
+- **Category:** REJECTED BAD PR (NOT A SUPPRESSION: see "if re-filed" below)
+- **Claim:** `apps/native/utils/vault.ts` keeps the push token it gave the key vault in AsyncStorage, not SecureStore.
+- **Why not to re-file as-is:** the record's key is `vaultPushTokenStoreKey()` = `beanpool_vault_push_token:<hex>`, and
+  expo-secure-store refuses any key outside `/^[\w.-]+$/`. It throws "Invalid key provided to SecureStore" on get, set and
+  delete, and the colon is outside that set. So on a phone the deposit's record is silently dropped (`.catch`),
+  `keepVaultPushTokenCurrent` never sends a changed token, and
+  `withdrawVaultPushToken` returns false at Sign Out or Replace. The vault then keeps sending an account's recovery notices
+  to a phone that may be someone else's, which undoes PR #1336 review finding 8. CI passed only because the tests' SecureStore mock
+  accepts any key. With the real key rule in `vault-phone.test.ts`'s mock, main passes 15/15 of the push-token block and the PR
+  fails 2 of them. The value is also no secret the phone keeps from anyone: it is this phone's Expo push token, which every community
+  it joins and the vault already hold, and whose own copy (`bp_push_token`) is in SecureStore already.
+- **If re-filed:** use a SecureStore-legal key, read the old AsyncStorage record as a fallback (or a phone updated from an
+  earlier build can never withdraw its token), and run the vault-phone tests with a mock that enforces SecureStore's key rule.
+
+### 2026-10-01 — Vault: `credentials: 'same-origin'` on the escrow dispute helpers, again (#1368) — CLOSED, RE-FILE OF #1294
+- **Category:** CLAIM FALSE, RECURRING (third filing: `deleteNodePost`, #1294, #1368)
+- **Claim:** `fetchEscrowDisputes` and `resolveEscrowDisputeApi` omit `credentials: 'same-origin'`, so cookie sessions get 401.
+- **Why not to re-file:** the same two functions and the same claim as #1294, registered on 2026-09-29. `'same-origin'` is fetch's
+  default, and `resolveNodeApiUrl` only ever returns the manager's own origin or a relative `/proxy/...` path, so the cookie
+  and CSRF header already go out. The PR's test asserts the literal option, which says nothing about behaviour. Vault:
+  search this register for the function name before filing.
+
+### 2026-10-01 — Palette: focus rings on VisitorPostDetail's Back and Join buttons (#1369) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE
+- **Claim:** the Back to Market and Join buttons in `apps/pwa/src/components/VisitorListing.tsx` have no visible keyboard focus
+  indicator.
+- **Why not to re-file:** the PWA has styled every element's keyboard focus since the first release:
+  `:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }` in `apps/pwa/src/index.css`. Measured in
+  Chromium with the PWA's compiled CSS, tabbing to each button on main shows `solid 2px rgb(100, 118, 100) offset 2px`. The
+  PR only swaps that outline for a Tailwind ring. Palette: a missing `focus-visible:` class is a defect only on an element
+  that suppresses the outline (`outline-none` or `focus:outline-none` with no replacement). Check the computed style before filing.
+
+### 2026-10-01 — Palette: NodeAdminLink focus ring (#1127) — FIX LANDED
+- **Category:** FIX LANDED
+- **Claim:** the 2026-09-25 entry for #1127 says the NodeAdminLink anchor's focus ring is still wanted.
+- **Why not to re-file:** it landed in #1263 (dc66f025, 2026-09-28). The anchor carries
+  `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`.
+
+### 2026-10-03 — Flow: spinning ⏳ emoji in AppVersionsCard (#1497) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE
+- **Claim:** the static "Counting…" text in the manager's AppVersionsCard needs an animated spinner.
+- **Why not to re-file:** it's cosmetic only, and the class it used (`text-terra-400`) isn't in the manager's Tailwind palette
+  (only terra 500/600 emit CSS), so it rendered nothing new. A loading indicator is wanted only where a user can't tell that
+  something is happening.
+
+### 2026-10-03 — Forge: try/catch around app-addresses admin routes (#1502) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE
+- **Claim:** the three `/api/local/admin/app-addresses` handlers (GET, confirm, remove) need try/catch to avoid uncaught 500s.
+- **Why not to re-file:** no failure was reproduced (rule 1). Koa already turns a throw into a 500, and the PR's catch blocks put
+  the raw `e.message` in the response, against the generic-error convention (A2-13: a generic message, the detail logged
+  server-side). Forge: show a reproduced failure first.
+
+### 2026-10-03 — Bolt: memoize decision list filtering in DecideSection (#1504) — CLOSED, NO MEANINGFUL GAIN
+- **Category:** CLAIM FALSE
+- **Claim:** `useMemo` on openDecisions, pastDecisions and filteredPastDecisions saves redundant filtering on re-render.
+- **Why not to re-file:** the lists are small and the filters cheap, so memoizing costs about what it saves (rule 11; see the
+  Bolt #745 entry). `pastDecisions` isn't stable enough for `filteredPastDecisions` to benefit.
+
+### 2026-10-03 — Atlas: unit test for getEngineVolumeCap (#1506) — CLOSED, TAUTOLOGICAL
+- **Category:** CLAIM FALSE
+- **Claim:** `getEngineVolumeCap` in `apps/manager/src/lib/engine-helpers.ts` lacks test coverage.
+- **Why not to re-file:** the function is `return PER_COUNTERPARTY_VOLUME_CAP`. A test that it equals that constant (and 500)
+  only restates it.
+
+### 2026-10-05 — Forge: 404 on removing a group member or post that is already gone (#1621) — CLOSED, KEEP IT IDEMPOTENT
+- **Category:** DELIBERATE DECISION
+- **Claim:** `DELETE /api/groups/:id/members/:pubkey` and the group post delete should answer 404 when the target is already gone.
+- **Why not to re-file:** removing someone already removed, deleting a post already deleted, or leaving twice should quietly succeed.
+  A double tap, a stale list or a retry on a flaky connection would otherwise show the member an error for something that worked.
+  Keep these writes idempotent.
+
+### 2026-10-05 — Vault: credentials: 'same-origin' on the bulk post delete (#1626) — CLOSED, NO-OP
+- **Category:** CLAIM FALSE (see rule 11 and the no-op entries)
+- **Why not to re-file:** `same-origin` is already fetch's default, and the call authenticates with the admin headers it is given,
+  not cookies. Adding it changes nothing.
+
+### 2026-10-05 — Pixel: accessibility label on the Pulse intake submit button (#1623) — CLOSED, LABEL REPEATS THE TEXT
+- **Category:** DELIBERATE DECISION (see #1036, #1087)
+- **Why not to re-file:** the button's visible text already names it. A label belongs only where the content is a spinner or icon, or
+  the spoken name must differ. `accessibilityState` busy is welcome on its own.
+
+### 2026-10-05 — Bolt: memoised pending-transaction lookup in the PWA Messages page (#1617) — MERGED BY MISTAKE, RULE 11 STILL STANDS
+- **Category:** NOTE
+- **What happened:** the director merged it without reading this register. It is harmless (same predicate, no behaviour change), but
+  like #1504 and #745 it memoises a cheap `find` over a small list, so it brings no measured gain.
+- **Why not to re-file more like it:** Bolt, memoisation of small lists still needs a measured gain (rule 11). #1617 is not a precedent.
+
+### 2026-10-06 — Sentinel: participant check on message edits (#1662) — LANDED, BUT NO HOLE ON MAIN
+- **Category:** NOTE
+- **Claim:** `editMessage` let a non-participant act on a DM line.
+- **Why not to re-file:** it never did. Main already refused every non-author edit (400 "Only the author can edit a message"),
+  measured over HTTPS. #1662 made edit answer as `deleteOwnMessage` already did: 403 "You are not a participant in this
+  conversation" for a DM line or a withheld line the caller isn't in, and 404 "Message not found" for an id nobody has or a line in
+  a chat the caller can't see. The #828 and #1403 rules still hold. Defence in depth, not a vulnerability fix.
+
+### 2026-10-06 — Vault: credentials: 'same-origin' on the bulk post delete (#1658) — CLOSED, THIRD FILING
+- **Category:** CLAIM FALSE (see #1626, and #1294, #1368)
+- **Why not to re-file:** the same no-op as #1626. Vault, this is the third filing: check this register before filing.
+
+### 2026-10-06 — Palette: focus ring and aria-expanded on RepaymentCard (#1663) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE (see #1369)
+- **Why not to re-file:** `index.css`'s global `:focus-visible` outline already applies; a missing `focus-visible:` class is a defect
+  only where `outline-none` removes the outline. The `aria-expanded` was a constant on a button that is unmounted while open.
+
+### 2026-10-06 — Bolt: Map lookup in `appAddressesReport` (#1665) — CLOSED, NO BENEFIT
+- **Category:** CLAIM FALSE (rule 11)
+- **Why not to re-file:** `signatureUsage` returns a few grouped (kind, address) rows; no loop scales with it. Memoising or
+  indexing a small list needs a measured gain.
+
+### 2026-10-06 — Pixel: dynamic label and hint on the group-join button (#1666) — CLOSED, HINT REPEATS THE TEXT
+- **Category:** DELIBERATE DECISION (see #1036, #1623)
+- **Why not to re-file:** the button already has an explicit label and busy state, and the hint repeated the visible note rendered
+  beneath it.
+
+### 2026-10-07 — Vault: credentials: 'same-origin' on the bulk post delete (#1671) — CLOSED, FOURTH FILING
+- **Category:** CLAIM FALSE (see #1294, #1368, #1626, #1658)
+- **Why not to re-file:** same-origin is fetch's default and the call authenticates with the admin headers it is given. Vault: check this
+  register before filing.
+
+### 2026-10-07 — Bolt: Map lookups in native MarketScreen (#1675) — CLOSED, NO BENEFIT
+- **Category:** CLAIM FALSE (rule 11)
+- **Why not to re-file:** TRUST_FILTERS has 6 fixed entries and the user's groups list is small; `find` over them costs nothing. Indexing a
+  small list needs a measured gain.
+
+### 2026-10-07 — Palette: focus-visible rings on ProposeDecisionModal inputs (#1676) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE (see #1369, #1663)
+- **Why not to re-file:** the global :focus-visible outline in index.css applies and the inputs also change border colour on focus. A
+  missing focus-visible class is a defect only where the outline is removed with no replacement.
+
+### 2026-10-07 — Flow: loading indicator in DoorSettingPanel (#1670) — CLOSED, NO MEANINGFUL GAIN
+- **Category:** CLAIM FALSE (see #1497)
+- **Why not to re-file:** the panel reads one local-node endpoint and a failed load already falls back to the form. The spinner used
+  `text-terra-400`, which the manager doesn't emit. Show a user-visible stall first.
+
+### 2026-10-08 — Bolt: ORDER BY + first row for the escrow cover photo (#1682) — CLOSED, NO BENEFIT
+- **Category:** CLAIM FALSE (rule 11; see #745, #1617, #1665)
+- **Why not to re-file:** the cover is the same whenever an `order_num` 0 photo exists, and the `.find()` runs once per row over a
+  post's few photos. It also added a SQL sort. The #1655 off-listing rule was left intact. Measure a gain first.
+
+### 2026-10-08 — Palette: min-height and focus-visible on ProfileGateModal (#1684) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE (see #1369, #1663, #1676)
+- **Why not to re-file:** `py-3` plus the 24 px line height already gives a 48 px button, and the ring classes were already there. The
+  global :focus-visible outline applies.
+
+### 2026-10-08 — Forge: try/catch on the post restore route (#1685) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE (see #1502)
+- **Why not to re-file:** Koa already turns a throw into a 500. The catch put the raw `e.message` in the response with no server-side
+  log, against the generic-error convention. Show a reproduced failure first.
+
+### 2026-10-08 — Flow: loading spinner in PeopleSafetySection (#1686) — CLOSED, NO MEANINGFUL GAIN
+- **Category:** CLAIM FALSE (see #1497, #1670)
+- **Why not to re-file:** the spinner replaced the whole list on every reload, including after a moderation action, so the list
+  flickered. A loading indicator belongs only where the user can't tell something is happening.
+
+### 2026-10-08 — Pixel: dynamic label and hint on the 2FA submit button (#1687) — CLOSED, HINT REPEATS THE TEXT
+- **Category:** DELIBERATE DECISION (see #1036, #1623, #1666)
+- **Why not to re-file:** the button keeps its label while busy and `accessibilityState` busy is already set; the hint restated the label.
+
+### 2026-10-08 — Watchman: BEANPOOL_SUITE_ENV_PASSWORD in test-admin-auth.ts (#1690) — CLOSED, NOT A REGRESSION
+- **Category:** CLAIM FALSE (rule 1 step 4; rule 11)
+- **Why not to re-file:** `scripts/server-suites.mjs` DEFAULT_ENV already sets it for every suite, and test-admin-auth is listed there.
+  The line only changed running the file raw, which is not how suites run.
+
+### 2026-10-09 — Bolt: Map lookups for TRUST_FILTERS and userGroups in the native Market (#1703) — CLOSED, NO BENEFIT
+- **Category:** CLAIM FALSE (rule 11; see #745, #1682)
+- **Why not to re-file:** `TRUST_FILTERS` has about six entries and `userGroups` is a member's own few groups; `.find()` on them
+  costs nothing a member could notice. Re-file only with a measured hot loop or a list of hundreds.
+
+### 2026-10-09 — Expo: ErrorBoundary exports in the four auth callback screens (#1704) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE (rule 11)
+- **Why not to re-file:** `apps/native/app/_layout.tsx` already exports `ErrorBoundary`, which covers every child route, including
+  `app/auth/*`. #801 (treasury detail) was one screen's case, not a pattern to repeat on every screen.
+
+### 2026-10-09 — Vault: drop x-admin-secret from the manager's registrar helpers (#1709) — CLOSED, WOULD BREAK THE REGISTRAR PANEL
+- **Category:** DELIBERATE DECISION
+- **Why not to re-file:** `getRegistrarPending`, `approveRegistrarClaim` and `revokeRegistrarClaim` call routes the registrar Worker
+  serves, and its `checkAdmin` (`apps/registrar/src/index.js:1087`) reads only `x-admin-secret`, never `X-Admin-Password`. Removing
+  the header makes the claims panel 401. The #834/#875 cleanups were for node routes. Check which server answers a route before
+  dropping a header from it.
+
+### 2026-10-09 — Forge: try/catch around the snapshot expiry interval (#1710) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE (rule 11)
+- **Why not to re-file:** `expireSnapshots()` already wraps its prune in try/catch and returns 0
+  (`apps/server/src/services/snapshot-scheduler.ts:356-364`), so the interval callback cannot throw.
+
+### 2026-10-09 — Palette: min-h-[44px] on ProfileGateModal's buttons (#1711) — CLOSED, CLAIM FALSE (SECOND TIME)
+- **Category:** CLAIM FALSE (rule 11; the same modal as #1684 the day before)
+- **Why not to re-file:** `py-3` plus the 24 px line height already renders each button at about 48 px. Measure the rendered height
+  before filing a touch-target fix.
+
+### 2026-10-10 — Bolt: O(1) Map lookup in getAllProjects (#1723) — CLOSED, NO BENEFIT
+- **Category:** NO BENEFIT (rule 11)
+- **Why not to re-file:** a node holds a handful of enterprises and the helper is one list call; the Map changes nothing a member or
+  the node can observe. Measure a real cost at realistic sizes before filing a lookup "optimisation".
+
+### 2026-10-10 — Expo: export ErrorBoundary in map.tsx (#1724) — CLOSED, PROTECTED FILE
+- **Category:** DELIBERATE DECISION (rule 7: the map, GlobalHeader, the logo and UnifiedMapPin are off-limits)
+- **Why not to re-file:** map.tsx is protected, and the root ErrorBoundary from #408 already covers the screen.
+
+### 2026-10-10 — Flow: loading indicator in StrandedEscrowsPanel (#1725) — CLOSED, NO MEANINGFUL GAIN
+- **Category:** DELIBERATE DECISION
+- **Why not to re-file:** the panel renders nothing unless stranded escrows exist; a spinner would only flash and vanish on most nodes.
+
+### 2026-10-10 — Forge: swallow bad commons_projects JSON (#1728) — CLOSED, WOULD LOSE DATA
+- **Category:** DELIBERATE DECISION
+- **Why not to re-file:** returning `[]` for a corrupt `commons_projects` value lets the next write persist the empty list and wipe every
+  stored project. Failing loudly is the safer behaviour. Do not file a silent fallback for stored money/commons data.
+- **Re-filed 2026-10-12 as #1802** (a `parseCommonsProjectsRow` helper in state-engine.ts used by createProject, plus an unrelated
+  versions.test.mjs cleanup change). Closed again for the same reason. Any helper that turns a corrupt `commons_projects` into `[]` on a
+  path that then writes is this same defect.
+
+### 2026-10-10 — Watchman: raise the test-door-work timing bound (#1730) — CLOSED, CLAIM FALSE
+- **Category:** CLAIM FALSE (no reproduction on main)
+- **Why not to re-file:** #1538 already set the bound for CI; loosening it fivefold would hide a real regression. File only with a failing
+  CI log from main.
+
+Note (#1729, Scout): closed as a bundle (an unrelated tls.ts rewrite rode with the test). The missing test of `engine/probation.ts` is
+still WANTED: re-file `test-probation.ts` and its `scripts/server-suites.mjs` line on their own.
+
+### 2026-10-11 — Watchman: raise the test-door-work timing bound again, 2 → 5 ms (#1759) — MERGED IN ERROR, REVERTED
+- **Category:** CLAIM FALSE (no reproduction on main) — a re-file of #1730
+- **Why not to re-file:** no CI run in the last 60 failed runs (any branch) shows this assertion failing. File only with a failing CI
+  log from main, quoted in the PR body.
+
+### 2026-10-11 — Bolt: O(1) peer pubkey lookup in getConversationsByMember (#1754) — CLOSED, WRONG ANSWER
+- **Category:** BEHAVIOUR CHANGE for no gain
+- **Why not to re-file:** `parts.find()` returns the FIRST other participant; a Map filled in a loop keeps the LAST, so a group
+  conversation's listed peer changes. Conversations have a handful of participants; there is nothing to speed up.
+
+### 2026-10-11 — Expo: take the first of repeated search params in claim-community.tsx (#1753) — CLOSED, DECIDED
+- **Category:** DELIBERATE BEHAVIOUR
+- **Why not to re-file:** a claim link that repeats node/code/id is ambiguous and is refused on purpose (an array gives no value).
+  Taking the first of two differing server addresses in a claim link is the wrong answer.
+
+### 2026-10-13 — Palette: tabIndex, key handler and focus ring on AddressSearch's matches (#1818) — CLOSED
+- **Category:** CLAIM FALSE
+- **Claim:** the address matches in `apps/pwa/src/components/AddressSearch.tsx` can't be chosen from the keyboard, so each `role="option"` needs `tabIndex={0}`, an Enter/Space `onKeyDown` and a focus-visible ring.
+- **Why not to re-file:** the search box is an ARIA combobox: focus stays in the input, ArrowUp/ArrowDown move `aria-activedescendant` and `aria-selected`, Enter picks the highlighted match and Escape closes the list. Measured in vitest on main: Enter searches, ArrowDown twice then Enter picks the second match, and focus never leaves the box. The PR made every match a Tab stop (2 extra stops for 2 matches), and while a match held focus the arrow keys did nothing. Palette: the options of a combobox or listbox are never Tab stops; look for `aria-activedescendant` before filing.
+
+### 2026-10-13 — Flow: loading indicators in DoorSettingPanel and KnownFloorPanel (#1820) — CLOSED
+- **Category:** CLAIM FALSE
+- **Claim:** `apps/manager/src/components/modules/DoorSettingPanel.tsx` and `KnownFloorPanel.tsx` need a spinner while their first read is in flight.
+- **Why not to re-file:** a re-file of #1670 (the same DoorSettingPanel spinner, closed 2026-10-07) and #1686 (a spinner in PeopleSafetySection, the section both panels sit in, closed 2026-10-08). Each panel makes one read of the node the operator is signed in to and renders nothing on a node older than its setting, so a spinner there flashes and vanishes (#1725). Flow: show a stall an operator can see before filing a loading indicator, and search this register for the component's name first.
+
+### 2026-10-13 — Vault: credentials: 'same-origin' on the bulk post delete (#1821) — CLOSED
+- **Category:** CLAIM FALSE
+- **Claim:** `sendBulkDeleteBatch` in `apps/manager/src/lib/bulk-delete-posts.ts` omits `credentials: 'same-origin'`, so cookie sessions get 401.
+- **Why not to re-file:** the fifth filing of this exact change (#1626, #1658, #1671, #1821; #1294 and #1368 on other helpers). `same-origin` is fetch's default (`new Request(url, { method: 'POST' }).credentials` is `'same-origin'`), and the call authenticates with the admin headers it is given. The PR's test asserts the literal option, not a behaviour. Where an older `.jules/vault.md` journal entry says "Always include `credentials: 'same-origin'`", this register wins. Vault: grep this register for `same-origin` before filing anything about `credentials`.
+
+### 2026-10-13 — Expo: export ErrorBoundary in rekey-code.tsx (#1823) — CLOSED
+- **Category:** CLAIM FALSE
+- **Claim:** `apps/native/app/rekey-code.tsx` has no `ErrorBoundary` export, so a render error on that screen isn't caught.
+- **Why not to re-file:** `apps/native/app/_layout.tsx` exports `ErrorBoundary`, which covers every child route, this one included (#1704, 2026-10-09; #1724). #801 was one screen's case, not a pattern to repeat. Expo: do not file per-screen `ErrorBoundary` exports; the journal's "check screens for missing ErrorBoundary exports" pattern is retired.
+
+Note (#1819, Scout): closed because its exemption checks were vacuous: with the blank-memo, system-account and enterprise exemptions all removed from `apps/server/src/engine/withheld-notes.ts`, `test-withheld-notes.ts` still passed 22/22, since every such check ran where no block existed. The coverage is still WANTED: re-file it once, with each exemption asserted under a `member_blocks` row that would otherwise withhold the note (blank memos after the block; the enterprise as the blocker and as the blocked), and show the suite failing with the exemption removed.

@@ -20,6 +20,23 @@ describe('PublicAddressPanel Component', () => {
         vi.clearAllMocks();
     });
 
+    it('an admin, who is not shown the tunnel token, is told only an owner can see it', async () => {
+        vi.spyOn(global, 'fetch').mockImplementation((url) => {
+            const body = String(url).includes('/api/local/admin/public-address/status')
+                ? { success: true, status: 'live', name: 'cairns', hostname: 'cairns.beanpool.org', mode: 'tunnel', tunnelTokenOwnerOnly: true }
+                : { success: true, logs: [] };
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) } as Response);
+        });
+
+        render(<PublicAddressPanel activeNode={mockActiveNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('cairns.beanpool.org')).toBeInTheDocument();
+        });
+        expect(screen.getByTestId('public-address-token-owner-only')).toHaveTextContent('Only an owner can see the tunnel token.');
+        expect(screen.queryByLabelText(/Tunnel Token/i)).not.toBeInTheDocument();
+    });
+
     it('renders with a real payload (status live, tunnel token, and live logs)', async () => {
         const realPayload = {
             success: true,
@@ -92,7 +109,7 @@ describe('PublicAddressPanel Component', () => {
         expect(screen.getByText('Step 4/4')).toBeInTheDocument();
 
         // Operational buttons
-        expect(screen.getByRole('button', { name: /Reset Tunnel/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Restart tunnel/i })).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /Take offline/i })).toBeInTheDocument();
     });
 
@@ -260,12 +277,12 @@ describe('PublicAddressPanel Component', () => {
         });
     });
 
-    it('requires confirmation step before restarting the tunnel sidecar', async () => {
+    it('requires confirmation step before restarting the tunnel inside the server', async () => {
         let restartCalled = false;
 
         vi.spyOn(global, 'fetch').mockImplementation((url, opts) => {
             const strUrl = String(url);
-            if (strUrl.includes('/api/local/admin/public-address/restart-sidecar') && opts?.method === 'POST') {
+            if (strUrl.includes('/api/local/admin/public-address/restart-tunnel') && opts?.method === 'POST') {
                 restartCalled = true;
                 return Promise.resolve({
                     ok: true,
@@ -294,24 +311,64 @@ describe('PublicAddressPanel Component', () => {
         render(<PublicAddressPanel activeNode={mockActiveNode} />);
 
         await waitFor(() => {
-            expect(screen.getByRole('button', { name: /Reset Tunnel/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /Restart tunnel/i })).toBeInTheDocument();
         });
 
-        // Click Reset Tunnel
-        fireEvent.click(screen.getByRole('button', { name: /Reset Tunnel/i }));
+        // Click Restart tunnel
+        fireEvent.click(screen.getByRole('button', { name: /Restart tunnel/i }));
 
         // Confirmation modal appears
-        expect(screen.getByText('Restart Tunnel Sidecar')).toBeInTheDocument();
-        expect(screen.getByText(/Are you sure you want to force-restart the Cloudflare tunnel sidecar process/i)).toBeInTheDocument();
+        expect(screen.getByText('Restart the tunnel')).toBeInTheDocument();
+        expect(screen.getByText(/Restart the Cloudflare tunnel inside this server\?/i)).toBeInTheDocument();
         expect(restartCalled).toBe(false);
 
         // Click Confirm inside modal
-        const confirmBtn = screen.getByRole('button', { name: 'Restart Sidecar' });
+        const confirmBtn = screen.getByRole('button', { name: 'Restart now' });
         fireEvent.click(confirmBtn);
 
         await waitFor(() => {
             expect(restartCalled).toBe(true);
         });
+        expect(screen.queryByText(/sidecar/i)).not.toBeInTheDocument();
+    });
+
+    const statusOnly = (payload: Record<string, unknown>) =>
+        vi.spyOn(global, 'fetch').mockImplementation((url) => Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve(String(url).includes('/public-address/status') ? payload : { logs: [] }),
+        } as Response));
+
+    it('shows the tunnel inside the server as it really is: connected, or retrying and why', async () => {
+        statusOnly({
+            status: 'live', hostname: 'cairns.beanpool.org', mode: 'tunnel',
+            tunnel: { state: 'connected', since: '2026-09-28T10:00:00Z', connections: 4, reason: null, version: '2026.9.3' },
+        });
+        const { unmount } = render(<PublicAddressPanel activeNode={mockActiveNode} />);
+        await waitFor(() => {
+            expect(screen.getByTestId('public-address-tunnel')).toHaveTextContent('Tunnel: connected (4)');
+        });
+        unmount();
+
+        vi.restoreAllMocks();
+        statusOnly({
+            status: 'live', hostname: 'cairns.beanpool.org', mode: 'tunnel',
+            tunnel: { state: 'retrying', since: '2026-09-28T10:02:00Z', connections: 0, reason: 'Unauthorized: Tunnel not found' },
+        });
+        render(<PublicAddressPanel activeNode={mockActiveNode} />);
+        await waitFor(() => {
+            expect(screen.getByTestId('public-address-tunnel')).toHaveTextContent(/Tunnel: retrying: Unauthorized: Tunnel not found since/);
+        });
+        expect(screen.queryByTestId('docker-socket-warning')).not.toBeInTheDocument();
+    });
+
+    it('warns when docker-compose.yml still mounts Docker\'s control socket', async () => {
+        statusOnly({ status: 'none', dockerSocket: true, tunnel: { state: 'off', connections: 0, reason: null } });
+        render(<PublicAddressPanel activeNode={mockActiveNode} />);
+        await waitFor(() => {
+            expect(screen.getByTestId('docker-socket-warning')).toHaveTextContent(/still mounts Docker's control socket/);
+        });
+        expect(screen.getByTestId('docker-socket-warning')).toHaveTextContent(/controls the whole machine/);
     });
 
     it('requires confirmation step before taking the node offline', async () => {
@@ -471,11 +528,11 @@ describe('PublicAddressPanel Component', () => {
         render(<PublicAddressPanel activeNode={mockActiveNode} />);
 
         await waitFor(() => {
-            expect(screen.getByRole('button', { name: /Reset Tunnel/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /Restart tunnel/i })).toBeInTheDocument();
         });
 
         // Open modal
-        fireEvent.click(screen.getByRole('button', { name: /Reset Tunnel/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Restart tunnel/i }));
         expect(screen.getByRole('dialog')).toBeInTheDocument();
 
         // Dismiss via Escape key
@@ -483,7 +540,7 @@ describe('PublicAddressPanel Component', () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 
         // Open modal again
-        fireEvent.click(screen.getByRole('button', { name: /Reset Tunnel/i }));
+        fireEvent.click(screen.getByRole('button', { name: /Restart tunnel/i }));
         const dialog = screen.getByRole('dialog');
         expect(dialog).toBeInTheDocument();
 
@@ -526,6 +583,75 @@ describe('PublicAddressPanel Component', () => {
         expect(domainSpan?.textContent).toBe('long-community-subdomain-overflow-test.beanpool.org');
     });
 
+    // M3 of the 2026-10-01 registrar review: the registrar pauses a name another server answers at, and this server
+    // takes it back by itself. Until then a paused status read as "Couldn't reach the registrar".
+    it('a name the address service paused says so, why, and that this server takes it back by itself', async () => {
+        const pausedPayload = (reason: string) => ({ success: true, status: 'paused', name: 'cairns', hostname: 'cairns.beanpool.org', mode: 'tunnel', reason, since: 1790000000 });
+        vi.spyOn(global, 'fetch').mockImplementation((url) => Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve(String(url).includes('/public-address/status') ? pausedPayload('content-swap') : { logs: [] }),
+        } as Response));
+        const { unmount } = render(<PublicAddressPanel activeNode={mockActiveNode} />);
+        const card = await screen.findByTestId('public-address-paused');
+        expect(card.textContent).toContain('Paused');
+        expect(card.textContent).toContain('cairns.beanpool.org');
+        expect(card.textContent).toMatch(/something that is not a BeanPool server answered at this address/);
+        expect(card.textContent).toMatch(/asks for it back by itself/);
+        expect(card.textContent).toMatch(/nobody else can claim it/);
+        expect(screen.queryByText(/Couldn.t reach the registrar/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /New tunnel key/i })).not.toBeInTheDocument();
+        unmount();
+
+        vi.restoreAllMocks();
+        vi.spyOn(global, 'fetch').mockImplementation((url) => Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve(String(url).includes('/public-address/status') ? pausedPayload('admin') : { logs: [] }),
+        } as Response));
+        render(<PublicAddressPanel activeNode={mockActiveNode} />);
+        const admin = await screen.findByTestId('public-address-paused');
+        expect(admin.textContent).toMatch(/the BeanPool project paused it/);
+        expect(admin.textContent).toMatch(/until the BeanPool project lifts the pause/);
+        expect(admin.textContent).not.toMatch(/asks for it back by itself/);
+    });
+
+    it('New tunnel key: confirmed first, then the node rotates the name onto a fresh tunnel; offered only for a live tunnel name', async () => {
+        let rotateCalls = 0;
+        let mode = 'tunnel';
+        vi.spyOn(global, 'fetch').mockImplementation((url, opts) => {
+            const strUrl = String(url);
+            if (strUrl.includes('/api/local/admin/public-address/rotate') && opts?.method === 'POST') {
+                rotateCalls++;
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ success: true, status: 'live' }) } as Response);
+            }
+            if (strUrl.includes('/api/local/admin/public-address/status')) {
+                return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ status: 'live', hostname: 'cairns.beanpool.org', mode }) } as Response);
+            }
+            return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ logs: [] }) } as Response);
+        });
+
+        const { unmount } = render(<PublicAddressPanel activeNode={mockActiveNode} />);
+        const button = await screen.findByRole('button', { name: /New tunnel key/i });
+        fireEvent.click(button);
+        expect(screen.getByText('Give the tunnel a new key')).toBeInTheDocument();
+        // Honest about its limit: it does not lock out a copied data folder or backup.
+        expect(screen.getByText(/does NOT protect you from a copy of this server’s data folder or a backup/)).toBeInTheDocument();
+        expect(screen.queryByText(/nobody can use a copy/)).not.toBeInTheDocument();
+        expect(screen.getByText(/the old key stops working at once/i)).toBeInTheDocument();
+        expect(rotateCalls).toBe(0);
+        fireEvent.click(screen.getByRole('button', { name: 'New key now' }));
+        await waitFor(() => expect(rotateCalls).toBe(1));
+        expect(await screen.findByText(/New tunnel key: the old one no longer works/i)).toBeInTheDocument();
+        unmount();
+
+        // A direct name runs no tunnel: no key to replace.
+        mode = 'direct';
+        render(<PublicAddressPanel activeNode={mockActiveNode} />);
+        await screen.findByText('Live');
+        expect(screen.queryByRole('button', { name: /New tunnel key/i })).not.toBeInTheDocument();
+    });
+
     it('sets role="log", aria-live="polite", and aria-atomic="false" on propagation monitor terminal', async () => {
         vi.spyOn(global, 'fetch').mockImplementation(() => {
             return Promise.resolve({
@@ -545,6 +671,73 @@ describe('PublicAddressPanel Component', () => {
         expect(terminal.getAttribute('role')).toBe('log');
         expect(terminal.getAttribute('aria-live')).toBe('polite');
         expect(terminal.getAttribute('aria-atomic')).toBe('false');
+    });
+    describe('a name the key holds besides the address', () => {
+        const mockNames = (names: () => unknown, extraStatus = 200) => {
+            const calls: { url: string; body: any }[] = [];
+            vi.spyOn(global, 'fetch').mockImplementation((url, init) => {
+                const u = String(url);
+                calls.push({ url: u, body: init?.body ? JSON.parse(String(init.body)) : null });
+                let status = 200;
+                let body: unknown = { success: true, logs: [] };
+                if (u.includes('/public-address/status')) body = { success: true, status: 'live', name: 'owner-pick', hostname: 'owner-pick.beanpool.org', mode: 'tunnel' };
+                else if (u.includes('/public-address/extra-names')) { status = extraStatus; body = extraStatus === 200 ? { success: true, names: names() } : { error: 'Only an owner of this node can change its public address' }; }
+                else if (u.includes('/public-address/release-name')) body = { success: true, name: 'install-race', status: 'released' };
+                return Promise.resolve({ ok: status === 200, status, json: () => Promise.resolve(body) } as Response);
+            });
+            return calls;
+        };
+
+        it('shows an owner one line for the install\'s late name, and Release releases it by name', async () => {
+            let held = [{ name: 'install-race', hostname: 'install-race.beanpool.org', state: 'live', releasable: true, fromInstall: true }];
+            const calls = mockNames(() => held);
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            const line = await screen.findByTestId('extra-name');
+            expect(line).toHaveTextContent('This community also holds install-race.beanpool.org from the install; it is not used. Release it?');
+            held = [];
+            fireEvent.click(screen.getByRole('button', { name: 'Release' }));
+            // It asks first, as Take offline does, and says the address stays (#1583 review r4176052081).
+            const dialog = await screen.findByRole('dialog');
+            expect(dialog).toHaveTextContent("Release install-race.beanpool.org? Your community's address stays owner-pick.beanpool.org.");
+            expect(calls.some((c) => c.url.includes('/public-address/release-name'))).toBe(false);
+            fireEvent.click(screen.getByRole('button', { name: 'Release it' }));
+            await waitFor(() => expect(screen.queryByTestId('extra-name')).not.toBeInTheDocument());
+            const rel = calls.filter((c) => c.url.includes('/public-address/release-name'));
+            expect(rel).toHaveLength(1);
+            expect(rel[0].body?.name).toBe('install-race');
+            expect(calls.some((c) => c.url.includes('/public-address/offline'))).toBe(false);
+            expect(screen.getByText(/install-race\.beanpool\.org released\. This community's address is unchanged\./)).toBeInTheDocument();
+        });
+
+        it('Cancel releases nothing; the line\'s text keeps a readable width, the button wraps under it', async () => {
+            const calls = mockNames(() => [{ name: 'install-race', hostname: 'install-race.beanpool.org', state: 'live', releasable: true, fromInstall: true }]);
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            const line = await screen.findByTestId('extra-name');
+            expect(line.querySelector('span')?.className).toMatch(/basis-\[12rem\]/);
+            fireEvent.click(screen.getByRole('button', { name: 'Release' }));
+            await screen.findByRole('dialog');
+            fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+            await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+            expect(calls.some((c) => c.url.includes('/public-address/release-name'))).toBe(false);
+            expect(screen.getByTestId('extra-name')).toBeInTheDocument();
+        });
+
+        it('an older address service that cannot release by name: the line only, no button', async () => {
+            mockNames(() => [{ name: 'install-race', hostname: 'install-race.beanpool.org', state: null, releasable: false, fromInstall: true }]);
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            const line = await screen.findByTestId('extra-name');
+            expect(line).toHaveTextContent('This community also holds install-race.beanpool.org from the install; it is not used.');
+            expect(line).not.toHaveTextContent('Release it?');
+            expect(screen.queryByRole('button', { name: 'Release' })).not.toBeInTheDocument();
+        });
+
+        it('an admin (refused the list) is shown nothing', async () => {
+            const calls = mockNames(() => [], 403);
+            render(<PublicAddressPanel activeNode={mockActiveNode} />);
+            await waitFor(() => expect(calls.some((c) => c.url.includes('/public-address/extra-names'))).toBe(true));
+            await screen.findByText('owner-pick.beanpool.org');
+            expect(screen.queryByTestId('extra-name')).not.toBeInTheDocument();
+        });
     });
 });
 

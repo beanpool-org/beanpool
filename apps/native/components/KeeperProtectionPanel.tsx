@@ -2,33 +2,56 @@
  * KeeperProtectionPanel — SSO Enrolment Panel
  *
  * NOTE: Friend / keeper recovery has been removed. This panel now hosts SSO enrolment only
- * (Sign-In Recovery Providers: Apple, Google, Facebook, GitHub).
+ * (Sign-In Recovery Providers: Apple, Google, Facebook).
  */
 import React from 'react';
 import { StyleSheet, Text, View, Platform, TouchableOpacity } from 'react-native';
-import { colors } from '../constants/colors';
+import { colors as lightColors, type AppColors } from '../constants/colors';
 import type { Protection } from '../utils/protection-state';
-import { GoogleButton, AppleButton, FacebookButton, GitHubButton } from './SsoButton';
-import type { SsoProvider } from '../utils/sso-signin';
+import { GoogleButton, AppleButton, FacebookButton } from './SsoButton';
+import { SSO_PROVIDER_NAMES as PROVIDER_NAMES, type SsoProvider } from '../utils/sso-providers';
 import { NO_WORDS_WAY_BACK, SSO_WORDS_NOTE } from '../utils/no-words-copy';
-
-const PROVIDER_NAMES: Record<SsoProvider, string> = {
-    apple: 'Apple',
-    google: 'Google',
-    facebook: 'Facebook',
-    github: 'GitHub',
-};
+import { hasVault } from '../utils/vault-config';
 
 /**
- * Under a connected sign-in: who can open the copy it keeps (recovery seal S3; Marty, card sso-copy-lock, D-2 = a,
- * 2026-09-26). The server's operators can: their process holds data/recovery-seal.key and receives the sign-in's id
- * on every sign-in it checks. A copy of the database alone can't, but only on a server with the seal, and this phone
- * may talk to one that has not updated yet. The 12 words part is for a phone that has them: on one restored with a
- * sign-in and no words, "use only your 12 words" would talk a member out of their only way back.
+ * Under a connected sign-in, in a build without a key vault (utils/vault.ts `signInCopiesAt`): who can open the copy
+ * the member's community keeps (recovery seal S3; Marty, card sso-copy-lock, D-2 = a, 2026-09-26). The server's
+ * operators can: their process holds data/recovery-seal.key and receives the sign-in's id on every sign-in it checks.
+ * A copy of the database alone can't, but only on a server with the seal, and this phone may talk to one that has not
+ * updated yet. The 12 words part is for a phone that has them: on one restored with a sign-in and no words, "use only
+ * your 12 words" would talk a member out of their only way back.
  */
 export const SIGN_IN_COPY_OPENERS =
     "The people who run your community's server can open the copy of your account kept for your sign-in, because their server checks your sign-in. A stolen copy of the server's database can't, once the server has been updated for it.";
 export const SIGN_IN_COPY_WORDS_ONLY = 'If you would rather nobody but you could get in, use only your 12 words.';
+
+/**
+ * The same, in a build with BeanPool's key vault (key vault design D6, Marty 2026-09-28: the honest words; D1: one
+ * custodian, Marty, until the reshare to people in other countries, and the guide says so). The copy is at the vault,
+ * not at any community. BeanPool can open it (the vault checks the sign-in itself, so it learns the id that opens the
+ * copy: review FABLE-sec-crypto F1); the host can read the running server's memory; a court could order it; anyone
+ * holding the sign-in account could get in, unless a device of the member's stops the day's wait (SSO_WAIT_NOTE, in the
+ * footnote). The guide says the same at length once the vault is live: the parked pages in issue #1349.
+ */
+export const VAULT_COPY_OPENERS =
+    "BeanPool's key vault, a small server in Iceland, keeps the copy of your account that your sign-in opens. BeanPool can open these copies: for now one person, BeanPool's founder, looks after the vault, and it is moving to three people in different countries, two of whom must act together. The company that hosts it can read its memory while it runs. A court could order a copy opened, and anyone who takes over your sign-in account could get in.";
+
+/**
+ * Above the sign-in buttons, in a build without a key vault: the community's server keeps the whole copy (single blob), so
+ * the sign-in brings the account back through it. Was "Any single connected account, plus your community hub, restores
+ * your account": that read as two keys, neither enough alone, when the server's operators can open the copy by
+ * themselves (SIGN_IN_COPY_OPENERS; review FABLE-sec-sso finding 1, honest wording 2026-10-01).
+ */
+export const COMMUNITY_SSO_GROUP_NOTE =
+    "Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, through your community's server, which keeps the copy.";
+
+/** Above the sign-in buttons, in a build with a key vault: what a linked sign-in does now that the vault keeps the copy. */
+export const SSO_GROUP_NOTE =
+    'Connect more than one, in case you lose one. Any one of them brings your account back on a new phone, in every community.';
+
+/** How a sign-in restore goes with a key vault (D2: every one waits a day unless a device that has the account says it's you). */
+export const SSO_WAIT_NOTE =
+    "it takes a day, or less if another phone or computer of yours says it's you, and your devices are told so they can stop it.";
 
 export function formatCommunityName(raw?: string | null): string | null {
     if (!raw) return null;
@@ -53,29 +76,37 @@ export function KeeperProtectionPanel({
     onProtectSso,
     onDisconnectSso,
     hasWords,
+    colors = lightColors,
 }: {
     protection: Protection;
+    /** The drawn theme's colours. Settings passes them; welcome, which is light throughout, keeps the default. */
+    colors?: AppColors;
     /**
      * Whether this phone holds the 12 words (`hasMnemonic`). A phone restored with a sign-in holds
      * none, so the panel must not call them the way back or tell the member to keep them written down.
      */
     hasWords: boolean;
     /**
-     * The community this protection describes. Keepers are enrolled PER NODE, so a
-     * panel that names no community reads as a property of the account and is how a
-     * member ends up attempting recovery on a node that holds nothing for them.
+     * The community this protection describes, in a build without a key vault: there keepers are enrolled PER NODE, so
+     * a panel that names no community reads as a property of the account and is how a member ends up attempting
+     * recovery on a node that holds nothing for them. Unused with a vault, whose one copy covers every community.
      */
     communityName?: string;
     onProtectSso?: (provider: SsoProvider) => void;
     onDisconnectSso?: (provider: SsoProvider) => void;
 }): React.JSX.Element {
+    const styles = stylesFor(colors);
     const enrolledSso = protection.enrolledSso ?? [];
     const allProviders: SsoProvider[] = Platform.OS === 'ios'
-        ? ['apple', 'google', 'facebook', 'github']
-        : ['google', 'facebook', 'github'];
+        ? ['apple', 'google', 'facebook']
+        : ['google', 'facebook'];
 
-    const community = formatCommunityName(communityName);
+    // Where this build keeps the copy (utils/vault.ts `signInCopiesAt`). One copy at the key vault covers every
+    // community, so there the heading names none; without a vault each community keeps its own, so it names this one.
+    const atVault = hasVault();
+    const community = atVault ? null : formatCommunityName(communityName);
     const coveredHeading = community ? `🛡️ You're covered on ${community}` : "🛡️ You're covered";
+    const copyOpeners = atVault ? VAULT_COPY_OPENERS : SIGN_IN_COPY_OPENERS;
 
     const renderSsoProviders = () => {
         if (Platform.OS === 'web' || !onProtectSso) return null;
@@ -84,9 +115,11 @@ export function KeeperProtectionPanel({
             <View style={styles.ssoGroup}>
                 <Text style={styles.ssoGroupTitle}>Sign-In Recovery Providers (1-of-N)</Text>
                 <Text style={styles.ssoGroupSubtitle}>
-                    {hasWords
-                        ? `Connect more than one for redundancy. Any single connected account, plus your community hub, restores your account on a new phone. ${SSO_WORDS_NOTE} It only works while your hub is running — so keep the words written down.`
-                        : 'Connect more than one for redundancy. Any single connected account, plus your community hub, restores your account on a new phone. It only works while your hub is running.'}
+                    {atVault
+                        ? (hasWords ? `${SSO_GROUP_NOTE} ${SSO_WORDS_NOTE} Keep the words written down as well.` : SSO_GROUP_NOTE)
+                        : hasWords
+                            ? `${COMMUNITY_SSO_GROUP_NOTE} ${SSO_WORDS_NOTE} It only works while your community's server is running, so keep the words written down.`
+                            : `${COMMUNITY_SSO_GROUP_NOTE} It only works while your community's server is running.`}
                 </Text>
 
                 {allProviders.map((prov) => {
@@ -113,9 +146,9 @@ export function KeeperProtectionPanel({
                                     >✅</Text>
                                     <Text style={styles.providerName}>{PROVIDER_NAMES[prov]} Connected</Text>
                                 </View>
-                                {/* Connecting again replaces this sign-in's copy with one that carries the 12 words.
-                                    The only way to add them to a copy made before copies carried words: the node
-                                    refuses to disconnect a member's last sign-in. Pointless on a phone without words. */}
+                                {/* Connecting again replaces this sign-in's copy (at the vault, or without one at the
+                                    community) with a fresh one, which carries the 12 words: the way to add them to a
+                                    copy made without them. Pointless on a phone without words. */}
                                 <View style={styles.providerActions}>
                                     {hasWords && (
                                         <TouchableOpacity
@@ -162,21 +195,11 @@ export function KeeperProtectionPanel({
                             />
                         );
                     }
-                    if (prov === 'facebook') {
-                        return (
-                            <FacebookButton
-                                key="facebook"
-                                title="Protect with Facebook"
-                                onPress={() => onProtectSso('facebook')}
-                                style={{ marginTop: 8 }}
-                            />
-                        );
-                    }
                     return (
-                        <GitHubButton
-                            key="github"
-                            title="Protect with GitHub"
-                            onPress={() => onProtectSso('github')}
+                        <FacebookButton
+                            key="facebook"
+                            title="Protect with Facebook"
+                            onPress={() => onProtectSso('facebook')}
                             style={{ marginTop: 8 }}
                         />
                     );
@@ -185,7 +208,7 @@ export function KeeperProtectionPanel({
                     row on Android, and its copy is on the server all the same. */}
                 {enrolledSso.length > 0 && (
                     <Text style={styles.copyOpeners}>
-                        {hasWords ? `${SIGN_IN_COPY_OPENERS} ${SIGN_IN_COPY_WORDS_ONLY}` : SIGN_IN_COPY_OPENERS}
+                        {hasWords ? `${copyOpeners} ${SIGN_IN_COPY_WORDS_ONLY}` : copyOpeners}
                     </Text>
                 )}
                 <Text style={styles.actionNote}>This is not a login — your account stays your own key.</Text>
@@ -204,9 +227,13 @@ export function KeeperProtectionPanel({
                     </View>
                 ))}
                 <Text style={styles.footnote}>
-                    {enrolledSso.length > 1
-                        ? `Protected by ${enrolledSso.length} sign-in accounts + your community hub. Any single account, together with the hub, restores your account.`
-                        : "Your sign-in account can't restore your account alone — it takes your community's server too."}
+                    {atVault
+                        ? (enrolledSso.length > 1
+                            ? `Protected by ${enrolledSso.length} sign-in accounts, in every community. Any one of them brings your account back on a new phone: ${SSO_WAIT_NOTE}`
+                            : `Protected by your sign-in account, in every community. It brings your account back on a new phone: ${SSO_WAIT_NOTE}`)
+                        : enrolledSso.length > 1
+                            ? `Protected by ${enrolledSso.length} sign-in accounts. Any one of them brings your account back, through your community's server, which keeps the copy.`
+                            : "Protected by your sign-in account. It brings your account back, through your community's server, which keeps the copy."}
                 </Text>
 
                 {renderSsoProviders()}
@@ -238,7 +265,17 @@ export function KeeperProtectionPanel({
     );
 }
 
-const styles = StyleSheet.create({
+const cache = new WeakMap<AppColors, ReturnType<typeof make>>();
+function stylesFor(colors: AppColors) {
+    let s = cache.get(colors);
+    if (!s) {
+        s = make(colors);
+        cache.set(colors, s);
+    }
+    return s;
+}
+
+const make = (colors: AppColors) => StyleSheet.create({
     panel: { borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1 },
     covered: { backgroundColor: colors.feedback.success.bg, borderColor: colors.feedback.success.border },
     wordsOnly: { backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border },

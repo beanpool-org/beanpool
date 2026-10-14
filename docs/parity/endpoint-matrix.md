@@ -126,7 +126,7 @@ client can appear to miss a route it reaches dynamically. Method mismatches are 
 - /api/local/admin/public-address/claim
 - /api/local/admin/public-address/logs
 - /api/local/admin/public-address/offline
-- /api/local/admin/public-address/restart-sidecar
+- /api/local/admin/public-address/restart-tunnel
 - /api/local/admin/public-address/status
 - /api/local/admin/public-address/update
 - /api/local/admin/pulse/channels
@@ -178,16 +178,6 @@ client can appear to miss a route it reaches dynamically. Method mismatches are 
 - /api/local/status
 - /api/local/update-identity
 - /api/local/verify-password
-- /api/manager/backups/download-db
-- /api/manager/backups/download-history
-- /api/manager/backups/download-identity
-- /api/manager/backups/history
-- /api/manager/backups/replication-config
-- /api/manager/backups/snapshots/create
-- /api/manager/backups/snapshots/delete
-- /api/manager/backups/snapshots/list
-- /api/manager/backups/status
-- /api/manager/backups/trigger
 - /api/marketplace/posts/:id/photos/:orderNum
 - /api/member/pulse/items/:id/delete
 - /api/pricing-guide/admin/aggregate

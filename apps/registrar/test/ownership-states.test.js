@@ -594,6 +594,33 @@ test('ensure: an existing record is PATCHed, never POSTed over; an intact name i
     } finally { w.restore(); }
 });
 
+// A node whose tunnel moved inside it (apps/server/src/services/tunnel-connector.ts) claims its own live name once with
+// its loopback as the origin. That must be a heal: the ingress follows the origin, and nothing else changes.
+test('the owner\'s claim of its live name with a new origin moves the ingress there: same tunnel, same token, still live', async () => {
+    const w = await world();
+    try {
+        const owner = await makeKey();
+        const first = await w.claim(owner, { name: 'moved', origin: 'http://beanpool-node:8080', community_name: 'Moved Town', contact: 'a@b.org' });
+        assert.equal(first.body.status, 'live');
+        const row = await w.row('moved');
+        const service = () => w.cf.tunnels.get(row.tunnel_id).ingress.find((r) => r.hostname === 'moved.beanpool.org')?.service;
+        assert.equal(service(), 'http://beanpool-node:8080');
+
+        const from = w.cf.calls.length;
+        const moved = await w.claim(owner, { name: 'moved', origin: 'http://127.0.0.1:8080' });
+        assert.equal(moved.status, 200, JSON.stringify(moved.body));
+        assert.equal(moved.body.status, 'live');
+        assert.equal(moved.body.tunnelToken, first.body.tunnelToken, 'the same token: the node\'s running tunnel keeps working');
+        assert.equal(service(), 'http://127.0.0.1:8080', 'the ingress now leads to the node\'s loopback');
+        const now = await w.row('moved');
+        assert.equal(now.origin, 'http://127.0.0.1:8080');
+        assert.equal(now.tunnel_id, row.tunnel_id, 'the same tunnel');
+        assert.equal(now.community_name, 'Moved Town', 'a claim that carries no community name leaves it');
+        assert.equal(now.contact, 'a@b.org', 'or contact');
+        assert.ok(!w.cf.calls.slice(from).some((c) => c.startsWith('POST') || c.startsWith('DELETE')), 'nothing made or deleted');
+    } finally { w.restore(); }
+});
+
 test('ensure: a tunnel made for a provisioning that then fails is removed, so the retry can make one', async () => {
     const w = await world();
     try {
@@ -1375,6 +1402,7 @@ test('migration 0002: incident victims go back to their original key, paused; a 
         assert.equal(snapshot(), before);
         w.sqlite.exec(migration('0003_decision_seq.sql'));   // the Worker below reads 0003's column
         w.sqlite.exec(migration('0004_teardown.sql'));       // … and may write 0004's table
+        w.sqlite.exec(migration('0007_content_swap.sql'));   // … and 0007's column
 
         // And the Worker on top: the victim's own node heals it (today's nodes do so with a claim) on a fresh
         // tunnel; the taker's key cannot have it; the taker keeps `test`.
@@ -1506,7 +1534,7 @@ test('race: two heals from one key, the second landing just before the first goe
         // The node has no token for the fresh tunnel yet, so the second heal's re-attest fails.
         w.nodes[`${name}.beanpool.org`] = unreachableTunnel;
         let second;
-        w.beforeRun(/^UPDATE name_allocations SET status=\?, pause_reason=\?, paused_at=\?, attest_fails=\? WHERE/, async () => { second = await w.heal(owner); });
+        w.beforeRun(/^UPDATE name_allocations SET status=\?, pause_reason=\?, paused_at=\?, attest_fails=\?, swap_fails=\? WHERE/, async () => { second = await w.heal(owner); });
         const first = await w.claim(owner, { name });
         assert.ok(second, 'the second heal landed');
         const why = `first ${first.status} ${JSON.stringify(first.body)}; second ${second.status} ${JSON.stringify(second.body)}`;

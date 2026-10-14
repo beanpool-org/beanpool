@@ -1,6 +1,6 @@
 /**
  * The one chat header (groups decision 9): back, then the owner — "🌻 Garden Crew · group",
- * "🥖 Bakery · enterprise", "📅 Working bee · event" — and an optional menu. Tapping the owner opens the owner's
+ * "🥖 Bakery · enterprise", "🎯 Hall roof · project", "📅 Working bee · event" — and an optional menu. Tapping the owner opens the owner's
  * page, which is the chat's "info" screen.
  *
  * At 320dp and 1.3× text the name truncates on its own line and the kind word sits under it, so the kind is
@@ -17,6 +17,8 @@ interface Props {
     kind: YourChatKind;
     name: string;
     category?: string | null;
+    /** An enterprise-kind chat's lifecycle: 'bounded' is a project (§3.1). */
+    lifecycle?: string | null;
     /** A second fact after the kind word, e.g. "12 members" or "muted". */
     detail?: string | null;
     onBack: () => void;
@@ -24,7 +26,7 @@ interface Props {
     onMenu?: () => void;
 }
 
-export function ChatOwnerHeader({ kind, name, category, detail, onBack, onOpenOwner, onMenu }: Props) {
+export function ChatOwnerHeader({ kind, name, category, lifecycle, detail, onBack, onOpenOwner, onMenu }: Props) {
     const { colors } = useTheme();
     const styles = useStyles(({ colors }) => StyleSheet.create({
         header: {
@@ -36,7 +38,7 @@ export function ChatOwnerHeader({ kind, name, category, detail, onBack, onOpenOw
         title: { fontSize: 17, fontWeight: '800', color: colors.text.heading },
         sub: { fontSize: 12, fontWeight: '600', color: colors.text.secondary, marginTop: 1 },
     }));
-    const h = ownerHeader(kind, name, category);
+    const h = ownerHeader(kind, name, category, lifecycle);
 
     return (
         <View style={styles.header}>

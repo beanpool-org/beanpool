@@ -40,7 +40,7 @@ This is why a community needs more than one admin.
 
 ## What the two people see
 
-The notification, the chat line, the ledger memo and, when an enterprise was in the deal, its public books name who ruled in words:
+The chat line, the ledger memo and, when an enterprise was in the deal, its public books name who ruled in words. The notification itself says only that there is news on one of your trades:
 
 - **Signed in with your own key:** your callsign.
 - **Signed in with the admin password:** "a community admin".

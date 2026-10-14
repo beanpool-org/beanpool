@@ -4,10 +4,13 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
     MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, marketFeedQuery, DEFAULT_MARKET_FILTERS,
     distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketFilterState,
+    marketSearchFromLink, marketSearchQuery, marketSearchMatches,
 } from '../market-filters';
 import { CATEGORY_FILTER_CHIPS, categoryPanelReducer } from '../map-filters';
 import { CATEGORY_META } from '../../constants/categories';
@@ -194,5 +197,68 @@ describe('what the feed asks the cache for', () => {
         expect(marketFeedQuery('offers', 'all', 'pk-me')).toEqual({ includeEvents: true, type: 'offer', includeGroupsOf: 'pk-me' });
         expect(marketFeedQuery('offers', 'g1', 'pk-me')).toEqual({ includeEvents: true, type: 'offer', targetGroupId: 'g1' });
         expect(marketFeedQuery('all', 'all', null)).toEqual({ includeEvents: true });
+    });
+});
+
+describe('marketSearchFromLink: a saved search\'s See more fills the Market\'s search (CARD-FRAME §4)', () => {
+    it('takes the words, trimmed and held to a saved search\'s 40 characters; nothing for none', () => {
+        expect(marketSearchFromLink('eggs')).toBe('eggs');
+        expect(marketSearchFromLink(['  duck eggs ', 'x'])).toBe('duck eggs');
+        expect(marketSearchFromLink('y'.repeat(60))).toBe('y'.repeat(40));
+        expect(marketSearchFromLink('   ')).toBeNull();
+        expect(marketSearchFromLink('')).toBeNull();
+        expect(marketSearchFromLink(undefined)).toBeNull();
+    });
+});
+
+describe('the Market\'s search in any script (review of #1716, finding 1)', () => {
+    const eggs = { title: 'Свежие яйца', description: 'от наших кур' };
+    const garden = { title: 'Jardín comunitario', description: null };
+    const duck = { title: 'Duck 蛋 by the dozen', description: '' };
+    const spade = { title: 'Spade to lend', description: 'garden tools' };
+
+    it('asks the node for the words as written, not for nothing', () => {
+        expect(marketSearchQuery('яйца')).toBe('яйца');
+        expect(marketSearchQuery('jardín')).toBe('jardín');
+        expect(marketSearchQuery('अंडे')).toBe('अंडे');
+        expect(marketSearchQuery('蛋')).toBe('蛋');
+        expect(marketSearchQuery('eggs').split(' ')).toEqual(expect.arrayContaining(['eggs', 'chicken']));
+    });
+
+    it('its own filter keeps the listing that holds the words and drops the rest', () => {
+        expect(marketSearchMatches(eggs, 'яйца')).toBe(true);
+        expect(marketSearchMatches(garden, 'jardín')).toBe(true);
+        expect(marketSearchMatches(duck, '蛋')).toBe(true);
+        for (const q of ['яйца', 'jardín', '蛋']) expect(marketSearchMatches(spade, q)).toBe(false);
+        expect(marketSearchMatches(spade, 'garden')).toBe(true);
+    });
+
+    it('finds a word with an apostrophe whichever apostrophe the listing or the search was typed with (#1828 check, finding 1)', () => {
+        const ios = { title: 'Don’t miss: garden tools', description: 'It’s all here' };
+        const plain = { title: "Don't miss: garden tools", description: '' };
+        const modifier = { title: 'Donʼt miss', description: 'пʼять' };
+        for (const q of ["don't", 'don’t', 'donʼt']) for (const p of [ios, plain, modifier]) expect(marketSearchMatches(p, q)).toBe(true);
+        expect(marketSearchMatches(ios, "it's")).toBe(true);
+        expect(marketSearchMatches({ title: 'L’eau de source', description: '' }, "l'eau")).toBe(true);
+        expect(marketSearchMatches({ title: 'Eau de cologne', description: '' }, "l'eau")).toBe(true);
+        expect(marketSearchMatches(modifier, "п'ять")).toBe(true);
+        expect(marketSearchMatches(modifier, 'п’ять')).toBe(true);
+        expect(marketSearchMatches({ title: 'Donuts and dolls', description: '' }, "don't")).toBe(false);
+    });
+
+    it('parts a Chinese list at its punctuation, so the word after the comma is asked and found mid-run (#1781)', () => {
+        const milk = { title: '新鲜牛奶出售', description: '' };
+        expect(marketSearchQuery('鸡蛋，牛奶')).toBe('鸡蛋 牛奶');
+        expect(marketSearchQuery('鸡蛋、牛奶')).toBe('鸡蛋 牛奶');
+        expect(marketSearchMatches(milk, '鸡蛋，牛奶')).toBe(true);
+        expect(marketSearchMatches(milk, '鸡蛋、牛奶')).toBe(true);
+        expect(marketSearchMatches(spade, '鸡蛋，牛奶')).toBe(false);
+    });
+
+    it('the Market screen searches and filters with these, not words of its own', () => {
+        const src = fs.readFileSync(path.join(__dirname, '../../app/(tabs)/market.tsx'), 'utf8');
+        expect(src).toMatch(/marketSearchQuery\(q\)/);
+        expect(src).toMatch(/marketSearchMatches\(p, searchQuery\)/);
+        expect(src).not.toMatch(/expandSearchTerms/);
     });
 });

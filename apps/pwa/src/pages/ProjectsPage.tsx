@@ -16,6 +16,11 @@ import { CreateGroupModal } from '../components/CreateGroupModal';
 import { GroupDetailModal } from '../components/GroupDetailModal';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 import { decisionsOn } from '../lib/node-decisions';
+import { useMembersOnDemand } from '../lib/members-on-demand';
+import { pledgeClosedLine } from '../lib/enterprise-pledge';
+import { modeFor, readerFeaturesOnce } from '../lib/features';
+import type { FeatureMode } from '@beanpool/core';
+import { CommonsPreview } from '../components/ShowcasePreviews';
 
 interface Props {
     identity: BeanPoolIdentity | null;
@@ -33,6 +38,12 @@ interface Props {
 /** Shown when the browser cannot read or decode the picked photo (resizePhotoFile rejected). */
 const PHOTO_READ_ERROR = 'That photo could not be read. Please choose another one.';
 
+/** Today in the member's own calendar, as a date field reads it (YYYY-MM-DD): a project can't end before it. */
+const localToday = (): string => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
 export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enterprises', onNavigate, isMember }: Props) {
     const canLoadBalance = !!identity?.publicKey && isMember !== false && isMember !== null;
     const [treasuries, setTreasuries] = useState<Treasury[]>([]);
@@ -43,16 +54,36 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [error, setError] = useState<string | null>(null);
 
     // UI States
-    const [pickedSection, setActiveSection] = useState<'decide' | 'enterprises' | 'groups'>(initialSection);
+    // One Groups list holds projects, enterprises and chat groups (pick 7): a page asked for Enterprises opens on it.
+    const [pickedSection, setActiveSection] = useState<'decide' | 'groups'>(initialSection === 'enterprises' ? 'groups' : initialSection);
     // Formal Decisions, where the node has them (lib/node-decisions.ts: off on the global node, which refuses every
     // proposal and vote). Until the node has said, on, as on every node before the switch. Where they are off there is
     // no Decide tab, and a page asked to open on Decide opens on Groups.
     const [votes, setVotes] = useState(true);
+    // Projects and enterprises hold Beans: where the node has Beans off, the Create form offers neither.
+    const [beansOn, setBeansOn] = useState(true);
+    // Enterprises or Decisions off here and the node shows previews: the Commons shows Example Valley's, each by its own
+    // mode (lib/features.ts).
+    const [enterprisesMode, setEnterprisesMode] = useState<FeatureMode>('hidden');
+    const [decisionsMode, setDecisionsMode] = useState<FeatureMode>('hidden');
     useEffect(() => {
         let cancelled = false;
         Promise.resolve()
             .then(() => communityInfoOnce())
-            .then((info) => { if (!cancelled) setVotes(decisionsOn(info)); })
+            .then((info) => {
+                if (cancelled) return;
+                // The node's info alone sets Decide and the Beans create options, as before: no wait on the reader's set.
+                setVotes(decisionsOn(info));
+                setBeansOn(info?.features?.beans !== false);
+                // The modes wait for the reader's set too (none is read where it cannot matter): no preview flashes and goes.
+                return readerFeaturesOnce(info).then((reader) => {
+                    if (cancelled) return;
+                    setEnterprisesMode(modeFor('enterprises', info, reader));
+                    const decisions = modeFor('decisions', info, reader);
+                    setDecisionsMode(decisions);
+                    setVotes(decisions === 'live');
+                });
+            })
             .catch(() => { /* Not answered: keep what the page shows; the node refuses a vote itself. */ });
         return () => { cancelled = true; };
     }, []);
@@ -65,6 +96,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [commonsBalance, setCommonsBalance] = useState<number>(0);
     const [showProposeDecision, setShowProposeDecision] = useState<boolean>(false);
     const [allMembersList, setAllMembersList] = useState<Array<{ publicKey: string; callsign?: string; balance?: number }>>([]);
+    // The directory (only the Decision form's name preview uses it) is read whole only where the node has said it reads
+    // whole: never with members on demand, the worldwide community (lib/members-on-demand; review of #1861, N1).
+    const membersOnDemand = useMembersOnDemand();
+    const membersOnDemandRef = useRef<boolean | null>(null);
+    membersOnDemandRef.current = membersOnDemand;
 
     // Groups State
     const [groups, setGroups] = useState<Group[]>([]);
@@ -73,8 +109,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
     const [selectedGroupForDetail, setSelectedGroupForDetail] = useState<Group | null>(null);
 
-    // Filter: all | ongoing | bounded
-    const [filter, setFilter] = useState<'all' | 'ongoing' | 'bounded'>('all');
+    // The kind chips: projects and enterprises hold Beans; chat groups (and My groups) are the rest.
+    const filter: 'all' | 'ongoing' | 'bounded' = groupCategoryFilter === 'projects' ? 'bounded' : groupCategoryFilter === 'enterprises' ? 'ongoing' : 'all';
+    const showEnterprises = groupCategoryFilter === 'all' || groupCategoryFilter === 'projects' || groupCategoryFilter === 'enterprises';
+    const showChatGroups = groupCategoryFilter === 'all' || groupCategoryFilter === 'chat' || groupCategoryFilter === 'my_groups';
 
     // Propose / New Enterprise modal
     const [showNewModal, setShowNewModal] = useState(false);
@@ -111,7 +149,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 getTreasuries ? getTreasuries().catch(() => ({ treasuries: [] })) : { treasuries: [] },
                 getDecisions ? getDecisions().catch(() => ({ decisions: [], myPoolVoting: null })) : { decisions: [], myPoolVoting: null },
                 getCommonsBalance ? getCommonsBalance().catch(() => ({ balance: 0 })) : { balance: 0 },
-                getAllMembers ? getAllMembers().catch(() => []) : [],
+                // null, not [], when the directory couldn't be read (the node busy with heavy lists answers 503): the
+                // members list below keeps who it had, and the next fetch reads them again.
+                // Read only once the node has said it reads whole (the effect below reads them when it says so).
+                membersOnDemandRef.current !== false ? null : getAllMembers ? getAllMembers().catch(() => null) : null,
             ]);
             setTreasuries(tresData.treasuries || []);
             setDecisions(decData.decisions || []);
@@ -141,6 +182,15 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     useEffect(() => {
         fetchEnterprises();
     }, [identity?.publicKey]);
+
+    // The node has just said it reads whole: the list the fetch at open couldn't read yet, read once.
+    useEffect(() => {
+        if (membersOnDemand !== false) return;
+        // Asked inside the promise, so a read that throws before it starts waits for the next fetch too.
+        Promise.resolve().then(() => getAllMembers()).then((membersData) => {
+            if (Array.isArray(membersData)) setAllMembersList(membersData.map((m: MemberSummary) => ({ publicKey: m.publicKey, callsign: m.callsign, balance: (m as any).balance ?? 0 })));
+        }).catch(() => { /* the next fetch reads them again */ });
+    }, [membersOnDemand]);
 
     // The viewer's balance (only earnedCredit, for proposing a Decision) is a member's alone. App learns
     // membership after mount, so this waits for it and a guest never asks the node.
@@ -195,7 +245,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             return;
         }
         if (newLifecycle === 'bounded' && (!newGoal || Number(newGoal) <= 0)) {
-            setCreateError('Goal amount must be a positive number for a bounded project');
+            setCreateError('A project needs a goal in Beans');
             return;
         }
 
@@ -250,11 +300,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     }, [activeSection, fetchGroups]);
 
     const filteredGroups = useMemo(() => {
-        if (groupCategoryFilter === 'all') return groups;
         if (groupCategoryFilter === 'my_groups') {
             return groups.filter(g => g.viewerStatus === 'active' || g.viewerRole || g.viewerStatus === 'pending_approval');
         }
-        return groups.filter(g => g.category === groupCategoryFilter);
+        return groups;
     }, [groups, groupCategoryFilter]);
 
     const energySentence = (energyBalance: number): string => {
@@ -294,7 +343,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
                             <span>🌱</span> The Commons
                         </h1>
-                        <p className="text-nature-400 text-sm mt-0.5">Community decisions, pooled circulation, and shared enterprises</p>
+                        <p className="text-nature-400 text-sm mt-0.5">Community decisions, the Commons, and your groups: projects, enterprises and more</p>
                     </div>
                     {identity && (
                         <button
@@ -316,14 +365,21 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     setCreateError(null);
                                 }
                             }}
-                            className="bg-accent hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
+                            className="bg-accent dark:bg-nature-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
                         >
                             {activeSection === 'groups' ? '+ Create Group' : '+ Propose'}
                         </button>
                     )}
                 </div>
 
+                {/* Enterprises or Decisions off here and the node shows previews: Example Valley's, under the strip; Groups below stay real. */}
+                {(enterprisesMode === 'preview' || decisionsMode === 'preview') && (
+                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full bg-white dark:bg-nature-900 rounded-2xl p-3">
+                        <CommonsPreview enterprises={enterprisesMode === 'preview'} decisions={decisionsMode === 'preview'} onNearYou={onNavigate ? () => onNavigate('home') : undefined} onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
+                    </div>
+                )}
                 {/* Commons Pool & Available Governance Credits */}
+                {enterprisesMode !== 'preview' && (<>
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-2 gap-3 pt-1">
                     <div className="bg-nature-950/70 border border-nature-800 rounded-xl p-3">
                         <div className="text-[10px] font-bold uppercase tracking-wider text-nature-400">
@@ -347,16 +403,16 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         </div>
                     </div>
                 </div>
+                </>)}
             </header>
 
-            {/* Section Switcher: Decide vs Enterprises vs Groups — the one sticky row */}
+            {/* Section Switcher: Decide vs Groups — the one sticky row */}
             <div className="sticky top-0 z-40 bg-nature-900 px-4 py-2" data-testid="commons-section-tabs">
                 {/* Emoji over label below `sm`: side by side, the three tabs need ~400px and pushed
                     Groups off a 320px screen at 1.3x text. */}
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex bg-nature-950 p-1 rounded-xl border border-nature-800">
                     {([
                         { key: 'decide', emoji: '🗳️', label: 'Decide' },
-                        { key: 'enterprises', emoji: '🏛️', label: 'Enterprises' },
                         { key: 'groups', emoji: '👥', label: 'Groups' },
                     ] as const).filter(tab => votes || tab.key !== 'decide').map(tab => (
                         <button
@@ -371,7 +427,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             <span className="flex items-center gap-1">
                                 <span>{tab.emoji}</span>
                                 {tab.key === 'decide' && openDecisionsCount > 0 && (
-                                    <span className="bg-accent text-white text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-bold leading-none">
+                                    <span className="bg-accent dark:bg-nature-700 text-white text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-bold leading-none">
                                         {openDecisionsCount}
                                     </span>
                                 )}
@@ -384,43 +440,23 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
 
             {/* Filters scroll away with the content */}
             <div className="bg-nature-900 border-b border-nature-800 px-4 pb-3 shadow-sm empty:hidden" data-testid="commons-filters">
-                {/* Filter Controls: All / Ongoing / Bounded */}
-                {activeSection === 'enterprises' && (
-                    <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex gap-2 pt-1 overflow-x-auto scrollbar-none" data-testid="enterprise-filter-chips">
-                        {(['all', 'ongoing', 'bounded'] as const).map(option => (
-                            <button
-                                key={option}
-                                onClick={() => setFilter(option)}
-                                className={`shrink-0 px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
-                                    filter === option
-                                        ? 'bg-emerald-600 text-white shadow-sm'
-                                        : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
-                                }`}
-                            >
-                                {option === 'all' ? 'All Enterprises' : option === 'ongoing' ? 'Ongoing' : 'Bounded Projects'}
-                            </button>
-                        ))}
-                    </div>
-                )}
-
                 {/* Filter Controls: Groups Category */}
                 {activeSection === 'groups' && (
                     <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex items-center justify-between gap-2 pt-1">
                         <div className="min-w-0 flex gap-2 overflow-x-auto py-1 scrollbar-none" data-testid="group-filter-chips">
                             {[
-                                { key: 'all', label: 'All Groups' },
-                                { key: 'my_groups', label: 'My Groups' },
-                                { key: 'working_group', label: '🤝 Working Groups' },
-                                { key: 'project', label: '🛠️ Projects' },
-                                { key: 'guild', label: '🛡️ Guilds' },
-                                { key: 'social', label: '☕ Social' },
+                                { key: 'all', label: 'All' },
+                                { key: 'my_groups', label: 'My groups' },
+                                { key: 'projects', label: '🌱 Projects' },
+                                { key: 'enterprises', label: '🏛️ Enterprises' },
+                                { key: 'chat', label: '👥 Chat groups' },
                             ].map(option => (
                                 <button
                                     key={option.key}
                                     onClick={() => setGroupCategoryFilter(option.key)}
                                     className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
                                         groupCategoryFilter === option.key
-                                            ? 'bg-emerald-600 text-white shadow-sm'
+                                            ? 'bg-emerald-600 dark:bg-emerald-700 text-white shadow-sm'
                                             : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
                                     }`}
                                 >
@@ -457,11 +493,15 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         onChangeView={setActiveDecideView}
                     />
                 </div>
-            ) : activeSection === 'groups' ? (
-                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full space-y-4">
+            ) : (
+                <>
+                <div className="px-4 pt-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full">
                     <div className="p-3 bg-nature-950/60 border border-nature-800 rounded-xl text-xs text-nature-300 leading-relaxed">
-                        👥 <strong>Groups & Teams:</strong> A group is a place to talk to some people rather than everyone. Groups do not hold beans and do not confer trust or voting standing.
+                        👥 <strong>Groups:</strong> A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.
                     </div>
+                </div>
+                {showChatGroups && (
+                <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full space-y-4" data-testid="commons-chat-groups">
 
                     {loadingGroups ? (
                         <div className="py-12 text-center text-sm text-nature-400">Loading groups...</div>
@@ -476,7 +516,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             </p>
                             <button
                                 onClick={() => setShowCreateGroupModal(true)}
-                                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
+                                className="px-4 py-2 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
                             >
                                 + Create a Group
                             </button>
@@ -505,7 +545,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                 <span className="text-[11px] font-bold text-nature-400 capitalize">
                                                     🏷️ {g.category.replace(/_/g, ' ')}
                                                 </span>
-                                                <span className="text-nature-600">•</span>
+                                                <span className="text-nature-600 dark:text-nature-400">•</span>
                                                 <span className="text-[11px] text-nature-400">
                                                     {g.memberCount || 0} {g.memberCount === 1 ? 'member' : 'members'}
                                                 </span>
@@ -532,7 +572,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         </p>
                                     )}
 
-                                    <div className="flex items-center justify-between pt-1 border-t border-nature-900 text-[11px] text-nature-500">
+                                    <div className="flex items-center justify-between pt-1 border-t border-nature-900 text-[11px] text-nature-500 dark:text-nature-400">
                                         <span>Join: {g.joinPolicy.replace(/_/g, ' ')}</span>
                                         <span className="text-emerald-500 font-bold hover:underline">View Details →</span>
                                     </div>
@@ -541,7 +581,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         </div>
                     )}
                 </div>
-            ) : loading ? (
+                )}
+                {!showEnterprises ? null : loading ? (
                 <div className="p-8 text-center text-nature-500">Loading enterprises…</div>
                 ) : error ? (
                     <div className="p-8 text-center text-red-500">{error}</div>
@@ -558,7 +599,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     setShowNewModal(true);
                                     setCreateError(null);
                                 }}
-                                className="bg-accent hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md"
+                                className="bg-accent dark:bg-nature-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md"
                             >
                                 + Propose a Project
                             </button>
@@ -635,7 +676,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                     </span>
                                                 ) : (
                                                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-blue-950/50 text-blue-300 border-blue-800/60">
-                                                        🏛️ Ongoing
+                                                        🏛️ Enterprise
                                                     </span>
                                                 )}
                                             </div>
@@ -712,11 +753,11 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                 />
                                             </div>
 
-                                            {/* Primary CTA if has goal and not funded */}
-                                            {!isFunded && (
+                                            {/* Primary CTA if has goal, not funded, and the enterprise still takes pledges */}
+                                            {!isFunded && !pledgeClosedLine(t.status) && (
                                                 <div
                                                     aria-hidden="true"
-                                                    className="w-full mt-2 py-2 px-3 rounded-xl bg-emerald-600 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 pointer-events-none"
+                                                    className="w-full mt-2 py-2 px-3 rounded-xl bg-emerald-600 dark:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 pointer-events-none"
                                                 >
                                                     <span>🌱</span> Pledge Beans
                                                 </div>
@@ -728,6 +769,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                         );
                     })}
                 </div>
+                )}
+                </>
             )}
 
             {/* Propose Enterprise / Project Modal */}
@@ -781,8 +824,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                 : 'bg-nature-800/60 border-nature-700 text-nature-400 hover:text-white'
                                         }`}
                                     >
-                                        <span>⏱️ Bounded Project</span>
-                                        <span className="text-[10px] font-normal opacity-80">Has funding goal & deadline</span>
+                                        <span>🌱 Project</span>
+                                        <span className="text-[10px] font-normal opacity-80">A leader, a goal, an end date</span>
                                     </button>
                                     <button
                                         type="button"
@@ -793,8 +836,8 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                                 : 'bg-nature-800/60 border-nature-700 text-nature-400 hover:text-white'
                                         }`}
                                     >
-                                        <span>🏛️ Ongoing Enterprise</span>
-                                        <span className="text-[10px] font-normal opacity-80">Permanent co-op or facility</span>
+                                        <span>🏛️ Enterprise</span>
+                                        <span className="text-[10px] font-normal opacity-80">Keepers; it keeps going</span>
                                     </button>
                                 </div>
                             </div>
@@ -853,6 +896,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         </label>
                                         <input
                                             type="date"
+                                            min={localToday()}
                                             value={newDeadline}
                                             onChange={(e) => setNewDeadline(e.target.value)}
                                             className="w-full bg-nature-800 border border-nature-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -897,7 +941,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 <button
                                     type="submit"
                                     disabled={creating || preparingPhoto}
-                                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm disabled:opacity-50"
+                                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-sm disabled:opacity-50"
                                 >
                                     {creating ? 'Submitting…' : preparingPhoto ? 'Preparing photo…' : 'Propose Enterprise 🌱'}
                                 </button>
@@ -922,6 +966,12 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 isOpen={showCreateGroupModal}
                 onClose={() => setShowCreateGroupModal(false)}
                 onCreated={() => fetchGroups()}
+                onStartWithBeans={!beansOn ? undefined : (lifecycle) => {
+                    setShowCreateGroupModal(false);
+                    setNewLifecycle(lifecycle);
+                    setShowNewModal(true);
+                    setCreateError(null);
+                }}
             />
 
             <GroupDetailModal

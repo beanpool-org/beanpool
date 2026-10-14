@@ -35,7 +35,8 @@ import crypto from 'node:crypto';
 import net from 'node:net';
 import { URL } from 'node:url';
 import { db } from '../db/db.js';
-import { respondIfMuted } from './profile-feature-gate.js';
+import { respondIfMuted, respondProfileRefusal } from './profile-feature-gate.js';
+import { WriterLimitError, assertMaySubmitToPulse, pulseSyncAllowance } from '../engine/writer-bounds.js';
 import {
     ssrfSafeFetch,
     extractYouTubeVideoId,
@@ -62,11 +63,13 @@ import {
     PulseThumbnailService,
     extractInstagramEmbedUrl,
     extractThumbnailFromEmbedHtml,
+    SSRF_REFUSED_TEXT,
 } from '../engine/pulse-thumbnail.js';
 import { logger } from '../logger.js';
 import { getPulseOAuthConfig } from './channels.js';
 import type { RouteDeps } from './types.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { memberErrorText } from './member-error-text.js';
+import { avatarUrlOf } from '@beanpool/core';
 
 export interface PulseSubmitRouteDeps extends RouteDeps {
     thumbnailService?: PulseThumbnailService;
@@ -152,6 +155,24 @@ function extractTagText(html: string, tagName: string): string | null {
  * Detect platform and extract identity from URL without making network calls.
  * Performs strict hostname / IP address SSRF validation.
  */
+/** Query parameters that only say where a link was shared from or who shared it, never which page it is. */
+const SHARE_TRACKING_PARAM = /^(utm_[a-z0-9_]*|fbclid|gclid|dclid|gbraid|wbraid|msclkid|mc_cid|mc_eid|igshid|igsh|si|feature|ref|ref_src|ref_url|share_id|is_from_webapp|sender_device|_r|_t)$/i;
+
+/**
+ * The one spelling of a link the Pulse dedups on (W-main: one member's varied spellings of a link were each a new row a
+ * standby copies): no fragment, no share-tracking parameters, the rest of the query sorted. The host is already lower
+ * case (URL does that). A platform with its own canonical form (YouTube, Instagram) replaces this below.
+ */
+export function normalisePulseUrl(parsed: URL): string {
+    const url = new URL(parsed.toString());
+    url.hash = '';
+    const kept = [...url.searchParams].filter(([name]) => !SHARE_TRACKING_PARAM.test(name))
+        .sort(([a, av], [b, bv]) => (a < b ? -1 : a > b ? 1 : av < bv ? -1 : av > bv ? 1 : 0));
+    url.search = '';
+    for (const [name, value] of kept) url.searchParams.append(name, value);
+    return url.toString();
+}
+
 export function identifyPlatformAndExternalId(rawUrl: string): {
     platform: ChannelPlatform;
     externalId: string | null;
@@ -188,7 +209,7 @@ export function identifyPlatformAndExternalId(rawUrl: string): {
     const host = hostClean.toLowerCase().replace(/^www\./, '');
     let platform: ChannelPlatform = 'website';
     let externalId: string | null = null;
-    let canonicalUrl = parsed.toString();
+    let canonicalUrl = normalisePulseUrl(parsed);
     let accountHandle: string | null = null;
 
     if (host === 'youtube.com' || host === 'youtu.be' || host === 'm.youtube.com') {
@@ -486,7 +507,7 @@ export function rowToPulseFeedCard(itemId: string): PulseFeedCard {
     const r = db.prepare(
         `SELECT i.id, i.owner_pubkey, i.platform, i.url, i.title, i.thumbnail_url,
                 i.published_at, i.category, i.source, c.oauth_verified_at,
-                m.callsign, m.avatar_url
+                m.callsign, m.avatar_ref
            FROM pulse_items i
            LEFT JOIN creator_channels c ON c.id = i.channel_id
            LEFT JOIN members m ON m.public_key = i.owner_pubkey
@@ -501,7 +522,7 @@ export function rowToPulseFeedCard(itemId: string): PulseFeedCard {
         id: r.id,
         ownerPubkey: r.owner_pubkey,
         callsign: r.callsign || 'Neighbour',
-        avatarUrl: avatarUrlFor(r.owner_pubkey, r.avatar_url),
+        avatarUrl: avatarUrlOf(r.owner_pubkey, r.avatar_ref),
         platform: r.platform,
         category: r.category,
         url: r.url || null,
@@ -511,6 +532,18 @@ export function rowToPulseFeedCard(itemId: string): PulseFeedCard {
         source: r.source,
         isVerified: Boolean(r.oauth_verified_at),
     };
+}
+
+/**
+ * A refused address, in words that name no address (FABLE-sec-errors LOW-1, 2026-10-01): the guard's own message says
+ * which private address the node's resolver gave the member's name, and why it was refused, which is the internal
+ * network the guard is there to keep out of reach. The detail stays in the server's log.
+ */
+export { SSRF_REFUSED_TEXT };
+
+function ssrfRefusal(err: SsrfSecurityError): string {
+    logger.warn('SYS', `[PulseSubmit] Address refused: ${err.message}`);
+    return SSRF_REFUSED_TEXT;
 }
 
 export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps): Router {
@@ -674,11 +707,11 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
             }
             if (err instanceof SsrfSecurityError) {
                 ctx.status = 400;
-                ctx.body = { error: 'ssrf_blocked', message: err.message };
+                ctx.body = { error: 'ssrf_blocked', message: ssrfRefusal(err) };
                 return;
             }
             ctx.status = 500;
-            ctx.body = { error: 'internal_error', message: err?.message || 'Failed to preview URL.' };
+            ctx.body = { error: 'internal_error', message: memberErrorText(err, 'Failed to preview URL.') };
         }
     });
 
@@ -791,7 +824,9 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
                         isDeduplicated = true;
                     }
                 } else {
-                    // Fresh insert
+                    // Fresh insert: 50 new links by hand a day per member (W-main, engine/writer-bounds.ts). Checked here,
+                    // in the transaction, so a link already there or brought back is never refused.
+                    assertMaySubmitToPulse(actor);
                     finalItemId = `item_${crypto.randomBytes(12).toString('hex')}`;
                     stmtInsertItem.run(
                         finalItemId,
@@ -830,11 +865,12 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
             }
             if (err instanceof SsrfSecurityError) {
                 ctx.status = 400;
-                ctx.body = { error: 'ssrf_blocked', message: err.message };
+                ctx.body = { error: 'ssrf_blocked', message: ssrfRefusal(err) };
                 return;
             }
+            if (err instanceof WriterLimitError && respondProfileRefusal(ctx, err)) return;
             ctx.status = 500;
-            ctx.body = { error: 'internal_error', message: err?.message || 'Failed to submit post.' };
+            ctx.body = { error: 'internal_error', message: memberErrorText(err, 'Failed to submit post.') };
         }
     });
 
@@ -1098,9 +1134,13 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
         const results: PulseFeedCard[] = [];
         const itemsToCache: Array<{ id: string; url: string }> = [];
         let deduplicatedCount = 0;
+        // New items past the member's day (W-main: 300 new synced items a day, engine/writer-bounds.ts) wait for a later
+        // sync, which finds the ones already here and adds the rest. Counted, never a refusal of the whole sync.
+        let leftForLater = 0;
 
         try {
             db.transaction(() => {
+                let allowance = pulseSyncAllowance(actor);
                 for (const rawItem of items) {
                     const itemUrl = typeof rawItem.url === 'string' ? rawItem.url.trim() : '';
                     if (!itemUrl || !/^https?:\/\//i.test(itemUrl)) continue;
@@ -1177,6 +1217,8 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
                             deduplicatedCount++;
                         }
                     } else {
+                        if (allowance <= 0) { leftForLater++; continue; }
+                        allowance--;
                         finalItemId = `item_${crypto.randomBytes(12).toString('hex')}`;
                         stmtInsertOauthItem.run(
                             finalItemId,
@@ -1220,11 +1262,12 @@ export function createPulseSubmitRoutes(deps: RouteDeps | PulseSubmitRouteDeps):
                 count: results.length,
                 skippedCount,
                 deduplicatedCount,
+                leftForLater,
                 items: results,
             };
         } catch (err: any) {
             ctx.status = 500;
-            ctx.body = { error: 'internal_error', message: err?.message || 'Failed to ingest OAuth items.' };
+            ctx.body = { error: 'internal_error', message: memberErrorText(err, 'Failed to ingest OAuth items.') };
         }
     });
 

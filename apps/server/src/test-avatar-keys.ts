@@ -10,7 +10,7 @@
  *    - false if avatarKeysRequired() is false
  *    - false if key length is not 22
  *    - false if member does not exist
- *    - false if member avatar_url is null or not servable (e.g. bundled:// or /api/avatar/)
+ *    - false if the member has no photo, or a shipped picture (bundled://, whose URL carries no key)
  *    - true if key matches HMAC for member's current photo
  *    - false if key is mismatched/tampered
  * 5. GET /api/avatar/:pubkey HTTP route behavior when avatarKeysRequired() is true:
@@ -32,7 +32,8 @@ import {
     avatarKeyMatches,
     AVATAR_KEY_SECRET_ROW,
 } from './engine/avatar-keys.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarRefOf, avatarUrlOf } from '@beanpool/core';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -106,16 +107,17 @@ async function main(): Promise<void> {
 
     // Seed member
     db.prepare(`
-        INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, joined_at, status)
-        VALUES (?, 'TestMember', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
-    `).run(pubkey, photoDataUri);
+        INSERT OR REPLACE INTO members (public_key, callsign, joined_at, status)
+        VALUES (?, 'TestMember', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
+    `).run(pubkey);
+    setMemberPhoto(db, pubkey, photoDataUri);
 
     // Compute expected avatar URL with key
-    const emittedUrl = avatarUrlFor(pubkey, photoDataUri);
-    assert(!!emittedUrl && emittedUrl.includes('&k='), `avatarUrlFor emits URL with &k= parameter (${emittedUrl})`);
+    const emittedUrl = avatarUrlOf(pubkey, avatarRefOf(photoDataUri));
+    assert(!!emittedUrl && emittedUrl.includes('&k='), `avatarUrlOf emits URL with &k= parameter (${emittedUrl})`);
 
     const keyMatch = emittedUrl!.match(/&k=([A-Za-z0-9_-]{22})/);
-    assert(!!keyMatch, 'Extracted 22-char base64url key from avatarUrlFor output');
+    assert(!!keyMatch, 'Extracted 22-char base64url key from avatarUrlOf output');
     const validKey = keyMatch![1];
 
     assert(avatarKeyMatches(pubkey, validKey) === true, 'avatarKeyMatches returns true for valid key and member photo');
@@ -125,13 +127,14 @@ async function main(): Promise<void> {
     const nonExistentPubkey = 'f'.repeat(64);
     assert(avatarKeyMatches(nonExistentPubkey, validKey) === false, 'avatarKeyMatches returns false for non-existent member');
 
-    // Bundled or non-servable avatar_url returns false
+    // A shipped picture (bundled://) returns false: its URL is its name, which carries no key
     const bundledPubkey = 'e'.repeat(64);
     db.prepare(`
-        INSERT OR REPLACE INTO members (public_key, callsign, avatar_url, joined_at, status)
-        VALUES (?, 'BundledMember', 'bundled://leaf', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
+        INSERT OR REPLACE INTO members (public_key, callsign, joined_at, status)
+        VALUES (?, 'BundledMember', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active')
     `).run(bundledPubkey);
-    assert(avatarKeyMatches(bundledPubkey, validKey) === false, 'avatarKeyMatches returns false for bundled:// avatar_url');
+    setMemberPhoto(db, bundledPubkey, 'bundled://leaf');
+    assert(avatarKeyMatches(bundledPubkey, validKey) === false, 'avatarKeyMatches returns false for a bundled:// avatar');
 
     // When avatar keys are not required, avatarKeyMatches returns false
     process.env.NODE_PROFILE = 'local';

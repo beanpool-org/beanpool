@@ -85,6 +85,23 @@ echo $((1 * 1024 * 1024)) > "$FREE_FILE"; rm -f "$PRUNED"
 assert "no-prune fails when short" "$(yn disk_preflight 2048 t no-prune)" "no"
 assert "no-prune never prunes (it would delete the image just pulled)" "$([ -e "$PRUNED" ] && echo pruned || echo untouched)" "untouched"
 
+# --- a deploy stops the node before it removes it ---
+# docker rm -f alone is SIGKILL: the node never closes its database or marks the stop clean, and every deploy showed
+# owners "The node restarted after an unclean shutdown" (mullum and test, 2026-10-04). Each container deploy.sh removes
+# must get docker stop (SIGTERM, then a grace period) on an earlier line.
+RM_LINES=$(grep -n 'docker rm -f .*beanpool-node-1' "$ROOT/deploy.sh")
+assert "deploy.sh removes node containers (the check below has something to check)" "$([ -n "$RM_LINES" ] && echo yes || echo no)" "yes"
+UNSTOPPED=""
+while IFS= read -r line; do
+  [ -n "$line" ] || continue
+  num=${line%%:*}
+  name=$(printf '%s\n' "$line" | sed -E 's/.*docker rm -f ([^ ]+).*/\1/')
+  head -n "$num" "$ROOT/deploy.sh" | grep -Fq "docker stop -t 20 $name " || UNSTOPPED="$UNSTOPPED $name"
+done <<< "$RM_LINES"
+assert "every node container deploy.sh removes is stopped first (docker stop -t 20), never only killed" "${UNSTOPPED:-none}" "none"
+assert "docker-compose.yml gives the node 20 s to stop" \
+  "$(grep -Eq '^    stop_grace_period: 20s$' "$ROOT/docker-compose.yml" && echo yes || echo no)" "yes"
+
 echo ""
 echo "$passed/$run passed"
 [ "$passed" = "$run" ] || exit 1

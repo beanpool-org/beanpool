@@ -21,7 +21,7 @@ You need a name and a profile photo. If one is missing, the app asks you to **Se
 - **Category:** pick the closest one.
 - **Description:** what, when, where, anything people should know.
 - **Photos:** at least one, up to five. Tap **Camera** or **Gallery**.
-- **Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. Anyone who opens your community's map can see the pin, including people who have not joined, so drop it near you rather than on your front door if you prefer. See "Where your pin goes".
+- **Location:** tap **My location**, or **Drop a pin** and tap the map, then **Confirm Pin**. Every member of your community can see the pin, so drop it near you rather than on your front door if you prefer. See "Where your pin goes".
 - **Price:** a number of beans. Tap the unit button to choose **Total** or **/ Hr**. Tap **FREE** to give it away. The button also offers **/ Dy**, **/ Wk** and **/ Mo**, but a new post does not keep them yet: it is saved as a total price. Choose **Total** and say the period in the description.
 - Tap **Post Offer** or **Post Need**.
 
@@ -29,7 +29,7 @@ Until everything needed is filled in, the button tells you what is missing, like
 
 ## On the global community
 
-There are no Beans on the global community, so a post there has no price. In the phone app the form has no **Price**: say in the description what you would like in return, or that it is free.
+There are no Beans on the global community, so a post there has no price. The form has no **Price**: say in the description what you would like in return, or that it is free. Where the price would go, the web app's form, and the phone's form for changing a post, say "🏘️ In a local community this is a price in Beans ›": tap it to see why. See "Beans and the global community".
 
 Visitors to the global community can see this listing's photos and its rough area before they join. They see the post's words and photos and roughly where it is, not your name, your face or the exact spot. In the web app the form says so under the photos.
 
@@ -58,5 +58,7 @@ Open your post. If no deal is under way on it:
 - **Edit Post** changes the words, category, price and photos. Tap **Save**. The location cannot be changed; delete the post and post it again instead.
 - **Pause Offer** hides an Offer for a while. **Activate Offer** brings it back. Needs cannot be paused.
 - **Delete Post** removes it. Anyone still asking for it sees their request marked declined.
+
+While someone is asking for your post, or has beans held on it (a Repeatable post can have several), you can still change its words and photos, but not its price: the app says so. To change the price, decline or cancel that deal first.
 
 Posts do not expire. Delete them when they are done.

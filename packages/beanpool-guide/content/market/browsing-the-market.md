@@ -2,14 +2,17 @@
 slug: browsing-the-market
 title: Browsing the market
 summary: Find Offers and Needs with search, filters and distance.
-related: posting, a-deal-step-by-step, near-you, trust-badges
+help: Offers and Needs from people near you. Search, filter by category or distance, or tap + ADD POST to put up your own.
+related: home, posting, a-deal-step-by-step, near-you, trust-badges, beans-and-the-global-community
 ---
 
 ## The Market tab
 
-Tap **Market** in the row of tabs. You see what people in your community are offering and looking for, newest first, grouped by the day they were posted. Events come first.
+Tap **Market** in the row of tabs. You see what people in your community are offering and looking for, newest first, grouped by the day they were posted. Events come first. If you have already let the app use your location, the list and compact views show listings nearest first instead, under **Nearest first**, with polls under **Polls**. **For You** keeps its own order.
 
 Pull the list down to refresh it.
+
+On the global community, the web app shows the listings near you first: the nearest within your **Distance**, or within 250 km of your area (the rough place you give the community when you join, or in **Settings**), each with how far it is. A line above the list says which. Near your area it has **Show everywhere** for the newest from everywhere; with a **Distance**, open **Distance** and tap **Reset** for that. On the phone, the global community keeps the listings nearest your area, so those are what the Market shows. See "Finding things near you".
 
 On the global community, while there are only a few listings, the Market also shows a few cards marked **Example**. They are made up, to show what people post, and can't be opened or answered. They go once there are enough real listings.
 
@@ -17,14 +20,14 @@ The search and filters slide away as you scroll down, so you see more posts. Scr
 
 ## Search
 
-Type in **Search marketplace...** at the top. On a small phone it may just say **Search**. The search also finds related words: "fruit" finds "lemon". Without a connection, it searches what is already on your phone.
+Type in **Search marketplace...** at the top. On a small phone it may just say **Search**. The search also finds related words: "fruit" finds "lemon". It finds words in Chinese, Japanese and Thai too, and leaves out posts by people you have blocked. Without a connection, it searches what is already on your phone.
 
 ## Filters
 
 The row of buttons under the search chooses what you see:
 
 - **All**, **Offers** or **Needs**.
-- **For You:** only the categories you star under **Customize interests**.
+- **For You:** posts in the categories you star under **Customize interests** (the same stars you set on Home), and your upcoming events you have said you are going to.
 - **Events** and **Polls**.
 
 The second row narrows it down:
@@ -60,5 +63,7 @@ Tap a post to open it.
 - Tap their name to see their profile, reviews and trust.
 - **Report Post** if it is a scam, offensive or misleading.
 - **Block User** to hide their posts and chats on your phone. It also tells your admins. See "Blocking someone".
+
+On the global community a post has no price in Beans: it says what the person would like in return. Where the price would be, it says "🏘️ In a local community this is a price in Beans ›". In place of asking for it, the post shows **Request · Beans held safely 🏘️**: tap it to see how a deal works in a local community. Messaging the person works as anywhere. See "Beans and the global community".
 
 You cannot save or share a post yet.

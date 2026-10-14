@@ -51,7 +51,9 @@
  * the boot log says why. Both locks only ever keep money on and the door shut, never the reverse.
  */
 import { db } from '../db/db.js';
+import { prepared } from '@beanpool/engine';
 import { noteTakeoverInputsChanged } from '../services/takeover-signal.js';
+import { isPrivatePreview, privatePreviewAtBoot } from './private-preview.js';
 
 export type NodeProfile = 'local' | 'global';
 
@@ -60,7 +62,9 @@ export interface ProfileSwitches {
     /** Anyone may join through `POST /api/join` with a verified sign-in instead of an invite. Off: that route and
      *  every other door route are 404 (routes/open-join.ts). Never on where the ledger has moved. */
     openJoin: boolean;
-    /** The open door needs an SSO sign-in (D1 = a, Marty 2026-09-24). Means nothing while `openJoin` is off. */
+    /** The open door needs a sign-in (Google, Apple, Facebook). Off: the 12-words door is open beside the sign-in one, and
+     *  anyone may join with a name and a little door work, no provider (routes/open-join.ts `door: 'words'`; the two-doors
+     *  design §2, which made D1 "sign-in optional", 2026-10-01). Means nothing while `openJoin` is off. */
     ssoRequiredForJoin: boolean;
     /** Beans move: member-to-member sends and credit. Off: the money entry points refuse, and posts carry no price. */
     beans: boolean;
@@ -70,8 +74,18 @@ export interface ProfileSwitches {
     crowdfund: boolean;
     /** This node takes "ask to join" requests from non-members, which any member may answer with an invite (G6,
      *  routes/knocks.ts; D4 = a: on for every community). Off: every /api/join/knock route is 404. The operator's
-     *  one-tap opt-out in Settings (`acceptKnocks`) is this switch's override (`setSwitchOverride`). */
+     *  one-tap opt-out in Settings (`acceptKnocks`) is this switch's override (`setSwitchOverride`). A knock is
+     *  answered with an invite, so with `invites` off it is off too, whatever its own setting says. */
     knocks: boolean;
+    /** Invites (engine/invites.ts): a member makes a code or an offline ticket, an owner or admin a seed invite, and
+     *  whoever holds one joins with it. Off: nobody here makes one, members and node roles alike, and none joins
+     *  anyone, a code already in the database included (the routes are 404 `feature_off`, and the engine refuses
+     *  underneath). The invites already made, and the invite tree, still read. Off on the global node (Marty,
+     *  2026-10-01): an invite needs no sign-in, so one sign-in account minting 20 a day grew into hundreds of accounts
+     *  that no sign-in stood behind, past the door's one-account-one-member rule (D1) and its per-address limit
+     *  (FABLE-sec-global-abuse HIGH-1). There the open door is the only way in. A member of the global node joining a
+     *  LOCAL community with that community's invite (a knock answered there) is the local node's invite, unchanged. */
+    invites: boolean;
     /** A post listing read with a point (`lat`, `lng`) and no `sort` comes nearest first; off, it keeps the most
      *  recently updated first. Without a point every profile keeps that order (routes/marketplace.ts). Not the same as
      *  `features.distanceSearch`, which every node reports. */
@@ -112,6 +126,40 @@ export interface ProfileSwitches {
      *  (Marty, 2026-09-27): anyone may join it with one sign-in and no invite, so one person with several accounts
      *  could swing a vote, and it is moderated without votes. Polls are posts, not Decisions, and are not this. */
     decisions: boolean;
+    /** Every member's socket hears `member_joined` when someone joins, the doorbell on which each of their apps reads
+     *  the member list again (engine/members.ts announceJoin). Off (the global node, DESIGN-global-two-doors-fable
+     *  §6.5): only the joiner's own sockets hear it, which it makes member sockets, and the members' version still
+     *  moves, so anyone's next read of the members or the feed has the newcomer. A lobby of strangers needs no live
+     *  news of each join, and at its numbers (5 joins a second, 5,000 sockets) it was 25,000 frames a second, each
+     *  sending a phone back for the list. */
+    announceJoins: boolean;
+    /** Every member's socket hears `profile_updated` when a member edits their own card (name, photo, bio, contact,
+     *  archetype: engine/members.ts updateProfile), the doorbell on which each of their apps runs its whole sync. Off (the
+     *  global node): only that member's own sockets and the members who share a conversation with them hear it; the
+     *  members' and listings' versions still move, so anyone's next read has the new card. Measured on the global node's
+     *  load rehearsal (scratch/global-node/REPORT-global-load-rehearsal.md §3): 2,400 photos set in a minute to 3,500
+     *  sockets were 8.4 million frames, a whole core, before each app's sync of about ten requests. A change to a
+     *  member's standing (a suspension, a vouch, holiday, a re-key) is not an edit of their card, and goes to every
+     *  member's socket as before. */
+    announceProfiles: boolean;
+    /** A member's phone may ask for its own set of listings (`nearby=1` on the posts sync read, routes/marketplace.ts):
+     *  the nearest NEARBY_LISTINGS_MAX within NEARBY_LISTINGS_RADIUS_KM of the member's stored area, their own and the
+     *  ones they are tied to, instead of every listing on the node (DESIGN-global-sync-by-area §2). A new listing with no
+     *  place takes its author's area. Off (a local community): `nearby` is ignored and every listing goes as before. */
+    nearbyListings: boolean;
+    /** A member's phone holds only the cards it has a reason to show (its own, the people it talks to, trades with,
+     *  rates, has as friends) and asks the node for any other by key, or searches on the node, instead of reading the
+     *  whole member directory (DESIGN-global-members-by-area §2, #1792). The three small forms of `GET /api/members`
+     *  (`keys=`, `q=`, `lat` and `lng` with `limit=`) answer on every node whatever this says: the switch only tells the
+     *  phone, in `features`, to stop reading the directory whole. Its own switch rather than `nearbyListings`'s (Marty,
+     *  2026-10-13): a self-hosted community with thousands of members may turn it on without by-area listings. */
+    membersOnDemand: boolean;
+    /** A feature switched off here is shown, not hidden: the apps preview it from the sample community Example Valley
+     *  (@beanpool/core sample-community.ts) under the 🏘️ Local community marker, with every action opening the sheet
+     *  that leads to a local community (DESIGN-global-showcase-fable.md §4, Marty 2026-10-13). Reported in `features`
+     *  only while on. Off (a local community): a feature its operator turned off is hidden, as before, since they
+     *  meant it. On or off, nothing about what the node does changes, and no write carries a sample id (sample-id-guard.ts). */
+    showcase: boolean;
 }
 
 export type ProfileSwitch = keyof ProfileSwitches;
@@ -130,6 +178,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         treasuries: true,
         crowdfund: true,
         knocks: true,
+        invites: true,
         distanceSortDefault: false,
         directoryMirror: false,
         publishToDirectory: true,
@@ -139,10 +188,16 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         guestListingsOnly: false,
         exampleListings: false,
         decisions: true,
+        announceJoins: true,
+        announceProfiles: true,
+        nearbyListings: false,
+        membersOnDemand: false,
+        showcase: false,
     },
     global: {
         openJoin: true,
-        ssoRequiredForJoin: true,
+        // Two doors side by side, 12 words first (the two-doors design §2, 2026-10-01): a sign-in is optional.
+        ssoRequiredForJoin: false,
         beans: false,
         escrow: false,
         enterprises: false,
@@ -150,6 +205,8 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         crowdfund: false,
         // Nobody knocks on the lobby: people knock on a local community from here.
         knocks: false,
+        // The door is the only way in (Marty, 2026-10-01): one sign-in account, one member. Share the link instead.
+        invites: false,
         distanceSortDefault: true,
         directoryMirror: true,
         // The lobby is not a place, so it is not a pin on the directory map.
@@ -164,6 +221,17 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
         // Groups findable, no formal votes (Marty, 2026-09-27): one sign-in each, so no vote is safe from one person
         // with several accounts. Reported posts are hidden, repeat offenders muted, and the team moderates.
         decisions: false,
+        // Nobody in a lobby of strangers needs each join live, and every member's app read the list again for it.
+        announceJoins: false,
+        // Nor each stranger's new photo: the people they talk with hear it, and everyone else reads it at their next sync.
+        announceProfiles: false,
+        // The lobby holds the world's listings; a phone keeps the nearest 500 within 250 km (Marty, 2026-10-09).
+        nearbyListings: true,
+        // Nor a directory of 20,000 strangers on every phone: each holds the cards it has a reason for and searches the
+        // node for the rest (Marty, 2026-10-13).
+        membersOnDemand: true,
+        // Global is where a stranger meets BeanPool (Marty, 2026-10-12): what lives in a local community is shown, not hidden.
+        showcase: true,
     },
 };
 
@@ -172,9 +240,7 @@ const DEFAULTS: Record<NodeProfile, ProfileSwitches> = {
  * profile nor an override changes it. The PR that builds a switch deletes its line here, with its tests.
  */
 const NOT_BUILT_YET: Readonly<Partial<ProfileSwitches>> = {
-    // G2 built the door with a sign-in (routes/open-join.ts). A door WITHOUT one (D1 b: no provider, a stricter
-    // probation) is not built, so an override asking for it is reported at boot and changes nothing.
-    ssoRequiredForJoin: true,
+    // Every switch is built. (The last, ssoRequiredForJoin, came with the 12-words door, 2026-10-01.)
 };
 
 /** The switches that hold or move Beans. None of them can be off on a node whose ledger has ever moved. */
@@ -193,7 +259,8 @@ export interface NodeFeatures {
     distanceSearch: boolean;
     /** New accounts have daily limits; `GET /api/community/me` says a member's own. */
     probation: boolean;
-    /** A post reported by 3 established members is hidden until a moderator looks. */
+    /** A post reported by members in 3 independent circles, each with at least half its author's standing, is hidden
+     *  until a moderator looks (engine/auto-moderation.ts). */
     autoHideReports: boolean;
     /** 3 posts removed by a moderator in 30 days stop a member posting and messaging until a moderator lifts it. */
     autoMute: boolean;
@@ -205,6 +272,28 @@ export interface NodeFeatures {
     /** Members can propose and vote on formal Decisions here. Off, the apps show no way into Decide. An app that
      *  finds no `decisions` (a server from before it) treats it as on: every such server allows them. */
     decisions: boolean;
+    /** Members make and join with invites here. Off (the global node), the apps show no way to make one: no code, no
+     *  QR, no ticket, only the community's plain link to share. An app that finds no `invites` (a server from before
+     *  it) treats it as on: every such server takes them. */
+    invites: boolean;
+    /** The open door takes a join with 12 words alone, beside the sign-in (`openJoin` on, `ssoRequiredForJoin` off). An
+     *  app that finds no `wordsDoor` (a server from before it) offers the sign-in only. */
+    wordsDoor: boolean;
+    /** Present only where `nearbyListings` is on: a phone's posts sync may say `nearby=1` and gets its member's set,
+     *  the nearest `max` listings within `radiusKm` of their area (NEARBY_LISTINGS_RADIUS_KM, NEARBY_LISTINGS_MAX).
+     *  Absent: the node syncs every listing, as before. */
+    nearbyListings?: { radiusKm: number; max: number };
+    /** Present, and true, only where `membersOnDemand` is on: the phone reads no whole member directory and no delta of
+     *  everyone who changed; it asks `GET /api/members?keys=` for the cards it needs, and searches with `q=`. Absent: the
+     *  phone reads the directory as before. */
+    membersOnDemand?: true;
+    /** Present, and true, only while the node is in a private preview (config/private-preview.ts): only its members
+     *  and the people its owner or an admin invites get in, and a visitor sees nothing. The apps show the preview's
+     *  message instead of the doors. Absent otherwise, so a node not in a preview answers exactly as before. */
+    privatePreview?: true;
+    /** Present, and true, only where `showcase` is on: the apps preview a switched-off feature from the sample community
+     *  instead of hiding it. Absent (a local community, or a server from before it): hidden, exactly as before. */
+    showcase?: true;
 }
 
 export const NODE_PROFILE_KEY = 'nodeProfile';
@@ -279,7 +368,7 @@ export function setSwitchOverride(name: ProfileSwitch, on: boolean): void {
 }
 
 function overrideRows(): { key: string; value: string }[] {
-    return db.prepare('SELECT key, value FROM node_config WHERE substr(key, 1, ?) = ? ORDER BY key')
+    return prepared(db, 'SELECT key, value FROM node_config WHERE substr(key, 1, ?) = ? ORDER BY key')
         .all(OVERRIDE_PREFIX.length, OVERRIDE_PREFIX) as { key: string; value: string }[];
 }
 
@@ -293,12 +382,59 @@ export function getConfiguredSwitches(profile: NodeProfile = getNodeProfile()): 
  * money kept on and the open door shut wherever the ledger has moved.
  */
 export function getProfileSwitches(profile: NodeProfile = getNodeProfile()): ProfileSwitches {
-    return lockToLedger({ ...getConfiguredSwitches(profile), ...NOT_BUILT_YET });
+    return lockKnocksToInvites(lockToPrivatePreview(lockToLedger({ ...getConfiguredSwitches(profile), ...NOT_BUILT_YET })));
+}
+
+/**
+ * A private preview (config/private-preview.ts) takes invites, an owner's or admin's only (config/door.ts), even where
+ * the profile has none, and no knocks. The open door stays as configured so an existing member can still add a sign-in
+ * (`/api/join/link`); the preview gate refuses every join through it, and the apps are told it is shut (getNodeFeatures).
+ */
+function lockToPrivatePreview(s: ProfileSwitches): ProfileSwitches {
+    if (!isPrivatePreview()) return s;
+    s.invites = true;
+    s.knocks = false;
+    return s;
+}
+
+/** A knock is answered with an invite (engine/knocks.ts approveKnock), so a node that makes none takes no knocks. */
+function lockKnocksToInvites(s: ProfileSwitches): ProfileSwitches {
+    if (!s.invites) s.knocks = false;
+    return s;
+}
+
+/** The radius and the cap of a member's set (`nearbyListings`): 250 km and 500 (Marty, 2026-10-09). */
+export const NEARBY_LISTINGS_RADIUS_KM_DEFAULT = 250;
+export const NEARBY_LISTINGS_MAX_DEFAULT = 500;
+const NEARBY_LISTINGS_RADIUS_KM_MAX = 2_000;
+const NEARBY_LISTINGS_MAX_MAX = 2_000;
+
+/** A whole number from the env within [1, ceiling], or the default when unset or anything else. */
+function envWhole(name: string, fallback: number, ceiling: number): number {
+    const raw = process.env[name];
+    if (raw === undefined || raw.trim() === '') return fallback;
+    const n = Number(raw);
+    return Number.isInteger(n) && n >= 1 && n <= ceiling ? n : fallback;
+}
+
+let nearbyLimits: { radiusKm: number; max: number } | null = null;
+/**
+ * The radius and the cap of a member's set: NEARBY_LISTINGS_RADIUS_KM and NEARBY_LISTINGS_MAX on a self-hosted node
+ * (design §9 Q6), else 250 km and 500. Read once, at the first ask (boot), so the node and `features` agree for the
+ * life of the process; a value out of range is the default, never a set of every listing. Beside them,
+ * NEARBY_SET_MEMORY_MB (default 32, 0 off) bounds the memory of the sets this node named, by which a changed set is sent
+ * as a diff (engine/nearby-set-memory.ts nearbySetMemoryLimits).
+ */
+export function nearbyListingsLimits(): { radiusKm: number; max: number } {
+    return nearbyLimits ??= {
+        radiusKm: envWhole('NEARBY_LISTINGS_RADIUS_KM', NEARBY_LISTINGS_RADIUS_KM_DEFAULT, NEARBY_LISTINGS_RADIUS_KM_MAX),
+        max: envWhole('NEARBY_LISTINGS_MAX', NEARBY_LISTINGS_MAX_DEFAULT, NEARBY_LISTINGS_MAX_MAX),
+    };
 }
 
 export function getNodeFeatures(): NodeFeatures {
     const s = getProfileSwitches();
-    return {
+    const features: NodeFeatures = {
         beans: s.beans,
         escrow: s.escrow,
         // One construct under two names in this build: the treasury routes serve both, so it is here only with both on.
@@ -313,7 +449,15 @@ export function getNodeFeatures(): NodeFeatures {
         guestListingsOnly: s.guestListingsOnly,
         exampleListings: s.exampleListings,
         decisions: s.decisions,
+        invites: s.invites,
+        wordsDoor: s.openJoin && !s.ssoRequiredForJoin,
+        ...(s.nearbyListings ? { nearbyListings: { ...nearbyListingsLimits() } } : {}),
+        ...(s.membersOnDemand ? { membersOnDemand: true as const } : {}),
+        ...(s.showcase ? { showcase: true as const } : {}),
     };
+    // In a private preview no door takes a join, so the apps offer none: only an owner's or admin's invite.
+    if (isPrivatePreview()) return { ...features, openJoin: false, wordsDoor: false, privatePreview: true };
+    return features;
 }
 
 // ── Money is never frozen, and the door never opens onto it ──────────────────────────────
@@ -432,7 +576,19 @@ const FEATURE_OFF_MESSAGES: Partial<Record<ProfileSwitch, string>> = {
     decisions: 'Community votes are switched off on this node, so nothing here can be proposed or voted on. Its moderators look after it instead.',
 };
 
+/** Invites off, to a member who would make one and to someone holding a code: what to do instead. */
+export const INVITES_OFF_MESSAGE = 'This community doesn’t use invites: anyone joins it with a sign-in in the BeanPool app. To bring someone here, share its link.';
+/** The same, where the 12-words door is open beside the sign-in (`wordsDoor`). */
+export const INVITES_OFF_WORDS_MESSAGE = 'This community doesn’t use invites: anyone joins it in the BeanPool app, with 12 secret words or a sign-in. To bring someone here, share its link.';
+/** The same, where the open door is shut too: nobody new can join here at all, and saying "sign in" would be false. */
+export const INVITES_OFF_DOOR_SHUT_MESSAGE = 'This community doesn’t use invites, and it isn’t taking new members right now.';
+
 export function featureOffMessage(feature: ProfileSwitch): string {
+    if (feature === 'invites') {
+        const s = getProfileSwitches();
+        if (!s.openJoin) return INVITES_OFF_DOOR_SHUT_MESSAGE;
+        return s.ssoRequiredForJoin ? INVITES_OFF_MESSAGE : INVITES_OFF_WORDS_MESSAGE;
+    }
     return FEATURE_OFF_MESSAGES[feature] ?? `${feature} is switched off on this node.`;
 }
 
@@ -537,6 +693,15 @@ export class GuestViewAuthOffError extends Error {
     }
 }
 
+/**
+ * A refusal mirrorNodeProfileAtBoot makes on a main server, which stops its boot (index.ts main().catch exits 1): the
+ * database is a global node and NODE_PROFILE is another, or the guest view's escape hatches are set. A promotion in place
+ * (state-engine.ts becomeMainServerInPlace) stops the same way.
+ */
+export function isMainServerBootRefusal(e: unknown): e is NodeProfileMismatchError | GuestViewAuthOffError {
+    return e instanceof NodeProfileMismatchError || e instanceof GuestViewAuthOffError;
+}
+
 function pinnedLine(profile: NodeProfile): string {
     const wanted = DEFAULTS[profile];
     const parts = (Object.keys(NOT_BUILT_YET) as ProfileSwitch[]).map((k) =>
@@ -597,9 +762,17 @@ export function mirrorNodeProfileAtBoot(role: 'primary' | 'backup' = 'primary'):
     if (pinned.length) {
         console.log(`🧭 Not built yet, so these overrides do nothing for now: ${pinned.map((k) => `${k}=${overrides[k]}`).join(', ')}.`);
     }
-    if (profile === 'global') console.log(pinnedLine(profile));
+    if (profile === 'global' && Object.keys(NOT_BUILT_YET).length > 0) console.log(pinnedLine(profile));
 
     const configured = { ...getConfiguredSwitches(profile), ...NOT_BUILT_YET };
+    // A private preview (config/private-preview.ts) says so, and the door lines below would be false while it is on: no
+    // open door takes a join and invites are on (an owner's or admin's). A value it doesn't know stops the boot here.
+    const preview = privatePreviewAtBoot();
+    if (preview) {
+        console.log(preview);
+        configured.openJoin = false;
+        configured.invites = true;
+    }
     const off = MONEY_SWITCHES.filter((k) => !configured[k]);
     const history = off.length > 0 || configured.openJoin ? ledgerHistory() : null;
     if (history) historyFound = history;
@@ -615,7 +788,16 @@ export function mirrorNodeProfileAtBoot(role: 'primary' | 'backup' = 'primary'):
     }
     if (configured.openJoin) {
         if (history) loudly(doorShutMessage(history));
-        else console.log('🚪 The open door is open: anyone may join here with a sign-in instead of an invite. It shuts for good if Beans ever move here.');
+        else if (configured.ssoRequiredForJoin) console.log('🚪 The open door is open: anyone may join here with a sign-in instead of an invite. It shuts for good if Beans ever move here.');
+        else console.log('🚪 The open door is open: anyone may join here with 12 secret words or a sign-in instead of an invite. It shuts for good if Beans ever move here.');
+    }
+    if (!configured.invites) {
+        if (configured.openJoin && !history) {
+            console.log('🎟️  Invites are off: nobody here makes an invite or joins with one, and the open door is the only way in.');
+        } else {
+            loudly(`⚠️  Invites are off and the open door is shut, so nobody new can join this node. To let people in, turn invites `
+                + `back on with the node_config row ${NODE_PROFILE_KEY}.invites = true.`);
+        }
     }
     return { profile, previous };
 }

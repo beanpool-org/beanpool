@@ -1,12 +1,51 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     issueRekeyCodeApi,
+    cancelRekeyCodeApi,
+    bindRekeyByMatchApi,
     completeRekeyApi,
+    declineRekeyProposalApi,
+    RekeyBindError,
     fetchRekeyStatusApi,
+    normalizeNodeUrl,
+    type RekeyProposal,
     type RekeyStatusResponse,
 } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
+import { generateOfflineQrUrl } from '../../lib/qr';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+
+/** What the operator types to make a new code for a member who already moved to a new key. */
+export const MOVE_AGAIN_WORDS = 'NEW CODE';
+
+/** How often step 2 reads which phones asked on the code (#1768). */
+export const REKEY_PROPOSALS_POLL_MS = 3000;
+
+/**
+ * What the code's QR holds: the node's own address with `?rekey=<code>`, as invite links are made, whatever domain the
+ * node lives on (no beanpool.org). The phone's scanner reads the community and the code from it; a browser opens the
+ * node's web app on its re-key screen.
+ */
+export function rekeyLink(nodeUrl: string, code: string): string {
+    const origin = normalizeNodeUrl(nodeUrl) || (typeof window !== 'undefined' ? window.location.origin : '');
+    return `${origin}/?rekey=${encodeURIComponent(code)}`;
+}
+
+/** When a phone asked, as the admin's clock shows it: "14:02". */
+function askedAt(iso: string): string {
+    const d = new Date(iso);
+    return Number.isFinite(d.getTime()) ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+}
+
+/** A pending code's time left, in words: "5 h 12 min left", "12 min left", or "Expired". */
+export function rekeyTimeLeft(expiresAt: string, now: number = Date.now()): string {
+    const ms = new Date(expiresAt).getTime() - now;
+    if (!Number.isFinite(ms) || ms <= 0) return 'Expired';
+    const totalMin = Math.max(1, Math.floor(ms / 60000));
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    return h > 0 ? `${h} h ${m} min left` : `${m} min left`;
+}
 
 export interface RekeyMemberWizardProps {
     member: {
@@ -46,56 +85,255 @@ export function RekeyMemberWizard({
     const [copiedCode, setCopiedCode] = useState(false);
     const copiedCodeTimer = useTimeout();
 
-    // New pubkey input
+    // New pubkey input (folded away under "Paste a key instead"), or the key of the phone bound
     const [newPubkey, setNewPubkey] = useState('');
     const [completing, setCompleting] = useState(false);
+    // Set before the first await, so a second Enter or tap sends nothing while a bind is out (#1783 review C2): each
+    // number sent is a try the node counts.
+    const binding = useRef(false);
+    const [showPaste, setShowPaste] = useState(false);
+
+    // The phones that asked on the code, read every few seconds while step 2 shows (#1768)
+    const [proposals, setProposals] = useState<RekeyProposal[]>([]);
+    const [declining, setDeclining] = useState<string | null>(null);
+    // The number the admin types from the member's phone: the node finds the phone that shows it (#1783 review B2).
+    const [typedMatch, setTypedMatch] = useState('');
+    const [wrongNumbers, setWrongNumbers] = useState(0);
+    // Someone is guessing at codes starting like this one (the node's per-prefix count, #1783 review N3).
+    const [underAttack, setUnderAttack] = useState<RekeyStatusResponse['codeUnderAttack'] | null>(null);
+    // Three wrong numbers stopped the code on the node: like an expired one, only a new code helps.
+    /**
+     * 'wrong': three wrong numbers here. 'elsewhere': the node no longer has the code (stopped or cancelled on another
+     * screen). 'replaced': another screen made a new code, which cancels this one. 'expired': it ran out on the node.
+     */
+    const [codeStopped, setCodeStopped] = useState<false | 'wrong' | 'elsewhere' | 'replaced' | 'expired'>(false);
+    // This dashboard's own Cancel is out: a read that finds no code meanwhile is that cancel, not another screen's (#1783
+    // review D2).
+    const cancellingHere = useRef(false);
+    // Sign-in copies of the old key the move removed (the node's count): step 3 asks for a new link only when > 0.
+    const [signInCopiesRemoved, setSignInCopiesRemoved] = useState(0);
+
+    // The node left an owner's or admin's pending code out: this phone session is past its step-up window (#1534).
+    const [codeNeedsStepUp, setCodeNeedsStepUp] = useState(false);
+    const [rereading, setRereading] = useState(false);
+
+    // Opening the wizard only reads the member's re-key status; a code is made only by the "Make a re-key code" press,
+    // and not before that read has answered, so the wizard knows whether the member already moved. A failed read leaves
+    // it unknown, so the button stays off until a retry answers: they may have moved (review 4176252099).
+    const [statusChecked, setStatusChecked] = useState(false);
+    const [statusReadFailed, setStatusReadFailed] = useState(false);
+    const [typedConfirm, setTypedConfirm] = useState('');
+    const [cancelling, setCancelling] = useState(false);
+    const [notice, setNotice] = useState<string | null>(null);
+    const [now, setNow] = useState(() => Date.now());
 
     const isChecklistComplete = checkPhysical && checkLost && checkInvalidateNotice;
+    /** The member's latest finished re-key, newest first from the node: they already moved to a new key. */
+    const lastMove = rekeyStatus?.history?.[0] ?? null;
+    const typedConfirmOk = !lastMove || typedConfirm.trim().toUpperCase() === MOVE_AGAIN_WORDS;
+    const mayMakeCode = isChecklistComplete && statusChecked && typedConfirmOk && !loading;
+
+    const resetChecklist = () => {
+        setCheckPhysical(false);
+        setCheckLost(false);
+        setCheckInvalidateNotice(false);
+        setTypedConfirm('');
+    };
+
+    /** Reads the member's re-key status and shows a pending code, or asks for Manage again when it is held back. */
+    const applyStatus = useCallback((status: RekeyStatusResponse) => {
+        setRekeyStatus(status);
+        setProposals(status.proposals ?? []);
+        setWrongNumbers(status.wrongNumbers ?? 0);
+        setUnderAttack(status.codeUnderAttack ?? null);
+        const pending = status.pendingRequest;
+        if (!pending) return;
+        const isExpired = new Date(pending.expires_at).getTime() < Date.now();
+        if (isExpired) return;
+        setExpiresAt(pending.expires_at);
+        setStep(2);
+        setIssuedCode(pending.code ?? null);
+        setCodeNeedsStepUp(!!pending.codeNeedsStepUp);
+    }, []);
+
+    /** The read opening does, and its retry: only an answer lets a code be made. */
+    const checkExisting = useCallback(async (isMounted: () => boolean = () => true) => {
+        setStatusReadFailed(false);
+        try {
+            const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            if (!isMounted()) return;
+            if (status) applyStatus(status);
+            setStatusChecked(true);
+        } catch {
+            if (isMounted()) setStatusReadFailed(true);
+        }
+    }, [nodeUrl, member.publicKey, adminPassword, tfaToken, applyStatus]);
 
     useEffect(() => {
         let mounted = true;
-        const checkExisting = async () => {
-            try {
-                const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
-                if (mounted && status) {
-                    setRekeyStatus(status);
-                    if (status.pendingRequest) {
-                        const isExpired = new Date(status.pendingRequest.expires_at).getTime() < Date.now();
-                        if (!isExpired) {
-                            setIssuedCode(status.pendingRequest.code);
-                            setExpiresAt(status.pendingRequest.expires_at);
-                            setStep(2);
-                        }
-                    }
-                }
-            } catch {
-                // Not blocking
-            }
-        };
-        checkExisting();
+        checkExisting(() => mounted);
         return () => {
             mounted = false;
         };
-    }, [nodeUrl, member.publicKey, adminPassword, tfaToken]);
+    }, [checkExisting]);
 
-    const handleIssueCode = async () => {
-        if (!isChecklistComplete) return;
-        setLoading(true);
+    // The time left on a pending code, kept current while it shows.
+    useEffect(() => {
+        if (step !== 2) return;
+        const id = setInterval(() => setNow(Date.now()), 30000);
+        return () => clearInterval(id);
+    }, [step]);
+
+    // While the code shows: which phones asked, and whether the move was made from another screen meanwhile.
+    const historyLength = rekeyStatus?.history?.length ?? 0;
+    useEffect(() => {
+        if (step !== 2 || !issuedCode) return;
+        let live = true;
+        const id = setInterval(async () => {
+            try {
+                const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+                if (!live || cancellingHere.current) return;
+                const pending = status.pendingRequest;
+                const moved = status.history?.[0];
+                if (!pending && moved && (status.history?.length ?? 0) > historyLength) {
+                    setNewPubkey(moved.new_pubkey);
+                    setStep(3);
+                } else if (!pending || (pending.code && pending.code !== issuedCode)) {
+                    // This code is gone from the node: replaced by a new code on another screen (#1783 review D3), run out
+                    // (D4: the node marks it before this page's clock does), or stopped or cancelled there (C3). The
+                    // phones and counts the node reads now are another code's, so none of them are taken up. The cards
+                    // and the guessing warning show only beside a live code, and the next code made here starts clean
+                    // (forgetCodeState), so nothing needs clearing here (#1783 check, finding 2).
+                    const ranOut = !pending && !!expiresAt && new Date(expiresAt).getTime() - Date.now() < 60000;
+                    setCodeStopped((was) => was || (pending ? 'replaced' : ranOut ? 'expired' : 'elsewhere'));
+                } else {
+                    setProposals(status.proposals ?? []);
+                    setWrongNumbers(status.wrongNumbers ?? 0);
+                    setUnderAttack(status.codeUnderAttack ?? null);
+                }
+            } catch {
+                // The next read tries again; the cards stay as they were.
+            }
+        }, REKEY_PROPOSALS_POLL_MS);
+        return () => {
+            live = false;
+            clearInterval(id);
+        };
+    }, [step, issuedCode, expiresAt, nodeUrl, member.publicKey, adminPassword, tfaToken, historyLength]);
+
+    /** A code made or cancelled here starts clean: nothing of the code before it shows (#1783 review D2). */
+    const forgetCodeState = () => {
+        setCodeStopped(false);
+        setWrongNumbers(0);
+        setTypedMatch('');
+        setProposals([]);
+        setUnderAttack(null);
+    };
+
+    /** After Manage again: read the status once more, which now carries the code. */
+    const handleReread = async () => {
+        setRereading(true);
         setError(null);
         try {
+            const status = await fetchRekeyStatusApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            applyStatus(status);
+            if (status.pendingRequest?.codeNeedsStepUp) {
+                setError("Still waiting: press Manage in the BeanPool app again (it asks for your phone's lock), then try again.");
+            }
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to fetch re-key status');
+        } finally {
+            setRereading(false);
+        }
+    };
+
+    const handleIssueCode = async () => {
+        if (!mayMakeCode) return;
+        setLoading(true);
+        setError(null);
+        setNotice(null);
+        try {
             const res = await issueRekeyCodeApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            forgetCodeState();
             setIssuedCode(res.code);
+            setCodeNeedsStepUp(false);
             setExpiresAt(res.expiresAt);
             setStep(2);
-        } catch (err: any) {
-            setError(err?.message || 'Failed to issue re-enrolment code');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to issue re-enrolment code');
         } finally {
             setLoading(false);
         }
     };
 
-    const handleCompleteRekey = async () => {
-        const clean = newPubkey.trim().toLowerCase();
+    /** Undoes the pending code on the node: the member's key works again and their status is put back. */
+    const handleCancelCode = async () => {
+        cancellingHere.current = true;
+        setCancelling(true);
+        setError(null);
+        try {
+            const res = await cancelRekeyCodeApi(nodeUrl, member.publicKey, adminPassword, tfaToken);
+            forgetCodeState();
+            setIssuedCode(null);
+            setCodeNeedsStepUp(false);
+            setExpiresAt(null);
+            setNewPubkey('');
+            resetChecklist();
+            setRekeyStatus((s) => (s ? { ...s, pendingRequest: null, isInvalidated: false, invalidatedInfo: null } : s));
+            setNotice(`Code cancelled. @${member.callsign}'s key works again; their status is ${res.status}.${res.note ? ` ${res.note}` : ''}`);
+            setStep(1);
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to cancel the re-key code');
+        } finally {
+            cancellingHere.current = false;
+            setCancelling(false);
+        }
+    };
+
+    /**
+     * Binds the phone in front of the admin by the number it shows: the node binds the waiting phone with those digits,
+     * so no card can be bound by a press, and a thief's phone (another number) can't be picked by mistake.
+     */
+    const handleBindByMatch = async () => {
+        const match = typedMatch.trim();
+        if (!/^\d{2}$/.test(match)) {
+            setError('Type the two digits on their phone.');
+            return;
+        }
+        if (!issuedCode) {
+            setError('Re-enrolment code is missing');
+            return;
+        }
+        if (binding.current) return;
+        binding.current = true;
+        setCompleting(true);
+        setError(null);
+        try {
+            const res = await bindRekeyByMatchApi(nodeUrl, member.publicKey, issuedCode, match, adminPassword, tfaToken);
+            setSignInCopiesRemoved(res.signInCopiesRemoved ?? 0);
+            setNewPubkey(res.newPubkey);
+            setStep(3);
+            onSuccess?.(res.newPubkey);
+        } catch (err: any) {
+            setTypedMatch('');
+            if (err instanceof RekeyBindError && err.code === 'code_stopped') {
+                setCodeStopped('wrong');
+                setProposals([]);
+            } else if (err instanceof RekeyBindError && err.code === 'wrong_number') {
+                if (err.triesLeft !== undefined) setWrongNumbers(3 - err.triesLeft);
+                setError(`${err.message}${err.triesLeft !== undefined ? ` ${err.triesLeft === 1 ? 'One more wrong number stops this code.' : `${err.triesLeft} tries left.`}` : ''}`);
+            } else {
+                setError(err?.message || 'Failed to complete re-keying');
+            }
+        } finally {
+            binding.current = false;
+            setCompleting(false);
+        }
+    };
+
+    /** "Paste a key instead": binds the key pasted, for a phone that can't ask on the code. */
+    const bindKey = async (key: string) => {
+        const clean = key.trim().toLowerCase();
         if (!clean || !/^[0-9a-f]{64}$/.test(clean)) {
             setError('Please enter a valid 64-character hex public key');
             return;
@@ -108,15 +346,35 @@ export function RekeyMemberWizard({
         setCompleting(true);
         setError(null);
         try {
-            await completeRekeyApi(nodeUrl, member.publicKey, issuedCode, clean, adminPassword, tfaToken);
+            const res = await completeRekeyApi(nodeUrl, member.publicKey, issuedCode, clean, adminPassword, tfaToken);
+            setSignInCopiesRemoved(res?.signInCopiesRemoved ?? 0);
+            setNewPubkey(clean);
             setStep(3);
             onSuccess?.(clean);
-        } catch (err: any) {
-            setError(err?.message || 'Failed to complete re-keying');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to complete re-keying');
         } finally {
             setCompleting(false);
         }
     };
+
+    const handleCompleteRekey = () => bindKey(newPubkey);
+
+    /** "Not theirs": the phone is declined, and its card goes. */
+    const handleDecline = async (key: string) => {
+        setDeclining(key);
+        setError(null);
+        try {
+            await declineRekeyProposalApi(nodeUrl, member.publicKey, key, adminPassword, tfaToken);
+            setProposals((list) => list.filter((p) => p.newPubkey !== key));
+        } catch (err: any) {
+            setError(err?.message || 'Failed to decline that phone');
+        } finally {
+            setDeclining(null);
+        }
+    };
+
+    const codeExpired = Boolean(expiresAt && new Date(expiresAt).getTime() < now) || codeStopped !== false;
 
     const handleCopy = () => {
         if (!issuedCode) return;
@@ -176,9 +434,27 @@ export function RekeyMemberWizard({
                     </div>
                 )}
 
+                {notice && (
+                    <div data-testid="rekey-notice" className="p-3 bg-emerald-950/60 border border-emerald-800/80 rounded-2xl text-xs text-emerald-200 break-words">
+                        ✓ {notice}
+                    </div>
+                )}
+
                 {/* Step 1: Verification Checklist */}
                 {step === 1 && (
                     <div className="space-y-4 text-xs">
+                        {lastMove && (
+                            <div data-testid="rekey-already-moved" className="p-3 bg-sky-950/40 border border-sky-800/60 rounded-2xl text-sky-100 space-y-1 break-words">
+                                <span className="font-bold block">
+                                    Already moved to {lastMove.new_pubkey.slice(0, 10)}… on {new Date(lastMove.completed_at || lastMove.performed_at).toLocaleDateString()}
+                                </span>
+                                <p className="text-[11px] leading-relaxed m-0">
+                                    {lastMove.new_pubkey === member.publicKey.toLowerCase()
+                                        ? `This is the key @${member.callsign} moved to. A new code stops it straight away and signs them out, so make one only if this phone is lost too.`
+                                        : `@${member.callsign} already moved to a new key.`}
+                                </p>
+                            </div>
+                        )}
                         <div className="p-3 bg-amber-950/30 border border-amber-800/50 rounded-2xl text-amber-200 space-y-1">
                             <span className="font-bold block">🛡️ Operator-Assisted Identity Verification</span>
                             <p className="text-[11px] leading-relaxed text-amber-300/90 m-0">
@@ -224,25 +500,63 @@ export function RekeyMemberWizard({
                             </label>
                         </div>
 
-                        <div className="flex items-center justify-end gap-2 pt-2">
+                        {lastMove && (
+                            <label className="block space-y-1.5">
+                                <span className="block text-nature-200 break-words">
+                                    To make a new code anyway, type <strong className="font-mono text-amber-300">{MOVE_AGAIN_WORDS}</strong>:
+                                </span>
+                                <input
+                                    type="text"
+                                    value={typedConfirm}
+                                    onChange={(e) => setTypedConfirm(e.target.value)}
+                                    aria-label={`Type ${MOVE_AGAIN_WORDS} to make a new code`}
+                                    autoCapitalize="characters"
+                                    autoComplete="off"
+                                    className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3 py-2.5 text-xs text-white font-mono placeholder:text-nature-600 focus:outline-none focus:border-amber-500"
+                                />
+                            </label>
+                        )}
+
+                        {statusReadFailed ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-[11px] text-amber-300 m-0 break-words flex-1 min-w-0">
+                                    Couldn’t read this member’s re-key status, so a code can’t be made yet: they may already have moved to a new key.
+                                </p>
+                                <button
+                                    type="button"
+                                    onClick={() => checkExisting()}
+                                    className="shrink-0 px-3 py-1.5 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 text-xs font-semibold"
+                                >
+                                    Try again
+                                </button>
+                            </div>
+                        ) : (
+                            <p className="text-[11px] text-nature-400 m-0 break-words">
+                                {statusChecked
+                                    ? 'Nothing changes until you press Make a re-key code. You can cancel a code until it is used.'
+                                    : 'Checking this member’s re-key status…'}
+                            </p>
+                        )}
+
+                        <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
                             <button
                                 type="button"
                                 onClick={onClose}
                                 className="shrink-0 px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 font-semibold"
                             >
-                                Cancel
+                                Close
                             </button>
                             <button
                                 type="button"
-                                disabled={!isChecklistComplete || loading}
+                                disabled={!mayMakeCode}
                                 onClick={handleIssueCode}
                                 className={`px-4 py-2 rounded-xl font-bold transition-all shadow-lg ${
-                                    isChecklistComplete && !loading
+                                    mayMakeCode
                                         ? 'bg-amber-600 hover:bg-amber-500 text-white'
                                         : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700'
                                 }`}
                             >
-                                {loading ? 'Issuing...' : 'Invalidate Old Key & Issue Code →'}
+                                {loading ? 'Making the code…' : 'Make a re-key code →'}
                             </button>
                         </div>
                     </div>
@@ -252,7 +566,7 @@ export function RekeyMemberWizard({
                 {step === 2 && (
                     <div className="space-y-4 text-xs">
                         <div className="p-3 bg-red-950/30 border border-red-800/50 rounded-2xl text-red-300">
-                            🔒 Old key has been invalidated and cannot perform transactions.
+                            🔒 Old key has been invalidated and cannot perform transactions. Made by mistake? Cancel this code: the key works again.
                         </div>
 
                         {/* Display Code */}
@@ -260,44 +574,196 @@ export function RekeyMemberWizard({
                             <span className="text-[11px] uppercase tracking-wider text-nature-400 font-mono font-bold block">
                                 One-Time Re-enrolment Code
                             </span>
-                            <div className="flex items-center justify-center gap-3">
-                                <span className="text-2xl font-mono font-extrabold tracking-widest text-amber-300 bg-black/40 px-4 py-2 rounded-xl border border-amber-900/60">
-                                    {issuedCode}
-                                </span>
+                            {issuedCode ? (
+                            <div className="space-y-3">
+                                <div className="flex flex-wrap items-center justify-center gap-3">
+                                    <span className="text-2xl font-mono font-extrabold tracking-widest text-amber-300 bg-black/40 px-4 py-2 rounded-xl border border-amber-900/60 break-all">
+                                        {issuedCode}
+                                    </span>
+                                    <button
+                                        type="button"
+                                        onClick={handleCopy}
+                                        className="px-3 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-white font-mono text-[11px] font-semibold border border-nature-600"
+                                    >
+                                        {copiedCode ? '✓ Copied' : 'Copy'}
+                                    </button>
+                                </div>
+                                {codeExpired ? (
+                                    <div data-testid="rekey-code-expired" className="space-y-2">
+                                        <p className="text-[11px] text-amber-300 m-0 break-words">
+                                            {codeStopped === 'wrong'
+                                                ? 'Three wrong numbers were typed, so this code has stopped and no phone can use it.'
+                                                : codeStopped === 'elsewhere'
+                                                    ? 'This code is no longer active: it was stopped or cancelled on another screen, so no phone can use it.'
+                                                    : codeStopped === 'replaced'
+                                                        ? `This code is no longer active: a new code for @${member.callsign} was made on another screen, so no phone can use this one.`
+                                                        : 'This code has expired, so no phone can use it.'}
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setIssuedCode(null);
+                                                setCodeNeedsStepUp(false);
+                                                setExpiresAt(null);
+                                                setProposals([]);
+                                                setCodeStopped(false);
+                                                setTypedMatch('');
+                                                setWrongNumbers(0);
+                                                resetChecklist();
+                                                setStep(1);
+                                            }}
+                                            className="px-3 py-2 rounded-xl bg-amber-700 hover:bg-amber-600 text-white text-[11px] font-semibold"
+                                        >
+                                            Make a new code
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <img
+                                        data-testid="rekey-code-qr"
+                                        src={generateOfflineQrUrl(rekeyLink(nodeUrl, issuedCode))}
+                                        data-qr-value={rekeyLink(nodeUrl, issuedCode)}
+                                        alt={`QR code for ${issuedCode}`}
+                                        className="mx-auto w-40 h-40 max-w-full rounded-lg bg-white p-1"
+                                    />
+                                )}
+                            </div>
+                            ) : codeNeedsStepUp ? (
+                            <div className="space-y-2" data-testid="rekey-code-needs-step-up">
+                                <p className="text-[11px] leading-relaxed text-amber-200 m-0">
+                                    Confirm it's you first: this code moves an owner's or admin's role to a new phone. Press Manage in the BeanPool app again (it asks for your phone's lock), then show the code here.
+                                </p>
                                 <button
                                     type="button"
-                                    onClick={handleCopy}
-                                    className="px-3 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-white font-mono text-[11px] font-semibold border border-nature-600"
+                                    onClick={handleReread}
+                                    disabled={rereading}
+                                    className="px-3 py-2 rounded-xl bg-amber-700 hover:bg-amber-600 text-white text-[11px] font-semibold"
                                 >
-                                    {copiedCode ? '✓ Copied' : 'Copy'}
+                                    {rereading ? 'Checking…' : 'Show the code'}
                                 </button>
                             </div>
-                            {expiresAt && (
-                                <p className={`text-[10px] m-0 ${
-                                    new Date(expiresAt).getTime() < Date.now() ? 'text-amber-400 font-bold' : 'text-nature-400'
-                                }`}>
-                                    {new Date(expiresAt).getTime() < Date.now()
+                            ) : (
+                            <p className="text-[11px] leading-relaxed text-nature-300 m-0">
+                                Only the person who issued this code, or an owner, can see it.
+                            </p>
+                            )}
+                            {expiresAt && !codeStopped && (
+                                <p className={`text-[10px] m-0 ${codeExpired ? 'text-amber-400 font-bold' : 'text-nature-400'}`}>
+                                    {codeExpired
                                         ? '⚠️ Code has expired'
-                                        : `Expires in 24 hours (${new Date(expiresAt).toLocaleTimeString()})`}
+                                        : `${rekeyTimeLeft(expiresAt, now)} (until ${new Date(expiresAt).toLocaleString()})`}
                                 </p>
                             )}
                         </div>
 
-                        {/* Complete binding */}
-                        <div className="space-y-2">
-                            <label className="block font-bold text-nature-200">
-                                Member's Replacement Public Key:
-                            </label>
-                            <input
-                                type="text"
-                                value={newPubkey}
-                                onChange={(e) => setNewPubkey(e.target.value)}
-                                placeholder="e.g. 64 hex characters from new device"
-                                className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3 py-2.5 text-xs text-white font-mono placeholder:text-nature-600 focus:outline-none focus:border-amber-500"
-                            />
-                            <p className="text-[11px] text-nature-400 m-0">
-                                The member can also scan the code on their replacement phone, or paste their new device's public key here to bind immediately.
+                        {issuedCode && !codeExpired && underAttack && (
+                            <div data-testid="rekey-under-attack" className="p-3 bg-red-950/60 border border-red-800/80 rounded-2xl text-[11px] leading-relaxed text-red-200 break-words">
+                                {underAttack.refusing
+                                    ? 'Someone is guessing at codes like this one, so phones asking with it are turned away for the rest of the hour. Cancel it and make a new code: a new one starts differently.'
+                                    : `Someone has tried ${underAttack.wrongTries} wrong codes like this one in the last hour. A phone you don't recognise is someone else's: press Not theirs.`}
+                            </div>
+                        )}
+
+                        {issuedCode && !codeExpired && (
+                            <p className="text-[11px] leading-relaxed text-nature-300 m-0 break-words" data-testid="rekey-scan-help">
+                                Have them open BeanPool → <strong>Already a Member? Restore Account</strong> → <strong>An admin gave me a re-key code</strong>, and scan this or type the code and your community's name.
                             </p>
+                        )}
+
+                        {/* The phones that asked: the admin types the number on the phone in front of them; the node finds that phone */}
+                        {issuedCode && !codeExpired && (
+                            <div className="space-y-2" data-testid="rekey-proposals">
+                                {proposals.length === 0 ? (
+                                    <p className="text-[11px] text-nature-400 m-0">Waiting for their phone to ask…</p>
+                                ) : (
+                                    <>
+                                        <label className="block space-y-1.5" data-testid="rekey-type-number">
+                                            <span className="block font-bold text-amber-200 break-words">
+                                                Type the number on their phone:
+                                            </span>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <input
+                                                    type="text"
+                                                    inputMode="numeric"
+                                                    autoComplete="off"
+                                                    maxLength={2}
+                                                    value={typedMatch}
+                                                    onChange={(e) => setTypedMatch(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') handleBindByMatch();
+                                                    }}
+                                                    aria-label="The number on their phone"
+                                                    placeholder="00"
+                                                    className="w-20 bg-nature-900 border border-nature-700 rounded-xl px-3 py-2 text-lg text-center text-white font-mono tracking-widest placeholder:text-nature-600 focus:outline-none focus:border-amber-500"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    disabled={completing || declining !== null || !/^\d{2}$/.test(typedMatch)}
+                                                    onClick={handleBindByMatch}
+                                                    className={`px-3 py-2 rounded-xl text-xs font-bold ${
+                                                        !completing && /^\d{2}$/.test(typedMatch)
+                                                            ? 'bg-amber-600 hover:bg-amber-500 text-white'
+                                                            : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700'
+                                                    }`}
+                                                >
+                                                    {completing ? 'Moving the account…' : 'Bind their phone'}
+                                                </button>
+                                            </div>
+                                            <span className="block text-[11px] text-nature-400 break-words">
+                                                Read it off the phone in front of you; this page never shows it. Three wrong numbers stop this code.
+                                                {wrongNumbers > 0 && ` Wrong so far: ${wrongNumbers} of 3.`}
+                                            </span>
+                                        </label>
+                                        <p className="text-[11px] text-nature-300 m-0 break-words">
+                                            {proposals.length === 1 ? 'One phone has asked.' : `${proposals.length} phones have asked.`} More than theirs means someone else has the code: press Not theirs on any you don't recognise, or cancel the code and make a new one with them here.
+                                        </p>
+                                        {proposals.map((p) => (
+                                            <div key={p.newPubkey} data-testid="rekey-proposal" className="p-3 bg-nature-900/80 border border-nature-700/80 rounded-2xl flex flex-wrap items-center justify-between gap-2">
+                                                <p className="text-nature-200 m-0 break-words min-w-0">
+                                                    A phone asked at {askedAt(p.proposedAt)} · key{' '}
+                                                    <span className="font-mono">{p.newPubkey.slice(0, 6)}…</span>
+                                                </p>
+                                                <button
+                                                    type="button"
+                                                    disabled={completing || declining !== null}
+                                                    onClick={() => handleDecline(p.newPubkey)}
+                                                    className="shrink-0 px-3 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 text-xs font-semibold"
+                                                >
+                                                    {declining === p.newPubkey ? 'Declining…' : 'Not theirs'}
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Paste a key instead: for a phone that can't reach the node from where the member stands */}
+                        <div className="space-y-2">
+                            <button
+                                type="button"
+                                aria-expanded={showPaste}
+                                onClick={() => setShowPaste((v) => !v)}
+                                className="text-[11px] text-nature-400 hover:text-nature-200 underline"
+                            >
+                                {showPaste ? 'Hide pasting a key' : 'Paste a key instead'}
+                            </button>
+                            {showPaste && (
+                                <div className="space-y-2">
+                                    <label className="block font-bold text-nature-200">
+                                        Member's Replacement Public Key:
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={newPubkey}
+                                        onChange={(e) => setNewPubkey(e.target.value)}
+                                        placeholder="e.g. 64 hex characters from new device"
+                                        className="w-full bg-nature-900 border border-nature-700 rounded-xl px-3 py-2.5 text-xs text-white font-mono placeholder:text-nature-600 focus:outline-none focus:border-amber-500"
+                                    />
+                                    <p className="text-[11px] text-nature-400 m-0">
+                                        Only when their phone can't reach this community from where they are: paste the new phone's public key, and it is bound at once.
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Federation notice: plain explanation before committing */}
@@ -311,17 +777,33 @@ export function RekeyMemberWizard({
                         </div>
 
                         <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setIssuedCode(null);
-                                    setExpiresAt(null);
-                                    setStep(1);
-                                }}
-                                className="px-3 py-2 rounded-xl bg-nature-800/80 hover:bg-nature-700 text-nature-300 text-xs font-semibold"
-                            >
-                                ← Issue New Code
-                            </button>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={handleCancelCode}
+                                    disabled={cancelling || completing}
+                                    className="px-3 py-2 rounded-xl bg-red-900/80 hover:bg-red-800 text-red-100 text-xs font-semibold border border-red-800"
+                                >
+                                    {cancelling ? 'Cancelling…' : 'Cancel this code'}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setIssuedCode(null);
+                                        setCodeNeedsStepUp(false);
+                                        setExpiresAt(null);
+                                        setProposals([]);
+                                        setCodeStopped(false);
+                                        setTypedMatch('');
+                                        setWrongNumbers(0);
+                                        resetChecklist();
+                                        setStep(1);
+                                    }}
+                                    className="px-3 py-2 rounded-xl bg-nature-800/80 hover:bg-nature-700 text-nature-300 text-xs font-semibold"
+                                >
+                                    ← Issue New Code
+                                </button>
+                            </div>
                             <div className="flex items-center gap-2">
                                 <button
                                     type="button"
@@ -330,18 +812,20 @@ export function RekeyMemberWizard({
                                 >
                                     Close
                                 </button>
+                                {showPaste && (
                                 <button
                                     type="button"
-                                    disabled={completing || !newPubkey.trim() || Boolean(expiresAt && new Date(expiresAt).getTime() < Date.now())}
+                                    disabled={completing || !issuedCode || !newPubkey.trim() || Boolean(expiresAt && new Date(expiresAt).getTime() < Date.now())}
                                     onClick={handleCompleteRekey}
                                     className={`px-4 py-2 rounded-xl font-bold transition-all shadow-lg ${
-                                        !completing && newPubkey.trim() && !(expiresAt && new Date(expiresAt).getTime() < Date.now())
+                                        !completing && issuedCode && newPubkey.trim() && !(expiresAt && new Date(expiresAt).getTime() < Date.now())
                                             ? 'bg-amber-600 hover:bg-amber-500 text-white'
                                             : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700'
                                     }`}
                                 >
                                     {completing ? 'Transferring Records...' : 'Complete Re-Keying →'}
                                 </button>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -357,6 +841,10 @@ export function RekeyMemberWizard({
                             <h4 className="text-base font-bold text-white">Re-Keying Complete!</h4>
                             <p className="text-nature-300 text-xs">
                                 All balance, trade history, roles, and keeperships for <strong className="text-white break-all">@{member.callsign}</strong> have been atomically transferred to the new device key.
+                            </p>
+                            <p className="text-nature-400 text-[11px] m-0">
+                                If their phone made a new key, it shows that key's 12 words.
+                                {signInCopiesRemoved > 0 && ' A sign-in they had linked for recovery protected the old key, so it was removed: they link it again from the new phone.'}
                             </p>
                         </div>
 

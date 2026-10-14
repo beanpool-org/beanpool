@@ -2,6 +2,14 @@ import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, Platform, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
+/**
+ * One size for every provider's logo, in a box that never gives way. The label beside it shrinks and wraps
+ * instead: at 320dp with enlarged text a label that could not shrink pushed the row wider than the button, the
+ * row stayed centred, and the text spilled past the button's edges (utils/__tests__/sso-button-layout.test.ts).
+ */
+const SSO_LOGO_SIZE = 20;
+const SSO_ICON_BOX = 24;
+
 export function GoogleLogo({ size = 20 }: { size?: number }) {
     return (
         <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -63,7 +71,7 @@ export function GoogleButton({
             accessibilityState={{ disabled }}
         >
             <View style={styles.iconContainer}>
-                <GoogleLogo size={20} />
+                <GoogleLogo size={SSO_LOGO_SIZE} />
             </View>
             <Text style={[styles.googleBtnText, textStyle]}>{title}</Text>
         </TouchableOpacity>
@@ -115,17 +123,6 @@ export function FacebookLogo({ size = 20 }: { size?: number }) {
     );
 }
 
-export function GitHubLogo({ size = 20, color = '#24292F' }: { size?: number; color?: string }) {
-    return (
-        <Svg width={size} height={size} viewBox="0 0 24 24">
-            <Path
-                fill={color}
-                d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"
-            />
-        </Svg>
-    );
-}
-
 export function FacebookButton({
     onPress,
     title = 'Protect with Facebook',
@@ -153,43 +150,9 @@ export function FacebookButton({
             accessibilityState={{ disabled }}
         >
             <View style={styles.iconContainer}>
-                <FacebookLogo size={20} />
+                <FacebookLogo size={SSO_LOGO_SIZE} />
             </View>
             <Text style={[styles.facebookBtnText, textStyle]}>{title}</Text>
-        </TouchableOpacity>
-    );
-}
-
-export function GitHubButton({
-    onPress,
-    title = 'Protect with GitHub',
-    disabled = false,
-    accessibilityHint,
-    style,
-    textStyle,
-}: {
-    onPress: () => void;
-    title?: string;
-    disabled?: boolean;
-    accessibilityHint?: string;
-    style?: StyleProp<ViewStyle>;
-    textStyle?: StyleProp<TextStyle>;
-}) {
-    return (
-        <TouchableOpacity
-            style={[styles.githubBtn, disabled && styles.disabled, style]}
-            onPress={onPress}
-            disabled={disabled}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel={title}
-            accessibilityHint={accessibilityHint}
-            accessibilityState={{ disabled }}
-        >
-            <View style={styles.iconContainer}>
-                <GitHubLogo size={20} color="#24292F" />
-            </View>
-            <Text style={[styles.githubBtnText, textStyle]}>{title}</Text>
         </TouchableOpacity>
     );
 }
@@ -213,6 +176,7 @@ const styles = StyleSheet.create({
         elevation: 1,
     },
     googleBtnText: {
+        flexShrink: 1,
         color: '#1F1F1F',
         fontSize: 15,
         fontWeight: '600',
@@ -236,12 +200,16 @@ const styles = StyleSheet.create({
         elevation: 1,
     },
     appleBtnText: {
+        flexShrink: 1,
         color: '#FFFFFF',
         fontSize: 15,
         fontWeight: '600',
         textAlign: 'center',
     },
     iconContainer: {
+        width: SSO_ICON_BOX,
+        height: SSO_ICON_BOX,
+        flexShrink: 0,
         marginRight: 10,
         alignItems: 'center',
         justifyContent: 'center',
@@ -264,30 +232,8 @@ const styles = StyleSheet.create({
         elevation: 1,
     },
     facebookBtnText: {
+        flexShrink: 1,
         color: '#1877F2',
-        fontSize: 15,
-        fontWeight: '600',
-        textAlign: 'center',
-    },
-    githubBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#F6F8FA',
-        borderWidth: 1,
-        borderColor: '#D0D7DE',
-        borderRadius: 12,
-        paddingVertical: 14,
-        paddingHorizontal: 16,
-        minHeight: 48,
-        shadowColor: '#000000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.08,
-        shadowRadius: 2,
-        elevation: 1,
-    },
-    githubBtnText: {
-        color: '#24292F',
         fontSize: 15,
         fontWeight: '600',
         textAlign: 'center',

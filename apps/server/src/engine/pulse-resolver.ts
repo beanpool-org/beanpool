@@ -24,7 +24,8 @@ import crypto from 'node:crypto';
 import { db } from '../db/db.js';
 import { ChannelCategory, ChannelPlatform } from './creator-channels.js';
 import { scrubEndedEvents } from './posts.js';
-import { avatarUrlFor } from '@beanpool/core';
+import { avatarUrlOf } from '@beanpool/core';
+import { pulseHarvestAllowance } from './writer-bounds.js';
 
 // ============================================================================
 // 1. Errors & Types
@@ -459,6 +460,13 @@ async function resolveAndPinHost(hostname: string): Promise<PinnedResolution> {
  * Node 22 defaults net.connect to autoSelectFamily: true, which passes { all: true }
  * and expects cb(null, [{ address, family }]). When all is falsy or omitted, the legacy
  * cb(null, address, family) form is expected.
+ *
+ * It must never call back synchronously. dns.lookup always answers on a later tick, and
+ * http/https/net depend on that: the ClientRequest attaches its socket listeners only after the
+ * agent's createConnection returns. A synchronous answer runs connect() inside createConnection,
+ * so a connect that fails at once (EPERM/EACCES from an egress firewall, ENETUNREACH for an IPv6
+ * address with no route, EAFNOSUPPORT) emits its error on a socket nobody listens to yet: an
+ * uncaught exception that takes the whole node down, from the Pulse scheduler every 5 minutes.
  */
 export function createCustomLookup(pinnedIp: string, family: number) {
     return (_host: string, lookupOpts: any, callback?: any) => {
@@ -466,11 +474,13 @@ export function createCustomLookup(pinnedIp: string, family: number) {
         if (typeof cb !== 'function') return;
 
         const isAll = typeof lookupOpts === 'object' && lookupOpts !== null && Boolean(lookupOpts.all);
-        if (isAll) {
-            cb(null, [{ address: pinnedIp, family }]);
-        } else {
-            cb(null, pinnedIp, family);
-        }
+        process.nextTick(() => {
+            if (isAll) {
+                cb(null, [{ address: pinnedIp, family }]);
+            } else {
+                cb(null, pinnedIp, family);
+            }
+        });
     };
 }
 
@@ -1740,7 +1750,17 @@ export async function buildSoundCloudFeedUrl(urlOrHandle: string): Promise<strin
     return null;
 }
 
-export async function resolveChannel(channelId: string): Promise<{ count: number; error?: string }> {
+export interface ResolveChannelOptions {
+    /** Tests only: fetches the channel's site and feed in place of ssrfSafeFetch (which refuses localhost). */
+    fetchFn?: (url: string, options?: SsrfSafeFetchOptions) => Promise<SsrfSafeResponse>;
+}
+
+/**
+ * One visit to a channel: fetch its feed and list its newest items. `count` is the items listed or refreshed;
+ * `leftForLater` the new ones its owner's day allowance had no room for (WRITER_LIMITS.pulseHarvestedItemsPerDay).
+ */
+export async function resolveChannel(channelId: string, options: ResolveChannelOptions = {}): Promise<{ count: number; error?: string; leftForLater?: number }> {
+    const fetchFn = options.fetchFn ?? ssrfSafeFetch;
     const channel = db.prepare(
         `SELECT id, owner_pubkey, platform, url, handle, category, supports_autolist,
                 syndicate_to_node, fail_count, last_error, is_stale, created_at
@@ -1820,7 +1840,7 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
                 return { count: 0, error: 'No URL available' };
             }
 
-            const initialResp = await ssrfSafeFetch(initialUrl, {
+            const initialResp = await fetchFn(initialUrl, {
                 timeoutMs: 8000,
                 maxBytes: 256 * 1024,
             });
@@ -1894,7 +1914,7 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
 
         let xml = feedXmlContent;
         if (!xml) {
-            const response = await ssrfSafeFetch(feedUrl, {
+            const response = await fetchFn(feedUrl, {
                 timeoutMs: 8000,
                 maxBytes: 2 * 1024 * 1024,
             });
@@ -1925,6 +1945,14 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
             .slice(0, PULSE_KEEP_PER_CHANNEL);
 
         let insertedOrUpdated = 0;
+        // W-main: a new row spends the owner's day allowance, across all their channels; an item already listed
+        // (a live row with this guid) is only refreshed and costs nothing. Past the allowance the rest wait for a later
+        // visit, which finds them again: no error, so the channel stays healthy and in the rotation. Counted from the
+        // rows (engine/writer-bounds.ts), pruned ones included, so a restart or a take-over carries the day with it.
+        let leftForLater = 0;
+        const isListed = db.prepare(
+            'SELECT 1 FROM pulse_items WHERE channel_id = ? AND external_id = ? AND deleted_at IS NULL'
+        );
 
         const insertItem = db.prepare(
             `INSERT INTO pulse_items
@@ -1941,7 +1969,13 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
         );
 
         db.transaction(() => {
+            let allowance = pulseHarvestAllowance(channel.owner_pubkey);
             for (const item of intake) {
+                const listed = item.externalId !== null && !!isListed.get(channel.id, item.externalId);
+                if (!listed) {
+                    if (allowance <= 0) { leftForLater++; continue; }
+                    allowance--;
+                }
 
                 const itemId = `item_${crypto.randomBytes(12).toString('hex')}`;
                 insertItem.run(
@@ -1968,7 +2002,8 @@ export async function resolveChannel(channelId: string): Promise<{ count: number
             ).run(now, channel.id);
         })();
 
-        return { count: insertedOrUpdated };
+        // Not logged: an owner past the allowance would write a line at every visit.
+        return leftForLater > 0 ? { count: insertedOrUpdated, leftForLater } : { count: insertedOrUpdated };
     } catch (err: any) {
         const nextFails = (channel.fail_count || 0) + 1;
         const isStale = nextFails >= 3 ? 1 : (channel.is_stale || 0);
@@ -2198,7 +2233,7 @@ export function getPulseFeed(options: PulseFeedOptions = {}): { items: PulseFeed
     const rows = db.prepare(
         `SELECT i.id, i.owner_pubkey, i.platform, i.url, i.title, i.thumbnail_url,
                 i.published_at, i.category, i.source, c.oauth_verified_at,
-                m.callsign, m.avatar_url
+                m.callsign, m.avatar_ref
            FROM pulse_items i
            JOIN creator_channels c ON c.id = i.channel_id
            JOIN members m ON m.public_key = i.owner_pubkey
@@ -2216,7 +2251,7 @@ export function getPulseFeed(options: PulseFeedOptions = {}): { items: PulseFeed
         id: r.id,
         ownerPubkey: r.owner_pubkey,
         callsign: r.callsign || 'Neighbour',
-        avatarUrl: avatarUrlFor(r.owner_pubkey, r.avatar_url),
+        avatarUrl: avatarUrlOf(r.owner_pubkey, r.avatar_ref),
         platform: r.platform,
         category: r.category,
         url: r.url || null,
@@ -2234,7 +2269,7 @@ export function setPulseItemMute(actorPubkey: string, itemId: string, muted: boo
     const row = db.prepare(
         `SELECT i.id, i.owner_pubkey, i.platform, i.url, i.title, i.thumbnail_url,
                 i.published_at, i.category, i.source, i.muted, i.deleted_at,
-                c.oauth_verified_at, m.callsign, m.avatar_url
+                c.oauth_verified_at, m.callsign, m.avatar_ref
            FROM pulse_items i
            JOIN creator_channels c ON c.id = i.channel_id
            JOIN members m ON m.public_key = i.owner_pubkey
@@ -2264,7 +2299,7 @@ export function setPulseItemMute(actorPubkey: string, itemId: string, muted: boo
             id: row.id,
             ownerPubkey: row.owner_pubkey,
             callsign: row.callsign || 'Neighbour',
-            avatarUrl: avatarUrlFor(row.owner_pubkey, row.avatar_url),
+            avatarUrl: avatarUrlOf(row.owner_pubkey, row.avatar_ref),
             platform: row.platform,
             category: row.category,
             url: row.url || null,

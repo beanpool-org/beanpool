@@ -102,7 +102,7 @@ async function main(): Promise<void> {
     console.log('=== Pulse Resolver & Cache Test Suite ===\n');
 
     initStateEngine();
-    const p2pNode = await startP2P(4034, 4035);
+    const p2pNode = await startP2P(0, 0);
     const nodeId = p2pNode.peerId.toString();
     addConnector(`/ip4/127.0.0.1/tcp/4035/p2p/${nodeId}`, 'mirror', 'self-test-peer');
 
@@ -475,46 +475,35 @@ async function main(): Promise<void> {
     }
     assert(publicHttpOk, `ssrfSafeFetch succeeds on public HTTP domain with real socket connection${publicHttpError ? ` (failed: ${publicHttpError.message || publicHttpError})` : ''}`);
 
-    // CustomLookup callback interface tests (Node 22 all:true vs legacy single-result form)
+    // CustomLookup callback interface tests (Node 22 all:true vs legacy single-result form). The
+    // lookup answers on a later tick, as dns.lookup does (see test-ssrf-fetch-timeout.ts section 8),
+    // so each call is awaited.
     const lookup = createCustomLookup('93.184.216.34', 4);
-
-    let allTrueResult: any = null;
-    lookup('example.com', { all: true }, (_err: any, addresses: any) => {
-        allTrueResult = addresses;
+    const lookupArgs = (opts?: unknown): Promise<any[]> => new Promise((resolve) => {
+        const cb = (...args: any[]) => resolve(args);
+        if (opts === undefined) (lookup as any)('example.com', cb);
+        else (lookup as any)('example.com', opts, cb);
     });
+
+    const [, allTrueResult] = await lookupArgs({ all: true });
     assert(
         Array.isArray(allTrueResult) && allTrueResult.length === 1 && allTrueResult[0].address === '93.184.216.34' && allTrueResult[0].family === 4,
         'createCustomLookup returns array [{ address, family }] when options.all is true (Node 22 autoSelectFamily)'
     );
 
-    let allFalseAddr: any = null;
-    let allFalseFamily: any = null;
-    lookup('example.com', { all: false }, (_err: any, address: any, family: any) => {
-        allFalseAddr = address;
-        allFalseFamily = family;
-    });
+    const [, allFalseAddr, allFalseFamily] = await lookupArgs({ all: false });
     assert(
         allFalseAddr === '93.184.216.34' && allFalseFamily === 4,
         'createCustomLookup returns (address, family) when options.all is false'
     );
 
-    let numericFamilyAddr: any = null;
-    let numericFamilyVal: any = null;
-    lookup('example.com', 4, (_err: any, address: any, family: any) => {
-        numericFamilyAddr = address;
-        numericFamilyVal = family;
-    });
+    const [, numericFamilyAddr, numericFamilyVal] = await lookupArgs(4);
     assert(
         numericFamilyAddr === '93.184.216.34' && numericFamilyVal === 4,
         'createCustomLookup returns (address, family) when options is a numeric family'
     );
 
-    let legacyAddr: any = null;
-    let legacyFamily: any = null;
-    lookup('example.com', (_err: any, address: any, family: any) => {
-        legacyAddr = address;
-        legacyFamily = family;
-    });
+    const [, legacyAddr, legacyFamily] = await lookupArgs();
     assert(
         legacyAddr === '93.184.216.34' && legacyFamily === 4,
         'createCustomLookup returns (address, family) when called without options'
@@ -638,7 +627,9 @@ async function main(): Promise<void> {
     assert(scrubbedRow.thumbnail_url === null, 'thumbnail_url NULLed on tombstone');
 
     // Per-Channel Pruner: insert an old item and run prunePulseItems with keepPerChannel = 1
-    const oldPublished = new Date(Date.now() - (35 * 24 * 60 * 60 * 1000)).toISOString();
+    // A fixed date older than every fixture in this file, never "now - N days": the pruner keeps the newest per channel, so an
+    // item dated relative to the clock overtook item_1 (published 2026-08-30T10:00Z) at 2026-10-04T10:00Z and item_1 was pruned.
+    const oldPublished = '2026-01-01T00:00:00.000Z';
     insertStmt.run('item_old', ch.id, kayla, 'youtube', 'vid_old', 'https://youtube.com/watch?v=vid_old', 'Old Video', 'https://img.com/old.jpg', oldPublished, 'craft', now, now);
 
     const prunedCount = prunePulseItems(1);

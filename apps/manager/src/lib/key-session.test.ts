@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { parseHandoffFragment, startKeySession, sectionTarget } from './key-session';
+import { parseHandoffFragment, startKeySession, sectionTarget, signInWithPassword, forgetStoredAdminSecrets } from './key-session';
 import { buildAdminHeaders, setKeySessionCsrfToken } from './node-client';
 
 const TOKEN = 'a'.repeat(64);
@@ -67,6 +67,74 @@ describe('startKeySession', () => {
         expect(r2.kind === 'failed' && r2.message).toMatch(/already used/);
     });
 
+    it('says the phone link is spent and to tap Manage again, in plain words', async () => {
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/auth/exchange')
+            ? reply(401, { error: 'x', expired: true })
+            : reply(200, { authenticated: false })));
+        const r = await startKeySession(fakeWindow(`#handoff=${TOKEN}&section=home&from=app`).win);
+        expect(r.kind === 'failed' && r.message).toMatch(/sign-in link from your phone has expired/);
+        expect(r.kind === 'failed' && r.message).toMatch(/Tap Manage again/);
+    });
+
+    it('a damaged link (not a token) is said, never a silent password form', async () => {
+        const fetchMock = vi.fn(async (_url: string) => reply(200, { authenticated: false }));
+        vi.stubGlobal('fetch', fetchMock);
+        const { win, replaceState } = fakeWindow('#handoff=abc&from=app');
+        const r = await startKeySession(win);
+        expect(r.kind).toBe('failed');
+        expect(r.kind === 'failed' && r.message).toMatch(/cut short or damaged.*Tap Manage again/);
+        expect(replaceState).toHaveBeenCalledWith(null, '', '/settings');
+        // Nothing was posted as a token.
+        expect(fetchMock.mock.calls.map(c => c[0])).toEqual(['/api/local/admin/auth/session']);
+    });
+
+    it('a refused link with a live session cookie FOR THE SAME KEY resumes it, and says the link was not used (a page loaded twice)', async () => {
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/auth/exchange')
+            ? reply(401, { error: 'x', replay: true, mintedFor: 'cd'.repeat(32) })
+            : url.endsWith('/auth/session')
+                ? reply(200, { authenticated: true, isKeySession: true, role: 'owner', memberPubkey: 'cd'.repeat(32), callsign: 'Ada' })
+                : reply(200, { csrfToken: 'csrf3' })));
+        const r = await startKeySession(fakeWindow(`#handoff=${TOKEN}&section=home`).win);
+        expect(r).toMatchObject({ kind: 'session', session: { memberPubkey: 'cd'.repeat(32), role: 'owner' }, csrfToken: 'csrf3', section: 'home' });
+        expect(r.kind === 'session' && r.notice).toMatch(/link from your phone was already used.*earlier sign-in.*same account/i);
+    });
+
+    it('a refused link with a live session cookie for ANOTHER key does not resume it: it names who is signed in and asks to sign out', async () => {
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/auth/exchange')
+            ? reply(401, { error: 'x', expired: true, mintedFor: 'ef'.repeat(32) })
+            : url.endsWith('/auth/session')
+                ? reply(200, { authenticated: true, isKeySession: true, role: 'admin', memberPubkey: 'cd'.repeat(32), callsign: 'Ada' })
+                : reply(200, { csrfToken: 'csrf4' })));
+        const r = await startKeySession(fakeWindow(`#handoff=${TOKEN}&section=home`).win);
+        expect(r).toEqual({
+            kind: 'other-session',
+            message: "You're still signed in here as Ada — not the account your phone just sent. Sign out, then tap Manage again.",
+            csrfToken: 'csrf4',
+            section: 'home',
+        });
+    });
+
+    it('a refused link that names no key, with a live key session, does not resume it either', async () => {
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/auth/exchange')
+            ? reply(401, { error: 'Invalid handshake token' })
+            : url.endsWith('/auth/session')
+                ? reply(200, { authenticated: true, isKeySession: true, role: 'owner', memberPubkey: 'cd'.repeat(32), callsign: 'Ada' })
+                : reply(200, { csrfToken: 'csrf5' })));
+        const r = await startKeySession(fakeWindow(`#handoff=${TOKEN}`).win);
+        expect(r.kind).toBe('other-session');
+        expect(r.kind === 'other-session' && r.message).toBe("You're still signed in here as Ada — maybe not the account your phone just sent. Sign out, then tap Manage again.");
+    });
+
+    it('a refused link with a live PASSWORD session does not resume it: the phone sent a key, never the password', async () => {
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/auth/exchange')
+            ? reply(401, { error: 'x', replay: true, mintedFor: 'cd'.repeat(32) })
+            : url.endsWith('/auth/session')
+                ? reply(200, { authenticated: true, isKeySession: false, isPasswordSession: true, role: 'owner', memberPubkey: null })
+                : reply(200, { csrfToken: 'csrf6' })));
+        const r = await startKeySession(fakeWindow(`#handoff=${TOKEN}`).win);
+        expect(r.kind === 'other-session' && r.message).toBe("You're still signed in here with the admin password — not the account your phone just sent. Sign out, then tap Manage again.");
+    });
+
     it('never treats a password-authenticated answer as a key session', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => reply(200, { authenticated: true, isKeySession: false, role: 'owner', memberPubkey: null })));
         expect((await startKeySession(fakeWindow('').win)).kind).toBe('none');
@@ -81,6 +149,58 @@ describe('startKeySession', () => {
         const res = await startKeySession(win);
         expect(res).toEqual({ kind: 'session', session: { memberPubkey: 'cd'.repeat(32), role: 'owner' }, csrfToken: 'csrf2', section: null });
         expect(replaceState).not.toHaveBeenCalled();
+    });
+
+    it('a reload with a live PASSWORD session resumes it as one (owner, no member), with a fresh CSRF token', async () => {
+        const fetchMock = vi.fn(async (url: string) => url.endsWith('/auth/session')
+            ? reply(200, { authenticated: true, isKeySession: false, isPasswordSession: true, role: 'owner', memberPubkey: null })
+            : reply(200, { csrfToken: 'csrf-pw' }));
+        vi.stubGlobal('fetch', fetchMock);
+        expect(await startKeySession(fakeWindow('').win)).toEqual({ kind: 'password', csrfToken: 'csrf-pw', section: null, totpSetupRequired: false });
+        // A password session is only ever the owner's: any other role in the answer is not taken as one.
+        vi.stubGlobal('fetch', vi.fn(async (url: string) => url.endsWith('/auth/session')
+            ? reply(200, { authenticated: true, isPasswordSession: true, role: 'moderator', memberPubkey: null })
+            : reply(200, { csrfToken: 'csrf-x' })));
+        expect((await startKeySession(fakeWindow('').win)).kind).toBe('none');
+    });
+});
+
+describe('signInWithPassword', () => {
+    it('posts the password once, in the body, for the session cookie, and hands back only the CSRF token', async () => {
+        const fetchMock = vi.fn(async () => reply(200, { success: true, role: 'owner', csrfToken: 'csrf-signin' }));
+        vi.stubGlobal('fetch', fetchMock);
+        const res = await signInWithPassword('/api/local/admin/auth/password', 'hunter2', '123456');
+        expect(res).toEqual({ ok: true, csrfToken: 'csrf-signin', totpSetupRequired: false });
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+        const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+        expect(url).toBe('/api/local/admin/auth/password');
+        expect(init.method).toBe('POST');
+        expect(init.credentials).toBe('same-origin');
+        expect(JSON.parse(String(init.body))).toEqual({ password: 'hunter2', totpCode: '123456' });
+        expect(JSON.stringify(init.headers)).not.toContain('hunter2');
+        expect(JSON.stringify(res)).not.toContain('hunter2');
+    });
+
+    it('says when the node wants a 2FA code, and passes its error on', async () => {
+        vi.stubGlobal('fetch', vi.fn(async () => reply(401, { error: '2FA code required', totpRequired: true })));
+        expect(await signInWithPassword('/x', 'pw')).toEqual({ ok: false, totpRequired: true, error: '2FA code required' });
+        vi.stubGlobal('fetch', vi.fn(async () => reply(403, { error: 'Break-glass mode active', breakGlassMode: true })));
+        expect(await signInWithPassword('/x', 'pw')).toEqual({ ok: false, totpRequired: false, error: 'Break-glass mode active' });
+    });
+});
+
+describe('forgetStoredAdminSecrets', () => {
+    it('removes what older builds stored (the password, its 2FA sessions) and nothing else', () => {
+        sessionStorage.clear();
+        sessionStorage.setItem('bp-admin-token', 'old-password');
+        sessionStorage.setItem('bp-2fa-session', 'old-2fa');
+        sessionStorage.setItem('bp_tfa_session_local-node', 'old-2fa');
+        sessionStorage.setItem('bp_tfa_session_node-7', 'old-2fa-7');
+        sessionStorage.setItem('bp-csrf-token', 'old-csrf');
+        sessionStorage.setItem('bp-settings-tab', 'identity');
+        forgetStoredAdminSecrets();
+        expect(Object.keys({ ...sessionStorage })).toEqual(['bp-settings-tab']);
+        expect(sessionStorage.getItem('bp-settings-tab')).toBe('identity');
     });
 });
 

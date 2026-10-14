@@ -13,10 +13,11 @@ import {
     type GroupRole,
     type JoinPolicy
 } from '../lib/api';
-import { MAKE_OBSERVER_MEMBER_FIRST } from '@beanpool/core';
+import { MAKE_OBSERVER_MEMBER_FIRST, GROUP_CLOSED_NOTE, type GroupPerson } from '@beanpool/core';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { buildRosterView } from '../lib/group-roster';
 import { GroupSuccessionPanel } from './GroupSuccessionPanel';
+import { GroupDecisions } from './EnterpriseDecisions';
 
 interface Props {
     group: Group | null;
@@ -41,22 +42,32 @@ export function GroupDetailModal({
     const [actionLoading, setActionLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const loadDetails = useCallback(async () => {
+    const loadCard = useCallback(async () => {
+        if (!group?.id) return;
+        try {
+            const g = await getGroup(group.id);
+            setGroupData(g);
+        } catch (err: any) {
+            console.warn('[GroupDetail] Failed to load group card:', err);
+        }
+    }, [group?.id]);
+
+    const loadRoster = useCallback(async () => {
         if (!group?.id) return;
         setLoading(true);
         try {
-            const [g, m] = await Promise.all([
-                getGroup(group.id),
-                getGroupMembers(group.id)
-            ]);
-            setGroupData(g);
+            const m = await getGroupMembers(group.id);
             setMembers(Array.isArray(m) ? m : []);
         } catch (err: any) {
-            console.warn('[GroupDetail] Failed to load:', err);
+            console.warn('[GroupDetail] Failed to load roster:', err);
         } finally {
             setLoading(false);
         }
     }, [group?.id]);
+
+    const loadDetails = useCallback(async () => {
+        await Promise.all([loadCard(), loadRoster()]);
+    }, [loadCard, loadRoster]);
 
     useEffect(() => {
         if (isOpen && group?.id) {
@@ -86,6 +97,14 @@ export function GroupDetailModal({
     // with the native roster and with the engine that enforces it: a convenor never sees the Role select or ✕ on
     // the lead, or on another convenor.
     const roster = buildRosterView(groupData, members, myPubkey);
+    // Closed by its members' vote (DESIGN-group-decisions §2.3): it stays to read and takes nothing new.
+    const closed = !!groupData.closedAt;
+    // Everyone in the group now, for the Decisions block's names and pickers (the lead as 'lead').
+    const people: GroupPerson[] = members.filter(m => m.status === 'active').map(m => ({
+        pubkey: m.memberPubkey,
+        name: m.callsign || m.memberPubkey.slice(0, 10),
+        role: m.memberPubkey === groupData.leadPubkey ? 'lead' : m.role,
+    }));
 
     const handleJoin = async () => {
         setActionLoading(true);
@@ -241,6 +260,11 @@ export function GroupDetailModal({
                         <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300">
                             <span aria-hidden="true">🚪 </span>{groupData.joinPolicy.replace(/_/g, ' ')}
                         </span>
+                        {closed && (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-black bg-nature-200 dark:bg-nature-800 text-nature-900 dark:text-nature-100" data-testid="group-closed-pill">
+                                <span aria-hidden="true">🔒 </span>Closed
+                            </span>
+                        )}
                         {isConvenor && (
                             <span className="px-2.5 py-1 rounded-full text-xs font-black bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
                                 <span aria-hidden="true">🛡️ </span>{roster.viewerIsLead ? 'Lead convenor' : 'Convenor'}
@@ -273,8 +297,31 @@ export function GroupDetailModal({
                         </p>
                     )}
 
+                    {closed && (
+                        <p className="m-0 p-3 rounded-xl border border-nature-300 dark:border-nature-700 text-sm text-nature-800 dark:text-nature-200 break-words" data-testid="group-closed-note">
+                            <span aria-hidden="true">🔒 </span>{GROUP_CLOSED_NOTE}
+                        </p>
+                    )}
+
+                    {/* The group's votes, high on the sheet: Home's vote line lands here. Drawn for anyone the node answers,
+                        members or not: someone removed or made an observer mid-vote still votes on it (#1784 review B1). It
+                        draws nothing for someone the node doesn't answer, or when there is no vote and none can open. */}
+                    {(
+                        <GroupDecisions
+                            groupId={groupData.id}
+                            myPubkey={myPubkey ?? null}
+                            people={people}
+                            joinPolicy={groupData.joinPolicy}
+                            onChanged={() => {
+                                // A vote carried out may move the lead, a role or the join rule, or close the group.
+                                void loadDetails();
+                                onMembershipChanged?.();
+                            }}
+                        />
+                    )}
+
                     {/* Convenor Tools Section */}
-                    {isConvenor && (
+                    {isConvenor && !closed && (
                         <div className="p-4 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl space-y-3">
                             <h3 className="text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-400">
                                 <span aria-hidden="true">🛡️ </span>Convenor Tools
@@ -325,7 +372,7 @@ export function GroupDetailModal({
                                                             onClick={() => handleApprove(p.memberPubkey)}
                                                             disabled={actionLoading}
                                                             aria-label={`Approve join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
-                                                            className="px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-colors"
+                                                            className="px-2 py-1 rounded bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-[11px] font-bold transition-colors"
                                                         >
                                                             Approve
                                                         </button>
@@ -333,7 +380,7 @@ export function GroupDetailModal({
                                                             onClick={() => handleRemoveMember(p.memberPubkey, p.callsign)}
                                                             disabled={actionLoading}
                                                             aria-label={`Decline join request from ${p.callsign || p.memberPubkey.slice(0, 10)}`}
-                                                            className="px-2 py-1 rounded border border-red-300 dark:border-red-800 text-red-600 dark:text-red-400 text-[11px] font-bold hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                            className="px-2 py-1 rounded border border-red-300 dark:border-red-800 text-red-600 dark:text-red-300 text-[11px] font-bold hover:bg-red-50 dark:hover:bg-red-950/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                                         >
                                                             Decline
                                                         </button>
@@ -349,7 +396,7 @@ export function GroupDetailModal({
 
                     {/* The quiet-lead vote, beside the roster it is about. It draws nothing unless the lead is
                         eligible for replacement or a vote has been held, so a healthy group sees no change. */}
-                    {isMember && (
+                    {isMember && !closed && (
                         <GroupSuccessionPanel
                             groupId={groupData.id}
                             members={members}
@@ -403,7 +450,7 @@ export function GroupDetailModal({
                                                 <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
                                                     highlight
                                                         ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300/40'
-                                                        : 'bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400'
+                                                        : 'bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300'
                                                 }`}>
                                                     {row.isLead ? 'Lead' : m.role}
                                                 </span>
@@ -444,7 +491,7 @@ export function GroupDetailModal({
                                                                 onClick={() => handleRemoveMember(m.memberPubkey, m.callsign)}
                                                                 disabled={actionLoading}
                                                                 aria-label={`Remove ${m.callsign || m.memberPubkey.slice(0, 10)} from group`}
-                                                                className="p-1 rounded text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                                className="p-1 rounded text-red-500 dark:text-red-400 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 dark:hover:text-red-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                                                 title="Remove member"
                                                             >
                                                                 ✕
@@ -462,14 +509,14 @@ export function GroupDetailModal({
 
                     {/* Action Area */}
                     <div className="pt-2 space-y-2">
-                        {isMember && onPostToGroup && (
+                        {isMember && onPostToGroup && !closed && (
                             <button
                                 type="button"
                                 onClick={() => {
                                     onClose();
                                     onPostToGroup(groupData);
                                 }}
-                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
                                 <span aria-hidden="true">✏️ </span>Post to {groupData.name}
                             </button>
@@ -484,12 +531,16 @@ export function GroupDetailModal({
                             >
                                 Leave Group
                             </button>
+                        ) : closed ? (
+                            <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300 font-bold text-sm text-center">
+                                Closed
+                            </div>
                         ) : isPending ? (
-                            <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-400 font-bold text-sm text-center">
+                            <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-300 font-bold text-sm text-center">
                                 Request Pending Approval
                             </div>
                         ) : groupData.joinPolicy === 'invite_only' ? (
-                            <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-400 font-bold text-sm text-center">
+                            <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-300 font-bold text-sm text-center">
                                 Invite Only
                             </div>
                         ) : (
@@ -497,7 +548,7 @@ export function GroupDetailModal({
                                 type="button"
                                 onClick={handleJoin}
                                 disabled={actionLoading}
-                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                className="w-full py-3 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                             >
                                 {groupData.joinPolicy === 'request_to_join' ? 'Request to Join' : 'Join Group'}
                             </button>

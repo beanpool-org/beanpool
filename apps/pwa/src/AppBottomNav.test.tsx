@@ -23,6 +23,12 @@ if (typeof window !== 'undefined') {
     }));
 }
 
+// The real store, with Take the tour again's hand-off watched (review of #1857, NB1).
+vi.mock('./lib/tour-store', async (importOriginal) => {
+    const real = await importOriginal<typeof import('./lib/tour-store')>();
+    return { ...real, askTourAgain: vi.fn(real.askTourAgain) };
+});
+
 vi.mock('./components/InstallPrompt', () => ({
     InstallPrompt: () => null,
 }));
@@ -48,6 +54,8 @@ vi.mock('./lib/avatar', () => ({
 }));
 
 vi.mock('./lib/api', () => ({
+    // The page's own server unless Settings points it elsewhere: App reads it for the web app's update banner.
+    getNodeApiUrl: vi.fn(() => ''),
     registerMember: vi.fn(async () => ({ ok: true })),
     checkMembership: vi.fn(async () => ({ isMember: true })),
     getConversations: vi.fn(async () => ({ conversations: [], totalUnread: 0 })),
@@ -68,7 +76,7 @@ vi.mock('./lib/api', () => ({
     getRatingsGiven: vi.fn(async () => []),
     getFriends: vi.fn(async () => []),
     getPublicChannels: vi.fn(async () => []),
-    getMyActiveRecoveryCollections: vi.fn(async () => []),
+    getMyActiveRecoveryCollections: vi.fn(async () => ({ count: 0, collections: [] })),
     getTreasuryDetail: vi.fn(async () => null),
     getTreasuries: vi.fn(async () => []),
     getUnseenNotices: vi.fn(async () => []),
@@ -108,6 +116,13 @@ vi.mock('./components/ProfileSetup', () => ({
     ProfileSetup: () => <div>Profile setup</div>,
 }));
 
+// Members land on Home (DESIGN-home-dashboard-fable.md §8); these tests drive the Market's stand-in, one tap away.
+async function openMarket() {
+    const nav = await screen.findByTestId('mobile-bottom-nav');
+    fireEvent.click(within(nav).getByText('Market'));
+    await screen.findByTestId('marketplace-page');
+}
+
 describe('App mobile bottom nav dynamic visibility & CSS variable regression (#791 / #792)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -125,9 +140,7 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
         render(<App />);
 
         // Wait for identity to load and marketplace to mount
-        await waitFor(() => {
-            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
-        });
+        await openMarket();
 
         const bottomNav = screen.getByTestId('mobile-bottom-nav');
         expect(bottomNav).toBeInTheDocument();
@@ -152,7 +165,7 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
         expect(document.documentElement.getAttribute('data-bottom-nav')).toBe('hidden');
         expect(document.documentElement.classList.contains('bottom-nav-hidden')).toBe(true);
         expect(document.documentElement.style.getPropertyValue('--bottom-nav-height')).toBe('0px');
-        expect(document.documentElement.style.getPropertyValue('--bottom-nav-offset')).toBe('env(safe-area-inset-bottom, 0px)');
+        expect(document.documentElement.style.getPropertyValue('--bottom-nav-offset')).toBe('calc(env(safe-area-inset-bottom, 0px) + var(--tour-bar-height, 0px))');
 
         // Closing the profile restores bottom nav visibility
         const backButton = screen.getByRole('button', { name: /back/i });
@@ -170,9 +183,7 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
     it('hides bottom nav when opening a treasury and restores it when closed', async () => {
         render(<App />);
 
-        await waitFor(() => {
-            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
-        });
+        await openMarket();
 
         const bottomNav = screen.getByTestId('mobile-bottom-nav');
         expect(bottomNav.classList.contains('flex')).toBe(true);
@@ -196,7 +207,7 @@ describe('App mobile bottom nav dynamic visibility & CSS variable regression (#7
         expect(document.documentElement.getAttribute('data-bottom-nav')).toBe('hidden');
         expect(document.documentElement.classList.contains('bottom-nav-hidden')).toBe(true);
         expect(document.documentElement.style.getPropertyValue('--bottom-nav-height')).toBe('0px');
-        expect(document.documentElement.style.getPropertyValue('--bottom-nav-offset')).toBe('env(safe-area-inset-bottom, 0px)');
+        expect(document.documentElement.style.getPropertyValue('--bottom-nav-offset')).toBe('calc(env(safe-area-inset-bottom, 0px) + var(--tour-bar-height, 0px))');
 
         // Close treasury
         const backButton = screen.getByRole('button', { name: /back/i });
@@ -219,21 +230,34 @@ describe('App mobile bottom nav labels on a 320px phone at 1.3x text', () => {
         expect(navTabWeight('Pulse')).toBe(5);
         expect(navTabWeight('Market')).toBe(6);
         expect(navTabWeight('Commons')).toBe(7);
+        // Wider than its four letters (measured, e2e/home-check.mjs): the fifth share the Pulse had.
+        expect(navTabWeight('Home')).toBe(5);
     });
 
     it('caps the label size by viewport width so whole labels fit, full 0.6rem on wider screens', () => {
         expect(NAV_LABEL_FONT_SIZE).toBe('min(0.6rem, 3.3vw)');
     });
 
+    it('lands a member on Home, the first tab, with the Market one tap away and no Pulse tab', async () => {
+        render(<App />);
+        expect(await screen.findByTestId('home-page')).toBeInTheDocument();
+        const nav = screen.getByTestId('mobile-bottom-nav');
+        const home = within(nav).getByText('Home').closest('button')!;
+        expect(home.querySelector('[data-nav-label]')!.className).toMatch(/text-rainbow/);
+        expect(within(nav).queryByText('Pulse')).toBeNull();
+        expect(screen.queryByTestId('marketplace-page')).toBeNull();
+        await openMarket();
+        expect(screen.queryByTestId('home-page')).toBeNull();
+    });
+
     it('renders every tab with its full label and a weighted width', async () => {
         render(<App />);
-        await waitFor(() => {
-            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
-        });
+        await openMarket();
 
         const bottomNav = screen.getByTestId('mobile-bottom-nav');
         const labels = Array.from(bottomNav.querySelectorAll<HTMLElement>('[data-nav-label]'));
-        expect(labels.map(l => l.textContent?.trim())).toEqual(['Market', 'Pulse', 'Map', 'Commons', 'Chat', 'People', 'Ledger']);
+        // Home first, the Pulse folded into a card on Home (design §8, §13 Q1): seven tabs, as before.
+        expect(labels.map(l => l.textContent?.trim())).toEqual(['Home', 'Market', 'Map', 'Commons', 'Chat', 'People', 'Ledger']);
 
         for (const label of labels) {
             const button = label.closest('button') as HTMLButtonElement;
@@ -251,9 +275,7 @@ describe('Overlays with their own Back bar stack above the mobile header', () =>
 
     it('draws the profile and enterprise pages above the header', async () => {
         render(<App />);
-        await waitFor(() => {
-            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
-        });
+        await openMarket();
         expect(mobileHeader().style.zIndex).toBe('100');
 
         // `fixed inset-0` became `.page-overlay`: the same fixed layer, full bleed on a phone, but
@@ -275,9 +297,7 @@ describe('Overlays with their own Back bar stack above the mobile header', () =>
 
     it('draws Settings over the header but under the bottom nav, which stays usable', async () => {
         render(<App />);
-        await waitFor(() => {
-            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
-        });
+        await openMarket();
         const header = mobileHeader();
         fireEvent.click(within(header).getByRole('button', { name: 'Settings' }));
 
@@ -296,9 +316,7 @@ describe('Overlays with their own Back bar stack above the mobile header', () =>
 
     it('draws profile setup above both the header and the bottom nav, so its last step\'s Back is tappable', async () => {
         render(<App />);
-        await waitFor(() => {
-            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
-        });
+        await openMarket();
         const header = mobileHeader();
         fireEvent.click(within(header).getByRole('button', { name: 'Settings' }));
         fireEvent.click(await screen.findByRole('button', { name: 'Re-run setup' }));
@@ -323,9 +341,7 @@ describe('Full-page views clear the desktop sidebar', () => {
 
     it('mounts Settings as .page-overlay, outside the sidebar, whose tabs still close it', async () => {
         render(<App />);
-        await waitFor(() => {
-            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
-        });
+        await openMarket();
 
         fireEvent.click(within(sidebar()).getByRole('button', { name: 'Settings' }));
         const overlay = await screen.findByTestId('settings-overlay');
@@ -344,14 +360,21 @@ describe('Full-page views clear the desktop sidebar', () => {
 
     it('mounts a profile as .page-overlay, outside the sidebar', async () => {
         render(<App />);
-        await waitFor(() => {
-            expect(screen.getByTestId('marketplace-page')).toBeInTheDocument();
-        });
+        await openMarket();
 
         fireEvent.click(screen.getByText('Open Peer Profile'));
         const profile = await screen.findByTestId('page-overlay');
         expect(profile).toHaveClass('page-overlay');
         expect(profile.contains(sidebar())).toBe(false);
+    });
+
+    // Review of #1857, NB5: what rides on the offset (ADD POST, the Map's +, the tour bar's own bottom) clears the
+    // tour bar only while every rule that sets the offset adds the bar's height; without it the bar slid off the screen.
+    it('index.css adds the tour bar\'s height to every --bottom-nav-offset it sets', () => {
+        const css = readFileSync(join(import.meta.dirname, 'index.css'), 'utf8');
+        const sets = [...css.matchAll(/--bottom-nav-offset:([^;]*);/g)].map((m) => m[1]);
+        expect(sets.length).toBeGreaterThanOrEqual(3);
+        for (const value of sets) expect(value).toContain('var(--tour-bar-height');
     });
 
     it('index.css insets .page-overlay past the sidebar on md+ and gives it the wallpaper over its own ground', () => {
@@ -391,5 +414,47 @@ describe('Full-page views clear the desktop sidebar', () => {
         expect(css).toMatch(/:root\s*\{\s*--page-ground:\s*var\(--pattern-bg\)/);
         expect(css).toMatch(/:root\.plain-background\s*\{\s*--page-ground:\s*#fbfaf8/);
         expect(css).toMatch(/:root\.dark-theme\.plain-background\s*\{\s*--page-ground:\s*#1d231d/);
+    });
+});
+
+describe('the "?" opens the guide\'s words for the tab you are on (review of #1857, B4)', () => {
+    const sheetFor = async (tab: string) => {
+        const { helpSheetFor, webHelpKey } = await import('@beanpool/core');
+        const { getBundledGuide } = await import('./lib/guide');
+        return helpSheetFor(getBundledGuide() as never, webHelpKey({ tab, settings: false }));
+    };
+    const openWith = async (id: 'header-help' | 'sidebar-help') => {
+        fireEvent.click(screen.getByTestId(id));
+        return within(await screen.findByTestId('help-dialog'));
+    };
+
+    it('the pill\'s ? on the Market opens the Market\'s page, and on Commons the Commons\'; the sidebar\'s ? the same', async () => {
+        render(<App />);
+        await openMarket();
+        const market = await sheetFor('marketplace');
+        const commons = await sheetFor('projects');
+        expect(market.title).toBeTruthy();
+        expect(commons.title).toBeTruthy();
+        expect(market.title).not.toBe(commons.title);
+        expect((await openWith('header-help')).getByTestId('help-title')).toHaveTextContent(market.title!);
+        fireEvent.click(screen.getByTestId('help-close'));
+        await waitFor(() => expect(screen.queryByTestId('help-dialog')).toBeNull());
+        fireEvent.click(within(screen.getByTestId('mobile-bottom-nav')).getByText(/Commons/i));
+        await screen.findByTestId('projects-page');
+        expect((await openWith('header-help')).getByTestId('help-title')).toHaveTextContent(commons.title!);
+        fireEvent.click(screen.getByTestId('help-close'));
+        await waitFor(() => expect(screen.queryByTestId('help-dialog')).toBeNull());
+        expect((await openWith('sidebar-help')).getByTestId('help-title')).toHaveTextContent(commons.title!);
+    });
+
+    it('Take the tour again in the ? closes it, goes Home and asks Home to open the tour (review of #1857, NB1)', async () => {
+        const { askTourAgain } = await import('./lib/tour-store');
+        vi.mocked(askTourAgain).mockClear();
+        render(<App />);
+        await openMarket();
+        fireEvent.click((await openWith('header-help')).getByTestId('help-tour'));
+        await waitFor(() => expect(screen.queryByTestId('help-dialog')).toBeNull());
+        expect(askTourAgain).toHaveBeenCalledWith('my-user-pubkey');
+        expect(screen.queryByTestId('marketplace-page')).toBeNull();
     });
 });

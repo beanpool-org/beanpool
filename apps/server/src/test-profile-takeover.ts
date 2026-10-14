@@ -12,6 +12,8 @@
  *  3. The main server dies. A take-over with the right code is REFUSED before anything is written: 409, saying to set
  *     NODE_PROFILE=global. No journal, the code not spent.
  *  4. The same standby promoted by hand instead (NODE_ROLE=primary, NODE_PROFILE still unset): it does not start.
+ * 4b. A copy of it with NODE_PROFILE=global and ENFORCE_READ_AUTH=false: a take-over killed before `role` and finished in
+ *     place at the next start refuses there as a main server's boot does (exit 1), and finishes once the flag is gone.
  *  5. The standby restarted with NODE_PROFILE=global: the take-over goes through, its `profile` step writes the
  *     community's profile and override, and the promoted server runs global with Beans off.
  *  6. The promoted server started again without NODE_PROFILE: it does not start.
@@ -109,6 +111,53 @@ async function spawnRefused(dataDir: string, env: Record<string, string>): Promi
     }
 }
 
+/**
+ * 4b (the 2026-10-02 re-review of #1448, state-engine.ts:902). A copy of the standby with NODE_PROFILE=global and
+ * ENFORCE_READ_AUTH=false in its .env: a standby starts with it (it only copies), and a global main server never does. A
+ * take-over killed after `roles` is finished at the next start, which makes the process the main server in place, after
+ * its database booted as a standby's. That start refuses as a main server's boot does: it exits 1, saying why, before
+ * anything serves, never running on as the main server with visitors shown the people. The take-over is kept: started
+ * again with the flag still there, it refuses again; with the flag gone, it comes up the main server and finishes.
+ */
+async function refusedInPlace(standbyDir: string, dir: string, code: string, mainPeerId: string): Promise<void> {
+    copyDir(standbyDir, dir);
+    const env = { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', NODE_PROFILE: 'global' };
+    const unsafe = { ...env, ENFORCE_READ_AUTH: 'false' };
+    const node = await spawnNode(SCRIPT, dir, { ...unsafe, BEANPOOL_TEST_TAKEOVER_CRASH_AFTER: 'roles' });
+    try {
+        assert(node.ready.role === 'backup', 'the standby starts with ENFORCE_READ_AUTH=false (it only copies)');
+        // Step 7c: under an owner's key session the node makes, not the password alone (refused with 2FA off).
+        const nodeOwner: Record<string, string> = await node.send('owner-session');
+        const opened = await post(node.base, '/api/local/admin/takeover/open', { code }, nodeOwner);
+        assert(opened.status === 200, `the code opens (${opened.status})`);
+        await post(node.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, nodeOwner);
+        await node.exited;
+    } finally {
+        await node.kill();
+    }
+    const journal = () => JSON.parse(fs.readFileSync(path.join(dir, 'takeover-journal.json'), 'utf-8'));
+    assert(!!journal().steps.roles && !journal().steps.role, 'killed after "roles", before "role"');
+
+    const first = await spawnRefused(dir, unsafe);
+    assert(!first.started && first.code === 1, `the start that finishes it in place does not run on as the main server: it exits 1 (${first.started ? 'it started' : `exit ${first.code}`})`);
+    assert(/Resuming an interrupted take-over/.test(first.output) && /ENFORCE_READ_AUTH=false would show a visitor the people anyway, so this node will not start/.test(first.output),
+        'it finished the steps before the restart, then refused as a main server\'s boot does, saying why');
+    assert(journal().state === 'restarting' && !!journal().steps.restart && !journal().steps.audit,
+        `the take-over is kept: its steps up to the restart recorded, the rest to come (${journal().state})`);
+
+    const again = await spawnRefused(dir, unsafe);
+    assert(!again.started && again.code === 1 && /so this node will not start/.test(again.output), 'started again with the flag still set, it refuses again');
+
+    const fixed = await spawnNode(SCRIPT, dir, env);
+    try {
+        const p = await fixed.send('profile');
+        assert(fixed.ready.role === 'primary' && fixed.ready.peerId === mainPeerId && p.state === 'complete' && p.running === 'global',
+            `with the flag gone, it is the main server, the take-over finished (${fixed.ready.role}, ${p.state})`);
+    } finally {
+        await fixed.kill();
+    }
+}
+
 async function main(): Promise<void> {
     const root = process.env.BEANPOOL_DATA_DIR;
     if (!root) throw new Error('Set BEANPOOL_DATA_DIR to a throwaway directory');
@@ -119,7 +168,9 @@ async function main(): Promise<void> {
     const nodes: NodeProc[] = [];
     const ownerSeedHex = crypto.randomBytes(32).toString('hex');
     const replicationToken = crypto.randomBytes(32).toString('hex');
-    const pw = (p: string) => ({ 'X-Admin-Password': p });
+    // Step 7c: the password alone opens no admin route with 2FA off: each take-over call goes under an owner's key session
+    // the standby makes (takeover-test-harness.ts owner-session; in memory, so asked again after each start).
+    const asOwner = async (n: NodeProc): Promise<Record<string, string>> => n.send('owner-session');
     const LOCAL = { NODE_PROFILE: '' };
     const GLOBAL = { NODE_PROFILE: 'global' };
 
@@ -163,7 +214,7 @@ async function main(): Promise<void> {
         // ── 3. The main server dies; a take-over from the wrong kind of server is refused ──
         console.log('\n— 3. take-over on a standby whose NODE_PROFILE is local —');
         await main.kill('SIGKILL');
-        const refused = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, pw(PW_STANDBY));
+        const refused = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, await asOwner(standby));
         assert(refused.status === 409 && refused.body?.profileMismatch === true && /NODE_PROFILE=global/.test(refused.body?.error ?? ''),
             `refused 409, saying to set NODE_PROFILE=global (${refused.status} ${refused.body?.error})`);
         assert(refused.body?.communityProfile === 'global' && refused.body?.thisServerProfile === 'local', 'naming both profiles');
@@ -179,15 +230,20 @@ async function main(): Promise<void> {
         assert(/This database is a global node, but NODE_PROFILE here is unset \(local\)/.test(byHand.output) && /will not start/.test(byHand.output),
             'and says why, before the ledger is loaded or a port is open');
 
+        // ── 4b. A take-over finished in place, on settings every boot refuses ──
+        console.log('\n— 4b. a take-over killed before "role", finished in place where the profile refuses to start —');
+        await refusedInPlace(dirs.standby, path.join(root, 'in-place'), setup.code, main.ready.peerId);
+
         // ── 5. With NODE_PROFILE=global the take-over goes through ──
         console.log('\n— 5. the standby restarted with NODE_PROFILE=global —');
         await standby.kill('SIGTERM');
         standby = await spawnNode(SCRIPT, dirs.standby, { ADMIN_PASSWORD: PW_STANDBY, NODE_ROLE: 'backup', ...GLOBAL });
         nodes.push(standby);
-        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, pw(PW_STANDBY));
+        const standbyOwner = await asOwner(standby);
+        const opened = await post(standby.base, '/api/local/admin/takeover/open', { code: setup.code }, standbyOwner);
         assert(opened.status === 200 && opened.body?.preview?.profile?.community === 'global' && opened.body?.preview?.profile?.thisServer === 'global',
             `the code opens, and the preview names the profile (${opened.status} ${JSON.stringify(opened.body?.preview?.profile ?? opened.body)})`);
-        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, pw(PW_STANDBY));
+        const confirmed = await post(standby.base, '/api/local/admin/takeover/confirm', { sessionId: opened.body.preview.sessionId, confirm: true }, standbyOwner);
         assert(confirmed.status === 200, `confirmed (${confirmed.status})`);
         const exit = await standby.exited;
         assert(exit === 0, `the standby restarts itself (exit ${exit})`);

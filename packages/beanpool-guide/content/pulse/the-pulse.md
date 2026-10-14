@@ -2,19 +2,22 @@
 slug: the-pulse
 title: The Pulse
 summary: What your neighbours make and share elsewhere, in one feed.
-related: learn, your-channels, reporting, the-bean
+help: Links your neighbours made or shared elsewhere, in one feed. Tap one to open it.
+related: home, learn, your-channels, reporting, the-bean
 ---
 
 ## What it is
 
-Tap **Pulse** in the row of tabs. The Pulse gathers what members of your community post on other sites: videos, music, blogs, photos. It is a way to find out what your neighbours make and do.
+Open the Pulse from the **The Pulse** card on **Home**: tap a post, or tap **See all**. If it is not on your Home, bring it back with **Add a card** on the phone, or **Edit home** in the web app. On the phone you can also open it from **Settings**, under **The Pulse**.
+
+The Pulse gathers what members of your community post on other sites: videos, music, blogs, photos. It is a way to find out what your neighbours make and do.
 
 - **Neighbours:** posts from members' channels. The buttons along the top pick a subject, like Food & growing or Repair & reuse. **All** shows everything.
 - **Learn:** videos about how BeanPool works, and a short daily reflection. See "The Learn lane".
 
 Pull down to refresh.
 
-The buttons along the top slide away as you scroll down. Scroll up a little and they come back. Tap **Pulse** again to jump to the top.
+The buttons along the top slide away as you scroll down. Scroll up a little and they come back.
 
 ## Opening a post
 
@@ -28,7 +31,7 @@ You can always open a video on YouTube instead: tap the title, or **Open on YouT
 
 ## Something wrong with a post
 
-- **Someone else's post:** tap the flag, choose why (**Spam or scam**, **Offensive content**, **Misleading post** or **Other**) and tap **Submit report**. The people who run your community's server look at it.
+- **Someone else's post:** tap the flag, choose why (**Spam or scam**, **Offensive content**, **Misleading post**, **Child safety** or **Other**) and tap **Submit report**. The people who run your community's server look at it.
 - **Your own post:** tap **Hide**, then **Hide from feed**. It comes off the Pulse for everyone.
 
 You cannot hide someone else's post just for yourself.

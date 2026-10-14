@@ -1,1765 +1,1111 @@
-import React, { useState, useEffect, useRef, useReducer, useCallback } from 'react';
-import { StyleSheet, View, Text, FlatList, Animated, Pressable, useWindowDimensions, Platform, Alert, TextInput, ScrollView, DeviceEventEmitter, ActivityIndicator, RefreshControl } from 'react-native';
-import { Image } from 'expo-image';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
-import * as SecureStore from 'expo-secure-store';
-import { useFocusEffect, router, useLocalSearchParams } from 'expo-router';
-import { getPosts, getMarketplaceTransactions, getBalance, fetchGroups, fetchMyEvents, isRouteMissing, type GroupItem } from '../../utils/db';
-import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
-import { requestSync, isPillarSyncActive, PILLAR_SYNC_ENDED } from '../../services/pillar-sync';
-import { useIdentity } from '../IdentityContext';
-import { RadiusPickerModal } from '../../components/RadiusPickerModal';
-import { MyDealsSheet, usePendingDealsCount } from '../../components/MyDealsSheet';
-import { PostAuthorTrust, isElder } from '../../components/PostAuthorTrust';
-import { TrustPickerSheet, TRUST_FILTERS } from '../../components/TrustPickerSheet';
-import { CurrencyDisplay } from '../../components/CurrencyDisplay';
-import { ActivityWaterfall } from '../../components/ActivityWaterfall';
-import { categoryEmoji, categoryLabel } from '../../constants/categories';
-import { palette } from '../../constants/colors';
-import { useTheme, useStyles } from '../ThemeContext';
-import { PollCard } from '../../components/PollCard';
-import { NewPollModal } from '../../components/NewPollModal';
-import { EventCard, EVENT_ACCENT } from '../../components/EventCard';
-import { NewEventModal } from '../../components/NewEventModal';
-import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
-import { OwnerWordsPrompt } from '../../components/OwnerWordsPrompt';
-import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
-import { useQuickReturn, QuickReturnBlock, ActiveFilterChip } from '../../components/QuickReturn';
-import { composeTargetFor } from '../../utils/compose-options';
-import { EVENT_TYPES_QUERY, type EventWindow } from '../../utils/events';
-import { myEventAsPost, type MyEvent } from '../../utils/event-extras';
-import { FilterChipRow, FilterChipBar } from '../../components/FilterChipRow';
-import { FilterChipButton, FilterChipPanel } from '../../components/FilterChipPicker';
-import { CATEGORY_FILTER_CHIPS, categoryChipLabel, categoryPanelReducer } from '../../utils/map-filters';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, marketFilterSummary, marketFeedQuery, distanceChipLabel, trustChipLabel, beansChipLabel,
-    type MarketTypeFilter, type MarketFilterState,
-} from '../../utils/market-filters';
-import { localDaysAgo } from '../../utils/feed-sections';
-import { useNodeProfile } from '../../utils/use-node-profile';
-import { marketShowsBeans, marketExtras, marketSearchDistanceParams, marketFeedSections } from '../../utils/market-global';
-import { FindCommunityCard } from '../../components/FindCommunityCard';
-import { ExampleListings } from '../../components/ExampleListings';
-import { exampleListingsOn, showExampleListings } from '../../utils/example-listings';
+    View, Text, ScrollView, Pressable, RefreshControl, StyleSheet, Animated, AccessibilityInfo, AppState, DeviceEventEmitter,
+    Alert, ActivityIndicator, Platform, useWindowDimensions, type NativeSyntheticEvent, type NativeScrollEvent,
+} from 'react-native';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as Location from 'expo-location';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SYNONYM_MAP as synonymMap } from '@beanpool/core';
+import {
+    TIPS_ALL_SEEN, dismissTips, emptyTipsRecord, homeCardType, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding,
+    tipsCaption, tipsFor, type TipsRecord,
+    START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourEnded, tourRecord, tourSteps, type TourProgress,
+} from '@beanpool/core';
+import { closeTour, lendTourHome, readProgress, resendTourRecord, saveTourRecord, startTour, useTour } from '../../utils/tour-store';
+import { useTheme } from '../ThemeContext';
+import { useIdentity } from '../IdentityContext';
+import { PageTitle, useTabRetapScrollTop } from '../../components/PageTitle';
+import { OneWayBackCard } from '../../components/OneWayBackCard';
+import { KeyMovedCard } from '../../components/KeyMovedCard';
+import { NewPostTypeSheet } from '../../components/NewPostTypeSheet';
+import { NewPollModal } from '../../components/NewPollModal';
+import { NewEventModal } from '../../components/NewEventModal';
+import { goToNeedsTarget } from '../../components/NeedsYouIcons';
+import { useManageNode } from '../../components/useManageNode';
+import { FabBandContext, HomeCard, HomeButton, homeStyles, type FabBand } from '../../components/home/HomeParts';
+import { YourBeansPreviewCard } from '../../components/showcase/YourBeansPreviewCard';
+import { HomeCardMenu } from '../../components/home/HomeCardMenu';
+import { EditHomeSheet } from '../../components/home/EditHomeSheet';
+import { AddCardSheet } from '../../components/home/AddCardSheet';
+import { CardSettingsSheet } from '../../components/home/CardSettingsSheet';
+import { FindCommunityBody } from '../../components/home/FindCommunityBody';
+import { readTypedPlace } from '../../utils/typed-place';
+import {
+    BeansBody, CommunityBody, DealsBody, DecideBody, EnterpriseBody, EventsBody, GroupsBody, InterestsBody, InviteBody, JoinedBody,
+    MarketBody, NeedsBody, NoticesBody, PulseBody, SearchBody, SkyBody, StartBody, StepsBody, TipsBody,
+} from '../../components/home/HomeCardBodies';
+import {
+    FEWER_CARDS_LINE, HOME_DOORBELL_SETTLE_MS, HOME_HINT_LINE, HOME_SAFETY_POLL_MS, addCard, addedLine, searchCardFor, askPinned, canMoveCard, canRemoveCard, cardLabelName,
+    canTailor, cardCaption, cardName, cardOrder, cardsToAsk, cardsToDraw, changeCardSettings, createDoorbellDebounce, dismissSafety,
+    effectiveInterests, fewerCardsNews, shownLayout, firstSteps, homeBeansPreview, invitesForReader, localNeeds, marketForward, marketInOrder, mergeNeeds, moveCard,
+    ownMarkedSave, pickLayout, pickerGroups, pinnedCards, rememberMarkSent, removeCard, removedLine, safetyWord, sameList, skyOf, starredFirst, tourOverFor,
+    type HomeCardInstance, type HomeLayout, type HomeRole, type LocalNeeds, type MarkSent, type PickerRow, type StepLine,
+} from '../../utils/home-cards';
+import {
+    SAVE_REFUSED, SAVE_SHAPE_REFUSED, loadHome, markSeenOnce, readPhoneInterests, readPhoneLayout, readPhoneOnlyMark, readPhoneOnlySent,
+    readStoredHome, reconcileInterests, readTips, saveHomePreferences, saveInterests, seenOnce, writePhoneLayout, writePhoneOnlyMark,
+    writePhoneOnlySent, writeTips, yieldPhoneLayout, type HomePoint, type StoredHome,
+} from '../../utils/home-store';
+import { readGlobalHome } from '../../utils/community-directory';
+import { rememberedKnocks, type RememberedKnock } from '../../utils/knock';
+import { getCachedNodeProfile, hiddenTabsFor } from '../../utils/node-profile';
+import { homeAccount, stillOnPhone, type HomeAccount } from '../../utils/home-account';
+import { fabStepsAsideAny, type CardActionsAt } from '../../utils/fab-band';
+import { anchorUrl, signedGet, signedPost } from '../../utils/node-post';
+import { cachedNodeRole } from '../../utils/node-admin';
+import { getMarketplaceTransactions, getUnreadByConversation } from '../../utils/db';
+import { composeTargetFor } from '../../utils/compose-options';
+import type { NeedsYouEntry } from '../../utils/needs-you';
 
-// Build reverse synonym index: given a category/synonym, find all words that map to it
-// e.g. "fruit" → ["lemon", "lime", "orange", "apple", ...]
-const reverseSynonyms: Record<string, string[]> = {};
-for (const [word, syns] of Object.entries(synonymMap)) {
-    if (word === '_meta') continue;
-    for (const syn of syns as string[]) {
-        if (!reverseSynonyms[syn]) reverseSynonyms[syn] = [];
-        reverseSynonyms[syn].push(word);
+/**
+ * Home (scratch/global-node/DESIGN-home-dashboard-fable.md, slice H2): the screen the app opens on. A short list of cards
+ * answering what needs me, what's alive around me, and what I could do next, each a line or three and one tap into a
+ * screen that already exists. The rules are utils/home-cards.ts; the request and the copies are utils/home-store.ts.
+ *
+ * - **Drawn at once** from the answer the phone kept, then **one signed read** (`GET /api/home`, a 304 when nothing
+ *   changed). Read again on returning to Home, on a pull, once after a burst of doorbells that matter to it (3 s), and
+ *   every two minutes while it is in front: never a timer per card.
+ * - **Nothing here waits on the network or blocks anything** (memory onboarding-no-hard-gates): with no answer yet and
+ *   none kept, it says so plainly and the tabs work as ever.
+ * - **Tailoring** (scratch/home/CARD-FRAME-DESIGN-fable.md, slice F2): a member's Home is a list of cards they own. Add a
+ *   card (the picker) and Edit home at the bottom; each card's "…" (Settings…, Move up, Move down, Remove); kept on the
+ *   account (`home.layout` version 2). A card added lands first and is read for once its save is answered (§2.4). A node
+ *   from before the frame refuses the new shape: the cards stay on the phone, "not on your account yet", and are sent
+ *   again at each landing (§2.3). A member's only: a visitor (a key with no account on the global node, which answers
+ *   with its public cards) gets none of it, no hint, and no layout is ever sent for one.
+ * - **The one-time reveal** (~300 ms, skipped when the phone asks for less motion) and its one-line hint (§6.2).
+ * - **Where only the community's admins invite** (`door: 'admins'`), Grow your community and First steps' invite line are
+ *   an owner's or admin's alone (PR #1483 review 4166559683): the role is the header's ten-minute copy
+ *   (utils/node-admin.ts `cachedNodeRole`), asked only on such a node.
+ * - **Nothing is written for an account that has left the phone** (PR #1483 review 4166559191): each landing and edit
+ *   takes the account as it begins (utils/home-account.ts), and what it keeps (the answer, the layout, the stars, the
+ *   reveal and hint) is kept only while that account is still the one on the phone.
+ * - **"+ ADD POST"** floats as on the Market, and steps aside while a card's buttons, chips or links rest under it.
+ * - **The global node** (slice H4): Find your community is a card here (the Market no longer draws it), pinned at the top
+ *   and with no "…" for the member's first 30 days; First steps says the global words and the new-account limits; Who
+ *   joined is a count; "Near you" lists the nearest first. Only there, the read carries the phone's last known place to
+ *   about a kilometre, read only where location is already allowed (Home never asks for it), as the Market's card did;
+ *   and only there, the knocks this phone sent are read, for the card's answers and First steps' ask.
+ */
+
+type Status = 'loading' | 'ok' | 'offline' | 'members_only' | 'no_community' | 'needs_update';
+
+const REVEAL_MS = 300;
+
+/**
+ * The account's list is known again: the phone's list is no longer marked as made while it wasn't (pickLayout), and the
+ * dates of the edits sent under the mark go with it.
+ */
+function clearPhoneOnly(mark: { current: string | null }, sent: { current: MarkSent[] }, publicKey: string, url: string, whose: HomeAccount): void {
+    if (mark.current === null) return;
+    mark.current = null;
+    sent.current = [];
+    void writePhoneOnlyMark(publicKey, url, null, whose);
+}
+
+/** A sheet opened as another closes: iOS can't present one modal while the last is still going (Android can). */
+const afterModal = (fn: () => void) => (Platform.OS === 'ios' ? void setTimeout(fn, 350) : fn());
+
+/** The settings sheet's subject: a card about to be added, or one on Home being changed in place. */
+type SettingsFor = { type: string; mode: 'add' } | { type: string; mode: 'save'; id: string; settings?: Record<string, unknown> };
+
+/**
+ * A town the member typed in "Find your community" (utils/typed-place.ts), which they chose, so it comes first; else the
+ * phone's last known place, only where location is already allowed: Home never asks for it. Null otherwise.
+ */
+async function lastKnownPlace(): Promise<HomePoint | null> {
+    const typed = await readTypedPlace();
+    if (typed) return { lat: typed.lat, lng: typed.lng };
+    try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status !== 'granted') return null;
+        const last = await Location.getLastKnownPositionAsync();
+        return last ? { lat: last.coords.latitude, lng: last.coords.longitude } : null;
+    } catch {
+        return null;
     }
 }
 
-/** Expand a search query using synonyms: "fruit" → ["fruit", "lemon", "lime", ...] */
-function expandSearchTerms(query: string): string[] {
-    const words = query.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(w => w.length > 1);
-    const expanded = new Set<string>(words);
-    for (const w of words) {
-        // Forward: word → its synonyms (e.g. "lemon" → ["fruit", "citrus"])
-        const fwd = (synonymMap as any)[w];
-        if (fwd) for (const s of fwd) expanded.add(s);
-        // Reverse: word → all words that have it as synonym (e.g. "fruit" → ["lemon", "lime"])
-        if (reverseSynonyms[w]) for (const s of reverseSynonyms[w]) expanded.add(s);
-        // Also try stemmed forms
-        let stem = w;
-        if (w.endsWith('ies')) stem = w.slice(0, -3) + 'y';
-        else if (w.endsWith('es')) stem = w.slice(0, -2);
-        else if (w.endsWith('s') && w.length > 3) stem = w.slice(0, -1);
-        else if (w.endsWith('ing') && w.length > 5) stem = w.slice(0, -3);
-        if (stem !== w) {
-            expanded.add(stem);
-            const fwdStem = (synonymMap as any)[stem];
-            if (fwdStem) for (const s of fwdStem) expanded.add(s);
-            if (reverseSynonyms[stem]) for (const s of reverseSynonyms[stem]) expanded.add(s);
-        }
-    }
-    return [...expanded];
+/**
+ * Whether the community Home reads is the global node, by what the phone already knows (no request): the answer it kept,
+ * or its copy of the node's profile (utils/node-profile.ts, which the tab strip keeps current). A local community is never
+ * sent a point: it would change what it answers (a distance on each listing).
+ */
+async function readsGlobal(url: string, kept: StoredHome | null): Promise<boolean> {
+    if (kept?.answer.profile === 'global') return true;
+    if (kept) return false;
+    return (await getCachedNodeProfile(url).catch(() => null))?.profile === 'global';
 }
 
-export const MARKETPLACE_CATEGORIES = [
-    { id: 'all', emoji: '🏷️', label: 'All Categories' },
-    { id: 'food', emoji: '🥕', label: 'Food' },
-    { id: 'services', emoji: '🤝', label: 'Services' },
-    { id: 'labour', emoji: '👷', label: 'Labour' },
-    { id: 'tools', emoji: '🛠️', label: 'Tools' },
-    { id: 'goods', emoji: '📦', label: 'Goods' },
-    { id: 'garden', emoji: '🌻', label: 'Garden' },
-    { id: 'housing', emoji: '🏠', label: 'Housing' },
-    { id: 'transport', emoji: '🚗', label: 'Transport' },
-    { id: 'education', emoji: '📚', label: 'Education' },
-    { id: 'arts', emoji: '🎨', label: 'Arts' },
-    { id: 'health', emoji: '🌿', label: 'Health' },
-    { id: 'care', emoji: '❤️', label: 'Care' },
-    { id: 'animals', emoji: '🐾', label: 'Animals' },
-    { id: 'tech', emoji: '💻', label: 'Tech' },
-    { id: 'energy', emoji: '☀️', label: 'Energy' },
-    { id: 'general', emoji: '🌱', label: 'General' },
-];
-
-// ⚡ Bolt: O(1) Map lookup for marketplace categories instead of repeated O(C) .find() scans
-export const MARKETPLACE_CATEGORIES_BY_ID = new Map(MARKETPLACE_CATEGORIES.map(c => [c.id, c]));
-
-const MIN_FEED_UNDER_PANEL = 48;
-
-export default function MarketScreen() {
-    const { theme, colors } = useTheme();
-    // At 320dp with large text the field has room for one word; the long placeholder wrapped or was cut.
-    const { width: winW, fontScale } = useWindowDimensions();
-    const searchPlaceholder = winW / Math.min(fontScale, 1.3) < 360 ? 'Search' : 'Search marketplace...';
+export default function HomeScreen() {
+    const { colors } = useTheme();
     const { identity } = useIdentity();
+    const { height: winH } = useWindowDimensions();
+    const s = homeStyles(colors);
+    const manage = useManageNode();
 
-    // What kind of community this is (utils/node-profile.ts): the phone's copy first, then the node's own answer.
-    // On the worldwide community (Beans off) the Market shows no price and no "Beans only" filter, puts the "Find
-    // your community" card on top, and orders listings nearest first (utils/market-global.ts). Local communities
-    // are unchanged: a node that says nothing trades in Beans.
-    const nodeProfile = useNodeProfile();
-    const showsBeans = marketShowsBeans(nodeProfile?.features);
-    const isGlobal = nodeProfile?.profile === 'global';
-    // Deals are escrow: off where escrow is off.
-    const showsDeals = nodeProfile?.features.escrow !== false;
-
-    // Contributions-First quest card: shown until the member has listed their
-    // first Offer (the gate that unlocks posting Needs / accepting Offers), so
-    // the rule reads as a friendly next step here instead of being discovered
-    // through a rejection modal mid-trade. Re-checked on every focus, so it
-    // disappears the moment their first Offer is posted.
-    const [showFirstOfferQuest, setShowFirstOfferQuest] = useState(false);
-    useFocusEffect(
-        React.useCallback(() => {
-            let cancelled = false;
-            (async () => {
-                if (!identity?.publicKey) return;
-                if (await AsyncStorage.getItem('beanpool_first_offer_quest_dismissed')) return;
-                try {
-                    const b: any = await getBalance(identity.publicKey);
-                    if (!cancelled) setShowFirstOfferQuest(!!b?.isBlockedFromTrading);
-                } catch {
-                    // Unknown (offline / old node) — don't show the card on a guess.
-                }
-            })();
-            return () => { cancelled = true; };
-        }, [identity?.publicKey])
-    );
-    const dismissFirstOfferQuest = () => {
-        setShowFirstOfferQuest(false);
-        AsyncStorage.setItem('beanpool_first_offer_quest_dismissed', 'true').catch(() => {});
-    };
-    const [filter, setFilter] = useState<MarketTypeFilter>('all');
-    
-    const styles = useStyles(({ theme, colors }) => StyleSheet.create({
-        safeArea: { flex: 1, backgroundColor: colors.surface.page },
-        listContent: { paddingHorizontal: 16, paddingTop: 0, paddingBottom: 100 },
-
-        // Search row
-        searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
-        searchTarget: { flex: 1, minHeight: 48, justifyContent: 'center' },
-        searchWrap: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.card, borderRadius: 20, paddingHorizontal: 14, height: 40, borderWidth: 1, borderColor: colors.border.default, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 },
-        searchInput: { flex: 1, marginLeft: 8, paddingVertical: 0, fontSize: 14, color: colors.text.body, fontWeight: '500', includeFontPadding: false, textAlignVertical: 'center' },
-        iconBtn: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1 },
-        dealsIconBtn: {
-            paddingHorizontal: 14, height: 38, borderRadius: 19,
-            backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50,
-            borderWidth: 1,
-            borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.amber300,
-            justifyContent: 'center', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 2, elevation: 1
-        },
-        dealsIconBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: colors.feedback.danger.solid, paddingHorizontal: 4, paddingVertical: 1, borderRadius: 8, minWidth: 14, alignItems: 'center' },
-
-        // Deal badge (positioned on icon button)
-        dealBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: colors.feedback.danger.solid, paddingHorizontal: 5, paddingVertical: 1, borderRadius: 8, minWidth: 16, alignItems: 'center' },
-        dealBadgeText: { color: colors.text.inverse, fontSize: 9, fontWeight: '900' },
-
-        // Horizontal filter chips
-        chipScrollContainer: { flexGrow: 1, justifyContent: 'center', flexDirection: 'row', gap: 4, paddingHorizontal: 16, paddingVertical: 4 },
-        foundingChip: {
-            alignSelf: 'center', marginTop: 8, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14, borderWidth: 1,
-            borderColor: theme === 'dark' ? colors.trust.founding.border : 'rgba(34,197,94,0.4)',
-            backgroundColor: colors.surface.card
-        },
-        foundingChipActive: {
-            backgroundColor: theme === 'dark' ? colors.trust.founding.bg : palette.green100,
-            borderColor: theme === 'dark' ? colors.trust.founding.border : palette.green500
-        },
-        foundingChipText: { fontSize: 12, fontWeight: '800', color: theme === 'dark' ? colors.trust.founding.fg : palette.green700 },
-        foundingChipTextActive: { color: theme === 'dark' ? colors.trust.founding.fg : palette.green800 },
-        chip: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingVertical: 8,
-            paddingHorizontal: 10,
-            borderRadius: 20,
-            borderWidth: 1,
-            borderColor: colors.border.default,
-            backgroundColor: colors.surface.card,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.03,
-            shadowRadius: 2,
-            elevation: 1,
-        },
-        chipText: { fontSize: 13, fontWeight: '700', color: colors.text.secondary },
-        chipTextActive: { color: colors.text.inverse },
-        chipAllActive: {
-            backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.gray800,
-            borderColor: theme === 'dark' ? colors.border.strong : palette.gray800
-        },
-        chipOfferActive: {
-            backgroundColor: colors.market.offer.bg,
-            borderColor: colors.market.offer.fg
-        },
-        chipNeedActive: {
-            backgroundColor: colors.market.need.bg,
-            borderColor: colors.market.need.fg
-        },
-        chipActive: {
-            backgroundColor: colors.accent.primary,
-            borderColor: colors.accent.primary
-        },
-        chipDistanceActive: {
-            backgroundColor: colors.feedback.warning.bg,
-            borderColor: colors.feedback.warning.border
-        },
-        chipDivider: { width: 1, height: 24, backgroundColor: colors.border.default, alignSelf: 'center' },
-
-        // Cards
-        card: {
-            backgroundColor: colors.surface.card,
-            borderRadius: 14,
-            marginBottom: 8,
-            borderWidth: 1,
-            borderColor: colors.border.default,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.05,
-            shadowRadius: 8,
-            elevation: 2,
-            overflow: 'hidden'
-        },
-        elderCard: {
-            borderLeftWidth: 3,
-            borderLeftColor: colors.trust.star,
-            shadowColor: colors.trust.star,
-            shadowOpacity: 0.15,
-        },
-        pulseCard: {
-            borderWidth: 2,
-            borderColor: palette.amber400,
-            backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : '#fffbeb',
-            shadowColor: palette.amber500,
-            shadowOpacity: 0.25,
-            shadowRadius: 10,
-        },
-        gridRow: { gap: 16 },
-        gridCard: { flex: 1, marginBottom: 16 },
-        gridImageWrapper: { position: 'relative', width: '100%', aspectRatio: 1 },
-        gridImage: { width: '100%', height: '100%' },
-        gridFallback: { backgroundColor: colors.surface.subtle, justifyContent: 'center', alignItems: 'center' },
-        gridFallbackEmoji: { fontSize: 32, opacity: 0.3 },
-        gridPriceBadge: { position: 'absolute', bottom: 8, right: 8, backgroundColor: colors.overlay.scrim, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: colors.overlay.scrimEdge },
-        gridPriceText: { color: colors.text.inverse, fontSize: 13, fontWeight: 'bold' },
-        gridTypeBadge: { position: 'absolute', top: 8, left: 8, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
-        gridTextContent: { padding: 12 },
-        gridCardTitle: { fontSize: 14, fontWeight: '700', color: colors.text.body, marginBottom: 4 },
-        badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
-        badgeOffer: { backgroundColor: colors.market.offer.bg, borderWidth: 0 },
-        badgeNeed: { backgroundColor: colors.market.need.bg, borderWidth: 0 },
-        badgeText: { fontSize: 11, fontWeight: '800', color: colors.market.offer.fg, letterSpacing: 0.5 },
-        price: { fontSize: 16, fontWeight: '800', color: colors.text.body },
-        fab: { position: 'absolute', bottom: 32, right: 24, backgroundColor: colors.action.fab, paddingVertical: 14, paddingHorizontal: 20, borderRadius: 28, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 8, zIndex: 100 },
-        compactRow: {
-            flexDirection: 'row',
-            backgroundColor: colors.surface.card,
-            borderRadius: 14,
-            paddingVertical: 10,
-            paddingHorizontal: 12,
-            marginBottom: 8,
-            borderWidth: 1,
-            borderColor: colors.border.default,
-            alignItems: 'center',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.02,
-            shadowRadius: 1,
-            elevation: 1,
-        },
-        elderCompactRow: {
-            borderLeftWidth: 3,
-            borderLeftColor: colors.trust.star,
-        },
-        compactEmoji: {
-            fontSize: 20,
-        },
-        compactTitle: {
-            fontSize: 14,
-            fontWeight: '800',
-            color: colors.text.body,
-        },
-        compactAuthor: {
-            fontSize: 11,
-            color: colors.text.secondary,
-            marginTop: 1,
-        },
-        compactPrice: {
-            fontSize: 14,
-            fontWeight: '900',
-            color: colors.text.body,
-        },
-        compactBadge: {
-            paddingHorizontal: 6,
-            paddingVertical: 2,
-            borderRadius: 8,
-        },
-        compactBadgeOffer: {
-            backgroundColor: colors.market.offer.bg,
-        },
-        compactBadgeNeed: {
-            backgroundColor: colors.market.need.bg,
-        },
-        compactBadgeText: {
-            fontSize: 9,
-            fontWeight: '800',
-            letterSpacing: 0.5,
-        },
-        sectionHeader: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            marginTop: 4,
-            marginBottom: 2,
-            paddingHorizontal: 4,
-        },
-        sectionHeaderText: {
-            fontSize: 11,
-            fontWeight: '800',
-            color: colors.text.muted,
-            letterSpacing: 1,
-            textTransform: 'uppercase',
-        },
-        sectionHeaderLine: {
-            flex: 1,
-            height: 1,
-            backgroundColor: colors.border.default,
-            marginLeft: 12,
-        },
-        freshBanner: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.orange50,
-            borderRadius: 16,
-            paddingVertical: 12,
-            paddingHorizontal: 16,
-            borderWidth: 1,
-            borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.orange100,
-            marginHorizontal: 16,
-            marginTop: 8,
-            marginBottom: 8,
-            shadowColor: theme === 'dark' ? '#000' : palette.orange500,
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: theme === 'dark' ? 0.2 : 0.05,
-            shadowRadius: 4,
-            elevation: 1,
-        },
-        freshBannerTitle: {
-            fontSize: 13,
-            fontWeight: '900',
-            color: theme === 'dark' ? colors.feedback.warning.fg : palette.orange700,
-        },
-        freshBannerSub: {
-            fontSize: 10,
-            fontWeight: '500',
-            color: theme === 'dark' ? colors.text.body : palette.orange800,
-            opacity: 0.8,
-            marginTop: 1,
-        },
-        liveBadge: {
-            backgroundColor: theme === 'dark' ? colors.feedback.warning.border : palette.orange100,
-            paddingHorizontal: 8,
-            paddingVertical: 2,
-            borderRadius: 10,
-            borderWidth: 1,
-            borderColor: theme === 'dark' ? colors.feedback.warning.fg : palette.orange200,
-        },
-        liveBadgeText: {
-            fontSize: 9,
-            fontWeight: '900',
-            color: theme === 'dark' ? colors.feedback.warning.fg : palette.orange600,
-        },
-        favPanel: {
-            backgroundColor: colors.accent.tint,
-            borderRadius: 16,
-            padding: 16,
-            borderWidth: 1,
-            borderColor: colors.accent.border,
-            marginHorizontal: 16,
-            marginTop: 8,
-            marginBottom: 8,
-        },
-        favPanelTitle: {
-            fontSize: 11,
-            fontWeight: '900',
-            color: colors.accent.primary,
-            letterSpacing: 1,
-            marginBottom: 4,
-        },
-        favPanelSub: {
-            fontSize: 11,
-            color: colors.text.secondary,
-            marginBottom: 10,
-        },
-        favTagsContainer: {
-            flexDirection: 'row',
-            flexWrap: 'wrap',
-            gap: 6,
-        },
-        favTag: {
-            backgroundColor: colors.surface.card,
-            borderWidth: 1,
-            borderColor: colors.border.default,
-            borderRadius: 16,
-            paddingVertical: 6,
-            paddingHorizontal: 10,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.02,
-            shadowRadius: 1,
-            elevation: 1,
-        },
-        favTagActive: {
-            backgroundColor: colors.accent.primary,
-            borderColor: colors.accent.primary,
-        },
-        favTagText: {
-            fontSize: 11,
-            fontWeight: '700',
-            color: colors.text.secondary,
-        },
-        favTagTextActive: {
-            color: colors.text.inverse,
-        },
-        favSummaryBanner: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            backgroundColor: colors.accent.tint,
-            borderRadius: 16,
-            paddingVertical: 10,
-            paddingHorizontal: 16,
-            borderWidth: 1,
-            borderColor: colors.accent.border,
-            marginHorizontal: 16,
-            marginTop: 4,
-            marginBottom: 4,
-        },
-        favSummaryText: {
-            fontSize: 12,
-            fontWeight: '700',
-            color: colors.accent.primary,
-            flex: 1,
-        },
-        favSummaryEditBadge: {
-            backgroundColor: colors.accent.border,
-            paddingHorizontal: 8,
-            paddingVertical: 3,
-            borderRadius: 8,
-        },
-        favSummaryEditBtn: {
-            fontSize: 9,
-            fontWeight: '900',
-            color: colors.accent.primary,
-        },
-        filterRow: { marginBottom: 4, borderWidth: 1, borderColor: colors.border.default, borderRadius: 26, overflow: 'hidden' },
-        filterGrow: { flexGrow: 1 },
-        typePill: { paddingHorizontal: 8 },
-    }));
-
-    const [trustFilter, setTrustFilter] = useState<string>('all');
-    const [beansOnly, setBeansOnly] = useState(false);  // #108: hide listings that also need cash
-    const [showTrustPicker, setShowTrustPicker] = useState(false);
-    const [viewMode, setViewMode] = useState<'list' | 'grid' | 'compact'>('list');
-    const [favCategories, setFavCategories] = useState<string[]>([]);
-    const [isCustomizerExpanded, setIsCustomizerExpanded] = useState(true);
-
-    // "Your events" under ★ For You: the signer's own upcoming RSVPs (decision 1). Its own read, only while
-    // that pill is chosen. Empty on anything that goes wrong — a node without the route answers 404, and a
-    // community that does not have the feature should show no row rather than an error about it (decision 7).
-    const [myEvents, setMyEvents] = useState<MyEvent[]>([]);
-    const loadMyEvents = useCallback(async () => {
-        if (!identity?.publicKey) return;
-        try {
-            setMyEvents(await fetchMyEvents());
-        } catch (e) {
-            setMyEvents([]);
-            if (!isRouteMissing(e)) console.warn('[Market] Could not read your events:', e);
-        }
-    }, [identity?.publicKey]);
+    // The map's "My deals" (app/(tabs)/map.tsx, left as it is) links to `/` with the deals: passed on to the Market.
+    const params = useLocalSearchParams<{ tab?: string; dealsTab?: string }>();
     useEffect(() => {
-        if (filter !== 'for-you') return;
-        loadMyEvents();
-    }, [filter, loadMyEvents]);
-
-    // Fresh listings banner dismissal. The banner is the list's first row, so it scrolls away with it.
-    const [dismissedFreshCount, setDismissedFreshCount] = useState<number>(0);
-    const listRef = useRef<FlatList>(null);
-
-    const [refreshing, setRefreshing] = useState(false);
-
-    const onRefresh = async () => {
-        setRefreshing(true);
-        try {
-            await requestSync();
-            await loadPosts();
-        } catch (e) {
-            console.error('Pull-to-refresh failed:', e);
-        } finally {
-            setRefreshing(false);
-        }
-    };
-
-    useEffect(() => {
-        AsyncStorage.getItem('bp_fav_categories').then(val => {
-            if (val) {
-                const parsed = JSON.parse(val);
-                setFavCategories(parsed);
-                if (parsed && parsed.length > 0) {
-                    setIsCustomizerExpanded(false);
-                }
-            }
-        }).catch(() => {});
-
-        // Load dismissed fresh postings count
-        AsyncStorage.getItem('bp_dismissed_fresh_count').then(val => {
-            if (val) {
-                setDismissedFreshCount(parseInt(val, 10));
-            }
-        }).catch(() => {});
-    }, []);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
-    const [posts, setPosts] = useState<any[]>([]);
-    // First-run loading: until posts load or a pillar sync completes THIS session, show a
-    // loading state rather than the "no items" empty state (which reads as broken/empty).
-    const [firstSyncDone, setFirstSyncDone] = useState(false);
-    const [syncTimedOut, setSyncTimedOut] = useState(false);
-    const [searchResults, setSearchResults] = useState<any[] | null>(null);
-    const [isSearching, setIsSearching] = useState(false);
-    const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    /**
-     * The category chip and its panel of tiles — the map's (utils/map-filters.ts), so picking a tile applies
-     * it and closes the panel in one step. The panel opens under the filter bar and pushes the list down.
-     */
-    const [categoryPanel, dispatchCategoryPanel] = useReducer(categoryPanelReducer, { category: 'all', open: false });
-    const categoryFilter = categoryPanel.category;
-    const closeCategoryPanel = () => dispatchCategoryPanel({ kind: 'dismiss' });
-    // Leaving the tab closes it, so coming back to the Market shows the feed, not the panel.
-    useFocusEffect(useCallback(() => () => dispatchCategoryPanel({ kind: 'dismiss' }), []));
-    const [eventWindow, setEventWindow] = useState<EventWindow>('all');
-    const selectType = (t: MarketTypeFilter) => {
-        setFilter(t);
-        // Polls and Events have no category chip, so an open panel goes with it.
-        const row = marketSecondRow(t);
-        if (row.kind !== 'filters' || !row.category) closeCategoryPanel();
-    };
-    /**
-     * The open panel pushes the list down. It may grow until MIN_FEED_UNDER_PANEL of the list is left under
-     * it — one touch-height strip to tap to close, and a sight of the feed they will return to; past that its
-     * tiles scroll inside it.
-     */
-    const [screenH, setScreenH] = useState(0);
-    const [filterBlockY, setFilterBlockY] = useState(0);
-    const [filterRowsBottom, setFilterRowsBottom] = useState(0);
-    const searchInputRef = useRef<TextInput>(null);
-    const [searchFocused, setSearchFocused] = useState(false);
-    /**
-     * The title and the controls (search, type pills, filter row, group pills) ride away as the feed scrolls
-     * down and come back on any scroll up (components/QuickReturn). They stay while in use: the category
-     * panel open, or the search field focused (typing narrows the list under the keyboard).
-     */
-    const qr = useQuickReturn({ pinned: categoryPanel.open || searchFocused, resetKey: viewMode });
-    // Tapping Market again scrolls to the top, and brings the controls with it.
-    useTabRetapScrollTop(listRef, qr.show);
-    // Measured with the title showing: at worst that leaves the panel a title's height shorter than it could be.
-    const rowsBottom = qr.titleHeight + filterBlockY + filterRowsBottom;
-    const panelMaxHeight = screenH && filterRowsBottom ? Math.max(120, screenH - rowsBottom - 6 - MIN_FEED_UNDER_PANEL) : undefined;
-    const [groupFilter, setGroupFilter] = useState('all');
-    const [userGroups, setUserGroups] = useState<GroupItem[]>([]);
-    const [radiusKm, setRadiusKm] = useState<number | null>(null);
-    const [locationCenter, setLocationCenter] = useState<{lat: number, lng: number} | null>(null);
-    const [showRadiusPicker, setShowRadiusPicker] = useState(false);
-    
-    // Deals Sheet
-    const [showDealsSheet, setShowDealsSheet] = useState(false);
-    const [dealsInitialTab, setDealsInitialTab] = useState<'active' | 'pending' | 'history'>('pending');
-    const [showNewPollModal, setShowNewPollModal] = useState(false);
-    const [showNewEventModal, setShowNewEventModal] = useState(false);
-    // For the distance on event cards. Read only when location is already allowed; the feed never prompts.
-    const [myLocation, setMyLocation] = useState<{ lat: number; lng: number } | null>(null);
-    const [showNewPostTypePicker, setShowNewPostTypePicker] = useState(false);
-    const [myTransactions, setMyTransactions] = useState<any[]>([]);
-    // Every listing I could have a deal on, whatever its audience or the feed's filters: the pill counts what the
-    // My Deals sheet it opens lists, as the tab badge does (_layout.tsx).
-    const [dealPosts, setDealPosts] = useState<any[]>([]);
-
-    const pendingCount = usePendingDealsCount(identity, dealPosts, myTransactions);
-
-    useEffect(() => {
-        let cancelled = false;
-        Location.getForegroundPermissionsAsync()
-            .then(async ({ status }) => {
-                if (status !== 'granted') return;
-                const last = await Location.getLastKnownPositionAsync();
-                if (!cancelled && last) setMyLocation({ lat: last.coords.latitude, lng: last.coords.longitude });
-            })
-            .catch(() => {});
-        return () => { cancelled = true; };
-    }, []);
-
-    useEffect(() => {
-        fetchGroups().then(groups => {
-            const active = groups.filter(g => g.viewerStatus === 'active');
-            setUserGroups(active);
-        }).catch(console.error);
-    }, [identity?.publicKey]);
-
-    useEffect(() => {
-        getBlockedUsers().then(setBlockedUsers);
-        const sub = DeviceEventEmitter.addListener(BLOCKLIST_UPDATED_EVENT, (newList) => {
-            setBlockedUsers(newList);
-        });
-        return () => sub.remove();
-    }, []);
-
-    // The feed reads the groups I am in from the cached memberships, which fetchGroups above refreshes: read it
-    // again when they change, so it matches the group chips.
-    const userGroupsKey = userGroups.map(g => g.id).join(',');
-    useFocusEffect(
-        React.useCallback(() => {
-            loadPosts();
-        }, [filter, groupFilter, identity?.publicKey, userGroupsKey])
-    );
-
-    const params = useLocalSearchParams<{ tab?: string, dealsTab?: string }>();
-
-    useEffect(() => {
-        if (params.tab === 'deals') {
-            setShowDealsSheet(true);
-            router.setParams({ tab: '' });
-        }
-        if (params.dealsTab) {
-            setDealsInitialTab(params.dealsTab as any);
-            setShowDealsSheet(true);
-            router.setParams({ dealsTab: '' });
-        }
+        const forward = marketForward(params);
+        if (!forward) return;
+        router.setParams({ tab: '', dealsTab: '' });
+        router.navigate({ pathname: '/(tabs)/market', params: forward });
     }, [params.tab, params.dealsTab]);
 
-    useEffect(() => {
-        // Data changed on SOME sync path (messages, balance, or marketplace) → refresh the
-        // list. This does NOT mean the marketplace itself has finished loading: a fast
-        // messages/balance sync fires this too (and does so even with zero messages), so
-        // flipping the loading gate here was showing a false "No items found" before the
-        // marketplace posts had actually landed.
-        const sub = DeviceEventEmitter.addListener('sync_data_updated', () => {
-            loadPosts();
-        });
-        // Only a COMPLETED pillar sync fetches and writes the marketplace posts, so this is
-        // the signal that dismisses the spinner. If the market is genuinely empty the list
-        // stays empty and now correctly shows "No items found"; if there are posts, the
-        // fast-first-paint 'sync_data_updated' above will already have rendered them.
-        const doneSub = DeviceEventEmitter.addListener('pillar_sync_done', () => {
-            // Load the freshly-synced posts BEFORE flipping the gate, so the empty state can
-            // never flash in the window between "sync completed" and "posts rendered". If the
-            // market has posts they're in state before firstSyncDone turns true; only a truly
-            // empty market then shows "No items found". Only dismiss the spinner if the load
-            // actually succeeded — a transient failure (e.g. DB closing mid wipe/restore) keeps
-            // the spinner so the 12s fallback retries instead of flashing "No items found".
-            loadPosts().then((ok) => {
-                if (ok) {
-                    setSyncTimedOut(false);
-                    setFirstSyncDone(true);
-                }
-            });
-        });
-        return () => { sub.remove(); doneSub.remove(); };
-    }, [filter, identity?.publicKey]);
+    const [url, setUrl] = useState<string | null>(null);
+    const [stored, setStored] = useState<StoredHome | null>(null);
+    const [status, setStatus] = useState<Status>('loading');
+    const [layout, setLayout] = useState<HomeLayout | null>(null);
+    const [interests, setInterests] = useState<string[]>([]);
+    // The interests card stays while Home is in front once it is up (opened from "Tune", or shown because nothing was
+    // starred): the first star must not take away the card the member is picking "a few" on. It goes on leaving Home.
+    const [tuneOpen, setTuneOpen] = useState(false);
+    const [safetyUp, setSafetyUp] = useState(false);
+    const [local, setLocal] = useState<LocalNeeds | null>(null);
+    const [menuFor, setMenuFor] = useState<HomeCardInstance | null>(null);
+    const [editOpen, setEditOpen] = useState(false);
+    const [addOpen, setAddOpen] = useState(false);
+    const [settingsFor, setSettingsFor] = useState<SettingsFor | null>(null);
+    /** A node from before the frame refused the member's cards: they stay on the phone and are sent again (§2.3). */
+    const [notOnAccount, setNotOnAccount] = useState(false);
+    /** The one-time "Home now starts with fewer cards" line (§2.6). */
+    const [fewer, setFewer] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+    const [offlineNote, setOfflineNote] = useState(false);
+    const [postPicker, setPostPicker] = useState(false);
+    const [pollModal, setPollModal] = useState(false);
+    const [eventModal, setEventModal] = useState(false);
+    const [hint, setHint] = useState(false);
+    /** The tour ended on this phone (Done or Skip) before the account's answer says so (DESIGN-getting-started-fable.md §2). */
+    const [tourOver, setTourOver] = useState(false);
+    /** A tour part way on this phone, for "Pick up the tour at step n ›". */
+    const [tourProgress, setTourProgress] = useState<TourProgress | null>(null);
+    const { run: tourRun } = useTour();
+    /** The member's role here, asked only where only admins invite (undefined: not heard, so no invite asked of them). */
+    const [role, setRole] = useState<HomeRole>(undefined);
+    /** On the global node: the place the last read was measured from (the phone's, where allowed), and this phone's knocks. */
+    const [place, setPlace] = useState<HomePoint | null>(null);
+    const [knocks, setKnocks] = useState<RememberedKnock[]>([]);
+    /** The Tips card's record for this account (@beanpool/core home-tips.ts); null: not read yet, so no card. */
+    const [tips, setTips] = useState<TipsRecord | null>(null);
+    const tipsRef = useRef<TipsRecord | null>(null);
+    const roleRef = useRef<HomeRole>(undefined);
+    roleRef.current = role;
 
-    // Arm a retry fallback so a flaky connection never leaves an infinite spinner.
-    // We deliberately do NOT dismiss the spinner from a stored last-sync timestamp:
-    // after a recovery/restore the local posts table can be empty while that cursor
-    // still exists (clearDB drops the table but not the AsyncStorage cursor), which
-    // showed a false "No items found". The spinner is dismissed only when posts
-    // actually load (list becomes non-empty) or a pillar sync completes this session.
-    //
-    // "Having trouble connecting" is a verdict, so it waits for one: after 12s it shows only if no
-    // sync is queued or running, or once a sync cycle actually ends in failure. A first sync that is
-    // still downloading on a slow connection keeps the loader (it used to flash the banner, then
-    // the listings arrived a moment later). A real failure — offline, node down, a request timing
-    // out — still ends the cycle unsuccessfully and shows the banner.
-    const syncWaitElapsedRef = useRef(false);
-    const syncWaitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const armSyncWait = React.useCallback(() => {
-        syncWaitElapsedRef.current = false;
-        setSyncTimedOut(false);
-        if (syncWaitTimerRef.current) clearTimeout(syncWaitTimerRef.current);
-        syncWaitTimerRef.current = setTimeout(() => {
-            syncWaitElapsedRef.current = true;
-            if (!isPillarSyncActive()) setSyncTimedOut(true);
-        }, 12000);
+    const identityRef = useRef(identity);
+    identityRef.current = identity;
+    const storedRef = useRef<StoredHome | null>(null);
+    const phoneLayout = useRef<HomeLayout | null>(null);
+    // The account and community (`key|url`) whose node refused the phone's list as a shape it doesn't know yet (a node from
+    // before the frame): the list is sent again once per landing, never at a poll, a bell, a pull or an add's own read.
+    const refusedShape = useRef<string | null>(null);
+    // The phone's list was made while the account's was unknown (an empty version-1 list, as a standby from before the
+    // frame answers): that list's date, so the account's real list wins over it once it answers (pickLayout).
+    // Accepted (review of #1699 confirmation, finding 2, P2c): a member whose real list is an empty version 1 (a way-back
+    // dismissal or a Reset on an older app) and who edits offline is marked too, so another device's version-2 list saved
+    // after that empty list wins over this phone's later edit. The phone can't tell a standby's empty list from a real
+    // one, it is rare (no copy here, an offline first edit, another device's save meanwhile), and one edit is lost either
+    // way: the other device's, were this phone's sent instead.
+    const phoneOver = useRef<string | null>(null);
+    // While marked: the edits the phone sent (each its date and its list's print). A version-2 answer that is one of them is
+    // the phone's own save, not the account's real list (utils/home-cards.ts ownMarkedSave; review of #1701 confirmation,
+    // finding 2; review of #1715, finding 1). Kept with the mark.
+    const phoneSent = useRef<MarkSent[]>([]);
+    const layoutRef = useRef<HomeLayout | null>(null);
+    // A Home never saved, once the tour has ended (Skip or Done, here or on another device): the starter set, edited as any
+    // saved Home is. Before the tour ends it is Getting started alone, core's default (DESIGN-getting-started-fable.md §1).
+    const shown: HomeLayout | null = shownLayout(stored?.answer, layout, { tourOver });
+    layoutRef.current = shown;
+    const focused = useRef(false);
+    const scrollRef = useRef<ScrollView>(null);
+    const cardY = useRef(new Map<string, number>());
+    const menuRefs = useRef(new Map<string, React.RefObject<View | null>>());
+    const menuRef = (id: string) => {
+        let r = menuRefs.current.get(id);
+        if (!r) { r = React.createRef<View | null>(); menuRefs.current.set(id, r); }
+        return r;
+    };
+    useTabRetapScrollTop(scrollRef);
+
+    // ── The floating button's band ──
+    const scrollY = useRef(0);
+    const regions = useRef(new Map<string, CardActionsAt>());
+    const [fabAside, setFabAside] = useState(false);
+    const [bandVersion, setBandVersion] = useState(0);
+    const updateFab = useCallback(() => {
+        const aside = fabStepsAsideAny(regions.current.values(), scrollY.current, winH);
+        setFabAside(prev => (prev === aside ? prev : aside));
+    }, [winH]);
+    useEffect(() => { updateFab(); }, [updateFab]);
+    const band: FabBand = useMemo(() => ({
+        report: (key, at) => {
+            if (at) regions.current.set(key, { ...at, scrollY: scrollY.current });
+            else regions.current.delete(key);
+            updateFab();
+        },
+        version: bandVersion,
+    }), [bandVersion, updateFab]);
+    const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+        scrollY.current = e.nativeEvent.contentOffset.y;
+        updateFab();
+    }, [updateFab]);
+
+    // ── The reveal and the hint (§6.2): once per account, never again ──
+    const reveal = useRef(new Animated.Value(1)).current;
+    const revealChecked = useRef<string | null>(null);
+    const maybeReveal = useCallback(async (whose: HomeAccount) => {
+        if (revealChecked.current === whose.publicKey) return;
+        revealChecked.current = whose.publicKey;
+        if (await seenOnce(whose.publicKey, 'reveal')) return;
+        if (!stillOnPhone(whose)) return;
+        void markSeenOnce(whose, 'reveal');
+        // Getting started says the same as the hint: while it is up the hint waits (it shows after a Skip, never after Done).
+        const ans = storedRef.current?.answer;
+        const startUp = !!ans?.me && !tourEnded(ans.me.tour);
+        if (!startUp && !(await seenOnce(whose.publicKey, 'hint')) && stillOnPhone(whose)) {
+            setHint(true);
+            void markSeenOnce(whose, 'hint');
+        }
+        const calm = await AccessibilityInfo.isReduceMotionEnabled().catch(() => true);
+        if (calm) return;
+        reveal.setValue(0);
+        Animated.timing(reveal, { toValue: 1, duration: REVEAL_MS, useNativeDriver: true }).start(() => setBandVersion(v => v + 1));
+    }, [reveal]);
+
+    // A member who never edited, here before the frame: one line, once (§2.6).
+    const maybeFewer = useCallback(async (whose: HomeAccount) => {
+        if (await seenOnce(whose.publicKey, 'fewer')) return;
+        if (!stillOnPhone(whose) || identityRef.current?.publicKey !== whose.publicKey) return;
+        setFewer(true);
+        void markSeenOnce(whose, 'fewer');
     }, []);
-    useEffect(() => {
-        armSyncWait();
-        const endedSub = DeviceEventEmitter.addListener(PILLAR_SYNC_ENDED, (e?: { success?: boolean }) => {
-            if (syncWaitElapsedRef.current && !e?.success) setSyncTimedOut(true);
-        });
-        return () => {
-            endedSub.remove();
-            if (syncWaitTimerRef.current) clearTimeout(syncWaitTimerRef.current);
-        };
-    }, [armSyncWait]);
 
-    // Debounced FTS5 server search
-    useEffect(() => {
-        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-        
-        const q = searchQuery.trim();
-        if (!q) {
-            setSearchResults(null);
-            setIsSearching(false);
+    // ── The phone's own Needs you lines: its database, no request ──
+    const readLocal = useCallback(async (me: string) => {
+        const settle = <T,>(p: Promise<T>) => p.catch(() => null);
+        const [transactions, conversations] = await Promise.all([
+            settle(getMarketplaceTransactions(me)),
+            settle(getUnreadByConversation(me)),
+        ]);
+        setLocal(localNeeds(me, Date.now(), transactions, conversations));
+    }, []);
+
+    // ── The layout: the phone's copy at once, the account's once it is saved ──
+    const pushLayout = useCallback(async (next: HomeLayout, whose: HomeAccount) => {
+        const id = identityRef.current;
+        const u = storedRef.current?.url ?? url;
+        if (!id || !u || id.publicKey !== whose.publicKey || !stillOnPhone(whose)) return;
+        if (phoneOver.current !== null) {
+            phoneSent.current = rememberMarkSent(phoneSent.current, next);
+            void writePhoneOnlySent(id.publicKey, u, phoneSent.current, whose);
+        }
+        const saved = await saveHomePreferences(u, id, { layout: next });
+        // The account left the phone while the save was out: nothing of it is drawn or kept.
+        if (!stillOnPhone(whose)) return;
+        const answered = storedRef.current?.answer;
+        if (saved === SAVE_SHAPE_REFUSED && (!answered?.layout || answered.layoutV1)) {
+            // A node from before the frame (its Home answer is version 1): the cards stay on the phone and are sent again at
+            // each landing, never thrown away (CARD-FRAME §2.3).
+            refusedShape.current = `${id.publicKey}|${u}`;
+            setNotOnAccount(true);
             return;
         }
-        
-        setIsSearching(true);
-        searchTimerRef.current = setTimeout(async () => {
-            try {
-                const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
-                if (!anchorUrl) {
-                    setSearchResults(null);
-                    setIsSearching(false);
-                    return;
-                }
-                // Events are opt-in on the list route; All and Events ask for them.
-                const type = filter === 'all' ? `&${EVENT_TYPES_QUERY}` : filter === 'for-you' ? '' : filter === 'needs' ? '&type=need' : filter === 'polls' ? '&type=poll' : filter === 'events' ? '&type=event' : '&type=offer';
-                // Only while the category chip is on screen (not under Polls or Events).
-                const row = marketSecondRow(filter);
-                const cat = categoryFilter !== 'all' && row.kind === 'filters' && row.category ? `&category=${categoryFilter}` : '';
-                
-                // Expand synonyms so the server's FTS5 'OR' logic can find them
-                const expandedQ = expandSearchTerms(q).join(' ');
-                
-                // Nearest first where the node sorts by distance and the phone already knows where it is.
-                const near = marketSearchDistanceParams(nodeProfile, myLocation);
-                const res = await fetch(`${anchorUrl}/api/marketplace/posts?q=${encodeURIComponent(expandedQ)}${type}${cat}${near}&limit=50`);
-                if (res.ok) {
-                    const data = await res.json();
-                    // Server returns camelCase MarketplacePost; the UI reads snake_case
-                    // (matching local SQLite shape). Normalize and parse photos.
-                    const parsed = (Array.isArray(data) ? data : []).map((p: any) => {
-                        let photosArr = p.photos;
-                        if (typeof p.photos === 'string') {
-                            try { photosArr = JSON.parse(p.photos); } catch { photosArr = []; }
-                        }
-                        if (Array.isArray(photosArr)) {
-                            photosArr = photosArr.map((url: string) => url && url.startsWith('/') ? `${anchorUrl}${url}` : url);
-                        }
-                        return {
-                            ...p,
-                            photos: photosArr,
-                            author_pubkey: p.author_pubkey ?? p.authorPublicKey,
-                            author_callsign: p.author_callsign ?? p.authorCallsign,
-                            author_avatar: p.author_avatar ?? p.authorAvatarUrl ?? null,
-                            author_energy_cycled: p.author_energy_cycled ?? p.authorEnergyCycled ?? 0,
-                            authorFoundingNeeded: p.authorFoundingNeeded ?? (p.author_founding_needed === 1),
-                            author_founding_needed: p.author_founding_needed ?? (p.authorFoundingNeeded ? 1 : 0),
-                            // #108: the server returns camelCase `cashAlsoNeeded`; local SQLite rows carry
-                            // snake_case 0/1. Normalise here — the same place the other mixed-casing fields
-                            // are reconciled — so the beans-only filter AND the card badge both keep working
-                            // while a server search is active. Guarding at each call site instead would leave
-                            // the next reader to rediscover this.
-                            cash_also_needed: p.cash_also_needed ?? (p.cashAlsoNeeded ? 1 : 0),
-                        };
-                    });
-                    setSearchResults(parsed);
-                } else {
-                    setSearchResults(null); // Fall back to local filtering
-                }
-            } catch {
-                setSearchResults(null); // Fall back to local filtering
-            }
-            setIsSearching(false);
-        }, 300);
-
-        return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current); };
-    }, [searchQuery, filter, categoryFilter, nodeProfile, myLocation]);
-
-    const loadPosts = async (): Promise<boolean> => {
-        const queryFilter = marketFeedQuery(filter, groupFilter, identity?.publicKey);
-        const runLoad = async () => {
-            const data = await getPosts(queryFilter);
-            setPosts(data);
-            if (identity) {
-                const txs = await getMarketplaceTransactions(identity.publicKey);
-                setMyTransactions(txs);
-                setDealPosts(await getPosts({ allScopes: true }));
-            }
-        };
-        try {
-            await runLoad();
-            return true;
-        } catch (e: any) {
-            if (e?.message?.includes('closed') || String(e).includes('closed')) {
-                // Database was closing or re-initializing during a wipe/restore transition.
-                // Retry the WHOLE load (posts and transactions) once with a fresh connection —
-                // reloading posts alone left myTransactions / the pending-deals badge stale.
-                try {
-                    await runLoad();
-                    return true;
-                } catch (retryErr) {
-                    console.error('Failed to reload marketplace after DB reconnect', retryErr);
-                    return false;
-                }
-            } else {
-                console.error('Failed to query SQLite Posts', e);
-                return false;
-            }
+        if (saved === SAVE_REFUSED || saved === SAVE_SHAPE_REFUSED) {
+            // The node won't keep it: the account's copy stands, and the phone's is never sent again by itself.
+            const account = storedRef.current?.answer.layout ?? null;
+            phoneLayout.current = account;
+            setLayout(account);
+            clearPhoneOnly(phoneOver, phoneSent, id.publicKey, u, whose);
+            await yieldPhoneLayout(id.publicKey, u, account, whose);
+            return;
         }
-    };
-
-    const loadBlockedUsers = async () => {
-        const list = await getBlockedUsers();
-        setBlockedUsers(list);
-    };
-
-
-
-    // Use server search results when available, otherwise filter locally
-    const basePosts = searchResults !== null ? searchResults : posts;
-
-    const filterState: MarketFilterState = {
-        type: filter, category: categoryFilter, eventWindow, trust: trustFilter, beansOnly, radiusKm, center: locationCenter, groupId: groupFilter,
-    };
-    const secondRow = marketSecondRow(filter);
-    // "Beans only" is not offered where there are no Beans.
-    const rowExtras = secondRow.kind === 'filters' ? marketExtras(secondRow.extras, nodeProfile?.features) : [];
-    // The second row's chips fill with the type's colour, as the map's category chip does.
-    // Fill for the selected type pill, each carrying white text; the map's colours for Offers / Needs / Events.
-    const typeColors: Record<MarketTypeFilter, string> = {
-        all: theme === 'dark' ? palette.gray600 : palette.gray800,
-        'for-you': colors.accent.primary,
-        offers: '#10b981',
-        needs: '#ea580c',
-        events: EVENT_ACCENT,
-        polls: '#7c3aed',
-    };
-    const filterColor = filter === 'offers' || filter === 'needs' ? typeColors[filter] : colors.brand.dark;
-    const filterCtx = { blockedUsers, favCategories };
-
-    let filteredPosts = basePosts.filter(p => {
-        // Type pills, the category chip, the date chips, Distance, Trust, Beans only, groups (utils/market-filters.ts)
-        if (!feedPostVisible(p, filterState, filterCtx)) return false;
-
-        // Goods search isolation: searching marketplace keywords must not return polls unless explicitly filtered
-        if (searchQuery.trim() && p.type === 'poll' && filter !== 'polls') return false;
-
-        // Synonym-aware local search: expand query using synonym map
-        // Works on ALL servers, even those without FTS5 deployed
-        if (searchQuery.trim()) {
-            const serverHasFTS = searchResults !== null && searchResults.length > 0 && 'search_keywords' in searchResults[0];
-            if (!serverHasFTS) {
-                const terms = expandSearchTerms(searchQuery);
-                const titleStr = p.title ? p.title.toLowerCase() : '';
-                const descStr = p.description ? p.description.toLowerCase() : '';
-                const postText = `${titleStr} ${descStr}`;
-                const matched = terms.some(term => postText.includes(term));
-                if (!matched) return false;
-            }
+        if (saved) {
+            refusedShape.current = null;
+            clearPhoneOnly(phoneOver, phoneSent, id.publicKey, u, whose);
+            setNotOnAccount(false);
         }
-        return true;
-    });
+        // The node keeps the newer layout (another phone's, the web app's): that one, then.
+        if (saved?.layout && (saved.layout.updatedAt ?? '') > (next.updatedAt ?? '')) {
+            phoneLayout.current = saved.layout;
+            setLayout(saved.layout);
+            await writePhoneLayout(id.publicKey, u, saved.layout, whose);
+        } else if (saved?.layout && phoneLayout.current === next && saved.layout.updatedAt !== next.updatedAt && sameList(saved.layout, next)) {
+            // This save, dated earlier by the node (a clock ahead of the node's is held to its now): that date is the phone's
+            // copy's too, so no read takes the copy as newer and sends it again (review of #1715, note 1).
+            phoneLayout.current = saved.layout;
+            setLayout(saved.layout);
+            await writePhoneLayout(id.publicKey, u, saved.layout, whose);
+        }
+    }, [url]);
 
-    // Maintainer rule: Daily Pulse appears ONLY where marketplace has fewer than 2 listings (< 2).
-    const realMemberListingsCount = posts.filter(p => {
-        const isPulse = (p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode;
-        return !isPulse && p.type !== 'poll' && p.type !== 'event' && p.status === 'active';
-    }).length;
-    if (realMemberListingsCount >= 2) {
-        filteredPosts = filteredPosts.filter(p => !((p.author_callsign || p.authorCallsign) === 'Daily Pulse' && !p.origin_node && !p.originNode));
-    }
+    // ── Tips (scratch/home/TIPS-DESIGN-fable.md): the record is the phone's, per account ──
+    const keepTips = useCallback((whose: HomeAccount, next: TipsRecord) => {
+        if (!stillOnPhone(whose)) return;
+        tipsRef.current = next;
+        setTips(next);
+        void writeTips(whose, next);
+    }, []);
+    // A return to Home's once-a-day advance, from the answer in hand (the kept one counts: tips work with no connection): a
+    // tip first shown on an earlier day is marked seen and the next one drawn. With no answer in hand, the record as it is,
+    // so the card can be drawn when one comes; it moves on the next return. Only a return lands (PR #1694 review 1).
+    const landTips = useCallback(async (whose: HomeAccount) => {
+        const record = await readTips(whose.publicKey);
+        if (!stillOnPhone(whose) || identityRef.current?.publicKey !== whose.publicKey) return;
+        const ans = storedRef.current?.answer;
+        const next = ans?.me ? tipOnLanding(record, tipsFor(ans, roleRef.current), localDay()).record : record;
+        if (next === record) { tipsRef.current = record; setTips(record); } else keepTips(whose, next);
+    }, [keepTips]);
 
-    // Pin Daily Pulse to the top of the feed (local only)
-    filteredPosts.sort((a, b) => {
-        const isPulseA = (a.author_callsign || a.authorCallsign) === 'Daily Pulse' && !a.origin_node && !a.originNode;
-        const isPulseB = (b.author_callsign || b.authorCallsign) === 'Daily Pulse' && !b.origin_node && !b.originNode;
-        if (isPulseA && !isPulseB) return -1;
-        if (!isPulseA && isPulseB) return 1;
-        return 0;
-    });
-
-    const selectedTrustFilter = TRUST_FILTERS.find(f => f.id === trustFilter);
-    const hasActiveFilters = marketFiltersActive(filterState) || searchQuery.trim().length > 0;
-
-    // A few example cards while the Market is nearly empty, where the node asks for them (utils/example-listings.ts):
-    // never under a search or a filter, and never in listData, so nothing counts, opens or pins them. Above the
-    // empty state's welcome, or after the real listings.
-    const showExamples = showExampleListings({
-        on: exampleListingsOn(nodeProfile?.features), narrowed: hasActiveFilters, loaded: firstSyncDone, realInView: filteredPosts.length,
-    });
-
-    // Listings posted today, by the local calendar day the TODAY heading uses; events are not listings.
-    const freshTodayCount = posts.filter(post => {
-        if (post.status !== 'active' || post.type === 'event') return false;
-        const postTime = new Date(post.created_at || post.createdAt).getTime();
-        return Number.isFinite(postTime) && localDaysAgo(postTime, Date.now()) === 0;
-    }).length;
-
-    // Display banner only if fresh postings count is greater than the dismissed count
-    const shouldShowFreshBanner = freshTodayCount > 0 && freshTodayCount > dismissedFreshCount;
-
-    const dismissFreshBanner = async () => {
-        const { LayoutAnimation } = require('react-native');
-        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-        setDismissedFreshCount(freshTodayCount);
-        try {
-            await AsyncStorage.setItem('bp_dismissed_fresh_count', String(freshTodayCount));
-        } catch (e) {}
-    };
-
-    // The block that rides over the top of the feed (components/QuickReturn): search row, type pills, filter row
-    // and group pills. Everything else above the listings is the list's own header and scrolls with it.
-    const controls = (
-        <View style={{ paddingBottom: 2 }}>
-            {/* Top row: Search + My Deals + View Toggle. The field is 40dp to look at, inside a 48dp target
-                that focuses it; its text is capped at 1.3x so the placeholder is never cut top and bottom. */}
-            <View style={[styles.searchRow, { paddingHorizontal: 16 }]}>
-                <Pressable
-                    style={styles.searchTarget}
-                    onPress={() => searchInputRef.current?.focus()}
-                    accessible={false}
-                >
-                <View style={styles.searchWrap}>
-                    <Text style={{ opacity: 0.4, fontSize: 14 }} maxFontSizeMultiplier={1.3}>🔍</Text>
-                    <TextInput
-                        ref={searchInputRef}
-                        style={styles.searchInput}
-                        placeholder={searchPlaceholder}
-                        placeholderTextColor={colors.text.muted}
-                        value={searchQuery}
-                        onChangeText={setSearchQuery}
-                        numberOfLines={1}
-                        onFocus={() => setSearchFocused(true)}
-                        onBlur={() => setSearchFocused(false)}
-                        returnKeyType="search"
-                        maxFontSizeMultiplier={1.3}
-                        accessibilityLabel="Search marketplace"
-                    />
-                </View>
-                </Pressable>
-                {showsDeals && <Pressable
-                    onPress={() => setShowDealsSheet(true)}
-                    style={styles.dealsIconBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel={pendingCount > 0 ? `My Deals, ${pendingCount} pending` : 'My Deals'}
-                    accessibilityHint="Opens your active and pending deals sheet"
-                >
-                    <Text style={{ fontSize: 18, marginBottom: -2 }}>🤝</Text>
-                    <Text style={{ fontSize: 11, fontWeight: '800', color: palette.amber700 }}>My Deals</Text>
-                    {pendingCount > 0 && (
-                        <View style={styles.dealsIconBadge}>
-                            <Text style={{ color: colors.text.inverse, fontSize: 8, fontWeight: '900' }}>{pendingCount}</Text>
-                        </View>
-                    )}
-                </Pressable>}
-                <Pressable
-                    onPress={() => setViewMode(v => v === 'list' ? 'grid' : (v === 'grid' ? 'compact' : 'list'))}
-                    style={styles.iconBtn}
-                    accessibilityRole="button"
-                    accessibilityLabel={viewMode === 'list' ? 'Grid view' : (viewMode === 'grid' ? 'Compact view' : 'List view')}
-                >
-                    <MaterialCommunityIcons
-                        name={viewMode === 'list' ? 'view-grid-outline' : (viewMode === 'grid' ? 'view-headline' : 'view-list-outline')} 
-                        size={20} 
-                        color={colors.text.secondary}
-                    />
-                </Pressable>
-            </View>
-
-            {/* The map's filter shape (utils/market-filters.ts): the type row, and under it one row that stays in
-                the same place and changes with the type — the category chip and the feed's own filters, or the
-                event date chips under Events. The category panel opens under it, full width. */}
-            <View style={{ paddingHorizontal: 16, marginTop: 0 }} onLayout={e => setFilterBlockY(e.nativeEvent.layout.y)}>
-                <View onLayout={e => setFilterRowsBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}>
-                <FilterChipRow
-                    chips={MARKET_TYPE_PILLS}
-                    selected={filter}
-                    onSelect={selectType}
-                    activeColor={typeColors[filter]}
-                    fill
-                    // One line that scrolls sideways at 320dp + 1.3x text (wrapping cost a second 38dp line).
-                    moreHint
-                    // 8dp sides, not 12: the six pills fit one line on a normal phone (~338dp of 379).
-                    chipStyle={styles.typePill}
-                    style={styles.filterRow}
-                    accessibilityLabel="Show"
-                />
-
-                {secondRow.kind === 'eventWindows' ? (
-                    <FilterChipRow
-                        key="eventWindows"
-                        chips={secondRow.chips}
-                        selected={eventWindow}
-                        onSelect={setEventWindow}
-                        activeColor={EVENT_ACCENT}
-                        fill
-                        moreHint
-                        style={styles.filterRow}
-                        accessibilityLabel="Filter events by date"
-                    />
-                ) : (
-                    <FilterChipBar key="filters" fill moreHint style={styles.filterRow} accessibilityLabel="Filters">
-                        {secondRow.category && (
-                            <FilterChipButton
-                                variant="flat"
-                                label={categoryChipLabel(categoryFilter, categoryPanel.open)}
-                                active={categoryFilter !== 'all'}
-                                activeColor={filterColor}
-                                expanded={categoryPanel.open}
-                                onPress={() => dispatchCategoryPanel({ kind: 'toggle' })}
-                                accessibilityLabel="Filter by category"
-                                style={styles.filterGrow}
-                            />
-                        )}
-                        {rowExtras.includes('distance') && (
-                            <FilterChipButton
-                                variant="flat"
-                                label={distanceChipLabel(radiusKm)}
-                                active={radiusKm !== null}
-                                activeColor={filterColor}
-                                onPress={() => { closeCategoryPanel(); setShowRadiusPicker(true); }}
-                                accessibilityLabel="Filter by distance"
-                                style={styles.filterGrow}
-                            />
-                        )}
-                        {rowExtras.includes('trust') && (
-                            <FilterChipButton
-                                variant="flat"
-                                label={trustChipLabel(selectedTrustFilter)}
-                                active={trustFilter !== 'all'}
-                                activeColor={filterColor}
-                                onPress={() => { closeCategoryPanel(); setShowTrustPicker(true); }}
-                                accessibilityLabel="Filter by trust level"
-                                style={styles.filterGrow}
-                            />
-                        )}
-                        {/* #108 Beans-only filter — a toggle, not a picker, so it needs no sheet. */}
-                        {rowExtras.includes('beans') && (
-                            <FilterChipButton
-                                variant="flat"
-                                label={beansChipLabel(beansOnly)}
-                                active={beansOnly}
-                                selected={beansOnly}
-                                activeColor={filterColor}
-                                onPress={() => { closeCategoryPanel(); setBeansOnly(!beansOnly); }}
-                                accessibilityLabel="Show only listings that need no cash"
-                                style={styles.filterGrow}
-                            />
-                        )}
-                    </FilterChipBar>
-                )}
-                </View>
-
-                {/* Row 4: Group Filter Chips (Item 10) */}
-                {userGroups.length > 0 && (
-                    <ScrollView
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        contentContainerStyle={{ gap: 8, paddingVertical: 6 }}
-                    >
-                        <Pressable
-                            onPress={() => setGroupFilter('all')}
-                            style={[styles.chip, groupFilter === 'all' && styles.chipActive]}
-                            accessibilityRole="button"
-                            accessibilityState={{ selected: groupFilter === 'all' }}
-                        >
-                            <Text style={[styles.chipText, groupFilter === 'all' && styles.chipTextActive]}>
-                                👥 All Groups & Public
-                            </Text>
-                        </Pressable>
-                        {userGroups.map((g) => {
-                            const isSelected = groupFilter === g.id;
-                            return (
-                                <Pressable
-                                    key={g.id}
-                                    onPress={() => setGroupFilter(isSelected ? 'all' : g.id)}
-                                    style={[
-                                        styles.chip,
-                                        isSelected && { backgroundColor: colors.brand.primary, borderColor: colors.brand.primary }
-                                    ]}
-                                    accessibilityRole="button"
-                                    accessibilityState={{ selected: isSelected }}
-                                >
-                                    <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                                        👥 {g.name}
-                                    </Text>
-                                </Pressable>
-                            );
-                        })}
-                    </ScrollView>
-                )}
-            </View>
-
-        </View>
-    );
-
-    // The category tiles open over the feed from under the filter row, covering the group pills, so opening
-    // them never moves the list.
-    const categoryPanelOverlay = (
-        <View style={{ position: 'absolute', left: 0, right: 0, top: rowsBottom, paddingHorizontal: 16 }}>
-            {categoryPanel.open && secondRow.kind === 'filters' && secondRow.category && (
-                <FilterChipPanel
-                    chips={CATEGORY_FILTER_CHIPS}
-                    selected={categoryFilter}
-                    onSelect={(id) => dispatchCategoryPanel({ kind: 'pick', category: id })}
-                    activeColor={filterColor}
-                    panelMaxHeight={panelMaxHeight}
-                    // The map's 8dp gutter, not the feed's 16: four tiles a row at 320dp + 1.3x, not three.
-                    style={{ marginHorizontal: -8 }}
-                />
-            )}
-        </View>
-    );
-
-    const filterSummary = marketFilterSummary(filterState, searchQuery, {
-        trustLabel: id => TRUST_FILTERS.find(t => t.id === id)?.label,
-        groupName: id => userGroups.find(g => g.id === id)?.name,
-    });
-    const clearAllFilters = () => {
-        setSearchQuery('');
-        setFilter('all');
-        dispatchCategoryPanel({ kind: 'pick', category: 'all' });
-        setEventWindow('all');
-        setRadiusKm(null);
-        setLocationCenter(null);
-        setTrustFilter('all');
-        setBeansOnly(false);
-        setGroupFilter('all');
-    };
-    const showControls = () => {
-        qr.show();
-        // A search is what the member most likely came back to change.
-        if (searchQuery.trim()) searchInputRef.current?.focus();
-    };
-
-    // Out of the list's 16dp gutter: these rows bring their own 16dp margins, as they did above the list.
-    const ListHeader = (
-        <View style={{ marginHorizontal: -16 }}>
-            {/* The worldwide community's way out to a local one (design §3.1). */}
-            {isGlobal && !categoryPanel.open && <FindCommunityCard point={myLocation} />}
-            {/* "Unlock trading" is a Beans rule; there is none where Beans are off. */}
-            {showFirstOfferQuest && showsBeans && !categoryPanel.open && (
-                <View style={{ marginHorizontal: 16, marginBottom: 8, borderRadius: 14, borderWidth: 1, borderColor: 'rgba(245, 158, 11, 0.4)', backgroundColor: 'rgba(245, 158, 11, 0.10)', padding: 14 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
-                        <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text.heading, flex: 1 }}>
-                            🫘 Welcome{identity?.callsign ? `, ${identity.callsign}` : ''}! One step to unlock trading
-                        </Text>
-                        <Pressable onPress={dismissFirstOfferQuest} hitSlop={8} accessibilityRole="button" accessibilityLabel="Dismiss">
-                            <Text style={{ fontSize: 15, color: colors.text.secondary, fontWeight: '700', paddingLeft: 8 }}>✕</Text>
-                        </Pressable>
-                    </View>
-                    <Text style={{ fontSize: 13.5, color: colors.text.body, lineHeight: 19, marginTop: 4 }}>
-                        List one Offer — anything you can give: a skill, produce, tools, a lift. That unlocks accepting Offers and posting Needs.
-                    </Text>
-                    <Pressable
-                        style={{ marginTop: 10, backgroundColor: palette.amber500, borderRadius: 10, paddingVertical: 10, alignItems: 'center' }}
-                        onPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
-                        accessibilityRole="button"
-                    >
-                        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>➕ Post your first Offer</Text>
-                    </Pressable>
-                </View>
-            )}
-            {/* Interests Tag Cloud when in For You mode */}
-            {filter === 'for-you' && !categoryPanel.open && (
-                isCustomizerExpanded ? (
-                    <View style={styles.favPanel}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                            <Text style={styles.favPanelTitle}>★ CUSTOMIZE INTERESTS</Text>
-                            <Pressable
-                                onPress={() => setIsCustomizerExpanded(false)}
-                                style={{ backgroundColor: colors.accent.border, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}
-                                accessibilityRole="button"
-                            >
-                                <Text style={{ fontSize: 10, fontWeight: '800', color: colors.accent.primary }}>✕ HIDE</Text>
-                            </Pressable>
-                        </View>
-                        <Text style={styles.favPanelSub}>Select categories to prioritize in your feed:</Text>
-                        <View style={styles.favTagsContainer}>
-                            {MARKETPLACE_CATEGORIES.filter(c => c.id !== 'all').map(cat => {
-                                const isFav = favCategories.includes(cat.id);
-                                return (
-                                    <Pressable
-                                        key={cat.id}
-                                        onPress={async () => {
-                                            const updated = isFav
-                                                ? favCategories.filter(c => c !== cat.id)
-                                                : [...favCategories, cat.id];
-                                            setFavCategories(updated);
-                                            try {
-                                                await AsyncStorage.setItem('bp_fav_categories', JSON.stringify(updated));
-                                            } catch {}
-                                        }}
-                                        style={[styles.favTag, isFav && styles.favTagActive]}
-                                        accessibilityRole="button"
-                                        accessibilityState={{ selected: isFav }}
-                                    >
-                                        <Text style={[styles.favTagText, isFav && styles.favTagTextActive]}>
-                                            {cat.emoji} {cat.label} {isFav ? '★' : ''}
-                                        </Text>
-                                    </Pressable>
-                                );
-                            })}
-                        </View>
-                    </View>
-                ) : (
-                    <Pressable
-                        onPress={() => setIsCustomizerExpanded(true)}
-                        style={styles.favSummaryBanner}
-                        accessibilityRole="button"
-                    >
-                        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
-                                <Text style={{ fontSize: 13, color: colors.accent.primary, fontWeight: 'bold' }}>★</Text>
-                                <Text style={styles.favSummaryText} numberOfLines={1}>
-                                    Prioritizing: {favCategories.length > 0 
-                                        ? favCategories.map(id => MARKETPLACE_CATEGORIES_BY_ID.get(id)?.emoji || '').join(' ')
-                                        : 'None selected yet'}
-                                </Text>
-                            </View>
-                            <View style={styles.favSummaryEditBadge}>
-                                <Text style={styles.favSummaryEditBtn}>⚙️ CUSTOMIZE</Text>
-                            </View>
-                        </View>
-                    </Pressable>
-                )
-            )}
-
-            {/* Owners only, on its own cadence, always dismissible: "Check your 12 words" (sealed-keys.md §7). */}
-            {!categoryPanel.open && <OwnerWordsPrompt />}
-            {/* Freshness Social Proof Banner */}
-            {shouldShowFreshBanner && !categoryPanel.open && (
-                <Pressable
-                    onPress={dismissFreshBanner}
-                    style={({ pressed }) => [
-                        styles.freshBanner,
-                        pressed && { opacity: 0.7, transform: [{ scale: 0.98 }] }
-                    ]}
-                    accessibilityRole="button"
-                >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }}>
-                        <Text style={{ fontSize: 20 }}>🔥</Text>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.freshBannerTitle}>
-                                {freshTodayCount} fresh listing{freshTodayCount > 1 ? 's' : ''} posted today!
-                            </Text>
-                            <Text style={styles.freshBannerSub}>
-                                Tap to dismiss • Scroll down to explore
-                            </Text>
-                        </View>
-                    </View>
-                    <View style={styles.liveBadge}>
-                        <Text style={styles.liveBadgeText}>LIVE</Text>
-                    </View>
-                </Pressable>
-            )}
-        </View>
-    );
-
-    let listData: any[] = [];
-    if (viewMode === 'grid') {
-        listData = filteredPosts;
-    } else {
-        if (filter === 'for-you') {
-            // What you said you would be at, above what you might like: it is the one part of For You you
-            // have already committed to (decision 1). It stays even when nothing starred matched today.
-            if (myEvents.length > 0) {
-                listData.push({ isHeader: true, title: 'Your events', id: 'header-your-events' });
-                listData.push(...myEvents.map(myEventAsPost));
+    // ── Reading Home ──
+    // `focus` is a return to Home (the tab, the app coming back, another account): the only read that moves the Tips card.
+    // `again` is a read while Home stays in front after the member's own step there (a notice opened, a poll or event made,
+    // an edit made while the phone's list is the phone's only).
+    const refresh = useCallback(async (why: 'focus' | 'pull' | 'bell' | 'poll' | 'layout' | 'again') => {
+        const id = identityRef.current;
+        if (!id) return;
+        const whose = homeAccount(id.publicKey);
+        const raw = await anchorUrl().catch(() => null);
+        if (!raw) { setStatus('no_community'); return; }
+        const u = raw.replace(/\/+$/, '');
+        void readLocal(id.publicKey);
+        let cached = storedRef.current;
+        if (!cached || cached.url !== u || cached.publicKey !== id.publicKey) {
+            // Another community or account than the one drawn: its own copies, drawn before the network answers.
+            const [copy, mine, over, sent, phoneStars] = await Promise.all([
+                readStoredHome(id.publicKey, u), readPhoneLayout(id.publicKey, u), readPhoneOnlyMark(id.publicKey, u), readPhoneOnlySent(id.publicKey, u),
+                readPhoneInterests(),
+            ]);
+            cached = copy;
+            storedRef.current = copy;
+            phoneLayout.current = mine;
+            phoneOver.current = mine ? over : null;
+            phoneSent.current = phoneOver.current !== null ? sent : [];
+            setUrl(u);
+            setRole(undefined);
+            setPlace(null);
+            setKnocks([]);
+            setStored(copy);
+            setLayout(canTailor(copy?.answer) ? pickLayout(copy!.answer.layout, mine, copy!.answer.layoutV1, phoneOver.current).layout : null);
+            setNotOnAccount(false);
+            setFewer(false);
+            setInterests(effectiveInterests(copy?.answer.me?.interests, phoneStars));
+            setStatus(copy ? 'ok' : 'loading');
+        }
+        // The Tips card lands on this return from the answer in hand, before the network is asked: never on what a read
+        // brings later (a 304 or no answer changes nothing, and nothing moves while Home is in front). With none in hand
+        // (the first landing), from what this read brings, at its end.
+        const tipsLandNow = why === 'focus' && !!cached?.answer.me;
+        if (tipsLandNow) void landTips(whose);
+        const asked = cardsToAsk(pickLayout(cached?.answer.layout ?? null, phoneLayout.current, cached?.answer.layoutV1, phoneOver.current).layout, askPinned(cached?.answer, Date.now()), cached?.answer);
+        // The global node only: "near you" from where the phone is (where location is already allowed).
+        const global = await readsGlobal(u, cached);
+        const point = global ? await lastKnownPlace() : null;
+        if (identityRef.current?.publicKey !== id.publicKey || !stillOnPhone(whose)) return;
+        setPlace(was => (was?.lat === point?.lat && was?.lng === point?.lng ? was : point));
+        const read = await loadHome(u, id, asked, cached, { whose, point });
+        // Another account on the screen, or this one gone from the phone while the read was out (Sign Out, Replace).
+        if (identityRef.current?.publicKey !== id.publicKey || read.kind === 'left' || !stillOnPhone(whose)) return;
+        if (read.kind === 'answer') {
+            storedRef.current = read.stored;
+            setStored(read.stored);
+            setStatus('ok');
+            setOfflineNote(false);
+            // A visitor keeps no Home here: drawn in the default order, and nothing is sent.
+            const member = canTailor(read.stored.answer);
+            const answered = read.stored.answer;
+            if (member && phoneOver.current !== null && ownMarkedSave(answered.layout, answered.layoutV1, phoneSent.current)) {
+                // The phone's own marked save, read back (this read overtook the save's answer): the account's list is known
+                // and is the phone's, so the mark goes and the dates decide (a newer edit made since wins and is sent).
+                clearPhoneOnly(phoneOver, phoneSent, id.publicKey, u, whose);
             }
-            if (filteredPosts.length > 0) {
-                listData.push({ isHeader: true, title: '★ For You Feed', id: 'header-for-you' });
-                listData.push(...filteredPosts);
+            const pick = member ? pickLayout(answered.layout, phoneLayout.current, answered.layoutV1, phoneOver.current) : { layout: null, push: false };
+            if (member && answered.layout && !answered.layoutV1) {
+                // A version-2 answer: this node keeps the new shape now (it was updated), so nothing waits on it: the list
+                // goes by its date at any read again, and Edit home stops saying the server needs an update, even when
+                // another device's newer list wins and nothing is sent (review of #1699 confirmation, note 1).
+                refusedShape.current = null;
+                setNotOnAccount(false);
             }
+            if (member && !pick.push && !answered.layoutV1 && phoneOver.current !== null) {
+                // The account's real list is back (a version-2 answer at or after the unknown one): it stands, and the
+                // phone's list made meanwhile goes (its copy is replaced below). Nothing of it is sent.
+                clearPhoneOnly(phoneOver, phoneSent, id.publicKey, u, whose);
+            }
+            setLayout(pick.layout);
+            // An empty version-1 list with no copy here moved or hid nothing (a way-back dismissal or a Reset on an older app):
+            // the newcomer's list is drawn, so the line is theirs as for one who never edited (review of #1699 confirmation,
+            // finding 2). On a standby it can't be told from a real list; the line is still true of what is drawn.
+            const fewerFrom = answered.layoutV1?.empty && !phoneLayout.current ? null : answered.layout;
+            if (member && fewerCardsNews(fewerFrom, phoneLayout.current, answered.me, Date.now())) void maybeFewer(whose);
+            // The phone's newer list is sent, but one the node refused as a shape it doesn't know yet only at a landing
+            // (CARD-FRAME §2.3: "sent again each time you open Home").
+            const resend = why === 'focus' || refusedShape.current !== `${id.publicKey}|${u}`;
+            const saving = pick.push && pick.layout && resend ? pushLayout(pick.layout, whose) : null;
+            // The account's list asks for cards this read didn't (a first landing on this phone, or another device's edit):
+            // one more read for them, never more (a `layout` read doesn't ask again). It follows the save's answer, so it
+            // never sends the list a second time while the first is out.
+            const wanted = cardsToAsk(pick.layout, askPinned(answered, Date.now()), answered);
+            if (member && why !== 'layout' && wanted.some(c => !asked.includes(c))) void (saving ?? Promise.resolve()).then(() => refreshRef.current('layout'));
+            if (!pick.push && pick.layout && !answered.layoutV1) {
+                // A version-1 copy is drawn and never kept as the phone's: it is not written until the member edits (§2.6),
+                // and it must never stand in for the phone's own version 2 (review of #1697, note b).
+                phoneLayout.current = pick.layout;
+                void writePhoneLayout(id.publicKey, u, pick.layout, whose);
+            }
+            // Tips land with the other cards, not after the interests save below (up to 15 s on a first landing).
+            if (why === 'focus' && !tipsLandNow) void landTips(whose);
+            if (read.stored.answer.me) {
+                // A star tapped while the node answered is newer than the answer's interests. Judged by when the read was
+                // sent, not by this landing: one that joined a read already out gets that read's mark (home-store.ts).
+                const drawn = await reconcileInterests(u, id, read.stored.answer.me.interests, read.since);
+                if (stillOnPhone(whose)) setInterests(drawn);
+            }
+            if (member) void maybeReveal(whose);
+            if (member && read.stored.answer.features.door === 'admins') {
+                void cachedNodeRole(u, id).then(r => { if (stillOnPhone(whose) && identityRef.current?.publicKey === id.publicKey) setRole(r.role); });
+            }
+            // The knocks this phone sent, on the global node (where a member asks a local community to let them in).
+            if (member && read.stored.answer.profile === 'global') {
+                void rememberedKnocks(id.publicKey).catch(() => [] as RememberedKnock[]).then(list => {
+                    if (stillOnPhone(whose) && identityRef.current?.publicKey === id.publicKey) setKnocks(list);
+                });
+            }
+            if (why === 'pull') AccessibilityInfo.announceForAccessibility('Home updated');
+        } else if (read.kind === 'members_only') {
+            setStatus('members_only');
+        } else if (read.kind === 'needs_update') {
+            setStatus('needs_update');
+            storedRef.current = null;
+            setStored(null);
+            setOfflineNote(false);
+            if (why === 'pull') AccessibilityInfo.announceForAccessibility("This community's server needs an update before Home works. Market and Talk still work.");
         } else {
-            // Events under their own heading, soonest first; listings by the local day they were posted.
-            // By the day posted, or nearest first where the node sorts by distance (utils/market-global.ts).
-            for (const section of marketFeedSections(filteredPosts, nodeProfile, myLocation)) {
-                listData.push({ isHeader: true, title: section.title, id: section.id });
-                listData.push(...section.posts);
+            setStatus(storedRef.current ? 'ok' : 'offline');
+            setOfflineNote(!!storedRef.current);
+            if (why === 'pull') AccessibilityInfo.announceForAccessibility("Couldn't reach your community; showing what we had");
+        }
+        // No answer this time (offline, members only, needs an update): land from what the phone holds.
+        if (why === 'focus' && !tipsLandNow && read.kind !== 'answer') await landTips(whose);
+    }, [readLocal, pushLayout, maybeReveal, maybeFewer, landTips]);
+
+    const refreshRef = useRef(refresh);
+    refreshRef.current = refresh;
+
+    // On landing and on returning to Home; the two-minute backstop while Home is in front and the app is open.
+    useFocusEffect(useCallback(() => {
+        focused.current = true;
+        void refreshRef.current('focus');
+        const poll = setInterval(() => { if (AppState.currentState === 'active') void refreshRef.current('poll'); }, HOME_SAFETY_POLL_MS);
+        return () => { focused.current = false; clearInterval(poll); setTuneOpen(false); };
+    }, []));
+
+    // The app coming back while Home is in front, and the doorbells that matter to Home (one read after a burst).
+    useEffect(() => {
+        const bell = createDoorbellDebounce(() => {
+            if (focused.current && AppState.currentState === 'active') void refreshRef.current('bell');
+        }, HOME_DOORBELL_SETTLE_MS);
+        const ws = DeviceEventEmitter.addListener('ws_activity', (data: unknown) => { if (focused.current) bell.ring(data); });
+        const app = AppState.addEventListener('change', st => { if (st === 'active' && focused.current) void refreshRef.current('focus'); });
+        return () => { bell.cancel(); ws.remove(); app.remove(); };
+    }, []);
+
+    // Another account on the phone (or the account loading after the screen did) starts from nothing, and reads its own
+    // Home at once when Home is in front.
+    const shownFor = useRef(identity?.publicKey);
+    useEffect(() => {
+        if (shownFor.current === identity?.publicKey) return;
+        shownFor.current = identity?.publicKey;
+        storedRef.current = null;
+        phoneLayout.current = null;
+        phoneOver.current = null;
+        phoneSent.current = [];
+        setStored(null);
+        setLayout(null);
+        setNotOnAccount(false);
+        setFewer(false);
+        setRole(undefined);
+        setPlace(null);
+        setKnocks([]);
+        tipsRef.current = null;
+        setTips(null);
+        setStatus('loading');
+        if (focused.current) void refreshRef.current('focus');
+    }, [identity?.publicKey]);
+
+    const onPull = useCallback(async () => {
+        setRefreshing(true);
+        try { await refresh('pull'); } finally { setRefreshing(false); }
+    }, [refresh]);
+
+    // ── Tips: Next, Don't show, and Edit home's switch ──
+    const onTipNext = useCallback(() => {
+        const id = identityRef.current;
+        const ans = storedRef.current?.answer;
+        if (!id || !ans || !tipsRef.current) return;
+        const step = nextTip(tipsRef.current, tipsFor(ans, role), localDay());
+        keepTips(homeAccount(id.publicKey), step.record);
+        AccessibilityInfo.announceForAccessibility(step.view ? step.view.tip.text : 'That was the last tip. Add a card brings them back.');
+    }, [role, keepTips]);
+
+    // ── The member's edits ──
+    // `reread`: a card's settings changed or a card was added, so Home is read again, but only once the save is answered:
+    // the node builds an instance from the settings it keeps, and a read sent before them answers no body (CARD-FRAME
+    // §2.4). A move or a remove reads nothing.
+    const changeLayout = useCallback((next: HomeLayout | null, opts: { reread?: boolean } = {}) => {
+        const id = identityRef.current;
+        if (!next || !id || !url || !canTailor(storedRef.current?.answer)) return;
+        const before = layoutRef.current;
+        const whose = homeAccount(id.publicKey);
+        const answered = storedRef.current?.answer;
+        if (phoneOver.current === null && !phoneLayout.current && answered?.layoutV1?.empty) {
+            // Made while the account's list is unknown: the phone's only, until the account's real list answers.
+            phoneOver.current = answered.layout?.updatedAt ?? '';
+            phoneSent.current = [];
+            void writePhoneOnlyMark(id.publicKey, url, phoneOver.current, whose);
+        }
+        phoneLayout.current = next;
+        layoutRef.current = next;
+        setLayout(next);
+        void writePhoneLayout(id.publicKey, url, next, whose);
+        if (phoneOver.current !== null) {
+            // The phone's only: never sent by itself, as the account's real list may be back (the primary after a standby).
+            // A read decides: it reads first, then sends the edit only if it still stands (review of #1699 confirmation,
+            // finding 1). An `again` read, so the account's list, if it wins, gets one more read for the cards it names.
+            void refreshRef.current('again');
+            return;
+        }
+        const saving = pushLayout(next, whose);
+        const pins = askPinned(answered, Date.now());
+        const asksMore = cardsToAsk(next, pins, answered).some(c => !cardsToAsk(before, pins, answered).includes(c));
+        if (asksMore || opts.reread) void saving.then(() => refreshRef.current('layout'));
+    }, [url, pushLayout]);
+    // "Don't show tips again", and Remove on Tips: the record says so and the card leaves the list, so the member's other
+    // devices follow.
+    const onTipsDontShow = useCallback(() => {
+        const id = identityRef.current;
+        if (!id) return;
+        keepTips(homeAccount(id.publicKey), dismissTips(tipsRef.current ?? emptyTipsRecord(), new Date().toISOString()));
+        setHint(false);
+        changeLayout(removeCard(layoutRef.current, 'tips', Date.now(), pinnedCards(storedRef.current?.answer, Date.now())));
+        AccessibilityInfo.announceForAccessibility(removedLine(cardName('tips')));
+    }, [keepTips, changeLayout]);
+    // Tips added from the picker, or Reset to defaults while they were off: the tips start over from the first one.
+    const onTipsOn = useCallback(() => {
+        const id = identityRef.current;
+        const ans = storedRef.current?.answer;
+        if (id) keepTips(homeAccount(id.publicKey), restartTips(ans ? tipsFor(ans, roleRef.current) : [], localDay()));
+    }, [keepTips]);
+
+    // ── Adding, removing, and a card's settings (CARD-FRAME §1.3) ──
+    const addNow = useCallback((type: string, settings?: Record<string, unknown>) => {
+        const ans = storedRef.current?.answer;
+        const added = addCard(layoutRef.current, type, Date.now(), { settings, pinned: pinnedCards(ans, Date.now()) });
+        setAddOpen(false);
+        setSettingsFor(null);
+        if (!added.ok) return;
+        setHint(false);
+        if (type === 'tips') onTipsOn();
+        // Read once the save is answered (§2.4); sun and moon is worked out here and needs nothing from the node.
+        changeLayout(added.layout, { reread: type !== 'sky' });
+        scrollRef.current?.scrollTo({ y: 0, animated: true });
+        AccessibilityInfo.announceForAccessibility(addedLine(cardLabelName({ type, settings }, ans?.profile)));
+    }, [changeLayout, onTipsOn]);
+    const onPick = useCallback((row: PickerRow) => {
+        if (!row.hasSettings) { addNow(row.type); return; }
+        setAddOpen(false);
+        afterModal(() => setSettingsFor({ type: row.type, mode: 'add' }));
+    }, [addNow]);
+    const onRemoveCard = useCallback((c: HomeCardInstance) => {
+        if (c.type === 'tips') { onTipsDontShow(); return; }
+        setHint(false);
+        changeLayout(removeCard(layoutRef.current, c.id, Date.now(), pinnedCards(storedRef.current?.answer, Date.now())));
+        AccessibilityInfo.announceForAccessibility(removedLine(cardLabelName(c, storedRef.current?.answer.profile)));
+    }, [changeLayout, onTipsDontShow]);
+    const openSettings = useCallback((c: HomeCardInstance) => {
+        afterModal(() => setSettingsFor({ type: c.type, mode: 'save', id: c.id, settings: c.settings }));
+    }, []);
+    const onSettingsDone = useCallback((next: Record<string, unknown>) => {
+        const what = settingsFor;
+        if (!what) return;
+        if (what.mode === 'add') { addNow(what.type, next); return; }
+        setSettingsFor(null);
+        // Changed in place: the card keeps where it is. Sun and moon's place is worked out here: no read.
+        changeLayout(changeCardSettings(layoutRef.current, what.id, next, Date.now()), { reread: what.type !== 'sky' });
+    }, [settingsFor, addNow, changeLayout]);
+
+    const interestsRef = useRef(interests);
+    interestsRef.current = interests;
+    const toggleInterest = useCallback((category: string) => {
+        const prev = interestsRef.current;
+        const next = prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category];
+        interestsRef.current = next;
+        // Shown the same moment (the Market card reorders in place); saved to the phone and the account behind it.
+        setInterests(next);
+        void saveInterests(url, identityRef.current, next);
+    }, [url]);
+
+    const openTune = useCallback(() => {
+        setTuneOpen(true);
+        setTimeout(() => {
+            const y = cardY.current.get('interests');
+            if (y !== undefined) scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+        }, 50);
+    }, []);
+
+    const onStep = useCallback((step: StepLine['id']) => {
+        // The global node's first post is an Offer too: something free or for swap (Beans are off there).
+        if (step === 'offer' || step === 'post') router.push({ pathname: '/map', params: { newPost: 'offer' } });
+        else if (step === 'photo') router.push({ pathname: '/(tabs)/settings', params: { section: 'profile' } });
+        else if (step === 'interests') openTune();
+        else if (step === 'ask') router.push('/find-community');
+        else router.push({ pathname: '/(tabs)/people', params: { view: 'invites' } });
+    }, [openTune]);
+
+    const openNeeds = useCallback((e: NeedsYouEntry) => {
+        const t = e.target;
+        if (t.to === 'admin') { manage.start(storedRef.current?.answer.cards.community?.name || 'this community', t.section); return; }
+        goToNeedsTarget(t);
+    }, [manage]);
+
+    // A kept notice: its whole text from the node (one read on the tap), then marked seen.
+    const openNotice = useCallback(async (noticeId: string) => {
+        const id = identityRef.current;
+        const first = storedRef.current?.answer.cards.notices?.first;
+        if (!id || !url) return;
+        let title = first?.title ?? 'From your community';
+        let body = first?.line ?? '';
+        try {
+            const res = await signedGet(url, '/api/notices?unseen=1', id);
+            const list = res.ok ? ((await res.json()) as { notices?: { id: string; title: string; body: string }[] }).notices : null;
+            const found = list?.find(n => n.id === noticeId);
+            if (found) { title = found.title; body = found.body; }
+        } catch { /* the card's own words */ }
+        Alert.alert(title, body);
+        try { await signedPost(url, '/api/notices/seen', { ids: [noticeId] }, id); } catch { /* seen next time */ }
+        void refreshRef.current('again');
+    }, [url]);
+
+    // ── What to draw ──
+    const answer = stored?.answer ?? null;
+    const now = Date.now();
+    const needsEntries = answer ? mergeNeeds(answer.cards.needs?.items, local, now, answer.features) : [];
+    const knocked = knocks.length > 0;
+    // Tips: the node's list, from the answer in hand; the card only once the record is read, and never advanced here.
+    const tipsList = answer ? tipsFor(answer, role) : [];
+    const tipsView = tips && answer?.me ? tipNow(tips, tipsList, localDay()).view : null;
+    const drawn = answer ? cardsToDraw(answer, shown, { interests, tuneOpen, safetyUp, needs: needsEntries.length, role, knocked, now, tipsUp: !!tipsView, place, tourOver }) : [];
+    // Find your community's pin (the global node, a member's first 30 days): no "…", no move, at the top.
+    const pins = pinnedCards(answer, now);
+    const interestsUp = drawn.some(c => c.type === 'interests');
+    useEffect(() => { if (interestsUp && focused.current) setTuneOpen(true); }, [interestsUp]);
+    const word = answer && stored ? safetyWord(answer, stored.asked.split(',')) : null;
+    const homeWord = word && stored ? { url: stored.url, standing: word } : null;
+    const profile = answer?.profile ?? 'local';
+    const showsBeans = answer?.features.beans !== false;
+    const invitesOn = !!answer && invitesForReader(answer.features, role);
+    const ordered = cardOrder(shown, pins);
+    const tailor = canTailor(answer);
+    const menuCard = tailor ? menuFor : null;
+    const menuAt = menuCard ? drawn.findIndex(d => d.id === menuCard.id) : -1;
+    const tipsAllSeen = !!tips && !tips.dismissedAt && tipsList.length > 0 && allTipsSeen(tips, tipsList);
+    const picker = answer && tailor && addOpen ? pickerGroups(answer, shown, role, pins, tipsAllSeen ? { tips: TIPS_ALL_SEEN } : {}) : null;
+
+    // ── The tour's Home side (DESIGN-getting-started-fable.md §2–§3) ──
+    // The bar is the tab layout's (utils/tour-store.ts); Home lends it the chips (the picker's own add) and the end (one
+    // layout write, then the account's record). Nothing here starts a tour by itself.
+    const chips = answer?.me && tailor
+        ? tourChips({ profile: answer.profile, features: answer.features, cards: answer.cards as Record<string, unknown> }, role, { members: answer.cards.community?.members ?? null })
+        : [];
+    const tourEnd = useCallback(async (kind: 'done' | 'skipped') => {
+        const id = identityRef.current;
+        const u = storedRef.current?.url ?? url;
+        if (!id) return;
+        const whose = homeAccount(id.publicKey);
+        setTourOver(true);
+        setTourProgress(null);
+        const ans = storedRef.current?.answer;
+        if (canTailor(ans)) changeLayout(endTourLayout(layoutRef.current, { pinned: pinnedCards(ans, Date.now()) }), { reread: true });
+        if (kind === 'done') {
+            setHint(false);
+            void markSeenOnce(whose, 'hint');
+        } else if (!(await seenOnce(id.publicKey, 'hint')) && stillOnPhone(whose)) {
+            setHint(true);
+            void markSeenOnce(whose, 'hint');
+        }
+        if (u && stillOnPhone(whose)) void saveTourRecord(u, id, tourRecord(kind));
+    }, [url, changeLayout]);
+    const tourRestart = useCallback(() => {
+        const id = identityRef.current;
+        const u = storedRef.current?.url ?? url;
+        if (!id) return;
+        setTourOver(false);
+        // The card returns until the tour ends again: on a Home already set up it is put back on top (the end takes it off).
+        const ans = storedRef.current?.answer;
+        if (canTailor(ans) && layoutRef.current) {
+            const added = addCard(layoutRef.current, 'start', Date.now(), { pinned: pinnedCards(ans, Date.now()) });
+            if (added.ok) changeLayout(added.layout);
+        }
+        if (u) void saveTourRecord(u, id, tourRecord('open'));
+        startTour(id.publicKey, 0);
+    }, [url, changeLayout]);
+    const tourAddChip = useCallback((type: string) => {
+        const ans = storedRef.current?.answer;
+        const added = addCard(layoutRef.current, type, Date.now(), { pinned: pinnedCards(ans, Date.now()) });
+        if (added.ok) changeLayout(added.layout, { reread: true });
+    }, [changeLayout]);
+    const chipsKey = chips.join(',');
+    useEffect(() => {
+        if (!answer?.me || !tailor) { lendTourHome(null); return; }
+        lendTourHome({
+            chips,
+            chipName: (type) => cardName(type, profile),
+            onHome: (type) => (layoutRef.current?.cards ?? []).some(c => c.type === type),
+            addChip: tourAddChip,
+            moreCards: () => setAddOpen(true),
+            end: (kind) => { void tourEnd(kind); },
+            restart: tourRestart,
+        });
+    }, [answer, tailor, layout, chipsKey, profile, tourAddChip, tourEnd, tourRestart]);
+    useEffect(() => () => lendTourHome(null), []);
+    // Another account on the phone: this one's tour words go; a tour part way here is read again whenever the bar closes.
+    useEffect(() => { setTourOver(false); }, [identity?.publicKey]);
+    useEffect(() => {
+        const pk = identity?.publicKey;
+        if (!pk || tourRun) return;
+        void readProgress(pk).then(p => { if (identityRef.current?.publicKey === pk) setTourProgress(p); });
+    }, [identity?.publicKey, tourRun]);
+    // A Done or Skip the node didn't take (offline) is sent again on the next Home open.
+    useEffect(() => { if (url && identity) void resendTourRecord(url, identity); }, [url, identity?.publicKey]);
+
+    const card = (inst: HomeCardInstance): React.ReactNode => {
+        if (!answer) return null;
+        const { id, type } = inst;
+        const c = answer.cards;
+        const caption = type === 'tips' && tipsView ? tipsCaption(tipsView) : cardCaption(type, answer);
+        // Getting started has no "…": Skip is its remove.
+        const menu = tailor && type !== 'start' && canRemoveCard(type, pins) ? () => setMenuFor(inst) : undefined;
+        const frame = (body: React.ReactNode, extra?: { right?: React.ReactNode; accent?: boolean }) => (
+            <HomeCard id={id} caption={caption} menuLabel={cardLabelName(inst, answer.profile)} colors={colors} onMenu={menu} menuRef={menuRef(id)} testID={`home-card-${id}`} right={extra?.right} accent={extra?.accent}>
+                {body}
+            </HomeCard>
+        );
+        switch (type) {
+            case 'needs': return frame(<NeedsBody entries={needsEntries} colors={colors} onOpen={openNeeds} />, { accent: needsEntries.some(e => e.accent) });
+            case 'safety':
+                // Its own card (the two-doors design's): it says when it is up, and keeps its own ✕ and schedule.
+                return (
+                    <OneWayBackCard
+                        place="landing"
+                        colors={colors}
+                        homeWord={homeWord}
+                        accountDismissedAt={layout?.dismissed.safety ?? null}
+                        onDismiss={at => changeLayout(dismissSafety(layoutRef.current, at))}
+                        onUp={setSafetyUp}
+                        onActionsAt={at => band.report('safety:actions', at)}
+                    />
+                );
+            case 'find': {
+                // The directory's rows are other people's publications: each is checked before it is drawn.
+                const home = readGlobalHome(c.find);
+                return home ? frame(
+                    <FindCommunityBody home={home} knocks={knocks} identity={identity} nodeUrl={url} point={place ?? answer.me?.area ?? null} colors={colors} />,
+                ) : null;
             }
+            case 'steps': {
+                if (!c.steps) return null;
+                const steps = firstSteps(answer, { interests, role, knocked });
+                return frame(<StepsBody lines={steps.lines} note={steps.note} colors={colors} onStep={onStep} />);
+            }
+            case 'start': {
+                // The same rule the tab layout builds the running tour from: the Ledger step is in whenever its tab shows (the showcase included).
+                const total = tourSteps('phone', { global: answer.profile === 'global', beans: !hiddenTabsFor(answer.features).includes('ledger') }).length;
+                return frame(
+                    <StartBody
+                        words={START_CARD_WORDS}
+                        button={startCardButton(tourProgress, total)}
+                        colors={colors}
+                        onLookAround={() => {
+                            const pk = identityRef.current?.publicKey;
+                            if (pk) startTour(pk, resumeStep(tourProgress, total));
+                        }}
+                        onSkip={() => { closeTour(); void tourEnd('skipped'); }}
+                    />,
+                );
+            }
+            case 'interests': return frame(<InterestsBody interests={interests} colors={colors} onToggle={toggleInterest} />);
+            case 'tips': return tipsView ? frame(
+                <TipsBody
+                    view={tipsView}
+                    colors={colors}
+                    onNext={onTipNext}
+                    onReadMore={slug => router.push({ pathname: '/guide/[slug]', params: { slug } })}
+                    onDontShow={onTipsDontShow}
+                />,
+            ) : null;
+            case 'deals': return c.deals ? frame(<DealsBody card={c.deals} colors={colors} />) : null;
+            case 'enterprise': return c.enterprise ? frame(<EnterpriseBody card={c.enterprise} colors={colors} />) : null;
+            case 'events': return c.events ? frame(<EventsBody card={c.events} colors={colors} />) : null;
+            case 'market': return c.market ? frame(
+                <MarketBody
+                    items={marketInOrder(c.market.items, interests, profile, normalizeCategory)}
+                    examples={!!c.market.examples}
+                    nodeUrl={url}
+                    showsBeans={showsBeans}
+                    colors={colors}
+                    onSeeAll={() => router.navigate('/(tabs)/market')}
+                />,
+                {
+                    // The interests are a member's (a visitor's answer has no `me`, so no interests card to open).
+                    right: tailor ? (
+                        <Pressable onPress={openTune} style={{ minHeight: 48, minWidth: 48, paddingHorizontal: 8, justifyContent: 'center', alignItems: 'center' }}
+                            accessibilityRole="button" accessibilityLabel="Tune: pick what you're into" testID="home-market-tune">
+                            <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text.link }}>Tune</Text>
+                        </Pressable>
+                    ) : undefined,
+                },
+            ) : null;
+            case 'decide': return c.decide ? frame(<DecideBody card={c.decide} features={answer.features} colors={colors} now={now} />) : null;
+            case 'groups': return c.groups ? frame(<GroupsBody card={c.groups} colors={colors} />) : null;
+            case 'joined': return c.joined ? frame(<JoinedBody card={c.joined} profile={profile} colors={colors} />) : null;
+            case 'pulse': return c.pulse ? frame(<PulseBody card={{ items: starredFirst(c.pulse.items, i => i.category, interests, normalizeCategory) }} nodeUrl={url} colors={colors} />) : null;
+            case 'beans': return c.beans ? frame(<BeansBody card={c.beans} colors={colors} />) : null;
+            case 'notices': return c.notices ? frame(<NoticesBody card={c.notices} colors={colors} onOpen={openNotice} />) : null;
+            case 'invite': return frame(<InviteBody colors={colors} />);
+            case 'search': return frame(
+                <SearchBody
+                    settings={inst.settings}
+                    card={searchCardFor(answer, inst)}
+                    nodeUrl={url}
+                    showsBeans={showsBeans}
+                    colors={colors}
+                    onMore={q => router.navigate({ pathname: '/(tabs)/market', params: { q } })}
+                />,
+            );
+            case 'sky': {
+                // Worked out on the phone from what it already has: no request of its own (CARD-FRAME §2.4, way 3).
+                const sky = skyOf(answer, inst, place, now);
+                return sky ? frame(<SkyBody sky={sky} colors={colors} />) : null;
+            }
+            case 'community': return frame(
+                <CommunityBody
+                    card={c.community}
+                    profile={profile}
+                    invitesOn={invitesOn}
+                    colors={colors}
+                    onAdd={tailor ? () => setAddOpen(true) : undefined}
+                    onEdit={tailor ? () => setEditOpen(true) : undefined}
+                />,
+            );
+            default: return null;
+        }
+    };
+
+    // Each card in the member's order: the drawn ones, and the "one way back" card while it may be up (it decides).
+    const list = ordered.filter(c => drawn.some(d => d.id === c.id) || (c.type === 'safety' && !!answer));
+    const firstDrawn = list.find(c => c.type !== 'safety' || safetyUp);
+    // Where Beans are previewed, the Your Beans card (design §1 row 1): no API, the Ledger's example behind its link. It
+    // sits under First steps while that is up, else under the first card, and only its own "Hide this card" puts it away:
+    // First steps done, removed or out of its days leaves it. While Getting started is up for a tour not yet ended it waits,
+    // as the five do: a newcomer's Home is that card alone, and the tour's Ledger step is the example's way in
+    // (DESIGN-getting-started-fable.md §0, pick 10).
+    const touring = !!answer && list.some(c => c.type === 'start') && !tourOverFor(answer, { tourOver });
+    const beansPreviewCard = !!answer && !touring && homeBeansPreview(answer);
+    const beansCardUnder = beansPreviewCard ? (list.find(c => c.type === 'steps') ?? firstDrawn)?.id ?? null : null;
+
+    let empty: React.ReactNode = null;
+    if (!answer) {
+        if (status === 'members_only') {
+            empty = (
+                <View style={st.empty}>
+                    <Text style={[st.emptyText, { color: colors.text.body }]}>Home shows once you're a member of this community.</Text>
+                    <HomeButton colors={colors} text="Open the Market" onPress={() => router.navigate('/(tabs)/market')} />
+                </View>
+            );
+        } else if (status === 'needs_update') {
+            empty = (
+                <View style={st.empty}>
+                    <Text style={[st.emptyText, { color: colors.text.body }]} accessibilityLiveRegion="polite" testID="home-needs-update-note">
+                        This community's server needs an update before Home works. Market and Talk still work.
+                    </Text>
+                    <View style={s.buttonRow}>
+                        <HomeButton colors={colors} text="Open the Market" onPress={() => router.navigate('/(tabs)/market')} testID="home-open-market" />
+                        <HomeButton colors={colors} text="Open Talk" onPress={() => router.navigate('/(tabs)/chats')} testID="home-open-talk" />
+                    </View>
+                </View>
+            );
+        } else if (status === 'no_community') {
+            empty = (
+                <View style={st.empty}>
+                    <Text style={[st.emptyText, { color: colors.text.body }]}>Connect to a community to see your Home.</Text>
+                    <HomeButton colors={colors} primary text="Connect" onPress={() => router.push({ pathname: '/(tabs)/settings', params: { section: 'advanced' } })} />
+                </View>
+            );
+        } else if (status === 'offline') {
+            empty = (
+                <View style={st.empty}>
+                    <Text style={[st.emptyText, { color: colors.text.body }]} accessibilityLiveRegion="polite">
+                        Couldn't reach your community yet. Home fills in when it answers.
+                    </Text>
+                    <View style={s.buttonRow}>
+                        <HomeButton colors={colors} primary text="Try again" onPress={() => void refresh('pull')} testID="home-retry" />
+                        <HomeButton colors={colors} text="Open the Market" onPress={() => router.navigate('/(tabs)/market')} />
+                    </View>
+                </View>
+            );
+        } else {
+            empty = (
+                <View style={st.empty} accessibilityLiveRegion="polite">
+                    <ActivityIndicator color={colors.text.secondary} />
+                    <Text style={[st.emptyText, { color: colors.text.secondary }]}>Getting your Home…</Text>
+                </View>
+            );
         }
     }
 
-    const renderItem = ({ item }: { item: any }) => {
-        if (item.isHeader) {
-            return (
-                <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionHeaderText}>{item.title.toUpperCase()}</Text>
-                    <View style={styles.sectionHeaderLine} />
-                </View>
-            );
-        }
-
-        if (item.type === 'event') {
-            return (
-                <EventCard
-                    post={item}
-                    currentPubkey={identity?.publicKey}
-                    myLocation={myLocation}
-                    onRsvpChanged={() => { loadPosts(); if (filter === 'for-you') loadMyEvents(); }}
-                />
-            );
-        }
-
-        if (item.type === 'poll') {
-            return (
-                <PollCard
-                    post={item}
-                    currentPubkey={identity?.publicKey}
-                    onVoteSuccess={() => loadPosts()}
-                />
-            );
-        }
-
-        let coverImage: string | null = null;
-        if (item.photos) {
-            try {
-                const arr = Array.isArray(item.photos) ? item.photos : JSON.parse(item.photos);
-                if (arr.length > 0) coverImage = arr[0];
-            } catch {}
-        }
-
-        const cardAuthor = item.author_callsign || item.author_pubkey?.slice(0, 6) || 'Unknown';
-        const isPulse = (item.author_callsign || item.authorCallsign) === 'Daily Pulse';
-        const elderCard = !isPulse && isElder(item.author_energy_cycled);
-        const isOwn = !isPulse && !!(identity?.publicKey && item.author_pubkey === identity.publicKey);
-        const isGroupScope = item.audience_scope === 'group' || item.audienceScope === 'group' || !!item.target_group_id || !!item.targetGroupId;
-        const groupName = item.target_group_name || item.targetGroupName || 'Group';
-        const groupScopeBadgeText = isGroupScope ? `🔒 Only ${groupName} can see this` : null;
-
-        const priceLabel = item.price_type === 'hourly' ? '/Hr' :
-                           item.price_type === 'daily' ? '/Dy' :
-                           item.price_type === 'weekly' ? '/Wk' :
-                           item.price_type === 'monthly' ? '/Mo' : '';
-
-        const catEmoji = categoryEmoji(item.category);
-        const catLabel = categoryLabel(item.category);
-
-        if (viewMode === 'grid') {
-            return (
-                <Pressable
-                    style={[
-                        styles.card,
-                        styles.gridCard,
-                        elderCard && styles.elderCard,
-                        isPulse && styles.pulseCard,
-                    ]}
-                    disabled={isPulse}
-                    onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
-                    accessibilityRole={isPulse ? undefined : "button"}
-                >
-                    <View style={styles.gridImageWrapper}>
-                        {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                            <Image source={{ uri: coverImage }} style={styles.gridImage} accessibilityLabel={item.title} contentFit="cover" cachePolicy="memory-disk" transition={150} />
-                        ) : (
-                            <View style={[styles.gridImage, styles.gridFallback]}>
-                                <Text style={styles.gridFallbackEmoji}>
-                                    {isPulse ? '🗞️' : catEmoji}
-                                </Text>
-                            </View>
-                        )}
-                        {!isPulse && showsBeans && (
-                            <View style={styles.gridPriceBadge}>
-                                <CurrencyDisplay
-                                    amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
-                                    style={styles.gridPriceText}
-                                    asView={true}
-                                />
-                            </View>
-                        )}
-                        {isPulse && (
-                            <View style={[
-                                styles.gridPriceBadge,
-                                {
-                                    left: 8,
-                                    right: undefined,
-                                    backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : '#fef3c7',
-                                    borderColor: theme === 'dark' ? colors.feedback.warning.border : '#f59e0b',
-                                    borderWidth: 1,
-                                }
-                            ]}>
-                                <Text style={[styles.gridPriceText, { color: theme === 'dark' ? colors.feedback.warning.fg : '#92400e', fontWeight: '900' }]}>🗞️ PULSE</Text>
-                            </View>
-                        )}
-                        {!!item.repeatable && !isPulse && (
-                            <View style={[styles.gridPriceBadge, { left: 8, right: undefined }]}>
-                                <Text style={styles.gridPriceText}>↻ RECURRING</Text>
-                            </View>
-                        )}
-                        {isOwn && (
-                            <View style={[styles.gridPriceBadge, { left: item.repeatable ? 95 : 8, right: undefined, backgroundColor: '#2563eb' }]}>
-                                <Text style={styles.gridPriceText}>👤 YOU</Text>
-                            </View>
-                        )}
-                        {!isPulse && (
-                            <View style={[styles.gridTypeBadge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed]}>
-                                <Text style={[styles.badgeText, { color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{item.type.toUpperCase()}</Text>
-                            </View>
-                        )}
-                    </View>
-                    <View style={styles.gridTextContent}>
-                        <Text style={styles.gridCardTitle} numberOfLines={1}>
-                            {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
-                        </Text>
-                        <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="compact" isFounding={item.authorFoundingNeeded} />
-                        {groupScopeBadgeText && (
-                            <View style={{ marginTop: 4, alignSelf: 'flex-start', backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}>
-                                <Text style={{ fontSize: 9, fontWeight: '800', color: colors.brand.primary }} numberOfLines={1}>
-                                    {groupScopeBadgeText}
-                                </Text>
-                            </View>
-                        )}
-                    </View>
-                </Pressable>
-            );
-        }
-
-        // Compact View
-        if (viewMode === 'compact') {
-            return (
-                <Pressable
-                    disabled={isPulse}
-                    accessibilityRole={isPulse ? undefined : "button"}
-                    onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
-                >
-                    <View style={[styles.compactRow, elderCard && styles.elderCompactRow, isPulse && styles.pulseCard]}>
-                        <Text style={styles.compactEmoji}>
-                            {catEmoji}
-                        </Text>
-                        <View style={{ flex: 1, marginLeft: 10, marginRight: 8, justifyContent: 'center' }}>
-                            <Text style={styles.compactTitle} numberOfLines={1}>
-                                {item.cash_also_needed === 1 ? '💸 ' : ''}{item.title}
-                            </Text>
-                            <Text style={styles.compactAuthor} numberOfLines={1}>
-                                by {cardAuthor} {elderCard ? '⛰️' : ''} {isOwn ? '👤 (You)' : ''}
-                            </Text>
-                            {groupScopeBadgeText && (
-                                <View style={{ marginTop: 2, alignSelf: 'flex-start', backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 1 }}>
-                                    <Text style={{ fontSize: 9, fontWeight: '800', color: colors.brand.primary }} numberOfLines={1}>
-                                        {groupScopeBadgeText}
-                                    </Text>
-                                </View>
-                            )}
-                        </View>
-                        <View style={{ alignItems: 'flex-end', justifyContent: 'center', gap: 4 }}>
-                            {!isPulse && showsBeans && (
-                                <CurrencyDisplay
-                                    amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
-                                    style={styles.compactPrice}
-                                    asView={true}
-                                />
-                            )}
-                            <View style={[
-                                styles.compactBadge, 
-                                isPulse ? {
-                                    backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : '#fef3c7',
-                                    borderColor: theme === 'dark' ? colors.feedback.warning.border : '#f59e0b',
-                                    borderWidth: 1,
-                                } : (item.type === 'offer' ? styles.compactBadgeOffer : styles.compactBadgeNeed)
-                            ]}>
-                                <Text style={[
-                                    styles.compactBadgeText, 
-                                    {
-                                        color: isPulse ? (theme === 'dark' ? colors.feedback.warning.fg : '#92400e') : (item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg),
-                                        fontWeight: '800',
-                                    }
-                                ]}>
-                                    {isPulse ? 'PULSE' : item.type.toUpperCase()}
-                                </Text>
-                            </View>
-                        </View>
-                    </View>
-                </Pressable>
-            );
-        }
-
-        // List View
-        return (
-            <Pressable
-                disabled={isPulse}
-                accessibilityRole={isPulse ? undefined : "button"}
-                onPress={isPulse ? undefined : () => router.push(`/post/${item.id}`)}
-            >
-                <View style={[styles.card, { flexDirection: 'row', padding: 0 }, elderCard && styles.elderCard, isPulse && styles.pulseCard]}>
-                    {coverImage && typeof coverImage === 'string' && coverImage.trim() !== '' && coverImage !== 'null' && coverImage !== 'undefined' ? (
-                        <Image source={{ uri: coverImage }} style={{ width: 96, height: '100%', minHeight: 96, borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }} contentFit="cover" cachePolicy="memory-disk" transition={150} />
-                    ) : (
-                        <View style={{ width: 96, height: '100%', minHeight: 96, backgroundColor: colors.surface.subtle, alignItems: 'center', justifyContent: 'center', borderTopLeftRadius: 14, borderBottomLeftRadius: 14 }}>
-                            <Text style={{ fontSize: 32, opacity: 0.5 }}>
-                                {catEmoji}
-                            </Text>
-                        </View>
-                    )}
-                    <View style={{ flex: 1, padding: 12, justifyContent: 'center' }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1 }}>
-                                {!isPulse && (
-                                    <View style={[styles.badge, item.type === 'offer' ? styles.badgeOffer : styles.badgeNeed, { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, margin: 0 }]}>
-                                        <Text style={[styles.badgeText, { fontSize: 10, color: item.type === 'offer' ? colors.market.offer.fg : colors.market.need.fg }]}>{item.type.toUpperCase()}</Text>
-                                    </View>
-                                )}
-                                {isPulse && (
-                                    <View style={{
-                                        backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : '#fef3c7',
-                                        paddingHorizontal: 6,
-                                        paddingVertical: 2,
-                                        borderRadius: 8,
-                                        borderWidth: 1,
-                                        borderColor: theme === 'dark' ? colors.feedback.warning.border : '#f59e0b'
-                                    }}>
-                                        <Text style={{
-                                            fontSize: 10,
-                                            fontWeight: '800',
-                                            color: theme === 'dark' ? colors.feedback.warning.fg : '#92400e'
-                                        }}>🗞️ DAILY PULSE</Text>
-                                    </View>
-                                )}
-                                {isOwn && (
-                                    <View style={{ backgroundColor: '#dbeafe', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
-                                        <Text style={{ fontSize: 10, fontWeight: '700', color: '#1e40af' }}>👤 YOU</Text>
-                                    </View>
-                                )}
-                                <Text style={{ fontSize: 11, fontWeight: '700', color: colors.text.secondary }}>
-                                    {catEmoji} {catLabel}
-                                </Text>
-                                {!!item.repeatable && (
-                                    <View style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default }}>
-                                        <Text style={{ fontSize: 10, fontWeight: '700', color: colors.text.secondary }}>↻ RECURRING</Text>
-                                    </View>
-                                )}
-                                {/* #108: on the card, not just the detail view */}
-                                {item.cash_also_needed === 1 && (
-                                    <View style={{ backgroundColor: colors.feedback.warning.bg, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.warning.border }}>
-                                        <Text style={{ fontSize: 10, fontWeight: '700', color: colors.feedback.warning.fg }}>💸 CASH TOO</Text>
-                                    </View>
-                                )}
-                                {groupScopeBadgeText && (
-                                    <View style={{ backgroundColor: colors.brand.tint, borderColor: colors.brand.primary, borderWidth: 1, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 }}>
-                                        <Text style={{ fontSize: 10, fontWeight: '800', color: colors.brand.primary }}>
-                                            {groupScopeBadgeText}
-                                        </Text>
-                                    </View>
-                                )}
-                            </View>
-                            {!isPulse && showsBeans && (
-                                <CurrencyDisplay
-                                    amount={`${item.credits !== undefined && item.credits !== null ? item.credits : '?'}${priceLabel || ''}`}
-                                    style={[styles.price, { fontSize: 16 }]}
-                                    asView={true}
-                                />
-                            )}
-                        </View>
-
-                        <Text style={{ fontSize: 16, fontWeight: '900', color: colors.text.body, marginBottom: 4 }} numberOfLines={1}>
-                            {item.title}
-                        </Text>
-
-                        <PostAuthorTrust pubkey={item.author_pubkey} callsign={cardAuthor} energyCycled={item.author_energy_cycled} avatarUrl={item.author_avatar} mode="full" isFounding={item.authorFoundingNeeded} />
-                    </View>
-                </View>
-            </Pressable>
-        );
-    };
+    const menuName = menuCard && answer ? cardCaption(menuCard.type, answer) : '';
 
     return (
-        <View style={styles.safeArea} onLayout={e => setScreenH(e.nativeEvent.layout.height)}>
-            {/* The feed and, riding over its top, the controls. Clipped, so the block slides up under the tab bar. */}
-            <View style={{ flex: 1, overflow: 'hidden' }}>
-            <QuickReturnBlock qr={qr} title={<PageTitle title="Market" testID="page-title-market" />} below={categoryPanelOverlay}>
-                {controls}
-            </QuickReturnBlock>
-            <Animated.FlatList
-                ref={listRef}
-                key={viewMode}
-                numColumns={viewMode === 'grid' ? 2 : 1}
-                data={listData}
-                keyExtractor={(item: any) => item.id}
-                renderItem={renderItem}
-                ListHeaderComponent={ListHeader}
-                ListFooterComponent={showExamples && filteredPosts.length > 0 ? <ExampleListings /> : null}
-                contentContainerStyle={[styles.listContent, { paddingTop: qr.listInset }]}
-                columnWrapperStyle={viewMode === 'grid' ? styles.gridRow : undefined}
-                showsVerticalScrollIndicator={false}
-                {...qr.listProps}
-                keyboardShouldPersistTaps="handled"
-                // Dragging the feed puts the keyboard away and blurs the search, which lets the controls go again.
-                keyboardDismissMode="on-drag"
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        colors={[colors.brand.primary]}
-                        tintColor={colors.brand.primary}
-                        // Below the controls, not behind them.
-                        progressViewOffset={qr.listInset}
-                    />
-                }
-                ListEmptyComponent={
-                    (!hasActiveFilters && !firstSyncDone && !syncTimedOut) ? (
-                        // First-run / initial sync — show a loader, not the empty state.
-                        <View style={{ padding: 48, alignItems: 'center' }}>
-                            <ActivityIndicator size="large" color={colors.brand.primary} />
-                            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text.body, marginTop: 16 }}>
-                                Loading the marketplace…
-                            </Text>
-                            <Text style={{ fontSize: 13, color: colors.text.secondary, marginTop: 4 }}>
-                                Syncing with your community
-                            </Text>
-                        </View>
-                    ) : (!hasActiveFilters && !firstSyncDone && syncTimedOut) ? (
-                        // First sync hasn't landed — likely offline / node unreachable.
-                        <View style={{ padding: 40, alignItems: 'center' }}>
-                            <Text style={{ fontSize: 40, opacity: 0.3, marginBottom: 12 }}>📡</Text>
-                            <Text style={{ fontSize: 16, fontWeight: '800', color: colors.text.body, marginBottom: 6 }}>
-                                Having trouble connecting
-                            </Text>
-                            <Text style={{ fontSize: 13, color: colors.text.secondary, textAlign: 'center', marginBottom: 16 }}>
-                                Couldn't reach your community node yet. Check your connection.
-                            </Text>
-                            <Pressable
-                                accessibilityRole="button"
-                                style={{ backgroundColor: colors.brand.primary, paddingHorizontal: 22, paddingVertical: 11, borderRadius: 12 }}
-                                onPress={() => { armSyncWait(); requestSync(); }}
-                            >
-                                <Text style={{ fontWeight: '800', color: colors.text.inverse, fontSize: 14 }}>Retry</Text>
-                            </Pressable>
-                        </View>
-                    ) : !hasActiveFilters ? (
-                        <View>
-                            {showExamples && <ExampleListings />}
-                            <ActivityWaterfall onCreatePostPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })} />
-                        </View>
-                    ) : (
-                    <View style={{ padding: 32, alignItems: 'center' }}>
-                        <Text style={{ fontSize: 40, opacity: 0.3, marginBottom: 16 }}>🛒</Text>
-                        <Text style={{ fontSize: 18, fontWeight: '800', color: colors.text.body, marginBottom: 8 }}>
-                            No items found
+        <FabBandContext.Provider value={band}>
+            <View style={{ flex: 1, backgroundColor: colors.surface.page }}>
+                <ScrollView
+                    ref={scrollRef}
+                    onScroll={onScroll}
+                    scrollEventThrottle={32}
+                    onContentSizeChange={() => setBandVersion(v => v + 1)}
+                    contentContainerStyle={st.content}
+                    refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onPull} />}
+                    testID="home-scroll"
+                >
+                    <PageTitle title="Home" testID="page-title-home" />
+                    <KeyMovedCard colors={colors} />
+                    {offlineNote && (
+                        <Text style={[st.offline, { color: colors.text.secondary }]} accessibilityLiveRegion="polite" testID="home-offline-note">
+                            Couldn't reach your community; showing what we had.
                         </Text>
-                        <Text style={{ fontSize: 14, color: colors.text.secondary, textAlign: 'center', marginBottom: 20 }}>
-                            Try adjusting your filters to see more results.
+                    )}
+                    {answer?.me?.standing === 'suspended' && (
+                        <Text style={[st.offline, { color: colors.text.body }]} testID="home-suspended-note">
+                            Your account here is paused for now. You can still read your own messages, deals and Beans.
                         </Text>
-                        <Pressable
-                            accessibilityRole="button"
-                            style={{ backgroundColor: colors.surface.subtle, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12, marginBottom: 12 }}
-                            onPress={() => { setFilter('all'); dispatchCategoryPanel({ kind: 'pick', category: 'all' }); setEventWindow('all'); setRadiusKm(null); setLocationCenter(null); setTrustFilter('all'); setBeansOnly(false); setGroupFilter('all'); }}
-                        >
-                            <Text style={{ fontWeight: '700', color: palette.gray600, fontSize: 14 }}>Clear All Filters</Text>
-                        </Pressable>
-                        <Pressable
-                            accessibilityRole="button"
-                            style={{ backgroundColor: palette.gray900, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 12 }}
-                            onPress={() => router.push({ pathname: '/map', params: { newPost: 'true' } })}
-                        >
-                            <Text style={{ fontWeight: '700', color: colors.text.inverse, fontSize: 14 }}>+ Post a Deal</Text>
-                        </Pressable>
-                    </View>
-                    )
-                }
-            />
-            {/* While the category panel is open, a tap on the list closes it (and opens nothing), as a tap on
-                the map does. */}
-            {categoryPanel.open && (
-                <Pressable
-                    style={StyleSheet.absoluteFill}
-                    accessibilityRole="button"
-                    accessibilityLabel="Close categories"
-                    onPress={closeCategoryPanel}
+                    )}
+                    {empty}
+                    <Animated.View style={{ opacity: reveal, transform: [{ translateY: reveal.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }] }}>
+                        {list.map(c => (
+                            <View key={c.id} onLayout={e => cardY.current.set(c.id, e.nativeEvent.layout.y)}>
+                                {card(c)}
+                                {hint && tailor && c.id === firstDrawn?.id && (
+                                    <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-hint">
+                                        <Text style={[st.hintText, { color: colors.text.body }]}>{HOME_HINT_LINE}</Text>
+                                        <Pressable onPress={() => setHint(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel="Got it, hide this tip">
+                                            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.accent.primary }}>✕</Text>
+                                        </Pressable>
+                                    </View>
+                                )}
+                                {fewer && tailor && c.id === firstDrawn?.id && (
+                                    <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-fewer">
+                                        <Text style={[st.hintText, { color: colors.text.body }]}>{FEWER_CARDS_LINE}</Text>
+                                        <Pressable onPress={() => setFewer(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel="Got it, hide this line">
+                                            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.accent.primary }}>✕</Text>
+                                        </Pressable>
+                                    </View>
+                                )}
+                                {c.id === beansCardUnder && <YourBeansPreviewCard colors={colors} />}
+                            </View>
+                        ))}
+                        {beansPreviewCard && beansCardUnder === null && <YourBeansPreviewCard colors={colors} />}
+                    </Animated.View>
+                </ScrollView>
+
+                {!fabAside && (
+                    <Pressable accessibilityRole="button" accessibilityLabel="Add a post" style={[st.fab, { backgroundColor: colors.action.fab }]} onPress={() => setPostPicker(true)} testID="home-add-post">
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Text style={{ color: colors.text.inverse, fontSize: 20, fontWeight: '400', marginTop: -2 }}>+</Text>
+                            <Text style={{ color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>ADD POST</Text>
+                        </View>
+                    </Pressable>
+                )}
+
+                <HomeCardMenu
+                    visible={!!menuCard}
+                    name={menuName}
+                    label={menuCard && answer ? cardLabelName(menuCard, answer.profile) : undefined}
+                    colors={colors}
+                    canRemove={!!menuCard && canRemoveCard(menuCard.type, pins)}
+                    canUp={!!menuCard && canMoveCard(menuCard.type, pins) && menuAt > 0 && canMoveCard(drawn[menuAt - 1].type, pins)}
+                    canDown={!!menuCard && canMoveCard(menuCard.type, pins) && menuAt >= 0 && menuAt < drawn.length - 1 && canMoveCard(drawn[menuAt + 1].type, pins)}
+                    onSettings={menuCard && homeCardType(menuCard.type)?.readSettings ? () => openSettings(menuCard) : undefined}
+                    onRemove={() => { if (menuCard) onRemoveCard(menuCard); }}
+                    onUp={() => { if (menuCard) changeLayout(moveCard(layoutRef.current, menuCard.id, 'up', drawn, Date.now(), pins)); }}
+                    onDown={() => { if (menuCard) changeLayout(moveCard(layoutRef.current, menuCard.id, 'down', drawn, Date.now(), pins)); }}
+                    onClose={() => setMenuFor(null)}
+                    returnTo={menuCard ? menuRef(menuCard.id) : undefined}
                 />
-            )}
-            {qr.hidden && filterSummary && (
-                <ActiveFilterChip label={filterSummary} onPress={showControls} onClear={clearAllFilters} />
-            )}
+                <EditHomeSheet
+                    visible={editOpen && tailor && !!answer}
+                    layout={shown}
+                    node={answer ?? { profile, features: {} }}
+                    role={role}
+                    pinned={pins}
+                    drawnNow={drawn}
+                    colors={colors}
+                    onChange={next => changeLayout(next)}
+                    onClose={() => setEditOpen(false)}
+                    onAdd={() => { setEditOpen(false); afterModal(() => setAddOpen(true)); }}
+                    onRemove={onRemoveCard}
+                    onSettings={c => { setEditOpen(false); openSettings(c); }}
+                    onReset={() => { if (tips?.dismissedAt) onTipsOn(); }}
+                    tipsAllSeen={tipsAllSeen}
+                    notOnAccount={notOnAccount}
+                />
+                <AddCardSheet
+                    visible={!!picker}
+                    groups={picker?.groups ?? []}
+                    full={!!picker?.full}
+                    colors={colors}
+                    onAdd={onPick}
+                    onClose={() => setAddOpen(false)}
+                />
+                <CardSettingsSheet
+                    visible={!!settingsFor && tailor}
+                    type={settingsFor?.type ?? null}
+                    settings={settingsFor?.mode === 'save' ? settingsFor.settings : undefined}
+                    mode={settingsFor?.mode ?? 'add'}
+                    // A distance needs a point the node measures from: the member's area, or the phone's place (global only).
+                    hasPoint={!!place || !!answer?.me?.area}
+                    colors={colors}
+                    onDone={onSettingsDone}
+                    onClose={() => setSettingsFor(null)}
+                />
+                <NewPostTypeSheet
+                    visible={postPicker}
+                    onClose={() => setPostPicker(false)}
+                    onSelect={type => {
+                        const target = composeTargetFor(type);
+                        if (target === 'poll-modal') { setPollModal(true); return; }
+                        if (target === 'event-modal') { setEventModal(true); return; }
+                        // The Offer/Need form lives on the map, which takes the chosen type in the link (as the Market's).
+                        router.push({ pathname: '/map', params: { newPost: type } });
+                    }}
+                />
+                <NewPollModal visible={pollModal} onClose={() => setPollModal(false)} onSuccess={() => void refresh('again')} />
+                <NewEventModal visible={eventModal} onClose={() => setEventModal(false)} onSuccess={() => void refresh('again')} />
+                {manage.dialog}
             </View>
-            {/* Hidden while the panel is open, as the map's buttons are: it would cover the strip of feed left. */}
-            {!categoryPanel.open && (
-            <Pressable accessibilityRole="button" style={styles.fab} onPress={() => setShowNewPostTypePicker(true)}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text style={{ color: colors.text.inverse, fontSize: 20, fontWeight: '400', marginTop: -2 }}>+</Text>
-                    <Text style={{ color: colors.text.inverse, fontSize: 13, fontWeight: '800', letterSpacing: 0.5 }}>ADD POST</Text>
-                </View>
-            </Pressable>
-            )}
-
-            <RadiusPickerModal
-                visible={showRadiusPicker}
-                initialRadius={radiusKm}
-                initialLat={locationCenter?.lat}
-                initialLng={locationCenter?.lng}
-                onApply={(r, lat, lng) => {
-                    setRadiusKm(r);
-                    setLocationCenter({ lat, lng });
-                    setShowRadiusPicker(false);
-                }}
-                onReset={() => {
-                    setRadiusKm(null);
-                    setLocationCenter(null);
-                    setShowRadiusPicker(false);
-                }}
-                onCancel={() => setShowRadiusPicker(false)}
-            />
-
-            <TrustPickerSheet
-                visible={showTrustPicker}
-                selected={trustFilter}
-                onSelect={setTrustFilter}
-                onClose={() => setShowTrustPicker(false)}
-            />
-
-            <MyDealsSheet
-                visible={showDealsSheet}
-                identity={identity}
-                onClose={() => setShowDealsSheet(false)}
-                initialTab={dealsInitialTab}
-                showsBeans={showsBeans}
-            />
-
-            {/* The one way to post: the same chooser the map's + opens (components/NewPostTypeSheet). */}
-            <NewPostTypeSheet
-                visible={showNewPostTypePicker}
-                onClose={() => setShowNewPostTypePicker(false)}
-                onSelect={(type) => {
-                    const target = composeTargetFor(type);
-                    if (target === 'poll-modal') { setShowNewPollModal(true); return; }
-                    if (target === 'event-modal') { setShowNewEventModal(true); return; }
-                    // The offer/need form lives on the map, so this hands the chosen type over in the
-                    // deep link. It used to push a bare `newPost=true`, which dropped the choice and
-                    // opened the form on Offer even when the member had picked Need.
-                    router.push({ pathname: '/map', params: { newPost: type } });
-                }}
-            />
-
-            <NewPollModal
-                visible={showNewPollModal}
-                onClose={() => setShowNewPollModal(false)}
-                onSuccess={() => loadPosts()}
-            />
-
-            <NewEventModal
-                visible={showNewEventModal}
-                onClose={() => setShowNewEventModal(false)}
-                onSuccess={() => loadPosts()}
-            />
-        </View>
+        </FabBandContext.Provider>
     );
 }
 
+const st = StyleSheet.create({
+    // Room under the last card for the floating button, so every card can scroll clear of it.
+    content: { paddingBottom: 110 },
+    empty: { marginHorizontal: 16, marginTop: 24, alignItems: 'center', gap: 12 },
+    emptyText: { fontSize: 15, lineHeight: 21, textAlign: 'center' },
+    offline: { marginHorizontal: 16, marginBottom: 8, fontSize: 13, lineHeight: 18 },
+    hint: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginTop: -4, marginBottom: 10, borderWidth: 1, borderRadius: 12, paddingLeft: 12 },
+    hintText: { flex: 1, fontSize: 13, lineHeight: 18, paddingVertical: 8 },
+    hintClose: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+    fab: {
+        position: 'absolute', bottom: 32, right: 24, paddingVertical: 14, paddingHorizontal: 20, borderRadius: 28,
+        shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 6, elevation: 8, zIndex: 100,
+    },
+});

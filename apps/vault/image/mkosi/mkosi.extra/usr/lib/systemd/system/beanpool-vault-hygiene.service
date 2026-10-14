@@ -1,0 +1,16 @@
+# Checks the image's memory hygiene at every boot, once the keyholder runs, and prints it on the console (for whoever
+# watches the boot) and in the journal. A failure changes nothing else: the keyholder reports the same in /v1/report.
+[Unit]
+Description=BeanPool key vault: memory hygiene check
+After=beanpool-vault-keyholder.service beanpool-vault-dns.service caddy.service systemd-sysctl.service
+Wants=beanpool-vault-keyholder.service
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 5
+ExecStart=/usr/lib/beanpool-vault/check-hygiene
+StandardOutput=journal+console
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

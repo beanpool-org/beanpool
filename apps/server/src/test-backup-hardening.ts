@@ -44,7 +44,7 @@ async function run() {
     assert(isAllowedPrimaryUrl('not a url') === false, 'A2-9: garbage rejected');
 
     initStateEngine();
-    const node = await startP2P(4020, 4021);
+    const node = await startP2P(0, 0);
     const nodeId = node.peerId.toString();
     const trustedAddr = `/ip4/127.0.0.1/tcp/4021/p2p/${nodeId}`;
 

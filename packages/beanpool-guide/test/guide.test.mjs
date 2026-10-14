@@ -2,8 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { check, BUNDLED_JSON, WEBSITE_DIR, CONTENT_DIR, OPERATORS_DIR, OPERATORS_JSON, OPERATORS_WEBSITE_DIR, PUBLISH_OPERATORS_WEBSITE, expectedOutputs } from '../scripts/build.mjs';
+import { check, BUNDLED_JSON, WEBSITE_DIR, CONTENT_DIR, OPERATORS_DIR, OPERATORS_JSON, OPERATORS_WEBSITE_DIR, OPERATOR_PAGES_ON_WEBSITE, expectedOutputs, sourceGuides } from '../scripts/build.mjs';
 import { parseGuideMarkdown, renderWebsite, renderOperatorsWebsite, contentHash, loadGuide, GUIDE_SCHEMA } from '../src/guide.mjs';
+
+// Two copies of each collection are tested. What a page SAYS is pinned on the pages themselves (sourceGuides), so the
+// PR that changes the words changes the pin with them. The website and the bundles are tested on the PUBLISHED copy
+// (expectedOutputs), which the director publishes after merge; a pin on its words would break at publish instead.
 
 test('every generated file (app bundle and website) is exactly what the source produces', () => {
     assert.deepEqual(check(), []);
@@ -35,18 +39,19 @@ test('the website has a page for every guide, rendered from the same blocks the 
 });
 
 test('the app sheet finds the guides it links to', () => {
-    const { guide } = expectedOutputs();
+    const { guide } = sourceGuides();
     const about = guide.sections.find(s => s.id === 'about');
     assert.deepEqual(about.slugs, ['how-it-works', 'rules', 'faq', 'whats-new']);
 });
 
 test('the manual: every section has pages, every page has Related pages that exist, the website lists them all', () => {
+    const pages = sourceGuides().guide;
+    assert.ok(pages.sections.length >= 9, 'about + the eight manual sections');
+    for (const want of ['getting-started', 'market', 'map', 'talk', 'pulse', 'commons', 'ledger', 'settings']) {
+        assert.ok(pages.sections.some(s => s.id === want), `section ${want}`);
+    }
     const { guide } = expectedOutputs();
     const slugs = new Set(guide.guides.map(g => g.slug));
-    assert.ok(guide.sections.length >= 9, 'about + the eight manual sections');
-    for (const want of ['getting-started', 'market', 'map', 'talk', 'pulse', 'commons', 'ledger', 'settings']) {
-        assert.ok(guide.sections.some(s => s.id === want), `section ${want}`);
-    }
     const index = fs.readFileSync(path.join(WEBSITE_DIR, 'index.html'), 'utf8');
     for (const s of guide.sections) assert.ok(index.includes(`href="#${s.id}"`), `table of contents links ${s.id}`);
     for (const g of guide.guides) {
@@ -55,6 +60,18 @@ test('the manual: every section has pages, every page has Related pages that exi
         assert.ok(index.includes(`href="${g.slug}.html"`), `index links ${g.slug}`);
         const html = fs.readFileSync(path.join(WEBSITE_DIR, `${g.slug}.html`), 'utf8');
         for (const r of g.related) assert.ok(html.includes(`href="${r}.html"`), `${g.slug}.html links related ${r}`);
+    }
+});
+
+test("front matter: a title and a summary no longer than the apps' validateGuide takes (120 and 300 characters)", () => {
+    // The apps refuse a whole manual for one page over these (packages/beanpool-core member-guide.ts validate), so the
+    // build refuses the page first: a summary of 331 characters once made the operator manual in Settings null (#1427).
+    const page = (title, summary) => `---\nslug: a\ntitle: ${title}\nsummary: ${summary}\nrelated: b\n---\n\nText\n`;
+    assert.equal(parseGuideMarkdown(page('T'.repeat(120), 'S'.repeat(300)), 'x.md').summary.length, 300);
+    assert.throws(() => parseGuideMarkdown(page('T', 'S'.repeat(301)), 'x.md'), /summary is 301 characters; the apps take 300 at most/);
+    assert.throws(() => parseGuideMarkdown(page('T'.repeat(121), 'S'), 'x.md'), /title is 121 characters; the apps take 120 at most/);
+    for (const g of [...sourceGuides().guide.guides, ...sourceGuides().manual.guides]) {
+        assert.ok(g.summary.length <= 300 && g.title.length <= 120, `${g.slug}: title ${g.title.length}, summary ${g.summary.length} characters`);
     }
 });
 
@@ -119,7 +136,7 @@ test('website rendering escapes text', () => {
     assert.ok(html.includes('<h1>A &amp; B</h1>'));
 });
 
-test('a text change changes the hash (which forces a version bump)', () => {
+test('a text change changes the hash (which publishing turns into a higher version)', () => {
     const a = [{ slug: 'a', title: 'T', summary: 'S', blocks: [{ type: 'p', text: 'x' }] }];
     const b = [{ slug: 'a', title: 'T', summary: 'S', blocks: [{ type: 'p', text: 'y' }] }];
     assert.notEqual(contentHash(a), contentHash(b));
@@ -127,14 +144,32 @@ test('a text change changes the hash (which forces a version bump)', () => {
 
 // ─── The operator manual (operators/) ─────────────────────────────────────────
 
-test("the operator manual is not on the website: the build writes none of it and the folder does not exist", () => {
-    // The guard for Marty's decision of 2026-09-19: the manual ships in node Settings now, and the website copy waits
-    // until the security weak spots it describes are fixed. Remove this only together with the switch in build.mjs.
-    assert.equal(PUBLISH_OPERATORS_WEBSITE, false, 'PUBLISH_OPERATORS_WEBSITE must stay off until the brake weak spots are fixed');
-    assert.ok(!fs.existsSync(OPERATORS_WEBSITE_DIR),
-        'apps/website/guide/operators/ must not exist: the operator manual is not published on beanpool.org (Marty, 2026-09-19)');
-    const { out } = expectedOutputs();
-    assert.deepEqual(Object.keys(out).filter(f => f.startsWith(OPERATORS_WEBSITE_DIR + path.sep)), []);
+/** The files under apps/website/guide/operators/, relative to it, sorted. */
+const operatorWebsiteFiles = () => fs.readdirSync(OPERATORS_WEBSITE_DIR, { recursive: true, withFileTypes: true })
+    .filter(d => d.isFile()).map(d => path.relative(OPERATORS_WEBSITE_DIR, path.join(d.parentPath ?? d.path, d.name)).split(path.sep).join('/')).sort();
+const OPERATOR_WEBSITE_FILES = ['first-time-setup.html', 'images/cold-start.webp'];
+
+test("only First-time setup of the operator manual is on the website: that page and its one picture, nothing else", () => {
+    // The guard for Marty's decision of 2026-09-19: the manual ships in node Settings, and the website copy waits until
+    // the security weak spots it describes are fixed. Reversed for First-time setup alone (pick 8, 2026-10-13). Widen
+    // this only together with OPERATOR_PAGES_ON_WEBSITE in build.mjs.
+    assert.deepEqual(OPERATOR_PAGES_ON_WEBSITE, ['first-time-setup'], 'only First-time setup is published until the brake weak spots are fixed');
+    assert.deepEqual(operatorWebsiteFiles(), OPERATOR_WEBSITE_FILES,
+        'apps/website/guide/operators/ holds only First-time setup and its picture (Marty, 2026-09-19; pick 8, 2026-10-13)');
+    const { out, manual } = expectedOutputs();
+    assert.deepEqual(Object.keys(out).filter(f => f.startsWith(OPERATORS_WEBSITE_DIR + path.sep))
+        .map(f => path.relative(OPERATORS_WEBSITE_DIR, f).split(path.sep).join('/')).sort(), OPERATOR_WEBSITE_FILES);
+    // The published page links no other operator page, no operator index, and carries no copy of the whole manual.
+    const page = fs.readFileSync(path.join(OPERATORS_WEBSITE_DIR, 'first-time-setup.html'), 'utf8');
+    for (const g of manual.guides.filter(p => p.slug !== 'first-time-setup')) {
+        assert.ok(!page.includes(`href="${g.slug}.html"`), `first-time-setup.html links the unpublished ${g.slug}`);
+    }
+    assert.ok(!page.includes('href="index.html"'), 'first-time-setup.html links no operator index');
+    assert.ok(page.includes('<li><strong>Signing in to Settings</strong> (in Settings, under Manual)</li>'), 'an unpublished Related page is named, not linked');
+    assert.ok(page.includes('<img src="images/cold-start.webp"'), 'first-time-setup.html shows its picture');
+    assert.ok(page.includes('beanpool claim'), 'first-time-setup.html walks the claim');
+    assert.ok(fs.readFileSync(path.join(OPERATORS_WEBSITE_DIR, 'images/cold-start.webp')).equals(fs.readFileSync(path.join(OPERATORS_DIR, 'images/cold-start.webp'))),
+        'the picture is the bytes Settings shows');
     const members = fs.readFileSync(path.join(WEBSITE_DIR, 'index.html'), 'utf8');
     assert.ok(!members.includes('operators/'), "the members' guide links no operator pages");
     assert.ok(members.includes("Its manual is in your server's Settings"), "the members' guide says where the manual is");
@@ -152,21 +187,21 @@ test("the operator manual: Settings' bundled operators.json is well formed", () 
 });
 
 test("the operator manual is a separate collection: the members' guide carries none of its pages", () => {
-    const { guide, manual } = expectedOutputs();
+    const { guide, manual } = sourceGuides();
     const memberSlugs = new Set(guide.guides.map(g => g.slug));
     // Distinct slugs, so a page name never means two different pages in search results or links.
     for (const p of manual.guides) assert.ok(!memberSlugs.has(p.slug), `${p.slug} is in both collections`);
 });
 
-test('the operator manual covers what an operator needs, and the (unpublished) website renderer lists and renders every page', () => {
-    const { manual } = expectedOutputs();
-    const slugs = new Set(manual.guides.map(g => g.slug));
+test('the operator manual covers what an operator needs, and the website renderer, given every page, lists and renders them all', () => {
+    const slugs = new Set(sourceGuides().manual.guides.map(g => g.slug));
     for (const want of ['first-time-setup', 'signing-in', 'roles', 'members-and-invites', 'reports-and-takedowns', 'disputes',
         'decisions-and-emergencies', 'enterprises-and-keepers', 'pulse-and-announcements', 'backups-and-replicas',
         'updates-and-health', 'rate-limits', 'what-the-server-sees', 'feedback', 'troubleshooting']) {
         assert.ok(slugs.has(want), `operator page ${want}`);
     }
     // Rendered in memory: the renderer is kept working for the day the website copy is switched on.
+    const { manual } = expectedOutputs();
     const site = renderOperatorsWebsite(manual);
     assert.equal(site['operators.json'], fs.readFileSync(OPERATORS_JSON, 'utf8'), "the website's operators.json would be Settings' bytes");
     const index = site['index.html'];
@@ -196,6 +231,30 @@ test('the operator manual covers what an operator needs, and the (unpublished) w
     assert.ok(members.includes('href="operators/index.html"'), "once published, the members' guide links the operator manual");
 });
 
+test('the website renderer, given some pages, writes only those and names the rest without linking them', () => {
+    const { manual } = expectedOutputs();
+    // Settings map links a picture to nearly every page: a good test of pictures pointing at unpublished pages.
+    const only = ['settings-map', 'the-settings-screens'];
+    const site = renderOperatorsWebsite(manual, { only });
+    assert.deepEqual(Object.keys(site).sort(), ['settings-map.html', 'the-settings-screens.html'], 'no index, no operators.json, no other page');
+    const map = manual.guides.find(g => g.slug === 'settings-map');
+    const html = site['settings-map.html'];
+    const linked = map.blocks.filter(b => b.type === 'img' && b.href);
+    assert.ok(linked.some(b => !only.includes(b.href)) && linked.some(b => only.includes(b.href)), 'the test page links both kinds');
+    for (const b of linked) {
+        assert.ok(html.includes(`<img src="${b.src}"`), `renders img ${b.src}`);
+        assert.equal(html.includes(`<a href="${b.href}.html">`), only.includes(b.href), `img ${b.src} links ${b.href} only if it is published`);
+    }
+    for (const slug of map.related) {
+        const r = manual.guides.find(g => g.slug === slug);
+        assert.equal(html.includes(`href="${slug}.html"`), only.includes(slug), `Related ${slug} is a link only if it is published`);
+        if (!only.includes(slug)) assert.ok(html.includes(`<strong>${r.title}</strong> (in Settings, under Manual)`), `Related ${slug} is named`);
+    }
+    assert.ok(!html.includes('href="index.html"'), 'no link to an operator index that is not there');
+    assert.ok(html.includes('Only this part of it is on the website'), 'the foot says the rest is in Settings');
+    assert.throws(() => renderOperatorsWebsite(manual, { only: ['no-such-page'] }), /no page "no-such-page"/);
+});
+
 test('operator words: beans not Ʀ, badges gate nothing', () => {
     const text = fs.readdirSync(OPERATORS_DIR, { recursive: true }).filter(f => String(f).endsWith('.md'))
         .map(f => fs.readFileSync(path.join(OPERATORS_DIR, String(f)), 'utf8')).join('\n')
@@ -211,12 +270,12 @@ test('operator words: beans not Ʀ, badges gate nothing', () => {
 });
 
 test('the operator manual has no concept-guide section; the members\' guide still must', () => {
-    const { manual } = expectedOutputs();
+    const { manual } = sourceGuides();
     assert.ok(!manual.sections.some(s => s.id === 'about'));
     assert.throws(() => loadGuide(OPERATORS_DIR), /needs the "about" section/);
 });
 
-test('check() reports a stray file in the website folder, including any operator page while publishing is off', () => {
+test('check() reports a stray file in the website folder, including any operator page that is not published', () => {
     const existed = fs.existsSync(OPERATORS_WEBSITE_DIR);
     fs.mkdirSync(OPERATORS_WEBSITE_DIR, { recursive: true });
     const stray = path.join(OPERATORS_WEBSITE_DIR, 'signing-in.html');
@@ -270,7 +329,6 @@ test('validation: referenced image must exist on disk and linked href must be a 
     const tmp = fs.mkdtempSync(path.join(path.dirname(OPERATORS_DIR), 'tmp-guide-test-'));
     try {
         fs.writeFileSync(path.join(tmp, 'manifest.json'), JSON.stringify({
-            version: 1,
             sections: [{ id: 'sec', title: 'Sec', summary: 'Summary', pages: ['p1', 'p2'] }]
         }));
         fs.mkdirSync(path.join(tmp, 'sec'));
@@ -292,9 +350,92 @@ test('validation: referenced image must exist on disk and linked href must be a 
     }
 });
 
-test('website has no operator images and no operator content', () => {
-    const webFiles = fs.readdirSync(WEBSITE_DIR, { recursive: true }).map(String);
-    assert.ok(!webFiles.some(f => f.includes('operators')), 'no operators in website folder');
-    assert.ok(!webFiles.some(f => f.endsWith('.webp')), 'no operator webp images in website folder');
+test('website has no operator images and no operator content but First-time setup and its picture', () => {
+    const webFiles = fs.readdirSync(WEBSITE_DIR, { recursive: true, withFileTypes: true }).filter(d => d.isFile())
+        .map(d => path.relative(WEBSITE_DIR, path.join(d.parentPath ?? d.path, d.name)).split(path.sep).join('/'));
+    assert.deepEqual(webFiles.filter(f => f.includes('operators')).sort(), OPERATOR_WEBSITE_FILES.map(f => `operators/${f}`), 'only First-time setup in the website folder');
+    assert.deepEqual(webFiles.filter(f => f.endsWith('.webp')), ['operators/images/cold-start.webp'], "only First-time setup's picture in the website folder");
 });
 
+// ─── Versions: set when the director publishes, never in a manifest ───────────
+
+test('a manifest that holds "version" is refused: a version is set when the collection is published', () => {
+    const tmp = fs.mkdtempSync(path.join(path.dirname(OPERATORS_DIR), 'tmp-guide-test-'));
+    try {
+        fs.cpSync(OPERATORS_DIR, tmp, { recursive: true });
+        const manifest = JSON.parse(fs.readFileSync(path.join(tmp, 'manifest.json'), 'utf8'));
+        fs.writeFileSync(path.join(tmp, 'manifest.json'), JSON.stringify({ version: 76, ...manifest }, null, 2));
+        assert.throws(() => loadGuide(tmp, { aboutSection: null, allowImages: true }), /remove "version"/);
+    } finally {
+        fs.rmSync(tmp, { recursive: true, force: true });
+    }
+});
+
+test('publishing raises a version by one exactly where the text or its schema changed, and starts a new collection at 1', async () => {
+    const { nextPublished, publishedGuides } = await import('../scripts/build.mjs');
+    const published = publishedGuides();
+    const asPages = g => ({ ...structuredClone(g), version: null });
+    assert.deepEqual(nextPublished(published, { guide: asPages(published.guide), manual: asPages(published.manual) }), published);
+
+    const edited = asPages(published.guide);
+    edited.guides[0].blocks = [{ type: 'p', text: 'Changed.' }];
+    edited.hash = contentHash({ sections: edited.sections, guides: edited.guides });
+    const next = nextPublished(published, { guide: edited, manual: asPages(published.manual) });
+    assert.equal(next.guide.version, published.guide.version + 1);
+    assert.deepEqual(next.guide.guides[0].blocks, [{ type: 'p', text: 'Changed.' }]);
+    assert.deepEqual(next.manual, published.manual);
+
+    const reshaped = { ...asPages(published.manual), schema: published.manual.schema + 1 };
+    assert.equal(nextPublished(published, { guide: asPages(published.guide), manual: reshaped }).manual.version, published.manual.version + 1);
+    assert.equal(nextPublished({ guide: null, manual: published.manual }, { guide: edited, manual: asPages(published.manual) }).guide.version, 1);
+});
+
+
+// The names list's trust model (scratch/global-node/DESIGN-names-list-trust-fable.md §9, matrix F6): its pages say exactly
+// the design's sentences, true under its proof, and none of the promises the earlier model made.
+test("the names list's pages say the design's sentences, and none of the old promises", () => {
+    const { guide, manual } = sourceGuides();
+    const words = (g) => g.blocks.flatMap((b) => (b.type === 'ul' ? b.items : [b.text])).join('\n').replace(/\*\*/g, '');
+    const operators = words(manual.guides.find((g) => g.slug === 'running-a-known-community'));
+    const members = words(guide.guides.find((g) => g.slug === 'what-the-admins-can-see'));
+    for (const sentence of [
+        "Only your owners and admins can read the names, on their own phones. Each name is sealed on an admin's phone before it is sent. A backup, a snapshot, a standby's copy, a stolen database and BeanPool hold nothing readable.",
+        "Whoever runs the server can change what it stores and what it tells each phone, and with the owner password can make any key an admin or move an account to a new key. The admins' phones don't take its word: a phone gives the list's keys only to a key its admin checked, on a call or in person, or that an admin it trusts checked, and takes a new key only from such a key. Whoever runs the server can stop the list from working, delete it, and see who opened it and when. On its own it can't read a name. It needs an admin to check the wrong phone's code, or an admin who was removed to work with it (below).",
+        // The fifth deciding review's BLOCKING finding (52e1a759), in the design addendum's (e) words: the new key protects
+        // what the phones that took it write, and the limit is per phone.
+        "When an admin stops being one, the next admin who holds the keys to open the list makes a new key without them, and their phone sends it to the other admins. Nothing written from then on by a phone that has taken the new key can be read with the keys the person had. What they already saw, they keep, as with a paper list.",
+        "When an admin loses their phone, tell another admin the same day: they tap Remove @X's old key. Until that is done, whoever has the phone can read what is written. The admin's new phone's code is checked once, on a call or in person, and the keys are sent to it. Names written under a key that only the lost phone held can't be opened by anyone: the app counts them, and your paper copy is how they come back.",
+        "What this doesn't protect against: checking the wrong person's phone (your phone then trusts their key and sends them the names); an admin's phone someone else gets into; a lost phone before an admin removes its key; a PDF or a note an admin writes; and an admin's phone that whoever runs the server keeps from learning that an admin was removed: until it learns, what it writes can be read with the keys the removed admin had.",
+        // Design Addendum 2 (§3): the removal check is Remove by hand; the comparison only shows two phones are shown different things.
+        "Every admin's phone learns of a removal when it opens the list, unless the server hides it. After an admin is removed, each admin looks at the admins their phone shows: a phone that still shows the removed admin taps Remove @X's old key. Whatever the server says, that phone then makes a new key without them or writes nothing. Two phones that show different list keys are being shown different things: add no names until they match, and tell your admins.",
+        // The design addendum's (e): the vouched history gives a way forward through any admin whose phone opens the list.
+        // Round 12: a phone keeps the keys it takes, for the history it follows (B8, H3).
+        "Each name stays sealed under the key it was written with, and every admin's phone keeps every key it takes for the key history it follows.",
+        // Design Addendum 4 (§4): the stop at a maker this phone had removed, and Follow from it.
+        "A key made by someone no admin your phone trusts has checked. Check codes with that admin, or with an admin whose phone already opens the list, on a call or in person. If your phone had removed that admin's key, checking their phone admits them again; checking another admin's phone doesn't, and your phone then makes a new key without them before it writes. Where nobody can be reached, a phone that has opened the list before can tap Follow the server's history: your phone takes the key for its place only, trusts nobody new, and, if it had removed an admin and the key that removed them isn't in the server's history, makes a new key without them before it writes.",
+        "Whenever a phone opens the list and names it saw before are no longer there, and the log shows no admin deleting them, it says how many. A server put back to an older copy does that, and so does a standby that took over from one, whether or not a key changed in between. The missing names are sealed rows that may still be on the other copy: whoever runs the servers can copy them back, and the admins' phones still hold the keys they were written under, so they open again. Otherwise, the paper copy.",
+        // Design Addendum 3 (§5): Follow the server's history replaces Take @name's history; the standby paragraph names it.
+        "The server shows a key history your phone didn't take. A standby that took over from an older copy, where an admin's phone then made a new key, does that; so does whoever runs the server changing the history. Ask your admins what happened. Tap Follow the server's history: your phone keeps the other history's keys, reads with them and passes them on to the admins it trusts, but never writes under them again unless the server's history comes back to them. An admin your phone had removed stays removed: unless the key that removed them on your phone is in the server's history, your phone makes a new key without them before it writes.",
+        "If the standby's copy was older than the main server's, the phones say how many names are missing; if the key history is older too, they say so and can put it back. If an admin's phone made a new key on the standby first, the other phones say the server shows a different key history and offer to follow it (see When the app refuses).",
+        // Decided with the design (§12 Q3): the 12 words alone don't make a lost phone safe.
+        "The 12 words alone aren't enough for an admin whose phone was lost",
+        // Round 15 (Marty, 2026-10-03): admins check each other at a distance; the code is read out on a call, or scanned together.
+        "Admins trust each other by checking each other's code. You don't need to meet. Open the names list on both phones and tap Check an admin's code (or Check @name's code). Each phone shows its own key as a QR code and 20 digits. On a call, read your 20 digits out and type in theirs; if you're together, scan each other's QR code instead. Do it only when you know it's the other admin you're talking to.",
+        "Make them an admin first, then check each other's code once, on a call or in person.",
+    ]) assert.ok(operators.includes(sentence), `running-a-known-community says: ${sentence.slice(0, 70)}…`);
+    assert.ok(members.includes("Whoever runs the server can't read it. The admins' phones give the list's keys only to admins whose phones another admin has checked, on a call or in person, and take new keys only from them. That rests on the admins: an admin who checks the wrong person's phone, an admin's phone someone gets into, or a lost phone before the admins remove its key, can let someone else read the names. So can an admin's phone that whoever runs the server keeps from learning that an admin was removed: until it learns, what it writes can be read with the keys the removed admin had. An admin whose phone still shows the removed admin removes their key by hand, and that phone then makes a new key without them or writes nothing."),
+        'what-the-admins-can-see says the members\' sentence');
+    for (const gone of [/remembers it/i, /first (use|time a phone opens)/i, /whoever (first )?shares/i, /carried over/i, /seals? (every entry|them) again/i, /sealed again under/i,
+        /any admin can (\*\*)?start a new key/i, /working with whoever runs/i, /removed admin working with/i,
+        /can't read a name without an admin checking the wrong phone/i, /Nothing written from then on can be read/i,
+        /To be sure, meet another admin and compare the list key/i, /they should show the same one/i,
+        /Admins check for that by meeting and comparing their phones/i, /for reading only/i, /stay on it, for reading/i,
+        /every admin's phone holds every key it was sent/i,
+        /Take @/, /take their history/i, /an admin whose phone has the server's history can (check yours|meet you)/i, /only at a meeting/i,
+        // Round 15: no sentence asks admins to meet; a check is on a call or in person.
+        /by meeting/i, /\bmeet (that|and|every|them|one|an|@)/i, /in front of you/i, /(?<!on a call or )in person/i,
+        // Round 16 (:40): "Check each other" is the check screen's title, not a button; the button is Check an admin's code.
+        /tap Check each other/i]) {
+        assert.doesNotMatch(`${operators}\n${members}`, gone);
+    }
+});

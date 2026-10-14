@@ -40,9 +40,11 @@ import { db, createCrowdfundProject, initSchema } from './db/db.js';
 import { getPricingGuideItems, savePricingGuideItem } from './db/pricing-guide-db.js';
 import { ensureFederationLink } from './federation-link.js';
 import { ledger } from './engine/ledger.js';
+import { lockedDm } from './dm-test-payload.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
-const PORT = 8663;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 
 let run = 0, passed = 0;
@@ -59,9 +61,10 @@ function keypair(): Identity {
 
 function seedMember(callsign: string, balance = 0, extra: { status?: string } = {}): Identity {
     const id = keypair();
-    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, avatar_url, invited_by, invite_code)
-                VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'seed', 'seed')`)
-        .run(id.pub, `${callsign}-${id.pub.slice(0, 6)}`, extra.status || 'active', AVATAR);
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`)
+        .run(id.pub, `${callsign}-${id.pub.slice(0, 6)}`, extra.status || 'active');
+    setMemberPhoto(db, id.pub, AVATAR);
     db.prepare(`INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, ?, ?)`)
         .run(id.pub, balance, ledger.getCurrentEpoch());
     return id;
@@ -93,7 +96,8 @@ async function main() {
     console.log('Running Slice 6 / #840 / #841 review-finding tests (real HTTPS)...\n');
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // ── 1. keeperOf and a Decision-suspended keeper ────────────────────────────────────────────
     console.log('\n── 1. keeperOf ──');
@@ -107,7 +111,8 @@ async function main() {
         setUserStatusRow(kept.pub, 'disabled'); // the suspend_member Decision's exact write
         assert(!keeperOf(kept.pub).includes(ent), 'a Decision-suspended keeper no longer lists the enterprise in keeperOf');
         assert(!getBalance(kept.pub).keeperOf.includes(ent), 'getBalance().keeperOf leaves it out too');
-        const bal = await send('GET', `/api/ledger/balance/${kept.pub}`, undefined, other); // member-only read
+        // Read by the keeper themself: a balance is its owner's only (2026-09-28), and a suspended member reads their own.
+        const bal = await send('GET', `/api/ledger/balance/${kept.pub}`, undefined, kept);
         assert(bal.status === 200 && Array.isArray(bal.json?.keeperOf) && !bal.json.keeperOf.includes(ent),
             `GET /api/ledger/balance keeperOf leaves it out (got ${bal.status} ${JSON.stringify(bal.json?.keeperOf)})`);
         assert(keeperOf(other.pub).includes(ent), 'the unsuspended keeper still lists the enterprise');
@@ -272,7 +277,8 @@ async function main() {
                             strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now','+7 days'),
                             strftime('%Y-%m-%dT%H:%M:%fZ','now'), strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(decisionId, subject.pub);
         const dSpoof = await send('GET', `/api/commons/decisions/${decisionId}?voterPubkey=${subject.pub}`, undefined);
-        assert(dSpoof.status === 200 && dSpoof.json?.voiceCredits === undefined, `unsigned ?voterPubkey= gets no voice credits (got ${JSON.stringify(dSpoof.json?.voiceCredits)})`);
+        // A Decision is a members' read on every node (2026-10-01): unsigned, it is refused whole.
+        assert(dSpoof.status === 401 && dSpoof.json?.voiceCredits === undefined, `unsigned ?voterPubkey= is refused and gets no voice credits (got ${dSpoof.status} ${JSON.stringify(dSpoof.json?.voiceCredits)})`);
         const dSigned = await send('GET', `/api/commons/decisions/${decisionId}`, undefined, subject);
         assert(dSigned.status === 200 && dSigned.json?.voiceCredits !== undefined, 'the signed voter still gets their voice credits');
 
@@ -328,16 +334,18 @@ async function main() {
         const b = seedMember('msgB');
         const disabled = seedMember('msgDisabled', 0, { status: 'disabled' });
         const conv = createConversation('dm', [a.pub, b.pub], a.pub)!;
-        const existing = sendMessage(conv.id, a.pub, 'Zmlyc3Q=', 'bjE=')!;
+        // Every DM line and edit below is in the encrypted form, so each refusal is the one it names.
+        const first = lockedDm();
+        const existing = sendMessage(conv.id, a.pub, first.ciphertext, first.nonce)!;
 
         db.exec(`CREATE TEMP TRIGGER fault_msg_insert BEFORE INSERT ON messages BEGIN SELECT RAISE(ABORT, 'database is locked (injected)'); END;`);
         db.exec(`CREATE TEMP TRIGGER fault_msg_update BEFORE UPDATE ON messages BEGIN SELECT RAISE(ABORT, 'database is locked (injected)'); END;`);
         db.exec(`CREATE TEMP TRIGGER fault_conv_insert BEFORE INSERT ON conversations BEGIN SELECT RAISE(ABORT, 'database is locked (injected)'); END;`);
         try {
-            const s = await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: a.pub, ciphertext: 'c2Vjb25k', nonce: 'bjI=' }, a);
+            const s = await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: a.pub, ...lockedDm() }, a);
             assert(s.status === 500, `send: a database fault is 500 (got ${s.status})`);
             assert(!/locked|injected/i.test(s.json?.error || ''), `send: the driver text is not echoed (got "${s.json?.error}")`);
-            const e = await send('POST', '/api/messages/edit', { messageId: existing.id, ciphertext: 'ZWRpdA==', nonce: 'bjM=' }, a);
+            const e = await send('POST', '/api/messages/edit', { messageId: existing.id, ...lockedDm() }, a);
             assert(e.status === 500, `edit: a database fault is 500 (got ${e.status})`);
             const r = await send('POST', '/api/messages/react', { messageId: existing.id, emoji: '👍' }, a);
             assert(r.status === 500, `react: a database fault is 500 (got ${r.status})`);
@@ -348,15 +356,16 @@ async function main() {
             db.exec('DROP TRIGGER IF EXISTS temp.fault_msg_insert; DROP TRIGGER IF EXISTS temp.fault_msg_update; DROP TRIGGER IF EXISTS temp.fault_conv_insert;');
         }
 
-        const refusedSend = await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: disabled.pub, ciphertext: 'eA==', nonce: 'bjQ=' }, disabled);
+        const refusedSend = await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: disabled.pub, ...lockedDm() }, disabled);
         assert(refusedSend.status === 400 && refusedSend.json?.error === 'Account is disabled', `send: a disabled account is still 400 with its message (got ${refusedSend.status} ${refusedSend.json?.error})`);
-        const refusedEdit = await send('POST', '/api/messages/edit', { messageId: existing.id, ciphertext: 'ZWRpdA==', nonce: 'bjU=' }, b);
+        const refusedEdit = await send('POST', '/api/messages/edit', { messageId: existing.id, ...lockedDm() }, b);
         assert(refusedEdit.status === 400 && /Only the author/.test(refusedEdit.json?.error || ''), `edit: a non-author is still 400 (got ${refusedEdit.status})`);
         const dupId = crypto.randomUUID();
-        await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: a.pub, ciphertext: 'ZHVw', nonce: 'bjY=', id: dupId }, a);
-        const conflict = await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: b.pub, ciphertext: 'ZHVw', nonce: 'bjc=', id: dupId }, b);
+        const dup = lockedDm();
+        await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: a.pub, ...dup, id: dupId }, a);
+        const conflict = await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: b.pub, ciphertext: dup.ciphertext, nonce: lockedDm().nonce, id: dupId }, b);
         assert(conflict.status === 409, `send: an id conflict is still 409 (got ${conflict.status})`);
-        const ok = await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: a.pub, ciphertext: 'b2s=', nonce: 'bjg=' }, a);
+        const ok = await send('POST', '/api/messages/send', { conversationId: conv.id, authorPubkey: a.pub, ...lockedDm() }, a);
         assert(ok.status === 200, `send works once the fault clears (got ${ok.status})`);
     }
 
@@ -386,7 +395,7 @@ async function main() {
         const sig = crypto.sign(null, Buffer.from(payload), lead.priv).toString('base64');
         const ticketB64 = Buffer.from(JSON.stringify({ p: payload, s: sig })).toString('base64');
         const joiner = keypair();
-        const res = await send('POST', '/api/invite/redeem-offline', { ticketB64, publicKey: joiner.pub, callsign: `joiner${joiner.pub.slice(0, 5)}` });
+        const res = await send('POST', '/api/invite/redeem-offline', { ticketB64, publicKey: joiner.pub, callsign: `joiner${joiner.pub.slice(0, 5)}` }, joiner);
         assert(res.status === 200 && res.json?.success, `fixture: the ticket redeems (got ${res.status} ${res.json?.error})`);
         const leadRow = db.prepare('SELECT last_active_at FROM members WHERE public_key = ?').get(lead.pub) as any;
         assert(leadRow.last_active_at === longAgo, `redeeming does not stamp the inviter active (got ${leadRow.last_active_at})`);
@@ -400,15 +409,19 @@ async function main() {
         const cancelPlan = (db.prepare(
             "EXPLAIN QUERY PLAN UPDATE enterprise_succession_proposals SET status = 'cancelled' WHERE lead_pubkey = ? AND status = 'active'"
         ).all(lead.pub) as any[]).map(r => r.detail).join(' | ');
-        assert(/USING INDEX idx_succession_lead_active/.test(cancelPlan), `the cancel update uses it too (plan: ${cancelPlan})`);
+        // A search by the index, never a scan. SQLite reports it as a COVERING one when the table has an AFTER UPDATE trigger
+        // (its plain-table watermark, db.ts stampPlainTables): the update then collects the rows' ids from the index alone.
+        assert(/^SEARCH enterprise_succession_proposals USING (COVERING )?INDEX idx_succession_lead_active\b/.test(cancelPlan) && !/\bSCAN\b/.test(cancelPlan),
+            `the cancel update uses it too (plan: ${cancelPlan})`);
     }
 
     // ── 9. Thread rows reach the delta backup ─────────────────────────────────────────────────
     console.log('\n── 9. thread created_at and the delta exporter ──');
     {
         const oldEnt = keypair().pub;
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, avatar_url, is_treasury)
-                    VALUES (?, ?, 'active', '2025-01-01T00:00:00.000Z', ?, 1)`).run(oldEnt, `Old Mill ${oldEnt.slice(0, 4)}`, AVATAR);
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, is_treasury)
+                    VALUES (?, ?, 'active', '2025-01-01T00:00:00.000Z', 1)`).run(oldEnt, `Old Mill ${oldEnt.slice(0, 4)}`);
+        setMemberPhoto(db, oldEnt, AVATAR);
         db.prepare('DELETE FROM conversations WHERE id = ?').run(oldEnt);
         const cursor = new Date(Date.now() - 1000).toISOString();
         ensureEnterpriseThread(oldEnt);
@@ -416,8 +429,9 @@ async function main() {
         assert(!!delta.conversations?.some((c: any) => c.id === oldEnt), 'a thread created lazily for an old enterprise ships in the next delta');
 
         const migratedEnt = keypair().pub;
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, avatar_url, is_treasury)
-                    VALUES (?, ?, 'active', '2025-02-01T00:00:00.000Z', ?, 1)`).run(migratedEnt, `Old Kiln ${migratedEnt.slice(0, 4)}`, AVATAR);
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, is_treasury)
+                    VALUES (?, ?, 'active', '2025-02-01T00:00:00.000Z', 1)`).run(migratedEnt, `Old Kiln ${migratedEnt.slice(0, 4)}`);
+        setMemberPhoto(db, migratedEnt, AVATAR);
         db.prepare('DELETE FROM conversations WHERE id = ?').run(migratedEnt);
         const cursor2 = new Date(Date.now() - 1000).toISOString();
         initSchema(); // the boot backfill

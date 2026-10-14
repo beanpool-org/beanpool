@@ -104,6 +104,13 @@ describe('FleetSidebar Component', () => {
         expect(screen.getByTitle('Admin password needed')).toBeInTheDocument();
     });
 
+    it('a token profile the node refused says to make a new token, never that a password is needed', () => {
+        const profiles = defaultProps.profiles.map((p, i) => i === 1 ? { ...p, adminPassword: undefined, automationToken: `bp_${'d4'.repeat(6)}_${'0c'.repeat(32)}` } : p);
+        render(<FleetSidebar {...defaultProps} profiles={profiles} nodeHealthMap={{ 'node-1': 'online', 'node-2': 'auth_required' }} />);
+        expect(screen.queryByTitle('Admin password needed')).not.toBeInTheDocument();
+        expect(screen.getByTitle('Token refused. Make a new token from your phone (Settings → Automation tokens)')).toBeInTheDocument();
+    });
+
     it('renders empty state when profiles array is empty', () => {
         const onOpenAddModal = vi.fn();
         render(<FleetSidebar {...defaultProps} profiles={[]} onOpenAddModal={onOpenAddModal} />);

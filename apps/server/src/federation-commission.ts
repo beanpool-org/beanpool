@@ -55,6 +55,7 @@ import { getConnectors, getConnectorByPeerId } from './connector-manager.js';
 import { payFromCommons, getCommonsBalanceExact } from './state-engine.js';
 import { crossNodeFee } from './federation-settlement-exchange.js';
 import { logger } from './logger.js';
+import { COMMONS_POT_PAUSED } from './engine/audit.js';
 
 const round4 = (n: number): number => Math.round(n * 10000) / 10000;
 const round2 = (n: number): number => Math.round(n * 100) / 100;
@@ -129,7 +130,9 @@ function capacityFor(link: FederationLink): CommissionCapacity {
 export type CommissionRefusal =
     | { ok: false; reason: 'no_link'; message: string }
     | { ok: false; reason: 'over_allowance'; allowance: number; needed: number; message: string }
-    | { ok: false; reason: 'commons_short'; shortfall: number; commonsBalance: number; message: string };
+    | { ok: false; reason: 'commons_short'; shortfall: number; commonsBalance: number; message: string }
+    // The pot's balance is not a finite number (its row held none at boot, or ±Infinity): nothing can be drawn from it.
+    | { ok: false; reason: 'commons_not_a_number'; shortfall: number; message: string };
 
 export type CommissionFunding =
     | { ok: true; total: number; amount: number; fee: number; drawnFromCommons: number; capacity: CommissionCapacity }
@@ -213,6 +216,17 @@ export function fundCommission(peerId: string, amount: number): CommissionFundin
 
     // What the enterprise still needs on top of what it already holds.
     const shortfall = round4(Math.max(0, total - link.treasuryBalance));
+    // A pot that isn't a finite number compares false with anything, so the test below let it through to payFromCommons
+    // (#1445 confirmation, NB-3). Refused here, in words, before anything moves; payFromCommons refuses it too.
+    if (shortfall > 0 && !Number.isFinite(getCommonsBalanceExact())) {
+        return {
+            ok: false,
+            reason: 'commons_not_a_number',
+            shortfall: round2(shortfall),
+            // The words every Bean move gives while the pot is unknown (engine/audit.ts COMMONS_POT_PAUSED).
+            message: COMMONS_POT_PAUSED,
+        };
+    }
     if (shortfall > 0 && shortfall > round4(getCommonsBalanceExact())) {
         return {
             ok: false,

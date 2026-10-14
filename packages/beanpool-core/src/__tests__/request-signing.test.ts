@@ -162,6 +162,20 @@ describe('builders', () => {
         expect(ed25519.verify(b64(re), signedRequestBytes(reEnrollText('a.example', 'ABC-123')), ed25519.getPublicKey(SEED))).toBe(true);
     });
 
+    it('a ticket bound to a names-list entry signs the entry id, reads back, and is unreadable as format 2', async () => {
+        const entry = 'ab'.repeat(16);
+        const t = await buildInviteTicket('https://a.example', PUB, ed25519Signer(SEED), { timestamp: 42, intendedFor: 'Robin\nx', namesEntryId: entry });
+        const p = JSON.parse(Buffer.from(t, 'base64').toString('utf8'));
+        expect(p.p).toBe(`beanpool-invite-ticket-named/1\na.example\n${PUB}\n42\n${entry}\nRobin\nx`);
+        expect(parseInviteTicketText(p.p)).toEqual({ host: 'a.example', inviter: PUB, timestamp: 42, intendedFor: 'Robin\nx', namesEntryId: entry });
+        expect(ed25519.verify(b64(p.s), signedRequestBytes(p.p), ed25519.getPublicKey(SEED))).toBe(true);
+        // A node from before it reads format 2 only, so it never joins anyone with the binding dropped.
+        expect(p.p.startsWith(`${INVITE_TICKET_TAG}\n`)).toBe(false);
+        expect(parseInviteTicketText(`beanpool-invite-ticket-named/1\na.example\n${PUB}\n42\nnot-an-id\n`)).toBeNull();
+        expect(() => inviteTicketText('a.example', PUB, 42, null, 'Zebedee')).toThrow();
+        expect(inviteTicketText('a.example', PUB, 42, null, null)).toBe(`${INVITE_TICKET_TAG}\na.example\n${PUB}\n42\n`);
+    });
+
     it('a push leave statement is bound to its host, key, token and stamp, and refuses what it can\'t carry', async () => {
         const token = 'ExponentPushToken[kims-phone]';
         const sig = await signPushLeave('https://a.example:8443/', PUB, token, 1759000000000, ed25519Signer(SEED));

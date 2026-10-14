@@ -5,17 +5,31 @@
  *  1. Invite code generation & management
  *  2. Interactive invite tree visualisation
  *  3. Community health metrics & flags
+ *
+ * On a node that takes no invites (lib/node-invites.ts: the global node), none of that: the community's plain link to
+ * share, since anyone joins it with a sign-in. Where only its admins invite (the door, `features.door === 'admins'`), a
+ * member who is no owner or admin there makes none either, and is told who does, in plain words.
  */
 
 import { useState, useEffect } from 'react';
-import { buildOfflineInviteCode, generateInvite, getMyInvites, getInviteTree, type InviteCode } from '../lib/api';
+import { buildOfflineInviteCode, generateInvite, getMyInvites, getInviteTree, request, type CommunityInfo, type InviteCode } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
+import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+import { marked, modeFor, useReaderFeatures } from '../lib/features';
+import { LocalCommunityLine } from '../components/LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import {
+    communityLinkText, invitesOn, invitesOffRefusal, onlyAdminsInvite, takesKnocks, readInviteRole, mayInviteHere, mayMakeOfflineTicket,
+    adminsOnlyText, adminsOnlyRefusal, OFFLINE_ADMINS_ONLY_TEXT, type InviteRole,
+} from '../lib/node-invites';
 import { QRCodeSVG } from 'qrcode.react';
 
 const QRCodeSVGComponent = QRCodeSVG as any;
 
 interface Props {
     identity: BeanPoolIdentity;
+    /** Where the 🏘️ sheet's in-app ways forward lead (Home's Find card, a guide page). */
+    onNavigate?: (tab: string, contextId?: string) => void;
 }
 
 interface TreeNode {
@@ -26,7 +40,7 @@ interface TreeNode {
     children: TreeNode[];
 }
 
-export function InvitePage({ identity }: Props) {
+export function InvitePage({ identity, onNavigate }: Props) {
     const [invites, setInvites] = useState<InviteCode[]>([]);
     const [generating, setGenerating] = useState(false);
     const [newCode, setNewCode] = useState<string | null>(null);
@@ -37,6 +51,45 @@ export function InvitePage({ identity }: Props) {
     // Tree
     const [tree, setTree] = useState<TreeNode[]>([]);
     const [activeSection, setActiveSection] = useState<'invites' | 'tree'>('invites');
+
+    // Invites, where the node makes them (lib/node-invites.ts: off on the global node, which refuses every one). Until
+    // the node has said, on, as on every node before the switch. Where they are off the page offers the link instead.
+    const [makes, setMakes] = useState(true);
+    // The node's own words, when it refused a generate before this page had heard it takes no invites.
+    const [refused, setRefused] = useState<string | null>(null);
+    const [nodeInfo, setNodeInfo] = useState<CommunityInfo | null>(null);
+    // Invites live in a local community here (preview or read-only, lib/features.ts): the line under the link (§1 row 8).
+    const reader = useReaderFeatures(nodeInfo);
+    useEffect(() => {
+        let cancelled = false;
+        Promise.resolve()
+            .then(() => communityInfoOnce())
+            .then((info) => { if (!cancelled) { setNodeInfo(info); setMakes(invitesOn(info)); } })
+            .catch(() => { /* Not answered: keep what the page shows; the node refuses an invite itself. */ });
+        return () => { cancelled = true; };
+    }, []);
+
+    // Where only its admins invite (lib/node-invites.ts), this member's role, as the node says it (GET
+    // /api/node-admin/me). Not heard yet, or no answer, counts as before: the node refuses a member's invite itself.
+    const doorAdmins = onlyAdminsInvite(nodeInfo);
+    const [role, setRole] = useState<InviteRole | undefined>(undefined);
+    useEffect(() => {
+        if (!doorAdmins) return;
+        let cancelled = false;
+        request<{ role?: unknown }>('GET', '/api/node-admin/me')
+            .then((body) => { if (!cancelled) setRole(readInviteRole(body?.role)); })
+            .catch((e) => {
+                // A refusal (not a member) is an answer: no role. No answer at all leaves it unknown.
+                const status = (e as { status?: unknown } | null)?.status;
+                if (!cancelled && typeof status === 'number' && status < 500) setRole(null);
+            });
+        return () => { cancelled = true; };
+    }, [doorAdmins]);
+    // The node's own words, when it refused a generate because only admins invite here.
+    const [adminsRefused, setAdminsRefused] = useState<string | null>(null);
+    const adminsOnly = adminsRefused !== null || !mayInviteHere(nodeInfo, role);
+    // Said under the button when no invite was made and the page stays as it is (offline where only admins invite).
+    const [notice, setNotice] = useState<string | null>(null);
 
     useEffect(() => {
         loadInvites();
@@ -92,6 +145,7 @@ export function InvitePage({ identity }: Props) {
     async function handleGenerate() {
         setGenerating(true);
         setCopied(false);
+        setNotice(null);
         try {
             // Online first (parity with native): a server-minted INV- code is
             // short, single-use enforced centrally, and lands in the node's
@@ -106,7 +160,30 @@ export function InvitePage({ identity }: Props) {
                     setInvites(prev => [res.invite, ...prev]);
                     return;
                 }
-            } catch { /* node unreachable — offline fallback below */ }
+            } catch (e) {
+                // The node takes no invites (it said so before this page heard): its words, and no offline ticket, which
+                // it would refuse just the same.
+                const refusal = invitesOffRefusal(e);
+                if (refusal) {
+                    setRefused(refusal);
+                    setMakes(false);
+                    return;
+                }
+                // Only admins invite here (the page hadn't heard, or this member's role changed): the node's words, and
+                // no offline ticket, which it would refuse at the join.
+                const adminsWords = adminsOnlyRefusal(e);
+                if (adminsWords) {
+                    setAdminsRefused(adminsWords);
+                    return;
+                }
+                /* node unreachable — offline fallback below */
+            }
+
+            // Where only admins invite, a ticket only from a member the node has said is one (lib/node-invites.ts).
+            if (!mayMakeOfflineTicket(nodeInfo, role)) {
+                setNotice(OFFLINE_ADMINS_ONLY_TEXT);
+                return;
+            }
 
             // A self-signed ticket for this community only (core's format 2 names its host), with the
             // `BP-` that tells it apart from an invite code.
@@ -182,8 +259,74 @@ export function InvitePage({ identity }: Props) {
         }
     }
 
-    const unusedInvites = invites.filter(i => !i.usedBy);
+    async function handleShareLink() {
+        const text = communityLinkText(window.location.origin);
+        if (navigator.share) {
+            try { await navigator.share({ title: 'BeanPool', text }); } catch { /* cancelled */ }
+        } else {
+            handleCopy(text);
+        }
+    }
+
+    // Where only admins invite, a paper ticket made on this device before the switch is refused by the node, so it is
+    // not listed as a code that still works.
+    const offlineCodes = adminsOnly ? localOfflineCodes(identity.publicKey) : new Set<string>();
+    const unusedInvites = invites.filter(i => !i.usedBy && !offlineCodes.has(i.code));
     const usedInvites = invites.filter(i => i.usedBy);
+
+    // The community's plain link, to copy or share: where nobody makes invites, or where only admins do and the
+    // community takes requests to join (someone with the link asks in the app, and an admin answers).
+    const linkActions = () => {
+        const link = window.location.origin;
+        return (
+            <>
+                <p className="font-mono text-[14px] font-bold text-nature-950 dark:text-white break-all mb-4">{link}</p>
+                <div className="flex flex-wrap gap-3">
+                    <button
+                        onClick={() => handleCopy(link)}
+                        className={`py-3 px-6 rounded-xl border text-[14px] font-bold cursor-pointer transition-all ${
+                            copied
+                                ? 'bg-emerald-100 border-emerald-500 text-emerald-700 dark:bg-emerald-900/50 dark:border-emerald-500 dark:text-emerald-400'
+                                : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-900 dark:text-white hover:bg-nature-50 dark:hover:bg-nature-700'
+                        }`}
+                        aria-label="Copy this community's link"
+                        title="Copy this community's link"
+                    >
+                        {copied ? '✓ Copied!' : '📋 Copy'}
+                    </button>
+                    <button
+                        onClick={handleShareLink}
+                        className="py-3 px-6 rounded-xl border-none bg-emerald-600 dark:bg-emerald-700 text-white text-[14px] font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all"
+                        aria-label="Share this community's link"
+                        title="Share this community's link"
+                    >
+                        📤 Share
+                    </button>
+                </div>
+            </>
+        );
+    };
+
+    if (!makes) {
+        return (
+            <div className="p-4 max-w-[500px] mx-auto min-h-full">
+                <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
+                    📤 Bring someone here
+                </h2>
+                <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-5 leading-relaxed">
+                    {refused ?? `This community doesn’t use invites. Anyone can join it with ${nodeInfo?.features?.wordsDoor === false ? '' : '12 words or '}a sign-in, so just share its link.`}
+                </p>
+                {linkActions()}
+                {marked(modeFor('invites', nodeInfo, reader)) && (
+                    <div className="mt-5" data-testid="invites-local-line">
+                        <LocalCommunityLine feature="invites" text={LOCAL_COMMUNITY_LINES.invites}
+                            onNearYou={onNavigate ? () => onNavigate('home') : undefined}
+                            onGuide={onNavigate ? (slug) => onNavigate('guide', slug) : undefined} />
+                    </div>
+                )}
+            </div>
+        );
+    }
 
     return (
         <div className="p-4 max-w-[500px] mx-auto min-h-full">
@@ -193,8 +336,8 @@ export function InvitePage({ identity }: Props) {
                     onClick={() => setActiveSection('invites')} 
                     className={`flex-1 py-3 rounded-xl border-none text-[14px] font-bold cursor-pointer transition-all shadow-sm ${
                         activeSection === 'invites' 
-                            ? 'bg-emerald-600 text-white shadow-md' 
-                            : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400 hover:bg-oat-200 dark:hover:bg-nature-700'
+                            ? 'bg-emerald-600 dark:bg-emerald-700 text-white shadow-md' 
+                            : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-200 hover:bg-oat-200 dark:hover:bg-nature-700'
                     }`}
                 >
                     🎟️ Invites
@@ -203,8 +346,8 @@ export function InvitePage({ identity }: Props) {
                     onClick={() => setActiveSection('tree')} 
                     className={`flex-1 py-3 rounded-xl border-none text-[14px] font-bold cursor-pointer transition-all shadow-sm ${
                         activeSection === 'tree' 
-                            ? 'bg-emerald-600 text-white shadow-md' 
-                            : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400 hover:bg-oat-200 dark:hover:bg-nature-700'
+                            ? 'bg-emerald-600 dark:bg-emerald-700 text-white shadow-md' 
+                            : 'bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-200 hover:bg-oat-200 dark:hover:bg-nature-700'
                     }`}
                 >
                     🌳 Tree
@@ -214,6 +357,20 @@ export function InvitePage({ identity }: Props) {
             {/* =================== INVITES SECTION =================== */}
             {activeSection === 'invites' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    {adminsOnly ? (
+                        // Only its admins invite here and this member is no owner or admin: no generator, but the
+                        // codes they already made (below) and the Tree stay.
+                        <div className="mb-6">
+                            <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
+                                📤 Bring someone here
+                            </h2>
+                            <p className="text-nature-500 dark:text-nature-400 text-[14px] mb-5 leading-relaxed">
+                                {adminsRefused ?? adminsOnlyText(takesKnocks(nodeInfo))}
+                            </p>
+                            {takesKnocks(nodeInfo) && linkActions()}
+                        </div>
+                    ) : (
+                        <>
                     <h2 className="text-xl font-bold mb-2 text-nature-950 dark:text-white flex items-center gap-2">
                         🎟️ Invite Someone
                     </h2>
@@ -226,7 +383,7 @@ export function InvitePage({ identity }: Props) {
                         placeholder="Who is this invite for? (For your records)"
                         value={intendedFor}
                         onChange={e => setIntendedFor(e.target.value)}
-                        className="w-full p-4 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-950 dark:text-white text-[15px] font-medium mb-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all"
+                        className="w-full p-4 rounded-xl border border-nature-200 dark:border-nature-500 bg-white dark:bg-nature-900 text-nature-950 dark:text-white text-[15px] font-medium mb-4 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all"
                     />
 
                     <button
@@ -235,11 +392,14 @@ export function InvitePage({ identity }: Props) {
                         className={`w-full p-4 rounded-xl text-[15px] font-bold border-none cursor-pointer mb-6 transition-all shadow-md ${
                             generating 
                                 ? 'bg-nature-400 text-white cursor-not-allowed' 
-                                : 'bg-emerald-600 text-white hover:bg-emerald-700 hover:shadow-lg'
+                                : 'bg-emerald-600 dark:bg-emerald-700 text-white hover:bg-emerald-700 hover:shadow-lg'
                         }`}
                     >
                         {generating ? 'Generating...' : '✨ Generate New Invite'}
                     </button>
+                    {notice && (
+                        <p role="alert" className="text-amber-700 dark:text-amber-400 text-[14px] -mt-3 mb-6 leading-relaxed">{notice}</p>
+                    )}
 
                     {newCode && showQR && (
                         <div className="bg-oat-50 dark:bg-nature-950 border-2 border-emerald-500 rounded-2xl p-6 text-center mb-6 shadow-md transition-all">
@@ -265,7 +425,7 @@ export function InvitePage({ identity }: Props) {
                                 </button>
                                 <button 
                                     onClick={() => handleShare(newCode)} 
-                                    className="py-3 px-6 rounded-xl border-none bg-emerald-600 text-white text-[14px] font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all"
+                                    className="py-3 px-6 rounded-xl border-none bg-emerald-600 dark:bg-emerald-700 text-white text-[14px] font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all"
                                     aria-label="Share invite link"
                                     title="Share invite link"
                                 >
@@ -274,10 +434,17 @@ export function InvitePage({ identity }: Props) {
                             </div>
                         </div>
                     )}
+                        </>
+                    )}
 
                     {unusedInvites.length > 0 && (
                         <div className="mb-6">
                             <h3 className="text-[13px] font-bold text-nature-500 dark:text-nature-400 mb-3 uppercase tracking-wider">⏳ Pending ({unusedInvites.length})</h3>
+                            {adminsOnly && (
+                                <p className="text-nature-500 dark:text-nature-400 text-[13px] mb-3 leading-relaxed">
+                                    Codes you made earlier still work until they lapse, 30 days after they were made.
+                                </p>
+                            )}
                             {unusedInvites.map(inv => (
                                 <div key={inv.code} className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-4 mb-3 shadow-sm transition-transform hover:-translate-y-0.5">
                                     <div className="flex justify-between items-center">
@@ -294,7 +461,7 @@ export function InvitePage({ identity }: Props) {
                                         <div className="flex gap-2">
                                             <button 
                                                 onClick={() => handleCopyProxy(inv.code)} 
-                                                className="p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-400 hover:bg-oat-100 dark:hover:bg-nature-700 cursor-pointer transition-colors shadow-sm"
+                                                className="p-2 rounded-lg bg-oat-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 cursor-pointer transition-colors shadow-sm"
                                                 aria-label="Copy invite link"
                                                 title="Copy invite link"
                                             >
@@ -302,7 +469,7 @@ export function InvitePage({ identity }: Props) {
                                             </button>
                                             <button 
                                                 onClick={() => handleShare(inv.code)} 
-                                                className="p-2 rounded-lg bg-emerald-600 border-none text-white hover:bg-emerald-700 cursor-pointer shadow-sm transition-colors"
+                                                className="p-2 rounded-lg bg-emerald-600 dark:bg-emerald-700 border-none text-white hover:bg-emerald-700 cursor-pointer shadow-sm transition-colors"
                                                 aria-label="Share invite link"
                                                 title="Share invite link"
                                             >
@@ -310,7 +477,7 @@ export function InvitePage({ identity }: Props) {
                                             </button>
                                         </div>
                                     </div>
-                                    <p className="text-nature-400 dark:text-nature-500 text-[11px] font-semibold mt-2 uppercase tracking-wide">
+                                    <p className="text-nature-400 dark:text-nature-400 text-[11px] font-semibold mt-2 uppercase tracking-wide">
                                         Created {new Date(inv.createdAt).toLocaleDateString()}
                                     </p>
                                 </div>
@@ -325,15 +492,15 @@ export function InvitePage({ identity }: Props) {
                                 <div key={inv.code} className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 mb-3 opacity-70">
                                     <div className="flex flex-col gap-1">
                                         {inv.intendedFor && (
-                                            <span className="text-[13px] text-nature-500 dark:text-nature-400 font-medium">
+                                            <span className="text-[13px] text-nature-500 dark:text-nature-300 font-medium">
                                                 For: {inv.intendedFor}
                                             </span>
                                         )}
-                                        <span className="font-mono text-[13px] text-nature-500 dark:text-nature-500 line-through break-all" title={inv.code}>
+                                        <span className="font-mono text-[13px] text-nature-500 dark:text-nature-300 line-through break-all" title={inv.code}>
                                             {inv.code.length > 20 ? `${inv.code.substring(0, 16)}...` : inv.code.toUpperCase()}
                                         </span>
                                     </div>
-                                    <p className="text-nature-400 dark:text-nature-600 text-[11px] font-semibold mt-2 uppercase tracking-wide">
+                                    <p className="text-nature-400 dark:text-nature-300 text-[11px] font-semibold mt-2 uppercase tracking-wide">
                                         Used {inv.usedAt ? new Date(inv.usedAt).toLocaleDateString() : ''}
                                     </p>
                                 </div>
@@ -371,6 +538,14 @@ export function InvitePage({ identity }: Props) {
     );
 }
 
+function localOfflineCodes(publicKey: string): Set<string> {
+    try {
+        const stored = localStorage.getItem(`bp_offline_invites_${publicKey}`);
+        const list: InviteCode[] = stored ? JSON.parse(stored) : [];
+        return new Set(list.map((i) => i.code));
+    } catch { return new Set(); }
+}
+
 // =================== SUB-COMPONENTS ===================
 function TreeNodeView({ node, depth, identity }: { node: TreeNode; depth: number; identity: BeanPoolIdentity }) {
     const [expanded, setExpanded] = useState(depth < 2);
@@ -387,14 +562,14 @@ function TreeNodeView({ node, depth, identity }: { node: TreeNode; depth: number
                 } ${depth > 0 ? 'border-l-2 border-nature-200 dark:border-nature-700 pl-4' : ''}`}
             >
                 {/* Expand/collapse */}
-                <span className="text-[12px] text-nature-400 dark:text-nature-500 w-4 text-center">
+                <span className="text-[12px] text-nature-400 dark:text-nature-400 w-4 text-center">
                     {hasChildren ? (expanded ? '▼' : '▶') : '·'}
                 </span>
 
                 {/* Avatar dot */}
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-[12px] font-bold shrink-0 shadow-sm ${
                     isMe 
-                        ? 'bg-emerald-600 text-white border-2 border-emerald-300 dark:border-emerald-800' 
+                        ? 'bg-emerald-600 dark:bg-emerald-700 text-white border-2 border-emerald-300 dark:border-emerald-800' 
                         : 'bg-oat-200 dark:bg-nature-800 text-nature-700 dark:text-nature-300'
                 }`}>
                     {node.callsign.charAt(0).toUpperCase()}

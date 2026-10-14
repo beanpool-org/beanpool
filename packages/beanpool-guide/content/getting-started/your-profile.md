@@ -15,7 +15,7 @@ related: privacy, trust-badges, joining, people
 - Tap the photo to change it.
 - Tap **Save Profile**.
 
-You can also tap **Re-run Setup** in Settings. It walks you through your name and photo again, and the short tour of how BeanPool works.
+You can also tap **Re-run Setup** in Settings. It walks you through your name and photo again, roughly where you are (on the global community), and the short tour of how BeanPool works.
 
 ## A name and a photo come first
 
@@ -23,7 +23,7 @@ You need a name and a photo before you can post or accept a trade. If one is mis
 
 ## Contact details
 
-Under **Contact details** you can add a phone number, an email or a WhatsApp number. You do not have to.
+Under **Contact details** you can add a phone number, an email or a WhatsApp number, up to 200 characters. You do not have to.
 
 Once you add one, choose **Who can see this?**:
 
@@ -42,7 +42,7 @@ Tap the round picture at the top right of the screen to see your own profile. Ot
 
 - your name, when you joined and your bio;
 - your trust badge, how many trades you have done, with how many people, and how many you finished;
-- star ratings and reviews from people you traded with;
+- star ratings and reviews from people you traded with (nobody else can see who wrote a review);
 - your posts.
 
 ## Your working style

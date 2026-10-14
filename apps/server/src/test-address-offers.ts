@@ -59,6 +59,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { setMemberPhoto } from '@beanpool/engine';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW = 'Address-Offers-Pw-6613!';
@@ -89,6 +90,7 @@ async function child(): Promise<void> {
     const { normaliseRegistryRow, writeDirectoryRows } = await import('./engine/directory-cache.js');
     const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
     const { resetAdminAuthTarpit } = await import('./admin-auth.js');
+    const { ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
 
     initAdminPassword();
     await initTls();
@@ -99,11 +101,12 @@ async function child(): Promise<void> {
         seed: (a: { owner: { pk: string; callsign: string }; members: { pk: string; callsign: string; role?: 'admin' | 'moderator' }[] }) => {
             se.seedGenesisMember(a.owner.pk, a.owner.callsign);
             db.prepare("INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'owner', 'genesis')").run(a.owner.pk);
-            db.prepare('UPDATE members SET avatar_url = ? WHERE public_key = ?').run(AVATAR, a.owner.pk);
+            setMemberPhoto(db, a.owner.pk, AVATAR);
             for (const m of a.members) {
-                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, updated_at)
-                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
-                    .run(m.pk, m.callsign, AVATAR);
+                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
+                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+                    .run(m.pk, m.callsign);
+                setMemberPhoto(db, m.pk, AVATAR);
                 db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
                 if (m.role) db.prepare('INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, ?, ?)').run(m.pk, m.role, a.owner.pk);
             }
@@ -131,6 +134,9 @@ async function child(): Promise<void> {
         },
         // What a client can make the node store: the counts rows and the owner/admin sightings.
         unconfirmedRows: () => (db.prepare("SELECT COUNT(*) AS n FROM signature_audiences WHERE kind = 'unconfirmed'").get() as { n: number }).n,
+        // Step 7c: with the node's 2FA off the admin password alone opens no admin route; Settings' report and its
+        // confirm/remove are sent with an automation token made from the seeded owner's key.
+        adminToken: (a: { owner: string }) => ownerTokenHeaders('admin', a.owner),
         staffRow: () => (db.prepare('SELECT value FROM node_config WHERE key = ?').get(STAFF_ROW) as { value: string } | undefined)?.value ?? null,
     };
 
@@ -276,7 +282,7 @@ async function main(): Promise<void> {
     const members = Array.from({ length: 20 }, (_, i) => id(`M${i + 1}`));
     const [m1, m2, m3, m4, m5, m6, m7] = members;
 
-    const adminPw = { 'X-Admin-Password': PW };
+    let adminPw: Record<string, string> = {}; // the owner's automation token on U, once U is seeded
     /** A member's read as a current app sends it: signed for `host`, sent to the node at localhost. */
     async function readAs(node: Node, who: Id, host: string, reqPath = '/api/community/me'): Promise<Reply> {
         const url = `https://${host}${reqPath}`;
@@ -289,6 +295,17 @@ async function main(): Promise<void> {
         const text = JSON.stringify(body);
         const headers = await core.buildBoundRequestHeaders({ method: 'POST', url, body: text, publicKeyHex: who.pk, sign: who.sign });
         return call(node, 'POST', core.signedPathOf(url), headers, text);
+    }
+    /**
+     * A signed POST in the old format, naming no host, as an app before request binding sends one: it puts no address on
+     * the list. A redeem must be signed by the key it registers.
+     */
+    async function postUnbound(node: Node, who: Id, reqPath: string, body: unknown): Promise<Reply> {
+        const text = JSON.stringify(body);
+        const timestamp = String(Date.now());
+        const nonce = crypto.randomBytes(16).toString('hex');
+        const sig = await who.sign(core.utf8Bytes(core.unboundRequestText({ method: 'POST', path: reqPath, timestamp, nonce, body: text })));
+        return call(node, 'POST', reqPath, { 'X-Public-Key': who.pk, 'X-Signature': Buffer.from(sig).toString('base64'), 'X-Timestamp': timestamp, 'X-Nonce': nonce }, text);
     }
     let U: Node;
     /** The Settings report; `host` is the host Settings reached the node at, sent as it sends it. */
@@ -323,6 +340,7 @@ async function main(): Promise<void> {
                 ...members.map((m) => ({ pk: m.pk, callsign: m.callsign })),
             ],
         });
+        adminPw = await U.send('adminToken', { owner: owner.pk });
         const cutoff = await U.send('switchCutoff');
         if (typeof cutoff !== 'number') throw new Error('U refuses the old format already (ACCEPT_UNBOUND_SIGNATURES_UNTIL=never?): this suite needs a switch date');
         SWITCH = cutoff;
@@ -410,7 +428,7 @@ async function main(): Promise<void> {
                 const gen = await postAs(U, mallory, 'mallory.example', '/api/invite/generate', { publicKey: mallory.pk });
                 const code = gen.body?.invite?.code;
                 const fresh = id(`Mallory${i + 1}`);
-                const joined = await call(U, 'POST', '/api/invite/redeem', {}, j({ code, publicKey: fresh.pk, callsign: fresh.callsign }));
+                const joined = await postUnbound(U, fresh, '/api/invite/redeem', { code, publicKey: fresh.pk, callsign: fresh.callsign });
                 assert(gen.status === 200 && typeof code === 'string' && joined.status === 200 && joined.body?.success === true && !joined.body?.alreadyMember,
                     `Mallory, an ordinary member, makes invite ${i} for herself and redeems it with a fresh key (${show(gen)}; ${show(joined)})`);
                 keys.push(fresh);
@@ -611,10 +629,11 @@ async function main(): Promise<void> {
             const solo = id('Solo');
             const S = await startNode('s', {});
             await S.send('seed', { owner: { pk: solo.pk, callsign: solo.callsign }, members: [] });
+            const sAdmin: Record<string, string> = await S.send('adminToken', { owner: solo.pk });
             await beforeSwitch(S);
             await S.send('resetLimits');
             const soloReport = async (host?: string) => {
-                const r = await call(S, 'GET', `/api/local/admin/app-addresses${host ? `?host=${encodeURIComponent(host)}` : ''}`, adminPw);
+                const r = await call(S, 'GET', `/api/local/admin/app-addresses${host ? `?host=${encodeURIComponent(host)}` : ''}`, sAdmin);
                 if (r.status !== 200) throw new Error(`S's Settings report: ${show(r)}`);
                 return r.body as { unconfirmed: Offer[]; heldBack?: Held[]; named?: boolean };
             };
@@ -642,7 +661,7 @@ async function main(): Promise<void> {
             const refused = await readAs(S, solo, 'solo.example');
             const late = offered(await soloReport('solo.example'), 'solo.example');
             assert(refused.status === 421 && late?.busiestDay === 1, `after the switch the app is refused there, and Settings open at it still offers it with one tap (${refused.status}, ${j(late)})`);
-            const confirmed = await call(S, 'POST', '/api/local/admin/app-addresses/confirm?host=solo.example', adminPw, j({ address: 'solo.example' }));
+            const confirmed = await call(S, 'POST', '/api/local/admin/app-addresses/confirm?host=solo.example', sAdmin, j({ address: 'solo.example' }));
             const now = await readAs(S, solo, 'solo.example');
             assert(confirmed.status === 200 && confirmed.body?.named === true && confirmed.body?.addresses?.some((a: any) => a.address === 'solo.example' && a.source === 'owner')
                 && confirmed.body?.unconfirmed?.length === 0 && now.status === 200,

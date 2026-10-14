@@ -296,7 +296,9 @@ measured. The measurement is recorded in the header comment of
 ## 5. Traps that have already cost hours
 
 1. **`deploy.sh` ships your working tree.** A plain `deploy.sh` local-builds whatever tree it
-   is pointed at, on any branch, silently. `DEPLOY_PULL=1` pulls from GHCR, but `:latest` only
+   is pointed at, on any branch, silently: every file git tracks, as it is on disk (since
+   2026-10-01 a file git does not track never ships, so `git add` a new file before deploying
+   it). `DEPLOY_PULL=1` pulls from GHCR, but `:latest` only
    moves on a release — to deploy a CI image from `main`, pass `DEPLOY_TAG=<short-sha>` (e.g.
    `DEPLOY_PULL=1 DEPLOY_TAG=3fb6e72 bash deploy.sh 11`). The test node sat 3 days stale while we
    debugged client code that was fine. **Verify by grepping the running image, not the version string.**
@@ -320,7 +322,9 @@ measured. The measurement is recorded in the header comment of
 
 ### Added 2026-08-13 — each of these cost real time in one session
 
-9. **`deploy.sh` overwrites every node's Cloudflare tunnel token.** Line ~130 writes the
+9. *(Fixed 2026-09-28: `deploy.sh` no longer writes the fleet token, removes the copy it left, and
+   starts no sidecar. The diagnosis steps below still hold for a node's own tunnel.)*
+   **`deploy.sh` overwrites every node's Cloudflare tunnel token.** Line ~130 writes the
    single global `CF_TUNNEL_TOKEN` from your local `.env` over `<node>/data/tunnel-token`.
    Deploying to `test` took `test.beanpool.org` off the internet for ~20 minutes with
    Cloudflare **error 1033 / HTTP 530**, cloudflared logging `Unauthorized: Tunnel not found`.

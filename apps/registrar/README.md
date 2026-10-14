@@ -4,7 +4,8 @@ Cloudflare Worker that leases `<name>.beanpool.org` to community nodes and keeps
 Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
 
 - **Node-facing (signed):** `GET /api/registrar/available` (public) · `POST /api/registrar/claim` (a new
-  name, or a heal of the claimant's own) · `POST /api/registrar/heal` · `GET /api/registrar/status` ·
+  name, or a heal of the claimant's own) · `POST /api/registrar/heal` · `POST /api/registrar/rotate` (a fresh
+  tunnel, below) · `GET /api/registrar/status` ·
   `POST /api/registrar/update` · `POST /api/registrar/release` (`/offline` is its old name and still works) ·
   `POST /api/registrar/holder {name}` (who holds a name, below)
 - **Health (public):** `GET /api/registrar/health` → `{ status: 'ok', commit, accepted_proto }`: the git commit
@@ -12,18 +13,29 @@ Full design: [`docs/node-dns-registrar.md`](../../docs/node-dns-registrar.md).
 - **Admin (shared secret):** `GET /api/local/admin/registrar/pending` (every held name, any state) ·
   `GET /api/local/admin/registrar/events[?name=]` · `POST /api/local/admin/registrar/:name/`
   `approve | pause | resume | block | release` (`revoke` is block's old name; `release` takes
-  `{"free_now": true}`, below). Every action is logged in `name_events`.
-- **Switchboard:** `GET /i/:code` (trampoline) — resolves `live` and `paused` names only
+  `{"free_now": true}`, below). Every action is logged in `name_events`. Alerts (below):
+  `GET /api/local/admin/registrar/alerts` · `POST …/alerts/settings {category, mode}` · `POST …/alerts/test` ·
+  `GET …/servers` (the outside checks of our servers)
+- **Switchboard:** `GET /i/:code` (trampoline) — resolves `live` and `paused` names only. `?n=<name>` (or
+  `?n=<name>.beanpool.org`) names the node to join, and is answered only for a name this registrar holds **live**;
+  anything else is the "not found" page, never a link to another host (before 2026-10-01 any host was linked)
 - **Cron:** attestation sweep every 5 min, in two phases. Phase 1 challenges every live name
   (`/api/attest`) and writes nothing; each reply is `ok`, `impostor` (a valid signature by a
   *different* node key) or `unverifiable` (down, 5xx, not an attest, or a signature we can't verify —
-  never evidence). Phase 2 runs only if the sweep is believable: a configured `CANARY_NAME` attested
-  `ok`, impostors ≤ max(2, 10% of live) and not every live name, unverifiable ≤ half of live. Otherwise
-  it acts on no row and logs `[ATTEST_SWEEP] suspended:…`. `ATTEST_FAIL_LIMIT` consecutive impostor
-  verdicts **pause** the name (tunnel and DNS deleted, the name kept for its key); an `ok` or
-  `unverifiable` verdict in an applied sweep ends the run (a suspended sweep changes nothing). Every
-  sweep writes one `sweep_log` row, including a count of content-swaps (a 2xx that is no attest at all),
-  which are counted only, never acted on yet. Then, applied or suspended alike, **upkeep** (not a verdict: it
+  never evidence on its own). A **content swap** is an unverifiable reply that is a 2xx but no attest at all (a page,
+  or JSON with no signature): something other than a BeanPool node answers at the name — a stranger's server at a
+  direct name's old IP address, or a connector running on a copy of the tunnel's token. A BeanPool node never answers
+  one. While a run (below) is open on a name, an `ok` is asked again, up to three answers in all: two connectors on
+  one tunnel share its visitors, and the owner's answer must not hide the other one. This holds only for a wrong key or a page: a second connector that answers `/api/attest` with an error (4xx/5xx) is `unverifiable`, never opens a run, and is not detected (New tunnel key cuts it off). Phase 2 runs only if the sweep
+  is believable: a configured `CANARY_NAME` attested `ok`, impostors and content swaps together ≤ max(2, 10% of
+  live) and not every live name, unverifiable ≤ half of live. Otherwise it acts on no row and logs
+  `[ATTEST_SWEEP] suspended:…`. Two runs are counted, over applied sweeps in a row: `ATTEST_FAIL_LIMIT` (2)
+  impostor verdicts, or `SWAP_FAIL_LIMIT` (12, about an hour; design D2 = b) sweeps of foreign answers (an
+  impostor or a content swap; a swap counts only in a sweep that saw the verifier work: the canary `ok`, or with
+  no canary some name `ok`), **pause** the name, `pause_reason` `impostor` or `content-swap` (tunnel and DNS
+  deleted, the name kept for its key, its node's heal resumes it). An `ok` (three, while a run is open) or any
+  other `unverifiable` verdict in an applied sweep ends the runs (a suspended sweep changes nothing). Every sweep
+  writes one `sweep_log` row, including the count of content swaps. Then, applied or suspended alike, **upkeep** (not a verdict: it
   never takes routing away from a live name or routes one that isn't live): a live name whose attest reached no
   node at all (unreachable, Cloudflare's 530, or its 52x for a proxied address) is checked at Cloudflare, and if its
   record or tunnel is gone or points elsewhere it is re-made as its row says (event `repaired`; a new tunnel's
@@ -41,6 +53,95 @@ no row records would make Cloudflare refuse every later tunnel for the name (101
 deletes it when it provably belongs to nobody: it is owed, or it was made before the claiming tenure or over 10
 minutes ago. Otherwise the claim answers **503** "cleaning up … try again shortly".
 
+## Alerts to the admin's phone (the control room)
+
+The Worker tells its admin, through one [ntfy](https://ntfy.sh) topic, what only the registrar knows (design
+`scratch/global-node/DESIGN-alerts-fable.md` §2, slice S1; Marty, 2026-10-09/10). `src/alerts.js`, state in D1
+(migration 0008):
+
+| Event | Priority | Category |
+|---|---|---|
+| A claim on a gated name, waiting for approval | default | names |
+| A new community's (auto) name went live | default | names |
+| The sweep paused a name (another node's key, or a content swap) | high | names |
+| A heal refused, a name repaired by the registrar | low | names |
+| The sweep suspended itself (canary, mass, unverifiable) — raised, still every 24 h, cleared | urgent | health |
+| Deletions Cloudflare has refused for over a day; the nonce table missing — raised, still, cleared | default | health |
+| Your own approve, pause, resume, block, release | low | admin |
+
+A message says a name, the community name its operator published, and counts — **never the `contact` column** (a
+person's address) or a key. Its `Click` (and one `view` action, "Open control room") opens `https://beanpool.org/admin#<name>`,
+which scrolls to and lights that row; there is no approve-from-the-notification button. A send that fails is tried
+again every 5 minutes (the cron) with everything waiting — at most 50, and at most 3,900 bytes ("… and N more, see
+/admin") — in one message. At most 20 messages an hour: past them one line, "muted: N more this hour, see /admin", and
+nothing more that hour — except high and urgent messages, which still go, up to 40 in the hour; a condition the cap
+muted is told in the next hour. A heal refused is told once per pause. Each category is `on`, `digest` (held, and
+sent in the daily summary at 08:00 Brisbane, below) or `off`: the toggles on
+`/admin`, which also shows the channel (set or not, last good send, waiting, failures), what is raised and the last
+50 alerts, and has a "send a test alert" button.
+
+Secrets, as Worker secrets only (never `wrangler.toml`, never the repo, never a log line — a failed send logs its
+status code): `NTFY_URL`, the full topic URL (the topic name is the secret), and optionally `NTFY_TOKEN`, an ntfy
+access token sent as `Authorization: Bearer`. With no `NTFY_URL` nothing is sent, the events wait for the first
+channel that is set, and `/admin` says so. Rotating the topic: `wrangler secret put NTFY_URL`, then subscribe the
+phone to the new one.
+
+### Our servers, from outside (slice S2)
+
+Every 5 minutes, 2 minutes after the sweep, the Worker looks at our own servers — `WATCH_TARGETS` in `wrangler.toml`:
+global, the vault, mullum, castlemaine, test; public names and addresses only — from here, never from the server itself
+(`src/watch.js`, state in D1: migration 0009). It has a cron entry of its own (`2-57/5 * * * *`; the sweep keeps
+`*/5 * * * *`, and `scheduled()` runs each entry's job only), so it runs in its own invocation: Cloudflare lets one
+invocation have 6 connections waiting for headers (a 7th is queued, and its timeout runs out in the queue) and one
+budget of subrequests, and our servers hanging must never hold the sweep's. It looks at 3 servers at a time (a node is
+2 connections, the vault 1), so it never queues behind itself either. Each look is one GET of 15 s that never follows a
+redirect: a node's `/api/version` and `/api/community/health`, the vault's `/v1/health` and, when it answers open, its
+signed `/v1/report`.
+
+| Condition | Rule | Priority |
+|---|---|---|
+| `<server> down` | no answer as ours (a 3xx, a 5xx, a timeout, unreachable, or a 2xx that is "not a BeanPool answer": a node's needs JSON with its `version`, the vault's a `state` of open or locked — a parked page or a captive portal is down, never "locked") two looks in a row; cleared at the first answer | urgent |
+| `vault locked` | answers locked two looks in a row | urgent |
+| `vault report` | its report missing, not signed by the ticket key ("report unverifiable"), unreadable, or not from now ("stale") two looks in a row; or its own report says a day's report was not made | high |
+| `vault backups`, `vault off-box copy` | its verified report says they fail, or the newest is over 2 h 10 min old | high |
+| `<server> now runs …` | the version or commit changed since the last look; told once | default (the vault: high) |
+| `<server> restarted by its watchdog` | its health's `watchdog.recoveries` rose; told once | high |
+| `Our nodes run different releases` | our nodes (not the vault) on different versions for over a day; then daily while it lasts | default |
+| `Daily: …` | once a day in the 08:00 Brisbane hour (22:00 UTC all year: Queensland keeps no daylight saving): how each server answers and what it runs, names live, what is raised, and every event the digest held since the last one. A message of its own, never batched and never muted by the hourly cap; the held events it carries are marked sent only once it is sent (a failed send is tried again with the rest, 5 minutes on; with no `NTFY_URL` they stay held and `/admin` says so). A day whose 08:00 hour had no tick gets none: its absence says the cron, the Worker or ntfy is broken | min |
+
+The vault's report is believed only under `VAULT_TICKET_KEYS` (a var, not a secret: the ticket PUBLIC key(s) the apps
+are built with, 64 hex each, newest first, two at most), with strict Ed25519 (RFC 8032; a ZIP-215-only signature is
+refused). Without it the report is "not checked" — never "fine" — and `/admin` and the daily line say so. A condition
+of a vault that is locked or gone stays as it was (nothing is known of its report). Every look is a row in `watch_log`,
+kept 30 days; `/admin`'s "Our servers" panel (`GET /api/local/admin/registrar/servers`) shows each server's newest
+look and its last day. These reproduce the Mac vault watcher (`apps/vault/src/custodian/watch.ts`), which retires
+after a week of the two agreeing (design §2.5, Marty 2026-10-10). With `WATCH_TARGETS` unset nothing is watched and no
+daily line is sent, so nothing the digest holds is sent either: `/admin` says so beside the digest toggles.
+
+## Limits on what a key may do (the 2026-10-01 review)
+
+- **Names per key:** one node key holds at most `CLAIM_LIMIT_PER_KEY` names (`wrangler.toml`, default 3; a value
+  that isn't a whole number ≥ 1 means 3). Counted: every name held under the key — live, pending, paused, blocked —
+  and its own releases (the owner's, or the admin's default one) still inside their hold. Not counted: a release that
+  freed the name at once, one past its hold, and the admin's release of a name it took from the key (held from that
+  key too). A claim of a **new** name past the limit gets `403 { error, limit, held }` and writes nothing; a name the
+  key already holds is healed and taken back whatever the count, so a key over the limit when it was set or lowered
+  keeps everything it has. Three, because a node uses one name and a rename leaves the old one held for it 30 days:
+  two renames in a month fit, and one key can hold at most three Cloudflare tunnels (the account has ~1,000). Keys
+  are free to make, so this stops one script with one key, not many keys: a per-IP budget (a Cloudflare rate-limit
+  rule on `POST /api/registrar/claim`) is the next step and is not built. Two claims by one key that race past the
+  count are both counted again once written, and the one over the limit gives its name back before it reaches
+  Cloudflare.
+- **Fields:** `community_name` (or `communityName`) at most 120 characters, `contact` at most 254, both text in any
+  script but with no control characters, line or paragraph separators or bidi overrides (checked after trimming);
+  `origin` is `http(s)://host[:port]` and nothing more, at most 200 characters; `public_ip` is an IPv4 address (a
+  direct name is an A record). A claim, heal or update carrying anything else gets a plain `400 { error }` before it
+  writes anything. The node caps its community name at 60, and its self-heal sends neither field.
+- **Errors:** a keyholder is never sent Cloudflare's error, which names the account and the zone: a failure at
+  Cloudflare answers `502 { error: 'provisioning failed', ref }`, anything else unexpected `500 { error: 'internal',
+  ref }`, and the Worker's log has the detail under that `ref`. The admin's approve and resume still show Cloudflare's
+  answer (`detail`).
+
 ## Ownership: a name belongs to its node's key
 
 The registrar can stop routing a name, but never hands it to another key. A name frees only when its
@@ -53,7 +154,7 @@ or — a later PR — after a long, warned abandonment. States (`name_allocation
 |---|---|---|---|
 | `pending` | no | no | a gated claim · admin approve (→ live), or a release: its key's frees it at once (nobody approved it; `pause_reason` `withdrawn`) |
 | `live` | yes | no | claim / approve / heal / resume |
-| `paused` | no | no | sweep impostor (`pause_reason` `impostor`), admin pause (`admin`), the 09-24 incident (`incident-2026-09-24`), a take-back not yet re-attested (`unverified`, or `impostor` if another key answered) · the owner's heal, except an admin pause, which only admin resume (or release) lifts: its owner can neither heal nor release it |
+| `paused` | no | no | sweep impostor (`pause_reason` `impostor`), sweep content swap (`content-swap`), admin pause (`admin`), the 09-24 incident (`incident-2026-09-24`), a take-back not yet re-attested (`unverified`, or `impostor` if another key answered) · the owner's heal (or rotate), except an admin pause, which only admin resume (or release) lifts: its owner can neither heal nor release it |
 | `released` | no | after the 30-day hold (the owner's release, `owner`; the admin's, `admin-held`; the admin's of a name it had blocked or paused, `admin-held-all`, which its own key can't claim either) or at once (the admin's with "free now", `admin`; a withdrawn or rejected claim nobody approved) | release · the same key re-claims any time (not after `admin-held-all`: it waits out the hold like anyone, then claims as a new claimant); others once free |
 | `blocked` | no | never | admin block (the kill switch) · admin resume or release (held 30 days from every key, this one included, unless "free now"); the owner can't heal or release it |
 | `abandoned` | no | yes | a later PR |
@@ -67,6 +168,21 @@ own release is routed by the same rule: the take-back first deletes a tunnel its
 normally comes back on a fresh one; a tunnel Cloudflare still won't delete, or a direct address, routes only
 after the re-attest, and otherwise the name stays paused for its key, which its next heal re-attests. `status`
 reports the owner's row in any state with `reason` and `since` (and `held_until` for a release).
+
+**Rotate** — `POST /api/registrar/rotate {name?, origin?}`, signed by the name's key (M3 of the 2026-10-01 review):
+its own tunnel name, live or paused by anything but the admin, onto a fresh tunnel. The old tunnel is deleted at
+Cloudflare first, so every connector running on a copy of its token (a standby given
+away, a token shown on a screen) is cut off (a copied data folder or backup is not: it holds the node key, and `/status` hands that key the new token on its own); then the owner's heal makes the new one, re-points the record at it (the
+record is kept, never deleted: a resolver that saw the name missing would remember that for up to half an hour) and
+answers with its `tunnelToken`. `origin` moves the tunnel's destination at the same time. Row first: the old tunnel
+leaves the row (a decision) before Cloudflare deletes it, so a request that read the row earlier misses its write. If
+Cloudflare won't delete it, it goes back on the row and the answer is **503**, nothing changed (its token still works).
+If the new tunnel fails, the old one is gone all the same, and the node's next heal makes it. Refused: another key or no
+name (404), blocked or paused by the admin (403), released (409: a take-back is on a fresh tunnel anyway), awaiting
+approval (409), a direct name (400: it has no token; a heal with its new `public_ip` re-points it), and a second rotate
+of a name within 5 minutes of its last (429 with `retry_after`: each one deletes and makes a tunnel, on the Cloudflare API
+budget every community's claims and heals share; a heal is never held back). The node's Settings offer it as **New
+tunnel key**.
 
 **The admin's release** (decision D-C, Marty 2026-09-28) holds the name 30 days for its key, as the owner's own
 release does: another key's claim is refused, and the key's node takes it back with its next claim (a misclick
@@ -134,6 +250,12 @@ Applying 0002 to the live database (Marty or the deploy workflow — not an agen
    the global node's names, and `ssh-global`, the global server's only way in). The live table already has
    `global` and `earth`, so there it adds only `ssh-global`: it adds a row only where the table has none for
    that name, never changing one it has. The Worker doesn't depend on it; a rerun changes nothing.
+   Then `--file migrations/0006_request_nonces.sql` (one table, `request_nonces`: the one-use nonces of v2 signed
+   requests, kept ~10 minutes). Before the Worker; a rerun changes nothing. A Worker without the table answers every
+   v2 request 500 (v1 requests never touch it).
+   Then `--file migrations/0007_content_swap.sql` (one column, `swap_fails`: the sweeps in a row in which something
+   other than a name's own node answered at it, design D2). Before the Worker: every write that routes a name again
+   resets it, so a Worker without the column fails those. A rerun stops at the ALTER.
 3. Deploy the Worker.
 
 Or let the deploy workflow apply them (below), once the live database is bootstrapped.
@@ -152,7 +274,8 @@ npx wrangler d1 execute beanpool-registrar --remote --file scripts/bootstrap-d1-
 
 It creates `d1_migrations` exactly as wrangler would and records each migration whose objects the database
 already has (0001's tables; 0002's seven columns, two tables and three indexes; 0003's column; 0004's table and
-index; 0005's three policy rows, `global`, `earth` and `ssh-global`), then prints the table. Safe to re-run.
+index; 0005's three policy rows, `global`, `earth` and `ssh-global`; 0006's table and index), then prints the table.
+Safe to re-run.
 Whatever it didn't record — say 0002–0005, if they were never applied by hand — the workflow applies next, before
 the Worker that needs them is deployed. The live table has only two of 0005's rows (`ssh-global` was never added
 by hand), so there 0005 is not recorded and the workflow applies it, adding just `ssh-global`. The workflow
@@ -175,6 +298,17 @@ Headers `x-bp-pubkey` (64 hex), `x-bp-timestamp` (unix s), `x-bp-signature` (128
 signing protocol) for any protocol but v1; signed message
 `` `${PROTOCOLS[proto].request}\n${METHOD}\n${pathname}\n${timestamp}\n${bodyText}` `` with the node's Ed25519 key.
 For v1 that is `` `beanpool-registrar-request/v1\n${METHOD}\n…` ``, exactly as before protocols had versions.
+
+**v2 (2026-10-01): a one-use nonce.** A v2 request also carries `x-bp-nonce` (32 lower-case hex, fresh for each
+request), signed between the timestamp and the body:
+`` `beanpool-registrar-request/v2\n${METHOD}\n${pathname}\n${timestamp}\n${nonce}\n${bodyText}` ``. The Worker records
+each (key, nonce) in `request_nonces` (migration 0006) before acting and answers a second request carrying it
+`401 { error: 'request already used' }`, so a captured request — a `/status` with its tunnel token above all — can't be
+replayed while its timestamp is inside the ±300 s window. The sweep drops nonces over 600 s old. v1 signs no nonce and
+is still accepted, replayable inside its window as before, until every node sends v2: v2 is at **step 1** below (both
+sides accept it; nodes still send v1). Step 2 (`SEND_PROTO = 'v2'` in the node's `registrar-client.ts`) waits for this
+Worker to be live through the deploy workflow: the live Worker may predate `accepted_proto` in its 401, and a node
+sending v2 to it could not fall back.
 
 The leading domain tag is load-bearing, not cosmetic: the node signs both this and a PUBLIC attestation with the same identity key, so without distinct tags `/api/attest` is a forgery oracle for this scheme.
 
@@ -297,6 +431,8 @@ npx wrangler secret put CF_API_TOKEN             # scoped: Account·Tunnel·Edit
 npx wrangler secret put CF_ACCOUNT_ID            # 151a28c4fd1e6ee09768f4226be76b4d
 npx wrangler secret put CF_ZONE_ID               # 060a99ae34e53b26dcf3be6578722b31
 npx wrangler secret put ADMIN_SECRET
+npx wrangler secret put NTFY_URL                 # optional: the control room's ntfy topic URL (alerts above)
+npx wrangler secret put NTFY_TOKEN               # optional: an ntfy access token for it
 
 # 3. Deploy + attach routes
 npx wrangler deploy --var GIT_SHA:$(git rev-parse HEAD)
@@ -313,7 +449,16 @@ about 12 s): a request or decision landing at each Cloudflare call of another, a
 settles what is owed, with Cloudflare refusing writes for a while. After Cloudflare recovers and the sweep runs, no key
 but the owner is routed, a paused, blocked, released or pending name routes nothing, a live name routes exactly what
 its row records, and nothing owed is lost. `npm run fuzz` runs the whole matrix (about 35,000 cases, 3½ minutes);
-`FUZZ_CASE='…'` replays one case and prints its trace.
+`FUZZ_CASE='…'` replays one case and prints its trace. `test/review-2026-10-01.test.js` covers the 2026-10-01 review's
+fixes: the switchboard's `?n=`, the field caps, the per-key limit (and its races), v2's nonce and replay refusal (and
+v1 nodes still working), and no Cloudflare ids or error bodies in an answer to a keyholder. `test/m3-2026-10-02.test.js`
+covers its M3: a content swap paused after 12 applied sweeps in a row and not before, what ends a run and what a
+suspended sweep leaves alone, the mass breaker counting swaps, two connectors on one tunnel (another key, or a page,
+every other answer), a direct name's address passed to a stranger, and rotate (its refusals, Cloudflare refusing or
+failing it, and the admin's pause landing during it). `test/alerts.test.js` covers the control room's alerts against
+a fake ntfy and a stepped clock: the headers, the words (never the contact), raised / still at 24 h / cleared, a 503
+retried in one message, the hourly cap, no channel set, the category toggles, `/admin#<name>`, and no secret in any
+log line.
 
 The signing contract with the node is tested from the node's side: `apps/server/src/test-registrar-contract.ts`
 (run by `scripts/test-all.sh`) imports this Worker's `src/` and the harness. `node scripts/check-migrations.mjs`

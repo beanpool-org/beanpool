@@ -38,6 +38,9 @@ delete process.env.NODE_PROFILE;
 import crypto from 'node:crypto';
 import http from 'node:http';
 import WebSocket from 'ws';
+import { pushIsGeneric, toldPush } from './push-notice-test-harness.js';
+import { localFetch } from './keepalive-test-fetch.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -87,11 +90,19 @@ process.env.DIRECTORY_REGISTRY_URL = `${REGISTRY}/functions/v1/directory-registe
 const serve = (rows: unknown[]) => { fixture = { status: 200, body: JSON.stringify(rows) }; };
 
 // ── pushes never leave: Expo is caught at fetch ──────────────────────────────────────────────────────────────────
+// Each as its member is told it (push-notice-test-harness.ts): the lock screen shows only "A community has started near
+// you.", and the words and the communities below are the notice's details, which the app reads from this server.
 const realFetch = globalThis.fetch;
 const pushed: any[] = [];
+const notGeneric: any[] = [];
+let caught = 0;
 (globalThis as any).fetch = async (url: any, init: any) => {
     if (String(url).includes('exp.host')) {
-        pushed.push(...JSON.parse(init.body));
+        for (const m of JSON.parse(init.body)) {
+            caught++;
+            if (!pushIsGeneric(m) || m.data.k !== 'community.near') notGeneric.push(m);
+            pushed.push(toldPush(db, m));
+        }
         return { ok: true, status: 200, json: async () => ({}) } as any;
     }
     return realFetch(url, init);
@@ -102,6 +113,7 @@ const { initTls } = await import('./services/tls.js');
 const { initStateEngine, seedGenesisMember, createPost, setNodeRole, adminPruneUser } = await import('./state-engine.js');
 const { startHttpsServer } = await import('./https-server.js');
 const { db } = await import('./db/db.js');
+const { putPushTokenRow } = await import('./services/push-token-seal.js');
 const { resetGatewayRateLimit } = await import('./gateway-rate-limit.js');
 const { startP2P } = await import('./p2p.js');
 const { updateLocalConfig } = await import('./config/local-config.js');
@@ -131,8 +143,9 @@ function newId(name: string): Id {
 let owner: Id;
 function member(name: string): Id {
     const id = newId(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
-                VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`).run(id.pk, name, new Date(Date.now() - 30 * 86_400_000).toISOString(), owner.pk);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, new Date(Date.now() - 30 * 86_400_000).toISOString(), owner.pk);
+    setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
@@ -151,7 +164,7 @@ async function call(method: 'GET' | 'POST' | 'DELETE', id: Id | null, urlPath: s
         headers['X-Timestamp'] = String(ts);
         headers['X-Nonce'] = nonce;
     }
-    const res = await fetch(`${BASE}${urlPath}`, { method, headers, body: method === 'POST' ? raw : undefined });
+    const res = await localFetch(`${BASE}${urlPath}`, { method, headers, body: method === 'POST' ? raw : undefined });
     const text = await res.text();
     let parsed: any = text;
     try { parsed = JSON.parse(text); } catch { /* empty (304) */ }
@@ -245,7 +258,7 @@ async function main(): Promise<void> {
     const poster = member('Pat');
     const stranger = newId('Stranger');
     const pushToken = (id: Id) => `ExponentPushToken[g5-${id.name}]`;
-    for (const id of [wes, wanda, theo]) db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`).run(id.pk, pushToken(id));
+    for (const id of [wes, wanda, theo]) putPushTokenRow(id.pk, pushToken(id), 'android');
     const pushesTo = (id: Id) => pushed.filter(m => m.to === pushToken(id));
 
     // ── 1. local profile ────────────────────────────────────────────────────────────────────────────────────────
@@ -519,7 +532,7 @@ async function main(): Promise<void> {
     for (const s of [sWes, sTheo, sPat]) s.ws.close();
 
     const fay = member('Fay');
-    db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`).run(fay.pk, pushToken(fay));
+    putPushTokenRow(fay.pk, pushToken(fay), 'android');
     const setF = await call('POST', fay, '/api/global/watches', { lat: -1.29, lng: 36.82, radiusKm: 200 });
     pushed.length = 0;
     serve([...V2, SUFFOLK, MITTE, BRUNSWICK, ...FLOOD]);
@@ -584,7 +597,7 @@ async function main(): Promise<void> {
     db.prepare('UPDATE place_watches SET created_at = ? WHERE pubkey = ?').run(daysAgo(9), olga.pk);
     db.prepare("UPDATE directory_cache SET first_seen_at = ? WHERE community_key = 'peer-lima'").run(daysAgo(8));
     db.prepare("UPDATE directory_cache SET first_seen_at = ? WHERE community_key = 'peer-callao'").run(daysAgo(6));
-    db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`).run(olga.pk, pushToken(olga));
+    putPushTokenRow(olga.pk, pushToken(olga), 'android');
     pushed.length = 0;
     const rE = await runMirror();
     await settle();
@@ -752,6 +765,8 @@ async function main(): Promise<void> {
     const localInit = publisher.initDirectoryPublisher() as unknown;
     assert(localInit !== false, `local: the publisher's timer is set as it always was (${String(localInit)})`);
     await p2p.stop();
+    assert(caught > 0 && notGeneric.length === 0,
+        `every push showed only "A community has started near you.", and carried no community's key, name or distance (${notGeneric.length} of ${caught} did not)`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

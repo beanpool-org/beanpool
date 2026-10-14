@@ -19,11 +19,14 @@
  *
  * Text is set in a bundled Verdana-width font (see HARNESS_FONT in harness.mjs), so a Mac and CI measure the same.
  *
+ * Every page is served under the node's strict policy for Settings (no inline script, nothing from unpkg.com), and the
+ * run fails if any page reports a violation of it (harness.mjs CSP_VIOLATIONS).
+ *
  * Needs Chromium for Playwright once: `pnpm --filter @beanpool/manager exec playwright install --only-shell chromium`.
  */
 /* global console, process, document, window, getComputedStyle, NodeFilter -- Node, plus page.evaluate callbacks run in the browser */
 import { FAKE_RECOVERY_CODE } from './fixtures.mjs';
-import { startServer, launch, openSettings, selectSubTab, settle, horizontalOverflow, boxOverflow, SCREENS, screenName, UNKNOWN, HARNESS_FONT, ALL_MODALS, openModal, topModal, closeControl } from './harness.mjs';
+import { startServer, launch, openSettings, selectSubTab, settle, horizontalOverflow, boxOverflow, SCREENS, screenName, UNKNOWN, HARNESS_FONT, ALL_MODALS, openModal, topModal, closeControl, CSP_VIOLATIONS } from './harness.mjs';
 
 const WIDTH = 320;
 /** One of each kind of modal an owner meets on a phone: `open` is the button (in the page) that opens it. */
@@ -178,6 +181,43 @@ try {
             } else {
                 console.log(`  ✓ phone sign-in card ${at} (QR ${card.qrWidth}px)`);
             }
+            await context.close();
+        }
+        {
+            // The unclaimed card (a node with no owner yet): it fits, its QR scales down inside it, a long address
+            // wraps rather than widening the page, and the password's fold is a 48px target whose form fits open.
+            const { context, page } = await openSettings(browser, origin, {
+                width: WIDTH, textScale, signedIn: false,
+                overrides: { '/api/local/claim': () => ({ unclaimed: true, codeId: 'a1b2c3d4', communityName: 'Harcourt Orchard Exchange' }) },
+            });
+            await page.getByTestId('claim-qr').waitFor();
+            record(`unclaimed card ${at}`, await horizontalOverflow(page));
+            // The harness's own origin is short: put a long one in its place, as a self-hoster's might be.
+            await page.getByTestId('claim-origin').evaluate((el) => {
+                el.textContent = 'https://harcourt-orchard-exchange-community-garden.members.example-community-hosting.org.au:8443';
+            });
+            record(`unclaimed card, long address ${at}`, await horizontalOverflow(page));
+            checks++;
+            const card = await page.getByTestId('claim-card').evaluate((el) => {
+                const box = el.getBoundingClientRect();
+                const inside = (r) => r.left >= box.left - 0.5 && r.right <= box.right + 0.5;
+                const qr = el.querySelector('[data-testid="claim-qr"]').getBoundingClientRect();
+                const out = [...el.querySelectorAll('*')].filter((c) => {
+                    const r = c.getBoundingClientRect();
+                    return r.width > 0 && !inside(r);
+                }).map((c) => `<${c.tagName.toLowerCase()}> "${(c.textContent || '').trim().slice(0, 30)}"`);
+                return { qrWidth: Math.round(qr.width), qrInside: inside(qr), out };
+            });
+            const fold = await page.getByTestId('claim-password-fold').locator('summary').evaluate((el) => Math.round(el.getBoundingClientRect().height));
+            if (!card.qrInside || card.qrWidth < 160 || card.out.length || fold < 47.5) {
+                failures.push(`unclaimed card ${at}: QR ${card.qrWidth}px${card.qrInside ? '' : ' (outside the card)'}; outside: ${card.out.join(', ') || 'none'}; fold ${fold}px tall`);
+                console.log(`  ✗ unclaimed card contents ${at}`);
+            } else {
+                console.log(`  ✓ unclaimed card contents ${at} (QR ${card.qrWidth}px, fold ${fold}px)`);
+            }
+            await page.getByTestId('claim-password-fold').locator('summary').click();
+            await page.getByPlaceholder('Password').waitFor();
+            record(`unclaimed card, password fold open ${at}`, await horizontalOverflow(page));
             await context.close();
         }
 
@@ -519,6 +559,15 @@ try {
 }
 
 if (UNKNOWN.size) console.log(`\n(note) API paths with no fixture, answered {}: ${[...UNKNOWN].join(', ')}`);
+// Settings runs under the web app's strict policy on every node (app-document-csp.ts): nothing it did may be blocked.
+checks++;
+if (CSP_VIOLATIONS.length) {
+    const seen = [...new Set(CSP_VIOLATIONS.map(v => `${v.directive} blocked ${v.blocked || '(inline)'} at ${v.at} (${v.page})`))];
+    failures.push(`${CSP_VIOLATIONS.length} Content-Security-Policy violation(s):\n      ${seen.slice(0, 20).join('\n      ')}`);
+    console.log(`  ✗ the strict policy: ${CSP_VIOLATIONS.length} violation(s)`);
+} else {
+    console.log('  ✓ the strict policy: no violation on any page');
+}
 if (failures.length) {
     console.error(`\n✗ ${failures.length} of ${checks} checks failed:\n  - ${failures.join('\n  - ')}`);
     process.exit(1);

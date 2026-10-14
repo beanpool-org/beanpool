@@ -135,8 +135,7 @@ The member's own default is one row in `member_preferences` under `event_reminde
 `holiday_mode` and the `notify_*` toggles, holding the same JSON. Everyone starts at `[1440]` — the day
 before — without a row being written for them, so an upgrade needs no backfill.
 
-`event_reminders_sent` is a delivery log, not member data: see §2.2 for what it is for and §2.4 for why it
-does not replicate.
+`event_reminders_sent` is a delivery log: see §2.2 for what it is for and §2.4 for how a standby holds it.
 
 **The chat.** One row in `conversations` with a new `type = 'event_thread'`, created with the post, id equal
 to the post id, mirroring `ensureEnterpriseThread` (`apps/server/src/engine/enterprise-thread.ts:41-58`,
@@ -314,10 +313,11 @@ whichever one it dropped would be a silent loss. It is deliberately NOT added to
 keys RSVPs on `post_id|member_pubkey|status`, and putting a personal preference in it would read a
 mixed-version pair as diverged over something that is not divergence.
 
-`event_reminders_sent` does **not** replicate, and is in no tombstone, snapshot or audit count. It is this
-node's own delivery log; only the primary sends (§2.2), so a replica has no use for it, and the worst case
-at failover is bounded by the 15-minute window — a promoted standby can only re-send a reminder whose
-moment fell inside the last quarter hour.
+`event_reminders_sent` replicates to a standby (2026-09-29, the standby design's G4: a plain table on the
+generic path, `apps/server/src/engine/replication-manifest.ts`). Only the main server sends (§2.2), and a
+standby writes no mark and sends nothing; a promoted standby holds every mark its main server had at its last
+copy, so it sends no reminder a second time. The scrub deletes an event's marks with a tombstone each, and the
+standby's whole-copy check counts them.
 
 Peer communities see none of this: the listings pull carries no RSVPs, and so carries no reminders either.
 

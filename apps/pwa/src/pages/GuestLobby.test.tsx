@@ -14,6 +14,8 @@ import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
 import { memoryIndexedDB } from '../lib/memory-indexeddb';
 import { saveRadiusSettings, clearRadiusSettings } from '../lib/geo';
 import * as sync from '../lib/sync';
+import { ACCOUNT_EPOCH_KEY, resetAccountEpochForTest } from '../lib/account-epoch';
+import { signOutInAnotherTab } from '../lib/another-tab';
 
 const markers = vi.hoisted(() => [] as Array<{ coords: [number, number]; listeners: Record<string, () => void> }>);
 
@@ -69,16 +71,18 @@ function stubMatchMedia() {
 
 /*
  * Every read a visitor may make of the global node: the node's public allowlist (apps/server/src/https-server.ts,
- * PUBLIC_READ_EXACT and PUBLIC_READ_PATTERNS) less what it makes members-only with the visitors' view on
- * (MEMBERS_ONLY_ON_GUEST_LISTINGS_*: Commons decisions and balance, the Pulse feed, enterprises, treasuries,
- * crowdfunds and Commons projects). Copied, since the server can't be imported here: a read added to the lobby that
- * isn't one of these fails the test below.
+ * PUBLIC_READ_EXACT and PUBLIC_READ_PATTERNS) less what is members-only there (MEMBERS_ONLY_READS_*: Commons
+ * decisions, the Pulse feed, enterprises, treasuries, crowdfunds and Commons projects, on every node; and
+ * MEMBERS_ONLY_ON_GUEST_LISTINGS_EXACT: the Commons pot, with the visitors' view on). Copied, since the server can't be
+ * imported here: a read added to the lobby that isn't one of these fails the test below.
  */
 const VISITOR_READS_EXACT = new Set([
     '/api/version', '/api/community/info', '/api/community/health', '/api/node/config', '/api/directory/info',
     '/api/invite/check', '/api/attest', '/api/marketplace/posts', '/api/federation/reachable-peers', '/api/pricing-guide',
     '/api/pair/poll', '/api/channels/options', '/api/pulse/oauth/config', '/api/node/info', '/api/federation/links',
     '/api/node/identity-epoch', '/api/global/communities', '/api/global/home', '/api/join/knock/status',
+    // Home in one read: public only with the visitors' view on (HOME_READ_EXACT), as here.
+    '/api/home',
 ]);
 const VISITOR_READS_PATTERNS = [
     /^\/api\/community\/membership\/[^/]+$/,
@@ -124,11 +128,34 @@ const POLL = {
 };
 const GUEST_POSTS = [OFFER, NEED, EVENT, POLL];
 
+/**
+ * GET /api/home as the global node answers it (routes/home-answer.ts, H0): the visitors' subset with `welcome` to a reader
+ * with no account here, a member's Home to a signed member. The listings as the guest list has them, no person in them.
+ */
+function homeBody(member: boolean, profile: 'global' | 'local' = 'global') {
+    return {
+        generatedAt: NOW, profile,
+        features: { beans: false, escrow: false, enterprises: false, invites: false, decisions: false, guestListingsOnly: true, exampleListings: true, openJoin: true },
+        ...(member ? {} : { welcome: true }),
+        // A member past the tour (Skip): their Home is the starter set, so the listings are on it (DESIGN-getting-started-fable.md §1).
+        me: member ? { joinedAt: NOW, isKeeper: false, probation: null, interests: [], area: null, firstOffer: false, standing: 'member', tour: { v: 1, state: 'skipped', at: NOW } } : null,
+        layout: null,
+        cards: {
+            find: { point: null, communities: [], communityCount: 3, nearbyPosts: null, watches: member ? [] : null, knock: null, directoryFetchedAt: null },
+            events: { items: [{ id: EVENT.id, title: EVENT.title, startsAt: EVENT.eventStartAt, endsAt: EVENT.eventEndAt, place: null, rsvp: null }], radiusKm: null },
+            market: { items: [OFFER, NEED].map(p => ({ id: p.id, type: p.type, title: p.title, category: p.category, photoUrl: p.photos[0] ?? null })), total14d: 2, more: false, examples: true },
+            community: { name: null, members: 3, communities: 3 },
+        },
+    };
+}
+
 function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
-type Call = { path: string; headers: Record<string, string> };
+/** What a member's save sends (lib/api.ts saveHomePreferences), where a test looks. */
+type Sent = { publicKey?: string; preferences?: { interests?: unknown } };
+type Call = { path: string; headers: Record<string, string>; method: string; body?: Sent };
 
 /**
  * The node, answering a visitor as the global node does. `members`: keys the membership probe says are members;
@@ -139,7 +166,9 @@ function stubNode(info: unknown, members: Map<string, string> = new Map(), peerN
     vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL, init: RequestInit = {}) => {
         const url = String(input);
         const path = url.split('?')[0];
-        calls.push({ path, headers: (init.headers ?? {}) as Record<string, string> });
+        let body: Sent | undefined;
+        try { body = typeof init.body === 'string' ? JSON.parse(init.body) as Sent : undefined; } catch { body = undefined; }
+        calls.push({ path, headers: (init.headers ?? {}) as Record<string, string>, method: init.method ?? 'GET', body });
         if (path === '/api/community/info') return json(200, info);
         if (path === '/api/community/health') return json(200, { status: 'ok', version: '1.2.26' });
         if (path === '/api/marketplace/posts') {
@@ -156,6 +185,10 @@ function stubNode(info: unknown, members: Map<string, string> = new Map(), peerN
         if (path === '/api/marketplace/transactions') return json(200, []);
         if (path.startsWith('/api/messages/conversations/')) return json(200, { conversations: [], totalUnread: 0 });
         if (path === '/api/groups') return json(200, []);
+        if (path === '/api/home') {
+            const h = (init.headers ?? {}) as Record<string, string>;
+            return json(200, homeBody(!!(h['X-Public-Key'] ?? h['x-public-key']), (info as { profile?: string }).profile === 'local' ? 'local' : 'global'));
+        }
         return json(200, {});
     }));
     return calls;
@@ -181,9 +214,12 @@ afterEach(() => {
     sessionStorage.clear();
 });
 
+/** The lobby, on its Market: a visitor lands on their Home (H3), and these tests are about the Market, one tap away. */
 async function openLobby() {
     render(<App />);
-    return await screen.findByTestId('guest-lobby');
+    const lobby = await screen.findByTestId('guest-lobby');
+    fireEvent.click(within(screen.getByTestId('lobby-bottom-nav')).getByRole('button', { name: /Market/ }));
+    return lobby;
 }
 
 describe('a visitor with no key on the global node', () => {
@@ -196,13 +232,50 @@ describe('a visitor with no key on the global node', () => {
         expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull();
         expect(screen.getAllByTestId('header-join').length).toBeGreaterThan(0);
         const nav = screen.getByTestId('lobby-bottom-nav');
-        expect(within(nav).getAllByRole('button').map(b => b.textContent)).toEqual(['🤝Market', '🗺️Map']);
+        // Home first: the visitors' Home (DESIGN-home-dashboard-fable.md §9 (c)), then the Market and the Map.
+        expect(within(nav).getAllByRole('button').map(b => b.textContent)).toEqual(['🏠Home', '🤝Market', '🗺️Map']);
         expect(await screen.findByTestId('lobby-join-card')).toHaveTextContent('No invite needed');
         expect(screen.getByTestId('lobby-have-account')).toHaveTextContent('Already have BeanPool?');
         // No key was made just to look.
         expect(await loadIdentity()).toBeNull();
         // The doorbell socket, opened with no key.
         expect(sync.connectToAnchor).toHaveBeenCalled();
+    });
+
+    it('the header\'s ? opens the lobby\'s own guide words for the tab on screen: the Market\'s, then Home\'s (review of #1857, B4)', async () => {
+        stubNode(GLOBAL);
+        await openLobby();
+        const { helpSheetFor, webHelpKey } = await import('@beanpool/core');
+        const { getBundledGuide } = await import('../lib/guide');
+        const words = (tab: string) => helpSheetFor(getBundledGuide() as never, webHelpKey({ tab, lobby: true }));
+        expect(webHelpKey({ tab: 'marketplace', lobby: true })).toMatch(/^lobby\//);
+        const market = words('marketplace'), home = words('home');
+        expect(market.title).toBeTruthy();
+        expect(market.title).not.toBe(home.title);
+        const ask = async () => {
+            fireEvent.click(within(screen.getByTestId('lobby-header')).getByTestId('lobby-help'));
+            return within(await screen.findByTestId('help-dialog')).getByTestId('help-title');
+        };
+        expect(await ask()).toHaveTextContent(market.title!);
+        fireEvent.click(screen.getByTestId('help-close'));
+        await waitFor(() => expect(screen.queryByTestId('help-dialog')).toBeNull());
+        fireEvent.click(within(screen.getByTestId('lobby-bottom-nav')).getByRole('button', { name: /Home/ }));
+        expect(await ask()).toHaveTextContent(home.title!);
+    });
+
+    it("on a node that previews Beans, the lobby's Ledger tab: its ? opens the Ledger's guide words, not Home's", async () => {
+        stubNode({ ...GLOBAL, features: { ...GLOBAL.features, showcase: true } });
+        await openLobby();
+        const { helpSheetFor, webHelpKey } = await import('@beanpool/core');
+        const { getBundledGuide } = await import('../lib/guide');
+        const words = (tab: string) => helpSheetFor(getBundledGuide() as never, webHelpKey({ tab, lobby: true }));
+        const ledger = words('ledger'), home = words('home');
+        expect(ledger.slug).toBe('your-balance');
+        expect(ledger.title).not.toBe(home.title);
+        fireEvent.click(within(screen.getByTestId('lobby-bottom-nav')).getByRole('button', { name: /Ledger/ }));
+        expect(within(screen.getByTestId('lobby-header')).getByTestId('lobby-title')).toHaveTextContent('Ledger');
+        fireEvent.click(within(screen.getByTestId('lobby-header')).getByTestId('lobby-help'));
+        expect(within(await screen.findByTestId('help-dialog')).getByTestId('help-title')).toHaveTextContent(ledger.title!);
     });
 
     it('shows each listing without the person: no author, face or tier, the terms with no Beans, and the one line once, under the first card', async () => {
@@ -385,6 +458,20 @@ describe('a visitor with no key on the global node', () => {
         }
     });
 
+    it('the Join card names the two doors on a node that takes 12 words alone, and one sign-in where it does not (review 4161723961)', async () => {
+        stubNode({ ...GLOBAL, features: { ...GLOBAL.features, wordsDoor: true } });
+        await openLobby();
+        const card = await screen.findByTestId('lobby-join-card');
+        expect(card).toHaveTextContent('It takes a name, and 12 secret words or a sign-in. No invite needed.');
+        expect(card).not.toHaveTextContent(/one sign-in/);
+        cleanup();
+        resetCommunityInfoOnce();
+
+        stubNode(GLOBAL);
+        await openLobby();
+        expect(await screen.findByTestId('lobby-join-card')).toHaveTextContent('It takes a name and one sign-in. No invite needed.');
+    });
+
     it('Join in the header opens screen 1 over the lobby, and ← Back returns to the listings', async () => {
         stubNode(GLOBAL);
         await openLobby();
@@ -470,7 +557,7 @@ describe('a listing shared by link, read in the lobby, opens again once the visi
         await screen.findByTestId('mobile-bottom-nav');
     }
 
-    /** The member's Market with its list showing, and no listing open. */
+    /** The member's landing with the listings showing (Home's Market card, or the Market itself), and no listing open. */
     async function memberListWithNothingOpen() {
         await screen.findAllByText('Sourdough loaves');
         // Give the Market's deep-link effect, and its one read by id, their turn.
@@ -607,5 +694,105 @@ describe('where the lobby does not show', () => {
         render(<App />);
         await screen.findByTestId('join-screen-lobby');
         expect(screen.queryByTestId('guest-lobby')).toBeNull();
+    });
+});
+
+/*
+ * PR #1479's review, round 3: a page holding no account (the lobby, the welcome page) that heard another tab's Sign Out
+ * kept it as its own, so the account signed in IN that page afterwards (onComplete, no reload) read no Home ("You
+ * signed out of this browser in another tab") and its stars were neither saved nor kept. A sign-in starts the page's
+ * epoch again (lib/account-epoch.ts beginAccountEpoch).
+ */
+describe("a sign-in in a page that heard another tab's sign-out: the account signed in there is that page's own", () => {
+    afterEach(() => {
+        localStorage.removeItem(ACCOUNT_EPOCH_KEY);
+        resetAccountEpochForTest();
+    });
+
+    /**
+     * Home is read as `member` (every read since the sign-in signed by them), and a chip tap there is saved on the account
+     * and kept as this browser's.
+     */
+    async function homeIsTheirs(calls: Call[], from: number, member: BeanPoolIdentity) {
+        // Their Home, or the words for a member who signed out ("You signed out of this browser in another tab").
+        await waitFor(() => expect(screen.queryByTestId('home-card-community') ?? screen.queryByTestId('home-signed-out')).not.toBeNull(), { timeout: 5_000 });
+        expect(screen.queryByTestId('home-signed-out')).toBeNull();
+        await waitFor(() => expect(calls.slice(from).some(c => c.path === '/api/home' && c.headers['X-Public-Key'])).toBe(true));
+        // (The lobby's own Home, landing again as it hears the sign-out, may have read once more as a visitor: unsigned.)
+        const reads = calls.slice(from).filter(c => c.path === '/api/home' && c.headers['X-Public-Key']);
+        expect(reads.length).toBeGreaterThan(0);
+        expect(reads.every(c => c.headers['X-Public-Key'] === member.publicKey)).toBe(true);
+        fireEvent.click(await screen.findByTestId('home-interest-food'));
+        await waitFor(() => expect(calls.some(c => c.path === '/api/members/preferences' && c.method === 'POST'
+            && c.body?.publicKey === member.publicKey && JSON.stringify(c.body?.preferences?.interests) === '["food"]')).toBe(true));
+        expect(JSON.parse(localStorage.getItem('bp_fav_categories') ?? '[]')).toEqual(['food']);
+    }
+
+    async function lobbyRestore(member: BeanPoolIdentity) {
+        // Join is disabled until the lobby's browserKeyProblem() answers: wait for it, as restoreWith12Words does,
+        // or a slow runner clicks a disabled button and the overlay never opens (#1411's Test-All run 37045576983).
+        const join = screen.getAllByTestId('header-join')[0];
+        await waitFor(() => expect(join).not.toBeDisabled());
+        fireEvent.click(join);
+        const overlay = await screen.findByTestId('lobby-join-overlay');
+        fireEvent.click(await within(overlay).findByRole('button', { name: 'I have my 12 words' }));
+        for (let i = 0; i < 12; i++) fireEvent.change(await within(overlay).findByLabelText(`Recovery word ${i + 1}`), { target: { value: member.mnemonic![i] } });
+        fireEvent.click(within(overlay).getByRole('button', { name: 'Recover Identity' }));
+        await waitFor(() => expect(screen.queryByTestId('guest-lobby')).toBeNull());
+    }
+
+    it('the lobby on global: Rowan restores with 12 words after Ana signed out in another tab, and it is his Home, his star saved', async () => {
+        const member = await generateIdentity('Rowan');
+        const calls = stubNode(GLOBAL, new Map([[member.publicKey, 'Rowan']]));
+        render(<App />);
+        await screen.findByTestId('guest-lobby');
+        await screen.findByTestId('home-card-community');
+        // Ana signs out in another tab of this browser; this page, the lobby, hears it.
+        await act(async () => { await signOutInAnotherTab(); });
+        const from = calls.length;
+        await lobbyRestore(member);
+        await homeIsTheirs(calls, from, member);
+    });
+
+    it('the welcome page on a local node: the same, after a sign-out it heard', async () => {
+        const member = await generateIdentity('Cal');
+        const calls = stubNode(LOCAL, new Map([[member.publicKey, 'Cal']]));
+        render(<App />);
+        await act(async () => { await signOutInAnotherTab(); });
+        const from = calls.length;
+        fireEvent.click(await screen.findByRole('button', { name: 'Restore existing identity' }));
+        fireEvent.click(await screen.findByRole('button', { name: /Recover with 12 Words/ }));
+        for (let i = 0; i < 12; i++) fireEvent.change(await screen.findByLabelText(`Recovery word ${i + 1}`), { target: { value: member.mnemonic![i] } });
+        fireEvent.click(screen.getByRole('button', { name: 'Recover Identity' }));
+        await screen.findByTestId('mobile-bottom-nav');
+        await homeIsTheirs(calls, from, member);
+    });
+
+    it('a star in the Market there, after the same restore: shown, saved on the account and kept as this browser\'s', async () => {
+        const member = await generateIdentity('Rowan');
+        const calls = stubNode(GLOBAL, new Map([[member.publicKey, 'Rowan']]));
+        render(<App />);
+        await screen.findByTestId('guest-lobby');
+        await act(async () => { await signOutInAnotherTab(); });
+        localStorage.removeItem('bp_fav_categories');
+        await lobbyRestore(member);
+        fireEvent.click(within(await screen.findByTestId('mobile-bottom-nav')).getByText('Market'));
+        await screen.findAllByText('Sourdough loaves');
+        await act(async () => { screen.getByRole('button', { name: '★ For You' }).click(); });
+        await act(async () => { screen.getByRole('button', { name: /Food & Produce/ }).click(); });
+        await waitFor(() => expect(calls.some(c => c.path === '/api/members/preferences' && c.method === 'POST'
+            && c.body?.publicKey === member.publicKey && JSON.stringify(c.body?.preferences?.interests) === '["food"]')).toBe(true));
+        expect(JSON.parse(localStorage.getItem('bp_fav_categories') ?? '[]')).toEqual(['food']);
+    });
+
+    it('a lobby that heard nothing of the sign-out (it finds it at its first check): the same', async () => {
+        const member = await generateIdentity('Rowan');
+        const calls = stubNode(GLOBAL, new Map([[member.publicKey, 'Rowan']]));
+        render(<App />);
+        await screen.findByTestId('guest-lobby');
+        await act(async () => { await signOutInAnotherTab({ heard: false }); });
+        const from = calls.length;
+        await lobbyRestore(member);
+        await homeIsTheirs(calls, from, member);
     });
 });

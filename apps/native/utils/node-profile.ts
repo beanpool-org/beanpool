@@ -14,9 +14,13 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { recordRequestSigning } from './nodes';
+import { trackInfoRead } from './request-signing-version';
 
-/** The worldwide community's one address. `earth.beanpool.org` redirects here at Cloudflare. */
-export const GLOBAL_NODE_URL = 'https://global.beanpool.org';
+import { GLOBAL_NODE_URL } from './global-node-url';
+import { featureModeFor, type FeatureMode, type ShowcaseFeature } from '@beanpool/core';
+
+/** The worldwide community's one address (utils/global-node-url.ts, which imports nothing). */
+export { GLOBAL_NODE_URL };
 
 export type NodeProfileName = 'local' | 'global';
 
@@ -36,11 +40,50 @@ export interface NodeFeatures {
     exampleListings?: boolean;
     /** Members propose and vote on formal Decisions here. Off on the worldwide community (Marty, 2026-09-27). */
     decisions?: boolean;
+    /** Members make invites here, and an invite joins someone. Off on the worldwide community (Marty, 2026-10-01). */
+    invites?: boolean;
+    /**
+     * The 12-words door (two-doors design §2): anyone may join with 12 words and a moment of the phone's work, beside a
+     * sign-in. Only the worldwide community, and only while its operator hasn't made a sign-in required. A node that
+     * doesn't say has no 12-words door: its door looks exactly as before.
+     */
+    wordsDoor?: boolean;
+    /** The node is in a private preview: only its members and the people its owner or an admin invites get in, and a
+     *  visitor sees nothing. The door offers an invite only. A node that doesn't say is not in one. */
+    privatePreview?: boolean;
+    /**
+     * A switched-off feature is shown from the sample community, Example Valley, rather than hidden (the showcase,
+     * scratch/global-node/DESIGN-global-showcase-fable.md §4): the worldwide community's, overridable. A node that
+     * doesn't say hides what it has off, as before: an operator who turned a feature off meant it.
+     */
+    showcase?: boolean;
+    /**
+     * Who may invite here (the door, apps/server config/door.ts): `members` (any member, every community until now),
+     * `admins` (only its owners and admins, the community's choice) or `open` (the worldwide community: anyone joins with
+     * a sign-in, and nobody makes invites). A node from before the door says nothing: any member, as before.
+     */
+    door?: NodeDoor;
+    /**
+     * The community gives each member's phone the listings near the member's area: the nearest `max` within `radiusKm`
+     * (the worldwide one, design DESIGN-global-sync-by-area §2). Signup then asks for a rough area (utils/member-area.ts).
+     * A node that doesn't say gives every listing, as before.
+     */
+    nearbyListings?: { radiusKm: number; max: number };
+    /**
+     * The phone holds only the members it has a reason to show and fetches the rest by key (the worldwide one, design
+     * DESIGN-global-members-by-area §2.2; utils/members-on-demand.ts): no whole directory read, no everyone-delta. A node
+     * that doesn't say is read as before.
+     */
+    membersOnDemand?: boolean;
 }
 
-const FEATURE_KEYS: ReadonlyArray<keyof NodeFeatures> = [
+export type NodeDoor = 'open' | 'members' | 'admins';
+const DOORS: ReadonlyArray<NodeDoor> = ['open', 'members', 'admins'];
+
+const FEATURE_KEYS: ReadonlyArray<Exclude<keyof NodeFeatures, 'door' | 'nearbyListings'>> = [
     'beans', 'escrow', 'enterprises', 'openJoin', 'knocks', 'distanceSearch',
-    'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions',
+    'probation', 'autoHideReports', 'autoMute', 'guestListingsOnly', 'exampleListings', 'decisions', 'invites', 'wordsDoor',
+    'privatePreview', 'showcase', 'membersOnDemand',
 ];
 
 export interface NodeProfile {
@@ -48,6 +91,22 @@ export interface NodeProfile {
     features: NodeFeatures;
     /** When this phone last heard it from the node (ISO). */
     checkedAt: string;
+    /**
+     * Where Start a community's "How to run a node" leads on this node (apps/server config/start-community.ts), when it
+     * names an address an app may open for a stranger. Absent: beanpool.org's (utils/start-community.ts runANodeUrl).
+     */
+    startCommunityUrl?: string;
+}
+
+/** The server's own rule (config/start-community.ts cleanStartCommunityUrl): https, a host, no user name or password, at most 300 characters, no spaces. */
+function openableStartUrl(v: unknown): string | null {
+    if (typeof v !== 'string') return null;
+    const s = v.trim();
+    if (!s || s.length > 300 || /\s/.test(s)) return null;
+    let u: URL;
+    try { u = new URL(s); } catch { return null; }
+    if (u.protocol !== 'https:' || !u.hostname || u.username || u.password) return null;
+    return s;
 }
 
 const CACHE_KEY = 'beanpool_node_profiles';
@@ -62,19 +121,25 @@ function cacheKey(url: string): string {
  * Read the profile out of an info answer, or null when the answer is not one.
  *
  * Only the exact string `global` makes a node global: anything else, including an answer that does
- * not say, is `local`. Only booleans are kept from `features`.
+ * not say, is `local`. Only booleans are kept from `features`, beside `door` and `nearbyListings`' two numbers.
  */
 export function readNodeProfile(body: unknown, now: Date = new Date()): NodeProfile | null {
     if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
-    const b = body as { profile?: unknown; features?: unknown };
+    const b = body as { profile?: unknown; features?: unknown; startCommunityUrl?: unknown };
     const features: NodeFeatures = {};
     if (b.features && typeof b.features === 'object') {
         const f = b.features as Record<string, unknown>;
         for (const key of FEATURE_KEYS) {
             if (typeof f[key] === 'boolean') features[key] = f[key] as boolean;
         }
+        if (DOORS.includes(f.door as NodeDoor)) features.door = f.door as NodeDoor;
+        const n = f.nearbyListings as { radiusKm?: unknown; max?: unknown } | undefined;
+        if (n && typeof n === 'object' && typeof n.radiusKm === 'number' && n.radiusKm > 0 && typeof n.max === 'number' && n.max > 0) {
+            features.nearbyListings = { radiusKm: n.radiusKm, max: n.max };
+        }
     }
-    return { profile: b.profile === 'global' ? 'global' : 'local', features, checkedAt: now.toISOString() };
+    const startCommunityUrl = openableStartUrl(b.startCommunityUrl);
+    return { profile: b.profile === 'global' ? 'global' : 'local', features, checkedAt: now.toISOString(), ...(startCommunityUrl ? { startCommunityUrl } : {}) };
 }
 
 async function readCache(): Promise<Record<string, NodeProfile>> {
@@ -126,6 +191,12 @@ export async function fetchNodeProfile(
     url: string, fetchImpl: typeof fetch = fetch, timeoutMs: number = FETCH_TIMEOUT_MS,
 ): Promise<NodeProfile | null> {
     const base = url.trim().replace(/\/+$/, '');
+    // Noted as in flight until its answer is recorded, so a request signed for this node meanwhile waits for this
+    // answer rather than asking again (request-signing-version.ts learnRequestSigning).
+    return trackInfoRead(base, readProfile(base, fetchImpl, timeoutMs));
+}
+
+async function readProfile(base: string, fetchImpl: typeof fetch, timeoutMs: number): Promise<NodeProfile | null> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -157,7 +228,9 @@ export type GlobalDoorRefusal =
     /** It answered, and it is not the worldwide community (a stale build must never open-join a local node). */
     | 'not_global'
     /** It is the worldwide community, and its door is shut (`features.openJoin` is not on). */
-    | 'door_closed';
+    | 'door_closed'
+    /** It is the worldwide community in a private preview (`features.privatePreview`): only an owner's or admin's invite. */
+    | 'private_preview';
 
 export type GlobalDoorCheck = { ok: true; profile: NodeProfile } | { ok: false; reason: GlobalDoorRefusal };
 
@@ -173,6 +246,7 @@ export async function checkGlobalDoor(
     const profile = await fetchNodeProfile(url, fetchImpl, timeoutMs);
     if (!profile) return { ok: false, reason: 'unreachable' };
     if (profile.profile !== 'global') return { ok: false, reason: 'not_global' };
+    if (privatePreviewOn(profile.features)) return { ok: false, reason: 'private_preview' };
     if (profile.features.openJoin !== true) return { ok: false, reason: 'door_closed' };
     return { ok: true, profile };
 }
@@ -182,17 +256,62 @@ export const GLOBAL_DOOR_MESSAGES: Record<GlobalDoorRefusal, string> = {
     unreachable: "Can't reach the global community right now. Try again, or join with an invite.",
     not_global: "The global community isn't available right now. You can still join a community with an invite.",
     door_closed: "The global community isn't taking new members right now. You can still join a community with an invite.",
+    // The node's own sentence (apps/server config/private-preview.ts), word for word.
+    private_preview: 'This community is in a private preview. Ask its owner for an invite.',
 };
 
-/** The tabs a node hides. Only a node that says outright that Beans are off hides any. */
+/** Whether this node is in a private preview (an invite from its owner or an admin is the only way in). */
+export function privatePreviewOn(features: NodeFeatures | null | undefined): boolean {
+    return features?.privatePreview === true;
+}
+
+/**
+ * Whether the door offers the 12-words way in beside a sign-in. Only a node that says so outright: a node from before
+ * the 12-words door says nothing, and its door stays exactly as it was (the sign-in alone).
+ */
+export function wordsDoorOn(features: NodeFeatures | null | undefined): boolean {
+    return features?.wordsDoor === true;
+}
+
+/**
+ * The reader's own feature set: the node's (`GET /api/community/info`), each switch as the reader's own (`features` on
+ * `GET /api/community/me`) says where it says one. The reader's set decides (design §4, pick 6, as @beanpool/core
+ * featureModeFor): a verified member on a node with Beans off reads Beans on while the rest stay in preview, and a
+ * switch the reader's has off is off. `showcase` is always the node's. Signed out, or before the reader's is known, the
+ * node's. Writes stay gated on the server whatever this says.
+ */
+export function effectiveFeatures(node: NodeFeatures | null | undefined, reader?: NodeFeatures | null): NodeFeatures {
+    const out: NodeFeatures = { ...(node ?? {}) };
+    if (!reader) return out;
+    for (const key of FEATURE_KEYS) {
+        if (key === 'showcase') continue;
+        if (typeof reader[key] === 'boolean') out[key] = reader[key];
+    }
+    return out;
+}
+
+/**
+ * How one switched-off feature shows to this reader (@beanpool/core featureModeFor): `live`, `read-only` (the node
+ * has it, the reader not yet), `preview` (from the sample community, on a node whose `showcase` is on) or `hidden`.
+ * The reader's set goes in as effectiveFeatures makes it, so a mode and the `effective` set never disagree: a reader's
+ * answer that says nothing of a switch leaves the node's.
+ */
+export function showcaseMode(feature: ShowcaseFeature, node: NodeFeatures | null | undefined, reader?: NodeFeatures | null): FeatureMode {
+    const readerSet = reader ? effectiveFeatures(node, reader) : undefined;
+    return featureModeFor(feature, node as Record<string, unknown> | null | undefined, readerSet as Record<string, unknown> | undefined);
+}
+
+/** The tabs a node hides. Only a node that says outright that Beans are off hides any, and not one that previews them. */
 export type HideableTab = 'projects' | 'ledger';
 
 /**
  * Commons (the `projects` route) and Ledger are money: the pool, enterprises, crowdfunds, balances.
- * On a node with Beans off they would show a ledger that is 0 forever, so they are hidden. The
+ * On a node with Beans off they would show a ledger that is 0 forever, so they are hidden, unless the node's
+ * `showcase` is on: then both stay, and show Example Valley in preview (design §1 rows 3 and 6). The
  * routes stay (a link to them still opens), only the tab strip changes.
  */
 export function hiddenTabsFor(features: NodeFeatures | null | undefined): HideableTab[] {
+    if (features?.showcase === true) return [];
     return features?.beans === false ? ['projects', 'ledger'] : [];
 }
 
@@ -209,4 +328,27 @@ export function beansOn(features: NodeFeatures | null | undefined): boolean {
  */
 export function decisionsOn(features: NodeFeatures | null | undefined): boolean {
     return features?.decisions !== false;
+}
+
+/**
+ * Whether this node's members make invites (a code, a QR, an offline ticket). Only a node that says outright it
+ * doesn't makes none: the worldwide community, whose open door is the only way in (one sign-in, one member), and which
+ * refuses every invite. Unknown counts as yes, as every node before the switch took them. Joining ANOTHER community
+ * with its own invite (a knock answered there) is that community's, and is not this.
+ */
+export function invitesOn(features: NodeFeatures | null | undefined): boolean {
+    return features?.invites !== false;
+}
+
+/** What a poll card says on the worldwide community, above how its ballot works. */
+export const INFORMAL_POLL_NOTE = 'An informal poll; it decides nothing';
+
+/**
+ * Whether this node's polls are labelled informal: the worldwide community's are. Anyone may join it with a sign-in, so
+ * one person with several accounts can tip a poll's count (FABLE-sec-global-abuse LOW-7), and nothing there is decided
+ * by a vote (Decisions are off). Polls decide nothing anywhere; there each one says so. A node not known yet, or one
+ * that doesn't say, is a local community, as every node before the profile was.
+ */
+export function pollsInformal(profile: NodeProfile | null | undefined): boolean {
+    return profile?.profile === 'global';
 }

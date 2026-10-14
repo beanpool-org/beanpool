@@ -32,9 +32,10 @@ import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { addConnector } from './connector-manager.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
-const PORT = 8550;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const PEER_ORIGIN = 'https://byron.beanpool.org';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -47,9 +48,10 @@ function makeAuthor(callsign: string) {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     db.prepare(
-        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at, avatar_url)
-         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'data:image/png;base64,iVBORw0KGgo=')`
+        `INSERT OR IGNORE INTO members (public_key, callsign, joined_at)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
     ).run(pubKeyHex, callsign);
+    setMemberPhoto(db, pubKeyHex, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
@@ -85,7 +87,8 @@ async function main() {
     }
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const author = makeAuthor('cashtester');
 
@@ -152,26 +155,32 @@ async function main() {
     );
 
     // ── 4. Cash cannot travel: a peer node never sees a cash-flagged listing ────
-    // Remote browsing hits this same public endpoint, so the peer Origin is the signal.
+    // Remote browsing hits this same endpoint, so the peer Origin is the signal.
     addConnector('byron.beanpool.org', 'peer', 'Byron', PEER_ORIGIN);
 
-    const asPeer = await fetch(`${BASE}/api/marketplace/posts`, { headers: { Origin: PEER_ORIGIN } });
-    const peerIds = ((await asPeer.json()) as any[]).map(p => p.id);
+    // A local community's listings are its members' since 2026-09-28: a linked peer's app browsing unsigned is refused
+    // like any stranger, until linked communities get signed access of their own. The filter below is checked on a
+    // member's signed read sent from the peer's origin, which the handler still filters by that origin alone.
+    const unsignedPeer = await fetch(`${BASE}/api/marketplace/posts`, { headers: { Origin: PEER_ORIGIN } });
+    assert(unsignedPeer.status === 401 && (await unsignedPeer.json())?.code === 'members_only',
+        `a peer's unsigned browse of a local community's board is refused members_only (got ${unsignedPeer.status})`);
+    const asPeer = await signedFetch('GET', '/api/marketplace/posts', author, undefined, { Origin: PEER_ORIGIN });
+    const peerIds = (Array.isArray(asPeer.body) ? asPeer.body as any[] : []).map(p => p.id);
     assert(!peerIds.includes(cashId), 'a PEER node does not see the cash-flagged listing');
     assert(peerIds.includes(beanId), 'a peer node still sees the beans-only listing');
 
     // A peer cannot opt back in — the exclusion is server-side, not a client preference.
-    const peerOptOut = await fetch(`${BASE}/api/marketplace/posts?beansOnly=false`, { headers: { Origin: PEER_ORIGIN } });
+    const peerOptOut = await signedFetch('GET', '/api/marketplace/posts?beansOnly=false', author, undefined, { Origin: PEER_ORIGIN });
     assert(
-        !((await peerOptOut.json()) as any[]).map(p => p.id).includes(cashId),
+        !(Array.isArray(peerOptOut.body) ? peerOptOut.body as any[] : []).map(p => p.id).includes(cashId) && Array.isArray(peerOptOut.body),
         'beansOnly=false does not let a peer opt back in to cash listings',
     );
 
     // An unknown origin is treated as local — this is a discovery filter, not access control
     // (docs/federation-economics.md Rule 9), so it must not pretend to be a security boundary.
-    const stranger = await fetch(`${BASE}/api/marketplace/posts`, { headers: { Origin: 'https://not-a-peer.example' } });
+    const stranger = await signedFetch('GET', '/api/marketplace/posts', author, undefined, { Origin: 'https://not-a-peer.example' });
     assert(
-        ((await stranger.json()) as any[]).map(p => p.id).includes(cashId),
+        (Array.isArray(stranger.body) ? stranger.body as any[] : []).map(p => p.id).includes(cashId),
         'a non-peer origin is not filtered — the flag is a discovery filter, not access control',
     );
 

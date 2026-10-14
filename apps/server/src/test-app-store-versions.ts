@@ -21,8 +21,8 @@ import {
     __resetAppStoreVersionsForTest,
 } from './app-store-versions.js';
 
-const PORT = 8593;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -46,7 +46,7 @@ async function main() {
     // ── Store response parsing ───────────────────────────────────────────────────
     // The exact shape itunes.apple.com/lookup returns for org.beanpool.pillar.
     assert(
-        parseItunesLookup({ resultCount: 1, results: [{ version: 'V1.2.31', trackName: 'Bean Pool' }] }) === '1.2.31',
+        parseItunesLookup({ resultCount: 1, results: [{ version: 'V1.2.31', trackName: 'BeanPool' }] }) === '1.2.31',
         'iTunes lookup yields the App Store version'
     );
     assert(parseItunesLookup({ resultCount: 0, results: [] }) === null, 'an empty iTunes lookup yields null');
@@ -93,7 +93,8 @@ async function main() {
     // ── The health payload the app actually reads ────────────────────────────────
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const res = await fetch(`${BASE}/api/community/health`);
     assert(res.status === 200, 'GET /api/community/health returns 200');

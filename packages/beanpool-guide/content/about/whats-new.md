@@ -2,8 +2,45 @@
 slug: whats-new
 title: What's new
 summary: What changed in each version of the app, in plain words.
-related: the-bean, how-it-works, rules, faq
+related: home, the-bean, how-it-works, rules, faq, communities
 ---
+
+## The global community, near you
+
+You get these when the global community's server is updated. On the phone they need an up-to-date app.
+
+- **The listings near you.** The global community has listings from everywhere. Your phone now keeps the nearest 500 within 250 km of your area, and your own and any listing you have a deal in progress or a conversation about, wherever they are. The Market's search still finds listings from everywhere. See "More than one community".
+- **Your area.** Joining the global community has one more step after your photo: **Roughly where are you?** Tap **Use my location**, **Type a town or suburb**, or **Skip for now**. It is kept to about 10 km, never your exact spot. Change or clear it in Settings, under **Your area**. See "Your area".
+- **No area, no problem.** Without one you see the newest listings from everywhere, and a line above the Market says so. On the phone, tap it to set your area.
+- **New listings near you.** They come in as they are posted. Ones far away no longer reach your phone.
+- **In the web app**, the Market and the Map start from your area, or from a place you pick with **Distance**: nearest first, each listing with how far away it is. See "Finding things near you".
+- **Polls** have no place of their own, so each is shown at the area of the member who made it.
+
+## Home
+
+- **A new Home tab.** The app now opens on Home: a dashboard answering what needs you, what is new around you, and what you could do next. The Market is now its own tab, and the Pulse is a card on Home. You choose your cards: on the phone, **Add a card** puts one on Home and each card's **…** moves or removes it; in the web app, **Edit home** shows, hides and orders them.
+- **A saved search on Home.** Choose words such as "eggs", and whether you want offers, needs or both, a category and a distance. The card shows the first four listings that match, the same ones the Market's search finds, and **See more** opens the Market with your words in its search. It needs an up-to-date app and your community's server to be updated.
+- **Sun and moon on Home.** Tonight's moon and today's sunrise and sunset, worked out on your phone or in your browser for your community's place or your area, on your own clock. It asks nothing of your community's server. It needs an up-to-date app; until your community's server is updated, it uses your area.
+
+## Privacy by default
+
+These changes live on your community's server. You get them when your community's server is updated. The Poll choice needs an up-to-date app.
+
+- **Your balance and trades are yours.** Nobody else in your community can read your balance or your history. A trade shows only its two people, on the community activity too. A vote on removing a member shows that member's balance to the people who can vote in it, and nowhere else.
+- **Listings are for members.** Someone who has not joined can't see your community's listings or their photos. They are shown the way to the global community instead, where anyone can look around.
+- **Anonymous polls.** Polls show only the totals, unless the person who starts one makes it an **Open vote**.
+- **Enterprises' books.** Everyone still sees an enterprise's amounts. Who paid it, and the note, only its keepers and that member see.
+
+## Daily limits
+
+These live on your community's server. You get them when your community's server is updated.
+
+- **Nobody can flood a community.** One account can make up to 5,000 changes a day: posts, messages, edits and the like. Within that, up to 100 new posts, 5 new groups, 3 new enterprises, 20 invites and 50 links on the Pulse a day. Nobody using BeanPool normally comes near these. If you do reach one, the app says which, and when you can carry on.
+- **Messages.** Up to 30 a minute in any chat, direct messages too. A very long message is refused: send it in parts. Photos don't count.
+- **New people.** You can start conversations with 20 people from outside your community a day. Messaging members, and replying, is not limited.
+- **Invites.** You can have 50 that nobody has used yet. One nobody uses is deleted after its 30 days.
+- **Payments.** Up to 100 payments a day, and up to 30 people you have never paid before. Up to 100 deals asked for, accepted or approved, and 20 pledges made or changed. Receiving is never limited.
+- **Projects and enterprises** have their own limits, ten times a member's. What a keeper does for one counts against it, not against the keeper's own, except running it: keepers, pausing, winding up, and completing or turning down its deals. Once an enterprise has used up a limit for the day, what a keeper does of that for it counts against the keeper's own, so no keeper can use up its day and stop the others. A keeper can do one enterprise's worth a day for all the enterprises they keep together.
 
 ## Version 1.2.38
 
@@ -47,6 +84,7 @@ Some of these changes live on your community's server. You get them when your co
 - Only an owner can give back or take away an owner's or admin's role.
 - An admin cannot settle a stuck trade they are part of.
 - Group and event chats limit how fast one person can post.
+- **Chats between two people are always locked.** The app used to send a message without the lock if it could not find the other person's key. Now it does not send it: your words stay in the message box, and you can send again in a moment. Your community's server refuses a message between two people that is not locked.
 
 ### Fixes
 

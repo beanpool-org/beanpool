@@ -14,7 +14,9 @@ import React, { useEffect, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as Crypto from 'expo-crypto';
-import { Stack } from 'expo-router';
+import { Stack, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import { useIdentity } from './IdentityContext';
 import { anchorUrl, signedPost } from '../utils/node-post';
 import { SsoSignInError, fetchSsoNonce, signInWithGoogle } from '../utils/sso-signin';

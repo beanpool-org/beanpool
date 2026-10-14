@@ -82,10 +82,14 @@ export async function pushDirectoryNow() {
         const nodeId = p2pNode.peerId.toString();
         const timestamp = Date.now();
         
+        // The contacts are always said, null unless the owner turned each on (getDirectoryInfo): a node that publishes
+        // nothing else must still tell the directory to drop a contact it was sent before.
         const payload = {
             nodeId,
             callsign: localConfig.communityName,
             timestamp,
+            contactEmail: null,
+            contactPhone: null,
             ...directoryInfo
         };
         

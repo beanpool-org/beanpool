@@ -17,17 +17,22 @@ import {
 import { onSyncActivity } from '../lib/sync';
 import {
     timeLeftText, keeperChangeTitle, keeperChangeBody, canObjectToChange, canRemoveKeeper, canStepDown,
-    stepDownConfirmText, removeKeeperConfirmText, approvedApplicantText, successionTallyText,
+    stepDownConfirmText, removeKeeperConfirmText, approvedApplicantText, applicantBackingText, successionTallyText,
     successionDeadlineText, myChoice, successionHeading, successionExplainer,
 } from '../lib/keeper-governance';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
+import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from '../lib/chat-tombstone';
 import { MARKETPLACE_CATEGORIES } from '../lib/marketplace';
+import { pledgeClosedLine } from '../lib/enterprise-pledge';
+import { groupKindLine, keeperWords } from '@beanpool/core';
 import { ReportModal } from '../components/ReportModal';
+import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
 import { EnterpriseLocationPicker } from '../components/EnterpriseLocationPicker';
 
-function decodeThreadText(ciphertext: string, type: string): string {
-    if (type === 'removed') return 'removed by a keeper';
+/** A removed line is a keeper's removal, or its author's own delete when they deleted their account (lib/chat-tombstone.ts). */
+function decodeThreadText(ciphertext: string, type: string, metadata?: string, keeper = 'keeper'): string {
+    if (type === 'removed') return blankedWithAccount(metadata) ? ACCOUNT_DELETED_TEXT : `removed by a ${keeper}`;
     try {
         const binString = atob(ciphertext);
         const bytes = Uint8Array.from(binString, (m) => m.charCodeAt(0));
@@ -55,6 +60,8 @@ interface Props {
 export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, isMember, onOpenProfile }: Props) {
     const viewerIsMember = !!identity && isMember !== false;
     const [detail, setDetail] = useState<any>(null);
+    /** A project has a leader and collaborators; an enterprise a lead keeper and keepers (pick 8). */
+    const kw = keeperWords(detail?.lifecycle);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [isKeeperOfThis, setIsKeeperOfThis] = useState(false);
@@ -133,7 +140,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             await requestToJoinEnterprise(pubkey, Number(joinBackingPledge));
             setActionFeedback({
                 type: 'success',
-                message: `Join request submitted with ${joinBackingPledge} 🫘 backing pledge. Awaiting lead keeper review.`
+                message: `Join request submitted with ${joinBackingPledge} 🫘 backing pledge. Awaiting ${kw.lead} review.`
             });
             await load();
         } catch (err: any) {
@@ -155,14 +162,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback({
                 type: 'success',
                 message: res.applied === false
-                    ? 'Approved. They become a keeper in 3 days, unless another keeper objects first.'
-                    : `Approved keeper request with ${res.backing ?? 0} 🫘 backing.`
+                    ? `Approved. They become a ${kw.keeper} in 3 days, unless another ${kw.keeper} objects first.`
+                    : `Approved ${kw.keeper} request with ${res.backing ?? 0} 🫘 backing.`
             });
             await load();
         } catch (err: any) {
             setActionFeedback({
                 type: 'error',
-                message: err.message || 'Failed to approve keeper request.'
+                message: err.message || `Failed to approve ${kw.keeper} request.`
             });
         } finally {
             setRequestProcessingId(null);
@@ -177,13 +184,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             await declineKeeperRequest(pubkey, requestId);
             setActionFeedback({
                 type: 'success',
-                message: 'Declined keeper request.'
+                message: `Declined ${kw.keeper} request.`
             });
             await load();
         } catch (err: any) {
             setActionFeedback({
                 type: 'error',
-                message: err.message || 'Failed to decline keeper request.'
+                message: err.message || `Failed to decline ${kw.keeper} request.`
             });
         } finally {
             setRequestProcessingId(null);
@@ -201,14 +208,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             if (passed) {
                 setActionFeedback({
                     type: 'success',
-                    message: 'Succession passed! Lead role moved to candidate.'
+                    message: `Succession passed! The ${kw.lead} role moved to the candidate.`
                 });
             } else {
                 const count = res.proposal?.votesCount ?? res.votesCount ?? 1;
                 const req = res.proposal?.requiredVotes ?? res.votesRequired ?? 2;
                 setActionFeedback({
                     type: 'success',
-                    message: `Succession proposal submitted (${count} of ${req} votes). Awaiting other keepers.`
+                    message: `Succession proposal submitted (${count} of ${req} votes). Awaiting other ${kw.keepers}.`
                 });
             }
             setSelectedSuccessionCandidate('');
@@ -216,7 +223,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         } catch (err: any) {
             setActionFeedback({
                 type: 'error',
-                message: err.message || 'Failed to propose lead succession.'
+                message: err.message || `Failed to propose a new ${kw.lead}.`
             });
         } finally {
             setSubmittingSuccession(false);
@@ -240,15 +247,15 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
     const handleRemoveKeeper = async (k: any) => {
         if (changeProcessingId) return;
-        if (!window.confirm(`Remove ${k.callsign}? ${removeKeeperConfirmText(k)}`)) return;
+        if (!window.confirm(`Remove ${k.callsign}? ${removeKeeperConfirmText(k, kw)}`)) return;
         try {
             setChangeProcessingId(k.publicKey);
             setActionFeedback(null);
             await removeEnterpriseKeeper(pubkey, k.publicKey);
-            setActionFeedback({ type: 'success', message: removeKeeperConfirmText(k) });
+            setActionFeedback({ type: 'success', message: removeKeeperConfirmText(k, kw) });
             await load();
         } catch (err: any) {
-            setActionFeedback({ type: 'error', message: err.message || 'Could not remove the keeper.' });
+            setActionFeedback({ type: 'error', message: err.message || `Could not remove the ${kw.keeper}.` });
         } finally {
             setChangeProcessingId(null);
         }
@@ -257,12 +264,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
     const handleStepDown = async () => {
         const me = identity?.publicKey;
         if (!me || steppingDown) return;
-        if (!window.confirm(`Step down as keeper? ${stepDownConfirmText(me, keeperList)}`)) return;
+        if (!window.confirm(`Step down as a ${kw.keeper}? ${stepDownConfirmText(me, keeperList, kw)}`)) return;
         try {
             setSteppingDown(true);
             setActionFeedback(null);
             await stepDownAsKeeper(pubkey);
-            setActionFeedback({ type: 'success', message: 'You have stepped down as a keeper.' });
+            setActionFeedback({ type: 'success', message: `You have stepped down as a ${kw.keeper}.` });
             await load();
         } catch (err: any) {
             // The server says plainly what must happen first (e.g. the debt your pledge covers).
@@ -282,10 +289,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             if (passed) {
                 setActionFeedback({
                     type: 'success',
-                    message: 'Succession vote registered and passed! Lead role has been transferred.'
+                    message: `Succession vote registered and passed! The ${kw.lead} role has been transferred.`
                 });
             } else if (res.proposal?.closedReason === 'rejected') {
-                setActionFeedback({ type: 'success', message: 'Vote registered. Not enough keepers can now say yes, so the lead stays.' });
+                setActionFeedback({ type: 'success', message: `Vote registered. Not enough ${kw.keepers} can now say yes, so the ${kw.kind === 'project' ? 'leader' : 'lead'} stays.` });
             } else {
                 const count = res.proposal?.votesCount ?? res.votesCount ?? 1;
                 const req = res.proposal?.requiredVotes ?? res.votesRequired ?? 2;
@@ -320,7 +327,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             await treasuryPledge(pubkey, amt, pledgeMemo.trim() || undefined);
             setPledgeAmount('');
             setPledgeMemo('');
-            setActionFeedback({ type: 'success', message: `Successfully pledged ${amt} 🫘 to ${detail?.name || 'enterprise'}!` });
+            setActionFeedback({ type: 'success', message: `Successfully pledged ${amt} 🫘 to ${detail?.name || `the ${kw.kind}`}!` });
             await load();
         } catch (err: any) {
             setActionFeedback({ type: 'error', message: err.message || 'Failed to complete pledge.' });
@@ -361,7 +368,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                 setIsKeeperOfThis(false);
             }
         } catch (e: any) {
-            setError(e.message || 'Could not load community enterprise details');
+            setError(e.message || 'Check your connection and try again.');
         } finally {
             setLoading(false);
         }
@@ -386,7 +393,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             const data = await getEnterpriseLedger(pubkey, { since });
             setLedgerData(data);
         } catch (e: any) {
-            setLedgerError(e?.message || 'Could not load enterprise ledger');
+            setLedgerError(e?.message || 'Could not load the ledger');
         } finally {
             setLedgerLoading(false);
         }
@@ -438,7 +445,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
     const handleRemoveThreadMessage = async (messageId: string) => {
         if (!pubkey || threadRemovingId) return;
-        if (!window.confirm('Are you sure you want to remove this message? It will show as "removed by a keeper".')) return;
+        if (!window.confirm(`Are you sure you want to remove this message? It will show as "removed by a ${kw.keeper}".`)) return;
         setThreadRemovingId(messageId);
         setThreadError(null);
         try {
@@ -457,11 +464,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback(null);
             await pauseEnterprise(pubkey);
             setConfirmingPause(false);
-            setActionFeedback({ type: 'success', message: 'Enterprise paused for the season. Credit held at snapshot.' });
+            setActionFeedback({ type: 'success', message: `${kw.Kind} paused for the season. Credit held at snapshot.` });
             await load();
             await loadLedger(ledgerPeriod);
         } catch (e: any) {
-            setActionFeedback({ type: 'error', message: e?.message || 'Failed to pause enterprise' });
+            setActionFeedback({ type: 'error', message: e?.message || `Failed to pause the ${kw.kind}` });
         } finally {
             setLifecycleActionLoading(false);
         }
@@ -473,11 +480,11 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback(null);
             await resumeEnterprise(pubkey);
             setConfirmingResume(false);
-            setActionFeedback({ type: 'success', message: 'Enterprise resumed! Active listings are now buyable again.' });
+            setActionFeedback({ type: 'success', message: `${kw.Kind} resumed! Active listings are now buyable again.` });
             await load();
             await loadLedger(ledgerPeriod);
         } catch (e: any) {
-            setActionFeedback({ type: 'error', message: e?.message || 'Failed to resume enterprise' });
+            setActionFeedback({ type: 'error', message: e?.message || `Failed to resume the ${kw.kind}` });
         } finally {
             setLifecycleActionLoading(false);
         }
@@ -505,7 +512,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setActionFeedback(null);
             await cancelWindUp(pubkey);
             setConfirmingCancelWindUp(false);
-            setActionFeedback({ type: 'success', message: 'Wind-up cancelled. Enterprise restored to active status.' });
+            setActionFeedback({ type: 'success', message: `Wind-up cancelled. ${kw.Kind} restored to active status.` });
             await load();
             await loadLedger(ledgerPeriod);
         } catch (e: any) {
@@ -523,7 +530,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setConfirmingFinaliseWindUp(false);
             setActionFeedback({
                 type: 'success',
-                message: `Wind-up finalised. Swept ${res.sweptAmount ?? 0} 🫘 to Commons and released keepers.`,
+                message: `Wind-up finalised. Swept ${res.sweptAmount ?? 0} 🫘 to Commons and released ${kw.keepers}.`,
             });
             await load();
             await loadLedger(ledgerPeriod);
@@ -692,7 +699,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
             setPostCredits('');
             setActionFeedback({
                 type: 'success',
-                message: `${postModalMode === 'offer' ? 'Offer' : 'Need'} posted on behalf of enterprise.`
+                message: `${postModalMode === 'offer' ? 'Offer' : 'Need'} posted on behalf of the ${kw.kind}.`
             });
             await load();
         } catch (e: any) {
@@ -763,7 +770,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
         : 0;
     const windUpGraceEnded = windUpGraceEndsAt ? Date.now() >= new Date(windUpGraceEndsAt).getTime() : false;
     const initiatorKeeper = detail?.keepers?.find((k: any) => k.publicKey === detail?.windUpInitiatedBy);
-    const initiatorName = initiatorKeeper?.callsign || (detail?.windUpInitiatedBy ? `${detail.windUpInitiatedBy.slice(0, 8)}…` : 'a keeper');
+    const initiatorName = initiatorKeeper?.callsign || (detail?.windUpInitiatedBy ? `${detail.windUpInitiatedBy.slice(0, 8)}…` : `a ${kw.keeper}`);
     const keeperCount = detail?.keepers?.length || 1;
 
     const availableToBack = detail?.availableToBack ?? 0;
@@ -819,10 +826,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
             <div className="max-w-2xl mx-auto p-4 sm:p-6 space-y-6 pb-24" style={{ paddingBottom: 'calc(var(--bottom-nav-offset) + 4rem)' }}>
                 {loading ? (
-                    <div className="py-20 text-center text-nature-500 font-medium">Loading enterprise details…</div>
+                    <div className="py-20 text-center text-nature-500 font-medium">Loading…</div>
                 ) : error ? (
                     <div className="p-6 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 text-red-600 dark:text-red-400 text-center">
-                        <p className="font-bold mb-2">Error loading enterprise</p>
+                        <p className="font-bold mb-2">Couldn't load this group</p>
                         <p className="text-sm">{error}</p>
                         <button
                             onClick={load}
@@ -832,7 +839,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         </button>
                     </div>
                 ) : !detail ? (
-                    <div className="py-20 text-center text-nature-500">Enterprise not found.</div>
+                    <div className="py-20 text-center text-nature-500">Group not found.</div>
                 ) : (
                     <>
                         {/* Identity Banner */}
@@ -855,7 +862,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     {name}
                                 </h1>
                                 <p className="text-xs sm:text-sm text-nature-500 dark:text-nature-400 mt-0.5">
-                                    {detail?.lifecycle === 'bounded' ? 'Bounded enterprise · Community project' : 'Community enterprise · Run by the Commons'}
+                                    {groupKindLine(detail?.lifecycle)}
                                 </p>
                             </div>
                         </div>
@@ -904,7 +911,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     Winding up ({windUpDaysLeft} day{windUpDaysLeft === 1 ? '' : 's'} left · started by {initiatorName})
                                 </p>
                                 <p className="text-xs text-rose-800 dark:text-rose-300 leading-relaxed font-medium">
-                                    This enterprise is winding down. Listings are inactive and cannot be bought. Any keeper can stop this during the 7-day grace period.
+                                    This {kw.kind} is winding down. Listings are inactive and cannot be bought. Any {kw.keeper} can stop this during the 7-day grace period.
                                 </p>
                                 {windUpGraceEnded && (
                                     <p className="text-xs font-bold text-rose-700 dark:text-rose-400 pt-1">
@@ -930,7 +937,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     Completed · Wound up
                                 </p>
                                 <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed font-medium">
-                                    This enterprise has completed its purpose and wound up permanently. Surplus was returned to the Commons, keepers were released, and listings are closed.
+                                    This {kw.kind} has completed its purpose and wound up permanently. Surplus was returned to the Commons, {kw.keepers} were released, and listings are closed.
                                 </p>
                             </div>
                         )}
@@ -953,6 +960,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             const progress = Math.min(100, (current / goal) * 100);
                             const isFunded = current >= goal || detail.status === 'funded' || detail.status === 'completed';
                             const daysRemaining = getDaysRemaining(detail.deadlineAt);
+                            // The node takes a pledge only while the enterprise is active: otherwise a sentence, not a box.
+                            const pledgesClosed = pledgeClosedLine(detail.status, detail.lifecycle);
 
                             return (
                                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 shadow-sm space-y-4">
@@ -962,7 +971,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 Funding Progress
                                             </div>
                                             <div className={`text-2xl font-black mt-1 ${isFunded ? 'text-emerald-600 dark:text-emerald-400' : 'text-nature-900 dark:text-white'}`}>
-                                                {current} 🫘 <span className="text-xs font-semibold text-nature-500">raised of {goal} 🫘 goal</span>
+                                                {current} 🫘 <span className="text-xs font-semibold text-nature-500 dark:text-nature-400">raised of {goal} 🫘 goal</span>
                                             </div>
                                         </div>
                                         {daysRemaining && (
@@ -985,12 +994,17 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
                                     <p className="text-xs text-nature-500 dark:text-nature-400 leading-relaxed">
                                         {isFunded
-                                            ? "🎉 This enterprise reached its funding goal! Pledged funds are held securely in the enterprise account."
-                                            : "🔒 Pledges are held securely in the enterprise account, spendable only on transparent offers and needs that the whole community can see."}
+                                            ? `🎉 This ${kw.kind} reached its funding goal! Pledged funds are held securely in the ${kw.kind}'s account.`
+                                            : `🔒 Pledges are held securely in the ${kw.kind}'s account, spendable only on transparent offers and needs that the whole community can see.`}
                                     </p>
 
                                     {/* Inline Pledge Form — pledging moves the member's own beans */}
-                                    {viewerIsMember && (
+                                    {viewerIsMember && pledgesClosed && (
+                                    <p data-testid="pledges-closed" className="pt-3 border-t border-nature-100 dark:border-nature-800 text-sm font-semibold text-nature-700 dark:text-nature-300 leading-relaxed">
+                                        {pledgesClosed}
+                                    </p>
+                                    )}
+                                    {viewerIsMember && !pledgesClosed && (
                                     <form onSubmit={handlePledge} className="pt-2 border-t border-nature-100 dark:border-nature-800 space-y-3">
                                         <div className="text-xs font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
                                             Back this initiative
@@ -1015,7 +1029,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             <button
                                                 type="submit"
                                                 disabled={pledging || !pledgeAmount}
-                                                className="py-2 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-sm transition-all disabled:opacity-40 whitespace-nowrap"
+                                                className="py-2 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-sm shadow-sm transition-all disabled:opacity-40 whitespace-nowrap"
                                             >
                                                 {pledging ? 'Pledging…' : 'Pledge Beans 🌱'}
                                             </button>
@@ -1029,7 +1043,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         {/* Balance Card */}
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-6 shadow-sm">
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
-                                Enterprise Balance
+                                {kw.Kind} Balance
                             </div>
                             <div className={`text-4xl font-black mt-2 ${balance < 0 ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                                 {balance} 🫘
@@ -1041,7 +1055,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     aria-live="polite"
                                     className="mt-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-xs font-semibold leading-relaxed"
                                 >
-                                    ⚠️ In Deficit: This enterprise is currently in deficit ({balance} 🫘). Credit buys inputs and supplies, but keepers can only be paid from profit. Keepers cannot be paid while the enterprise is in deficit.
+                                    ⚠️ In Deficit: This {kw.kind} is currently in deficit ({balance} 🫘). Credit buys inputs and supplies, but {kw.keepers} can only be paid from profit. {kw.Keepers} cannot be paid while the {kw.kind} is in deficit.
                                 </div>
                             )}
 
@@ -1049,7 +1063,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 at the text size in use (rem-based, so this follows the phone's font scale too). */}
                             <div className="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-3 mt-5 pt-5 border-t border-nature-100 dark:border-nature-800" data-testid="enterprise-balance-tiles">
                                 <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
-                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">
+                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-300">
                                         Credit Line
                                     </div>
                                     <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
@@ -1057,7 +1071,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     </div>
                                 </div>
                                 <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
-                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">
+                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-300">
                                         Live Offers
                                     </div>
                                     <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
@@ -1065,7 +1079,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     </div>
                                 </div>
                                 <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
-                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">
+                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-300">
                                         Earned Surplus
                                     </div>
                                     <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
@@ -1073,7 +1087,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     </div>
                                 </div>
                                 <div className="bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
-                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">
+                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-300">
                                         Capital Ceiling
                                     </div>
                                     <div className="text-lg font-extrabold text-nature-900 dark:text-white mt-1">
@@ -1085,15 +1099,15 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             {pendingClaims.length > 0 && (
                                 <div className="mt-4 p-3.5 rounded-xl bg-nature-50 dark:bg-nature-800/50 border border-nature-200 dark:border-nature-700">
                                     <div className="flex justify-between items-center text-xs">
-                                        <span className="font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
+                                        <span className="font-bold uppercase tracking-wider text-nature-500 dark:text-nature-300">
                                             Pending Wage Claims ({pendingClaims.length})
                                         </span>
                                         <span className="font-black text-amber-500 dark:text-amber-400 text-sm">
                                             {pendingClaimsTotal} 🫘
                                         </span>
                                     </div>
-                                    <p className="text-xs text-nature-500 dark:text-nature-400 mt-1 leading-relaxed">
-                                        Deferred until enterprise earns sufficient trading profit. Paid automatically from future sales.
+                                    <p className="text-xs text-nature-500 dark:text-nature-300 mt-1 leading-relaxed">
+                                        Deferred until the {kw.kind} earns sufficient trading profit. Paid automatically from future sales.
                                     </p>
                                 </div>
                             )}
@@ -1116,6 +1130,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             </div>
                         )}
 
+                        {/* The keepers' votes (DESIGN-group-decisions S2): drawn only for those the node answers */}
+                        <EnterpriseDecisions treasuryKey={pubkey} myPubkey={myPubkey} keepers={keeperList} balance={balance}
+                            earnedSurplus={typeof detail?.earnedSurplus === 'number' ? detail.earnedSurplus : null} lifecycle={detail?.lifecycle} />
+
                         {/* Operator Controls Panel */}
                         {isKeeperOfThis && (
                             <div className="bg-emerald-50/40 dark:bg-emerald-950/20 border-2 border-emerald-500/40 rounded-2xl p-5 space-y-5 shadow-sm">
@@ -1135,7 +1153,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             setPostRepeatable(true);
                                             setPostError(null);
                                         }}
-                                        className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        className="py-3 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         <span>🏷️</span> Post Offer
                                     </button>
@@ -1147,7 +1165,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             setPostRepeatable(false);
                                             setPostError(null);
                                         }}
-                                        className="py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                        className="py-3 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-sm shadow-sm transition-all active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                     >
                                         <span>🤝</span> Post Need
                                     </button>
@@ -1163,7 +1181,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     )}
                                     {detail.status === 'completed' && (
                                         <div className="col-span-2 text-center text-xs font-semibold text-stone-600 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 p-2 rounded-lg">
-                                            Enterprise closed permanently.
+                                            {kw.Kind} closed permanently.
                                         </div>
                                     )}
                                 </div>
@@ -1254,7 +1272,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             type="button"
                                                             disabled={actionState?.id === b.id}
                                                             onClick={() => handleApproveBid(b.id)}
-                                                            className="flex-1 min-h-[44px] py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
+                                                            className="flex-1 min-h-[44px] py-2 px-3 rounded-lg bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
                                                         >
                                                             {actionState?.id === b.id && actionState?.type === 'approve' ? 'Approving…' : `Approve Bid (${b.credits} 🫘)`}
                                                         </button>
@@ -1262,7 +1280,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             type="button"
                                                             disabled={actionState?.id === b.id}
                                                             onClick={() => handleRejectBid(b.id)}
-                                                            className="min-h-[44px] py-2 px-3 rounded-lg border border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 font-bold text-xs hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 flex items-center justify-center"
+                                                            className="min-h-[44px] py-2 px-3 rounded-lg border border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-300 font-bold text-xs hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50 flex items-center justify-center"
                                                         >
                                                             {actionState?.id === b.id && actionState?.type === 'reject' ? 'Declining…' : 'Decline'}
                                                         </button>
@@ -1303,7 +1321,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         {d.action_required === 'fulfill' ? (
                                                             <div
                                                                 onClick={() => onNavigatePost?.(d.post_id)}
-                                                                className="w-full min-h-[44px] py-2.5 px-4 rounded-lg bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 font-bold text-xs text-center flex items-center justify-center cursor-pointer hover:bg-nature-200 dark:hover:bg-nature-700 transition-colors"
+                                                                className="w-full min-h-[44px] py-2.5 px-4 rounded-lg bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 font-bold text-xs text-center flex items-center justify-center cursor-pointer hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors"
                                                             >
                                                                 Fulfill Deal · Awaiting Customer Release
                                                             </div>
@@ -1312,7 +1330,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 type="button"
                                                                 disabled={actionState?.id === d.id}
                                                                 onClick={() => handleCompleteDeal(d.id, d.post_title, d.credits, d.price_type, d.hours)}
-                                                                className="w-full min-h-[44px] py-2.5 px-4 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
+                                                                className="w-full min-h-[44px] py-2.5 px-4 rounded-lg bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-extrabold text-xs shadow-sm transition-all disabled:opacity-50 flex items-center justify-center"
                                                             >
                                                                 {actionState?.id === d.id && actionState?.type === 'complete' ? 'Releasing…' : `Release Payment (${d.credits} 🫘)`}
                                                             </button>
@@ -1340,7 +1358,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     <span>Confirm Pause for Season</span>
                                                 </div>
                                                 <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed font-medium">
-                                                    Pausing for the season holds your credit floor at {heldCredit} beans{pauseDateFormatted ? ` until ${pauseDateFormatted}` : ' for up to 90 days'} and pauses active listings so members cannot buy. Any keeper can resume at any time.
+                                                    Pausing for the season holds your credit floor at {heldCredit} beans{pauseDateFormatted ? ` until ${pauseDateFormatted}` : ' for up to 90 days'} and pauses active listings so members cannot buy. Any {kw.keeper} can resume at any time.
                                                 </p>
                                                 <div className="flex gap-2 pt-1">
                                                     <button
@@ -1367,7 +1385,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             <div className="p-4 rounded-xl border-2 border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/40 space-y-3">
                                                 <div className="font-bold text-sm text-emerald-950 dark:text-emerald-100 flex items-center gap-2">
                                                     <span>▶️</span>
-                                                    <span>Confirm Resume Enterprise</span>
+                                                    <span>Confirm Resume {kw.Kind}</span>
                                                 </div>
                                                 <p className="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed font-medium">
                                                     Resuming reactivates all listings and restores the credit floor to normal daily calculation.
@@ -1377,7 +1395,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         type="button"
                                                         disabled={lifecycleActionLoading}
                                                         onClick={handleResume}
-                                                        className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                        className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
                                                     >
                                                         {lifecycleActionLoading ? 'Resuming…' : 'Confirm Resume'}
                                                     </button>
@@ -1397,14 +1415,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             <div className="p-4 rounded-xl border-2 border-red-400 dark:border-red-600 bg-red-50 dark:bg-red-950/50 space-y-3">
                                                 <div className="font-bold text-sm text-red-950 dark:text-red-100 flex items-center gap-2">
                                                     <span>⚠️</span>
-                                                    <span>Start Enterprise Wind-Up</span>
+                                                    <span>Start {kw.Kind} Wind-Up</span>
                                                 </div>
                                                 <p className="text-xs text-red-900 dark:text-red-200 leading-relaxed font-semibold">
-                                                    Winding up returns {Math.max(0, balance).toFixed(2)} beans to the Commons, releases {keeperCount} keeper{keeperCount === 1 ? '' : 's'}, and closes {name} for good. Any keeper can stop this for the next 7 days.
+                                                    Winding up returns {Math.max(0, balance).toFixed(2)} beans to the Commons, releases {keeperCount} {keeperCount === 1 ? kw.keeper : kw.keepers}, and closes {name} for good. Any {kw.keeper} can stop this for the next 7 days.
                                                 </p>
                                                 {balance < 0 && (
                                                     <p className="text-xs text-amber-700 dark:text-amber-400 font-bold">
-                                                        ⚠️ Cannot wind up an enterprise in deficit ({balance} 🫘). Debt must be resolved or written off first.
+                                                        ⚠️ Cannot wind up {kw.kind === 'project' ? 'a project' : 'an enterprise'} in deficit ({balance} 🫘). Debt must be resolved or written off first.
                                                     </p>
                                                 )}
                                                 <div className="flex gap-2 pt-1">
@@ -1432,17 +1450,17 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             <div className="p-4 rounded-xl border-2 border-emerald-500/40 bg-emerald-50/60 dark:bg-emerald-950/40 space-y-3">
                                                 <div className="font-bold text-sm text-emerald-950 dark:text-emerald-100 flex items-center gap-2">
                                                     <span>🛑</span>
-                                                    <span>Stop Enterprise Wind-Up</span>
+                                                    <span>Stop {kw.Kind} Wind-Up</span>
                                                 </div>
                                                 <p className="text-xs text-emerald-900 dark:text-emerald-200 leading-relaxed font-medium">
-                                                    Cancelling wind-up restores {name} to active status immediately. Keepers remain appointed and listings can resume.
+                                                    Cancelling wind-up restores {name} to active status immediately. {kw.Keepers} remain appointed and listings can resume.
                                                 </p>
                                                 <div className="flex gap-2 pt-1">
                                                     <button
                                                         type="button"
                                                         disabled={lifecycleActionLoading}
                                                         onClick={handleCancelWindUp}
-                                                        className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
+                                                        className="flex-1 py-2 px-3 rounded-lg bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50"
                                                     >
                                                         {lifecycleActionLoading ? 'Stopping Wind-Up…' : 'Confirm Stop Wind-Up'}
                                                     </button>
@@ -1462,10 +1480,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             <div className="p-4 rounded-xl border-2 border-red-400 dark:border-red-600 bg-red-50 dark:bg-red-950/50 space-y-3">
                                                 <div className="font-bold text-sm text-red-950 dark:text-red-100 flex items-center gap-2">
                                                     <span>🏁</span>
-                                                    <span>Finalise Enterprise Wind-Up</span>
+                                                    <span>Finalise {kw.Kind} Wind-Up</span>
                                                 </div>
                                                 <p className="text-xs text-red-900 dark:text-red-200 leading-relaxed font-semibold">
-                                                    The 7-day grace period has elapsed. Finalising sweeps {Math.max(0, balance).toFixed(2)} beans to the Commons, releases all keepers, and closes {name} for good.
+                                                    The 7-day grace period has elapsed. Finalising sweeps {Math.max(0, balance).toFixed(2)} beans to the Commons, releases all {kw.keepers}, and closes {name} for good.
                                                 </p>
                                                 <div className="flex gap-2 pt-1">
                                                     <button
@@ -1498,7 +1516,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             onClick={() => setConfirmingResume(true)}
                                                             className="py-2.5 px-3 rounded-xl border border-emerald-600 dark:border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-bold text-xs shadow-xs hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors flex items-center justify-center gap-1.5"
                                                         >
-                                                            <span>▶️</span> Resume Enterprise
+                                                            <span>▶️</span> Resume {kw.Kind}
                                                         </button>
                                                     ) : (
                                                         <button
@@ -1565,7 +1583,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             <div className="bg-amber-50/50 dark:bg-amber-950/20 border-2 border-amber-400/40 rounded-2xl p-5 space-y-4 shadow-sm">
                                 <div className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
                                     <span aria-hidden="true">📬</span>
-                                    <span>Pending Keeper Requests ({keeperRequests.length})</span>
+                                    <span>Asking to join as {kw.keepers} ({keeperRequests.length})</span>
                                 </div>
                                 <div className="space-y-3">
                                     {keeperRequests.map((req) => (
@@ -1582,6 +1600,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     <div className="text-[11px] text-nature-500 dark:text-nature-400">
                                                         Backing pledge: <span className="font-bold text-emerald-600 dark:text-emerald-400">{req.pledgedBacking} 🫘</span>
                                                     </div>
+                                                    {applicantBackingText(req.canBackPledge) && (
+                                                        <div className={req.canBackPledge === false
+                                                            ? 'text-[11px] font-semibold text-amber-800 dark:text-amber-300'
+                                                            : 'text-[11px] text-nature-500 dark:text-nature-400'}>
+                                                            {applicantBackingText(req.canBackPledge)}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                             {req.pendingChange ? (
@@ -1594,7 +1619,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                     type="button"
                                                     disabled={requestProcessingId === req.id}
                                                     onClick={() => handleApproveRequest(req.id)}
-                                                    className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 min-h-[36px]"
+                                                    className="px-3 py-2 rounded-lg bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white text-xs font-bold shadow-xs transition-colors disabled:opacity-50 min-h-[36px]"
                                                 >
                                                     {requestProcessingId === req.id ? 'Approving…' : 'Approve'}
                                                 </button>
@@ -1618,12 +1643,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         {keeperChanges.length > 0 && (
                             <div className="bg-amber-50/50 dark:bg-amber-950/20 border-2 border-amber-400/40 rounded-2xl p-5 space-y-3 shadow-sm">
                                 <div className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
-                                    Keeper changes waiting ({keeperChanges.length})
+                                    {kw.Keeper} changes waiting ({keeperChanges.length})
                                 </div>
                                 {keeperChanges.map((c) => (
                                     <div key={c.id} className="bg-white dark:bg-nature-900 border border-amber-200 dark:border-amber-800/60 rounded-xl p-3 space-y-2">
-                                        <div className="text-xs font-bold text-nature-900 dark:text-white">{keeperChangeTitle(c)}</div>
-                                        <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">{keeperChangeBody(c)}</p>
+                                        <div className="text-xs font-bold text-nature-900 dark:text-white">{keeperChangeTitle(c, kw)}</div>
+                                        <p className="text-xs text-nature-600 dark:text-nature-400 leading-relaxed">{keeperChangeBody(c, kw)}</p>
                                         <div className="text-[11px] font-semibold text-amber-800 dark:text-amber-300">
                                             <span aria-hidden="true">⏳ </span>Objection window: {timeLeftText(c.appliesAt)}
                                         </div>
@@ -1632,7 +1657,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 type="button"
                                                 disabled={changeProcessingId === c.id}
                                                 onClick={() => handleObjectToChange(c.id)}
-                                                aria-label={`Object: ${keeperChangeTitle(c)}`}
+                                                aria-label={`Object: ${keeperChangeTitle(c, kw)}`}
                                                 className="w-full px-3 py-2 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-200 text-xs font-bold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 min-h-[48px]"
                                             >
                                                 {changeProcessingId === c.id ? 'Objecting…' : 'Object'}
@@ -1650,10 +1675,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     <span className="text-xl" aria-hidden="true">⚠️</span>
                                     <div>
                                         <div className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-300">
-                                            {successionHeading(leadInactivity)}
+                                            {successionHeading(leadInactivity, kw)}
                                         </div>
                                         <p className="text-xs text-amber-900 dark:text-amber-200 mt-1 leading-relaxed">
-                                            {successionExplainer(leadInactivity)}
+                                            {successionExplainer(leadInactivity, kw)}
                                         </p>
                                     </div>
                                 </div>
@@ -1661,10 +1686,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 {activeProposal ? (
                                     <div className="bg-white dark:bg-nature-900 border border-amber-300 dark:border-amber-800 rounded-xl p-4 space-y-3">
                                         <div className="text-xs font-bold text-nature-900 dark:text-white">
-                                            Active Succession Proposal: Move lead role to <span className="text-emerald-700 dark:text-emerald-400 font-extrabold">{activeProposal.candidateCallsign}</span>
+                                            Active Succession Proposal: Move the {kw.lead} role to <span className="text-emerald-700 dark:text-emerald-400 font-extrabold">{activeProposal.candidateCallsign}</span>
                                         </div>
                                         <div className="text-xs text-nature-600 dark:text-nature-400">
-                                            {successionTallyText(activeProposal)}
+                                            {successionTallyText(activeProposal, kw)}
                                         </div>
                                         {successionDeadlineText(activeProposal) && (
                                             <div className="text-xs text-nature-600 dark:text-nature-400">
@@ -1684,8 +1709,8 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             type="button"
                                                             disabled={submittingSuccession}
                                                             onClick={() => handleVoteSuccession(activeProposal.id, 'yes')}
-                                                            aria-label={`Yes, make ${activeProposal.candidateCallsign} lead keeper`}
-                                                            className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[48px]"
+                                                            aria-label={`Yes, make ${activeProposal.candidateCallsign} ${kw.lead}`}
+                                                            className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[48px]"
                                                         >
                                                             {submittingSuccession ? 'Registering…' : 'Yes'}
                                                         </button>
@@ -1693,7 +1718,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             type="button"
                                                             disabled={submittingSuccession}
                                                             onClick={() => handleVoteSuccession(activeProposal.id, 'no')}
-                                                            aria-label={`No, do not make ${activeProposal.candidateCallsign} lead keeper`}
+                                                            aria-label={`No, do not make ${activeProposal.candidateCallsign} ${kw.lead}`}
                                                             className="flex-1 py-2.5 px-4 rounded-xl border border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-200 font-bold text-xs transition-all disabled:opacity-50 min-h-[48px]"
                                                         >
                                                             No
@@ -1706,7 +1731,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 ) : isEligibleSuccessor ? (
                                     <form onSubmit={handleProposeSuccession} className="bg-white dark:bg-nature-900 border border-amber-300 dark:border-amber-800 rounded-xl p-4 space-y-3">
                                         <div className="text-xs font-bold text-nature-800 dark:text-nature-200">
-                                            Propose an Active Keeper as Lead
+                                            Propose an Active {kw.Keeper} as {kw.kind === 'project' ? 'Leader' : 'Lead'}
                                         </div>
                                         <div className="flex flex-col sm:flex-row gap-2">
                                             <select
@@ -1714,7 +1739,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 onChange={(e) => setSelectedSuccessionCandidate(e.target.value)}
                                                 className="flex-1 bg-nature-50 dark:bg-nature-800 border border-nature-300 dark:border-nature-700 rounded-xl px-3 py-2 text-xs font-semibold text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-amber-500 min-h-[44px]"
                                             >
-                                                <option value="">Select an active keeper…</option>
+                                                <option value="">Select an active {kw.keeper}…</option>
                                                 {keepers
                                                     .filter((k: any) => !k.suspended && (k.publicKey || k.pubkey || k.memberPubkey) !== leadInactivity.leadPubkey)
                                                     .map((k: any) => {
@@ -1731,7 +1756,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 disabled={submittingSuccession || !selectedSuccessionCandidate}
                                                 className="py-2 px-4 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 shrink-0 min-h-[44px]"
                                             >
-                                                {submittingSuccession ? 'Proposing…' : 'Propose Lead'}
+                                                {submittingSuccession ? 'Proposing…' : `Propose ${kw.kind === 'project' ? 'Leader' : 'Lead'}`}
                                             </button>
                                         </div>
                                     </form>
@@ -1745,13 +1770,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <div className="bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-2xl p-5 space-y-2">
                                     <div className="text-xs font-bold uppercase tracking-wider text-sky-800 dark:text-sky-300 flex items-center gap-2">
                                         <span aria-hidden="true">⏳</span>
-                                        <span>Keeper Request Pending</span>
+                                        <span>Your request to join is waiting</span>
                                     </div>
                                     <p className="text-xs text-sky-900 dark:text-sky-200 leading-relaxed">
-                                        {myPendingRequest.pendingChange ? approvedApplicantText(myPendingRequest.pendingChange.appliesAt) : (
+                                        {myPendingRequest.pendingChange ? approvedApplicantText(myPendingRequest.pendingChange.appliesAt, undefined, kw) : (
                                             <>
-                                                You asked to join this enterprise with <strong className="font-bold text-emerald-700 dark:text-emerald-300">{myPendingRequest.pledgedBacking} 🫘</strong> of backing standing.
-                                                Awaiting review by the lead keeper.
+                                                You asked to join this {kw.kind} with <strong className="font-bold text-emerald-700 dark:text-emerald-300">{myPendingRequest.pledgedBacking} 🫘</strong> of backing standing.
+                                                Waiting for the {kw.lead}.
                                             </>
                                         )}
                                     </p>
@@ -1761,17 +1786,17 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     <div>
                                         <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 flex items-center gap-1.5">
                                             <span aria-hidden="true">🤝</span>
-                                            <span>Ask to Join as a Keeper</span>
+                                            <span>Ask to join as a {kw.keeper}</span>
                                         </div>
                                         <p className="text-xs text-nature-600 dark:text-nature-400 mt-1 leading-relaxed">
-                                            Help run this enterprise. You can back it with your earned trading standing to expand its credit floor.
+                                            Help run this {kw.kind}. You can back it with your earned trading standing to expand its credit floor.
                                         </p>
                                     </div>
 
                                     <form onSubmit={handleJoinRequest} className="space-y-4">
                                         <div className="space-y-2">
                                             <label htmlFor="join-backing-input" className="block text-xs font-bold text-nature-800 dark:text-nature-200">
-                                                Back this enterprise with your standing: 0 … {availableToBack}
+                                                Back this {kw.kind} with your standing: 0 … {availableToBack}
                                             </label>
                                             <div className="flex items-center gap-3">
                                                 <input
@@ -1790,7 +1815,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 />
                                                 <input
                                                     type="range"
-                                                    aria-label={`Back this enterprise with your standing: 0 to ${availableToBack}`}
+                                                    aria-label={`Back this ${kw.kind} with your standing: 0 to ${availableToBack}`}
                                                     min={0}
                                                     max={availableToBack}
                                                     step={1}
@@ -1804,16 +1829,16 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 </span>
                                             </div>
                                             <p className="text-[11px] text-nature-500 dark:text-nature-400">
-                                                A pledge of 0 is valid: someone who helps run it without pledging standing can still be a keeper.
+                                                A pledge of 0 is valid: someone who helps run it without pledging standing can still be a {kw.keeper}.
                                             </p>
                                         </div>
 
                                         <button
                                             type="submit"
                                             disabled={submittingJoinRequest}
-                                            className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[44px]"
+                                            className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-xs shadow-sm transition-all disabled:opacity-50 min-h-[44px]"
                                         >
-                                            {submittingJoinRequest ? 'Submitting request…' : 'Request to join as keeper'}
+                                            {submittingJoinRequest ? 'Submitting request…' : `Request to join as a ${kw.keeper}`}
                                         </button>
                                     </form>
                                 </div>
@@ -1824,7 +1849,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         {keepers.length > 0 && (
                             <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-3">
                                 <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
-                                    Accountable Keepers ({keepers.length})
+                                    {kw.Keepers} ({keepers.length})
                                 </div>
                                 <div className="flex flex-wrap gap-2">
                                     {keepers.map((k: any) => {
@@ -1840,22 +1865,22 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             <KeeperRow
                                                 key={keeperKey}
                                                 {...(canOpen ? { type: 'button' as const, onClick: () => onOpenProfile!(keeperKey!) } : {})}
-                                                className={`inline-flex items-center gap-2 px-3 py-1.5 min-h-[48px] rounded-xl bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-xs font-semibold text-nature-800 dark:text-nature-200 text-left ${canOpen ? 'cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 transition-colors' : ''} ${isSuspended ? 'opacity-60' : ''}`}
+                                                className={`inline-flex items-center gap-2 px-3 py-1.5 min-h-[48px] rounded-xl bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 text-xs font-semibold text-nature-800 dark:text-nature-100 text-left ${canOpen ? 'cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 transition-colors' : ''} ${isSuspended ? 'opacity-60 dark:opacity-90' : ''}`}
                                             >
                                                 <span aria-hidden="true">👤</span>
                                                 <span>{k.callsign}</span>
                                                 {isSuspended && (
-                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-nature-200 text-nature-700 dark:bg-nature-700 dark:text-nature-300">
+                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-nature-200 text-nature-700 dark:bg-nature-700 dark:text-nature-200">
                                                         Suspended
                                                     </span>
                                                 )}
                                                 {isLead ? (
                                                     <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
-                                                        Lead keeper
+                                                        {kw.Lead}
                                                     </span>
                                                 ) : (
-                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-nature-200/70 text-nature-700 dark:bg-nature-700 dark:text-nature-300">
-                                                        Keeper
+                                                    <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-nature-200/70 text-nature-700 dark:bg-nature-700 dark:text-nature-200">
+                                                        {kw.Keeper}
                                                     </span>
                                                 )}
                                                 {Number(k.backing) > 0 && (
@@ -1887,7 +1912,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                 onClick={handleStepDown}
                                                 className="w-full px-3 py-2 rounded-lg border border-nature-300 dark:border-nature-700 text-nature-700 dark:text-nature-300 text-xs font-bold hover:bg-nature-100 dark:hover:bg-nature-800 transition-colors disabled:opacity-50 min-h-[48px]"
                                             >
-                                                {steppingDown ? 'Stepping down…' : 'Step down as keeper'}
+                                                {steppingDown ? 'Stepping down…' : `Step down as a ${kw.keeper}`}
                                             </button>
                                         )}
                                     </div>
@@ -1918,7 +1943,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             className={`px-3 py-2.5 text-xs font-bold rounded-lg transition-colors ${
                                                 ledgerPeriod === period
                                                     ? 'bg-white dark:bg-nature-700 text-nature-900 dark:text-white shadow-xs'
-                                                    : 'text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-white'
+                                                    : 'text-nature-600 dark:text-nature-300 hover:text-nature-900 dark:hover:text-white'
                                             }`}
                                         >
                                             {period === 'all' ? 'All time' : period === '30d' ? '30d' : period === '90d' ? '90d' : '1y'}
@@ -1946,7 +1971,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     </div>
                                 </div>
                                 <div className="col-span-2 sm:col-span-1 bg-nature-50 dark:bg-nature-800/50 rounded-xl p-3 border border-nature-200/60 dark:border-nature-700/50">
-                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-400">
+                                    <div className="text-[11px] font-bold uppercase tracking-wide text-nature-500 dark:text-nature-300">
                                         Net change
                                     </div>
                                     <div className={`text-lg font-black mt-1 ${
@@ -1977,12 +2002,12 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     The full income and spend record is visible to members.
                                 </div>
                             ) : ledgerError ? (
-                                <div className="py-4 text-center text-xs text-red-500 font-medium space-y-2">
+                                <div className="py-4 text-center text-xs text-red-500 dark:text-red-300 font-medium space-y-2">
                                     <p>{ledgerError}</p>
                                     <button
                                         type="button"
                                         onClick={() => loadLedger(ledgerPeriod)}
-                                        className="text-xs font-bold underline text-red-600 dark:text-red-400"
+                                        className="text-xs font-bold underline text-red-600 dark:text-red-300"
                                     >
                                         Try again
                                     </button>
@@ -1995,7 +2020,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <div className="space-y-3">
                                     {/* Below sm each transaction is a stacked row (what for + amount, with + running
                                         balance, when): six columns needed 642px of a 272px card on a 320px phone. */}
-                                    <div className="sm:overflow-x-auto sm:-mx-5 sm:px-5" tabIndex={0} role="region" aria-label="Enterprise ledger transactions">
+                                    <div className="sm:overflow-x-auto sm:-mx-5 sm:px-5" tabIndex={0} role="region" aria-label={`${kw.Kind} ledger transactions`}>
                                         <table className="block sm:table w-full text-left text-xs border-collapse sm:min-w-[500px]">
                                             <thead className="hidden sm:table-header-group">
                                                 <tr className="border-b border-nature-200 dark:border-nature-800 text-nature-500 dark:text-nature-400 font-bold uppercase text-[10px] tracking-wider">
@@ -2010,7 +2035,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                             <tbody className="block sm:table-row-group divide-y divide-nature-100 dark:divide-nature-800">
                                                 {ledgerData.entries.map((entry) => (
                                                     <tr key={entry.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5 py-2.5 sm:py-0 sm:table-row hover:bg-nature-50/50 dark:hover:bg-nature-800/30 transition-colors" data-testid="ledger-entry">
-                                                        <td className="order-5 text-[11px] sm:text-xs sm:order-none sm:py-2.5 sm:pr-3 text-nature-500 dark:text-nature-400 whitespace-nowrap">
+                                                        <td className="order-5 text-[11px] sm:text-xs sm:order-none sm:py-2.5 sm:pr-3 text-nature-500 dark:text-nature-300 whitespace-nowrap">
                                                             {formatShortDate(entry.timestamp)}
                                                         </td>
                                                         <td className="order-1 sm:order-none sm:py-2.5 sm:px-3 font-semibold text-nature-800 dark:text-nature-200 [overflow-wrap:anywhere] sm:max-w-[140px] sm:truncate" title={entry.memo}>
@@ -2020,13 +2045,13 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                             {entry.counterpartyName || 'Member'}
                                                         </td>
                                                         <td className={`${entry.direction === 'income' ? 'order-2' : 'hidden'} sm:order-none sm:table-cell sm:py-2.5 sm:px-3 text-right font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap`}>
-                                                            {entry.direction === 'income' ? `+${entry.amount.toFixed(2)} 🫘` : <span className="text-nature-300 dark:text-nature-700 font-normal">—</span>}
+                                                            {entry.direction === 'income' ? `+${entry.amount.toFixed(2)} 🫘` : <span className="text-nature-300 dark:text-nature-300 font-normal">—</span>}
                                                         </td>
                                                         <td className={`${entry.direction === 'spend' ? 'order-2' : 'hidden'} sm:order-none sm:table-cell sm:py-2.5 sm:px-3 text-right font-bold text-amber-600 dark:text-amber-400 whitespace-nowrap`}>
-                                                            {entry.direction === 'spend' ? `-${entry.amount.toFixed(2)} 🫘` : <span className="text-nature-300 dark:text-nature-700 font-normal">—</span>}
+                                                            {entry.direction === 'spend' ? `-${entry.amount.toFixed(2)} 🫘` : <span className="text-nature-300 dark:text-nature-300 font-normal">—</span>}
                                                         </td>
                                                         <td className="order-4 text-[11px] sm:text-xs sm:order-none sm:py-2.5 sm:pl-3 text-right font-extrabold text-nature-900 dark:text-white whitespace-nowrap">
-                                                            <span className="sm:hidden font-semibold text-nature-500 dark:text-nature-400">bal </span>{entry.runningBalance.toFixed(2)} 🫘
+                                                            <span className="sm:hidden font-semibold text-nature-500 dark:text-nature-300">bal </span>{entry.runningBalance.toFixed(2)} 🫘
                                                         </td>
                                                     </tr>
                                                 ))}
@@ -2044,7 +2069,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                         {/* Enterprise Listings */}
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm space-y-3">
                             <div className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400">
-                                Enterprise Listings ({posts.length})
+                                {kw.Kind} Listings ({posts.length})
                             </div>
                             {posts.length === 0 ? (
                                 <p className="text-xs text-nature-400 italic py-2">No listings posted yet.</p>
@@ -2128,7 +2153,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                         {formatTimestamp(tx.timestamp)}
                                                     </div>
                                                 </div>
-                                                <div className={`font-black text-sm shrink-0 ${isOut ? 'text-amber-500' : 'text-emerald-500'}`}>
+                                                <div className={`font-black text-sm shrink-0 ${isOut ? 'text-amber-500' : 'text-emerald-500 dark:text-emerald-400'}`}>
                                                     {isOut ? '-' : '+'}{tx.amount} 🫘
                                                 </div>
                                             </div>
@@ -2144,10 +2169,10 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <div>
                                     <h3 className="text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 flex items-center gap-1.5 m-0">
                                         <span aria-hidden="true">💬</span>
-                                        <span>Enterprise Discussion</span>
+                                        <span>{kw.Kind} Discussion</span>
                                     </h3>
                                     <p className="text-xs text-nature-500 dark:text-nature-400 mt-0.5">
-                                        Public coordination for this enterprise
+                                        Public coordination for this {kw.kind}
                                     </p>
                                 </div>
                                 {threadReadOnly && (
@@ -2159,7 +2184,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
 
                             {threadReadOnly && (
                                 <div className="bg-nature-50 dark:bg-nature-800/60 p-3 rounded-xl text-xs italic text-nature-600 dark:text-nature-300 text-center">
-                                    This enterprise has wound up. Discussion is read-only for accountability.
+                                    This {kw.kind} has wound up. Discussion is read-only for accountability.
                                 </div>
                             )}
 
@@ -2176,7 +2201,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                     {threadMessages.map((m) => {
                                         const isRemoved = m.type === 'removed';
                                         const authorName = m.authorCallsign || (m.authorPubkey ? m.authorPubkey.slice(0, 8) : 'Member');
-                                        const textContent = decodeThreadText(m.ciphertext, m.type);
+                                        const textContent = decodeThreadText(m.ciphertext, m.type, m.metadata, kw.keeper);
                                         return (
                                             <div key={m.id} className="py-3 flex items-start gap-3 text-xs">
                                                 {m.authorAvatar ? (
@@ -2202,14 +2227,14 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                                                 onClick={() => handleRemoveThreadMessage(m.id)}
                                                                 disabled={threadRemovingId === m.id}
                                                                 aria-label={`Remove message from ${authorName}`}
-                                                                className="py-1 px-2 -my-1 -mx-2 text-[11px] font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-400 hover:underline cursor-pointer bg-transparent border-none rounded disabled:opacity-50 disabled:cursor-not-allowed"
+                                                                className="py-1 px-2 -my-1 -mx-2 text-[11px] font-semibold text-rose-600 hover:text-rose-700 dark:text-rose-300 dark:hover:text-rose-300 hover:underline cursor-pointer bg-transparent border-none rounded disabled:opacity-50 disabled:cursor-not-allowed"
                                                                 title="Remove message"
                                                             >
                                                                 {threadRemovingId === m.id ? 'Removing...' : 'Remove'}
                                                             </button>
                                                         )}
                                                     </div>
-                                                    <div className={`mt-1 leading-relaxed ${isRemoved ? 'italic text-nature-400 dark:text-nature-500' : 'text-nature-800 dark:text-nature-200'}`}>
+                                                    <div className={`mt-1 leading-relaxed ${isRemoved ? 'italic text-nature-400 dark:text-nature-400' : 'text-nature-800 dark:text-nature-200'}`}>
                                                         {textContent}
                                                     </div>
                                                 </div>
@@ -2228,25 +2253,25 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                             {!threadReadOnly && viewerIsMember && (
                                 <form onSubmit={handlePostThreadMessage} className="mt-2 space-y-2">
                                     {threadError && (
-                                        <div className="text-xs text-rose-600 dark:text-rose-400 font-medium">
+                                        <div className="text-xs text-rose-600 dark:text-rose-300 font-medium">
                                             {threadError}
                                         </div>
                                     )}
                                     <div className="flex gap-2">
                                         <input
                                             type="text"
-                                            aria-label="Message the enterprise"
+                                            aria-label={`Message the ${kw.kind}`}
                                             value={threadInput}
                                             onChange={(e) => setThreadInput(e.target.value)}
                                             disabled={threadPosting}
-                                            placeholder="Message the enterprise..."
+                                            placeholder={`Message the ${kw.kind}...`}
                                             maxLength={2000}
                                             className="flex-1 px-3 py-2 text-xs rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                         />
                                         <button
                                             type="submit"
                                             disabled={!threadInput.trim() || threadPosting}
-                                            className="px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
+                                            className="px-4 py-2 text-xs font-bold rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white disabled:opacity-50 transition-colors shadow-xs cursor-pointer"
                                         >
                                             {threadPosting ? 'Posting...' : 'Post'}
                                         </button>
@@ -2262,7 +2287,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 onClick={() => setShowReportModal(true)}
                                 className="text-xs text-red-600 dark:text-red-400 font-semibold hover:underline flex items-center gap-1 bg-transparent border-none cursor-pointer"
                             >
-                                <span aria-hidden="true">🛡️</span> Report Enterprise
+                                <span aria-hidden="true">🛡️</span> Report {kw.Kind}
                             </button>
                         </div>
                     </>
@@ -2284,7 +2309,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                     >
                         <div className="flex justify-between items-center">
                             <h2 id="post-modal-title" className="text-lg font-black text-nature-900 dark:text-white">
-                                {postModalMode === 'offer' ? 'Post Enterprise Offer' : 'Post Enterprise Need'}
+                                {postModalMode === 'offer' ? `Post ${kw.Kind} Offer` : `Post ${kw.Kind} Need`}
                             </h2>
                             <button
                                 type="button"
@@ -2403,7 +2428,7 @@ export function TreasuryDetailPage({ identity, pubkey, onBack, onNavigatePost, i
                                 <button
                                     type="submit"
                                     disabled={posting}
-                                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm disabled:opacity-50"
+                                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-sm disabled:opacity-50"
                                 >
                                     {posting ? 'Posting…' : 'Publish Listing'}
                                 </button>

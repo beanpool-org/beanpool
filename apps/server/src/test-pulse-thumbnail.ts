@@ -31,6 +31,7 @@ import {
     PulseThumbnailCache,
     PulseThumbnailDiskStore,
     MAX_THUMBNAIL_BYTES,
+    SSRF_REFUSED_TEXT,
     extractInstagramEmbedUrl,
     extractThumbnailFromEmbedHtml,
     type ThumbnailResult,
@@ -527,7 +528,7 @@ async function main(): Promise<void> {
     });
     const resLoopback = await callRouter(realSsrfRouter, 'GET', `/api/pulse/items/${loopbackItemId}/thumbnail`);
     assert(resLoopback.status === 400 || resLoopback.status === 502, 'Loopback IP (127.0.0.1) upstream is refused');
-    assert(resLoopback.body?.error?.includes('SSRF_BLOCKED') || resLoopback.body?.error?.includes('blocked'), 'SSRF error reported on 127.0.0.1');
+    assert(resLoopback.status === 400 && resLoopback.body?.error === SSRF_REFUSED_TEXT && !JSON.stringify(resLoopback.body).includes('127.0.0.1'), 'SSRF refusal on 127.0.0.1 is fixed words naming no address');
 
     const rfc1918ItemId = makePulseItem(chan, alice, {
         thumbnailUrl: 'http://10.0.0.1:8080/internal.jpg',
@@ -782,7 +783,7 @@ async function main(): Promise<void> {
         'https://images.example.org/ingest-403.jpg'
     );
     assert(ssrfIngestRes.status === 400, 'Ingest recovery SSRF rejection returns status 400');
-    assert(Boolean(ssrfIngestRes.error?.includes('SSRF_BLOCKED')), 'Ingest recovery SSRF error message preserved');
+    assert(ssrfIngestRes.error === SSRF_REFUSED_TEXT, 'Ingest recovery SSRF refusal answers in fixed words (the guard\'s detail stays in the log)');
 
     // ──────────────────────────────────────────────────────────────────────────
     // Tombstones beat the cache: an erased item must stop being served

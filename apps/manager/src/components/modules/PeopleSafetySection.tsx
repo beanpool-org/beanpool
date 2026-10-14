@@ -5,14 +5,21 @@ import { useSectionSubTab } from '../../lib/sections';
 import { MembersModule, type MemberItem, type NodeDataPayload } from './MembersModule';
 import { type MemberNodeRole } from './MemberDetailModal';
 import { InvitesModule } from './InvitesModule';
+import { DoorSettingPanel } from './DoorSettingPanel';
+import { KnownFloorPanel } from './KnownFloorPanel';
+import { CommunityHealthPanel } from './CommunityHealthPanel';
 import { OnboardingModule } from './OnboardingModule';
 import { ThreatReviewModal, type ThreatItem } from './ThreatReviewModal';
 import { PostModerationPanel } from './PostModerationPanel';
+import { BurstDigestCard, BurstPanel } from './BurstCleanup';
 import { AncestryTreePanel } from './AncestryTreePanel';
 import { NodeRolesPanel, type RolesViewer } from './NodeRolesPanel';
 import { SectionErrorBoundary } from '../common/SectionErrorBoundary';
 import type { NodeProfile } from '../../lib/profiles';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch, removeReportedPulseItem, dismissNodeReport, fetchReports, type NodeReport } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, pruneInviteBranch, removeReportedPulseItem, dismissNodeReport, fetchReports, reportSubject, type NodeReport } from '../../lib/node-client';
+import { bulkDeleteInBatches, sendBulkDeleteBatch, describeBulkDeleteOutcome } from '../../lib/bulk-delete-posts';
+import { nodeCredential } from '../../lib/profiles';
+import { AgentSuggestionsPanel } from './AgentSuggestionsPanel';
 
 interface PeopleSafetySectionProps {
     activeNode: NodeProfile;
@@ -32,6 +39,8 @@ interface PeopleSafetySectionProps {
     onSubTabChange?: (sub: 'directory' | 'invites' | 'funnel' | 'moderation' | 'roles') => void;
     /** Who is signed in to /settings — decides whether Owners & admins offers its add/remove controls. */
     rolesViewer?: RolesViewer;
+    /** A key session in Settings only: back to the sign-in screen after "Sign out everywhere". */
+    onSignedOutEverywhere?: () => void;
 }
 
 export function PeopleSafetySection({
@@ -50,6 +59,7 @@ export function PeopleSafetySection({
     initialSubTab = 'directory',
     onSubTabChange,
     rolesViewer = { kind: 'password' },
+    onSignedOutEverywhere,
 }: PeopleSafetySectionProps) {
     const [subTab, setSubTab] = useSectionSubTab<'directory' | 'invites' | 'funnel' | 'moderation' | 'roles'>(initialSubTab, onSubTabChange);
     const [directoryView, setDirectoryView] = useState<'roster' | 'tree'>('roster');
@@ -61,6 +71,10 @@ export function PeopleSafetySection({
     const [reportsLoading, setReportsLoading] = useState(false);
     const [dismissedReportIds, setDismissedReportIds] = useState<Set<string>>(new Set());
     const [actionedReportIds, setActionedReportIds] = useState<Set<string>>(new Set());
+    // Clean-up by burst (BurstCleanup.tsx), on a node whose open door labels joins: the global community.
+    const [burstsHere, setBurstsHere] = useState(false);
+    const [burstAnchor, setBurstAnchor] = useState<string | null>(null);
+    const [burstReload, setBurstReload] = useState(0);
 
     const loadReports = async () => {
         if (!activeNode?.url) return;
@@ -71,7 +85,7 @@ export function PeopleSafetySection({
                 reportFilter,
                 50,
                 0,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 getTfaSessionToken(activeNode.id)
             );
             setFetchedReports(res.reports);
@@ -103,7 +117,7 @@ export function PeopleSafetySection({
     }, [subTab, reportFilter, activeNode?.url, activeNode?.id, nodeData?.reports]);
 
     const handlePruneBranch = onPruneBranch || (async (pubkey: string) => {
-        await pruneInviteBranch(activeNode.url, pubkey, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+        await pruneInviteBranch(activeNode.url, pubkey, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
         onRefresh();
     });
     const [bulkDeleting, setBulkDeleting] = useState(false);
@@ -116,11 +130,11 @@ export function PeopleSafetySection({
         setRemovingReportId(reportId);
         setPulseRemoveError(null);
         try {
-            await removeReportedPulseItem(activeNode.url, reportId, activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            await removeReportedPulseItem(activeNode.url, reportId, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
             setActionedReportIds((prev) => new Set(prev).add(String(reportId)));
             refreshReports();
-        } catch (e: any) {
-            setPulseRemoveError(e?.message || 'Failed to remove the item');
+        } catch (e: unknown) {
+            setPulseRemoveError(e instanceof Error ? e.message : 'Failed to remove the item');
         } finally {
             setRemovingReportId(null);
         }
@@ -128,8 +142,11 @@ export function PeopleSafetySection({
 
     const rawReports: NodeReport[] = Array.isArray(nodeData?.reports) ? nodeData.reports : [];
     const members = Array.isArray(nodeData?.members) ? nodeData.members : [];
+    // Bursts exist only where members join through the open door (`invited_by` 'open:<provider>', the global community):
+    // anywhere else this screen asks the node nothing about them.
+    const hasDoorMembers = members.some(m => String((m as { invitedBy?: unknown }).invitedBy ?? '').startsWith('open:'));
 
-    const getOutcome = (r: any): 'open' | 'dismissed' | 'actioned' => {
+    const getOutcome = (r: NodeReport): 'open' | 'dismissed' | 'actioned' => {
         const id = String(r.id);
         if (dismissedReportIds.has(id)) return 'dismissed';
         if (actionedReportIds.has(id)) return 'actioned';
@@ -165,19 +182,13 @@ export function PeopleSafetySection({
                 return;
             }
 
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ postIds: stalePostIds }),
-            });
-            const data = await res.json();
-            if (res.ok) {
-                const count = data.deleted ?? data.deletedCount ?? stalePostIds.length;
-                setBulkDeleteResult(`Deleted ${count} post(s).`);
-                onRefresh();
-            } else {
-                setBulkDeleteResult(`Failed: ${data.error || 'Unknown error'}`);
-            }
+            // The node takes at most BULK_DELETE_BATCH_SIZE ids per request: send them in batches, one after another,
+            // stopping at the first that fails (lib/bulk-delete-posts.ts).
+            const headers = buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+            const outcome = await bulkDeleteInBatches(stalePostIds, (batch) => sendBulkDeleteBatch(url, headers, batch));
+            setBulkDeleteResult(describeBulkDeleteOutcome(outcome));
+            // Once, at the end, whenever any batch went through: a partial run changed the list too.
+            if (outcome.batchesDone > 0) onRefresh();
         } catch (e: unknown) {
             setBulkDeleteResult(`Error: ${e instanceof Error ? e.message : String(e)}`);
         } finally {
@@ -308,7 +319,7 @@ export function PeopleSafetySection({
                             nodeData={nodeData}
                             nodeDataLoading={nodeDataLoading}
                             activeNodeUrl={activeNode.url}
-                            adminPassword={activeNode.adminPassword}
+                            adminPassword={nodeCredential(activeNode)}
                             tfaToken={activeNode ? getTfaSessionToken(activeNode.id) : undefined}
                             onRefresh={onRefresh}
                             onFreezeUser={onFreezeUser}
@@ -335,7 +346,18 @@ export function PeopleSafetySection({
             )}
 
             {subTab === 'invites' && (
-                <InvitesModule activeNode={activeNode} />
+                <div className="space-y-6">
+                    <SectionErrorBoundary sectionName="Who may invite" resetKey={activeNode.id}>
+                        <DoorSettingPanel activeNode={activeNode} viewer={rolesViewer} />
+                    </SectionErrorBoundary>
+                    <SectionErrorBoundary sectionName="The known floor" resetKey={activeNode.id}>
+                        <KnownFloorPanel activeNode={activeNode} viewer={rolesViewer} />
+                    </SectionErrorBoundary>
+                    <SectionErrorBoundary sectionName="Community health" resetKey={activeNode.id}>
+                        <CommunityHealthPanel activeNode={activeNode} viewer={rolesViewer} />
+                    </SectionErrorBoundary>
+                    <InvitesModule activeNode={activeNode} />
+                </div>
             )}
 
             {subTab === 'funnel' && (
@@ -353,12 +375,42 @@ export function PeopleSafetySection({
 
             {subTab === 'roles' && (
                 <SectionErrorBoundary sectionName="Owners & admins" resetKey={activeNode.id}>
-                    <NodeRolesPanel activeNode={activeNode} members={members} viewer={rolesViewer} onChanged={onRefresh} />
+                    <NodeRolesPanel activeNode={activeNode} members={members} viewer={rolesViewer} onChanged={onRefresh} onSignedOutEverywhere={onSignedOutEverywhere} />
                 </SectionErrorBoundary>
             )}
 
             {subTab === 'moderation' && (
                 <div className="space-y-6">
+                    {hasDoorMembers && (
+                        <SectionErrorBoundary sectionName="Accounts that joined together" resetKey={activeNode.id}>
+                            <BurstDigestCard
+                                nodeUrl={activeNode.url}
+                                adminPassword={nodeCredential(activeNode)}
+                                tfaToken={getTfaSessionToken(activeNode.id)}
+                                onOpen={setBurstAnchor}
+                                reloadKey={burstReload}
+                                onAvailability={setBurstsHere}
+                            />
+                            {burstAnchor && (
+                                <BurstPanel
+                                    key={burstAnchor}
+                                    nodeUrl={activeNode.url}
+                                    anchor={burstAnchor}
+                                    canRemove
+                                    adminPassword={nodeCredential(activeNode)}
+                                    tfaToken={getTfaSessionToken(activeNode.id)}
+                                    onClose={() => setBurstAnchor(null)}
+                                    onChanged={() => { setBurstReload(n => n + 1); refreshReports(); }}
+                                />
+                            )}
+                        </SectionErrorBoundary>
+                    )}
+
+                    {/* An AI assistant's suggestions (admin MCP S4): approved by its member, the report beside each. */}
+                    <SectionErrorBoundary sectionName="AI assistant suggestions" resetKey={activeNode.id}>
+                        <AgentSuggestionsPanel activeNode={activeNode} viewer={rolesViewer} onChanged={refreshReports} />
+                    </SectionErrorBoundary>
+
                     {/* Pending Reports List */}
                     <div className="bg-nature-900/80 border border-nature-800 rounded-2xl p-6 shadow-xl space-y-4">
                         <div className="flex flex-wrap lg:flex-nowrap items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
@@ -440,7 +492,7 @@ export function PeopleSafetySection({
                             </div>
                         ) : (
                             <div className="space-y-3">
-                                {reportsToDisplay.map((report: any, idx: number) => {
+                                {reportsToDisplay.map((report: NodeReport, idx: number) => {
                                     const postTitle = report.postTitle || report.title;
                                     const authorCallsign = report.postAuthorCallsign;
                                     const isRemoved = Boolean(report.postRemoved);
@@ -467,13 +519,8 @@ export function PeopleSafetySection({
                                                     )}
                                                     <span className="text-xs font-mono text-nature-300">
                                                         {(() => {
-                                                            const target = typeof report.targetPubkey === 'string'
-                                                                ? report.targetPubkey
-                                                                : (typeof report.target_pubkey === 'string'
-                                                                    ? report.target_pubkey
-                                                                    : (report.targetPubkey && typeof report.targetPubkey.publicKey === 'string'
-                                                                        ? report.targetPubkey.publicKey
-                                                                        : ''));
+                                                            // On a post, its author as the node read it from the post (reportSubject).
+                                                            const target = reportSubject(report);
                                                             return `Target: ${target ? `${target.slice(0, 16)}...` : 'Unknown'}`;
                                                         })()}
                                                     </span>
@@ -496,10 +543,18 @@ export function PeopleSafetySection({
                                                     </div>
                                                 )}
 
+                                                {/* The node lists these first (getReports); the alert told the owners to look at them first. */}
+                                                {report.childSafety && (
+                                                    <p className="m-0">
+                                                        <span className="px-2 py-0.5 rounded text-xs font-bold border bg-red-950/60 text-red-200 border-red-800" data-testid="child-safety-badge">
+                                                            Child safety
+                                                        </span>
+                                                    </p>
+                                                )}
                                                 <p className="text-xs text-white m-0">
                                                     {report.reason || report.description || 'No reason provided'}
                                                 </p>
-                                                {report.pulseItem && typeof report.pulseItem === 'object' && (
+                                                {Boolean(report.pulseItem) && report.pulseItem && (
                                                     <div className="text-xs text-nature-300 flex flex-wrap items-center gap-2" data-testid="pulse-report-item">
                                                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-nature-800 text-nature-200 border border-nature-700">
                                                             Pulse · {String(report.pulseItem.platform || 'unknown')}
@@ -521,7 +576,7 @@ export function PeopleSafetySection({
                                                     </div>
                                                 )}
                                             </div>
-                                            <div className="flex items-center gap-2 self-end sm:self-auto">
+                                            <div className="flex flex-wrap items-center gap-2 self-end sm:self-auto">
                                                 {report.pulseItem && typeof report.pulseItem === 'object' && !report.pulseItem.removed && report.id && (
                                                     <button
                                                         onClick={() => handleRemovePulseItem(String(report.id))}
@@ -531,6 +586,20 @@ export function PeopleSafetySection({
                                                         {removingReportId === report.id ? 'Removing...' : 'Remove from the Pulse'}
                                                     </button>
                                                 )}
+                                                {hasDoorMembers && burstsHere && (() => {
+                                                    // A report on a post opens its author's group, as the node read it
+                                                    // from the post: never the key the reporter sent (reportSubject).
+                                                    const target = reportSubject(report);
+                                                    return target ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setBurstAnchor(target)}
+                                                            className="px-3 py-1.5 rounded-lg bg-nature-800 hover:bg-nature-700 text-xs font-bold text-white transition-all min-h-[48px] lg:min-h-0"
+                                                        >
+                                                            Who joined with them
+                                                        </button>
+                                                    ) : null;
+                                                })()}
                                                 <button
                                                     onClick={() => setSelectedThreat(report)}
                                                     className="px-3 py-1.5 rounded-lg bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all shadow-sm min-h-[48px] lg:min-h-0"
@@ -609,7 +678,7 @@ export function PeopleSafetySection({
                         setSelectedThreat(null);
                     }}
                     onDismissReport={async (threat) => {
-                        await dismissNodeReport(activeNode.url, String(threat.id), activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+                        await dismissNodeReport(activeNode.url, String(threat.id), nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                         if (threat?.id) {
                             setDismissedReportIds((prev) => new Set(prev).add(String(threat.id)));
                         }

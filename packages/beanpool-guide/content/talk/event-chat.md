@@ -24,5 +24,5 @@ Type in **Message everyone going…** and tap the send button. You can send up t
 
 - Event chats are not end-to-end encrypted. The host, everyone going, and the people who run your community's server can read them. The chat says so above the message box.
 - The host can remove any message. Tap it, then **Remove**. It then says "removed by the host".
-- An event chat has no reply, no reactions, no editing and no deleting your own message — unlike a chat with a person or a group's chat. Ask the host to remove something you regret.
+- An event chat has no reply, no reactions, no editing and no deleting your own message — unlike a chat with a person or a group's chat. Ask the host to remove something you regret. If you delete your account, every message you wrote here reads **This message was deleted**.
 - When the event ends or is cancelled, the chat becomes read-only. Some time later it goes away.

@@ -28,6 +28,7 @@ import {
 import { clearPendingOnboarding } from './onboarding-state';
 import { assertPlainNodeAddress } from './node-url';
 import { communitiesOnThisPhone, forgetCommunities, releaseAccountFromPhone } from './account-leaves-phone';
+import { communitySwitched } from './community-switch';
 
 /**
  * Asked before a restore writes another account over the one this phone holds: the "Replace this phone's account?"
@@ -124,6 +125,8 @@ export async function saveRestoredAccount({ identity, replacesAnother }: Cleared
             await wipeIdentityScopedStorage(AsyncStorage);
         }
         await AsyncStorage.setItem('beanpool_anchor_url', anchorUrl);
+        // The update screen asks the community now in use (utils/community-switch.ts).
+        communitySwitched();
         await importIdentity(identity);
     } catch (e) {
         if (!replacesAnother) throw e;
@@ -168,6 +171,13 @@ async function removeUnsavedReplace(failure: unknown): Promise<ReplaceNotSaved> 
 }
 
 /**
+ * Asks the community for the name `publicKey` has there. It is given the key's private half to sign the question with:
+ * a community names a key only to that key's own signer, and the key is not saved on the phone yet
+ * (utils/db.ts fetchNodeCallsign).
+ */
+export type NameOnNode = (publicKey: string, privateKey: string) => Promise<string | null>;
+
+/**
  * Restore the account these 12 words make ("Recover with 12 Words"), through {@link clearToRestore}.
  *
  * The words ARE the identity. The name is profile data the node holds, so it is asked of the node (`nameOnNode`),
@@ -178,7 +188,7 @@ async function removeUnsavedReplace(failure: unknown): Promise<ReplaceNotSaved> 
 export async function restoreFromWords(
     words: string[],
     anchorUrl: string,
-    options: { confirmReplace?: ConfirmReplace; nameOnNode: (publicKey: string) => Promise<string | null> },
+    options: { confirmReplace?: ConfirmReplace; nameOnNode: NameOnNode },
 ): Promise<BeanPoolIdentity> {
     assertPlainNodeAddress(anchorUrl);
     const { publicKeyHex, privateKeyHex } = await mnemonicToKeypair(words);
@@ -190,8 +200,39 @@ export async function restoreFromWords(
         mnemonic: words,
     };
     const cleared = await clearToRestore(incoming, options.confirmReplace);
-    const callsign = (await options.nameOnNode(publicKeyHex).catch(() => null)) || '';
+    const callsign = (await options.nameOnNode(publicKeyHex, privateKeyHex).catch(() => null)) || '';
     const identity: BeanPoolIdentity = { ...cleared.identity, callsign };
     await saveRestoredAccount({ ...cleared, identity }, anchorUrl);
+    return identity;
+}
+
+/**
+ * Save the account a key vault restore brought back ("Recover with Social"; utils/vault.ts `collectVaultRestore`, which
+ * has already checked that its seed makes the key the vault's release names), through {@link clearToRestore}, onto the
+ * community the member chose (global by default). The name is asked of that community, as for the 12 words. Then the
+ * restore stops waiting on the phone (`clearPending`). An address that isn't plain `host[:port]` is refused first.
+ */
+export async function restoreFromVault(
+    restored: { publicKey: string; privateKey: string; mnemonic?: string[] },
+    anchorUrl: string,
+    options: {
+        confirmReplace?: ConfirmReplace;
+        nameOnNode: NameOnNode;
+        clearPending: () => Promise<void>;
+    },
+): Promise<BeanPoolIdentity> {
+    assertPlainNodeAddress(anchorUrl);
+    const incoming: BeanPoolIdentity = {
+        publicKey: restored.publicKey,
+        privateKey: restored.privateKey,
+        callsign: '',
+        createdAt: new Date().toISOString(),
+        ...(restored.mnemonic?.length ? { mnemonic: restored.mnemonic } : {}),
+    };
+    const cleared = await clearToRestore(incoming, options.confirmReplace);
+    const callsign = (await options.nameOnNode(incoming.publicKey, incoming.privateKey).catch(() => null)) || '';
+    const identity: BeanPoolIdentity = { ...cleared.identity, callsign };
+    await saveRestoredAccount({ ...cleared, identity }, anchorUrl);
+    await options.clearPending();
     return identity;
 }

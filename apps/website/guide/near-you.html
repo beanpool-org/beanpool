@@ -7,9 +7,7 @@
     <title>Finding things near you — BeanPool members' guide</title>
     <meta name="description" content="Show only posts within a distance of you, or of any place you choose.">
     <link rel="icon" type="image/png" href="../favicon.png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../fonts/fonts.css">
     <link rel="stylesheet" href="../style.css?v=2.5">
     <style>
         /* Width only: .legal-content's top margin is what clears the fixed navbar. */
@@ -65,10 +63,24 @@
             <li>Tap <strong>Apply</strong>. The button then shows the distance, like <strong>5km</strong>.</li>
             <li>To go back to everything, open it again and tap <strong>Reset</strong>.</li>
         </ul>
-        <p>Posts with no location are always shown.</p>
-        <p>The picker opens on a fixed spot, not on you. Tap the target button, or tap the map, before you tap <strong>Apply</strong>.</p>
+        <p>Posts with no location are always shown, except on the global community in the web app (below).</p>
+        <p>If your browser already lets BeanPool use your location, the picker can open on where you are now. If not, it opens on a fixed spot. Check the pin, or tap the target button or the map, before you tap <strong>Apply</strong>. On the global community the web app sends the centre you chose to the community, rounded to about 11 metres.</p>
         <h2>On the Map</h2>
-        <p>The map has no distance filter. Tap the target button on the left to see where you are, then look around and zoom.</p>
+        <p>The map has no distance filter of its own. Tap the target button on the left to see where you are, then look around and zoom.</p>
+        <h2>On the global community, in the web app</h2>
+        <p>The global community has listings from everywhere, so the web app's <strong>Market</strong> and <strong>Map</strong> start from near you:</p>
+        <ul>
+            <li>With a <strong>Distance</strong> chosen on the Market, both show the nearest listings within it, nearest first. The Map shows up to 200 pins.</li>
+            <li>Without one, they show the nearest listings within 250 km of your area: the rough place you give the community when you join, or later in <strong>Settings</strong>, under <strong>Your area</strong>. A line above the Market's list says <strong>Nearest to your area first, within 250 km.</strong> Tap <strong>Show everywhere</strong> for the newest from everywhere, and <strong>Near your area</strong> to come back.</li>
+            <li>With neither, you see the newest from everywhere, and <strong>See what's near you</strong> opens the distance picker. A line above the Market's list says which of these you are seeing. With a <strong>Distance</strong> it has no button: open <strong>Distance</strong> and tap <strong>Reset</strong> to see the newest from everywhere.</li>
+            <li>Each listing shows how far away it is, like <strong>📍 12 km</strong>. Your own listings are always on the Map, and on the Market near your area, wherever they are. With a <strong>Distance</strong>, the Market shows only what is within it, yours too.</li>
+            <li>While the list is near you, posts with no location, like most polls, are left out. Tap <strong>Show everywhere</strong>, or reset the <strong>Distance</strong>, to see them.</li>
+            <li>Under <strong>Events</strong> the list is never cut by your area or your <strong>Distance</strong>, as before.</li>
+            <li>If nothing is near, the Map says so, with <strong>Show everywhere</strong>. Then <strong>Near your area</strong> (or <strong>Near the place you picked</strong>) brings the nearest back.</li>
+        </ul>
+        <p>The web app's search looks only through the listings on screen. <strong>Show everywhere</strong> shows the newest listings from everywhere, not every one, so a listing that is far away and not new won't come up in the search. In every other community the Market and the Map show everything, as before.</p>
+        <h2>On the global community, on the phone</h2>
+        <p>The phone keeps the listings nearest your area: up to 500, within 250 km. It also keeps your own listings, and any you have a deal, a chat or an answer on. The Market and the Map show what the phone keeps. With no area set, it keeps the newest listings instead, and a line above the Market says so. See &quot;Your area&quot;.</p>
         <h2>Events near you</h2>
         <p>Event cards show how far away they are once you have let the app use your location.</p>
         <h2 class="guide-related">Related</h2>
@@ -77,8 +89,9 @@
             <li><a href="map-pins.html"><strong>What the map shows</strong><span>The pins on the Map, what their colours mean, and the buttons around them.</span></a></li>
             <li><a href="pin-locations.html"><strong>Where your pin goes</strong><span>Who sees where your posts and events are, and how to keep your home private.</span></a></li>
             <li><a href="events.html"><strong>Events</strong><span>Create an event, say you are going, be reminded, share it, and run it as the host.</span></a></li>
+            <li><a href="your-area.html"><strong>Your area</strong><span>The rough place the global community uses to show you the listings near you, and how to change or clear it.</span></a></li>
         </ul>
-        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 70.</p>
+        <p class="guide-foot">The same guide is in the BeanPool app, and works there without a connection: open Settings, then "Help &amp; how it works" under BeanPool. Every other rule, guide and manual is in the <a href="../help.html">Help Centre</a>. Guide version 132.</p>
     </main>
 </body>
 </html>

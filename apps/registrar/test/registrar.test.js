@@ -138,10 +138,10 @@ test('R1: GET /api/registrar/health returns status ok, the deployed commit and t
     const res = await worker.fetch(req, env);
     assert.equal(res.status, 200);
     const body = await res.json();
-    assert.deepEqual(body, { status: 'ok', commit: null, accepted_proto: ['v1'] });
+    assert.deepEqual(body, { status: 'ok', commit: null, accepted_proto: ['v1', 'v2'] });
 
     const deployed = await worker.fetch(new Request('https://beanpool.org/api/registrar/health'), { ...env, GIT_SHA: 'abc123' });
-    assert.deepEqual(await deployed.json(), { status: 'ok', commit: 'abc123', accepted_proto: ['v1'] });
+    assert.deepEqual(await deployed.json(), { status: 'ok', commit: 'abc123', accepted_proto: ['v1', 'v2'] });
 });
 
 test('Ed25519 Signature Verification: claim and status endpoints', async () => {
@@ -215,13 +215,18 @@ test('R2: /i/:code Invite resolution and deep-linking response', async () => {
     });
     await db.insertInvite(env, 'INV-1234-5678', 'mullum');
 
-    // Case 1: Query param ?n= provided
-    const reqWithN = new Request('https://beanpool.org/i/cairns?n=cairns', { method: 'GET' });
+    // Case 1: Query param ?n= provided. Until the 2026-10-01 review (M2) this asserted that ?n=cairns — a name nobody
+    // holds — got a join page for cairns.beanpool.org: beanpool.org vouching for a host it doesn't route. Now ?n= must
+    // name a live name of this registrar.
+    const resUnheld = await worker.fetch(new Request('https://beanpool.org/i/cairns?n=cairns', { method: 'GET' }), env);
+    assert.equal(resUnheld.status, 404);
+    assert.ok(!(await resUnheld.text()).includes('beanpool://join'));
+    const reqWithN = new Request('https://beanpool.org/i/cairns?n=mullum', { method: 'GET' });
     const resN = await worker.fetch(reqWithN, env);
     assert.equal(resN.status, 200);
     const htmlN = await resN.text();
-    assert.ok(htmlN.includes('beanpool://join?node=cairns.beanpool.org&code=cairns'));
-    assert.ok(htmlN.includes('Community node: cairns.beanpool.org'));
+    assert.ok(htmlN.includes('beanpool://join?node=mullum.beanpool.org&code=cairns'));
+    assert.ok(htmlN.includes('Community node: mullum.beanpool.org'));
     assert.ok(htmlN.includes('apps.apple.com/app/beanpool'));
     assert.ok(htmlN.includes('play.google.com/store/apps/details?id=org.beanpool'));
 

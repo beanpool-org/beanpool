@@ -1,9 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { LedgerPage } from './LedgerPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getBalance, getTransactions } from '../lib/api';
+import { getBalance, getMembers, getMemberCards, getTransactions } from '../lib/api';
+import { onSyncActivity } from '../lib/sync';
+import { getBlockedUsers } from '../lib/blocklist';
 
 vi.mock('../lib/sync', () => ({
     onSyncActivity: vi.fn(() => () => {}),
@@ -13,12 +15,23 @@ vi.mock('../components/CommonsInfoModal', () => ({
     CommonsInfoModal: () => null,
 }));
 
+vi.mock('../lib/blocklist', () => ({
+    getBlockedUsers: vi.fn(() => []),
+    onBlocklistUpdated: vi.fn(() => () => {}),
+}));
+
 vi.mock('../lib/api', () => ({
     getBalance: vi.fn(),
     getTransactions: vi.fn(async () => []),
     getMembers: vi.fn(async () => []),
+    getMemberCards: vi.fn(async () => []),
     sendTransfer: vi.fn(),
 }));
+
+// The node's /api/community/info, read once per page load: a local community (no members on demand) unless a test says.
+const info = vi.hoisted(() => ({ value: { profile: 'local', features: {} } as Record<string, unknown> }));
+vi.mock('../lib/visitor-lobby-gate', () => ({ communityInfoOnce: vi.fn(async () => info.value) }));
+import { communityInfoOnce } from '../lib/visitor-lobby-gate';
 
 const identity: BeanPoolIdentity = {
     publicKey: 'viewer-pubkey',
@@ -89,5 +102,219 @@ describe('LedgerPage at 320px with 1.3x text', () => {
             expect(tile).toHaveClass('min-w-0', 'px-1.5', 'sm:p-3');
         }
         expect(screen.getByText('PARTNERS')).not.toHaveClass('tracking-wider');
+    });
+});
+
+// #1838: levels are merit badges. They gate nothing, so a level not reached yet is something to grow into: no lock, no
+// "Locked", and not faded or greyed as if it were out of bounds.
+describe('levels a member has not reached yet', () => {
+    const LOCK = /🔒|lock/i;
+    // The greys the shelf and the badge used for "can't": #9ca3af, #d1d5db, #f9fafb.
+    const GREYS = ['rgb(156, 163, 175)', 'rgb(209, 213, 219)', 'rgb(249, 250, 251)'];
+
+    function greyed(root: HTMLElement): string[] {
+        return [root, ...Array.from(root.querySelectorAll<HTMLElement>('*'))].flatMap(el => {
+            const s = el.style;
+            const faded = s.opacity !== '' && Number(s.opacity) < 1 ? [`opacity ${s.opacity}: ${el.textContent}`] : [];
+            return [...faded, ...[s.color, s.backgroundColor].filter(c => GREYS.includes(c)).map(c => `${c}: ${el.textContent}`)];
+        });
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(getBalance).mockResolvedValue({ balance: 0, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+    });
+
+    it('shows every level on the shelf without a lock, faded or grey', async () => {
+        render(<LedgerPage identity={identity} isMember={true} />);
+
+        const shelf = await screen.findByTestId('levels-shelf');
+        expect(within(shelf).getAllByRole('button')).toHaveLength(4);
+        expect(shelf.textContent).not.toMatch(LOCK);
+        expect(greyed(shelf)).toEqual([]);
+    });
+
+    it('names each one as the next level or one up ahead, with what it takes', async () => {
+        render(<LedgerPage identity={identity} isMember={true} />);
+        const shelf = await screen.findByTestId('levels-shelf');
+
+        for (const [name, badge] of [['Newcomer', "You're here"], ['Resident', 'Next level'], ['Steward', 'Up ahead'], ['Elder', 'Up ahead']]) {
+            fireEvent.click(within(shelf).getByRole('button', { name: `View ${name} level details` }));
+            const detail = screen.getByTestId('level-detail');
+            expect(screen.getByTestId('level-detail-heading').children[2], name).toHaveTextContent(badge);
+            expect(detail.textContent, name).not.toMatch(LOCK);
+            expect(greyed(detail), name).toEqual([]);
+            if (name !== 'Newcomer') expect(detail.textContent, name).toMatch(/Reach \d+ trust \(\d+ to go\)/);
+        }
+    });
+});
+
+describe('a line of Beans from someone the member has blocked', () => {
+    const BO = 'b'.repeat(64);
+    const CY = 'c'.repeat(64);
+    const line = (id: string, from: string, to: string, memo: string) =>
+        ({ id, from, to, amount: 3, taxFee: 0, memo, timestamp: '2026-10-01T10:00:00.000Z' });
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(getBalance).mockResolvedValue({ balance: 5, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getBlockedUsers).mockReturnValue([BO]);
+    });
+
+    async function wallet() {
+        render(<LedgerPage identity={identity} isMember={true} />);
+        await waitFor(() => expect(getTransactions).toHaveBeenCalled());
+        fireEvent.click(await screen.findByRole('button', { name: /Wallet/ }));
+    }
+
+    it('shows the neutral line in place of the note that came with the Beans', async () => {
+        vi.mocked(getTransactions).mockResolvedValue([line('t1', BO, identity.publicKey, 'meet me behind the shed')] as any);
+        await wallet();
+        expect(await screen.findByText('Beans from a member you blocked')).toHaveClass('italic');
+        expect(screen.queryByText(/behind the shed/)).not.toBeInTheDocument();
+    });
+
+    it('and as the community sends it, for a note it kept from them', async () => {
+        vi.mocked(getBlockedUsers).mockReturnValue([]);
+        vi.mocked(getTransactions).mockResolvedValue([line('t1', BO, identity.publicKey, 'Beans from a member you blocked')] as any);
+        await wallet();
+        expect(await screen.findByText('Beans from a member you blocked')).toHaveClass('italic');
+    });
+
+    it("shows anyone else's note, and the member's own to someone blocked", async () => {
+        vi.mocked(getTransactions).mockResolvedValue([
+            line('t1', CY, identity.publicKey, 'thanks for the eggs'),
+            line('t2', identity.publicKey, BO, 'for the bread'),
+        ] as any);
+        await wallet();
+        expect(await screen.findByText('thanks for the eggs')).toBeInTheDocument();
+        expect(screen.getByText('for the bread')).toBeInTheDocument();
+        expect(screen.queryByText('Beans from a member you blocked')).not.toBeInTheDocument();
+    });
+});
+
+describe('the Send picker when the node is too busy to send the members list', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(getBalance).mockResolvedValue({ balance: 5, earnedCredit: 2, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getBlockedUsers).mockReturnValue([]);
+    });
+
+    it('keeps the members it had when a refresh is answered "busy" (503), not an empty list', async () => {
+        vi.mocked(getMembers).mockResolvedValueOnce([{ publicKey: 'd'.repeat(64), callsign: 'Dana' }] as any);
+        render(<LedgerPage identity={identity} isMember={true} />);
+        await waitFor(() => expect(getMembers).toHaveBeenCalledTimes(1));
+        fireEvent.click(await screen.findByRole('button', { name: /Wallet/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /Send Credits/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Select recipient/ }));
+        expect(await screen.findByText('Dana')).toBeInTheDocument();
+
+        // The next refresh, past its 2 s coalescing window: the members list refused as the api module throws a 503 from
+        // the heavy-read cap (apps/server/src/heavy-reads.ts).
+        vi.mocked(getMembers).mockRejectedValueOnce(Object.assign(new Error('This community is busy right now.'), { status: 503, code: 'heavy_read_busy' }));
+        const sync = vi.mocked(onSyncActivity).mock.calls.at(-1)![0] as () => Promise<void> | undefined;
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+            vi.setSystemTime(Date.now() + 5000);
+            await act(async () => { await sync(); });
+        } finally {
+            vi.useRealTimers();
+        }
+        expect(getMembers).toHaveBeenCalledTimes(2);
+        expect(screen.getByText('Dana')).toBeInTheDocument();
+        expect(screen.queryByText('No members found')).not.toBeInTheDocument();
+    });
+});
+
+describe('the Ledger with members on demand (review of #1861, N1)', () => {
+    const DANA = 'd'.repeat(64);
+    beforeEach(() => {
+        vi.clearAllMocks();
+        vi.mocked(getBalance).mockResolvedValue({ balance: 5, earnedCredit: 2, floor: 0, commonsBalance: 0, callsign: 'Visitor', tier: { name: 'Newcomer' } } as any);
+        vi.mocked(getBlockedUsers).mockReturnValue([]);
+    });
+    afterEach(() => { info.value = { profile: 'local', features: {} }; });
+
+    const openPicker = async () => {
+        fireEvent.click(await screen.findByRole('button', { name: /Wallet/ }));
+        fireEvent.click(await screen.findByRole('button', { name: /Send Credits/ }));
+        fireEvent.click(screen.getByRole('button', { name: /Select recipient/ }));
+    };
+    const syncPast2s = async () => {
+        const sync = vi.mocked(onSyncActivity).mock.calls.at(-1)![0] as () => Promise<void> | undefined;
+        vi.useFakeTimers({ toFake: ['Date'] });
+        try {
+            vi.setSystemTime(Date.now() + 5000);
+            await act(async () => { await sync(); });
+        } finally {
+            vi.useRealTimers();
+        }
+    };
+
+    it('global: no whole-directory read at open or on refresh; the Send picker asks the node by name', async () => {
+        info.value = { profile: 'global', features: { membersOnDemand: true, beans: false } };
+        vi.mocked(getMemberCards).mockResolvedValue([{ publicKey: DANA, callsign: 'Dana', joinedAt: '2026-01-01' }]);
+        render(<LedgerPage identity={identity} isMember={true} />);
+        await waitFor(() => expect(getBalance).toHaveBeenCalled());
+        await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
+        await openPicker();
+        expect(await screen.findByTestId('ledger-picker-note')).toHaveTextContent('Type at least 2 letters of a name.');
+        fireEvent.change(screen.getByPlaceholderText('Search members...'), { target: { value: 'da' } });
+        fireEvent.click(await screen.findByRole('button', { name: /Dana/ }));
+        expect(vi.mocked(getMemberCards).mock.calls.map(c => c[0])).toEqual(['/api/members?q=da&limit=20']);
+        expect(screen.getByRole('button', { name: /Dana/ })).toBeInTheDocument();
+        await syncPast2s();
+        expect(getBalance).toHaveBeenCalledTimes(2);
+        expect(getMembers).not.toHaveBeenCalled();
+    });
+
+    it('global: a search that fails says so, never "nobody"', async () => {
+        info.value = { profile: 'global', features: { membersOnDemand: true } };
+        vi.mocked(getMemberCards).mockRejectedValue(new TypeError('Failed to fetch'));
+        render(<LedgerPage identity={identity} isMember={true} />);
+        await openPicker();
+        fireEvent.change(screen.getByPlaceholderText('Search members...'), { target: { value: 'da' } });
+        await waitFor(() => expect(screen.getByTestId('ledger-picker-note')).toHaveTextContent("Couldn't search just now."));
+        expect(screen.queryByText(/Nobody here/)).toBeNull();
+        expect(screen.queryByText('No members found')).toBeNull();
+        expect(getMembers).not.toHaveBeenCalled();
+    });
+
+    // The confirmation review of #1861's fix round, F2 (LG7): the node's answer can hold the member themself.
+    it('global: the search never offers the member themself', async () => {
+        info.value = { profile: 'global', features: { membersOnDemand: true } };
+        vi.mocked(getMemberCards).mockResolvedValue([
+            { publicKey: identity.publicKey, callsign: 'Dalia-me', joinedAt: '2026-01-01' },
+            { publicKey: DANA, callsign: 'Dana', joinedAt: '2026-01-01' },
+        ]);
+        render(<LedgerPage identity={identity} isMember={true} />);
+        await openPicker();
+        fireEvent.change(screen.getByPlaceholderText('Search members...'), { target: { value: 'da' } });
+        expect(await screen.findByRole('button', { name: /Dana/ })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Dalia-me/ })).toBeNull();
+    });
+
+    it('local: the directory is read as before, once at open and on each refresh, and no small form is asked', async () => {
+        vi.mocked(getMembers).mockResolvedValue([{ publicKey: DANA, callsign: 'Dana' }] as any);
+        render(<LedgerPage identity={identity} isMember={true} />);
+        await waitFor(() => expect(getMembers).toHaveBeenCalledTimes(1));
+        await openPicker();
+        expect(await screen.findByText('Dana')).toBeInTheDocument();
+        // F2 (LG6): typing in a local node's picker filters the list it has; it never searches the node.
+        fireEvent.change(screen.getByPlaceholderText('Search members...'), { target: { value: 'da' } });
+        await new Promise(r => setTimeout(r, 600));
+        expect(screen.getByText('Dana')).toBeInTheDocument();
+        await syncPast2s();
+        expect(getMembers).toHaveBeenCalledTimes(2);
+        expect(getMemberCards).not.toHaveBeenCalled();
+    });
+
+    // F2 (LG9): a guest on a local node never reads the directory, as before the switch.
+    it('local: a guest reads no directory, at open or once the node has said it reads whole', async () => {
+        render(<LedgerPage identity={identity} isMember={false} />);
+        await waitFor(() => expect(communityInfoOnce).toHaveBeenCalled());
+        await act(async () => { await new Promise(r => setTimeout(r, 50)); });
+        expect(getMembers).not.toHaveBeenCalled();
+        expect(getMemberCards).not.toHaveBeenCalled();
     });
 });

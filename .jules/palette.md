@@ -19,6 +19,14 @@ PostAuthorTrust, 2 on the FAQ — all the same fix). Before opening a PR:
 5. **Record outcomes below** so the next run sees what's already done.
 
 ## ✅ Resolved — do NOT re-file (2026-06-14, landed in #112 / #113)
+
+### 2026-10-01 — "focus rings on VisitorListing's Back and Join buttons" (#1369) — CLOSED, CLAIM FALSE.
+`apps/pwa/src/index.css` gives every element a keyboard focus outline (`:focus-visible { outline: 2px solid
+var(--accent); outline-offset: 2px }`), since the first release. Measured in Chromium: both buttons show a 2px sage
+outline on Tab on main. A missing `focus-visible:` class is only a gap on an element that removes the outline
+(`outline-none` / `focus:outline-none`) without a replacement. Check the computed style before filing.
+(Also: #1127's NodeAdminLink ring, "still wanted" on 2026-09-25, landed in #1263.)
+
 ### 2026-09-09 — Incomplete ARIA meter semantics in CreditBar (#681). Landed after fix.
 #681 added `role="meter"`, `aria-label`, `aria-valuenow`, and `aria-valuemin={floor}` to PWA `CreditBar.tsx`, but omitted `aria-valuemax`. Assistive technologies default omitted `aria-valuemax` to 100; because BeanPool balances regularly exceed 100, this produced an invalid ARIA state (`valuenow > valuemax`) and validator errors until `aria-valuemax={feeFreeMax}` (default 200) and clamped `aria-valuenow = Math.min(valuemax, Math.max(valuemin, balance))` were added.
 Before filing an accessibility PR, check every ARIA attribute the role requires, not just the role itself. For `role="meter"` and `role="progressbar"`, always supply valid `aria-valuemin`, `aria-valuemax`, and `aria-valuenow` that cover the full range of runtime values.
@@ -193,3 +201,39 @@ handler *and* an explicit close button *and* `type="button"`. One open nit worth
 ## 2026-09-25 - NodeAdminLink Focus Ring Styling
 **Learning:** `NodeAdminLink.tsx` rendered the community admin settings link `<a>` without explicit focus-visible ring styling, making keyboard focus highlights invisible during navigation.
 **Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl` to the `<a>` element in `NodeAdminLink.tsx` and added test coverage in `NodeAdminLink.test.tsx`.
+
+## 2026-09-26 - NewAccountCard Touch Target Sizing & Focus Ring Styling
+**Learning:** `NewAccountCard.tsx` close button `✕` had a size of `w-8 h-8` (32px x 32px), failing minimum touch target sizing guidelines (< 44px), and lacked explicit focus-visible ring styling for keyboard navigation.
+**Action:** Updated close button to `min-w-[44px] min-h-[44px] w-11 h-11` touch target sizing with `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500`, dark mode hover styling, and updated test coverage in `NewAccountCard.test.tsx`.
+
+## 2026-09-27 - MemberGuide Keyboard Focus Ring Styling
+**Learning:** `MemberGuide.tsx` interactive row buttons, header back button, section navigation button, video link, and search input wrapper lacked visible keyboard focus indicators (`focus-visible:ring-2` / `focus-within:ring-2`), making keyboard navigation focus states hard to discern for assistive technology users.
+**Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` to buttons and video link, and `focus-within:ring-2 focus-within:ring-emerald-500` to the search input label wrapper.
+
+## 2026-10-02 - EventChat Composer & Send Button Focus Rings
+**Learning:** `EventChat.tsx` chat composer textarea and Send action button lacked explicit focus-visible ring indicators, making keyboard focus highlights hard to discern during keyboard navigation.
+**Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500` to the textarea composer and `focus-visible:ring-offset-1` to the Send button in `EventChat.tsx`.
+
+## 2026-10-03 - InstallPrompt Touch Target Sizing & Test Coverage
+**Learning:** `InstallPrompt.tsx` interactive controls ("Dismiss", "How?", "Install", and "Don't show this again") lacked explicit minimum touch target sizing (height/width < 44px on mobile devices), and the component lacked unit test coverage.
+**Action:** Added explicit `minWidth: '44px'`, `minHeight: '44px'` touch target properties and inline flex alignment to buttons in `InstallPrompt.tsx`, and created comprehensive unit test suite in `InstallPrompt.test.tsx`.
+
+## 2026-10-03 - OwnerUnlockCard Focus Ring Styling
+**Learning:** `OwnerUnlockCard.tsx` interactive action buttons and code input textarea lacked explicit focus-visible ring indicators, making keyboard focus highlights hard to discern during keyboard navigation.
+**Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500` to the helper `BTN` class and unlock code textarea in `OwnerUnlockCard.tsx`, and updated `OwnerUnlockCard.test.tsx`.
+
+## 2026-10-04 - KnownConsentCard Focus Ring Styling
+**Learning:** `KnownConsentCard.tsx` action buttons ("I agree", "Withdraw", and "Not now") lacked explicit focus-visible ring indicators, making keyboard focus highlights hard to discern during keyboard navigation.
+**Action:** Added `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2` styling to buttons in `KnownConsentCard.tsx` and created `KnownConsentCard.test.tsx`.
+
+## 2026-10-05 - GroupSuccessionPanel Controls Focus Ring Styling
+**Learning:** `GroupSuccessionPanel.tsx` interactive voting buttons ("Yes", "No"), candidate selection dropdown, and proposal submit button ("Propose") suppressed default focus styling or lacked explicit `focus-visible` ring indicators, making keyboard navigation focus states hard to discern.
+**Action:** Added `focus-visible:outline-none focus-visible:ring-2` focus ring styling across interactive controls in `GroupSuccessionPanel.tsx`.
+
+## 2026-10-11 - ConsentText Summary Focus Ring & Accessibility
+**Learning:** `ConsentText.tsx` rendered the collapsible `<summary>` tag ("Read all of it") without explicit keyboard focus-visible ring styling.
+**Action:** Added `className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"` to `<summary>` in `ConsentText.tsx` and created `ConsentText.test.tsx`.
+
+## 2026-10-06 - MarketplacePage Post-Release Review Modal Accessibility & Focus Rings
+**Learning:** `MarketplacePage.tsx` post-release review modal (`promptReviewForTx`) lacked modal ARIA dialog semantics (`role="dialog"`, `aria-modal="true"`, `aria-labelledby`), star rating buttons lacked `type="button"` and screen reader `aria-label`s (`Rate N stars`), raw decorative emoji (`🎉`) was exposed to screen readers without `aria-hidden="true"`, and star rating buttons and "Skip for now" button suppressed focus outlines (`focus:outline-none` / `outline-none`) without replacement focus ring styling.
+**Action:** Added modal ARIA dialog attributes (`role="dialog"`, `aria-modal="true"`, `aria-labelledby="post-release-review-title"`), `id="post-release-review-title"`, `aria-hidden="true"` on emoji, explicit `type="button"` and `aria-label={`Rate ${star} star${star === 1 ? '' : 's'}`}` on star rating buttons, and `focus-visible:outline-none focus-visible:ring-2` focus rings across modal controls in `MarketplacePage.tsx`.

@@ -51,17 +51,20 @@ import {
     initStateEngine, transfer, seedGenesisMember, createPost, acceptPost, completePostTransaction, generateInvite,
     getBalance, assertMemberActive,
 } from './state-engine.js';
-import { issueRekeyCode, getOffboardPreview, executeOffboard } from './engine/member-wizards.js';
+import { issueRekeyCode, completeRekey, getOffboardPreview, executeOffboard } from './engine/member-wizards.js';
 import { adminActorName } from './engine/admin-actor-name.js';
 import { authorizeKeySigner } from './admin-key-auth.js';
 import { cacheRemoteListings } from './federation-listings.js';
 import { handlePurchaseRequest } from './federation-settlement-exchange.js';
 import { startHttpsServer, resetAdminRateLimit } from './https-server.js';
+import { ownerSessionHeaders } from './admin-auth-test-harness.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { initAdminPassword } from './config/local-config.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
 import { pruneAuthAttempts } from './auth-rate-limit.js';
 import { db } from './db/db.js';
+import { lockedDm } from './dm-test-payload.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -70,7 +73,6 @@ function assert(cond: boolean, msg: string): void {
 }
 
 let BASE = '';
-const ADMIN_PW = 'DoorsKeyCase123!';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const DAY = 86_400_000;
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
@@ -85,8 +87,9 @@ function keypair(name: string): Id {
 
 function makeMember(name: string, beans = 100): Id {
     const id = keypair(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
-                VALUES (?, ?, ?, 'genesis', 'TEST', ?, 'active')`).run(id.pk, name, ago(30 * DAY), AVATAR);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                VALUES (?, ?, ?, 'genesis', 'TEST', 'active')`).run(id.pk, name, ago(30 * DAY));
+    setMemberPhoto(db, id.pk, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pk);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
     return id;
@@ -140,7 +143,10 @@ async function call(method: string, id: Id | null, path: string, body?: unknown,
     let json: any; try { json = await res.json(); } catch { /* empty */ }
     return { status: res.status, body: json };
 }
-const admin = (method: string, path: string, body?: unknown) => call(method, null, path, body, undefined, { 'X-Admin-Password': ADMIN_PW });
+// Step 7c: with the node's 2FA off the admin password alone opens no admin route. The operator's calls go under an
+// owner's key session, opened in main() before anything is looked at.
+let operator: Record<string, string> = {};
+const admin = (method: string, path: string, body?: unknown) => call(method, null, path, body, undefined, operator);
 
 /** A /ws socket signed by `id` as `as`, and everything it is sent; rejects when the upgrade is refused. */
 type Sock = { ws: WebSocket; events: any[] };
@@ -209,6 +215,7 @@ async function main(): Promise<void> {
     seedGenesisMember(founder.pk, founder.name);
     const alice = makeMember('Alice');
     const bob = makeMember('Bob');
+    operator = ownerSessionHeaders();
     const offer = (m: Id, t: string) => createPost('offer', 'produce', t, `${t}, fresh`, 5, 'fixed', m.pk)!;
     offer(alice, 'Alice seedlings'); offer(bob, 'Bob seedlings');
     // A completed trade each, so both may send Beans (the send gate).
@@ -249,15 +256,15 @@ async function main(): Promise<void> {
     assert(rowsFor(bob.pk).length === 1 && rowsFor(vera.pk).length === 1 && rowsFor(nia.pk).length === 0,
         `still one row for Bob's key, one for Vera's, none for Nia's (${rowsFor(bob.pk).length}/${rowsFor(vera.pk).length}/${rowsFor(nia.pk).length})`);
 
-    const niaJoin = await call('POST', null, '/api/invite/redeem', { code, publicKey: nia.pk, callsign: 'Nia' });
+    const niaJoin = await call('POST', nia, '/api/invite/redeem', { code, publicKey: nia.pk, callsign: 'Nia' });
     assert(niaJoin.status === 200 && niaJoin.body?.member?.publicKey === nia.pk && codeRow()?.used_by === nia.pk,
         `the one spelling still joins: Nia is a member and the code is used by her key (${show(niaJoin)})`);
-    const bobAgain = await call('POST', null, '/api/invite/redeem', { code: generateInvite(alice.pk)!.code, publicKey: bob.pk, callsign: 'Bob' });
+    const bobAgain = await call('POST', bob, '/api/invite/redeem', { code: generateInvite(alice.pk)!.code, publicKey: bob.pk, callsign: 'Bob' });
     assert(bobAgain.status === 200 && bobAgain.body?.alreadyMember === true && rowsFor(bob.pk).length === 1,
         `Bob's key in the one spelling is answered "already a member", as before (${show(bobAgain)})`);
     const nora = keypair('Nora');
     const noraTicket = offlineTicket(alice);
-    const noraJoin = await call('POST', null, '/api/invite/redeem-offline', { ticketB64: noraTicket, publicKey: nora.pk, callsign: 'Nora' });
+    const noraJoin = await call('POST', nora, '/api/invite/redeem-offline', { ticketB64: noraTicket, publicKey: nora.pk, callsign: 'Nora' });
     assert(noraJoin.status === 200 && hasRow(nora.pk)
         && (db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(ticketCode(noraTicket)) as any)?.used_by === nora.pk,
         `the one spelling still joins with an offline ticket (${show(noraJoin)})`);
@@ -355,24 +362,27 @@ async function main(): Promise<void> {
 
     const bobSock = await socket(bob, bobCaps);
     const dm = await call('POST', alice, '/api/messages/conversation', { type: 'dm', participants: [alice.pk, bob.pk], createdBy: alice.pk });
-    const line = await call('POST', alice, '/api/messages/send', { conversationId: dm.body?.conversation?.id, authorPubkey: alice.pk, ciphertext: 'c2VjcmV0', nonce: 'bm9uY2U=' });
+    const line = await call('POST', alice, '/api/messages/send', { conversationId: dm.body?.conversation?.id, authorPubkey: alice.pk, ...lockedDm() });
     await settle();
     assert(line.status === 200 && bobSock.events.some(e => e.type === 'new_message' && e.conversationId === dm.body?.conversation?.id),
         `Bob's /ws socket signed in capitals is Bob's: it gets the line Alice sent him (${show(line)}; ${bobSock.events.map(e => e.type).join(',')})`);
     bobSock.ws.close();
 
-    // A re-key: the new key in capitals is refused; in the one spelling it binds.
+    // A re-key: the new key in capitals is refused; in the one spelling the phone's ask is taken, and the operator binds it
+    // (since #1768 an ask binds nothing).
     const rex = makeMember('Rex', 0);
     const rexNew = keypair('RexNew');
     const rekey = issueRekeyCode(rex.pk, founder.pk);
-    const proof = (k: Id) => crypto.sign(null, Buffer.from(rekey.code), k.priv).toString('hex');
+    const proof = (k: Id) => crypto.sign(null, Buffer.concat([Buffer.from([0xff]), Buffer.from(`beanpool-re-enroll/2\nlocalhost\n${rekey.code}`, 'utf8')]), k.priv).toString('hex');
     {
         const before = snapshot();
-        const caps = await call('POST', rexNew, '/api/member/re-enroll', { code: rekey.code, newPublicKey: rexNew.pk.toUpperCase(), signature: proof(rexNew) }, rexNew.pk.toUpperCase());
+        const caps = await call('POST', rexNew, '/api/member/re-enroll', { code: rekey.code, newPublicKey: rexNew.pk.toUpperCase(), signature: proof(rexNew), signedFor: 'localhost' }, rexNew.pk.toUpperCase());
         assert(isBadKey(caps) && changedTables(before, snapshot()).length === 0 && hasRow(rex.pk) && !hasRow(rexNew.pk),
             `a re-key naming the new key in capitals is refused 400 bad_key and nothing moves (${show(caps)})`);
-        const ok = await call('POST', rexNew, '/api/member/re-enroll', { code: rekey.code, newPublicKey: rexNew.pk, signature: proof(rexNew) });
-        assert(ok.status === 200 && hasRow(rexNew.pk) && !hasRow(rex.pk), `…in the one spelling it binds (${show(ok)})`);
+        const ok = await call('POST', rexNew, '/api/member/re-enroll', { code: rekey.code, newPublicKey: rexNew.pk, signature: proof(rexNew), signedFor: 'localhost' });
+        assert(ok.status === 200 && ok.body?.state === 'waiting' && hasRow(rex.pk), `…in the one spelling the ask is taken (${show(ok)})`);
+        completeRekey(rex.pk, rexNew.pk, rekey.code, founder.pk);
+        assert(hasRow(rexNew.pk) && !hasRow(rex.pk), '…and the operator binds that key');
     }
 
     // ── 4. Keys named by someone else: a send, a DM, a node role, a peer's listing and buyer ──
@@ -501,7 +511,7 @@ async function main(): Promise<void> {
         const before = snapshot(['onboarding_funnel']);
         const counted = refusals('invalid');
         const check = await inviteCheck(`BP-${t}`);
-        const r = await call('POST', null, '/api/invite/redeem-offline', { ticketB64: t, publicKey: tia.pk, callsign: 'Tia' });
+        const r = await call('POST', tia, '/api/invite/redeem-offline', { ticketB64: t, publicKey: tia.pk, callsign: 'Tia' });
         const changed = changedTables(before, snapshot(['onboarding_funnel']));
         assert(r.status === 400 && check.status === 200 && check.body?.valid === false && changed.length === 0 && refusals('invalid') === counted + 1
             && !db.prepare('SELECT 1 FROM invite_codes WHERE code = ?').get(ticketCode(t)) && !hasRow(tia.pk),
@@ -510,7 +520,7 @@ async function main(): Promise<void> {
     {
         const t = offlineTicket(bob);
         const check = await inviteCheck(`BP-${t}`);
-        const r = await call('POST', null, '/api/invite/redeem-offline', { ticketB64: t, publicKey: tia.pk, callsign: 'Tia' });
+        const r = await call('POST', tia, '/api/invite/redeem-offline', { ticketB64: t, publicKey: tia.pk, callsign: 'Tia' });
         assert(check.body?.valid === true && r.status === 200 && (db.prepare('SELECT invited_by FROM members WHERE public_key = ?').get(tia.pk) as any)?.invited_by === bob.pk,
             `a ticket Bob signs naming his own key in the one spelling still admits, invited by Bob (${show(check)}; ${show(r)})`);
     }
@@ -522,7 +532,7 @@ async function main(): Promise<void> {
         const before = snapshot(['onboarding_funnel']);
         const counted = refusals('inviter_gone');
         const check = await inviteCheck(strayCode);
-        const r = await call('POST', null, '/api/invite/redeem', { code: strayCode, publicKey: uma.pk, callsign: 'Uma' });
+        const r = await call('POST', uma, '/api/invite/redeem', { code: strayCode, publicKey: uma.pk, callsign: 'Uma' });
         const changed = changedTables(before, snapshot(['onboarding_funnel']));
         assert(r.status === 400 && check.body?.valid === false && check.body?.reason === 'unknown_inviter' && changed.length === 0 && refusals('inviter_gone') === counted + 1
             && !hasRow(uma.pk) && (db.prepare('SELECT used_by FROM invite_codes WHERE code = ?').get(strayCode) as any)?.used_by == null,
@@ -586,7 +596,7 @@ async function main(): Promise<void> {
     const piaSend = await call('POST', bob, '/api/ledger/transfer', { to: pia.pk, amount: 1, memo: 'welcome' });
     assert(piaSend.status === 200, `and Bob still sends Beans to Pia (${show(piaSend)})`);
     const seenBefore = bobOpen.events.length;
-    const afterPrune = await call('POST', alice, '/api/messages/send', { conversationId: dm.body?.conversation?.id, authorPubkey: alice.pk, ciphertext: 'YWZ0ZXI=', nonce: 'bm9uY2U=' });
+    const afterPrune = await call('POST', alice, '/api/messages/send', { conversationId: dm.body?.conversation?.id, authorPubkey: alice.pk, ...lockedDm() });
     await settle();
     const newLines = bobOpen.events.slice(seenBefore).filter(e => e.type === 'new_message' && e.conversationId === dm.body?.conversation?.id);
     assert(afterPrune.status === 200 && newLines.length === 1,

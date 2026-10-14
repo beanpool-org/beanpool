@@ -4,6 +4,7 @@ import {
     ownerHeader, previewLine, rowTime, unreadLabel, isMuted, groupsYouCouldJoin, inviteLandingAction, chatHref,
     threadMessageText, chatEmoji, groupsUnreadTotal, rowBadge, yourGroupsPaneState, markChatRead, showInvitePrompt,
     inviteLandingPhase, inviteLandingFacts, inviteLandingHref, inviteLandingPreviewFromParams,
+    ownerKindWord, chatLifecycleFromRows, rowRoleWord,
 } from '../your-groups';
 
 const g = (over: any) => ({
@@ -124,6 +125,37 @@ describe('the header label for every kind of chat (decision 9)', () => {
         });
         expect(ownerHeader('event', '').title).toBe('📅 Event');
         expect(ownerHeader('enterprise', '').title).toBe('🥖 Enterprise');
+    });
+});
+
+describe('a project is a project, an enterprise an enterprise (group decisions §3.1)', () => {
+    it('the header: 🎯 and "project" for a bounded one, 🥖 and "enterprise" otherwise, and from an older node', () => {
+        expect(ownerHeader('enterprise', 'Hall roof', null, 'bounded')).toEqual({
+            title: '🎯 Hall roof', kindWord: 'project', a11y: 'Hall roof, project. Opens the project page.',
+        });
+        expect(ownerHeader('enterprise', '', null, 'bounded').title).toBe('🎯 Project');
+        expect(ownerHeader('enterprise', 'Bakery', null, 'ongoing')).toMatchObject({ title: '🥖 Bakery', kindWord: 'enterprise' });
+        expect(ownerHeader('enterprise', 'Bakery', null, undefined)).toMatchObject({ title: '🥖 Bakery', kindWord: 'enterprise' });
+        // Only an enterprise-kind chat can be a project: a group or an event keeps its own word whatever is passed.
+        expect(ownerKindWord('group', 'bounded')).toBe('group');
+        expect(chatEmoji('event', null, 'bounded')).toBe('📅');
+    });
+
+    it('the row role words: Leader / Collaborator on a project, Lead keeper / Keeper on an enterprise, none on a group', () => {
+        expect(rowRoleWord({ kind: 'enterprise', role: 'lead', lifecycle: 'bounded' })).toBe('Leader');
+        expect(rowRoleWord({ kind: 'enterprise', role: 'keeper', lifecycle: 'bounded' })).toBe('Collaborator');
+        expect(rowRoleWord({ kind: 'enterprise', role: 'lead', lifecycle: 'ongoing' })).toBe('Lead keeper');
+        expect(rowRoleWord({ kind: 'enterprise', role: 'keeper' })).toBe('Keeper');
+        expect(rowRoleWord({ kind: 'group', role: 'convenor' })).toBeNull();
+        expect(rowRoleWord({ kind: 'event', role: 'host' })).toBeNull();
+    });
+
+    it('the chat header reads the kind from the Your groups row, by conversation or owner id', () => {
+        const rows = [{ id: 'r', conversationId: 'r', lifecycle: 'bounded' as const }, { id: 'b', conversationId: 'b', lifecycle: 'ongoing' as const }, { id: 'g', conversationId: 'g' }];
+        expect(chatLifecycleFromRows(rows, 'r')).toBe('bounded');
+        expect(chatLifecycleFromRows(rows, 'b')).toBe('ongoing');
+        expect(chatLifecycleFromRows(rows, 'g')).toBeUndefined();
+        expect(chatLifecycleFromRows(null, 'r')).toBeUndefined();
     });
 });
 

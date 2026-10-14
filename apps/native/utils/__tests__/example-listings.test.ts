@@ -29,7 +29,7 @@ const LOCAL = readNodeProfile({ profile: 'local', features: { beans: true, openJ
 const OLD_GLOBAL = readNodeProfile({ profile: 'global', features: { beans: false, openJoin: true } })!;
 const OLD = readNodeProfile({})!;
 
-/** The Market's inputs to the rule: what the screen passes (app/(tabs)/index.tsx). */
+/** The Market's inputs to the rule: what the screen passes (app/(tabs)/market.tsx). */
 const market = (features: typeof GLOBAL.features | null, realInView: number, extra: Partial<{ narrowed: boolean; loaded: boolean }> = {}) =>
     showExampleListings({ on: exampleListingsOn(features), narrowed: false, loaded: true, realInView, ...extra });
 
@@ -97,7 +97,7 @@ describe('what a card says', () => {
 
 describe('the Market screen draws them only where the rule says, and nothing on them responds', () => {
     const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, '../..', rel), 'utf-8');
-    const screen = read('app/(tabs)/index.tsx');
+    const screen = read('app/(tabs)/market.tsx');
     const component = read('components/ExampleListings.tsx');
 
     it('the rule is fed the list\'s own filters and its real posts in view, after the first sync', () => {
@@ -123,7 +123,7 @@ describe('the Market screen draws them only where the rule says, and nothing on 
         expect(component).toMatch(/EXAMPLE_BADGE/);
     });
 
-    it('only the Market uses them: the map, the phone\'s posts and search never see one', () => {
+    it('only the Market and Home\'s Market card use them: the map, the phone\'s posts and search never see one', () => {
         const root = path.resolve(__dirname, '../..');
         const users: string[] = [];
         const walk = (dir: string) => {
@@ -137,6 +137,7 @@ describe('the Market screen draws them only where the rule says, and nothing on 
             }
         };
         for (const dir of ['app', 'components', 'services', 'utils']) walk(path.join(root, dir));
-        expect(users.sort()).toEqual(['app/(tabs)/index.tsx', 'components/ExampleListings.tsx']);
+        // Home's Market card draws them when the answer says so (`market.examples`, design §6.1), under the same rule.
+        expect(users.sort()).toEqual(['app/(tabs)/market.tsx', 'components/ExampleListings.tsx', 'components/home/HomeCardBodies.tsx']);
     });
 });

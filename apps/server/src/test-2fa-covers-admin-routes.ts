@@ -17,7 +17,8 @@
  *   7. the brake-reset hole (#937 review, finding 1): with 2FA on, a caller who knows the password but not the code
  *      used to wipe their source's count of wrong codes by sending the password alone to one of these routes, and so
  *      guess codes without end. Now the count survives, and the source is braked after the free failures;
- *   8. /ws/logs?auth=<password> (password alone) is refused under 2FA.
+ *   8. /ws/logs?auth=<password> (password alone) is refused under 2FA, and with 2FA off too: the query-string
+ *      password is no door at all any more (Fable's web review, L5); a ticket is the only way in.
  *
  * A Koa app with the real checkAdminAuth and the real community and settings routes, without the per-IP auth rate
  * limit (15 a minute would stop the matrix half way; the password brake is real). No request leaves this process:
@@ -33,7 +34,7 @@ import { db } from './db/db.js';
 import { checkAdminAuth, resetAdminAuthTarpit } from './admin-auth.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { updateLocalConfig, getLocalConfig, hashPassword, setBreakGlassMode } from './config/local-config.js';
-import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, hashBackupCode } from './totp.js';
+import { generateTotpSecret, generateTotpCode, verifyTotpCode, generateBackupCodes, hashBackupCode, forgetUsedTotpCodesForTests } from './totp.js';
 import { createCommunityRoutes } from './routes/community.js';
 import { createSettingsRoutes } from './routes/settings.js';
 import { SOURCE_FREE_FAILURES } from './password-brake.js';
@@ -58,9 +59,11 @@ globalThis.fetch = (async (input: any, init?: any) => {
     return realFetch(input, init);
 }) as typeof fetch;
 
+// Hashed once: putting the password back after a reset restores the same credential, so a 2FA session made under it
+// lives on (a 2FA session ends when the password's hash or salt changes, admin-auth.ts isValid2faSession).
+const PW_HASH = hashPassword(PW);
 function setPassword(): void {
-    const { hash, salt } = hashPassword(PW);
-    updateLocalConfig({ adminHash: hash, salt });
+    updateLocalConfig({ adminHash: PW_HASH.hash, salt: PW_HASH.salt });
 }
 function set2fa(on: boolean): void {
     updateLocalConfig(on
@@ -80,13 +83,12 @@ function makeKeypair() {
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
     return { privateKey, pubKeyHex };
 }
-/** Key sign-in as the app does it: challenge → signature → handshake token → session. */
+/** Key sign-in as the app does it: challenge → signature → handshake token → session. No 2FA code: that is the password's (D2). */
 function keySession(kp: ReturnType<typeof makeKeypair>): { sessionId?: string; error?: string } {
     const chal = createAdminChallenge();
     const signature = crypto.sign(null, Buffer.from(chal.challenge, 'utf-8'), kp.privateKey).toString('hex');
     const solved = verifyAndSolveChallenge({
         challengeId: chal.challengeId, memberPubkey: kp.pubKeyHex, signature,
-        totpCode: getLocalConfig().totpEnabled ? generateTotpCode(SECRET) : undefined,
     });
     if (!solved.ok) return { error: solved.error };
     const ex = consumeHandshakeToken(solved.handshakeToken!);
@@ -141,6 +143,7 @@ async function main() {
     const base = `http://127.0.0.1:${(server.address() as any).port}`;
 
     async function call(method: string, path: string, headers: Record<string, string>, body?: any): Promise<{ status: number; body: any }> {
+        forgetUsedTotpCodesForTests(); // A code is accepted once (totp.ts useTotpCode, test-storm-smalls); this suite signs in more than once a step.
         // A password caller sends it in the body as well as the header, as the old clients did: the old routes read
         // only the body, so this is what reached them without 2FA.
         if (body !== undefined && headers['X-Admin-Password'] && body.password === undefined) {
@@ -178,13 +181,24 @@ async function main() {
         const asAdmin = { 'x-admin-session': adminSid };
         const asModerator = { 'x-admin-session': moSid };
 
-        type Route = { method: string; path: string; body?: any; ok: number; owner: boolean; after?: () => void };
+        type Route = { method: string; path: string; body?: any; ok: number; owner: boolean; after?: () => void | Promise<void> };
         // `ok` is what the route answers once past auth. Bodies are chosen to have no lasting effect where possible:
         // the connector routes stop at "address is required", 2FA verify at "code is required".
         const restoreAfterReset = () => { setPassword(); set2fa(true); };
+        // Each call of change-password below makes a new hash of the same password, and a 2FA session ends with the
+        // password it was made under unless it made the change itself (isValid2faSession): put the password back and
+        // sign in again, so the next rows have a 2FA session.
+        const renew2fa = async () => {
+            setPassword();
+            forgetUsedTotpCodesForTests();
+            const again = await call('POST', '/api/local/verify-password', {}, { password: PW, totpCode: generateTotpCode(SECRET) });
+            if (again.status !== 200) throw new Error(`signing in again answered ${again.status}`);
+            pwWith2fa['X-Admin-2FA-Session'] = again.body.tfaSessionToken;
+        };
         const ROUTES: Route[] = [
             { method: 'POST', path: '/api/local/update-identity', body: { callsign: 'TwoFaTest' }, ok: 200, owner: false },
-            { method: 'POST', path: '/api/local/change-password', body: { currentPassword: PW, newPassword: PW }, ok: 200, owner: true },
+            { method: 'POST', path: '/api/local/change-password', body: { currentPassword: PW, newPassword: PW }, ok: 200, owner: true, after: renew2fa },
+            { method: 'GET', path: '/api/local/connectors', ok: 200, owner: false },
             { method: 'POST', path: '/api/local/connectors', body: {}, ok: 400, owner: false },
             { method: 'POST', path: '/api/local/connectors/connect', body: {}, ok: 400, owner: false },
             { method: 'POST', path: '/api/local/connectors/credit-cap', body: {}, ok: 400, owner: false },
@@ -208,11 +222,11 @@ async function main() {
 
             const b = await call(r.method, r.path, pwWith2fa, r.body);
             assert(b.status === r.ok, `${name}: password + 2FA session → ${r.ok} (got ${b.status} ${JSON.stringify(b.body).slice(0, 80)})`);
-            r.after?.();
+            await r.after?.();
 
             const c = await call(r.method, r.path, asOwner, r.body);
             assert(c.status === r.ok, `${name}: owner key session → ${r.ok} (got ${c.status})`);
-            r.after?.();
+            await r.after?.();
 
             const d = await call(r.method, r.path, asAdmin, r.body);
             if (r.owner) {
@@ -238,7 +252,7 @@ async function main() {
             assert(f.status === 403 && f.body.breakGlassMode === true, `${name}: break-glass mode refuses password + 2FA session (got ${f.status})`);
             const g = await call(r.method, r.path, asOwner, r.body);
             assert(g.status === r.ok, `${name}: break-glass mode still lets the owner's key session through (got ${g.status})`);
-            r.after?.();
+            await r.after?.();
             setBreakGlassMode(false);
         }
 
@@ -251,7 +265,7 @@ async function main() {
         // An old client that sends only { currentPassword, newPassword } still signs in with it, 2FA included.
         const cpOldClientNo2fa = await call('POST', '/api/local/change-password', {}, { currentPassword: PW, newPassword: PW });
         assert(cpOldClientNo2fa.status === 401 && cpOldClientNo2fa.body.totpRequired === true, `a body-only change-password is held to 2FA (got ${cpOldClientNo2fa.status})`);
-        const cpOldClient = await call('POST', '/api/local/change-password', { 'X-Admin-2FA-Session': tfa }, { currentPassword: PW, newPassword: PW });
+        const cpOldClient = await call('POST', '/api/local/change-password', { 'X-Admin-2FA-Session': pwWith2fa['X-Admin-2FA-Session'] }, { currentPassword: PW, newPassword: PW });
         assert(cpOldClient.status === 200, `a body-only change-password with a 2FA session → 200 (got ${cpOldClient.status})`);
 
         // ── 6. Turning 2FA off ──
@@ -308,8 +322,7 @@ async function main() {
         const { initTls } = await import('./services/tls.js');
         const { startHttpsServer } = await import('./https-server.js');
         await initTls();
-        const WS_PORT = 8599;
-        await startHttpsServer(WS_PORT);
+        const WS_PORT = await startHttpsServer(0);
         const wsStatus = (): Promise<number> => new Promise(resolve => {
             const r = https.request({
                     host: '127.0.0.1', port: WS_PORT, path: `/ws/logs?auth=${encodeURIComponent(PW)}`, rejectUnauthorized: false,
@@ -324,7 +337,8 @@ async function main() {
         assert(wsOn === 401, `/ws/logs?auth=<password> under 2FA → 401 (got ${wsOn})`);
         set2fa(false);
         const wsOff = await wsStatus();
-        assert(wsOff === 101, `/ws/logs?auth=<password> with 2FA off still connects, as before (got ${wsOff})`);
+        // Until 2026-10-01 this connected (101): the admin password in a URL, which lands in proxy and browser logs.
+        assert(wsOff === 401, `/ws/logs?auth=<password> with 2FA off is refused too: the password in a URL opens nothing (got ${wsOff})`);
     } finally {
         server.close();
     }

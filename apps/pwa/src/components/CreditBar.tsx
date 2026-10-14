@@ -15,6 +15,11 @@ const WARM = '#c07d2a';
 const MARK = '#38bdf8';
 const BEAN = '#2f9e44';
 const BEAN_DEEP = '#1c6e30';
+// Inks for words and numbers on the card: the same colours in light; dark tokens (index.css) lift them off the dark card.
+const RED_INK = 'var(--credit-red, #bb4b32)';
+const WARM_INK = 'var(--credit-warm, #c07d2a)';
+const BEAN_INK = 'var(--credit-bean, #1c6e30)';
+const MUTED_INK = 'var(--credit-muted, #64748b)';
 
 function marginalRate(b: number): number {
     if (b <= 200) return 0;
@@ -54,16 +59,35 @@ const fmt = (n: number) => `${n >= 0 ? '+' : ''}${Number.isInteger(n) ? n : n.to
 // in the web bundle (the PWA mirrors core constants throughout). Keep in sync with core if the bands change.
 const OFFER_BANDS = [0, 200, 500, 1000, 1500, 2000];
 
+/**
+ * The offer ladder's numbers. `knownGrant` (a confirmed member in a known community, slice 4) is unlocked whole by one live
+ * offer; the rest of the limit keeps the bands. Mirrors @beanpool/core usableAllowance.
+ */
+export function offerLadder(floor: number, knownGrant = 0): { usableAt: (n: number) => number; offersForFull: number; rungs: number[] } {
+    const limit = Math.abs(floor);
+    const known = Math.max(0, Math.min(limit, knownGrant));
+    const other = limit - known;
+    const usableAt = (n: number) => {
+        const i = Math.max(0, Math.min(OFFER_BANDS.length - 1, Math.floor(n)));
+        return Math.min(limit, (i >= 1 ? known : 0) + Math.min(other, OFFER_BANDS[i]));
+    };
+    let offersForFull = OFFER_BANDS.length - 1;
+    for (let n = 0; n < OFFER_BANDS.length; n++) if (usableAt(n) >= limit) { offersForFull = n; break; }
+    const rungs = [...new Set(OFFER_BANDS.map((_, n) => usableAt(n)))].filter(b => b > 0 && b < limit);
+    return { usableAt, offersForFull, rungs };
+}
+
 interface Props {
     balance: number;
     floor: number;                 // earned credit LIMIT (deepest the floor could ever reach)
     usableFloor?: number;          // v3: how deep offers currently unlock (≥ floor, ≤ 0). Omit → no ladder.
+    knownGrant?: number;           // the known floor's part of the limit: one live offer unlocks all of it
     liveOffers?: number;           // v3: current live-offer count (for the ladder caption)
     feeFreeMax?: number;
     className?: string;
 }
 
-export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFreeMax = 200, className = '' }: Props) {
+export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, knownGrant = 0, feeFreeMax = 200, className = '' }: Props) {
     const pct = toPct(balance, floor);
     const overFeeFree = balance > feeFreeMax;
     const nearLimit = floor < 0 && balance - floor < Math.abs(floor) * 0.12;
@@ -80,14 +104,14 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
     const usablePct = toPct(uFloor, floor);                   // right edge of the unlocked (reachable) zone
     const floorPct = toPct(floor, floor);                     // left edge (earned limit)
     // Band rungs that fall within the earned limit (skip the outermost = the limit itself, and 0).
-    const rungs = showLadder ? OFFER_BANDS.filter(b => b > 0 && b < Math.abs(floor)).map(b => ({ b, pct: toPct(-b, floor) })) : [];
+    const ladder = offerLadder(floor, knownGrant);
+    const rungs = showLadder ? ladder.rungs.map(b => ({ b, pct: toPct(-b, floor) })) : [];
     // Next unlock = the next band above what you've unlocked, capped at your earned limit
     // (a 4th offer on a −1400 limit unlocks −1400, not −1500).
-    const nextBand = OFFER_BANDS.find(b => b > Math.abs(uFloor));
-    const nextUnlock = hasLocked && nextBand ? Math.min(nextBand, Math.abs(floor)) : undefined;
+    const nextDepth = ladder.usableAt(liveOffers + 1);
+    const nextUnlock = hasLocked && nextDepth > Math.abs(uFloor) ? nextDepth : undefined;
     // Total live Offers needed to unlock the FULL earned floor (band index, capped at 5).
-    const fullIdx = OFFER_BANDS.findIndex(b => b >= Math.abs(floor));
-    const offersForFull = fullIdx === -1 ? OFFER_BANDS.length - 1 : fullIdx;
+    const offersForFull = ladder.offersForFull;
 
     // Fee ladder — the monthly circulation-fee brackets above the fee-free ceiling. Opens up as the
     // balance climbs past halfway: revealT ramps 0→1 between feeFreeMax/2 and the ceiling, then
@@ -209,12 +233,12 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
 
             {/* Offer ladder caption — what your live Offers unlock, and how many reach your full line */}
             {showLadder && hasLocked && (
-                <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.4, color: '#64748b', fontWeight: 500, display: 'flex', alignItems: 'baseline', gap: 4 }}>
+                <div style={{ marginTop: 6, fontSize: 11, lineHeight: 1.4, color: MUTED_INK, fontWeight: 500, display: 'flex', alignItems: 'baseline', gap: 4 }}>
                     <span aria-hidden="true">🎣</span>
                     {uFloor < 0 ? (
-                        <span><b style={{ color: WARM }}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</b> {liveOffers === 1 ? 'unlocks' : 'unlock'}{"\u00A0"}−{Math.abs(uFloor)}{nextUnlock ? <> · <b style={{ color: WARM }}>{liveOffers + 1} offer{liveOffers + 1 === 1 ? '' : 's'}</b>{"\u00A0"}→{"\u00A0"}−{nextUnlock}</> : ''}</span>
+                        <span><b style={{ color: WARM_INK }}>{liveOffers} offer{liveOffers === 1 ? '' : 's'}</b> {liveOffers === 1 ? 'unlocks' : 'unlock'}{"\u00A0"}−{Math.abs(uFloor)}{nextUnlock ? <> · <b style={{ color: WARM_INK }}>{liveOffers + 1} offer{liveOffers + 1 === 1 ? '' : 's'}</b>{"\u00A0"}→{"\u00A0"}−{nextUnlock}</> : ''}</span>
                     ) : (
-                        <span><b style={{ color: WARM }}>Post an Offer</b> to open your credit line — <b style={{ color: WARM }}>{offersForFull}</b> offer{offersForFull === 1 ? '' : 's'} {offersForFull === 1 ? 'unlocks' : 'unlock'} your{"\u00A0"}full{"\u00A0"}−{Math.abs(floor)}.</span>
+                        <span><b style={{ color: WARM_INK }}>Post an Offer</b> to open your credit line — <b style={{ color: WARM_INK }}>{offersForFull}</b> offer{offersForFull === 1 ? '' : 's'} {offersForFull === 1 ? 'unlocks' : 'unlock'} your{"\u00A0"}full{"\u00A0"}−{Math.abs(floor)}.</span>
                     )}
                 </div>
             )}
@@ -235,15 +259,15 @@ export function CreditBar({ balance, floor, usableFloor, liveOffers = 0, feeFree
             {/* Lane 3 — anchors (space-between, can't collide) */}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10 }}>
                 <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: RED, fontVariantNumeric: 'tabular-nums' }}>{floor}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: RED_INK, fontVariantNumeric: 'tabular-nums' }}>{floor}</div>
                     <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>your limit</div>
                 </div>
                 <div style={{ textAlign: 'center' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: BEAN_DEEP }}><span aria-hidden="true">⚖️ </span>0</div>
-                    <div style={{ fontSize: 9, color: BEAN_DEEP, opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>sweet spot</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: BEAN_INK }}><span aria-hidden="true">⚖️ </span>0</div>
+                    <div style={{ fontSize: 9, color: BEAN_INK, opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>sweet spot</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: WARM }}>+{feeFreeMax}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: WARM_INK }}>+{feeFreeMax}</div>
                     <div style={{ fontSize: 9, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.4px', marginTop: 1 }}>fee-free</div>
                 </div>
             </div>

@@ -12,7 +12,7 @@ describe('links node Settings sends the member back with', () => {
     it('closes the in-app browser for "Back to the app" and "View my profile" only', () => {
         expect(isReturnFromSettings('beanpool://foreground')).toBe(true);
         expect(isReturnFromSettings(`beanpool://public-profile?publicKey=${'ab'.repeat(32)}`)).toBe(true);
-        expect(isReturnFromSettings('beanpool://auth/github?code=1')).toBe(false);
+        expect(isReturnFromSettings('beanpool://auth/google?code=1')).toBe(false);
         expect(isReturnFromSettings('beanpool://invite?code=BP-ABCD-EFGH')).toBe(false);
         expect(isReturnFromSettings('beanpool://public-profile-evil')).toBe(false);
     });

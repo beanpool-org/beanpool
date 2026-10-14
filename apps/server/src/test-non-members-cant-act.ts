@@ -73,11 +73,17 @@ import {
     purgeMemberSelf, pausePost, resumePost, updatePost,
 } from './state-engine.js';
 import { createCrowdfundProject } from './db/db.js';
-import { issueRekeyCode } from './engine/member-wizards.js';
+import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
+import { REKEY_CODE_NOT_VALID } from './engine/rekey-redeem.js';
 import { startHttpsServer, getKoaApp } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { initAdminPassword } from './config/local-config.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
+import { setMemberPhoto } from '@beanpool/engine';
+import { putPushTokenRow } from './services/push-token-seal.js';
+import { lockedDm } from './dm-test-payload.js';
+import { lockedGroupLine } from './group-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -99,12 +105,18 @@ function keypair(callsign: string): Id {
 function makeMember(callsign: string, beans = 100): Id {
     const id = keypair(callsign);
     db.prepare(
-        `INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, updated_at)
-         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
-    ).run(id.pubKeyHex, callsign, AVATAR);
+        `INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
+    ).run(id.pubKeyHex, callsign);
+    setMemberPhoto(db, id.pubKeyHex, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
     transfer('genesis', id.pubKeyHex, beans, `seed ${callsign}`, 'direct', true);
     return id;
+}
+
+/** A phone's proof of possession for a re-key ask (format 2, for this suite's host). */
+function reEnrollProof(phone: Id, code: string): string {
+    return crypto.sign(null, Buffer.concat([Buffer.from([0xff]), Buffer.from(`beanpool-re-enroll/2\nlocalhost\n${code}`, 'utf8')]), phone.privateKey).toString('base64');
 }
 
 async function signedFetch(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, id: Id, body?: unknown) {
@@ -122,6 +134,14 @@ async function signedFetch(method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE', 
     const res = await fetch(`${BASE}${path}`, { method, headers, body: body !== undefined ? bodyString : undefined });
     let json: any; try { json = await res.json(); } catch { /* empty */ }
     return { status: res.status, body: json };
+}
+
+// Step 7c: with the node's 2FA off the admin password alone opens no admin route. The owner's password goes with a fresh
+// code, 2FA on from its first use (the refusal is asserted just before that).
+let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
+function ownerPassword(): { password: string; totpCode: string } {
+    tfa ??= turnOn2faForTests(PW);
+    return { password: PW, totpCode: tfa.code() };
 }
 
 async function unsigned(method: 'GET' | 'POST', path: string, body?: unknown, headers: Record<string, string> = {}) {
@@ -183,7 +203,8 @@ const settle = () => new Promise(r => setTimeout(r, 50));
 const eventRow = (id: string) => db.prepare('SELECT title, event_place_name, event_start_at, event_state, status FROM posts WHERE id = ?').get(id);
 /** A member's account and profile, as the re-key hands it on. */
 const accountOf = (pk: string) => db.prepare(
-    'SELECT callsign, avatar_url, bio, contact_value, status FROM members WHERE public_key = ?').get(pk) as Record<string, unknown> | undefined;
+    `SELECT m.callsign, mp.photo AS avatar_url, m.bio, m.contact_value, m.status FROM members m
+     LEFT JOIN member_photos mp ON mp.public_key = m.public_key WHERE m.public_key = ?`).get(pk) as Record<string, unknown> | undefined;
 
 /** The whole database, table by table, so a sweep can say which table changed, if any did. */
 function snapshot(): Map<string, string> {
@@ -278,7 +299,7 @@ async function main(): Promise<void> {
     // on them, a DM with Bob, and Beans to pledge.
     const carol = makeMember('CarolNM');
     offer(carol, 'Carol plums');
-    const bobGroupLine = postGroupThreadMessage(group.id, bob.pubKeyHex, 'Seedlings are in');
+    const bobGroupLine = postGroupThreadMessage(group.id, bob.pubKeyHex, lockedGroupLine(db, group.id)); // a group chat line is sealed
     const bobGroupPost = createPost('offer', 'produce', 'Bob spare pots', 'For the club', 1, 'fixed', bob.pubKeyHex,
         undefined, undefined, [], false, undefined, false, { audienceScope: 'group', targetGroupId: group.id });
     if (!bobGroupPost) throw new Error('could not post to the group');
@@ -287,9 +308,11 @@ async function main(): Promise<void> {
     db.prepare('UPDATE members SET can_vouch = 1 WHERE public_key = ?').run(pruney.pubKeyHex);
     vouchMember(pruney.pubKeyHex, carol.pubKeyHex, 1);
     const pruneyDm = createConversation('dm', [pruney.pubKeyHex, alice.pubKeyHex], pruney.pubKeyHex)!;
-    const aliceDmLine = sendMessage(pruneyDm.id, alice.pubKeyHex, 'aGk=', 'n1')!;
+    const aliceDmText = lockedDm(); // a DM goes in encrypted
+    const aliceDmLine = sendMessage(pruneyDm.id, alice.pubKeyHex, aliceDmText.ciphertext, aliceDmText.nonce)!;
     const rekeyeeDm = createConversation('dm', [rekeyee.pubKeyHex, bob.pubKeyHex], rekeyee.pubKeyHex)!;
-    const bobDmLine = sendMessage(rekeyeeDm.id, bob.pubKeyHex, 'aGk=', 'n2')!;
+    const bobDmText = lockedDm();
+    const bobDmLine = sendMessage(rekeyeeDm.id, bob.pubKeyHex, bobDmText.ciphertext, bobDmText.nonce)!;
     const rekeyeeOffer2 = offer(rekeyee, 'Rekeyee pickles');
     const tRekeyee2 = requestPost(rekeyeeOffer2.id, bob.pubKeyHex);
     const aliceOffer4 = offer(alice, 'Alice quinces');
@@ -302,7 +325,7 @@ async function main(): Promise<void> {
 
     // For the event edits (4109566615): Bob, who is going to Alice's events, has a phone to push to. Rekeyee convenes a
     // group with an event of Alice's that Bob is going to; Carol, a live member, convenes another (the control).
-    db.prepare("INSERT INTO push_tokens (public_key, token, platform) VALUES (?, 'ExponentPushToken[bob-nm]', 'android')").run(bob.pubKeyHex);
+    putPushTokenRow(bob.pubKeyHex, 'ExponentPushToken[bob-nm]', 'android');
     const rekeyGroup = createGroup({ name: 'Swap shop NM', createdBy: rekeyee.pubKeyHex, joinPolicy: 'open' } as any);
     joinGroup(rekeyGroup.id, alice.pubKeyHex);
     joinGroup(rekeyGroup.id, bob.pubKeyHex);
@@ -436,14 +459,16 @@ async function main(): Promise<void> {
         assert(JSON.stringify(eventRow(rekeyGroupEvent.id)) === swapNight && pushes.length === pushed,
             `the event is unchanged, and nobody going is pushed that it moved (${JSON.stringify(eventRow(rekeyGroupEvent.id))}, ${pushes.length - pushed} pushes)`);
 
-        // Then the re-key completes, signed by the new phone with the operator's code: it holds the member's account, whole.
+        // Then the new phone asks with the operator's code, and the operator binds its number (since #1768 an ask binds
+        // nothing): it holds the member's account, whole.
         const newPhone = keypair('PhonelessNM');
-        const proof = crypto.sign(null, Buffer.from(phonelessRekey.code), newPhone.privateKey).toString('base64');
-        const done = await signedFetch('POST', '/api/member/re-enroll', newPhone,
-            { code: phonelessRekey.code, newPublicKey: newPhone.pubKeyHex, signature: proof });
+        const asked = await signedFetch('POST', '/api/member/re-enroll', newPhone,
+            { code: phonelessRekey.code, newPublicKey: newPhone.pubKeyHex, signature: reEnrollProof(newPhone, phonelessRekey.code), signedFor: 'localhost' });
+        assert(asked.status === 200 && asked.body?.state === 'waiting', `the new phone asks and is given a number (got ${asked.status} ${JSON.stringify(asked.body)})`);
+        const done = completeRekey(phoneless.pubKeyHex, newPhone.pubKeyHex, phonelessRekey.code, operator.pubKeyHex);
         const moved = accountOf(newPhone.pubKeyHex);
         const was = JSON.parse(account);
-        assert(done.status === 200 && done.body?.success === true, `the new phone completes the re-key (got ${done.status} ${JSON.stringify(done.body)})`);
+        assert(done.success === true, 'the operator binds the new phone: the re-key completes');
         assert(getBalance(newPhone.pubKeyHex).balance === 50 && moved?.status === 'active' && moved?.callsign === 'PhonelessNM'
             && moved?.bio === 'Grows garlic' && moved?.avatar_url === was.avatar_url && moved?.contact_value === was.contact_value,
             `and the new key holds the member's account, with its 50 Beans and its profile (${getBalance(newPhone.pubKeyHex).balance}, ${JSON.stringify(moved)})`);
@@ -461,36 +486,39 @@ async function main(): Promise<void> {
         const check = await unsigned('GET', `/api/invite/check?code=${encodeURIComponent(pruneyCode.body.invite.code)}`);
         assert(check.body?.valid === false && check.body?.reason === 'unknown_inviter',
             `the pre-flight check says a pruned member's code no longer works (got ${JSON.stringify(check.body)})`);
-        const redeem = await unsigned('POST', '/api/invite/redeem',
+        const redeem = await signedFetch('POST', '/api/invite/redeem', newcomer,
             { code: pruneyCode.body.invite.code, publicKey: newcomer.pubKeyHex, callsign: newcomer.callsign });
         assert(redeem.status === 400 && !isMemberRow(newcomer.pubKeyHex), `a code made before the prune no longer redeems (got ${redeem.status})`);
 
         const ticketCheck = await unsigned('GET', `/api/invite/check?code=${encodeURIComponent('BP-' + pruneyTicket)}`);
         assert(ticketCheck.body?.valid === false && ticketCheck.body?.reason === 'unknown_inviter',
             `nor does its offline ticket pass the check (got ${JSON.stringify(ticketCheck.body)})`);
-        const offline = await unsigned('POST', '/api/invite/redeem-offline',
+        const offline = await signedFetch('POST', '/api/invite/redeem-offline', newcomer,
             { ticketB64: pruneyTicket, publicKey: newcomer.pubKeyHex, callsign: newcomer.callsign });
         assert(offline.status === 400 && !isMemberRow(newcomer.pubKeyHex), `nor does an offline ticket it signed (got ${offline.status})`);
 
         // Controls: a live member's invite and an admin's still redeem.
         const aliceCode = await signedFetch('POST', '/api/invite/generate', alice, { publicKey: alice.pubKeyHex });
         const viaAlice = keypair('ViaAliceNM');
-        const aliceRedeem = await unsigned('POST', '/api/invite/redeem',
+        const aliceRedeem = await signedFetch('POST', '/api/invite/redeem', viaAlice,
             { code: aliceCode.body?.invite?.code, publicKey: viaAlice.pubKeyHex, callsign: viaAlice.callsign });
         assert(aliceRedeem.status === 200 && isMemberRow(viaAlice.pubKeyHex), `a live member's invite still redeems (got ${aliceRedeem.status})`);
 
-        const seed = await unsigned('POST', '/api/admin/seed-invite', { password: PW });
+        const alone = await unsigned('POST', '/api/admin/seed-invite', { password: PW });
+        assert(alone.status === 403 && alone.body?.code === 'password_needs_2fa' && !alone.body?.success,
+            `2FA off: the admin password alone → 403 password_needs_2fa, no invite (got ${alone.status} ${alone.body?.code})`);
+        const seed = await unsigned('POST', '/api/admin/seed-invite', ownerPassword());
         const viaAdmin = keypair('ViaAdminNM');
-        const adminRedeem = await unsigned('POST', '/api/invite/redeem',
+        const adminRedeem = await signedFetch('POST', '/api/invite/redeem', viaAdmin,
             { code: seed.body?.code, publicKey: viaAdmin.pubKeyHex, callsign: viaAdmin.callsign });
         assert(seed.status === 200 && adminRedeem.status === 200 && isMemberRow(viaAdmin.pubKeyHex),
             `an admin's invite still redeems (got ${seed.status}, ${adminRedeem.status})`);
 
         // The admin's invite hangs off the genesis member. Pruned, the node picks a live member instead.
         adminPruneUser(founder.pubKeyHex, 'owner:password');
-        const seed2 = await unsigned('POST', '/api/admin/seed-invite', { password: PW });
+        const seed2 = await unsigned('POST', '/api/admin/seed-invite', ownerPassword());
         const viaAdmin2 = keypair('ViaAdminTwoNM');
-        const adminRedeem2 = await unsigned('POST', '/api/invite/redeem',
+        const adminRedeem2 = await signedFetch('POST', '/api/invite/redeem', viaAdmin2,
             { code: seed2.body?.code, publicKey: viaAdmin2.pubKeyHex, callsign: viaAdmin2.callsign });
         assert(seed2.status === 200 && adminRedeem2.status === 200 && isMemberRow(viaAdmin2.pubKeyHex),
             `with the genesis member pruned, an admin's invite still redeems (got ${seed2.status}, ${adminRedeem2.status} ${JSON.stringify(adminRedeem2.body)})`);
@@ -593,7 +621,7 @@ async function main(): Promise<void> {
         assert(!db.prepare('SELECT 1 FROM marketplace_transactions WHERE post_id = ?').get(aliceOffer5.id), 'and no trade is opened');
         const before = db.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?').get(rekeyeeDm.id) as { n: number };
         refused('nor message Bob as them',
-            await signedFetch('POST', '/api/messages/send', rekeyee, { conversationId: rekeyeeDm.id, authorPubkey: rekeyee.pubKeyHex, ciphertext: 'aGk=', nonce: 'n3' }));
+            await signedFetch('POST', '/api/messages/send', rekeyee, { conversationId: rekeyeeDm.id, authorPubkey: rekeyee.pubKeyHex, ...lockedDm() }));
         assert((db.prepare('SELECT COUNT(*) AS n FROM messages WHERE conversation_id = ?').get(rekeyeeDm.id) as { n: number }).n === before.n, 'and nothing is sent');
         refused("nor react to Bob's message",
             await signedFetch('POST', '/api/messages/react', rekeyee, { messageId: bobDmLine.id, authorPubkey: rekeyee.pubKeyHex, emoji: '👍' }));
@@ -634,7 +662,8 @@ async function main(): Promise<void> {
             id: rekeyGroupEvent.id, postId: aliceOffer4.id, groupId: rekeyGroup.id, targetGroupId: rekeyGroup.id, conversationId: rekeyeeDm.id,
             messageId: bobDmLine.id, transactionId: tRekeyee2.id, projectId: project, code: phonelessRekey.code,
             type: 'offer', category: 'produce', title: 'Swept NM', description: 'Swept', credits: 1, priceType: 'fixed', amount: 1,
-            ciphertext: 'aGk=', nonce: 'c3dlcHQ=', emoji: '👍', stars: 5, reason: 'Swept', callsign: 'Swept NM', bio: 'Swept',
+            ...lockedDm(), // ciphertext + nonce in the encrypted form, the only one a DM send or edit takes
+            emoji: '👍', stars: 5, reason: 'Swept', callsign: 'Swept NM', bio: 'Swept',
             token: 'ExponentPushToken[swept]', platform: 'android', status: 'going', choice: 'yes', optionId: 'a',
             ...own,
         };
@@ -642,12 +671,15 @@ async function main(): Promise<void> {
     /** Every write in `swept`, signed by `key`: the ones not answered as `isRefusal` says, and whether any table changed or anyone was pushed. */
     const sweepAs = async (key: Id, isRefusal: (r: { status: number; body: any }, route: string) => boolean, ownPost?: string, own?: Record<string, unknown>) => {
         // Each refusal is charged to the caller's address as an unsigned request would be (gateway-rate-limit.ts
-        // gatewaySettle, as for a bad signature). This many from one address would trip it, so each pass starts clear.
+        // gatewaySettle, as for a bad signature). This many from one address would trip it, so each pass starts clear, and
+        // is cleared again every 100 writes: a pass of 200 (group chats 2b's reject route made it so) crossed one window's.
         resetGatewayRateLimit();
         const before = snapshot();
         const pushed = pushes.length;
         const answered: string[] = [];
-        for (const route of swept) {
+        for (const [i, route] of swept.entries()) {
+            // Over 200 writes now: the limiter is reset every 100 routes, and the purge starts clear, as its own steps do.
+            if ((i > 0 && i % 100 === 0) || route === 'POST /api/member/purge') resetGatewayRateLimit();
             const [method, path] = route.split(' ') as ['POST' | 'PUT' | 'PATCH' | 'DELETE', string];
             const r = await signedFetch(method, materialise(path, ownPost), key, bodyFor(key, own));
             if (!isRefusal(r, route)) answered.push(`${route} → ${r.status} ${JSON.stringify(r.body ?? null).slice(0, 90)}`);
@@ -663,6 +695,7 @@ async function main(): Promise<void> {
         const isRefusal = (r: { status: number; body: any }) => r.status === 403 && r.body?.code === 'key_invalidated' && r.body?.error === REPLACED;
         assert(swept.length > 150 && writes.length - swept.length > 100,
             `the sweep takes every registered write the middleware sees: ${swept.length} of ${writes.length} (the rest are the admin surface and invite redemption)`);
+        assert(swept.includes('POST /mcp') && swept.includes('DELETE /mcp'), 'the AI assistant endpoint among them (POST and DELETE /mcp): a key\'s signature is no way in');
         const keys: Array<[string, Id]> = [['the old key of a member being re-keyed', rekeyee], ['the old key of a completed re-key', phoneless]];
         for (const [who, key] of keys) {
             const { answered, changed, pushed } = await sweepAs(key, isRefusal);
@@ -709,9 +742,12 @@ async function main(): Promise<void> {
             const row = JSON.stringify(accountOf(member.pubKeyHex));
             const before = snapshot();
             const phone = keypair(`${member.callsign} new`);
-            const proof = crypto.sign(null, Buffer.from(rekey.code), phone.privateKey).toString('base64');
-            const r = await signedFetch('POST', '/api/member/re-enroll', phone, { code: rekey.code, newPublicKey: phone.pubKeyHex, signature: proof });
-            assert(r.status === 400 && r.body?.error === GONE, `completing the re-key of an account ${how} is refused in plain words (got ${r.status} ${JSON.stringify(r.body)})`);
+            const r = await signedFetch('POST', '/api/member/re-enroll', phone,
+                { code: rekey.code, newPublicKey: phone.pubKeyHex, signature: reEnrollProof(phone, rekey.code), signedFor: 'localhost' });
+            assert(r.status === 404 && r.body?.error === REKEY_CODE_NOT_VALID, `a phone's ask on the code of an account ${how} is refused, as any dead code is (got ${r.status} ${JSON.stringify(r.body)})`);
+            let bound = '';
+            try { completeRekey(member.pubKeyHex, phone.pubKeyHex, rekey.code, operator.pubKeyHex); } catch (e) { bound = (e as Error).message; }
+            assert(bound === GONE, `and binding a key to it is refused in plain words (got ${bound || 'no refusal'})`);
             const changed = changedTables(before, snapshot());
             assert(changed.length === 0 && !isMemberRow(phone.pubKeyHex) && JSON.stringify(accountOf(member.pubKeyHex)) === row,
                 `and nothing changes: the row stays pruned under the old key, and the new key holds nothing${changed.length ? ` (changed: ${changed.join(', ')})` : ''}`);
@@ -736,7 +772,7 @@ async function main(): Promise<void> {
             const post = await signedFetch('POST', '/api/marketplace/posts', member, { type: 'offer', category: 'produce', title: `Honey from ${status}`,
                 description: 'Jars', credits: 3, priceType: 'fixed', authorPublicKey: member.pubKeyHex });
             const message = await signedFetch('POST', '/api/messages/send', member,
-                { conversationId: dm.id, authorPubkey: member.pubKeyHex, ciphertext: 'aGk=', nonce: `bm9uY2Ut${status}` });
+                { conversationId: dm.id, authorPubkey: member.pubKeyHex, ...lockedDm() }); // a DM goes in encrypted
             const pause = await signedFetch('POST', '/api/marketplace/posts/pause', member, { postId: own.id, authorPublicKey: member.pubKeyHex });
             const resume = await signedFetch('POST', '/api/marketplace/posts/resume', member, { postId: own.id, authorPublicKey: member.pubKeyHex });
             const edit = await signedFetch('POST', '/api/marketplace/posts/update', member,
@@ -829,7 +865,7 @@ async function main(): Promise<void> {
 
         // A listing the prune cancelled under a deal in escrow stays down when an admin refunds the buyer.
         const carolHeld = getBalance(carol.pubKeyHex).balance;
-        const refund = await unsigned('POST', `/api/local/admin/disputes/${escrowTx.id}/resolve`, { password: PW, action: 'refund_to_buyer' });
+        const refund = await unsigned('POST', `/api/local/admin/disputes/${escrowTx.id}/resolve`, { ...ownerPassword(), action: 'refund_to_buyer' });
         assert(refund.status === 200 && tradeStatus(escrowTx.id) === 'cancelled' && getBalance(carol.pubKeyHex).balance > carolHeld,
             `an admin refunds Carol the deal in escrow with the removed member (got ${refund.status} ${JSON.stringify(refund.body)}, ${tradeStatus(escrowTx.id)})`);
         assert(postStatus(escrowed.id) === 'cancelled', `and the listing the prune cancelled stays down (got ${postStatus(escrowed.id)})`);
@@ -912,17 +948,19 @@ async function main(): Promise<void> {
             assert(isClosed(gated), `${how}: a gated read it signs is refused the same way (got ${gated.status} ${JSON.stringify(gated.body)})`);
             const own = await signedFetch('GET', '/api/community/me', s.m);
             assert(isClosed(own), `${how}: so is a read of its own standing (got ${own.status})`);
-            const signedPublic = await signedFetch('GET', '/api/marketplace/posts', s.m);
+            // A read that is public on a local node: the community's info. (The listings were the example while the board
+            // was public on every node; a local community's are its members' since 2026-09-28.)
+            const signedPublic = await signedFetch('GET', '/api/community/info', s.m);
             assert(isClosed(signedPublic), `${how}: and a public read it signs (got ${signedPublic.status})`);
         }
-        const unsignedPublic = await unsigned('GET', '/api/marketplace/posts');
+        const unsignedPublic = await unsigned('GET', '/api/community/info');
         assert(unsignedPublic.status === 200, `the same public read unsigned is answered as before (got ${unsignedPublic.status})`);
 
         // Invite redemption, which the middleware never sees, refuses a closed account's key itself and uses no code.
         const code = (await signedFetch('POST', '/api/invite/generate', alice, { publicKey: alice.pubKeyHex })).body?.invite?.code;
         for (const [how, s] of closed) {
             const account = JSON.stringify(accountOf(s.m.pubKeyHex));
-            const r = await unsigned('POST', '/api/invite/redeem', { code, publicKey: s.m.pubKeyHex, callsign: 'Back again NM' });
+            const r = await signedFetch('POST', '/api/invite/redeem', s.m, { code, publicKey: s.m.pubKeyHex, callsign: 'Back again NM' });
             assert(r.status === 400 && /account in this community was closed/.test(r.body?.error ?? '') && r.body?.member === undefined,
                 `${how}: redeeming an invite with the key is refused, not answered as a member (got ${r.status} ${JSON.stringify(r.body)})`);
             assert(JSON.stringify(accountOf(s.m.pubKeyHex)) === account, `${how}: and the account stays closed`);

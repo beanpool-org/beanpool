@@ -37,6 +37,7 @@ import { generateTotpSecret, generateBackupCodes, hashBackupCode } from './totp.
 import { createCommunityRoutes } from './routes/community.js';
 import { createSettingsRoutes } from './routes/settings.js';
 import { resetPasswordBrake } from './password-brake.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -157,10 +158,17 @@ async function main() {
         // scrypt and no password brake, so their writes land while a password caller is held.
         const asOwner = { 'x-admin-session': keySession(olive) };
 
+        // Step 7c: with the node's 2FA off the password alone changes nothing. A to D run with 2FA on and send the
+        // password with a fresh code, as an owner with an authenticator does; the races they hold are unchanged.
+        const alone = await call('/api/local/change-password', {}, { password: PW, currentPassword: PW, newPassword: NEW_PW });
+        assert(alone.status === 403 && alone.body?.code === 'password_needs_2fa' && works(PW) && !works(NEW_PW),
+            `7c. 2FA off: change-password with the password alone → 403 password_needs_2fa, nothing changed (${alone.status} ${alone.body?.code})`);
+        const tfa = turnOn2faForTests(PW);
+
         // ── A ────────────────────────────────────────────────────────────────────────────────
         console.log('\nA. Change password while two-factor setup and a gateway setting land');
         fs.writeFileSync(firstPasswordPath(), PW + '\n', { mode: 0o600 });
-        const a = await heldCall('/api/local/change-password', { password: PW, currentPassword: PW, newPassword: NEW_PW });
+        const a = await heldCall('/api/local/change-password', { password: PW, totpCode: tfa.code(), currentPassword: PW, newPassword: NEW_PW });
         const setupA = await call('/api/local/admin/2fa/setup', asOwner, {});
         assert(setupA.status === 200, `A0. (setup) two-factor setup lands while the change is held (${setupA.status})`);
         updateGatewayConfig({ corsAllowedOrigins: ['https://pwa.example.org'] });
@@ -178,7 +186,7 @@ async function main() {
         // ── B ────────────────────────────────────────────────────────────────────────────────
         console.log("\nB. Change password while another owner's new password lands");
         setPassword(PW);
-        const b = await heldCall('/api/local/change-password', { password: PW, currentPassword: PW, newPassword: NEW_PW });
+        const b = await heldCall('/api/local/change-password', { password: PW, totpCode: tfa.code(), currentPassword: PW, newPassword: NEW_PW });
         setPassword(OTHER_PW); // what another owner's change-password writes
         b.release();
         const changedB = await b.answer;
@@ -198,7 +206,7 @@ async function main() {
             fs.chmodSync(cfgPath, 0o444); // saveLocalConfig's write fails, and it only logs that
             let changedC: { status: number; body: any };
             try {
-                changedC = await call('/api/local/change-password', {}, { password: PW, currentPassword: PW, newPassword: NEW_PW });
+                changedC = await call('/api/local/change-password', {}, { password: PW, totpCode: tfa.code(), currentPassword: PW, newPassword: NEW_PW });
             } finally {
                 fs.chmodSync(cfgPath, 0o644);
             }
@@ -211,7 +219,7 @@ async function main() {
 
         // ── D ────────────────────────────────────────────────────────────────────────────────
         console.log('\nD. Update identity while two-factor setup lands');
-        const d = await heldCall('/api/local/update-identity', { password: PW, callsign: 'RaceTown', communityName: 'Race Town' });
+        const d = await heldCall('/api/local/update-identity', { password: PW, totpCode: tfa.code(), callsign: 'RaceTown', communityName: 'Race Town' });
         const setupD = await call('/api/local/admin/2fa/setup', asOwner, {});
         assert(setupD.status === 200, `D0. (setup) two-factor setup lands while the update is held (${setupD.status})`);
         const pendingD = getLocalConfig().totpPendingSecret;

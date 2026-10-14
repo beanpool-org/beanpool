@@ -32,6 +32,7 @@
  */
 
 import fs from 'node:fs';
+import { writeFileAtomic } from '../write-file-atomic.js';
 import path from 'node:path';
 import { createHmac } from 'node:crypto';
 import { ed25519, x25519 } from '@noble/curves/ed25519.js';
@@ -50,6 +51,8 @@ import { setTakeoverChangeHandler } from './takeover-signal.js';
 import { NODE_ROLE_ACTS } from '../engine/node-roles.js';
 import { isMemberKeySpelling } from '../engine/member-key.js';
 import { RECOVERY_SEAL_KEY_FILE } from './recovery-seal-key.js';
+import { OPEN_JOIN_KEY_FILE, readOpenJoinKeyForBundle } from './open-join-key.js';
+import { withoutOldAddresses } from './address-retention.js';
 
 export const TAKEOVER_ENVELOPE_FILE = 'takeover-envelope.json';
 /** Chokepoints fire in bursts (a prune touches roles, status and config); one re-seal covers the burst. */
@@ -66,10 +69,30 @@ function envelopePath(): string {
 
 // ── What is sealed (§2.1) ──────────────────────────────────────────────────────────────────
 
-/** The admin/2FA fields a promoted node needs so the community's owners sign in with the community's credentials. */
+/** The admin/2FA fields a promoted node needs so the community's owners sign in with the community's credentials.
+ *  `passwordRetired` is never copied plain: {@link bundledLocalConfigUpdates} merges it. */
 export const BUNDLED_LOCAL_CONFIG_FIELDS = [
-    'adminHash', 'salt', 'totpEnabled', 'totpSecret', 'totpBackupCodesHashes', 'breakGlassMode',
+    'adminHash', 'salt', 'totpEnabled', 'totpSecret', 'totpBackupCodesHashes', 'breakGlassMode', 'passwordRetired',
 ] as const;
+
+/**
+ * What a take-over (`admin-settings`) and a sealed-backup restore write into this server's local-config from a bundle.
+ * The admin password's retirement is sticky: retired when the bundle says so OR this server already is (a bundle
+ * sealed before the retirement carries no such field), and then no hash, salt or the 2FA that guarded the password
+ * come with it. So an older envelope or backup never brings a retired password back, and a restore never clears the
+ * flag. A server that never saw the retirement, given a bundle sealed before it, cannot learn of it from that bundle.
+ */
+export function bundledLocalConfigUpdates(
+    bundled: Record<string, unknown>, current: Record<string, unknown>,
+): Record<string, unknown> {
+    const updates: Record<string, unknown> = {};
+    for (const f of BUNDLED_LOCAL_CONFIG_FIELDS) updates[f] = bundled[f] ?? null;
+    updates.passwordRetired = bundled.passwordRetired || current.passwordRetired || null;
+    if (updates.passwordRetired) {
+        Object.assign(updates, { adminHash: null, salt: null, totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] });
+    }
+    return updates;
+}
 
 /**
  * Identity files, raw bytes as base64 so a take-over writes back exactly what was read.
@@ -80,12 +103,17 @@ export const BUNDLED_LOCAL_CONFIG_FIELDS = [
  * envelope and a sealed backup, is the ONLY place it travels: never the database, a sync payload, a snapshot, a plain
  * backup, a log or an HTTP answer. A take-over and a restore install it with installCarriedRecoverySealKey, never as a
  * plain file write, so a different key already there is kept. A bundle sealed before it travelled has no such entry.
+ *
+ * `open-join.key` is the open door's key (services/open-join-key.ts), kept the same way: only here, installed by the
+ * take-over's `open-door` step and a sealed-backup restore with installCarriedOpenJoinKey. A bundle sealed before it was a
+ * file carries it as `openJoins.salt` instead.
  */
-export const BUNDLED_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', RECOVERY_SEAL_KEY_FILE] as const;
+export const BUNDLED_FILES = ['libp2p_key', 'community.key', 'genesis.json', 'connectors.json', RECOVERY_SEAL_KEY_FILE, OPEN_JOIN_KEY_FILE] as const;
 
 export interface TakeoverBundle {
     v: 1;
-    /** A bundle sealed before the recovery-seal key travelled has no `recovery-seal.key` entry at all. */
+    /** A bundle sealed before the recovery-seal key travelled has no `recovery-seal.key` entry at all, and one sealed before
+     *  the open door's key was a file no `open-join.key` entry. */
     files: Record<(typeof BUNDLED_FILES)[number], string | null>;
     localConfig: Record<(typeof BUNDLED_LOCAL_CONFIG_FIELDS)[number], unknown>;
     /** The raw table: a standby does not replicate roles (backups-and-replicas.md), so without these a promoted
@@ -113,11 +141,12 @@ export interface TakeoverBundle {
      *  match, and writes these into its database otherwise (the `profile` step). Absent in a bundle sealed before
      *  this field existed: the record the standby copied with the replication payload decides. */
     nodeProfile?: ProfileRecord;
-    /** The open door's record (engine/open-join.ts): the key its hashes are made with and the newest
-     *  OPEN_JOINS_IN_BUNDLE rows, never the address hashes. The take-over's `open-door` step merges them, so the
-     *  promoted server refuses a sign-in account that already joined, even one its last copy missed. Absent in a
-     *  bundle sealed before this field existed: what the standby copied with the replication payloads stands. */
-    openJoins?: OpenJoinRecord;
+    /** The open door's record (engine/open-join.ts): the newest OPEN_JOINS_IN_BUNDLE rows, never the address hashes,
+     *  nor the key (the `open-join.key` file above). The take-over's `open-door` step merges them, so the promoted server
+     *  refuses a sign-in account that already joined, even one its last copy missed. Absent in a bundle sealed before
+     *  this field existed: what the standby copied with the replication payloads stands. A bundle sealed before the key
+     *  was a file also carries it here, as `salt` (base64url). */
+    openJoins?: OpenJoinRecord & { salt?: string | null };
 }
 
 export interface NodeIdentity {
@@ -156,6 +185,11 @@ export function readNodeIdentity(): NodeIdentity | null {
 /** The PeerId a libp2p_key file's bytes belong to. Throws when they are not an Ed25519 key. */
 export function peerIdOfKeyFile(keyBytes: Buffer): string {
     return loadNodeIdentity(keyBytes).peerId;
+}
+
+/** The identity a libp2p_key file's bytes hold (a take-over bundle's, before it is written). Throws as peerIdOfKeyFile. */
+export function nodeIdentityOfKeyFile(keyBytes: Buffer): NodeIdentity {
+    return loadNodeIdentity(keyBytes);
 }
 
 function readPublicAddress(): unknown {
@@ -315,9 +349,7 @@ function readStored(): StoredEnvelope | null {
 
 function writeStored(s: StoredEnvelope): void {
     const target = envelopePath();
-    const tmp = `${target}.tmp-${process.pid}`;
-    fs.writeFileSync(tmp, JSON.stringify(s), { mode: 0o600 });
-    fs.renameSync(tmp, target);
+    writeFileAtomic(target, JSON.stringify(s), { mode: 0o600 });
 }
 
 function removeStored(): boolean {
@@ -466,6 +498,8 @@ export function readSealingInputs(): SealingInputs {
 
     const files = {} as TakeoverBundle['files'];
     for (const f of BUNDLED_FILES) {
+        // The open door's key is carried only when it is one (services/open-join-key.ts), never made here.
+        if (f === OPEN_JOIN_KEY_FILE) { files[f] = readOpenJoinKeyForBundle(); continue; }
         const b = f === 'libp2p_key' ? keyBytes : f === 'genesis.json' ? genesisBytes : readFileOrNull(f);
         // A recovery-seal key file that is not a 32-byte key opens nothing: it is not carried (nor ever overwritten here).
         files[f] = b && !(f === RECOVERY_SEAL_KEY_FILE && b.length !== 32) ? b.toString('base64') : null;
@@ -605,9 +639,13 @@ export async function getSealedTakeoverEnvelope(): Promise<{ envelopeId: string;
 
 // ── Which standby holds which envelope (§4: "standby @ 203.0.113.9 holds the keys sealed today 14:02") ──
 
-/** One standby's last fetch of the envelope, keyed by the address it came from. */
+/**
+ * One standby's last fetch of the envelope, keyed by the address it came from. The address is kept 7 days from that
+ * fetch, then null (services/address-retention.ts): the record stays, because which keys went out, and when, still
+ * matters to the owners.
+ */
 export interface EnvelopeHolderRecord {
-    ip: string;
+    ip: string | null;
     envelopeId: string;
     /** When that envelope was sealed (its header's createdAt). */
     sealedAt: string;
@@ -629,7 +667,9 @@ function readHolderRecords(): EnvelopeHolderRecord[] {
     try {
         const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(HOLDERS_KEY) as { value?: string } | undefined;
         const list = row?.value ? JSON.parse(row.value) : [];
-        return Array.isArray(list) ? list.filter((h) => h && typeof h.ip === 'string' && typeof h.envelopeId === 'string') : [];
+        return Array.isArray(list)
+            ? withoutOldAddresses('takeover_envelope_holders', list.filter((h) => h && (typeof h.ip === 'string' || h.ip === null) && typeof h.envelopeId === 'string'))
+            : [];
     } catch {
         return [];
     }
@@ -639,9 +679,9 @@ function readHolderRecords(): EnvelopeHolderRecord[] {
 export function noteEnvelopeFetch(ip: string, envelopeId: string, sealedAt: string, how: EnvelopeHolderRecord['how']): void {
     try {
         const others = readHolderRecords().filter((h) => h.ip !== ip);
-        const list = [{ ip, envelopeId, sealedAt, lastFetchAt: Date.now(), how }, ...others]
+        const list = withoutOldAddresses('takeover_envelope_holders', [{ ip, envelopeId, sealedAt, lastFetchAt: Date.now(), how }, ...others]
             .sort((a, b) => b.lastFetchAt - a.lastFetchAt)
-            .slice(0, HOLDERS_KEEP);
+            .slice(0, HOLDERS_KEEP));
         db.prepare('INSERT OR REPLACE INTO node_config (key, value) VALUES (?, ?)').run(HOLDERS_KEY, JSON.stringify(list));
     } catch (e: any) {
         logger.warn('SYS', `[Takeover] Could not record which standby fetched the envelope: ${e?.message || e}`);
@@ -657,9 +697,10 @@ export function getEnvelopeHolders(): EnvelopeHolder[] {
     return readHolderRecords().map((h) => {
         const current = !!stored && stored.envelopeId === h.envelopeId;
         const verb = h.how === 'confirmed' ? 'holds' : 'was sent';
+        const who = h.ip ? `The standby at ${h.ip}` : 'A standby whose address is no longer kept';
         const message = current
-            ? `The standby at ${h.ip} ${verb} the take-over keys sealed ${h.sealedAt}, the current lock.`
-            : `The standby at ${h.ip} ${verb} take-over keys sealed ${h.sealedAt}, from before the latest change`
+            ? `${who} ${verb} the take-over keys sealed ${h.sealedAt}, the current lock.`
+            : `${who} ${verb} take-over keys sealed ${h.sealedAt}, from before the latest change`
                 + (stored ? ` (${stored.reason}, ${stored.sealedAt}).` : '.');
         return { ...h, current, message };
     });

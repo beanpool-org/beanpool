@@ -12,10 +12,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { db as defaultDb } from '../db/db.js';
+import { closeOpenCopies } from './open-copies.js';
+import { closeWashSnapshotHandle } from '@beanpool/engine';
 import {
     DiskImageStore, ImageStoreUnavailableError, deleteObjectUnless, getImageStore, imagesDir, scanOurObjectsAsync,
     type ImageStore, type ObjectInfo,
 } from '../storage/image-store.js';
+import { stagedObjects } from '../services/stager.js';
+import { OPTIONAL_STORAGE_KEY_TABLES } from '../storage/image-columns.js';
+import { thumbnailKeyOf } from '../storage/photo-thumbnails.js';
 
 export interface DiskBreakdownItem {
     dbSizeBytes: number;
@@ -309,6 +314,16 @@ export function getDiskHealth(options?: { db?: any; dataDir?: string }): DiskHea
  * that can ever reclaim one. No row can point at it — the object is written before the row, and under a name
  * no row would ever hold — so the only question is age, and the same grace period answers it: a `put` in
  * flight right now looks exactly like a leftover.
+ *
+ * ## A standby's whole copy being staged
+ *
+ * A standby builds a whole copy in a staging database beside the live one and swaps it in at a restart
+ * (services/stager.ts). Its stager puts each listing photo in this same store, and until the swap only the staging
+ * database names it; a copy of a big community runs longer than the grace period. So while a staging is there, the
+ * objects it names count as referenced, and nothing written since the copy started is judged at all (a page's photos are
+ * put before its rows commit): stagedObjects. A staging that can't be read judges nothing an orphan, as a failed read of
+ * the live rows does (review 4139589323). So are the objects a whole copy that failed fetched, until the next is due and
+ * has had its time (services/stager.ts keepFetchedObjects): its retry waits an hour, as long as this grace.
  */
 const ORPHAN_OBJECT_GRACE_MS = 60 * 60 * 1000;
 
@@ -362,8 +377,8 @@ function sweepBatchFor(store: ImageStore): number {
  * listed fresh, and the grace period passes over it.
  */
 async function findOrphanedImageObjects(db: any, options: { dataDir?: string; store?: ImageStore } | undefined, nowMs = Date.now()):
-    Promise<{ objects: ObjectInfo[]; totalBytes: number }> {
-    const out = { objects: [] as ObjectInfo[], totalBytes: 0 };
+    Promise<{ objects: ObjectInfo[]; totalBytes: number; stagedSince: number | null }> {
+    const out = { objects: [] as ObjectInfo[], totalBytes: 0, stagedSince: null as number | null };
     let store: ImageStore;
     try {
         store = sweepStore(options);
@@ -373,12 +388,27 @@ async function findOrphanedImageObjects(db: any, options: { dataDir?: string; st
     let listed: ObjectInfo[];
     try { listed = await scanOurObjectsAsync(store); } catch { return out; }
     const referenced = new Set<string>();
+    // A withheld line's photo (engine/withheld-lines.ts), its sender's alone, when this database has the table
+    // (OPTIONAL_STORAGE_KEY_TABLES): one it doesn't have names nothing; one it has must be read like the rest.
+    let optional: string[];
+    try {
+        const present = new Set((db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]).map(r => r.name));
+        optional = OPTIONAL_STORAGE_KEY_TABLES.filter(t => present.has(t)).map(t => `SELECT storage_key FROM ${t} WHERE storage_key IS NOT NULL`);
+    } catch {
+        return out;
+    }
     for (const sql of [
         'SELECT storage_key FROM post_photos WHERE storage_key IS NOT NULL',
         'SELECT storage_key FROM message_attachments WHERE storage_key IS NOT NULL',
+        ...optional,
     ]) {
         try {
-            for (const r of db.prepare(sql).all() as any[]) referenced.add(r.storage_key as string);
+            for (const r of db.prepare(sql).all() as any[]) {
+                referenced.add(r.storage_key as string);
+                // A listing photo's small copy (storage/photo-thumbnails.ts) is kept while its photo is.
+                const thumb = thumbnailKeyOf(r.storage_key);
+                if (thumb) referenced.add(thumb);
+            }
         } catch {
             // A table this build does not have cannot be holding references. But it could equally be a
             // transient read failure, and deleting objects on the strength of a failed read is how a sweep
@@ -386,8 +416,17 @@ async function findOrphanedImageObjects(db: any, options: { dataDir?: string; st
             return out;
         }
     }
+    // A whole copy staging beside this database: what it names, and what was written since it started, are kept.
+    let staged: { since: number; keys: Set<string> } | null;
+    try {
+        staged = stagedObjects(options?.dataDir || process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data'), nowMs);
+    } catch {
+        return out;
+    }
+    out.stagedSince = staged?.since ?? null;
     for (const o of listed) {
-        if (referenced.has(o.key)) continue;
+        if (referenced.has(o.key) || staged?.keys.has(o.key)) continue;
+        if (staged && o.mtimeMs >= staged.since) continue;
         if (nowMs - o.mtimeMs < ORPHAN_OBJECT_GRACE_MS) continue;
         out.objects.push(o);
         out.totalBytes += o.bytes;
@@ -397,6 +436,7 @@ async function findOrphanedImageObjects(db: any, options: { dataDir?: string; st
     // (S3) has none, and does not implement this.
     try {
         for (const t of store.listTemporary?.() ?? []) {
+            if (staged && t.mtimeMs >= staged.since) continue;
             if (nowMs - t.mtimeMs < ORPHAN_OBJECT_GRACE_MS) continue;
             out.objects.push(t);
             out.totalBytes += t.bytes;
@@ -458,7 +498,9 @@ async function sweepOnce(
     const started = Date.now();
     const max = limits.max ?? sweepBatchFor(store);
     const clock = () => options?.nowMs ?? Date.now();
-    const keep = (now: ObjectInfo) => !stillOpen(db) || clock() - now.mtimeMs < ORPHAN_OBJECT_GRACE_MS;
+    // Written again since the listing: inside the grace period again, or since a staged copy started.
+    const keep = (now: ObjectInfo) => !stillOpen(db) || clock() - now.mtimeMs < ORPHAN_OBJECT_GRACE_MS
+        || (found.stagedSince !== null && now.mtimeMs >= found.stagedSince);
     let reached = 0;
     let failures = 0;
     for (const o of found.objects) {
@@ -718,8 +760,17 @@ export async function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?
             }
         }
 
-        // Checkpoint WAL and truncate to immediately reclaim filesystem space
+        // Checkpoint WAL and truncate to immediately reclaim filesystem space. A copy being served to a standby holds a
+        // read on this database (engine/open-copies.ts) that the checkpoint would wait on for the whole busy timeout, with
+        // the event loop held, and then leave the WAL as it was: it is closed first, in the same step, as the recovery
+        // seal closes it, and the standby asks for a new copy. So is the wash analysis's refresh snapshot (a refresh in
+        // flight lands nothing; the next due read starts another).
         try {
+            if (db === defaultDb) {
+                const closed = closeOpenCopies('the operator cleaned storage (a truncating checkpoint)');
+                closeWashSnapshotHandle(db);
+                if (closed > 0) console.log(`[StorageHealth] Closed ${closed} cop${closed === 1 ? 'y' : 'ies'} being served to a standby first; it asks for a new one.`);
+            }
             db.pragma('wal_checkpoint(TRUNCATE)');
             const autoVacuumMode = db.pragma('auto_vacuum', { simple: true });
             if (autoVacuumMode === 2) {
@@ -762,8 +813,8 @@ export async function cleanStorageAndCompressLogs(options?: { db?: any; dataDir?
  * Until now the orphan sweep ran only when an admin opened Settings → Storage and pressed *Clean*
  * (`routes/admin.ts`). Every path in the image store that says an object is "swept later" therefore meant
  * "kept until a human clicks": the objects a rolled-back `createPost`/`updatePost`/import transaction left
- * behind, the old object behind an `INSERT OR REPLACE` on a replica, what `clearReplicatedTables` leaves
- * after a force-resync, and any post-commit `deleteStoredObjects` that hit an I/O error.
+ * behind, the old object behind an `INSERT OR REPLACE` on a replica, what a force-resync's clear leaves
+ * once its copy lands, and any post-commit `deleteStoredObjects` that hit an I/O error.
  *
  * None of those is ever served — every serving path reads the row first, and the row is gone — so this is
  * not data leaking out of the node. It is a member's deleted photo still ON the disk, indefinitely, on a

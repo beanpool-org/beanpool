@@ -59,7 +59,7 @@
 
 import { domainToASCII } from 'node:url';
 import { audienceOf } from '@beanpool/core';
-import { getNodeConfig, resolvePublicNodeUrl } from '../state-engine.js';
+import { getNodeConfig, resolvePublicNodeUrl, PUBLIC_URL_RULES } from '../state-engine.js';
 import { registrarNames, registrarNamesVersion } from './registrar-names.js';
 import { logger } from '../logger.js';
 
@@ -156,7 +156,7 @@ export function configuredAddresses(now = Date.now()): OwnAddress[] {
         if (!address || list.some((a) => a.address === address)) return;
         list.push({ address, source, ...(former ? { former: true as const } : {}), ...(lost.has(address) ? { lost: true as const } : {}) });
     };
-    const url = resolvePublicNodeUrl(config);
+    const url = resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config);
     add(url ? normalizeAddress(url) : null, 'public-address');
     for (const a of envAddresses()) add(a, 'env');
     for (const a of ownerConfirmedAddresses()) add(a, 'owner');

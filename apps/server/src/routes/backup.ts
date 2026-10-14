@@ -8,16 +8,19 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
 import {
-    getNodeRole, exportSyncState, signSyncPayload, type SyncPayload,
+    getNodeRole, exportSyncState, signSyncPayload, signSyncBody, pruneAgedOutRows, getCommonsBalanceExact, type SyncPayload,
     getConversationsByMember, getConversationMessages,
     recordReplicationAccess, getReplicationAccessLog,
 } from '../state-engine.js';
 import { tableContentHashes, type TableHashes } from '../engine/replica-hashes.js';
+import { openCopy, copyPage, closeCopy, type CopyAnswer } from '../engine/copy-pages.js';
+import { PHOTOS_BY_REFERENCE_FORMAT, notePhotoObjectUnreadable } from '../engine/sync.js';
+import { closeOpenCopies } from '../engine/open-copies.js';
 import { noteStandbyReport, forgetStandby, getStandbyHealthBanner } from '../services/standby-health.js';
 import {
     getLocalConfig, saveLocalConfig,
     verifyReplicationToken, generateReplicationToken, setReplicationToken,
-    clearReplicationToken, hasReplicationToken,
+    clearReplicationToken, hasReplicationToken, copyPasswordRemembered, rememberCopyPassword,
     updateBackupCadence,
 } from '../config/local-config.js';
 import { getP2PNode } from '../p2p.js';
@@ -28,27 +31,33 @@ import { startRestoreUnlock, unlockServerUrl } from '../services/owner-unlock.js
 import {
     createSnapshot, listSnapshots, resolveSnapshotPath, snapshotImagesDir,
     getAutoSnapshotConfig, updateAutoSnapshotConfig, isAutoSnapshotInterval, MAX_AUTOSNAPSHOT_INTERVAL_HOURS,
+    isAutoSnapshotKeep, MAX_SNAPSHOTS_KEPT,
 } from '../services/snapshot-scheduler.js';
-import { db, getDbDataVersion } from '../db/db.js';
+import { db, getDbDataVersion, closeDbDataVersionProbe } from '../db/db.js';
 import {
-    assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir, scanOurObjectsAsync, type ImageStore,
+    assertSafeKey, bucketOf, copyObjectReplacing, getImageStore, imagesDir, readObject, scanOurObjectsAsync, type ImageStore,
 } from '../storage/image-store.js';
 import { referencedStorageKeys } from '../storage/image-columns.js';
 import type { RouteDeps } from './types.js';
 import { clientIp, clientLimiterKey } from '../client-ip.js';
 import { acquirePasswordAttempt, refuseBraked, settlePasswordAttempt } from '../password-brake.js';
-import { requireAdminRole } from '../admin-auth.js';
+import { requireAdminRole, requirePhoneStepUp } from '../admin-auth.js';
 import {
     checkRecoveryCode, parseRecoveryCode, RecoveryCodeError, SealedEnvelopeError,
     type CodeStanza, type SealedEnvelopeHeader,
 } from '@beanpool/core';
 import {
     createSealedBackup, createPlainBackup, backupLockState, describeSealedHeader, isGzip, readFileStart,
-    readSealedFileHeader, signerCheck, openSealedFileTo, readBundleFrom, applyBundle, checkBackupArchive,
+    readSealedFileHeader, signerCheck, openSealedFileTo, readBundleFrom, applyBundle,
     MISSING_MEMBER, readInBucketMember,
     type BackupLock, type BackupSource, type StagedImages,
 } from '../services/sealed-backup.js';
+import { checkRestoreDatabase, extractBackupArchive, RESTORE_ARCHIVE_LIMITS, type ArchiveLimits } from '../services/restore-checks.js';
 import { countUnopenable, noCarriedKeyLine, RECOVERY_SEAL_KEY_FILE } from '../services/recovery-seal-key.js';
+import {
+    isOpenJoinKeyId, LEGACY_OPEN_JOIN_KEY_ROW, openJoinKeyId, openJoinKeyOffLine, OPEN_JOIN_KEY_FILE, OPEN_JOIN_KEY_ID_ROW,
+    readOpenJoinKeyForBundle,
+} from '../services/open-join-key.js';
 
 /** After a restore the node restarts to load what was written. Tests replace it. */
 let restartAfterRestore: () => void = () => process.exit(0);
@@ -61,17 +70,25 @@ function restorePaths() {
     return {
         DATA_DIR,
         tmpDir: path.join(DATA_DIR, '.restore-tmp'),
+        // The archive's state.db alone, checked there and copied into place from there (checkRestoreDatabase).
+        candidateDir: path.join(DATA_DIR, '.restore-candidate'),
         uploadPath: path.join(DATA_DIR, 'uploaded-backup.upload'),
         openedTarPath: path.join(DATA_DIR, 'uploaded-backup.opened.tar.gz'),
     };
+}
+
+/** What a restore unpacks at most (services/restore-checks.ts). Tests lower it. */
+let restoreArchiveLimits: ArchiveLimits = RESTORE_ARCHIVE_LIMITS;
+export function setRestoreArchiveLimitsForTests(limits: ArchiveLimits | null): void {
+    restoreArchiveLimits = limits ?? RESTORE_ARCHIVE_LIMITS;
 }
 
 /** Where a sealed upload waits for an owner's phone. One name per upload, so a new restore never hits an old one's file. */
 const PENDING_PREFIX = 'uploaded-backup.pending-';
 
 function cleanupRestoreTemp(): void {
-    const { tmpDir, uploadPath, openedTarPath } = restorePaths();
-    for (const p of [tmpDir, uploadPath, openedTarPath]) {
+    const { tmpDir, candidateDir, uploadPath, openedTarPath } = restorePaths();
+    for (const p of [tmpDir, candidateDir, uploadPath, openedTarPath]) {
         try { fs.rmSync(p, { recursive: true, force: true }); } catch { /* ignore */ }
     }
 }
@@ -103,8 +120,8 @@ function cleanupRestoreTemp(): void {
  * the newer one's. {@link copyObjectReplacing} is the one way any of this code copies onto a name that may
  * already exist, and the rule it keeps.
  *
- * `checkBackupArchive` has already refused the whole archive if any member could escape the extraction
- * directory or was a link, so the tree being copied here is known to be plain files under `tmpDir`.
+ * `extractBackupArchive` has already refused the whole archive if any member could escape the extraction
+ * directory or was anything but a plain file or folder, so the tree being copied here is plain files under `tmpDir`.
  *
  * Exported for the suite that proves the rule above: it is a pure function of two directories, so the test
  * can restore over a live object a snapshot hard-links without standing up a restore and a restart.
@@ -301,6 +318,39 @@ function recoveryCopiesAfterRestore(dataDir: string, carried: boolean): { copies
 }
 
 /**
+ * Whether the open door can check a sign-in against the restored database's records with the key now in the data folder
+ * (services/open-join-key.ts), said in one line when it cannot: a plain backup never carries the key, so a server restored
+ * from one that is not the server that made the records refuses sign-ins at the door until the key is back. Null when
+ * there is nothing to say: no live record, the key here is theirs, or the database still holds the key itself (a backup
+ * made before the key was a file; the boot moves it out). Never throws.
+ */
+function openDoorAfterRestore(dataDir: string, carried: boolean): { records: number; message: string } | null {
+    let records = 0;
+    let recorded: string | null = null;
+    try {
+        const handle = new Database(path.join(dataDir, 'state.db'), { readonly: true });
+        try {
+            if (!handle.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'open_joins'").get()) return null;
+            records = (handle.prepare("SELECT COUNT(*) AS n FROM open_joins WHERE join_hash NOT LIKE 'released:%' AND join_hash NOT LIKE 'words:%'").get() as { n: number }).n;
+            const config = (key: string) => (handle.prepare('SELECT value FROM node_config WHERE key = ?').get(key) as { value?: unknown } | undefined)?.value;
+            if (records === 0 || config(LEGACY_OPEN_JOIN_KEY_ROW) != null) return null;
+            const id = config(OPEN_JOIN_KEY_ID_ROW);
+            recorded = isOpenJoinKeyId(id) ? id : null;
+        } finally {
+            try { handle.close(); } catch { /* the read is done */ }
+        }
+    } catch (e) {
+        console.error('[Restore] Could not read the restored database to check the open door\'s records:', e);
+        return null;
+    }
+    const here = readOpenJoinKeyForBundle();
+    if (here && recorded === openJoinKeyId(Buffer.from(here, 'base64'))) return null;
+    const message = openJoinKeyOffLine(records, here ? 'other-key' : 'missing', carried ? 'here' : 'backup');
+    console.warn(`[Restore] ⚠️ ${message}`);
+    return { records, message };
+}
+
+/**
  * The restore from an opened (or legacy plain) tar on: the hostile-archive checks, state.db, node_config.json, the
  * take-over bundle when a sealed file carries one, then a restart. Shared by restore-by-code and restore by an
  * owner's phone. Returns the answer body; throws on a bad archive (the caller cleans up).
@@ -308,25 +358,35 @@ function recoveryCopiesAfterRestore(dataDir: string, carried: boolean): { copies
 async function restoreFromTar(
     tarPath: string, sealedHeader: SealedEnvelopeHeader | null, signerAcceptedByName: boolean, restartAfterMs = 1000,
 ): Promise<Record<string, unknown>> {
-    const { execFileSync } = await import('node:child_process');
-    const { DATA_DIR, tmpDir } = restorePaths();
+    const { DATA_DIR, tmpDir, candidateDir } = restorePaths();
 
-    // Extract the tar
     if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true });
-    fs.mkdirSync(tmpDir, { recursive: true });
+    fs.mkdirSync(tmpDir, { recursive: true, mode: 0o700 });
 
     // SECURITY (SRV-9a): a restore archive is fully attacker-controlled input — and so is the archive inside a
-    // sealed file: opening it only proves someone holding a key locked it. checkBackupArchive refuses the WHOLE
-    // archive if any member would escape the extraction dir or is a link, BEFORE a byte is extracted.
-    // Legitimate backups are written with `tar -C <stage> .`, so members are plain `./`-prefixed paths.
-    checkBackupArchive(tarPath);
-
-    execFileSync('tar', ['-xzf', tarPath, '-C', tmpDir]);
+    // sealed file: opening it only proves someone holding a key locked it. Read by its own headers and unpacked in
+    // one pass (services/restore-checks.ts), never by `tar`: a member that would escape tmpDir, a link of any kind,
+    // anything but a plain file or folder, or more than the limits (a gzip bomb) refuses the WHOLE archive, and the
+    // caller's cleanup removes tmpDir. Nothing outside tmpDir is written.
+    await extractBackupArchive(tarPath, tmpDir, restoreArchiveLimits);
 
     // Validate that state.db exists and is a regular file
-    const restoredDb = path.join(tmpDir, 'state.db');
-    if (!fs.existsSync(restoredDb) || !fs.lstatSync(restoredDb).isFile()) {
+    const extractedDb = path.join(tmpDir, 'state.db');
+    if (!fs.existsSync(extractedDb) || !fs.lstatSync(extractedDb).isFile()) {
         throw new Error('Invalid backup archive: state.db missing');
+    }
+    // The database, checked while the live one is still open: it must pass SQLite's integrity check and carry no
+    // trigger or view this server's own database does not have (restore-checks.ts checkRestoreDatabase). Alone in a
+    // folder of its own, so no -wal or -journal the archive brought is read with it: the file checked is the file
+    // copied into place below.
+    fs.rmSync(candidateDir, { recursive: true, force: true });
+    fs.mkdirSync(candidateDir, { recursive: true, mode: 0o700 });
+    const restoredDb = path.join(candidateDir, 'state.db');
+    fs.renameSync(extractedDb, restoredDb);
+    const { remade } = checkRestoreDatabase(restoredDb, db);
+    if (remade.length > 0) {
+        console.warn(`[Restore] The backup's database carried ${remade.length} trigger(s) or view(s) that differ from this server's; `
+            + `dropped from it, and made again from this version's code at the restart: ${remade.join(', ')}`);
     }
     // The take-over bundle, when the backup carries one: checked in full BEFORE anything is replaced. Only a
     // sealed file's bundle is used; a plain archive is anyone's to write, so keys in one are never installed.
@@ -356,12 +416,19 @@ async function restoreFromTar(
         throw err;
     }
 
-    // Close current DB connection safely before overwriting
-    const { db } = await import('../db/db.js');
+    // Close current DB connection safely before overwriting, and any copy's snapshot being served from it, and the
+    // change probe a standby's pulls open: `db` must be the last connection, so its close folds state.db-wal in and
+    // removes it. A -wal left behind is played over the restored file at the next open: a database of the old one's
+    // pages and the new one's (a main server that had served its standby since boot did exactly that).
+    closeOpenCopies('a restore replaces state.db');
+    closeDbDataVersionProbe();
     try { db.close(); } catch (e) { console.error('Error closing DB:', e); }
+    for (const sidecar of ['state.db-wal', 'state.db-shm', 'state.db-journal']) {
+        fs.rmSync(path.join(DATA_DIR, sidecar), { force: true });
+    }
 
-    // Replace files
-    fs.copyFileSync(path.join(tmpDir, 'state.db'), path.join(DATA_DIR, 'state.db'));
+    // Replace files: the database is the one checked above.
+    fs.copyFileSync(restoredDb, path.join(DATA_DIR, 'state.db'));
     // On an s3 node nothing goes to the local disk: the archive has no objects (refused above if it had), and
     // the database's keys resolve against the bucket.
     const images = nodeBucket ? { restored: 0, error: null } : restoreImages(tmpDir, DATA_DIR);
@@ -384,6 +451,8 @@ async function restoreFromTar(
     // Members' sign-in recovery copies in the database now in place, against the keys now beside it: said here, at the
     // restore, never first at a member's recovery (recovery seal S2).
     const recoverySeal = recoveryCopiesAfterRestore(DATA_DIR, !!bundle?.files[RECOVERY_SEAL_KEY_FILE]);
+    // And whether the open door can still tell a returning sign-in from a new one here.
+    const openDoor = openDoorAfterRestore(DATA_DIR, !!bundle?.files[OPEN_JOIN_KEY_FILE]);
 
     // What this node is REALLY missing, counted off the restored database and the store now beside it —
     // not read off the archive's label. This is the number that decides `complete`.
@@ -476,6 +545,7 @@ async function restoreFromTar(
         sealed: !!sealedHeader,
         restoredKeys: restoredKeys.length > 0,
         ...(recoverySeal ? { recoverySeal } : {}),
+        ...(openDoor ? { openDoor } : {}),
         ...(signerAcceptedByName ? { keysIgnored: true, note: 'Accepted by its signer\'s name: the database came back; keys and passwords inside it were not used.' } : {}),
         ...(sealedHeader ? { backup: describeSealedHeader(sealedHeader) } : {}),
     };
@@ -500,9 +570,31 @@ async function withTableHashes(payload: SyncPayload, hashes: TableHashes): Promi
     return signed.signature && signed.publicKey ? signed : payload;
 }
 
+/**
+ * Who may call what here (Fable's backups review, 2026-10-01). Everything that hands over the whole database or takes
+ * one in, and everything that decides who may copy it, is an owner's: the node password (only owners hold it) or an
+ * owner's key session. An admin's key session used to pass every route here that names no role, so an admin could
+ * restore a database that made them owner, or download the whole database, or mint a replication token and copy it.
+ * An admin keeps the status, the snapshot list, taking a snapshot and checking one. A moderator reaches none of these
+ * (admin-auth.ts MODERATOR_ROUTES). The replication token opens the standby's routes only: the copy routes
+ * (replicationAuth), replication-access (its probe) and the take-over envelope, which is ciphertext.
+ */
+const RESTORE_OWNER_ONLY = 'Only an owner of this node can restore a backup';
+const DOWNLOAD_OWNER_ONLY = 'Only an owner of this node can download a backup';
+const TOKEN_OWNER_ONLY = 'Only an owner of this node can make, change or remove its replication token';
+const COPY_FROM_OWNER_ONLY = 'Only an owner of this node can change the server it copies from';
+const SNAPSHOTS_OWNER_ONLY = 'Only an owner of this node can delete a snapshot or change when snapshots are taken and kept';
+const COPY_OWNER_ONLY = 'Only an owner of this node can copy its whole ledger';
+
 export function createBackupRoutes(deps: RouteDeps): Router {
     const router = new Router();
     const { checkAdminAuth } = deps;
+
+    /** checkAdminAuth, then the owner's role (the password is owner level). Answers 401 or 403 and returns false. */
+    async function ownerOnly(ctx: any, error: string): Promise<boolean> {
+        if (!(await checkAdminAuth(ctx))) return false;
+        return requireAdminRole(ctx, ['owner'], error);
+    }
 
     // Helper: resolve the public URL for backup enrollment
     function resolvePrimaryUrl(ctx: any): string {
@@ -523,11 +615,12 @@ export function createBackupRoutes(deps: RouteDeps): Router {
 // ======================== DATABASE BACKUP ========================
 
 // Backups (sealed-keys.md §6.1, seal review round 1). With a recovery code the response is a `.bpsealed` envelope —
-// the tar of state.db, node_config.json and the take-over bundle, locked to every owner and the code — whichever
-// credential asked; the replication token may fetch it, because what it gets is ciphertext. Without a code the only
-// opener that ships (the code) could not open a locked file, so the response is the readable backup this route
-// always sent — the tar.gz of state.db and node_config.json, no keys — marked as such: X-Backup-Locked: no, the
-// reason in X-Backup-Not-Locked, and a log line. Never a file nothing can open, and never a false "locked".
+// the tar of state.db, node_config.json and the take-over bundle, locked to every owner and the code. Without a code
+// the only opener that ships (the code) could not open a locked file, so the response is the readable backup this
+// route always sent — the tar.gz of state.db and node_config.json, no keys — marked as such: X-Backup-Locked: no, the
+// reason in X-Backup-Not-Locked, and a log line. Never a file nothing can open, and never a false "locked". An owner's
+// only, locked or not: the replication token used to be taken here too, and on a server with no recovery code that
+// handed whoever held a standby's token the whole database, tunnel token and all (Fable's replication review HIGH-1).
 function markLock(ctx: any, lock: BackupLock): void {
     ctx.set('X-Backup-Locked', lock.locked ? 'yes' : 'no');
     if (!lock.locked) ctx.set('X-Backup-Not-Locked', lock.message);
@@ -654,9 +747,7 @@ async function sendBackup(ctx: any, opts: BackupSource = {}): Promise<void> {
 }
 
 router.post('/api/local/admin/backup', async (ctx) => {
-    const token = ctx.request.header['x-replication-token'];
-    const isTokenValid = token && (await verifyReplicationToken(String(token)));
-    if (!isTokenValid && !(await checkAdminAuth(ctx as any))) return;
+    if (!(await ownerOnly(ctx, DOWNLOAD_OWNER_ONLY))) return;
     await sendBackup(ctx);
 });
 
@@ -762,7 +853,7 @@ router.post('/api/local/admin/replication-config/get', async (ctx) => {
 // refused: a standby that kept it held it in plain text, so anyone with the standby's disk,
 // or a backup of it, had the main server's admin password.
 router.post('/api/local/admin/replication-config/save', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!(await ownerOnly(ctx, COPY_FROM_OWNER_ONLY))) return;
     const { primaryUrl, primaryPassword, primaryToken } = (ctx as any).requestBody || {};
     if (primaryPassword) {
         ctx.status = 400;
@@ -795,6 +886,7 @@ router.post('/api/local/admin/replication-config/save', async (ctx) => {
 // A dedicated, scoped credential for the snapshot-pull endpoint, distinct from the
 // admin password: least-privilege (read-only replication only) and independently
 // rotatable. Stored hashed; the plaintext is shown to the operator exactly once.
+// Its holder copies the whole ledger, so making, changing or removing it is an owner's.
 router.post('/api/local/admin/replication-token/status', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const config = getLocalConfig();
@@ -806,7 +898,9 @@ router.post('/api/local/admin/replication-token/status', async (ctx) => {
 });
 
 router.post('/api/local/admin/replication-token/generate', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
+    // The answer is the standby's token: never cached, refusals included (#1548 NB3, as enrol and break-glass answer).
+    ctx.set('Cache-Control', 'no-store');
+    if (!(await ownerOnly(ctx, TOKEN_OWNER_ONLY))) return;
     const token = generateReplicationToken();
     setReplicationToken(token);
     // Returned ONCE — only the hash is persisted, so it can never be shown again.
@@ -814,7 +908,7 @@ router.post('/api/local/admin/replication-token/generate', async (ctx) => {
 });
 
 router.post('/api/local/admin/replication-token/mode', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!(await ownerOnly(ctx, TOKEN_OWNER_ONLY))) return;
     const { tokenOnly } = (ctx as any).requestBody || {};
     const config = getLocalConfig();
     if (tokenOnly && !hasReplicationToken()) {
@@ -828,7 +922,7 @@ router.post('/api/local/admin/replication-token/mode', async (ctx) => {
 });
 
 router.post('/api/local/admin/replication-token/clear', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!(await ownerOnly(ctx, TOKEN_OWNER_ONLY))) return;
     clearReplicationToken();
     ctx.body = { success: true };
 });
@@ -879,8 +973,9 @@ router.post('/api/local/admin/snapshots/create', async (ctx) => {
     }
 });
 
+// A snapshot is a recovery point, and removing one is an owner's, like restoring one.
 router.post('/api/local/admin/snapshots/delete', async (ctx) => {
-    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!(await ownerOnly(ctx, SNAPSHOTS_OWNER_ONLY))) return;
     const { name } = (ctx as any).requestBody || {};
     const target = resolveSnapshotPath(name);
     if (!target) {
@@ -901,11 +996,14 @@ router.post('/api/local/admin/snapshots/delete', async (ctx) => {
 });
 
 // Download via GET so the browser can stream it; auth via the X-Admin-Password
-// header (the name is in the query string, never the password). Locked like /backup when there is a code.
+// header (the name is in the query string, never the password). Locked like /backup when there is a code, and an
+// owner's like /backup.
 router.get('/api/local/admin/snapshots/download', async (ctx) => {
     const headerPassword = ctx.request.header['x-admin-password'];
     if (headerPassword) (ctx as any).requestBody = { password: headerPassword };
-    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!(await ownerOnly(ctx, DOWNLOAD_OWNER_ONLY))) return;
+    // A GET, but the whole community: from the phone it asks for its unlock again, like /backup (requirePhoneStepUp).
+    if (!requirePhoneStepUp(ctx)) return;
     const name = ctx.query.name as string;
     const target = resolveSnapshotPath(name);
     if (!target || !fs.existsSync(target)) {
@@ -938,7 +1036,16 @@ router.post('/api/local/admin/snapshots/config', async (ctx) => {
         ctx.body = { error: `intervalHours must be a whole number of hours from 1 to ${MAX_AUTOSNAPSHOT_INTERVAL_HOURS}` };
         return;
     }
+    // A snapshot is the whole database, a deleted member's data and all, so how many are kept is how long that lasts
+    // (services/snapshot-scheduler.ts, data-at-rest report F3).
+    if (body.keep !== undefined && !isAutoSnapshotKeep(body.keep)) {
+        ctx.status = 400;
+        ctx.body = { error: `keep must be a whole number of snapshots from 1 to ${MAX_SNAPSHOTS_KEPT}` };
+        return;
+    }
     const hasUpdate = body.enabled !== undefined || body.intervalHours !== undefined || body.keep !== undefined;
+    // Reading it is anyone's here; changing it can prune recovery points (keep), so it is an owner's, like a delete.
+    if (hasUpdate && !requireAdminRole(ctx, ['owner'], SNAPSHOTS_OWNER_ONLY)) return;
     const config = hasUpdate
         ? updateAutoSnapshotConfig({ enabled: body.enabled, intervalHours: body.intervalHours, keep: body.keep })
         : getAutoSnapshotConfig();
@@ -1009,49 +1116,72 @@ router.post('/api/local/admin/backup-config', async (ctx) => {
 // (304) to the mirror's every-60s pull without rebuilding the whole ledger.
 
 
-router.get('/api/local/admin/sync-snapshot', async (ctx) => {
-    // This endpoint emits the ENTIRE ledger (incl. DMs + recovery data). It is
-    // authenticated with a dedicated, scoped replication TOKEN (least privilege,
-    // independently rotatable). The all-powerful admin password is still accepted
-    // during rollout — until the operator enables token-only — so existing backups
-    // keep working. Every pull (and every rejected attempt) is logged for the
-    // primary's Replication Access panel.
-    const ip = replicationClientIp(ctx);
+/**
+ * Who asks for a copy of this server: its standby, with the replication token, or an owner with the admin password, until
+ * the operator makes the token the only way (every copy route: the whole ledger, DMs and recovery data included). A
+ * dedicated, scoped token: least privilege, independently rotatable. Every rejected attempt is logged for the primary's
+ * Replication Access panel, and answered here (401, or checkAdminAuth's own answer and its brute-force tarpit delay):
+ * null then.
+ */
+async function replicationAuth(ctx: any, ip: string): Promise<'token' | 'admin-pw' | null> {
     const token = ctx.request.header['x-replication-token'];
     const headerPassword = ctx.request.header['x-admin-password'];
     const cfg = getLocalConfig();
-    let authMode: 'token' | 'admin-pw' | null = null;
-
     if (token) {
-        if (await verifyReplicationToken(String(token))) {
-            authMode = 'token';
-        } else {
-            recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid replication token' });
-            ctx.status = 401;
-            ctx.body = { error: 'Invalid replication token' };
-            return;
-        }
-    } else if (headerPassword && !cfg.replicationTokenOnly) {
-        (ctx as any).requestBody = { password: headerPassword };
-        if (await checkAdminAuth(ctx as any)) {
-            authMode = 'admin-pw';
-        } else {
-            // checkAdminAuth already set 401 + applied the brute-force tarpit delay.
-            recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid admin password' });
-            return;
-        }
-    } else {
-        recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: cfg.replicationTokenOnly ? 'replication token required' : 'no credentials' });
+        if (await verifyReplicationToken(String(token))) return 'token';
+        recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid replication token' });
         ctx.status = 401;
-        ctx.body = { error: cfg.replicationTokenOnly ? 'Replication token required' : 'Authentication required' };
-        return;
+        ctx.body = { error: 'Invalid replication token' };
+        return null;
     }
+    if (headerPassword && !cfg.replicationTokenOnly) {
+        // The admin password that verified for a copy in the last few minutes, the same string: taken without its scrypt,
+        // as the token is (config/local-config.ts rememberCopyPassword). Any other goes through checkAdminAuth in full.
+        const password = String(headerPassword).trim();
+        if (copyPasswordRemembered(password)) return 'admin-pw';
+        const { adminHash, salt } = cfg;
+        (ctx as any).requestBody = { password: headerPassword };
+        // legacyCopy: a copy route takes the password while token-only is off, 2FA or not (admin-auth.ts step 7c), as
+        // before: a legacy standby keeps copying until its owner makes a replication token.
+        if (await checkAdminAuth(ctx as any, { legacyCopy: true })) {
+            // A key session wins over the header in checkAdminAuth, so an admin's session with any X-Admin-Password
+            // got here too: only an owner's copies the whole ledger (the password is owner level).
+            if (!requireAdminRole(ctx, ['owner'], COPY_OWNER_ONLY)) {
+                recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'not an owner' });
+                return null;
+            }
+            // Only the admin password itself, checked against its hash (not a break-glass code, nor a session), is
+            // remembered: so the shortcut above admits only someone who sent the owner-level password.
+            if (ctx.state?.verifiedAdminPassword === password && adminHash && salt) rememberCopyPassword(password, adminHash, salt);
+            return 'admin-pw';
+        }
+        // checkAdminAuth already set 401 + applied the brute-force tarpit delay.
+        recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid admin password' });
+        return null;
+    }
+    recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: cfg.replicationTokenOnly ? 'replication token required' : 'no credentials' });
+    ctx.status = 401;
+    ctx.body = { error: cfg.replicationTokenOnly ? 'Replication token required' : 'Authentication required' };
+    return null;
+}
+
+router.get('/api/local/admin/sync-snapshot', async (ctx) => {
+    // This endpoint emits the ENTIRE ledger (incl. DMs + recovery data), to its standby's replication token or the admin
+    // password (replicationAuth). Every pull (and every rejected attempt) is logged for the primary's Replication Access
+    // panel.
+    const ip = replicationClientIp(ctx);
+    const authMode = await replicationAuth(ctx, ip);
+    if (!authMode) return;
 
     // How the standby's copies have gone, for this community's owners (services/standby-health.ts): only a standby's own
     // channel, the replication token, is heard.
     if (authMode === 'token') noteStandbyReport(ctx.request.header['x-standby-report'], ip);
 
     try {
+        // The plain tables' rows past their age rule go first, with no tombstone (engine/plain-tables.ts pruneAgedOut): the
+        // copy then names none the standby's own age rule would take after it imports it, and its check stays exact. It
+        // writes nothing when there is nothing to prune, and a prune that does write makes the check below build a copy.
+        pruneAgedOutRows();
         // Conditional pull: the mirror sends the generatedAt of its last successful
         // import. If the DB hasn't changed since we built that exact snapshot,
         // answer 304 with no body. Without this, every 60s pull exported, signed
@@ -1120,34 +1250,8 @@ router.get('/api/local/admin/sync-snapshot', async (ctx) => {
 // full-snapshot import cap as DBs grow toward GB. See docs/delta-backup-plan.md.
 router.get('/api/local/admin/sync-delta', async (ctx) => {
     const ip = replicationClientIp(ctx);
-    const token = ctx.request.header['x-replication-token'];
-    const headerPassword = ctx.request.header['x-admin-password'];
-    const cfg = getLocalConfig();
-    let authMode: 'token' | 'admin-pw' | null = null;
-
-    if (token) {
-        if (await verifyReplicationToken(String(token))) {
-            authMode = 'token';
-        } else {
-            recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid replication token' });
-            ctx.status = 401;
-            ctx.body = { error: 'Invalid replication token' };
-            return;
-        }
-    } else if (headerPassword && !cfg.replicationTokenOnly) {
-        (ctx as any).requestBody = { password: headerPassword };
-        if (await checkAdminAuth(ctx as any)) {
-            authMode = 'admin-pw';
-        } else {
-            recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: 'invalid admin password' });
-            return;
-        }
-    } else {
-        recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: cfg.replicationTokenOnly ? 'replication token required' : 'no credentials' });
-        ctx.status = 401;
-        ctx.body = { error: cfg.replicationTokenOnly ? 'Replication token required' : 'Authentication required' };
-        return;
-    }
+    const authMode = await replicationAuth(ctx, ip);
+    if (!authMode) return;
 
     if (authMode === 'token') noteStandbyReport(ctx.request.header['x-standby-report'], ip);
 
@@ -1174,6 +1278,170 @@ router.get('/api/local/admin/sync-delta', async (ctx) => {
     }
 });
 
+/** A page of a copy as the route sends it: its signed text, byte for byte, so a retry gets what the first ask got. */
+function answerCopy(ctx: any, answer: CopyAnswer): void {
+    ctx.set('Cache-Control', 'no-store');
+    ctx.set('X-Node-Role', getNodeRole());
+    ctx.status = answer.status;
+    if (answer.status === 200) {
+        ctx.type = 'application/json';
+        ctx.body = answer.page;
+    } else {
+        ctx.body = answer.error;
+    }
+}
+
+// A copy in pages from one snapshot (engine/copy-pages.ts; design scratch/global-node/DESIGN-paged-copies-fable.md §3,
+// §5): a whole copy, or with `?since=<cursor>` the rows written since then. The same auth and log as sync-snapshot. The
+// answer is the opening page; the next ones are asked by number below.
+router.post('/api/local/admin/sync-copy', async (ctx) => {
+    const ip = replicationClientIp(ctx);
+    const authMode = await replicationAuth(ctx, ip);
+    if (!authMode) return;
+    if (authMode === 'token') noteStandbyReport(ctx.request.header['x-standby-report'], ip);
+
+    // A copy's listing photos go by reference (engine/sync.ts photoRowsByReference, REPLICA_FORMAT 8): a standby older than
+    // that says no format, and its import drops every photo row that carries no bytes, so it would land a copy without its
+    // photos. Refused instead, loudly on both servers: here in the log and the Replication Access panel, there as a pull
+    // that failed with this status, every time, in its report and its owners' notice, until it is updated.
+    const format = Number(ctx.request.header['x-replica-format']);
+    if (!Number.isInteger(format) || format < PHOTOS_BY_REFERENCE_FORMAT) {
+        const why = `this standby is older than its main server: a copy's listing photos travel by reference, which a standby `
+            + `reads from replica format ${PHOTOS_BY_REFERENCE_FORMAT}; update it, and its next pull takes a copy`;
+        console.warn(`[Backup] A copy asked for by ${ip ?? 'a standby'} was refused: ${why}.`);
+        recordReplicationAccess({ at: Date.now(), ip, auth: 'rejected', reason: why });
+        ctx.status = 426;
+        ctx.set('Cache-Control', 'no-store');
+        ctx.body = { error: `Copy refused: ${why}.`, needsReplicaFormat: PHOTOS_BY_REFERENCE_FORMAT };
+        return;
+    }
+
+    const since = typeof ctx.query.since === 'string' ? ctx.query.since : '';
+    if (since && (since.length > 64 || Number.isNaN(Date.parse(since)))) {
+        ctx.status = 400;
+        ctx.body = { error: 'since must be a cursor: the time a copy was made' };
+        return;
+    }
+    try {
+        // As before a whole copy (sync-snapshot): the plain tables' rows past their age rule go first, so the copy names
+        // none the standby's own age rule would take after it lands. Before the snapshot opens. Not before a delta, as the
+        // old delta route never did: a row that has just aged out here goes to the standby with its age, and the standby's
+        // own age rule takes it there (engine/plain-tables.ts importPlainTables); pruned here first, with no tombstone, it
+        // would never leave the standby.
+        if (!since) pruneAgedOutRows();
+        const nodeId = getP2PNode()?.peerId?.toString() ?? 'unknown';
+        const answer = await openCopy({ nodeId, since: since || null, commonsBalance: getCommonsBalanceExact, sign: signSyncBody });
+        answerCopy(ctx, answer);
+        if (answer.status === 200) recordReplicationAccess({ at: Date.now(), ip, auth: authMode, reason: since ? 'delta copy in pages' : 'whole copy in pages' });
+    } catch (e: any) {
+        console.error('[Backup] Opening a copy failed:', e);
+        ctx.status = 500;
+        ctx.body = { error: 'Copy export failed' };
+    }
+});
+
+// Page <n> of an open copy: the next one, or the last one again after a timeout. Any other number is 409; a copy this
+// server no longer holds (closed, expired, or from before a restart) is 404.
+router.get('/api/local/admin/sync-copy/:copyId/:n', async (ctx) => {
+    const ip = replicationClientIp(ctx);
+    const authMode = await replicationAuth(ctx, ip);
+    if (!authMode) return;
+    const n = Number(ctx.params.n);
+    if (!/^\d{1,9}$/.test(ctx.params.n) || !Number.isSafeInteger(n)) {
+        ctx.status = 400;
+        ctx.body = { error: 'a page is asked for by its number' };
+        return;
+    }
+    try {
+        answerCopy(ctx, await copyPage(ctx.params.copyId, n));
+    } catch (e: any) {
+        console.error('[Backup] Serving a page of a copy failed:', e);
+        ctx.status = 500;
+        ctx.body = { error: 'Copy export failed' };
+    }
+});
+
+// Close an open copy now, as its standby asks when it won't finish it (a delta too big to take, a page it refused), so the
+// next copy opens at once (engine/copy-pages.ts closeCopy). The same auth as the pages; a copy this server no longer holds
+// answers `closed: false`.
+router.delete('/api/local/admin/sync-copy/:copyId', async (ctx) => {
+    const ip = replicationClientIp(ctx);
+    const authMode = await replicationAuth(ctx, ip);
+    if (!authMode) return;
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { closed: closeCopy(String(ctx.params.copyId)) };
+});
+
+// One listing photo's object by its content address, for a standby taking a copy whose photos go by reference (engine/sync.ts
+// photoRowsByReference; design scratch/global-node/DESIGN-paged-copies-fable.md §6, P4): the bytes a `post_photos` row of this
+// server names by that sha256, and nothing else. An address no listing photo here names is 404, whatever the store holds
+// under it: a chat attachment's (they never leave this server: replication-manifest.ts message_attachments, G4), anything a
+// shared bucket holds, and an avatar's (no object: it sits in its members row). The same auth as a copy's pages, under the
+// same administrative limiter (https-server.ts): a standby asks only for the objects its store lacks, at its pages' pace
+// (services/backup-puller.ts). A listing photo whose object this server can't find is 404 too; either 404 fails the standby's
+// pull, and its next copy names what this server holds then (a photo whose object is lost here is left out of that copy
+// and named in `photosOmitted`). A store that doesn't answer is 503, and the pull fails the same way. The bytes are hashed
+// before they go (a listing photo is at most MAX_OBJECT_BYTES): an object whose bytes are not the photo its row names (a
+// same-size corruption at rest) is never sent, but answered 410, `why: 'not-its-photo'`, and logged here once; this server's
+// next copy leaves that photo out and names it in `photosOmitted` (engine/sync.ts notePhotoObjectUnreadable), so a standby
+// keeps its own copy and a new one seeds without it, rather than every copy that needs it being refused (review 4148896755).
+router.get('/api/local/admin/sync-object/:sha256', async (ctx) => {
+    const ip = replicationClientIp(ctx);
+    const authMode = await replicationAuth(ctx, ip);
+    if (!authMode) return;
+    ctx.set('Cache-Control', 'no-store');
+    const sha256 = String(ctx.params.sha256);
+    if (!/^[0-9a-f]{64}$/.test(sha256)) {
+        ctx.status = 400;
+        ctx.body = { error: 'an object is asked for by its sha256, in lowercase hex' };
+        return;
+    }
+    // idx_post_photos_sha256 (db/schema.sql). The same photo on several listings is several rows and objects, the same bytes.
+    const rows = db.prepare(`SELECT storage_key FROM post_photos WHERE sha256 = ? AND storage_key IS NOT NULL LIMIT 8`).all(sha256) as { storage_key: string }[];
+    if (rows.length === 0) {
+        ctx.status = 404;
+        ctx.body = { error: 'no listing photo of this server has that address', why: 'not-named' };
+        return;
+    }
+    const store = getImageStore();
+    let failure: unknown = null;
+    let unreadable = false;
+    for (const row of rows) {
+        let bytes: Buffer | null;
+        try {
+            bytes = await readObject(store, row.storage_key);
+        } catch (e) {
+            failure = e;
+            continue;
+        }
+        if (!bytes) continue;
+        const got = crypto.createHash('sha256').update(bytes).digest('hex');
+        if (got !== sha256) {
+            notePhotoObjectUnreadable(row.storage_key, sha256, got, bytes.length);
+            unreadable = true;
+            continue;
+        }
+        ctx.type = 'application/octet-stream';
+        ctx.set('X-Content-Type-Options', 'nosniff');
+        ctx.body = bytes;
+        return;
+    }
+    if (failure) {
+        console.error(`[Backup] A standby asked for listing photo ${sha256.slice(0, 12)}…, and the image store did not answer:`, (failure as Error)?.message || failure);
+        ctx.status = 503;
+        ctx.body = { error: 'the image store did not answer' };
+        return;
+    }
+    if (unreadable) {
+        ctx.status = 410;
+        ctx.body = { error: 'this server\'s object of that listing photo is not the photo its row names: its next copy leaves it out', why: 'not-its-photo' };
+        return;
+    }
+    console.warn(`[Backup] A standby asked for listing photo ${sha256.slice(0, 12)}…, whose object this server's image store does not hold.`);
+    ctx.status = 404;
+    ctx.body = { error: 'this server cannot find that listing photo\'s object', why: 'unreadable' };
+});
+
 // Restore (sealed-keys.md §6.2). Takes either:
 //   - a `.bpsealed` backup, opened with the printed recovery code in the X-Recovery-Code header, or with an owner's
 //     phone (X-Unlock-With: phone → 202 with the QR; the phone's unlock finishes it, services/owner-unlock.ts).
@@ -1189,7 +1457,9 @@ router.post('/api/local/admin/restore', async (ctx) => {
     if (headerPassword) {
         (ctx as any).requestBody = { password: headerPassword };
     }
-    if (!(await checkAdminAuth(ctx as any))) return;
+    // An owner's only: the file replaces the whole database, node_roles with it (Fable's backups review, HIGH). Refused
+    // before a byte of the upload is read.
+    if (!(await ownerOnly(ctx, RESTORE_OWNER_ONLY))) return;
 
     const { DATA_DIR, uploadPath, openedTarPath } = restorePaths();
     const cleanupAll = cleanupRestoreTemp;

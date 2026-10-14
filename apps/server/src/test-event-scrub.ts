@@ -27,6 +27,8 @@ delete process.env.CF_RECORD_NAME;
 
 import crypto from 'node:crypto';
 import { db } from './db/db.js';
+import { putPushTokenRow } from './services/push-token-seal.js';
+import { pushIsGeneric, toldPush, type ToldPush } from './push-notice-test-harness.js';
 import {
     initStateEngine, exportSyncState, importRemoteState, setNodeRole,
     submitReport, actionReport, adminDeletePost as adminDeletePostStateful,
@@ -40,7 +42,7 @@ import { chatRateLimit, resetChatRateLimit, CHAT_LINES_PER_MINUTE } from './chat
 import { runPulseSchedulerTick } from './engine/pulse-resolver.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
 import { createMessagingRoutes } from './routes/messaging.js';
-import { getStateHash, getReplicaConsistency } from '@beanpool/engine';
+import { getStateHash, getReplicaConsistency, setMemberPhoto } from '@beanpool/engine';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 
@@ -67,8 +69,9 @@ const inHours = (h: number) => new Date(Date.now() + h * HOUR).toISOString();
 
 function makeMember(callsign: string): string {
     const pub = crypto.randomBytes(32).toString('hex');
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, updated_at)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pub, callsign, AVATAR);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pub, callsign);
+    setMemberPhoto(db, pub, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pub);
     return pub;
 }
@@ -124,7 +127,7 @@ const msgCtx = (convId: string, actor: string | undefined): any => ({
 
 async function main(): Promise<void> {
     initStateEngine();
-    const p2pNode = await startP2P(4046, 4047);
+    const p2pNode = await startP2P(0, 0);
     const nodeId = p2pNode.peerId.toString();
     addConnector(`/ip4/127.0.0.1/tcp/4047/p2p/${nodeId}`, 'mirror', 'self-test-peer');
 
@@ -285,17 +288,18 @@ async function main(): Promise<void> {
 
     // The whole way through: report → admin actions it → Expo. This is the path §2.5 describes.
     const realFetch = globalThis.fetch;
-    const sent: any[] = [];
+    // Each push as its member is told it (push-notice-test-harness.ts): the lock screen shows only the kind's fixed words,
+    // and "Event cancelled" is the notice's details, which the app reads from this server.
+    const sent: ToldPush[] = [];
     (globalThis as any).fetch = async (url: any, init: any) => {
         if (String(url).includes('exp.host')) {
-            sent.push(...JSON.parse(init.body));
+            sent.push(...JSON.parse(init.body).map((m: any) => toldPush(db, m)));
             return { ok: true, status: 200, json: async () => ({}) } as any;
         }
         return realFetch(url, init);
     };
     try {
-        db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`)
-            .run(goer, 'ExponentPushToken[goer]');
+        putPushTokenRow(goer, 'ExponentPushToken[goer]', 'android');
         const wired = newEvent(host);
         rsvpEvent(capture, wired.id, goer, 'going');
         const report = submitReport(admin, host, 'This gathering is not real', wired.id)!;
@@ -306,7 +310,9 @@ async function main(): Promise<void> {
         assert(sent.length === 1 && sent[0]?.to === 'ExponentPushToken[goer]',
             'and the member marked Going is pushed to');
         assert(sent[0]?.channelId === 'marketplace' && sent[0]?.title === EVENT_CANCELLED_PUSH_TITLE,
-            'on the marketplace Android channel, so no app in the store needs an update');
+            'on the marketplace Android channel, so no app in the store needs an update (its details say the event is off)');
+        assert(pushIsGeneric(sent[0]?.sent) && sent[0]?.kind === 'event.update' && !JSON.stringify(sent[0]?.sent).includes(wired.id),
+            `its lock screen shows only "There is news about an event you're going to.", with no post id (${sent[0]?.sent?.body})`);
 
         // A reported listing that is not an event still sends nothing on this path.
         const offerReported = createPostEngine(capture, 'offer', 'other', 'Dodgy', 'Nope', 1, 'fixed', host,

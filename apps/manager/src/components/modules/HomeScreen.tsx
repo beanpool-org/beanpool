@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { HelpLink } from '../manual/Manual';
-import type { DiagnosticsResponse, NodeDataPayload, MemberItem } from '../../lib/node-client';
+import type { DiagnosticsResponse, NodeDataPayload, MemberItem, NodeReport } from '../../lib/node-client';
 import { FEEDBACK_LIVE } from '@beanpool/core';
 import { SuggestChangePanel } from './SuggestChangePanel';
+import { WebVisitsCard } from './WebVisitsCard';
+import { AppVersionsCard } from './AppVersionsCard';
+import type { NodeProfile } from '../../lib/profiles';
 
 interface HomeScreenProps {
     communityName: string;
@@ -15,11 +18,13 @@ interface HomeScreenProps {
     onCreateEnterprise: () => void;
     onDownloadBackup: () => Promise<void>;
     onRunLedgerAudit: () => Promise<void>;
-    auditState: { running: boolean; result: { ok: boolean; drift: number; sumBalances?: number } | null };
+    auditState: { running: boolean; result: { ok: boolean; drift: number | null; sumBalances?: number | null } | null };
     onStartColdStartWizard?: () => void;
     onAcknowledgeShutdown?: () => Promise<void>;
     /** An owner's "this standby is gone for good": the node stops watching it (its next report watches it again). */
     onForgetStandby?: (id: string) => Promise<void>;
+    /** The node this Home is for: its web app visits card reads it. Without one the card is not shown. */
+    activeNode?: NodeProfile;
 }
 
 export function HomeScreen({
@@ -37,6 +42,7 @@ export function HomeScreen({
     onStartColdStartWizard,
     onAcknowledgeShutdown,
     onForgetStandby,
+    activeNode,
 }: HomeScreenProps) {
     const [shutdownDismissed, setShutdownDismissed] = useState(false);
 
@@ -49,7 +55,7 @@ export function HomeScreen({
     const members = Array.isArray(nodeData?.members) ? nodeData.members : [];
     const pendingReportsCount = typeof nodeData?.reportCount === 'number'
         ? nodeData.reportCount
-        : reports.filter((r: any) => (r.outcome ? r.outcome === 'open' : (r.status === 'pending' || !r.status))).length;
+        : reports.filter((r: NodeReport) => (r.outcome ? r.outcome === 'open' : (r.status === 'pending' || !r.status))).length;
     
     // Calculate unclaimed invites from nodeData or invites count
     const membersCount = members.filter((m: MemberItem) => m && !m.isTreasury).length;
@@ -64,13 +70,9 @@ export function HomeScreen({
         if (typeof nodeData?.circulation === 'number') {
             return nodeData.circulation.toFixed(1);
         }
-        if (nodeData?.memberStats && typeof nodeData.memberStats === 'object') {
-            const stats = Object.values(nodeData.memberStats as Record<string, { volume?: number }>);
-            const totalVol = stats.reduce(
-                (sum, s) => sum + (s && typeof s.volume === 'number' ? s.volume : 0),
-                0
-            );
-            return (totalVol / 2).toFixed(1);
+        // The community's completed trade volume, each trade once: member stats carry no member's trades (queue item 29).
+        if (typeof nodeData?.tradeTotals?.volume === 'number') {
+            return nodeData.tradeTotals.volume.toFixed(1);
         }
         return '0.0';
     })();
@@ -97,6 +99,9 @@ export function HomeScreen({
     // The standby's incident (the node's standby watch; absent on a server before it, null to anyone but an owner)
     const standbyIncident = diag?.standbyHealth?.incident ?? null;
     const unhealthyStandbys = (diag?.standbyHealth?.standbys ?? []).filter((s) => !s.healthy);
+    // Off-box backups that need the owners (failing, late, a destination that can't be used, or none sent for want of a
+    // recovery code): owners only, absent on a server from before them.
+    const offboxProblems = diag?.offboxBackups?.problems ?? [];
 
     // Action items
     const actionItems:{ icon: string; text: string; tab: 'people' | 'economy' | 'bulletin' | 'appliance'; sub?: string }[] = [];
@@ -131,7 +136,7 @@ export function HomeScreen({
     }
 
     const driftText = auditState.result
-        ? `Ledger ${auditState.result.ok ? 'balanced' : 'drift detected'} (${auditState.result.drift} drift)`
+        ? `Ledger ${auditState.result.ok ? 'balanced' : 'drift detected'} (${Number.isFinite(auditState.result.drift) ? auditState.result.drift : 'not a number'} drift)`
         : 'Ledger balanced (0 drift)';
 
     return (
@@ -303,6 +308,33 @@ export function HomeScreen({
                 </div>
             )}
 
+            {/* Backups off the server need the owners (owners only: the node sends it to nobody else) */}
+            {offboxProblems.length > 0 && (
+                <div
+                    data-testid="offbox-health-banner"
+                    role="alert"
+                    className="p-5 rounded-2xl bg-amber-950/70 border-2 border-amber-600/70 shadow-xl space-y-3 animate-fade-in text-left"
+                    style={{ overflowWrap: 'anywhere' }}
+                >
+                    <div className="flex items-start gap-3.5">
+                        <span className="text-2xl" aria-hidden="true">🗄️</span>
+                        <div className="min-w-0 space-y-1">
+                            <h3 className="text-base font-black text-white m-0">Backups off the server need attention</h3>
+                            {offboxProblems.map((l) => <p key={l} className="text-sm text-amber-100 m-0">{l}</p>)}
+                        </div>
+                    </div>
+                    <div className="flex sm:justify-end">
+                        <button
+                            type="button"
+                            onClick={() => onNavigate('appliance', 'backups')}
+                            className="min-h-[44px] px-4 py-2 rounded-xl bg-nature-800 hover:bg-nature-700 text-nature-200 hover:text-white text-xs font-bold transition-all border border-nature-700"
+                        >
+                            Open Backups &amp; Restore
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* 2. Action required — either All clear or live list */}
             <div className="bg-nature-900/60 border border-nature-800 rounded-2xl p-5 shadow-lg">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-nature-400 mb-3 flex items-center gap-2">
@@ -364,7 +396,7 @@ export function HomeScreen({
                         <span className="text-lg" aria-hidden="true">🏛️</span>
                     </div>
                     <div className="text-3xl font-black text-white mb-1 group-hover:text-terra-400 transition-colors">
-                        {auditState.result?.sumBalances !== undefined
+                        {typeof auditState.result?.sumBalances === 'number' && Number.isFinite(auditState.result.sumBalances)
                             ? Math.abs(auditState.result.sumBalances).toFixed(1)
                             : (typeof nodeData?.commonsBalance === 'number'
                                 ? nodeData.commonsBalance.toFixed(1)
@@ -412,6 +444,12 @@ export function HomeScreen({
                     </p>
                 </button>
             </div>
+
+            {/* Web app visits a day, counted by the node itself */}
+            {activeNode && <WebVisitsCard node={activeNode} />}
+
+            {/* The phone app's versions and floors: whom raising a floor would stop */}
+            {activeNode && <AppVersionsCard node={activeNode} />}
 
             {/* 4. Quick actions — Invite a member · Create an enterprise · Run ledger audit · Download backup */}
             <div className="bg-nature-900/60 border border-nature-800 rounded-2xl p-6 shadow-lg">

@@ -7,7 +7,8 @@
 
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
-import { parseInviteTicketText, signedRequestBytes } from '@beanpool/core';
+import { avatarRefOf, avatarUrlOf, parseInviteTicketText, signedRequestBytes } from '@beanpool/core';
+import { prepared } from './statements.js';
 
 type Db = Database.Database;
 
@@ -20,7 +21,14 @@ export interface Member {
     invitedBy: string;
     inviteCode: string;
     homeNodeUrl?: string;
+    /**
+     * The member's avatar as they set it (member_photos.photo: a photo's bytes as a data URL, or a shipped picture's
+     * `bundled://` name), from a read of one member (getMember); null from a read of many (getMembers, getAllMembers),
+     * which never reads a photo: a list emits avatarUrlOf(publicKey, avatarRef).
+     */
     avatarUrl?: string | null;
+    /** members.avatar_ref (@beanpool/core avatarRefOf): what the avatar's URL is made from, without the photo. */
+    avatarRef?: string | null;
     status?: 'active' | 'migrated' | 'pruned' | 'flagged' | string;
     profileUpdatedAt?: number | null;
     bio?: string | null;
@@ -116,7 +124,8 @@ export interface InviteTreeNode {
 
 export interface InviteCheckResult {
     valid: boolean;
-    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed' | TicketBindingRefusal['reason'];
+    /** `admins_only`: a ticket a member made, where only admins invite (the server's door, apps/server config/door.ts). */
+    reason?: 'invalid' | 'used' | 'expired' | 'unknown_inviter' | 'malformed' | 'admins_only' | TicketBindingRefusal['reason'];
     inviterCallsign?: string | null;
 }
 
@@ -143,6 +152,7 @@ export function rowToMember(row: any): Member {
         inviteCode: row.invite_code,
         homeNodeUrl: row.home_node_url || undefined,
         avatarUrl: row.avatar_url || null,
+        avatarRef: row.avatar_ref || null,
         profileUpdatedAt: row.profile_updated_at || null,
         bio: row.bio || null,
         contactValue: row.contact_value || null,
@@ -195,19 +205,230 @@ export function publicMemberCard(m: Member): PublicMemberCard {
     return { publicKey: m.publicKey, callsign: m.callsign, joinedAt: m.joinedAt, avatarUrl: m.avatarUrl ?? null };
 }
 
+/**
+ * One member's row with their avatar as they set it, `avatar_url` (member_photos.photo), for the reads of ONE member
+ * that hand the avatar out as it is stored (the member card a join answers with, the profile page). A read of many
+ * never joins it: a photo is ~27 KB, and the members list read every one until they moved out of the row (the global
+ * node's load rehearsal: one full list at ~6,400 photos ran a 256 MB heap out of memory). Prefix `m.`, as `m.*`.
+ */
+export const MEMBER_WITH_PHOTO_SQL = 'SELECT m.*, mp.photo AS avatar_url FROM members m LEFT JOIN member_photos mp ON mp.public_key = m.public_key';
+
 export function getMember(db: Db, publicKey: string): Member | undefined {
-    const row = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
+    const row = db.prepare(`${MEMBER_WITH_PHOTO_SQL} WHERE m.public_key = ?`).get(publicKey) as any;
     return row ? rowToMember(row) : undefined;
 }
 
+/** Every member not pruned, without their photos: `avatarUrl` null, `avatarRef` for the URL (avatarUrlOf). */
 export function getMembers(db: Db): Member[] {
     const rows = db.prepare("SELECT * FROM members WHERE status != 'pruned'").all() as any[];
     return rows.map(rowToMember);
 }
 
+/** Every member, pruned too, without their photos (as getMembers). */
 export function getAllMembers(db: Db): Member[] {
     const rows = db.prepare("SELECT * FROM members").all() as any[];
     return rows.map(rowToMember);
+}
+
+/** A member's avatar as they set it (member_photos.photo), or null when they have none. */
+export function getMemberPhoto(db: Db, publicKey: string): string | null {
+    const row = db.prepare('SELECT photo FROM member_photos WHERE public_key = ?').get(publicKey) as { photo: string } | undefined;
+    return row?.photo ?? null;
+}
+
+/**
+ * What a member's avatar is kept as: `photo` in member_photos, exactly as set, and in the member's row `ref`
+ * (members.avatar_ref, @beanpool/core avatarRefOf) and `bytes` (members.avatar_bytes, its size), so a list, a count
+ * or a URL never reads it. Null for a value the node does not serve (empty, or this node's own avatar URL sent back,
+ * isServableAvatarValue): such a member has no avatar.
+ */
+export interface MemberPhotoColumns {
+    photo: string;
+    ref: string;
+    bytes: number;
+}
+
+/**
+ * @beanpool/core avatarVersionOf, by `node:crypto`: the same digest of the same UTF-8, ten times faster than the portable
+ * one, which the server's boot pays for every photo it moves out of the members rows (db.ts moveMemberPhotosOutOfRows).
+ */
+export function avatarVersionByNode(trimmed: string): string {
+    return crypto.createHash('sha256').update(trimmed, 'utf8').digest('hex').slice(0, 8);
+}
+
+export function memberPhotoColumnsOf(stored: string | null | undefined): MemberPhotoColumns | null {
+    const ref = avatarRefOf(stored, avatarVersionByNode);
+    if (ref === null || typeof stored !== 'string') return null;
+    return { photo: stored, ref, bytes: Buffer.byteLength(stored, 'utf8') };
+}
+
+/**
+ * Sets a member's avatar to `stored` (null, or a value the node does not serve: none): their member_photos row and
+ * their row's `avatar_ref` and `avatar_bytes`, together. The ONE writer of a member's avatar, so the reference always
+ * names the photo held. Writes nothing when both already hold it. Any change writes the row's two columns, whose touch
+ * trigger (members_touch_updated_at names them, and fires on a column SET even to the value it held) stamps the row,
+ * so a standby's delta carries the change: member_photos travels in the member's row (engine/replication-manifest.ts).
+ * Call it inside the caller's transaction when the member's row is written with it (it is one transaction of its own,
+ * nested as a savepoint in the caller's). Returns whether anything changed.
+ *
+ * On a node whose boot has not yet finished moving photos out of the rows (the server's db.ts
+ * moveMemberPhotosOutOfRows, stopped part way, so `members.avatar_url` is still there), it also clears the member's old
+ * inline photo, on every call: a set, a change, a removal, and a removal of a photo the move had not reached yet (which
+ * no app showed, so nothing else changes). The resumed move moves only a row whose `avatar_url` is still set, so a
+ * member's own change since the move began is never overwritten by the photo they had before it. Clearing it counts as
+ * a change, and the row is stamped, so a standby whose copy carried that old photo (@beanpool/engine sync.ts withPhoto)
+ * hears it is gone.
+ */
+export function setMemberPhoto(db: Db, publicKey: string, stored: string | null | undefined): boolean {
+    return db.transaction(() => {
+        const next = memberPhotoColumnsOf(stored);
+        const held = db.prepare('SELECT avatar_ref, avatar_bytes FROM members WHERE public_key = ?').get(publicKey) as
+            { avatar_ref: string | null; avatar_bytes: number | null } | undefined;
+        const heldPhoto = getMemberPhoto(db, publicKey);
+        const clearedInline = clearInlineMemberPhoto(db, publicKey);
+        const setRow = db.prepare('UPDATE members SET avatar_ref = ?, avatar_bytes = ? WHERE public_key = ?');
+        if (next === null) {
+            if (!clearedInline && heldPhoto === null && (!held || (held.avatar_ref === null && held.avatar_bytes === null))) return false;
+            db.prepare('DELETE FROM member_photos WHERE public_key = ?').run(publicKey);
+            setRow.run(null, null, publicKey);
+            return true;
+        }
+        if (!clearedInline && heldPhoto === next.photo && held && held.avatar_ref === next.ref && held.avatar_bytes === next.bytes) return false;
+        if (heldPhoto !== next.photo) {
+            db.prepare(`INSERT INTO member_photos (public_key, photo) VALUES (?, ?)
+                        ON CONFLICT(public_key) DO UPDATE SET photo = excluded.photo`).run(publicKey, next.photo);
+        }
+        setRow.run(next.ref, next.bytes, publicKey);
+        return true;
+    })();
+}
+
+/**
+ * Clears a member's photo from their row (`members.avatar_url`) where that column is still there: a node whose boot
+ * stopped part way through moving photos out of the rows (setMemberPhoto). Returns whether one was there.
+ */
+function clearInlineMemberPhoto(db: Db, publicKey: string): boolean {
+    if (!db.prepare(`SELECT 1 FROM pragma_table_info('members') WHERE name = 'avatar_url'`).get()) return false;
+    return db.prepare('UPDATE members SET avatar_url = NULL WHERE public_key = ? AND avatar_url IS NOT NULL').run(publicKey).changes > 0;
+}
+
+/**
+ * One member as the member directory (the server's GET /api/members) reads it: only the columns that response is
+ * built from, as stored, plus `is_treasury` to leave treasuries out. The rest of the row (bio, contact details, the
+ * invite code, standing) is never read, so it is never copied out of SQLite; nor is the photo, which is not in the row:
+ * the URL is made from `avatar_ref` (avatarUrlOf).
+ */
+export interface DirectoryRow {
+    public_key: string;
+    callsign: string;
+    joined_at: unknown;
+    avatar_ref: string | null;
+    profile_updated_at: unknown;
+    earned_credit: number | null;
+    elder_vouched_by: string | null;
+    archetype: string | null;
+    is_treasury: unknown;
+    /**
+     * 1 when the member's photo is still inline in the old `avatar_url` column, where a move of photos out of the rows
+     * stopped part way (the server's db.ts moveMemberPhotosOutOfRows) has left it, and no reference is in the row; 0
+     * otherwise. Only while that column exists (directoryColumns). SQLite works it out, so the photo is never copied into
+     * the server's heap (#1475's rule for a list). It may also be 1 for a value that is no photo (blank, the node's own address
+     * sent back), which the move clears without moving.
+     */
+    photo_inline?: number;
+}
+
+const DIRECTORY_COLUMNS = 'public_key, callsign, joined_at, avatar_ref, profile_updated_at, earned_credit, elder_vouched_by, archetype, is_treasury';
+
+/** DIRECTORY_COLUMNS, and photo_inline while the old `avatar_url` column is there (DirectoryRow). */
+function directoryColumns(db: Db): string {
+    if (!db.prepare(`SELECT 1 FROM pragma_table_info('members') WHERE name = 'avatar_url'`).get()) return DIRECTORY_COLUMNS;
+    return `${DIRECTORY_COLUMNS}, (avatar_ref IS NULL AND avatar_url IS NOT NULL) AS photo_inline`;
+}
+
+/**
+ * Whether a member's row changed after `updatedAfter`, the phone's delta cursor: joined after it, or updated their
+ * profile after it. The comparison the directory has always made, on getMembers' values (rowToMember: `joinedAt` as
+ * stored, `profileUpdatedAt` stored-or-null), kept exactly, coercions included, so every cursor gets the rows it got.
+ */
+function changedAfter(row: DirectoryRow, updatedAfter: any): boolean {
+    const joinedAt = row.joined_at as any;
+    const profileUpdatedAt = (row.profile_updated_at || null) as any;
+    return !!((joinedAt && joinedAt > updatedAfter) ||
+        (profileUpdatedAt != null && String(profileUpdatedAt) > updatedAfter));
+}
+
+/**
+ * The member directory's rows: every member not pruned (as getMembers), in rowid order (as getMembers' scan returns
+ * them). With `updatedAfter` (any truthy value, as the query string gives it), only those that changedAfter it.
+ *
+ * A delta cursor that is a string with no character at or above U+D800 (every cursor a phone sends: an ISO time) is
+ * answered from idx_members_joined_at and idx_members_profile_updated_at, so a phone's sync reads the rows changed since
+ * its cursor, not every member. The SQL takes a superset and changedAfter decides, so the rows are exactly the old ones:
+ * - a TEXT value against the cursor compares as JavaScript does: SQLite's BINARY collation orders UTF-8 bytes, which is
+ *   code point order, and JavaScript orders UTF-16 code units; the two agree wherever one side has nothing at or above
+ *   U+D800, and the cursor has nothing there.
+ * - a numeric value (`< ''`: every INTEGER and REAL sorts before every TEXT, and '' before every other TEXT) is always
+ *   taken, since JavaScript compares it to the cursor as a number or a string; so is a BLOB (`> cursor`: BLOBs sort
+ *   after TEXT).
+ * - a cursor SQLite reads as a number (the columns' NUMERIC affinity, e.g. `5`) makes every TEXT value `> cursor`: a
+ *   superset again.
+ * Any other cursor (a repeated query parameter arrives as an array) reads every member's directory columns and filters
+ * in JavaScript, as before.
+ */
+export function getMemberDirectoryRows(db: Db, updatedAfter?: unknown): DirectoryRow[] {
+    const columns = directoryColumns(db);
+    if (!updatedAfter) {
+        return db.prepare(`SELECT ${columns} FROM members WHERE status != 'pruned' ORDER BY rowid`).all() as DirectoryRow[];
+    }
+    let rows: DirectoryRow[];
+    if (typeof updatedAfter === 'string' && !/[\uD800-￿]/.test(updatedAfter)) {
+        // One index range a term, by rowid: written as one WHERE with ORs, SQLite scans the whole table instead.
+        rows = db.prepare(`SELECT ${columns} FROM members
+                           WHERE rowid IN (
+                                     SELECT rowid FROM members WHERE joined_at > @c
+                           UNION ALL SELECT rowid FROM members WHERE joined_at < ''
+                           UNION ALL SELECT rowid FROM members WHERE profile_updated_at > @c
+                           UNION ALL SELECT rowid FROM members WHERE profile_updated_at < '')
+                             AND status != 'pruned'
+                           ORDER BY rowid`).all({ c: updatedAfter }) as DirectoryRow[];
+    } else {
+        rows = db.prepare(`SELECT ${columns} FROM members WHERE status != 'pruned' ORDER BY rowid`).all() as DirectoryRow[];
+    }
+    return rows.filter(r => changedAfter(r, updatedAfter));
+}
+
+/**
+ * The directory's rows of these members only (`GET /api/members?keys=`, DESIGN-global-members-by-area §2.1): each key
+ * the directory holds, in the order asked, a pruned member left out as the whole directory leaves them. With
+ * `updatedAfter`, only those that changedAfter it, compared exactly as the delta compares. Searched on the primary key,
+ * one row a key, so it costs the same with 30 members or 30,000.
+ */
+export function getMemberDirectoryRowsByKeys(db: Db, keys: string[], updatedAfter?: string): DirectoryRow[] {
+    if (keys.length === 0) return [];
+    const rows = db.prepare(`SELECT ${directoryColumns(db)} FROM members
+        WHERE public_key IN (SELECT value FROM json_each(?)) AND status != 'pruned'`).all(JSON.stringify(keys)) as DirectoryRow[];
+    const byKey = new Map(rows.map(r => [r.public_key, r]));
+    return keys.map(k => byKey.get(k)).filter((r): r is DirectoryRow => !!r && (!updatedAfter || changedAfter(r, updatedAfter)));
+}
+
+/**
+ * The members whose name starts with `prefix`, case forgiven as the callsign check forgives it (SQLite's lower(), ASCII),
+ * shortest name first, at most `limit` (`GET /api/members?q=`). Never an account that is not a person: an escrow, a
+ * project or a treasury. Answered from idx_members_callsign_unique: a range of the index, `prefix` and every name after
+ * it that still starts with it, then LIKE with `%` and `_` escaped, so a typed wildcard is only a character. The range
+ * term is what the index answers (SQLite never turns a LIKE into a range on an index of an expression), and the
+ * `status` term is the index's own WHERE, without which the planner may not use it.
+ */
+export function searchMemberDirectoryRows(db: Db, prefix: string, limit: number): DirectoryRow[] {
+    const escaped = prefix.replace(/[\\%_]/g, c => '\\' + c);
+    return db.prepare(`SELECT ${directoryColumns(db)} FROM members
+        WHERE lower(callsign) >= lower(@p) AND lower(callsign) < (lower(@p) || char(1114111))
+          AND lower(callsign) LIKE @like ESCAPE '\\'
+          AND status NOT IN ('migrated', 'pruned')
+          AND NOT coalesce(is_treasury, 0) AND substr(public_key, 1, 7) != 'escrow_' AND substr(public_key, 1, 8) != 'project_'
+        ORDER BY length(callsign), callsign
+        LIMIT @limit`).all({ p: prefix, like: escaped + '%', limit }) as DirectoryRow[];
 }
 
 export function generateShortCode(): string {
@@ -240,7 +461,7 @@ const INVITER_KEY_SPELLING = 'This ticket names its inviter by a key written ano
  * signature has checked out; a ticket made for community A is refused at B, so it can't join B for 30 days in A's hands.
  */
 export function verifyOfflineTicket(db: Db, ticketB64: string, binding?: TicketBinding):
-    | { ok: true; inviterPubkey: string; timestamp: number; intendedFor?: string; codeHash: string }
+    | { ok: true; inviterPubkey: string; timestamp: number; intendedFor?: string; namesEntryId?: string; codeHash: string }
     | { ok: false; reason: 'unknown_inviter' | 'expired' | 'invalid' | 'malformed' | TicketBindingRefusal['reason']; error: string } {
     try {
         const normalizedB64 = ticketB64.replace(/-/g, '+').replace(/_/g, '/');
@@ -249,12 +470,12 @@ export function verifyOfflineTicket(db: Db, ticketB64: string, binding?: TicketB
         const { p: payloadStr, s: signatureBase64 } = ticketObj;
 
         let signedBytes: Uint8Array = Buffer.from(payloadStr);
-        let inviterPubkey: unknown, timestamp: unknown, intendedFor: string | undefined;
+        let inviterPubkey: unknown, timestamp: unknown, intendedFor: string | undefined, namesEntryId: string | undefined;
         let audience: string | null = null;
         const bound = parseInviteTicketText(payloadStr);
         if (bound) {
             signedBytes = signedRequestBytes(payloadStr);
-            ({ inviter: inviterPubkey, timestamp, intendedFor } = bound);
+            ({ inviter: inviterPubkey, timestamp, intendedFor, namesEntryId } = bound);
             audience = bound.host;
         } else {
             let payloadJson = payloadStr;
@@ -320,7 +541,7 @@ export function verifyOfflineTicket(db: Db, ticketB64: string, binding?: TicketB
         // Standard padded base64, as the apps write it (native encodeBase64, core toBase64, the web app's btoa): for
         // their tickets this is the string as sent, so a ticket used before this stays used.
         const codeHash = crypto.createHash('sha256').update(signature.toString('base64')).digest('hex').substring(0, 16);
-        return { ok: true, inviterPubkey, timestamp, intendedFor, codeHash };
+        return { ok: true, inviterPubkey, timestamp, intendedFor, ...(namesEntryId ? { namesEntryId } : {}), codeHash };
     } catch (e) {
         return { ok: false, reason: 'malformed', error: 'Malformed or broken offline ticket payload' };
     }
@@ -411,7 +632,7 @@ export function getInviteTree(db: Db, rootPubkey?: string): InviteTreeNode[] {
  */
 export function isInvalidatedKey(db: Db, pubkey: string | null | undefined): boolean {
     if (!pubkey) return false;
-    return !!db.prepare("SELECT 1 FROM invalidated_keys WHERE public_key = ?").get(pubkey.toLowerCase());
+    return !!prepared(db, "SELECT 1 FROM invalidated_keys WHERE public_key = ?").get(pubkey.toLowerCase());
 }
 
 /**
@@ -476,13 +697,25 @@ export function alreadyJoined(db: Db, pubkey: string | null | undefined): boolea
  */
 export function isNodeMember(db: Db, pubkey: string | null | undefined): boolean {
     if (!pubkey) return false;
-    const row = db.prepare("SELECT status, is_visitor FROM members WHERE public_key = ?").get(pubkey) as
+    const row = prepared(db, "SELECT status, is_visitor FROM members WHERE public_key = ?").get(pubkey) as
         { status: string | null; is_visitor: number | null } | undefined;
     return !!row && !row.is_visitor && row.status !== 'pruned' && !isInvalidatedKey(db, pubkey);
 }
 
 /** A member keeps their row and account under these, but reads nothing as a member while they last (readsAsMember). */
 const READS_AS_NON_MEMBER_WHILE: ReadonlySet<string> = new Set(['suspended', 'disabled']);
+
+/**
+ * Whether `pubkey`'s account is suspended: 'disabled' by an admin, a report or a community vote, or 'suspended' (the old
+ * key of a member being re-keyed). The same two statuses readsAsMember holds back. Every role the member holds is kept
+ * while it lasts; what a role lets them DO rests until it ends (a group convenor's powers: groups.ts
+ * assertConvenorPowersActive). Pass the verified signer.
+ */
+export function isSuspendedAccount(db: Db, pubkey: string | null | undefined): boolean {
+    if (!pubkey) return false;
+    const row = db.prepare("SELECT status FROM members WHERE public_key = ?").get(pubkey) as { status: string | null } | undefined;
+    return !!row && READS_AS_NON_MEMBER_WHILE.has(row.status ?? '');
+}
 
 /**
  * THE READ TEST: whether `pubkey` gets what only members of this node may read, where anyone else gets a non-member's
@@ -535,7 +768,7 @@ export function mayBringSomeoneIn(db: Db, pubkey: string | null | undefined): bo
     return isMemberKeySpelling(pubkey) && isNodeMember(db, pubkey);
 }
 
-/** ownersWhoAddedAsFriend's query, keyed on the viewer; idx_friends_friend_pubkey answers it (test-schema-upgrade.ts). */
+/** ownersWhoAddedAsFriend's query, keyed on the viewer; idx_friends_friend_pubkey answers it (test-schema-upgrade-triggers-visitors.ts). */
 export const OWNERS_WHO_ADDED_AS_FRIEND_SQL = "SELECT owner_pubkey FROM friends WHERE friend_pubkey = ?";
 
 /**
@@ -633,7 +866,7 @@ export function contactVisibleTo(
 }
 
 export function getProfile(db: Db, publicKey: string, requesterPubkey?: string): MemberProfile | null {
-    const row = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
+    const row = db.prepare(`${MEMBER_WITH_PHOTO_SQL} WHERE m.public_key = ?`).get(publicKey) as any;
     if (!row) return null;
     const profile = rowToProfile(row);
     profile.elderVouchedBy = row.elder_vouched_by || null;
@@ -647,6 +880,11 @@ export function getProfile(db: Db, publicKey: string, requesterPubkey?: string):
     return profile;
 }
 
+/**
+ * Every member's profile, not pruned, each `avatar` its URL (avatarUrlOf), never the photo: a list of every member must
+ * not read every photo (MEMBER_WITH_PHOTO_SQL). For the admins' members screen, served by the node itself, which shows
+ * a URL as it shows a photo.
+ */
 export function getAllProfiles(db: Db, requesterPubkey?: string): MemberProfile[] {
     const rows = db.prepare("SELECT * FROM members WHERE status != 'pruned'").all() as any[];
     const viewer = contactViewer(db, requesterPubkey);
@@ -654,6 +892,7 @@ export function getAllProfiles(db: Db, requesterPubkey?: string): MemberProfile[
     const profiles: MemberProfile[] = [];
     for (const row of rows) {
         const profile = rowToProfile(row);
+        profile.avatar = avatarUrlOf(row.public_key, row.avatar_ref);
         if (profile.contact && !contactVisibleTo(profile.publicKey, row.contact_visibility, viewer)) {
             profile.contact = null;
         }

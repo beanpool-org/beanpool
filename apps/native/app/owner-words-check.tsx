@@ -27,6 +27,7 @@ import { useIdentity } from './IdentityContext';
 import { useTheme, useStyles } from './ThemeContext';
 import { anchorUrl as getAnchorUrl } from '../utils/node-post';
 import { hasMnemonic } from '../utils/identity';
+import { NoScreenCapture } from '../components/WordsOnScreen';
 import {
     OWNER_WORDS_COPY as COPY, OWNER_WORDS_INITIAL, checkMyWords, forgetOwnerWordsStatus, ownerWordsFindThem,
     ownerWordsReducer, saveCheckedWords, sendOwnerWordsAttestation, shouldOfferSaveWords, typedWordCount,
@@ -107,6 +108,8 @@ export default function OwnerWordsCheckScreen() {
                 <KeyboardAwareScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" bottomOffset={footerHeight + 16}>
                     <Text style={styles.body}>{COPY.why}</Text>
                     <Text style={styles.label}>YOUR 12 WORDS, IN ORDER</Text>
+                    {/* The box shows the words as they are typed. */}
+                    <NoScreenCapture>
                     <TextInput
                         accessibilityLabel="Your 12 words, in order, with spaces between them"
                         style={styles.input}
@@ -125,6 +128,7 @@ export default function OwnerWordsCheckScreen() {
                         keyboardType={Platform.OS === 'android' ? 'visible-password' : 'default'}
                         editable={!state.busy}
                     />
+                    </NoScreenCapture>
                     <Text style={styles.hint}>{count} of 12 words · {COPY.stays}</Text>
 
                     {state.outcome === 'match' ? (

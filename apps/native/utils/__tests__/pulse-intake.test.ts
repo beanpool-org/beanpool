@@ -20,6 +20,7 @@ vi.mock('expo-crypto', () => ({
 }));
 
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(async () => null),
     setItemAsync: vi.fn(async () => undefined),
     deleteItemAsync: vi.fn(async () => undefined),
@@ -93,7 +94,7 @@ vi.mock('../node-post', () => ({
     })),
 }));
 
-import { lightColors, darkColors, earthColors, slateColors } from '../../constants/colors';
+import { lightColors, darkColors } from '../../constants/colors';
 import { makeStyles as makeIntakeStyles, safeDecodeURIComponent } from '../../app/pulse-intake';
 import { makeStyles as makePreviewStyles } from '../../components/PulsePreviewCard';
 import { makeStyles as makeNudgeStyles } from '../../components/PulseNudges';
@@ -116,9 +117,7 @@ describe('Pulse Intake Crash Prevention & Theming', () => {
 
     describe('PulseIntakeScreen makeStyles evaluation across all theme palettes', () => {
         const palettes = [
-            { name: 'light classic', colors: lightColors, theme: 'light' },
-            { name: 'light earth', colors: earthColors as unknown as typeof lightColors, theme: 'light' },
-            { name: 'light slate', colors: slateColors as unknown as typeof lightColors, theme: 'light' },
+            { name: 'light', colors: lightColors, theme: 'light' },
             { name: 'dark', colors: darkColors as unknown as typeof lightColors, theme: 'dark' },
         ];
 

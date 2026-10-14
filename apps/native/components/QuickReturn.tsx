@@ -66,7 +66,14 @@ export interface QuickReturn {
  * - `resetKey`: change it whenever the list is remounted (a different layout, a loader in between), so a
  *   fresh list at the top does not inherit the old one's scrolled-away block.
  */
-export function useQuickReturn({ pinned = false, resetKey }: { pinned?: boolean; resetKey?: unknown } = {}): QuickReturn {
+export function useQuickReturn({ pinned = false, resetKey, onScrollY }: {
+    pinned?: boolean;
+    resetKey?: unknown;
+    /** Told the list's scroll offset as it changes (the Market's floating button, utils/fab-band.ts). */
+    onScrollY?: (y: number) => void;
+} = {}): QuickReturn {
+    const scrollYListener = useRef(onScrollY);
+    scrollYListener.current = onScrollY;
     const screenReader = useA11ySetting(readScreenReader, 'screenReaderChanged');
     const reduceMotion = useA11ySetting(readReduceMotion, 'reduceMotionChanged');
     const fixed = screenReader || pinned;
@@ -101,6 +108,7 @@ export function useQuickReturn({ pinned = false, resetKey }: { pinned?: boolean;
             useNativeDriver: true,
             listener: (e: NativeSyntheticEvent<NativeScrollEvent>) => {
                 const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+                scrollYListener.current?.(contentOffset.y);
                 apply(quickReturnStep(state.current, {
                     y: contentOffset.y,
                     maxY: contentSize.height - layoutMeasurement.height,
@@ -119,6 +127,7 @@ export function useQuickReturn({ pinned = false, resetKey }: { pinned?: boolean;
         const maxY = Math.max(0, h - viewportH.current);
         if (state.current.lastY <= maxY) return;
         scrollY.setValue(maxY);
+        scrollYListener.current?.(maxY);
         apply(quickReturnStep(state.current, { y: maxY, fixed: live.current.fixed }));
     }, [scrollY, apply]);
 
@@ -131,6 +140,7 @@ export function useQuickReturn({ pinned = false, resetKey }: { pinned?: boolean;
     useEffect(() => {
         if (first.current) { first.current = false; return; }
         scrollY.setValue(0);
+        scrollYListener.current?.(0);
         apply(INITIAL_QUICK_RETURN);
     }, [resetKey, scrollY, apply]);
 

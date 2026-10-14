@@ -2,8 +2,8 @@
 //
 // Extracted from apps/server/src/state-engine.ts.
 
-import { isSyntheticAccount } from '@beanpool/core';
-import { db, afterTransactionCommit } from '../db/db.js';
+import { isSyntheticAccount, type PushNoticeKind } from '@beanpool/core';
+import { db, afterTransactionCommit, deletePlainRows } from '../db/db.js';
 import crypto from 'node:crypto';
 import { attachmentKey, getImageStore } from '../storage/image-store.js';
 import { deleteStoredObjects, storeAttachmentColumns } from '../storage/image-columns.js';
@@ -22,19 +22,33 @@ import {
 import {
     GROUP_THREAD_TYPE, GROUP_CHAT_FORBIDDEN, GROUP_CHAT_OBSERVER, GROUP_CHAT_SYSTEM_REACT_ERROR,
     GROUP_NOT_FOUND, GROUP_THREAD_DELETED_TEXT, postGroupThreadMessageFromSendRoute,
-    assertCanWriteInGroupChat, groupChatEditedCiphertext, groupChatRefusal, broadcastGroupChatUpdate,
+    assertCanWriteInGroupChat, groupChatEdit, groupChatRefusal, broadcastGroupChatUpdate, groupLineForReader, groupLineHearers,
 } from './group-thread.js';
-import { writeMessageTombstone } from './message-tombstone.js';
+import { GroupKeyError, fromEpochOf } from './group-keys.js';
+import { writeMessageTombstone, tombstoneFields } from './message-tombstone.js';
+import { eventChatUnknownTo } from './event-thread.js';
 import { unmutedRecipients } from './chat-mutes.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from './members.js';
+import { hasBlocked } from './member-blocks.js';
+import {
+    withheldConversationOwnedBy, withheldConversationOfPair, openWithheldConversation, dropWithheldConversation,
+    withheldLine, ownWithheldLine, storeWithheldLine, editWithheldLine, setWithheldLineMetadata, tombstoneWithheldLine,
+    withheldLineMessage, type WithheldConversation,
+    overlayOf, setOverlayReaction, setOverlayEdit, clearOverlayEdit, dropOverlaysOn, withOwnReaction, withOwnOverlay,
+} from './withheld-lines.js';
 
 type BroadcastFn = (event: any, recipients?: string[]) => void;
-type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow') => void;
+type PushFn = (targetPubkeys: string[], actorPubkey: string, title: string, body: string, data: Record<string, any>, categoryId: 'chat' | 'marketplace' | 'escrow', kind: PushNoticeKind) => void;
 type RegisterVisitorFn = (pubkey: string) => void;
 
 export interface MessagingCallbacks {
     broadcast: BroadcastFn;
     dispatchPushNotification: PushFn;
+    /**
+     * The same work as dispatchPushNotification, stopping before the notices are kept and anything goes to the push service.
+     * For a line withheld from its recipient (engine/withheld-lines.ts), so it costs what a stored one does (#1403 re-review).
+     */
+    rehearsePushNotification?: PushFn;
     registerVisitor?: RegisterVisitorFn;
 }
 
@@ -46,11 +60,14 @@ export interface MessagingCallbacks {
 export class MessagingError extends Error {
     status: number;
     code?: string;
-    constructor(message: string, status = 400, code?: string) {
+    /** More for the app beside the words (a group chat's 409: its current epoch and roster, engine/group-keys.ts). */
+    extra?: Record<string, unknown>;
+    constructor(message: string, status = 400, code?: string, extra?: Record<string, unknown>) {
         super(message);
         this.name = 'MessagingError';
         this.status = status;
         this.code = code;
+        this.extra = extra;
     }
 }
 
@@ -76,6 +93,8 @@ const VISITOR_SEND_REFUSAL = 'Member not found';
  */
 export function isVisitorsDirectLine(messageId: unknown, publicKey: string | undefined): boolean {
     if (typeof messageId !== 'string' || !messageId || !publicKey || !isLiveVisitor(db, publicKey)) return false;
+    // A line of its own kept for it alone (engine/withheld-lines.ts) is one too.
+    if (ownWithheldLine(messageId, publicKey)) return true;
     return !!db.prepare(`
         SELECT 1 FROM messages m
         JOIN conversations c ON c.id = m.conversation_id AND c.type = 'dm'
@@ -90,6 +109,8 @@ export function isVisitorsDirectLine(messageId: unknown, publicKey: string | und
  */
 export function isVisitorsDirectConversation(conversationId: unknown, publicKey: string | undefined): boolean {
     if (typeof conversationId !== 'string' || !conversationId || !publicKey || !isLiveVisitor(db, publicKey)) return false;
+    // One kept for it alone, because the other had blocked it (engine/withheld-lines.ts), is one it is in.
+    if (withheldConversationOwnedBy(conversationId, publicKey)) return true;
     return !!db.prepare(`
         SELECT 1 FROM conversations c
         JOIN conversation_participants cp ON cp.conversation_id = c.id AND cp.public_key = ?
@@ -98,14 +119,39 @@ export function isVisitorsDirectConversation(conversationId: unknown, publicKey:
 }
 
 /**
- * Whether a visitor's row may send to `conversationId`: a direct conversation it is in, or an id that names no
- * conversation, which sendMessage follows to the one it became (chat consolidation) and refuses a visitor anywhere but a
- * direct conversation it is in.
+ * The conversation an old conversation id was folded into (chat consolidation): a line stored there names the old id in
+ * its metadata, `originalConversationId` or an item of `originalConversationIds`. Undefined when no line does. The
+ * earliest such line decides, as when this scanned the table in order.
+ *
+ * Looked up in message_old_conversation_ids (schema.sql), which the messages triggers keep from each line's metadata:
+ * one index probe, whether or not a line names the id. Scanning every line's metadata instead made an id nobody has
+ * cost ~35 ms at 100k lines, where a hidden group's chat id is answered at once, so the time told the two apart
+ * (#1333 review). A list's items match exactly now; the scan matched any part of the list's text.
+ */
+function consolidatedConversationOf(conversationId: string): string | undefined {
+    const row = db.prepare(`
+        SELECT m.conversation_id FROM message_old_conversation_ids o
+        JOIN messages m ON m.id = o.message_id
+        WHERE o.old_conversation_id = ?
+        ORDER BY m.rowid
+        LIMIT 1
+    `).get(conversationId) as { conversation_id?: string } | undefined;
+    return row?.conversation_id || undefined;
+}
+
+/**
+ * Whether a visitor's row may send to `conversationId`: a direct conversation it is in, or an old id of one, which
+ * sendMessage follows to the one it became (chat consolidation). Anything else, an id nobody has included, is refused at
+ * the gate in the same words: letting every id that names no conversation through told a visitor, by the engine's
+ * different answer, which ids do name one (a hidden group's chat is its group's id).
  */
 export function visitorMaySendTo(conversationId: unknown, publicKey: string | undefined): boolean {
     if (isVisitorsDirectConversation(conversationId, publicKey)) return true;
-    return typeof conversationId === 'string' && !!conversationId && !!publicKey && isLiveVisitor(db, publicKey)
-        && !db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(conversationId);
+    if (typeof conversationId !== 'string' || !conversationId || !publicKey || !isLiveVisitor(db, publicKey)) return false;
+    if (db.prepare('SELECT 1 FROM conversations WHERE id = ?').get(conversationId)) return false;
+    let folded: string | undefined;
+    try { folded = consolidatedConversationOf(conversationId); } catch { return false; }
+    return !!folded && isVisitorsDirectConversation(folded, publicKey);
 }
 
 /**
@@ -131,6 +177,59 @@ function refuseVisitorOutsideItsDirectConversations(messageId: string, publicKey
  */
 export const CHAT_GROUP_REMOVED_ERROR =
     'Group chats made from Talk were removed. Create a group in Commons instead — every group has its own chat.';
+
+/**
+ * A member's words in a direct conversation are stored only end-to-end encrypted: the privacy policy tells members
+ * the server keeps them "in a form only the two of you can read", and that has to be true of every line, not of
+ * most. Both apps used to fall back to readable `plaintext-v1` whenever they could not find the other person's key;
+ * they now refuse to send instead, and this is the node refusing what an older app still sends (PR #1283 review).
+ * What the node writes itself into a DM is not a member's message and stays as it was: the deal notices
+ * (injectSystemMessage), a removed message's tombstone, and a message from the node's admin page, which the
+ * operator typed on the node.
+ */
+export const DM_NOT_ENCRYPTED_ERROR =
+    "This message wasn't locked for the other person, so it wasn't sent. Only the two of you can read a direct message. Try again in a moment, or update the app.";
+export const DM_NOT_ENCRYPTED_CODE = 'dm_not_encrypted';
+/** A direct conversation is named by its two people; a name typed for one would be words the node can read. */
+export const DM_NAME_REFUSED_ERROR =
+    'A direct conversation has no name. Send the words as a message: it is locked so only the two of you can read it.';
+
+/** The nonce prefix of an end-to-end encrypted DM (apps/pwa/src/lib/e2e-crypto.ts, apps/native/utils/e2e-crypto.ts). */
+export const DM_ENCRYPTED_NONCE_PREFIX = 'x25519-xc20p-v2:';
+const DM_NONCE_BYTES = 24;       // XChaCha20
+const AEAD_TAG_BYTES = 16;       // Poly1305: what encrypting an empty caption produces
+
+/** `s` is standard, padded base64 exactly as both apps write it, of at least `minBytes` bytes. */
+function isCanonicalBase64(s: unknown, minBytes: number): boolean {
+    if (typeof s !== 'string' || s.length === 0 || s.length % 4 !== 0) return false;
+    const bytes = Buffer.from(s, 'base64');
+    return bytes.length >= minBytes && bytes.toString('base64') === s;
+}
+
+/**
+ * Whether a DM payload is in the encrypted form (v2): the versioned nonce carrying a 24-byte nonce, and a ciphertext
+ * at least as long as the AEAD tag. The node cannot check the words are really encrypted — it has no key, which is the
+ * point — but it can refuse every form that is not, `plaintext-v1` first among them.
+ */
+export function isEncryptedDmPayload(ciphertext: unknown, nonce: unknown): boolean {
+    if (typeof nonce !== 'string' || !nonce.startsWith(DM_ENCRYPTED_NONCE_PREFIX)) return false;
+    const nonceBody = nonce.slice(DM_ENCRYPTED_NONCE_PREFIX.length);
+    if (!isCanonicalBase64(nonceBody, DM_NONCE_BYTES) || Buffer.from(nonceBody, 'base64').length !== DM_NONCE_BYTES) return false;
+    return isCanonicalBase64(ciphertext, AEAD_TAG_BYTES);
+}
+
+function refuseUnencryptedDm(ciphertext: unknown, nonce: unknown): void {
+    if (!isEncryptedDmPayload(ciphertext, nonce)) throw new MessagingError(DM_NOT_ENCRYPTED_ERROR, 400, DM_NOT_ENCRYPTED_CODE);
+}
+
+/**
+ * The id a line relayed from another node is stored under: the sender's own, verbatim, when it is a UUID v4 (lowered, as
+ * the send route lowers it). A DM line is sealed to its message id (apps' e2e-crypto, format 3), so a line stored under a
+ * new id would be one its recipient can't verify. Anything else gets an id of this node's, as before.
+ */
+export function relayedMessageId(id: unknown): string | undefined {
+    return typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id) ? id.toLowerCase() : undefined;
+}
 
 /** One DM per pair, never keyed to a post (chat consolidation): the pair's conversation row, if they have one. */
 function findDirectConversationRow(a: string, b: string): any {
@@ -158,11 +257,23 @@ export function createConversation(
     type: 'dm',
     participants: string[],
     createdBy: string,
-    name?: string
+    name?: string,
+    /**
+     * A caller's own limit on what this writes (the DM route's new-people-a-day, W-main): run once every refusal above has
+     * passed and before anything is written, a visitor's row for someone new included, so a limit never answers for a
+     * caller who may not open the conversation at all.
+     */
+    beforeWrite?: () => void,
+    /**
+     * `asNode`: the node opens it, not a member (a deal's chat, the admin page's message, the chat consolidation), so a
+     * block never withholds it: a trade under way keeps its chat and the node's notices in it.
+     */
+    opts: { asNode?: boolean } = {}
 ): Conversation | null {
     if (type !== 'dm') throw new MessagingError(CHAT_GROUP_REMOVED_ERROR, 410);
     if (participants.length !== 2) throw new MessagingError('DM conversations must have exactly 2 distinct participants');
     assertMemberActive(createdBy);
+    beforeWrite?.();
     if (cb.registerVisitor) {
         for (const p of participants) {
             if (!getMember(db, p)) cb.registerVisitor(p);
@@ -183,18 +294,89 @@ export function createConversation(
         };
     }
 
-    const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
+    // Someone who has blocked the opener gets no new chat in their list: the conversation is kept for the opener alone
+    // (engine/withheld-lines.ts), answered and announced to them exactly as a new one is, and asked for again it is the
+    // same one. Every refusal and limit above has run first, so the answer is the one anybody else would get.
+    const other = participants.find(p => p !== createdBy);
+    if (!opts.asNode && other && hasBlocked(other, createdBy)) {
+        const { conversation: kept, created } = openWithheldConversation(createdBy, other, crypto.randomUUID(), createdAt);
+        // A conversation already opened lists its two as a real one does, by key; a new one as the opener named them.
+        const conv: Conversation = { id: kept.id, type, name: name || null, createdBy: kept.owner_pubkey, createdAt: kept.created_at, participants: created ? participants : [...participants].sort() };
+        if (created) cb.broadcast({ type: 'conversation_created', conversation: conv }, [createdBy]);
+        return conv;
+    }
+
+    // A conversation kept for one of them while blocked becomes this one, under its id: the one the opener's app already
+    // encrypts against. Its withheld lines stay withheld.
+    const kept = withheldConversationOfPair(participants[0], participants[1]);
+    const id = kept?.id ?? crypto.randomUUID();
     db.transaction(() => {
+        if (kept) dropWithheldConversation(kept.id);
         db.prepare(`INSERT INTO conversations (id, type, post_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)`).run(id, type, null, name || null, createdBy, createdAt);
         const insertPart = db.prepare(`INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)`);
         for (const p of participants) insertPart.run(id, p);
+        if (kept) keepOwnersReadMarker(kept);
     })();
 
     const conv: Conversation = { id, type, name: name || null, createdBy, createdAt, participants };
     // A DM's existence says who is talking to whom: only its two participants hear of it.
-    cb.broadcast({ type: 'conversation_created', conversation: conv }, participants);
+    // Its owner was told of it when they opened it: only the other, for whom it is new, hears of it now.
+    cb.broadcast({ type: 'conversation_created', conversation: conv }, kept ? participants.filter(p => p !== kept.owner_pubkey) : participants);
     return conv;
+}
+
+/**
+ * A withheld conversation (engine/withheld-lines.ts) its owner writes in once the block is lifted: it becomes the real
+ * conversation between the two, under its id, and the other hears of it as of any new conversation (its owner had it
+ * already). When the two have a real
+ * one already (only a conversation opened some other way than createConversation could be), the withheld one goes and
+ * the line goes there. Returns the id the line is stored under.
+ */
+function promoteWithheldConversation(cb: MessagingCallbacks, kept: WithheldConversation, author: string): string {
+    const participants = [kept.owner_pubkey, kept.other_pubkey];
+    const real = findDirectConversationRow(participants[0], participants[1]);
+    if (real) {
+        dropWithheldConversation(kept.id);
+        return real.id;
+    }
+    const createdAt = new Date().toISOString();
+    db.transaction(() => {
+        dropWithheldConversation(kept.id);
+        db.prepare(`INSERT INTO conversations (id, type, post_id, name, created_by, created_at) VALUES (?, 'dm', NULL, NULL, ?, ?)`).run(kept.id, author, createdAt);
+        const insertPart = db.prepare(`INSERT INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)`);
+        for (const p of participants) insertPart.run(kept.id, p);
+        keepOwnersReadMarker(kept);
+    })();
+    const conv: Conversation = { id: kept.id, type: 'dm', name: null, createdBy: author, createdAt, participants };
+    // Its owner was told of it when they opened it: only the other, for whom it is new, hears of it now.
+    cb.broadcast({ type: 'conversation_created', conversation: conv }, participants.filter(p => p !== kept.owner_pubkey));
+    return kept.id;
+}
+
+/** A withheld conversation now the real one: its owner's read marker goes on to their participant row. */
+function keepOwnersReadMarker(kept: WithheldConversation): void {
+    if (!kept.owner_last_read_at) return;
+    db.prepare('UPDATE conversation_participants SET last_read_at = ? WHERE conversation_id = ? AND public_key = ?')
+        .run(kept.owner_last_read_at, kept.id, kept.owner_pubkey);
+}
+
+/** A line already stored under this client id, in `messages` or withheld (engine/withheld-lines.ts). */
+function storedLineWithId(id: string): any {
+    return db.prepare("SELECT * FROM messages WHERE id=?").get(id) ?? withheldLine(id);
+}
+
+/** `metadata` (a JSON string a client sent) without the keys only the node's own tombstone carries. */
+export function withoutTombstoneKeys(metadata: string | undefined): string | undefined {
+    if (typeof metadata !== 'string' || !metadata) return metadata;
+    let obj: any;
+    try { obj = JSON.parse(metadata); } catch { return metadata; }
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return metadata;
+    let hit = false;
+    for (const k of ['removed', 'removedBy', 'removedAt', 'accountDeleted']) {
+        if (k in obj) { delete obj[k]; hit = true; }
+    }
+    return hit ? JSON.stringify(obj) : metadata;
 }
 
 export function sendMessage(
@@ -206,7 +388,18 @@ export function sendMessage(
     type: 'text' | 'image' = 'text',
     attachment?: { data: string; nonce: string; mime?: string },
     metadata?: string,
-    clientId?: string
+    clientId?: string,
+    opts: {
+        /** The node's own words into a DM (the admin page's message), not a member's: stored as written. */
+        nodeAuthored?: boolean;
+        /**
+         * A caller's own limit on the line as it would be stored (the send route's 64 KB, W-main): run once every refusal
+         * below has passed (who may write here, the idempotent retry, encrypted or not at all) and just before the line is
+         * written, so a limit never answers for a caller who may not write in this conversation. Not run for a group
+         * chat line, which its own rule book bounds (2000 characters, and only a reply id kept from its metadata).
+         */
+        beforeStore?: (stored: { ciphertext: string; metadata?: string }) => void;
+    } = {}
 ): Message | null {
     assertMemberActive(authorPubkey);
     // A visitor's row (isLiveVisitor) writes only in a direct conversation it is already in (checked again below, once
@@ -230,26 +423,21 @@ export function sendMessage(
     // the read-only state after wind-up, the frozen-author block, the 2000-character cap and plaintext text
     // only. No participant row is authority to post here (PR #924 review, B1).
     if (directConv?.type === 'enterprise_thread') throw new MessagingError(ENTERPRISE_THREAD_SEND_ERROR, 403);
+    // A conversation kept for its opener alone, because the other had blocked them (engine/withheld-lines.ts): a DM
+    // between the two as far as every rule below goes, a visitor's too (a member of another community, relayed by a
+    // peer). Only its owner writes in it; to anyone else it is an id nobody has.
+    const kept = !directConv ? withheldConversationOwnedBy(conversationId, authorPubkey) : undefined;
     let effectiveConvId = conversationId;
-    let participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(effectiveConvId) as any[];
-    
+    let participants = kept
+        ? [{ public_key: kept.owner_pubkey }, { public_key: kept.other_pubkey }]
+        : db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(effectiveConvId) as any[];
+
     // If not found directly, check if conversationId was consolidated into an active DM
-    if (!participants.length || !participants.find(p => p.public_key === authorPubkey)) {
+    if (!kept && (!participants.length || !participants.find(p => p.public_key === authorPubkey))) {
         try {
-            // json_valid() guards json_extract via CASE so a single row with malformed
-            // metadata cannot abort the whole SELECT (which the surrounding catch would
-            // then swallow, silently disabling consolidation resolution node-wide).
-            const consolidatedMsg = db.prepare(`
-                SELECT conversation_id FROM messages
-                WHERE metadata IS NOT NULL
-                  AND CASE WHEN json_valid(metadata) THEN (
-                        json_extract(metadata, '$.originalConversationId') = ?
-                        OR json_extract(metadata, '$.originalConversationIds') LIKE ?
-                      ) ELSE 0 END
-                LIMIT 1
-            `).get(conversationId, `%${conversationId}%`) as any;
-            if (consolidatedMsg?.conversation_id) {
-                effectiveConvId = consolidatedMsg.conversation_id;
+            const consolidatedId = consolidatedConversationOf(conversationId);
+            if (consolidatedId) {
+                effectiveConvId = consolidatedId;
                 participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(effectiveConvId) as any[];
 
                 // Preserve the ORIGINAL conversation id the sender encrypted against.
@@ -271,7 +459,7 @@ export function sendMessage(
         } catch (e) {}
     }
 
-    const targetConv = db.prepare("SELECT type FROM conversations WHERE id=?").get(effectiveConvId) as any;
+    const targetConv = kept ? { type: 'dm' } : db.prepare("SELECT type FROM conversations WHERE id=?").get(effectiveConvId) as any;
     if (visitor && (targetConv?.type !== 'dm' || !participants.some(p => p.public_key === authorPubkey))) {
         throw new MessagingError(VISITOR_SEND_REFUSAL);
     }
@@ -284,7 +472,8 @@ export function sendMessage(
     if (targetConv?.type === 'enterprise_thread') throw new MessagingError(ENTERPRISE_THREAD_SEND_ERROR, 403);
 
     if (clientId) {
-        const existing = db.prepare("SELECT * FROM messages WHERE id=?").get(clientId) as any;
+        // A withheld line is answered again on a retry as a stored one is, so the retry tells its sender nothing.
+        const existing = storedLineWithId(clientId);
         if (existing) {
             if (existing.author_pubkey === authorPubkey && existing.conversation_id === effectiveConvId) {
                 return {
@@ -299,6 +488,71 @@ export function sendMessage(
                 };
             }
             throw new MessagingError('Message id already exists', 409, 'ID_CONFLICT');
+        }
+    }
+
+    // Everything that reaches this store is a direct conversation's: a group chat returned above, an event or
+    // enterprise chat was refused. So a member's words — the text and a photo alike — go in encrypted or not at
+    // all. Checked after the participant check, so an outsider learns nothing from it, and after the idempotent
+    // retry above, which stores nothing new.
+    if (!opts.nodeAuthored) {
+        refuseUnencryptedDm(ciphertext, nonce);
+        if (attachment?.data) refuseUnencryptedDm(attachment.data, attachment.nonce);
+        // A tombstone is written only by the node (message-tombstone.ts), never sent: a client's `removed`, `removedBy`,
+        // `removedAt` and `accountDeleted` would pose its line as one (#1407 review: a phone read it as a deleted account).
+        metadata = withoutTombstoneKeys(metadata);
+    }
+    opts.beforeStore?.({ ciphertext, metadata });
+
+    const participantKeys = participants.map(p => p.public_key as string);
+    // Someone in it has blocked the author (engine/member-blocks.ts): the line is kept for the author alone
+    // (engine/withheld-lines.ts) and answered exactly as a stored one is, after every refusal and limit above, so the
+    // block isn't revealed. Nothing goes in `messages`, nobody else's socket hears it, and no push or badge comes of it.
+    // The node's own words (nodeAuthored) are never withheld.
+    if (!opts.nodeAuthored && participantKeys.some(pk => pk !== authorPubkey && hasBlocked(pk, authorPubkey))) {
+        const withheld: Message = {
+            id: clientId || crypto.randomUUID(),
+            conversationId: effectiveConvId,
+            authorPubkey,
+            ciphertext,
+            nonce,
+            type,
+            metadata,
+            timestamp: new Date().toISOString()
+        };
+        storeWithheldLine(withheld, attachment);
+        cb.broadcast({ type: 'new_message', conversationId: effectiveConvId, message: withheld, participants: participantKeys }, [authorPubkey]);
+        // The work a stored line's push does after its answer (the recipient's preferences, tokens, badge count over all
+        // their chats, the signed notice), done all the same and dropped before it is kept or sent: the load on the node
+        // after the answer is then the same either way, so the sender's next request can't tell (#1403 re-review).
+        const withheldConvId = effectiveConvId;
+        setImmediate(() => {
+            try {
+                const senderName = (getMember(db, authorPubkey) as any)?.callsign || 'A member';
+                cb.rehearsePushNotification?.(
+                    unmutedRecipients(withheldConvId, participantKeys),
+                    authorPubkey,
+                    '💬 New Message',
+                    `${senderName} sent you a message`,
+                    { screen: 'chat', conversationId: withheldConvId },
+                    'chat',
+                    'chat.message'
+                );
+            } catch { /* nothing was owed */ }
+        });
+        return withheld;
+    }
+    // A withheld conversation its owner writes in once the block is lifted becomes the real one; the line goes there.
+    if (kept) {
+        effectiveConvId = promoteWithheldConversation(cb, kept, authorPubkey);
+        // Only when the two had a real conversation already: the line was encrypted against the withheld id, which the
+        // apps find here, as for a consolidated conversation's line.
+        if (effectiveConvId !== conversationId) {
+            let metaObj: any = {};
+            try { metaObj = metadata ? JSON.parse(metadata) : {}; } catch { metaObj = {}; }
+            if (!metaObj || typeof metaObj !== 'object' || Array.isArray(metaObj)) metaObj = {};
+            if (!metaObj.originalConversationId) metaObj.originalConversationId = conversationId;
+            metadata = JSON.stringify(metaObj);
         }
     }
 
@@ -318,7 +572,11 @@ export function sendMessage(
         // The ciphertext goes to the image store and the row keeps the nonce, the mime and a key
         // (storage design §7). The node has never held the key that would decrypt either half, so nothing
         // about what it can read changes; only where the 8 MB of it lives.
-        const cols = storeAttachmentColumns(getImageStore(), attachmentKey(msg.id), attachment.data);
+        // An id no key is built from (storage/image-store.ts idSegment refuses one, never strips it) keeps the
+        // ciphertext in the row, as a store that refuses it does: a failure here never fails the message.
+        let key: string | null = null;
+        try { key = attachmentKey(msg.id); } catch { /* kept in the row */ }
+        const cols = key ? storeAttachmentColumns(getImageStore(), key, attachment.data) : { data: attachment.data, storage_key: null };
         db.prepare(`INSERT INTO message_attachments (message_id, data, nonce, mime, storage_key) VALUES (?, ?, ?, ?, ?)`)
             .run(msg.id, cols.data, attachment.nonce, attachment.mime || 'image/jpeg', cols.storage_key);
     }
@@ -327,18 +585,30 @@ export function sendMessage(
     cb.broadcast({ type: 'new_message', conversationId: effectiveConvId, message: msg, participants: participants.map(p => p.public_key) }, participants.map(p => p.public_key));
 
     // Node-readable threads never push per message; a DM does, unless the recipient muted it (decision 12).
+    // After the answer, never inside it: the push's work (the recipient's preferences, tokens and badge count over all
+    // their chats) would make a stored line's answer measurably slower than a withheld one's, which has no push, and
+    // tell its sender they are blocked (#1403 review). A line's push never decided its answer.
     if (targetConv?.type !== 'enterprise_thread' && targetConv?.type !== 'event_thread') {
-        const senderMember = getMember(db, authorPubkey) as any;
-        // A push names people in words, never a slice of their key.
-        const senderName = senderMember?.callsign || 'A member';
-        cb.dispatchPushNotification(
-            unmutedRecipients(effectiveConvId, participants.map(p => p.public_key)),
-            authorPubkey,
-            '💬 New Message',
-            `${senderName} sent you a message`,
-            { screen: 'chat', conversationId: effectiveConvId },
-            'chat'
-        );
+        const recipients = participants.map(p => p.public_key as string);
+        const pushConvId = effectiveConvId;
+        setImmediate(() => {
+            try {
+                const senderMember = getMember(db, authorPubkey) as any;
+                // A push names people in words, never a slice of their key.
+                const senderName = senderMember?.callsign || 'A member';
+                cb.dispatchPushNotification(
+                    unmutedRecipients(pushConvId, recipients),
+                    authorPubkey,
+                    '💬 New Message',
+                    `${senderName} sent you a message`,
+                    { screen: 'chat', conversationId: pushConvId },
+                    'chat',
+                    'chat.message'
+                );
+            } catch (e: any) {
+                console.warn('[Push] A message push failed:', e?.message ?? e);
+            }
+        });
     }
 
     return msg;
@@ -351,12 +621,26 @@ export function toggleMessageReaction(
     emoji: string
 ): any {
     const row = db.prepare("SELECT * FROM messages WHERE id=?").get(messageId) as any;
-    if (!row) return null;
+    if (!row) {
+        // A withheld line (engine/withheld-lines.ts) takes its own author's reaction, heard on their own sockets only.
+        // To anyone else it is an id nobody has.
+        const own = ownWithheldLine(messageId, authorPubkey);
+        if (!own) return null;
+        if (own.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_REACT_ERROR, 403);
+        const toggled = JSON.stringify(toggledReactions(own.metadata, authorPubkey, emoji).metadata);
+        setWithheldLineMetadata(own.id, toggled);
+        cb.broadcast({ type: 'message_reaction', conversationId: own.conversation_id, messageId, metadata: toggled, participants: eventParticipants(own.conversation_id, authorPubkey) }, [authorPubkey]);
+        return { success: true, metadata: toggled };
+    }
 
     // An enterprise thread has no reactions, and nobody's participant row there is authority to write (B1).
     // Refused before the participant check: the thread is readable by members, so this hides nothing.
     const convType = db.prepare("SELECT type FROM conversations WHERE id=?").get(row.conversation_id) as any;
     if (convType?.type === 'enterprise_thread') throw new MessagingError(ENTERPRISE_THREAD_REACT_ERROR, 403);
+    // A line of an event chat whose event isn't there for this caller (a hidden group's event, one they were removed
+    // from or left while Going) answers as an id nobody has, before the participants mirror, where a removed member
+    // keeps their seat: "Reactions are not part of an event chat" would confirm the line is real (the #828 rule).
+    if (convType?.type === 'event_thread' && eventChatUnknownTo(row.conversation_id, authorPubkey)) return null;
 
     const participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(row.conversation_id) as any[];
 
@@ -369,6 +653,9 @@ export function toggleMessageReaction(
         const refusal = groupChatRefusal(row.conversation_id, authorPubkey);
         if (refusal?.status === 404) return null;
         if (refusal) throw new MessagingError(refusal.error, refusal.status);
+        // A line sealed under an epoch from before the caller's membership is one the chat never served them: an id
+        // nobody has, before any answer about the line itself (review of #1772, finding 2).
+        if (!groupLineForReader(row.metadata, fromEpochOf(row.conversation_id, authorPubkey))) return null;
         if (row.type === 'system') throw new MessagingError(GROUP_CHAT_SYSTEM_REACT_ERROR, 400);
         try { assertCanWriteInGroupChat(row.conversation_id, authorPubkey); }
         catch (e: any) { throw toGroupChatMessagingError(e); }
@@ -390,10 +677,72 @@ export function toggleMessageReaction(
     // A tombstone takes no reactions, in any chat: the message it stood for is gone.
     if (row.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_REACT_ERROR, 403);
 
+    // The line as this member sees it: with their own reaction from while they were blocked, if they made one
+    // (engine/withheld-lines.ts withheld_overlays), which only they see.
+    const overlay = overlayOf(messageId, authorPubkey);
+    const seen = overlay?.reaction ? withOwnReaction(row.metadata, authorPubkey, overlay.reaction) : row.metadata;
+    const { metadata, removed } = toggledReactions(seen, authorPubkey, emoji);
+    const metadataStr = JSON.stringify(metadata);
+    const keys = participants.map((p: any) => p.public_key as string);
+    const toAuthorOnly = () => {
+        // As a stored reaction is heard, the conversation's participants named, on the author's own sockets alone.
+        cb.broadcast({ type: 'message_reaction', conversationId: row.conversation_id, messageId, metadata: metadataStr, participants: keys }, [authorPubkey]);
+        return { success: true, metadata: metadataStr };
+    };
+    // In a DM with someone who has blocked them, a reaction is up to 32 characters of anything on the other person's
+    // screen (engine/member-blocks.ts): kept for its author alone and laid over their own reads (#1403 review), so it is
+    // there on their next read, as anyone's is, and never in the line the other person sees. Taking theirs back from the
+    // line itself still goes through.
+    if (!removed && convType?.type === 'dm' && keys.some(pk => pk !== authorPubkey && hasBlocked(pk, authorPubkey))) {
+        setOverlayReaction(messageId, authorPubkey, emoji);
+        return toAuthorOnly();
+    }
+    if (overlay?.reaction) {
+        setOverlayReaction(messageId, authorPubkey, null);
+        // The one they took back was only ever theirs to see: the line nobody else sees changes in nothing.
+        if (removed && !reactionsOf(row.metadata).some((r: any) => r?.author === authorPubkey)) return toAuthorOnly();
+    }
+    db.prepare("UPDATE messages SET metadata=? WHERE id=?").run(metadataStr, messageId);
+
+    // A group chat's line reaches only those it is served to, as its edits and removals do (groupLineHearers).
+    cb.broadcast({
+        type: 'message_reaction',
+        conversationId: row.conversation_id,
+        messageId,
+        metadata: metadataStr,
+        participants: keys
+    }, convType?.type === GROUP_THREAD_TYPE ? groupLineHearers(row.conversation_id, metadataStr, keys) : keys);
+
+    return { success: true, metadata: metadataStr };
+}
+
+/** A line's stored reactions, whatever its metadata holds. */
+function reactionsOf(stored: string | null | undefined): any[] {
+    try {
+        const m = stored ? JSON.parse(stored) : null;
+        return Array.isArray(m?.reactions) ? m.reactions : [];
+    } catch {
+        return [];
+    }
+}
+
+/** Who a conversation's live events name: its participants, or the two of a withheld conversation (engine/withheld-lines.ts). */
+function eventParticipants(conversationId: string, author: string): string[] {
+    const real = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(conversationId) as { public_key: string }[];
+    if (real.length > 0) return real.map(p => p.public_key);
+    const kept = withheldConversationOwnedBy(conversationId, author);
+    return kept ? [kept.owner_pubkey, kept.other_pubkey].sort() : [author];
+}
+
+/**
+ * A line's metadata with `author`'s reaction toggled: the same emoji again takes theirs away (`removed`), another
+ * replaces it, and none adds it.
+ */
+function toggledReactions(stored: string | null | undefined, author: string, emoji: string): { metadata: any; removed: boolean } {
     let metadata: any = {};
-    if (row.metadata) {
+    if (stored) {
         try {
-            metadata = JSON.parse(row.metadata);
+            metadata = JSON.parse(stored);
         } catch {
             metadata = {};
         }
@@ -406,30 +755,20 @@ export function toggleMessageReaction(
         metadata.reactions = [];
     }
 
-    const existingIndex = metadata.reactions.findIndex((r: any) => r.author === authorPubkey);
+    let removed = false;
+    const existingIndex = metadata.reactions.findIndex((r: any) => r.author === author);
     if (existingIndex > -1) {
         const existingReaction = metadata.reactions[existingIndex];
         if (existingReaction.emoji === emoji) {
             metadata.reactions.splice(existingIndex, 1);
+            removed = true;
         } else {
             metadata.reactions[existingIndex].emoji = emoji;
         }
     } else {
-        metadata.reactions.push({ emoji, author: authorPubkey });
+        metadata.reactions.push({ emoji, author });
     }
-
-    const metadataStr = JSON.stringify(metadata);
-    db.prepare("UPDATE messages SET metadata=? WHERE id=?").run(metadataStr, messageId);
-
-    cb.broadcast({
-        type: 'message_reaction',
-        conversationId: row.conversation_id,
-        messageId,
-        metadata: metadataStr,
-        participants: participants.map(p => p.public_key)
-    }, participants.map(p => p.public_key));
-
-    return { success: true, metadata: metadataStr };
+    return { metadata, removed };
 }
 
 export const MESSAGE_EDIT_WINDOW_MS = 15 * 60 * 1000;
@@ -467,12 +806,42 @@ export function editMessage(
     messageId: string,
     authorPubkey: string,
     ciphertext: string,
-    nonce: string
+    nonce: string,
+    /**
+     * A caller's own limit on the new words (the edit route's 64 KB, W-main): run once every refusal below has passed
+     * (a thread or event chat's line, someone else's, a removed one, past the 15 minutes) and just before the row is
+     * changed, so a limit never answers for a caller who may not edit this message at all.
+     */
+    beforeStore?: () => void,
+    /** A group chat edit's { epoch } (engine/group-thread.ts groupChatEdit); nothing else reads it. */
+    metadata?: unknown,
 ): Message {
     assertMemberActive(authorPubkey);
     refuseVisitorOutsideItsDirectConversations(messageId, authorPubkey);
     const row = db.prepare("SELECT * FROM messages WHERE id=?").get(messageId) as any;
-    if (!row) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR);
+    if (!row) {
+        // A withheld line (engine/withheld-lines.ts): its author edits it as any DM line of theirs, under the same rules,
+        // heard on their own sockets only. Anyone else is refused as a non-participant of a real DM is (#1403 re-review:
+        // "not found" would tell a second account that the id is a withheld one).
+        const own = ownWithheldLine(messageId, authorPubkey);
+        if (!own) {
+            if (withheldLine(messageId)) throw new MessagingError('You are not a participant in this conversation', 403);
+            throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
+        }
+        if (own.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_EDIT_ERROR, 403);
+        refuseUnencryptedDm(ciphertext, nonce);
+        const sentMs = new Date(own.timestamp).getTime();
+        if (Number.isNaN(sentMs) || Date.now() - sentMs > MESSAGE_EDIT_WINDOW_MS) {
+            throw new MessagingError('Messages can only be edited within 15 minutes of sending');
+        }
+        beforeStore?.();
+        const editedAt = new Date().toISOString();
+        editWithheldLine(own.id, ciphertext, nonce, editedAt);
+        const edited: Message = { ...withheldLineMessage(own), ciphertext, nonce, editedAt };
+        delete edited.updatedAt;
+        cb.broadcast({ type: 'message_edited', conversationId: own.conversation_id, message: edited, participants: eventParticipants(own.conversation_id, authorPubkey) }, [authorPubkey]);
+        return edited;
+    }
     // Enterprise discussion-thread messages are not editable. This route has no size bound
     // and knows nothing of thread moderation or a wound-up enterprise's read-only thread.
     // Fails closed: a message whose conversation row is missing cannot be shown to be outside a thread.
@@ -480,8 +849,12 @@ export function editMessage(
     if (!conv) throw new MessagingError('Conversation not found', 404);
     if (conv.type === 'enterprise_thread') throw new MessagingError(THREAD_MESSAGE_EDIT_ERROR, 403);
     // An event chat is moderated by its host and goes read-only when the event ends; this route knows
-    // neither, so it refuses (docs/events-on-the-map.md §2.2).
-    if (conv.type === 'event_thread') throw new MessagingError(EVENT_THREAD_EDIT_ERROR, 403);
+    // neither, so it refuses (docs/events-on-the-map.md §2.2). Someone the event isn't there for (a hidden group's
+    // event, or one they were removed from or left) is answered first, as an id nobody has (the #828 rule).
+    if (conv.type === 'event_thread') {
+        if (eventChatUnknownTo(row.conversation_id, authorPubkey)) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
+        throw new MessagingError(EVENT_THREAD_EDIT_ERROR, 403);
+    }
 
     const isGroupChat = conv.type === GROUP_THREAD_TYPE;
     // Whether this caller may SEE the chat at all is settled BEFORE the author match and before anything else
@@ -491,13 +864,18 @@ export function editMessage(
     if (isGroupChat) {
         const refusal = groupChatRefusal(row.conversation_id, authorPubkey);
         if (refusal) throw refusal.status === 404
-            ? new MessagingError(MESSAGE_NOT_FOUND_ERROR)
+            ? new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404)
             : new MessagingError(refusal.error, refusal.status);
+    } else if (!db.prepare("SELECT 1 FROM conversation_participants WHERE conversation_id=? AND public_key=?")
+        .get(row.conversation_id, authorPubkey)) {
+        throw new MessagingError('You are not a participant in this conversation', 403);
     }
     if (row.author_pubkey !== authorPubkey) throw new MessagingError('Only the author can edit a message');
     if (row.type === 'system') throw new MessagingError('System messages cannot be edited');
     // A keeper-removed message is a tombstone: never editable, by any route.
     if (row.type === 'removed') throw new MessagingError(MESSAGE_REMOVED_EDIT_ERROR, 403);
+    // An edit is new words: in a direct conversation, encrypted or not at all (see sendMessage).
+    if (!isGroupChat) refuseUnencryptedDm(ciphertext, nonce);
 
     // A group chat is editable under the group's own rules (chat parity, 2026-09-23 — slice 1 refused it here
     // because this route had no size bound and no membership re-check; it has both now, from the engine the
@@ -505,11 +883,15 @@ export function editMessage(
     // rule (an observer reads but does not post) on top of the read rule checked above:
     let storedCiphertext = ciphertext;
     let storedNonce = nonce;
+    let storedMetadata: string | null = row.metadata ?? null;
     if (isGroupChat) {
         try {
             assertCanWriteInGroupChat(row.conversation_id, authorPubkey);
-            storedCiphertext = groupChatEditedCiphertext(ciphertext, nonce);
-            storedNonce = 'plaintext-v1';
+            // Sealed again under the line's own epoch (§7.4 as step 2b decided it): the row's epoch never moves.
+            const edited = groupChatEdit(row, ciphertext, nonce, metadata, authorPubkey);
+            storedCiphertext = edited.ciphertext;
+            storedNonce = edited.nonce;
+            storedMetadata = edited.metadata;
         } catch (e: any) {
             throw toGroupChatMessagingError(e);
         }
@@ -519,9 +901,25 @@ export function editMessage(
     if (Number.isNaN(sentAtMs) || Date.now() - sentAtMs > MESSAGE_EDIT_WINDOW_MS) {
         throw new MessagingError('Messages can only be edited within 15 minutes of sending');
     }
+    beforeStore?.();
 
     const editedAt = new Date().toISOString();
-    db.prepare("UPDATE messages SET ciphertext=?, nonce=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, editedAt, messageId);
+    const participants = isGroupChat ? [] : db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(row.conversation_id) as any[];
+    // An edit is new words on the other person's screen: in a DM with someone who has blocked its author, kept for the
+    // author alone and laid over their own reads of the line (engine/withheld-lines.ts withheld_overlays; #1403 review),
+    // as a new line is withheld, so their next read shows it as made and the other person's never does.
+    const withheld = !isGroupChat && participants.some((p: any) => p.public_key !== authorPubkey && hasBlocked(p.public_key, authorPubkey));
+    if (withheld) {
+        setOverlayEdit(messageId, authorPubkey, storedCiphertext, storedNonce, editedAt);
+    } else {
+        if (isGroupChat) {
+            db.prepare("UPDATE messages SET ciphertext=?, nonce=?, metadata=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, storedMetadata, editedAt, messageId);
+        } else {
+            db.prepare("UPDATE messages SET ciphertext=?, nonce=?, edited_at=? WHERE id=?").run(storedCiphertext, storedNonce, editedAt, messageId);
+        }
+        // An edit from while they were blocked, still over their own read, gives way to this one.
+        if (!isGroupChat) clearOverlayEdit(messageId, authorPubkey);
+    }
 
     const updated: Message = {
         id: row.id,
@@ -531,7 +929,7 @@ export function editMessage(
         nonce: storedNonce,
         type: row.type,
         systemType: row.system_type,
-        metadata: row.metadata,
+        metadata: storedMetadata ?? undefined,
         timestamp: row.timestamp,
         editedAt
     };
@@ -542,8 +940,14 @@ export function editMessage(
         broadcastGroupChatUpdate(cb, row.conversation_id, messageId, 'edited');
         return updated;
     }
+    if (withheld) {
+        // Heard on the author's own sockets alone, as a stored edit is heard, with the line as they see it.
+        const seen = withOwnOverlay({ ...updated }, authorPubkey);
+        cb.broadcast({ type: 'message_edited', conversationId: row.conversation_id, message: { ...seen, ciphertext: storedCiphertext, nonce: storedNonce, editedAt },
+            participants: participants.map((p: any) => p.public_key) }, [authorPubkey]);
+        return { ...updated, metadata: seen.metadata };
+    }
 
-    const participants = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(row.conversation_id) as any[];
     cb.broadcast({
         type: 'message_edited',
         conversationId: row.conversation_id,
@@ -574,13 +978,33 @@ export function deleteOwnMessage(
     assertMemberActive(authorPubkey);
     refuseVisitorOutsideItsDirectConversations(messageId, authorPubkey);
     const row = db.prepare("SELECT * FROM messages WHERE id=?").get(messageId) as any;
-    if (!row) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
+    if (!row) {
+        // A withheld line (engine/withheld-lines.ts): its author takes it down as any DM line of theirs, to the same
+        // tombstone, heard on their own sockets only. Anyone else is refused as a non-participant of a real DM is
+        // (#1403 re-review: "not found" would tell a second account that the id is a withheld one).
+        const own = ownWithheldLine(messageId, authorPubkey);
+        if (!own) {
+            if (withheldLine(messageId)) throw new MessagingError('You are not a participant in this conversation', 403);
+            throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
+        }
+        // A withheld line has no system type: null, as a stored line's answer has it, so the two answers have one shape.
+        if (own.type === 'removed') return { ...toMessage(own), systemType: null as any };
+        const { ciphertext, metadata } = tombstoneFields(own, authorPubkey, GROUP_THREAD_DELETED_TEXT);
+        tombstoneWithheldLine(own.id, ciphertext, metadata);
+        const gone: Message = { ...toMessage(own), systemType: null as any, ciphertext, nonce: 'plaintext-v1', type: 'removed', metadata };
+        cb.broadcast({ type: 'message_edited', conversationId: own.conversation_id, message: gone, participants: eventParticipants(own.conversation_id, authorPubkey) }, [authorPubkey]);
+        return gone;
+    }
     // Fails closed, as the edit does: a message whose conversation row is missing cannot be shown to be
     // outside a thread this route may not write to.
     const conv = db.prepare("SELECT type FROM conversations WHERE id=?").get(row.conversation_id) as any;
     if (!conv) throw new MessagingError('Conversation not found', 404);
     if (conv.type === 'enterprise_thread') throw new MessagingError(THREAD_MESSAGE_DELETE_ERROR, 403);
-    if (conv.type === 'event_thread') throw new MessagingError(EVENT_THREAD_DELETE_ERROR, 403);
+    // An event chat's line: first answered as an id nobody has for someone the event isn't there for, as the edit is.
+    if (conv.type === 'event_thread') {
+        if (eventChatUnknownTo(row.conversation_id, authorPubkey)) throw new MessagingError(MESSAGE_NOT_FOUND_ERROR, 404);
+        throw new MessagingError(EVENT_THREAD_DELETE_ERROR, 403);
+    }
 
     const isGroupChat = conv.type === GROUP_THREAD_TYPE;
     // Who may SEE this chat comes FIRST — before the author match, and before the system-line refusal, both of
@@ -609,6 +1033,8 @@ export function deleteOwnMessage(
     }
 
     const { ciphertext, metadata } = writeMessageTombstone(messageId, row, authorPubkey, GROUP_THREAD_DELETED_TEXT);
+    // Nothing is laid over a tombstone: anyone's withheld reaction or edit on the line goes with it (engine/withheld-lines.ts).
+    dropOverlaysOn(messageId);
     const updated: Message = {
         ...toMessage(row),
         ciphertext,
@@ -711,14 +1137,15 @@ export function injectSystemMessage(
 /** Map a group-chat refusal onto the status the ordinary messaging routes answer with. */
 function toGroupChatMessagingError(e: any): Error {
     if (e instanceof MessagingError) return e;
+    if (e instanceof GroupKeyError) return new MessagingError(e.message, e.status, e.code, e.extra);
     const msg: string = e?.message || 'Could not send the message';
     if (e?.code === 'ID_CONFLICT') return new MessagingError(msg, 409, 'ID_CONFLICT');
     if (msg === GROUP_NOT_FOUND) return new MessagingError(msg, 404);
     if (msg === GROUP_CHAT_FORBIDDEN || msg === GROUP_CHAT_OBSERVER
         || /disabled|suspended|pruned|closed|Frozen|invalidated|Member not found/.test(msg)) return new MessagingError(msg, 403);
-    // Bad input from the caller, not a refusal of who they are: an empty or oversized edit, a nonce that is not
-    // plaintext-v1, a reply that names a message in another chat or a system line.
-    if (/empty|too long|plain text|Only text|not in this chat|system line/.test(msg)) return new MessagingError(msg, 400);
+    // Bad input from the caller, not a refusal of who they are: an oversized line, a photo, metadata that is not JSON, a
+    // reply that names a message in another chat or a system line.
+    if (/empty|too long|Only text|is JSON|sealed under|must be a message id|not in this chat|system line/.test(msg)) return new MessagingError(msg, 400);
     return e;
 }
 
@@ -738,10 +1165,10 @@ export function removeOldChatGroups(): number {
                 'SELECT storage_key FROM message_attachments WHERE storage_key IS NOT NULL AND message_id IN (SELECT id FROM messages WHERE conversation_id = ?)'
             ).all(id) as any[]).map(r => r.storage_key as string);
             db.prepare('DELETE FROM message_attachments WHERE message_id IN (SELECT id FROM messages WHERE conversation_id = ?)').run(id);
-            if (doomedObjects.length > 0) afterTransactionCommit(() => deleteStoredObjects(doomedObjects));
+            if (doomedObjects.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, doomedObjects));
             db.prepare('DELETE FROM messages WHERE conversation_id = ?').run(id);
             db.prepare('DELETE FROM conversation_participants WHERE conversation_id = ?').run(id);
-            db.prepare('DELETE FROM chat_mutes WHERE conversation_id = ?').run(id);
+            deletePlainRows('chat_mutes', 'conversation_id = ?', id);
             db.prepare('DELETE FROM conversations WHERE id = ?').run(id);
             for (const p of parts) writeTombstone('conversation_participants', `${id}|${p.public_key}`);
             writeTombstone('conversations', id);
@@ -761,7 +1188,8 @@ export function ensureTransactionConversation(
     buyerPubkey: string,
     sellerPubkey: string
 ): string {
-    const conv = createConversation(cb, 'dm', [buyerPubkey, sellerPubkey], buyerPubkey);
+    // A trade's chat is the node's: a block never withholds it, or a deal under way would lose its notices.
+    const conv = createConversation(cb, 'dm', [buyerPubkey, sellerPubkey], buyerPubkey, undefined, undefined, { asNode: true });
     if (!conv) throw new Error('Failed to create transaction conversation');
     return conv.id;
 }
@@ -785,7 +1213,7 @@ export function migrateConsolidateConversations(cb: MessagingCallbacks): void {
             const parts = db.prepare("SELECT public_key FROM conversation_participants WHERE conversation_id=?").all(conv.id) as any[];
             if (parts.length === 2) {
                 try {
-                    const targetConv = createConversation(cb, 'dm', [parts[0].public_key, parts[1].public_key], parts[0].public_key);
+                    const targetConv = createConversation(cb, 'dm', [parts[0].public_key, parts[1].public_key], parts[0].public_key, undefined, undefined, { asNode: true });
                     if (targetConv) {
                         const msgs = db.prepare("SELECT id, metadata FROM messages WHERE conversation_id=?").all(conv.id) as any[];
                         for (const msg of msgs) {

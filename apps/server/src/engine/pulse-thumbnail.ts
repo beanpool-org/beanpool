@@ -633,6 +633,13 @@ export interface PulseThumbnailOptions {
     backoffStore?: PulseThumbnailBackoffStore | null;
 }
 
+/**
+ * A refused address, in words that name no address, IPv4 or IPv6 (storm-smalls follow-up). The guard's own message
+ * says which private address the resolver gave the member's URL and why it was refused; the public thumbnail route
+ * must not hand that out. The detail stays in the server's log.
+ */
+export const SSRF_REFUSED_TEXT = "That address can't be fetched from here. Use a public web address.";
+
 export class PulseThumbnailService {
     public readonly cache: PulseThumbnailCache;
     public readonly diskStore: PulseThumbnailDiskStore | null;
@@ -852,7 +859,7 @@ export class PulseThumbnailService {
                 } catch (recoveryErr: any) {
                     if (recoveryErr instanceof SsrfSecurityError) {
                         logger.security('SYS', `[PulseThumbnail] Blocked as a prohibited address for item ${itemId}: ${recoveryErr.message}`);
-                        return this.refuse(itemId, null, 400, recoveryErr.message);
+                        return this.refuse(itemId, null, 400, SSRF_REFUSED_TEXT);
                     }
                 }
                 return this.refuse(itemId, null, 404, 'Item has no thumbnail');
@@ -935,7 +942,7 @@ export class PulseThumbnailService {
                         } catch (recoveryErr: any) {
                             if (recoveryErr instanceof SsrfSecurityError) {
                                 logger.security('SYS', `[PulseThumbnail] Blocked as a prohibited address for item ${itemId}: ${recoveryErr.message}`);
-                                return this.refuse(itemId, rawUrl, 400, recoveryErr.message);
+                                return this.refuse(itemId, rawUrl, 400, SSRF_REFUSED_TEXT);
                             }
                         }
                     }
@@ -982,7 +989,7 @@ export class PulseThumbnailService {
 
                 if (err instanceof SsrfSecurityError) {
                     status = 400;
-                    error = err.message;
+                    error = SSRF_REFUSED_TEXT;
                     logger.security('SYS', `[PulseThumbnail] Blocked as a prohibited address for item ${itemId}: ${err.message}`);
                 } else {
                     try {
@@ -991,7 +998,7 @@ export class PulseThumbnailService {
                     } catch (recoveryErr: any) {
                         if (recoveryErr instanceof SsrfSecurityError) {
                             logger.security('SYS', `[PulseThumbnail] Blocked as a prohibited address for item ${itemId}: ${recoveryErr.message}`);
-                            return this.refuse(itemId, rawUrl, 400, recoveryErr.message);
+                            return this.refuse(itemId, rawUrl, 400, SSRF_REFUSED_TEXT);
                         }
                     }
 
@@ -1114,7 +1121,7 @@ export class PulseThumbnailService {
                     } catch (recoveryErr: any) {
                         if (recoveryErr instanceof SsrfSecurityError) {
                             logger.security('SYS', `[PulseThumbnail] Blocked as a prohibited address at ingest for item ${itemId}: ${recoveryErr.message}`);
-                            return { status: 400, error: recoveryErr.message };
+                            return { status: 400, error: SSRF_REFUSED_TEXT };
                         }
                     }
                 }
@@ -1153,7 +1160,7 @@ export class PulseThumbnailService {
 
             if (err instanceof SsrfSecurityError) {
                 status = 400;
-                error = err.message;
+                error = SSRF_REFUSED_TEXT;
                 logger.security('SYS', `[PulseThumbnail] Blocked as a prohibited address at ingest for item ${itemId}: ${err.message}`);
             } else if (err instanceof ProhibitedContentTypeError) {
                 status = 502;

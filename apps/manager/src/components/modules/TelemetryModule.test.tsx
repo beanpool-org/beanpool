@@ -110,6 +110,21 @@ describe('TelemetryModule', () => {
         expect(mockHandlers.onRefreshFleet).toHaveBeenCalledTimes(1);
     });
 
+    it('a token profile\'s 401 says to make a new token from the phone, never to set a password', () => {
+        const tokenProfiles: NodeProfile[] = [mockProfiles[0], { ...mockProfiles[1], adminPassword: undefined, automationToken: `bp_${'c3'.repeat(6)}_${'0d'.repeat(32)}` }];
+        const diags = { ...mockFleetDiags, 'node-2': { diag: null, loading: false, error: 'HTTP 401: Invalid, revoked or expired automation token' } };
+        render(<TelemetryModule profiles={tokenProfiles} activeProfileId="node-1" fleetDiags={diags} {...mockHandlers} />);
+        // Condensed grid, then the expanded cards.
+        for (const view of ['Condensed Grid', 'Expanded Cards']) {
+            fireEvent.click(screen.getByText(view));
+            expect(screen.queryByText(/Set Password/), view).not.toBeInTheDocument();
+            expect(screen.queryByText(/admin password/i), view).not.toBeInTheDocument();
+            expect(screen.getAllByText(/Make a new token from your phone \(Settings → Automation tokens\)/).length, view).toBeGreaterThan(0);
+            expect(screen.getByRole('button', { name: /Fix token/ })).toBeInTheDocument();
+        }
+        expect(screen.getByText(/Invalid, revoked or expired automation token/)).toBeInTheDocument();
+    });
+
     it('allows toggling between condensed grid view and expanded cards view', () => {
         render(
             <TelemetryModule

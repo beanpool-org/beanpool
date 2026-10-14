@@ -28,6 +28,7 @@ import {
     confirmAppAddress, getAppAddresses, getTfaSessionToken, removeAppAddress,
     type AddressSighting, type AppAddress, type AppAddressesReport, type HeldBackAddress,
 } from '../../lib/node-client';
+import { nodeCredential } from '../../lib/profiles';
 
 const SOURCE_TEXT: Record<AppAddress['source'], string> = {
     'public-address': "this community's web address",
@@ -153,13 +154,13 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
 
     const load = useCallback(async () => {
         try {
-            const got = asReport(await getAppAddresses(activeNode.url, activeNode.adminPassword, getTfaSessionToken(activeNode.id)));
+            const got = asReport(await getAppAddresses(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id)));
             setReport(got);
             setLoadFailed(!got);
         } catch {
             setLoadFailed(true);
         }
-    }, [activeNode.id, activeNode.url, activeNode.adminPassword]);
+    }, [activeNode.id, activeNode.url, nodeCredential(activeNode)]);
 
     useEffect(() => { void load(); }, [load]);
 
@@ -168,7 +169,7 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
         setActionError(null);
         try {
             const call = how === 'confirm' ? confirmAppAddress : removeAppAddress;
-            const got = asReport(await call(activeNode.url, address, activeNode.adminPassword, getTfaSessionToken(activeNode.id)));
+            const got = asReport(await call(activeNode.url, address, nodeCredential(activeNode), getTfaSessionToken(activeNode.id)));
             if (got) setReport(got); else await load();
         } catch (e) {
             setActionError(e instanceof Error ? e.message : String(e));

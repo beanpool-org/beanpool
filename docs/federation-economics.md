@@ -352,6 +352,11 @@ terms of who now does what.
 - `key` is an **idempotency key per purchase**, minted by Brisbane. Every step is idempotent on it: a
   retried `PURCHASE` returns the same accept/refuse, and a retried receipt delivery is a no-op. A retry
   can never double-charge or double-pay.
+- **Brisbane's node mints it, never the member's app** (`xn-` for a purchase, `xc-` for a commission, then a
+  UUID). Brisbane holds the Beans in `escrow_<key>`, so a key the caller chose could name another account's
+  escrow (a crowdfund project's, a deal's). An app may send a key back only to retry its own purchase: the same
+  payer, peer, seller, listing and amount. Anything else is refused before anything moves, and a new settlement
+  whose key names any money already on the node (an account, member, escrow, project, deal) is refused too.
 - **Step 2 ambiguous** (timeout, connection dropped — Byron may or may not have reserved): Brisbane
   retries `PURCHASE` with the same key. Safe by idempotency. Brisbane's escrow is still held, so the
   buyer's beans are neither spent nor released while this resolves.

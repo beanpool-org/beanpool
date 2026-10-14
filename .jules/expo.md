@@ -106,3 +106,63 @@ Format: `## YYYY-MM-DD - [Title]\n**Issue:** [Type error or contract mismatch]\n
 **Issue:** `channels.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
 **Learning:** Re-exported `ErrorBoundary` from `expo-router` in `channels.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
 **Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-10-05 - [Export ErrorBoundary in new-message.tsx]
+**Issue:** `new-message.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` in `new-message.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
+**Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-10-08 - [Export ErrorBoundary in welcome.tsx]
+**Issue:** `welcome.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` in `welcome.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
+**Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-10-12 - [Export ErrorBoundary in node-mismatch.tsx]
+**Issue:** `node-mismatch.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` in `node-mismatch.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
+**Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-10-16 - [Export ErrorBoundary in recover-identity.tsx]
+**Issue:** `recover-identity.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` in `recover-identity.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
+**Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-10-20 - [Export ErrorBoundary in door-work-probe.tsx]
+**Issue:** `door-work-probe.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` in `door-work-probe.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
+**Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-10-24 - [Export ErrorBoundary in profile-setup.tsx]
+**Issue:** `profile-setup.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` in `profile-setup.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
+**Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-10-24 - [Export ErrorBoundary and refine search parameters in settings-signin.tsx]
+**Issue:** `settings-signin.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error handling and typed search parameters strictly as `{ community?: string }`.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` and updated search parameter types and array parameter extraction to allow `string | string[]`.
+**Pattern:** Check Expo Router screen components for missing `ErrorBoundary` exports and overly strict search parameter type constraints.
+
+## 2026-10-28 - [Export ErrorBoundary and refine search parameters in invite.tsx]
+**Issue:** `invite.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling and typed search parameters strictly as `{ invite?: string; code?: string; server?: string }`.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` and updated search parameter types and scalar unwrapping to handle optional `string | string[]` parameters safely.
+**Pattern:** Check Expo Router screen components for missing `ErrorBoundary` exports and overly strict search parameter type constraints.
+
+## 2026-11-01 - [Export ErrorBoundary in apple-probe.tsx]
+**Issue:** `apple-probe.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` in `apple-probe.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
+**Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-11-05 - [Export ErrorBoundary in google-probe.tsx]
+**Issue:** `google-probe.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` in `google-probe.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
+**Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-11-09 - [Export ErrorBoundary in edit-project.tsx]
+**Issue:** `edit-project.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` in `edit-project.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
+**Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.
+
+## 2026-11-12 - [Export ErrorBoundary in rekey-code.tsx]
+**Issue:** `rekey-code.tsx` lacked an exported `ErrorBoundary` component for Expo Router screen error boundary handling.
+**Learning:** Re-exported `ErrorBoundary` from `expo-router` in `rekey-code.tsx` so unhandled screen errors are caught by Expo Router's error boundary UI.
+**Pattern:** Check Expo Router screen route components in `apps/native/app/` for missing `ErrorBoundary` exports.

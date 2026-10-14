@@ -3,20 +3,32 @@
 // Bridges the database storage layer with server singletons and broadcasts.
 
 import { db, seedNodeRolesFromGenesis, afterTransactionCommit } from '../db/db.js';
+import { getNodeRole } from '../config/node-role.js';
 import { ledger } from './ledger.js';
-import { getMember, getProfile, isNodeMember, isVisitorKey, publicMemberCard, type Member, type MemberProfile } from '@beanpool/engine';
+import { getMember, getProfile, isNodeMember, isVisitorKey, prepared, publicMemberCard, setMemberPhoto, type Member, type MemberProfile } from '@beanpool/engine';
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
 import { bumpMembersVersion } from './versions.js';
 import { isAcceptablePhotoValue } from './avatar.js';
 import { stripImageValue } from '../storage/image-metadata.js';
-import { isSelfAvatarUrl, isSyntheticAccount } from '@beanpool/core';
+import { isSelfAvatarUrl, isSyntheticAccount, CONTACT_VALUE_LIMIT, fitsTextLimit, replaceLoneSurrogates } from '@beanpool/core';
 import { isMemberKeySpelling, badKeyError } from './member-key.js';
 
 /**
  * Record activity timestamp for a member.
  */
 export function recordActivity(publicKey: string): void {
-    db.prepare("UPDATE members SET last_active_at=? WHERE public_key=?").run(new Date().toISOString(), publicKey);
+    // Nothing on a standby: its members' rows and votes are its main server's (config/node-role.ts
+    // assertPlainTablesWritable). An activity it stamped would read, after a take-over, as a quiet lead or convenor come
+    // back, and close the vote to replace them.
+    if (getNodeRole() === 'backup') return;
+    // Nothing on a suspended account either. Last activity is how a group or an enterprise tells its lead has gone quiet,
+    // and a suspended lead cannot act for either (groups' assertConvenorPowersActive, treasury's keeper guards), so what
+    // they do while suspended is no lead coming back: it neither holds off the 30-day-silence vote nor cancels one. Their
+    // first write after the suspension ends is. Without this a suspended lead who kept signing anything at all — the
+    // refused convenor calls included, stamped before the route answers — froze their group with nobody able to act.
+    const stamped = prepared(db, "UPDATE members SET last_active_at=? WHERE public_key=? AND COALESCE(status, '') NOT IN ('suspended', 'disabled')")
+        .run(new Date().toISOString(), publicKey);
+    if (stamped.changes === 0) return;
     // A visitor's row is no lead or convenor coming back: it acts for no enterprise and no group (the director's rule,
     // 2026-09-26), so what it may still do (a reply in its own DM) cancels no vote to replace it (4111202724).
     if (isVisitorKey(db, publicKey)) return;
@@ -79,6 +91,8 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
                  VALUES (?, 'owner', 'genesis')`
             ).run(adminPublicKey);
         }
+        // An owner role shows in the directory (members-snapshot.ts rebuilds on the version).
+        bumpMembersVersion();
         return getMember(db, adminPublicKey)!;
     }
 
@@ -98,6 +112,7 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
         ).run(adminPublicKey);
     }
     console.log(`⛰️ Genesis member seeded: ${callsign}`);
+    bumpMembersVersion();
     return getMember(db, adminPublicKey)!;
 }
 
@@ -158,22 +173,22 @@ export interface RecoveryCandidate {
 export function findRecoveryCandidates(callsign: string, options: { exact?: boolean } = {}): RecoveryCandidate[] {
     const norm = callsign.trim().toLowerCase();
     if (!norm) return [];
-    // PREFIX, not exact. Callsigns are unique per node, so the member who wanted `paul` and was
+    // PREFIX by default. Callsigns are unique per node, so the member who wanted `paul` and was
     // given `paul12` has no reason to remember the digits months later — and an exact match returns
-    // nothing, which reads as "your account is gone" rather than "try harder". Matching on the
-    // prefix and showing avatars lets them recognise themselves instead of recalling a string.
-    //
-    // Enumeration is no cheaper than before in any way that matters: callsigns are public by design
-    // (they are how members find each other) and this endpoint is already rate-limited for exactly
-    // this reason. LIKE 'x%' uses the index; a leading wildcard would not, and is not offered.
+    // nothing, which reads as "your account is gone" rather than "try harder". That was the case for
+    // a prefix and avatars, while callsigns were public; they are members' now on every community
+    // (2026-10-01), and a prefix listed every member with a sign-in copy, face and join date to
+    // anyone in 26 requests, so the public lookup asks EXACT (below). LIKE 'x%' uses the index; a
+    // leading wildcard would not, and is not offered.
     //
     // The guardian floor moved out of the WHERE clause: it decides which BUTTON to offer, not
     // whether the account exists. Filtering on it hid every SSO-only member from a lookup they are
     // perfectly able to recover through.
     //
-    // EXACT (`options.exact`), on a node that shows visitors the listings and not the people (the
-    // global node, G9a-2): a stranger there must not list its members by typing a letter. Case is
-    // still forgiven; the same partial index answers it.
+    // EXACT (`options.exact`), which the public lookup asks on every node (the global node since
+    // G9a-2, a local community since 2026-10-01): a stranger must not list a community's members by
+    // typing a letter. Case is still forgiven; the same partial index answers it. The prefix is still
+    // this function's default (test-callsign-predicates pins its escaping), but no route asks it now.
     // `%` and `_` are LIKE wildcards. Bound straight in, a caller could send `%` and enumerate the
     // whole node from an unauthenticated endpoint — which is precisely what the rate limit on this
     // route exists to bound, so leaving it would have undone that.
@@ -184,7 +199,7 @@ export function findRecoveryCandidates(callsign: string, options: { exact?: bool
     // empty list — hiding a recoverable member behind namesakes who happen to sort earlier.
     const rows = db.prepare(`
         SELECT * FROM (
-            SELECT m.public_key, m.callsign, m.joined_at, m.avatar_url,
+            SELECT m.public_key, m.callsign, m.joined_at, (SELECT photo FROM member_photos mp WHERE mp.public_key = m.public_key) AS avatar_url,
                    (SELECT COUNT(*) FROM recovery_shares s
                      WHERE s.owner_pubkey = m.public_key AND s.holder_type = 'sso'
                        AND s.generation = (SELECT MAX(generation) FROM recovery_shares
@@ -232,10 +247,16 @@ function uniquifyCallsign(callsign: string, excludePublicKey?: string): string {
 }
 
 /**
+ * The node's broadcast as a member's own card edit calls it: `{ ownCard: true }` lets the node keep it to the member's
+ * circle where profiles are not announced (state-engine BroadcastOptions.ownCard, node-profile.ts announceProfiles).
+ */
+type CardBroadcast = (event: any, recipients?: string[], opts?: { ownCard?: boolean }) => void;
+
+/**
  * Internal member registration.
  */
 export function registerMemberInternal(
-    broadcast: (event: any) => void,
+    broadcast: CardBroadcast,
     publicKey: string,
     callsign: string,
     invitedBy: string | null,
@@ -258,8 +279,14 @@ export function registerMemberInternal(
         // A visitor joining for real, through a door (an invite, an offline ticket, the open door): its row becomes a
         // member's, as a new member's would be, and keeps what was sent to it (messages, Beans). Joined now, so a new
         // member's limits start now; the name is uniquified against everyone else, as at any join.
+        //
+        // A member's here, so no longer another community's: a federation visitor's row carries its home community's
+        // address (registerVisitor), and every federation path reads a row with one as that community's member, never
+        // this one's (its DMs relayed there, a peer's relay "from" it taken as genuine, its spending refused as a
+        // visitor's, and the join funnel leaving it out). A member of another community joining the global community
+        // with the same key is that row, so the address goes, as a new member's row has none.
         callsign = uniquifyCallsign(callsign, publicKey);
-        db.prepare("UPDATE members SET is_visitor = 0, invited_by = ?, invite_code = ?, callsign = ?, joined_at = ? WHERE public_key = ?")
+        db.prepare("UPDATE members SET is_visitor = 0, home_node_url = NULL, invited_by = ?, invite_code = ?, callsign = ?, joined_at = ? WHERE public_key = ?")
             .run(invitedBy, inviteCode, callsign, new Date().toISOString(), publicKey);
         return announceJoin(broadcast, publicKey, callsign, invitedBy, 'Visitor joined');
     }
@@ -269,8 +296,8 @@ export function registerMemberInternal(
         // changed, and uniquify it (excluding self) so a re-register never collides.
         if (callsign.toLowerCase() !== String(existing.callsign || '').toLowerCase()) {
             callsign = uniquifyCallsign(callsign, publicKey);
-            db.prepare("UPDATE members SET callsign = ? WHERE public_key = ?").run(callsign, publicKey);
-            broadcast({ type: 'profile_updated', publicKey });
+            db.prepare("UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?").run(callsign, new Date().toISOString(), publicKey);
+            broadcast({ type: 'profile_updated', publicKey }, undefined, { ownCard: true });
         }
         return getMember(db, publicKey)!;
     }
@@ -341,7 +368,7 @@ export function writeVisitorRow(publicKey: string, callsign?: string, homeNodeUr
     if (existing) {
         let changed = false;
         if (callsign && existing.callsign.startsWith('Visitor-')) {
-            db.prepare("UPDATE members SET callsign = ? WHERE public_key = ?").run(callsign, publicKey);
+            db.prepare("UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?").run(callsign, new Date().toISOString(), publicKey);
             changed = true;
         }
         if (homeNodeUrl && !existing.home_node_url) {
@@ -392,7 +419,7 @@ export function assertNodeMember(publicKey: string): void {
  * Update member profile avatar, bio, callsign, or contact information.
  */
 export function updateProfile(
-    broadcast: (event: any) => void,
+    broadcast: CardBroadcast,
     publicKey: string,
     update: {
         avatar?: string | null;
@@ -408,12 +435,12 @@ export function updateProfile(
     recordActivity(publicKey);
 
     // The photo rule, bare base64 included (G9a-3): /api/avatar/<pk> sniffs, but the group, group-members and profile
-    // routes hand members.avatar_url out exactly as stored, so a HEIC or any other format the strip does not know would
+    // routes hand a member's photo out exactly as stored, so a HEIC or any other format the strip does not know would
     // reach other members with its GPS. Both apps send a JPEG data URL or a bundled:// name, which pass.
     if (update.avatar !== undefined && !isAcceptablePhotoValue(update.avatar)) throw new Error('AVATAR_INVALID');
     const existing = db.prepare("SELECT * FROM members WHERE public_key = ?").get(publicKey) as any;
     // The node never stores its OWN avatar URL as an avatar. Installed builds read
-    // `members.avatar_url` out of their synced local row — which since #725 holds this node's
+    // their avatar out of their synced local row — which since #725 holds this node's
     // `/api/avatar/<pk>?size=thumb` string, not the photo — and post it straight back here on
     // every Save. Storing it replaced the member's photo with a pointer to itself, and from
     // then on `GET /api/avatar/<pk>` 404d: the photo was destroyed, on the node and (via the
@@ -424,7 +451,7 @@ export function updateProfile(
     // name at all. Read as "avatar unchanged" instead, which is what the sender meant.
     const avatarUnchanged = update.avatar === undefined || isSelfAvatarUrl(update.avatar);
     // A new photo is stored without its metadata (G9a-3): /api/avatar/<pk> serves it to anyone who asks.
-    const avatar = avatarUnchanged ? existing.avatar_url : stripImageValue(update.avatar);
+    const avatar = avatarUnchanged ? undefined : stripImageValue(update.avatar);
     const bio = typeof update.bio === 'string' ? update.bio.slice(0, 200) : (update.bio === null ? null : existing.bio);
     // Rename gate: enforce per-node uniqueness, but ONLY when the callsign actually
     // changes — re-saving your own name (e.g. the background profile push) must not
@@ -446,6 +473,14 @@ export function updateProfile(
     if (update.contact !== undefined) {
         contact_value = update.contact?.value || null;
         contact_visibility = update.contact?.visibility || null;
+        // Both lists of members send it for every member who shares it (#1493): a new one is held to its limit; the one
+        // already stored, sent back by a save of something else, is kept.
+        if (typeof contact_value === 'string' && contact_value !== existing.contact_value) {
+            contact_value = replaceLoneSurrogates(contact_value);
+            if (!fitsTextLimit(contact_value, CONTACT_VALUE_LIMIT)) {
+                throw new Error('CONTACT_TOO_LONG');
+            }
+        }
     }
     let archetype = existing.archetype || null;
     if (update.archetype === null) {
@@ -456,10 +491,14 @@ export function updateProfile(
 
     const profileUpdatedAt = new Date().toISOString();
 
-    db.prepare(`UPDATE members SET avatar_url=?, bio=?, contact_value=?, contact_visibility=?, callsign=?, profile_updated_at=?, archetype=? WHERE public_key=?`)
-      .run(avatar, bio, contact_value, contact_visibility, callsign, profileUpdatedAt, archetype, publicKey);
+    db.transaction(() => {
+        db.prepare(`UPDATE members SET bio=?, contact_value=?, contact_visibility=?, callsign=?, profile_updated_at=?, archetype=? WHERE public_key=?`)
+          .run(bio, contact_value, contact_visibility, callsign, profileUpdatedAt, archetype, publicKey);
+        // The photo, with its reference in the row, by its one writer (the engine's setMemberPhoto).
+        if (avatar !== undefined) setMemberPhoto(db, publicKey, avatar);
+    })();
 
-    broadcast({ type: 'profile_updated', publicKey, profileUpdatedAt });
+    broadcast({ type: 'profile_updated', publicKey, profileUpdatedAt }, undefined, { ownCard: true });
     // Read as the owner: POST /api/profile/update answers the signer, who always sees their own contact details.
     return getProfile(db, publicKey, publicKey);
 }

@@ -1,7 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIdentity } from './IdentityContext';
 import { AvatarPickerSheet } from '../components/AvatarPickerSheet';
@@ -16,10 +18,12 @@ import { explicitEditAvatar, resolveProfilePublishAvatar, retireParkedPickAfterP
 import { buildSignedHeaders } from '../utils/crypto';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { checkCallsignAvailable, suggestCallsigns, type CallsignStatus } from '../utils/callsign-suggest';
-import { colors, palette } from '../constants/colors';
+import { palette, type AppColors } from '../constants/colors';
+import { useOnboardingColors } from './ThemeContext';
+import { AreaPicker } from '../components/AreaPicker';
+import { profileSteps, rememberAreaPlace, type ProfileStep } from '../utils/member-area';
 
-type Step = 'name' | 'avatar' | 'guide';
-const STEP_ORDER: Step[] = ['name', 'avatar', 'guide'];
+type Step = ProfileStep;
 
 /**
  * Re-runnable profile setup. The 12-word key is the identity; this is where the
@@ -29,12 +33,18 @@ const STEP_ORDER: Step[] = ['name', 'avatar', 'guide'];
  * EXISTING identity; it never creates a key or touches invites.
  */
 export default function ProfileSetupScreen() {
+    // Follows light/dark like the rest of the app; light draws exactly as before (utils/onboarding-colors.ts).
+    const { colors, dark } = useOnboardingColors();
+    const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     const { identity, setIdentity } = useIdentity();
     // When launched as the wizard-on-join, `redirect` says where to land after
     // finishing (or cancelling) — the member has already joined, so there's no
     // sensible screen to router.back() to. Absent (Settings / gate launches) we
-    // just pop back to wherever we came from.
-    const params = useLocalSearchParams<{ redirect?: string }>();
+    // just pop back to wherever we came from. `name`: the name the global community's door has just checked and
+    // joined with (app/join-global.tsx), so the steps start from it rather than from the phone's own, and at the photo:
+    // the name step has just been done there.
+    const params = useLocalSearchParams<{ redirect?: string; name?: string }>();
+    const joinedAs = typeof params.name === 'string' && params.name.trim().length >= 2 ? params.name.trim() : null;
     const leaveWizard = () => {
         if (params.redirect) router.replace(params.redirect as any);
         else router.back();
@@ -43,7 +53,14 @@ export default function ProfileSetupScreen() {
     const [step, setStep] = useState<Step>('name');
     // The guide step: on a community with Beans off (the worldwide one) it says so, in place of the cards about Beans.
     const nodeProfile = useNodeProfile();
-    const [callsign, setCallsign] = useState(identity?.callsign ?? '');
+    // On a community that syncs listings by area (the worldwide one), "Roughly where are you?" comes after the photo
+    // (utils/member-area.ts); a local community's wizard is unchanged.
+    const stepOrder = profileSteps(nodeProfile?.features);
+    const [anchorUrl, setAnchorUrl] = useState<string | null>(null);
+    useEffect(() => {
+        AsyncStorage.getItem('beanpool_anchor_url').then(setAnchorUrl).catch(() => setAnchorUrl(null));
+    }, []);
+    const [callsign, setCallsign] = useState(joinedAs ?? identity?.callsign ?? '');
     // Three separate things, deliberately not one `avatar` state:
     //  - `pendingAvatar`  the photo picked in THIS session, and the only thing an explicit edit
     //                     may publish;
@@ -84,13 +101,14 @@ export default function ProfileSetupScreen() {
             setCanonicalAvatar(canonical ?? null);
             const haveAvatar = Boolean(row || canonical);
             const nameOk = (identity.callsign?.trim().length ?? 0) >= 2;
-            if (nameOk && !haveAvatar) setStep('avatar');
+            if (joinedAs || (nameOk && !haveAvatar)) setStep('avatar');
         })();
         return () => { cancelled = true; };
     }, [identity]);
 
     const nameOk = callsign.trim().length >= 2;
-    const stepIndex = STEP_ORDER.indexOf(step);
+    const stepIndex = stepOrder.indexOf(step);
+    const nextStep = () => { setError(null); setStep(stepOrder[stepIndex + 1] ?? 'guide'); };
 
     // What the wizard SHOWS: this session's pick, else the node's current photo, else — only
     // when the node has none — the canonical copy. It is also what "do you have an avatar yet?"
@@ -128,7 +146,7 @@ export default function ProfileSetupScreen() {
     const goBackStep = () => {
         if (stepIndex <= 0) { router.back(); return; }
         setError(null);
-        setStep(STEP_ORDER[stepIndex - 1]);
+        setStep(stepOrder[stepIndex - 1]);
     };
 
     async function handleFinish() {
@@ -216,14 +234,14 @@ export default function ProfileSetupScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar style="dark" />
+            <StatusBar style={dark ? 'light' : 'dark'} />
             <ScrollView contentContainerStyle={styles.scroll}>
                 {/* Step indicator */}
                 <View style={styles.steps}>
-                    {STEP_ORDER.map((s, i) => (
+                    {stepOrder.map((s, i) => (
                         <View key={s} style={[styles.stepDot, i <= stepIndex && styles.stepDotActive]} />
                     ))}
-                    <Text style={styles.stepLabel}>Step {stepIndex + 1} of {STEP_ORDER.length}</Text>
+                    <Text style={styles.stepLabel}>Step {stepIndex + 1} of {stepOrder.length}</Text>
                 </View>
 
                 <View style={styles.card}>
@@ -317,11 +335,29 @@ export default function ProfileSetupScreen() {
                             <Pressable
                                 style={[styles.primaryBtn, !displayAvatar && styles.disabledBtn]}
                                 disabled={!displayAvatar}
-                                onPress={() => { setError(null); setStep('guide'); }}
+                                onPress={nextStep}
                                 accessibilityRole="button"
                             >
                                 <Text style={styles.primaryBtnText}>Next →</Text>
                             </Pressable>
+                            <Pressable style={styles.backBtn} onPress={goBackStep} accessibilityRole="button" accessibilityLabel="Back">
+                                <Text style={styles.backBtnText}>← Back</Text>
+                            </Pressable>
+                        </>
+                    )}
+
+                    {step === 'area' && (
+                        <>
+                            <AreaPicker
+                                url={anchorUrl}
+                                identity={identity}
+                                features={nodeProfile?.features}
+                                onSaved={(_area, placeName) => {
+                                    if (anchorUrl) void rememberAreaPlace(anchorUrl, placeName);
+                                    nextStep();
+                                }}
+                                onSkip={nextStep}
+                            />
                             <Pressable style={styles.backBtn} onPress={goBackStep} accessibilityRole="button" accessibilityLabel="Back">
                                 <Text style={styles.backBtnText}>← Back</Text>
                             </Pressable>
@@ -354,6 +390,7 @@ export default function ProfileSetupScreen() {
 
             <AvatarPickerSheet
                 visible={showAvatarPicker}
+                colors={dark ? colors : undefined}
                 onClose={() => setShowAvatarPicker(false)}
                 onSelectImage={(uri) => setPendingAvatar(uri)}
             />
@@ -361,7 +398,8 @@ export default function ProfileSetupScreen() {
     );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(colors: AppColors, dark: boolean) {
+return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.surface.page },
     scroll: { padding: 20, paddingBottom: 48 },
     steps: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
@@ -387,11 +425,11 @@ const styles = StyleSheet.create({
     secondaryBtnText: { color: colors.text.body, fontSize: 15, fontWeight: '600' },
     backBtn: { padding: 12, alignItems: 'center', marginTop: 4 },
     backBtnText: { color: colors.text.secondary, fontSize: 14, fontWeight: '600' },
-    error: { color: palette.red600 || '#dc2626', fontSize: 13, marginBottom: 12, textAlign: 'center' },
+    error: { color: colors.feedback.danger.fg, fontSize: 13, marginBottom: 12, textAlign: 'center' },
     // Name-step availability hints
     hintMuted: { color: colors.text.secondary, fontSize: 13, marginTop: -8, marginBottom: 12 },
-    hintOk: { color: palette.green700 || '#15803d', fontSize: 13, fontWeight: '600', marginTop: -8, marginBottom: 12 },
-    hintTaken: { color: palette.red600 || '#dc2626', fontSize: 13, fontWeight: '600', marginTop: -8, marginBottom: 10 },
+    hintOk: { color: dark ? palette.emerald400 : (palette.green700 || '#15803d'), fontSize: 13, fontWeight: '600', marginTop: -8, marginBottom: 12 },
+    hintTaken: { color: colors.feedback.danger.fg, fontSize: 13, fontWeight: '600', marginTop: -8, marginBottom: 10 },
     suggestRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12 },
     suggestChip: {
         backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong,
@@ -399,3 +437,4 @@ const styles = StyleSheet.create({
     },
     suggestChipText: { color: colors.text.body, fontSize: 14, fontWeight: '600' },
 });
+}

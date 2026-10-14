@@ -4,6 +4,9 @@ import { GroupDetailModal } from './GroupDetailModal';
 import { getGroup, getGroupMembers, getGroupSuccession, type Group, type GroupMember } from '../lib/api';
 
 vi.mock('../lib/api', () => ({
+    getGroupDecisions: vi.fn(async () => null),
+    proposeGroupDecision: vi.fn(async () => ({ success: true })),
+    voteGroupDecision: vi.fn(async () => ({ success: true })),
     getGroup: vi.fn().mockResolvedValue({
         id: 'group-1',
         name: 'Local Food Co-op',
@@ -185,3 +188,86 @@ describe('GroupDetailModal roster and the lead convenor', () => {
         expect(screen.getByText(/Marty Party2 hasn't been active for 44 days/)).toBeInTheDocument();
     });
 });
+
+/**
+ * A roster's faces come from the node's URL for each photo (#1478): the roster sends `/api/avatar/<key>?size=thumb&v=…`,
+ * with the member-only key `&k=…` on the global node, never the photo. The web app is served by its node, so the URL
+ * opens there as it is, as the member list's does.
+ */
+describe("GroupDetailModal roster's faces", () => {
+    const LEAD = 'a'.repeat(64);
+    const ASKING = 'b'.repeat(64);
+    const SHIPPED = 'c'.repeat(64);
+    const NONE = 'd'.repeat(64);
+    const url = (pk: string) => `/api/avatar/${pk}?size=thumb&v=1a2b3c4d&k=AbCdEfGhIjKlMnOpQrSt_-`;
+
+    const roster: GroupMember[] = [
+        { groupId: 'group-1', memberPubkey: LEAD, callsign: 'Lena', role: 'convenor', status: 'active', joinedAt: '2026-01-01T00:00:00.000Z', avatarUrl: url(LEAD) },
+        { groupId: 'group-1', memberPubkey: SHIPPED, callsign: 'Sam', role: 'member', status: 'active', joinedAt: '2026-01-02T00:00:00.000Z', avatarUrl: 'bundled://leaf' },
+        { groupId: 'group-1', memberPubkey: NONE, callsign: 'Nell', role: 'member', status: 'active', joinedAt: '2026-01-03T00:00:00.000Z' },
+        { groupId: 'group-1', memberPubkey: ASKING, callsign: 'Asha', role: 'member', status: 'pending_approval', joinedAt: '2026-01-04T00:00:00.000Z', avatarUrl: url(ASKING) },
+    ];
+    const group: Group = {
+        id: 'group-1', name: 'Faces', slug: 'faces', category: 'social', joinPolicy: 'request_to_join',
+        createdBy: LEAD, createdAt: '2026-01-01T00:00:00.000Z', leadPubkey: LEAD, leadCallsign: 'Lena',
+    };
+
+    beforeEach(() => {
+        vi.mocked(getGroup).mockResolvedValue({ ...group, viewerRole: 'convenor', viewerStatus: 'active' } as Group);
+        vi.mocked(getGroupMembers).mockResolvedValue(roster);
+    });
+
+    it("shows each member's and each request's photo from its URL, a shipped picture from the app, and initials for none", async () => {
+        const { container } = render(<GroupDetailModal group={group} isOpen={true} onClose={() => {}} myPubkey={LEAD} />);
+        await waitFor(() => expect(screen.getByText('Nell')).toBeInTheDocument());
+        await waitFor(() => expect(screen.getByText('Asha')).toBeInTheDocument());
+        const srcs = Array.from(container.ownerDocument.querySelectorAll('img')).map(i => i.getAttribute('src'));
+        expect(srcs).toContain(url(LEAD));
+        expect(srcs).toContain(url(ASKING));
+        expect(srcs).toContain('/avatars/avatar_leaf.jpg');
+        expect(srcs.filter(src => src?.startsWith('data:'))).toEqual([]);
+        // No photo: the initial, as before.
+        expect(screen.getByText('N')).toBeInTheDocument();
+    });
+});
+
+describe('GroupDetailModal invite-only card loading (#1496)', () => {
+    it('shows the full description when the roster answers 403 and the card answers with the full description', async () => {
+        const fullDescription = 'This is the full unabbreviated description of the invite-only group that explains all its details and rules.';
+        const previewDescription = 'This is the preview of the description...';
+
+        const previewGroup: Group = {
+            id: 'group-invite-1',
+            name: 'Invite Only Circle',
+            slug: 'invite-only-circle',
+            category: 'social',
+            joinPolicy: 'invite_only',
+            description: previewDescription,
+            memberCount: 5,
+            createdBy: 'pk-lead',
+            createdAt: '2026-01-01T00:00:00Z',
+        };
+
+        const cardGroup: Group = {
+            ...previewGroup,
+            description: fullDescription,
+        };
+
+        vi.mocked(getGroup).mockResolvedValue(cardGroup);
+        vi.mocked(getGroupMembers).mockRejectedValue(Object.assign(new Error('Forbidden'), { status: 403 }));
+
+        render(
+            <GroupDetailModal
+                group={previewGroup}
+                isOpen={true}
+                onClose={() => {}}
+                myPubkey="pk-invitee"
+            />
+        );
+
+        // When the roster is refused (403), the card must still load and show the full description
+        expect(await screen.findByText(fullDescription)).toBeInTheDocument();
+        expect(screen.queryByText(previewDescription)).toBeNull();
+    });
+});
+

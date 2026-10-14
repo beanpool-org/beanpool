@@ -1,5 +1,6 @@
 /**
- * On a standby, the routes that move Beans or step a trade answer 409 `standby` before any handler runs.
+ * On a standby, the routes that move Beans or step a trade answer 409 `standby` before any handler runs, and so do the
+ * routes that write in-flight money and governance or members' devices and conveniences (STANDBY_WRITE_ROUTES).
  *
  * A standby makes no Bean move of its own (config/node-role.ts assertLedgerWritable): its ledger is its main server's
  * rows, verbatim, and members use the main server. The ledger primitives refuse underneath whoever calls, so this table
@@ -15,7 +16,7 @@
  *   refused by the engine under it (state-engine.ts assertPledgeWritable), and its route answers the same 409.
  */
 import type { Context, Next } from 'koa';
-import { getNodeRole, STANDBY_CODE, STANDBY_LEDGER_MESSAGE } from '../config/node-role.js';
+import { getNodeRole, STANDBY_CODE, STANDBY_LEDGER_MESSAGE, STANDBY_WRITE_MESSAGE } from '../config/node-role.js';
 
 export const STANDBY_LEDGER_ROUTES: readonly RegExp[] = [
     // A member's send.
@@ -50,15 +51,57 @@ export const STANDBY_LEDGER_ROUTES: readonly RegExp[] = [
     /^\/api\/federation\/(purchase|commission)(\/|$)/,
 ];
 
-/** Would a standby refuse this request here: a write to a route that moves Beans or steps a trade. */
+/**
+ * The routes that write the plain tables (engine/replication-manifest.ts, design G3, G4): their
+ * rows are the main server's, and a standby writes none of its own (config/node-role.ts assertPlainTablesWritable, which
+ * the writers under these call too). Decisions and their ballots are above, with the Beans they can move.
+ */
+export const STANDBY_WRITE_ROUTES: readonly RegExp[] = [
+    // An invite made, redeemed (a paper ticket's too), or made by answering a request to join with one.
+    /^\/api\/invite\/(generate|redeem|redeem-offline)\/?$/,
+    /^\/api\/admin\/seed-invite\/?$/,
+    /^\/api\/join\/knocks\/[^/]+\/approve\/?$/,
+    // An enterprise's keepers: a request to join and its answer, a removal and an objection to one, a step-down; and a
+    // vote for a new lead.
+    /^\/api\/(treasury|enterprise)\/[^/]+\/keepers\/(request|requests\/[^/]+\/(approve|decline)|[^/]+\/remove|changes\/[^/]+\/object|step-down)\/?$/,
+    /^\/api\/(treasury|enterprise)\/[^/]+\/succession\/(propose|[^/]+\/vote)\/?$/,
+    // A vote for a group's new convenor.
+    /^\/api\/groups\/[^/]+\/succession\/(propose|[^/]+\/vote)\/?$/,
+    // An admin's emergency suspension and its lift (a Decision, and the role it holds aside), and a replacement phone's code.
+    /^\/api\/local\/admin\/users\/[^/]+\/(suspend|status)\/?$/,
+    /^\/api\/local\/admin\/members\/[^/]+\/rekey\/(issue-code|cancel|proposals\/[^/]+\/decline)\/?$/,
+    // A recovery fragment released: the log of which fragments left the community.
+    /^\/api\/recovery\/collect\/(hub|sso)\/?$/,
+    // A link's commissioning ceiling.
+    /^\/api\/local\/federation\/links\/ceiling\/?$/,
+    // Members' devices and conveniences (design G4): a phone registered or removed, a leave statement, a chat muted or
+    // unmuted, and the pricing guide's items, prices and reports. A keeper's read mark on an enterprise thread is refused
+    // by its route's engine call (the same route marks group chats read, conversation_participants).
+    /^\/api\/push-tokens(\/leave\/[^/]+)?\/?$/,
+    /^\/api\/messages\/mute\/?$/,
+    /^\/api\/pricing-guide\/(report|reports\/[^/]+\/status|admin\/(item(\/[^/]+)?|pin|reset|aggregate))\/?$/,
+    // The names list (engine/names-list.ts): an entry, the list's key, a confirmation, the owner's settings. Its reads are
+    // refused on a standby too, by its own routes (routes/names-list.ts): a read writes the access log.
+    /^\/api\/names(\/|$)/,
+];
+
+/** What a standby answers this request here: a write to a route above, refused with its message; null when it goes on. */
+export function standbyRefusal(path: string, method: string): string | null {
+    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return null;
+    if (STANDBY_LEDGER_ROUTES.some((re) => re.test(path))) return STANDBY_LEDGER_MESSAGE;
+    if (STANDBY_WRITE_ROUTES.some((re) => re.test(path))) return STANDBY_WRITE_MESSAGE;
+    return null;
+}
+
+/** Would a standby refuse this request here: a write to a route that moves Beans, steps a trade, or writes a plain table. */
 export function standbyRefuses(path: string, method: string): boolean {
-    if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return false;
-    return STANDBY_LEDGER_ROUTES.some((re) => re.test(path));
+    return standbyRefusal(path, method) !== null;
 }
 
 /** Koa middleware: on a standby, 409 `standby` for such a request. Mounted before the route modules (https-server.ts). */
 export async function standbyLedgerGate(ctx: Context, next: Next): Promise<void> {
-    if (getNodeRole() !== 'backup' || !standbyRefuses(ctx.path, ctx.method.toUpperCase())) return next();
+    const refusal = getNodeRole() === 'backup' ? standbyRefusal(ctx.path, ctx.method.toUpperCase()) : null;
+    if (refusal === null) return next();
     ctx.status = 409;
-    ctx.body = { error: STANDBY_LEDGER_MESSAGE, code: STANDBY_CODE };
+    ctx.body = { error: refusal, code: STANDBY_CODE };
 }

@@ -68,6 +68,8 @@ import {
     connectInstagramChannel,
     syncChannelVideos,
     disconnectOAuthChannel,
+    getStoredOAuthToken,
+    restoreVerifiedBadge,
     type PulseOAuthConfig,
     PulseOAuthError,
 } from '../utils/pulse-oauth';
@@ -99,6 +101,11 @@ export default function ChannelsScreen() {
     const [connectingId, setConnectingId] = useState<string | null>(null);
     const [syncingId, setSyncingId] = useState<string | null>(null);
     const [cardErrors, setCardErrors] = useState<Record<string, string | null>>({});
+    // Unbadged channels this phone still holds a token for: their badge was cleared when the node
+    // started asking the platform itself (#1830), and one reconnect brings it back.
+    const [lostBadgeIds, setLostBadgeIds] = useState<Set<string>>(() => new Set());
+    // A silent TikTok re-verify is tried once per channel per visit, never on every render.
+    const restoreTriedRef = useRef<Set<string>>(new Set());
 
     // A list-level error renders above the cards, which is off-screen once the member has scrolled
     // to the form at the bottom — so the view is scrolled back to it rather than reporting silently.
@@ -150,6 +157,35 @@ export default function ChannelsScreen() {
     }, [identity]);
 
     useEffect(() => { load(); }, [load]);
+
+    useEffect(() => {
+        if (!identity) return;
+        let cancelled = false;
+        (async () => {
+            const lost = new Set<string>();
+            for (const c of channels) {
+                if (c.oauthVerifiedAt || (c.platform !== 'tiktok' && c.platform !== 'instagram')) continue;
+                if (await getStoredOAuthToken(c.id).catch(() => null)) lost.add(c.id);
+            }
+            if (cancelled) return;
+            setLostBadgeIds(lost);
+            const url = await anchorUrl().catch(() => null);
+            if (!url) return;
+            for (const c of channels) {
+                if (!lost.has(c.id) || c.platform !== 'tiktok' || restoreTriedRef.current.has(c.id)) continue;
+                restoreTriedRef.current.add(c.id);
+                try {
+                    const restored = await restoreVerifiedBadge(c, identity, url);
+                    if (restored) {
+                        setChannels(prev => prev.map(x => (x.id === restored.id ? { ...x, ...restored } : x)));
+                    }
+                } catch {
+                    // Silent by design: the card still offers Reconnect, which shows any refusal.
+                }
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [channels, identity]);
 
     const add = async () => {
         if (!identity || !value.trim() || !category) return;
@@ -556,6 +592,10 @@ export default function ChannelsScreen() {
                                             </View>
                                         )}
 
+                                        {isOauthPlatform && isOauthEnabled && !channel.oauthVerifiedAt && lostBadgeIds.has(channel.id) && (
+                                            <Text style={styles.badgeHintText}>Reconnect to restore your verified badge</Text>
+                                        )}
+
                                         <View style={styles.cardActions}>
                                             {/* OAuth Actions */}
                                             {isOauthPlatform && (
@@ -592,7 +632,7 @@ export default function ChannelsScreen() {
                                                         accessibilityState={{ disabled: isConnecting, busy: isConnecting }}
                                                     >
                                                         <Text style={styles.oauthConnectBtnText}>
-                                                            {isConnecting ? 'Connecting…' : `Connect ${meta.label}`}
+                                                            {isConnecting ? 'Connecting…' : `${lostBadgeIds.has(channel.id) ? 'Reconnect' : 'Connect'} ${meta.label}`}
                                                         </Text>
                                                     </Pressable>
                                                 ) : null
@@ -810,7 +850,7 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     cardActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
     shareBtn: {
         paddingVertical: 10, paddingHorizontal: 14, borderRadius: 8,
-        backgroundColor: colors.brand.primary,
+        backgroundColor: colors.brand.fill,
     },
     shareBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '600' },
     secondaryBtn: {
@@ -822,7 +862,7 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     removeBtnText: { color: colors.market.need.fg, fontSize: 15 },
     primaryBtn: {
         paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8,
-        backgroundColor: colors.brand.primary,
+        backgroundColor: colors.brand.fill,
     },
     primaryBtnDisabled: { opacity: 0.5 },
     primaryBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '600' },
@@ -854,7 +894,7 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     tileActive: { borderColor: colors.brand.primary, backgroundColor: colors.brand.tint },
     tileIcon: { fontSize: 20 },
     tileLabel: { fontSize: 15, fontWeight: '600', color: colors.text.heading, marginTop: 2 },
-    tileLabelActive: { color: colors.brand.dark },
+    tileLabelActive: { color: colors.brand.primary },
     tileHint: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
 
     input: {
@@ -870,7 +910,7 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     },
     chipActive: { borderColor: colors.brand.primary, backgroundColor: colors.brand.tint },
     chipText: { fontSize: 14, color: colors.text.body },
-    chipTextActive: { color: colors.brand.dark, fontWeight: '600' },
+    chipTextActive: { color: colors.brand.primary, fontWeight: '600' },
 
     verifiedBadgeRow: {
         flexDirection: 'row',
@@ -881,7 +921,7 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
         borderRadius: 12,
     },
     verifiedText: {
-        color: colors.brand.dark,
+        color: colors.brand.primary,
         fontSize: 12,
         fontWeight: '700',
     },
@@ -889,7 +929,7 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
         paddingVertical: 10,
         paddingHorizontal: 14,
         borderRadius: 8,
-        backgroundColor: colors.brand.primary,
+        backgroundColor: colors.brand.fill,
     },
     oauthConnectBtnText: {
         color: colors.text.inverse,
@@ -932,5 +972,10 @@ const makeStyles = ({ colors }: { colors: any }) => StyleSheet.create({
     cardErrorText: {
         color: colors.market.need.fg,
         fontSize: 13,
+    },
+    badgeHintText: {
+        color: colors.text.secondary,
+        fontSize: 13,
+        marginTop: 10,
     },
 });

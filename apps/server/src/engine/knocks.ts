@@ -4,8 +4,10 @@
  *
  * Local communities stay invite-only, and anyone can invite (tiers gate nothing), so a knock creates no new authority:
  * a member who answers "Invite" makes an ordinary invite (`generateInvite`), for the applicant's key, and the
- * applicant's app redeems it through today's redeem path. The global node plays no part: the app signs the knock with
- * the applicant's own key (the same key on every node) and sends it to the community itself.
+ * applicant's app redeems it through today's redeem path. Where the community has chosen that only its admins invite
+ * (the door, config/door.ts), only an owner or admin answers, either way (`admins_only`), and only they read the list.
+ * The global node plays no part: the app signs the knock with the applicant's own key (the same key on every node) and
+ * sends it to the community itself.
  *
  * ## Who may knock
  *
@@ -110,15 +112,18 @@
  * `join_requests` tombstones keyed by the row's id, which is never used again, so a copied row this database has a
  * tombstone for stays deleted: a stale copy can't bring it back. A standby applies a copy's `join_requests` tombstones
  * before its rows (engine/sync.ts): a key's lapsed knock deleted and its next knock, a new row, can arrive in one copy,
- * and the new row fits the one-open index only once the old one is gone. `ip_hash` never leaves this database. Invite
- * codes do not replicate, so a standby that merges an approved row makes that invite too (the same code, by the same
- * member, for the same key), or a server that takes over would tell the applicant about an invite it cannot redeem
+ * and the new row fits the one-open index only once the old one is gone. `ip_hash` never leaves this database. The
+ * invite an approved row names travels with the other invites (a plain table, design G3); only from a main server older
+ * than that does a standby that merges an approved row make that invite itself (the same code, by the same member, for
+ * the same key), or a server that takes over would tell the applicant about an invite it cannot redeem
  * (`mergeReplicatedKnocks`).
  */
 import crypto from 'node:crypto';
-import { db, writeTombstone } from '../db/db.js';
+import { db, writeTombstone, rethrowUnlessRowRefused } from '../db/db.js';
 import { alreadyJoined, getMember, type SyncJoinRequest } from '@beanpool/engine';
 import { generateInvite } from './invites.js';
+import { addEntry, assertNamesAdmin, reconcileHolders } from './names-list.js';
+import { mayInviteHere } from '../config/door.js';
 import { forgetOldJoinAddresses, knockAddressHash, openJoinKeyInvalidated } from './open-join.js';
 import { getNodeRole } from './sync.js';
 import { isMemberKeySpelling } from './member-key.js';
@@ -370,7 +375,7 @@ export function openKnockCount(now = Date.now()): number {
     return listOpenKnocks(0, 0, now).total;
 }
 
-export type AnswerRefusal = 'not_found' | 'answered' | 'lapsed' | 'already_member' | 'key_invalidated';
+export type AnswerRefusal = 'not_found' | 'answered' | 'lapsed' | 'already_member' | 'key_invalidated' | 'admins_only';
 
 export type AnswerOutcome =
     | { ok: true; knockId: string; status: 'approved'; invite: { code: string; expiresAt: string } }
@@ -396,11 +401,32 @@ function answerable(id: string, now: number): { row: KnockRow } | { reason: Answ
  * "Invite": `member` (the signer, a member here, checked by the route) makes an invite for the applicant's key, and
  * the knock records it and who. Both writes commit together or not at all.
  */
-export function approveKnock(id: string, member: string, now = Date.now()): AnswerOutcome {
+/**
+ * What an admin's answer may add (community modes slice 3): `entry`, a names-list entry their phone sealed as slice 2 does
+ * (id, ciphertext, key id: never the name), added and bound in the same step; or `entryId`, an entry already on the list.
+ * The invite is then bound to it (engine/names-list.ts assertMayBindInvite), and redeeming it confirms the knocker.
+ */
+export interface KnockNamesBinding {
+    entry?: { id?: unknown; ciphertext?: unknown; keyId?: unknown };
+    entryId?: unknown;
+}
+
+export function approveKnock(id: string, member: string, now = Date.now(), names?: KnockNamesBinding): AnswerOutcome {
     return db.transaction((): AnswerOutcome => {
+        // Where only admins invite (config/door.ts), a member who is no owner or admin answers nothing, before the
+        // knock is looked at: the invite below would be refused just the same.
+        if (!mayInviteHere(member)) return { ok: false, reason: 'admins_only' };
         const found = answerable(id, now);
         if ('reason' in found) return { ok: false, reason: found.reason };
-        const invite = generateInvite(member, found.row.pubkey);
+        // A binding asked for: the names list's own rules, each refusal a NamesListError thrown, so nothing commits (the
+        // entry included). Holders reconciled first, as every names-list route does.
+        let entryId: string | undefined;
+        if (names?.entry !== undefined || names?.entryId !== undefined) {
+            reconcileHolders();
+            assertNamesAdmin(member);
+            entryId = names.entry !== undefined ? addEntry(member, names.entry).id : String(names.entryId);
+        }
+        const invite = generateInvite(member, found.row.pubkey, undefined, entryId);
         // generateInvite refuses only a key that isn't a member here (isNodeMember), which the route has ruled out. Thrown, so nothing commits.
         if (!invite) throw new Error('knock approval: the invite could not be made');
         db.prepare(`UPDATE join_requests SET status = 'approved', decided_by = ?, decided_at = ?, invite_code = ?, updated_at = ?
@@ -414,6 +440,8 @@ export function approveKnock(id: string, member: string, now = Date.now()): Answ
 /** "Not now": declined, by `member`. Nothing reaches the applicant; their status reads `pending` for the block. */
 export function declineKnock(id: string, member: string, now = Date.now()): AnswerOutcome {
     return db.transaction((): AnswerOutcome => {
+        // "Not now" is an answer too: where only admins invite, only they give it (approveKnock).
+        if (!mayInviteHere(member)) return { ok: false, reason: 'admins_only' };
         const found = answerable(id, now);
         if ('reason' in found) return { ok: false, reason: found.reason };
         const at = iso(now);
@@ -546,16 +574,17 @@ const STATUSES = new Set<string>(['pending', 'approved', 'declined']);
 /**
  * The main server's knocks as a copy carries them (SyncPayload.joinRequests), merged into this standby's database in
  * one transaction, oldest change first (so a key's decided knock is written before the newer one that replaced it,
- * which the one-open-knock index needs). A row is written when it is new here or newer than the copy here. For an
- * approved row the standby also makes the invite it names, when it has no such code: the same code, by the member who
- * approved it, for the applicant's key, dated at the approval. Invite codes do not replicate, and a server that takes
+ * which the one-open-knock index needs). A row is written when it is new here or newer than the copy here. The invite an
+ * approved row names comes as the main server's own row, with the rest of its invites (a plain table, engine/plain-tables.ts).
+ * Only from a main server older than that (`invitesCopied` false) does the standby make it, when it has no such code:
+ * the same code, by the member who approved it, for the applicant's key, dated at the approval, since a server that takes
  * over must not tell the applicant about an invite it cannot redeem. A row this database has a tombstone for was
  * deleted by the main server's tidy-up, and ids are never used again, so a copy that still carries it is older: it stays
  * deleted (`removed`). The import applies the copy's own `join_requests` tombstones before calling this
  * (engine/sync.ts), so a key's deleted knock is gone before its newer one arrives. A malformed row, or one this
  * database refuses, is left out and counted; it never fails the copy it came in.
  */
-export function mergeReplicatedKnocks(rows: unknown): KnockMerge {
+export function mergeReplicatedKnocks(rows: unknown, invitesCopied = false): KnockMerge {
     const merge: KnockMerge = { written: 0, kept: 0, removed: 0, invitesMade: 0, invalid: 0 };
     if (!Array.isArray(rows) || rows.length === 0) return merge;
     const current = db.prepare('SELECT updated_at FROM join_requests WHERE id = ?');
@@ -595,10 +624,11 @@ export function mergeReplicatedKnocks(rows: unknown): KnockMerge {
                 upsert.run(r.id, r.pubkey, r.callsign, r.message, r.avatar ?? null, r.fromNode ?? null, r.status, r.createdAt,
                     r.decidedBy ?? null, r.inviteCode ?? null, r.decidedAt ?? null, r.updatedAt);
                 merge.written++;
-                if (r.status === 'approved' && r.inviteCode && r.decidedBy && memberExists.get(r.decidedBy)) {
+                if (!invitesCopied && r.status === 'approved' && r.inviteCode && r.decidedBy && memberExists.get(r.decidedBy)) {
                     merge.invitesMade += makeInvite.run(r.inviteCode, r.decidedBy, r.decidedAt ?? r.updatedAt, r.pubkey).changes;
                 }
             } catch (e: any) {
+                rethrowUnlessRowRefused(e);
                 console.warn(`[Knocks] A copied request to join could not be stored here, left out: ${e?.message || e}`);
                 merge.invalid++;
             }

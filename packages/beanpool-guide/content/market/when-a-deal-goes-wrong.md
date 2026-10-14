@@ -26,7 +26,7 @@ There is no "dispute" button in the app. Ask the admins of your community for he
 
 An admin cannot settle a deal they are part of, or one involving an enterprise they keep.
 
-You both get an alert and a line in your chat saying how it was settled. It names the admin by their callsign, or says "a community admin".
+You both get an alert ("There is news on one of your trades.") and a line in your chat saying how it was settled. The chat line names the admin by their callsign, or says "a community admin". The alert itself names no one.
 
 ## If someone is not honest
 

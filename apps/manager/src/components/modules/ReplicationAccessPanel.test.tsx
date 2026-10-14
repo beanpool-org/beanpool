@@ -250,6 +250,10 @@ describe('ReplicationAccessPanel Component (Bucket 2 Item 4)', () => {
             />
         );
 
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Generate \/ rotate token/i })).toBeInTheDocument();
+        });
+
         const genBtn = screen.getByRole('button', { name: /Generate \/ rotate token/i });
         await userEvent.click(genBtn);
 
@@ -286,6 +290,10 @@ describe('ReplicationAccessPanel Component (Bucket 2 Item 4)', () => {
             />
         );
 
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: /Generate \/ rotate token/i })).toBeInTheDocument();
+        });
+
         // 1. Generate modal with Escape
         const genBtn = screen.getByRole('button', { name: /Generate \/ rotate token/i });
         await userEvent.click(genBtn);
@@ -315,6 +323,31 @@ describe('ReplicationAccessPanel Component (Bucket 2 Item 4)', () => {
         const closeClearBtn = screen.getByRole('button', { name: /Close clear confirmation/i });
         await userEvent.click(closeClearBtn);
         expect(screen.queryByText(/Remove Replication Token\?/i)).not.toBeInTheDocument();
+    });
+
+    it('shows loading indicator while fetching replication access data', async () => {
+        let resolveFetch: (val: any) => void = () => {};
+        const pendingPromise = new Promise((resolve) => {
+            resolveFetch = resolve;
+        });
+
+        vi.stubGlobal('fetch', vi.fn().mockReturnValue(pendingPromise));
+
+        render(<ReplicationAccessPanel activeNode={mockNode} />);
+
+        // Loading indicator should be present while request is pending
+        expect(screen.getByText('Loading replication access settings...')).toBeInTheDocument();
+
+        // Resolve fetch
+        resolveFetch({
+            ok: true,
+            json: async () => ({ hasToken: true, tokenOnly: false, totalPulls: 5 }),
+        });
+
+        await waitFor(() => {
+            expect(screen.queryByText('Loading replication access settings...')).not.toBeInTheDocument();
+            expect(screen.getByText('Replication token:')).toBeInTheDocument();
+        });
     });
 
     it('a fresh install (token-only, no token) says nothing can copy, with no token-only-off notice', () => {

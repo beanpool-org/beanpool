@@ -1,4 +1,5 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import React from 'react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ApplianceSection } from './ApplianceSection';
 import type { NodeProfile } from '../../lib/profiles';
@@ -45,6 +46,7 @@ describe('ApplianceSection Component', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         sessionStorage.clear();
+        nodeClient.clearAllTfaSessionTokens();
         vi.spyOn(nodeClient, 'fetchNodeSnapshots').mockResolvedValue(mockSnapshots);
         vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockResolvedValue({
             enabled: true,
@@ -104,6 +106,188 @@ describe('ApplianceSection Component', () => {
         expect(screen.queryByRole('button', { name: /deploy update/i })).not.toBeInTheDocument();
     });
 
+    it('shows the node\'s real backup schedule, and "Unknown" when it can\'t be read, never a made-up default', async () => {
+        const renderBackups = () => render(
+            <ApplianceSection
+                activeNode={mockProfile}
+                diag={mockDiag}
+                gateway={mockGateway}
+                gatewayLoading={false}
+                gatewaySuccess={null}
+                gatewaySaving={false}
+                nodeLogs={[]}
+                onChangeGateway={vi.fn()}
+                onSaveGateway={vi.fn()}
+                onRefreshDiag={vi.fn()}
+                onRefreshLogs={vi.fn()}
+                onDownloadBackup={vi.fn()}
+                onRunLedgerAudit={vi.fn()}
+                auditState={{ running: false, result: null }}
+                initialSubTab="backups"
+            />
+        );
+        vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockResolvedValue({ enabled: true, intervalHours: 6, keep: 3 });
+        let view!: ReturnType<typeof render>;
+        await act(async () => { view = renderBackups(); });
+        expect(await screen.findByText('Active (6h)')).toBeInTheDocument();
+        view.unmount();
+
+        vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockRejectedValue(new Error('HTTP 403: Forbidden'));
+        await act(async () => { renderBackups(); });
+        expect(await screen.findByText('Unknown')).toBeInTheDocument();
+        expect(screen.queryByText(/^Active \(/)).not.toBeInTheDocument();
+        expect(screen.getByText(/Couldn't read this node's backup schedule/)).toBeInTheDocument();
+    });
+
+    it('when schedule is unknown: no editable form and no save request; when known: shows real values and saving sends exactly what is shown', async () => {
+        const renderBackups = () => render(
+            <ApplianceSection
+                activeNode={mockProfile}
+                diag={mockDiag}
+                gateway={mockGateway}
+                gatewayLoading={false}
+                gatewaySuccess={null}
+                gatewaySaving={false}
+                nodeLogs={[]}
+                onChangeGateway={vi.fn()}
+                onSaveGateway={vi.fn()}
+                onRefreshDiag={vi.fn()}
+                onRefreshLogs={vi.fn()}
+                onDownloadBackup={vi.fn()}
+                onRunLedgerAudit={vi.fn()}
+                auditState={{ running: false, result: null }}
+                initialSubTab="backups"
+            />
+        );
+
+        // 1. Unknown schedule: schedule could not be read
+        vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockRejectedValue(new Error('HTTP 403: Forbidden'));
+        let view!: ReturnType<typeof render>;
+        await act(async () => { view = renderBackups(); });
+
+        expect(await screen.findByText('Unknown')).toBeInTheDocument();
+        expect(screen.getByText("The node's schedule could not be read, so it can't be changed from here right now.")).toBeInTheDocument();
+        // No editable form controls and no save request
+        expect(screen.queryByRole('checkbox', { name: /enable automated snapshots/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument();
+        expect(nodeClient.updateNodeSnapshotSchedule).not.toHaveBeenCalled();
+        view.unmount();
+
+        // 2. Known schedule: node returns real values
+        const realSchedule = { enabled: false, intervalHours: 12, keep: 3 };
+        vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockResolvedValue(realSchedule);
+        await act(async () => { view = renderBackups(); });
+
+        expect(await screen.findByText('Disabled')).toBeInTheDocument();
+        const checkbox = screen.getByRole('checkbox', { name: /enable automated snapshots/i }) as HTMLInputElement;
+        expect(checkbox.checked).toBe(false);
+        expect(screen.getByDisplayValue('Every 12 hours')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('Keep last 3 snapshots')).toBeInTheDocument();
+
+        // Saving sends exactly what is shown
+        const saveButton = screen.getByRole('button', { name: /^save$/i });
+        await act(async () => {
+            fireEvent.click(saveButton);
+        });
+
+        expect(nodeClient.updateNodeSnapshotSchedule).toHaveBeenCalledTimes(1);
+        expect(nodeClient.updateNodeSnapshotSchedule).toHaveBeenCalledWith(
+            mockProfile.url,
+            realSchedule,
+            mockProfile.adminPassword,
+            undefined
+        );
+        view.unmount();
+    });
+
+    it('while the schedule is still being read it says so, never "could not be read"', async () => {
+        vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockReturnValue(new Promise(() => {}));
+        let view!: ReturnType<typeof render>;
+        await act(async () => {
+            view = render(
+                <ApplianceSection
+                    activeNode={mockProfile}
+                    diag={mockDiag}
+                    gateway={mockGateway}
+                    gatewayLoading={false}
+                    gatewaySuccess={null}
+                    gatewaySaving={false}
+                    nodeLogs={[]}
+                    onChangeGateway={vi.fn()}
+                    onSaveGateway={vi.fn()}
+                    onRefreshDiag={vi.fn()}
+                    onRefreshLogs={vi.fn()}
+                    onDownloadBackup={vi.fn()}
+                    onRunLedgerAudit={vi.fn()}
+                    auditState={{ running: false, result: null }}
+                    initialSubTab="backups"
+                />
+            );
+        });
+        expect(await screen.findByText("Reading the node's schedule…")).toBeInTheDocument();
+        expect(screen.queryByText(/could not be read/)).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument();
+        view.unmount();
+    });
+
+    it('backup schedule holds at 320px with 130% text in unknown and known states', async () => {
+        vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockRejectedValue(new Error('HTTP 403'));
+        let view!: ReturnType<typeof render>;
+        await act(async () => {
+            view = render(
+                <div style={{ width: 320, fontSize: '130%' }}>
+                    <ApplianceSection
+                        activeNode={mockProfile}
+                        diag={mockDiag}
+                        gateway={mockGateway}
+                        gatewayLoading={false}
+                        gatewaySuccess={null}
+                        gatewaySaving={false}
+                        nodeLogs={[]}
+                        onChangeGateway={vi.fn()}
+                        onSaveGateway={vi.fn()}
+                        onRefreshDiag={vi.fn()}
+                        onRefreshLogs={vi.fn()}
+                        onDownloadBackup={vi.fn()}
+                        onRunLedgerAudit={vi.fn()}
+                        auditState={{ running: false, result: null }}
+                        initialSubTab="backups"
+                    />
+                </div>
+            );
+        });
+        expect(await screen.findByText("The node's schedule could not be read, so it can't be changed from here right now.")).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument();
+        view.unmount();
+
+        vi.spyOn(nodeClient, 'fetchNodeSnapshotSchedule').mockResolvedValue({ enabled: true, intervalHours: 24, keep: 7 });
+        await act(async () => {
+            view = render(
+                <div style={{ width: 320, fontSize: '130%' }}>
+                    <ApplianceSection
+                        activeNode={mockProfile}
+                        diag={mockDiag}
+                        gateway={mockGateway}
+                        gatewayLoading={false}
+                        gatewaySuccess={null}
+                        gatewaySaving={false}
+                        nodeLogs={[]}
+                        onChangeGateway={vi.fn()}
+                        onSaveGateway={vi.fn()}
+                        onRefreshDiag={vi.fn()}
+                        onRefreshLogs={vi.fn()}
+                        onDownloadBackup={vi.fn()}
+                        onRunLedgerAudit={vi.fn()}
+                        auditState={{ running: false, result: null }}
+                        initialSubTab="backups"
+                    />
+                </div>
+            );
+        });
+        expect(await screen.findByRole('button', { name: /^save$/i })).toBeInTheDocument();
+        view.unmount();
+    });
+
     it('manages automated backup schedule and verifies database integrity', async () => {
         await act(async () => {
             render(
@@ -145,35 +329,88 @@ describe('ApplianceSection Component', () => {
         expect(screen.getByText(/Database verified, no corruption \(PRAGMA integrity_check: ok\)/i)).toBeInTheDocument();
     });
 
-    it('renders break-glass placeholder card with admin-surface §2.2 explanation in Access tab', async () => {
-        await act(async () => {
-            render(
-                <ApplianceSection
-                    activeNode={mockProfile}
-                    diag={mockDiag}
-                    gateway={mockGateway}
-                    gatewayLoading={false}
-                    gatewaySuccess={null}
-                    gatewaySaving={false}
-                    nodeLogs={[]}
-                    onChangeGateway={vi.fn()}
-                    onSaveGateway={vi.fn()}
-                    onRefreshDiag={vi.fn()}
-                    onRefreshLogs={vi.fn()}
-                    onDownloadBackup={vi.fn()}
-                    onRunLedgerAudit={vi.fn()}
-                    auditState={{ running: false, result: null }}
-                    initialSubTab="access"
-                />
-            );
-        });
+    const renderAccess = (rolesViewer: React.ComponentProps<typeof ApplianceSection>['rolesViewer']) => render(
+        <ApplianceSection
+            activeNode={mockProfile}
+            diag={mockDiag}
+            gateway={mockGateway}
+            gatewayLoading={false}
+            gatewaySuccess={null}
+            gatewaySaving={false}
+            nodeLogs={[]}
+            onChangeGateway={vi.fn()}
+            onSaveGateway={vi.fn()}
+            onRefreshDiag={vi.fn()}
+            onRefreshLogs={vi.fn()}
+            onDownloadBackup={vi.fn()}
+            onRunLedgerAudit={vi.fn()}
+            auditState={{ running: false, result: null }}
+            initialSubTab="access"
+            rolesViewer={rolesViewer}
+        />
+    );
+    /** fetch answering `route` with `answer`, and 2FA status as `totpEnabled`; every other call an empty 200. */
+    const fakeFetch = (route: string, answer: unknown, totpEnabled = false) => vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any) => {
+        const url = String(input);
+        if (url.includes(route)) return new Response(JSON.stringify(answer), { status: 200 });
+        if (url.includes('/api/local/admin/2fa/status')) return new Response(JSON.stringify({ totpEnabled, backupCodesRemaining: 3 }), { status: 200 });
+        return new Response('{}', { status: 200 });
+    });
 
+    it('an owner key makes a break-glass code from the Access tab, shown once', async () => {
+        const fetchSpy = fakeFetch('/api/local/admin/auth/break-glass/issue', { success: true, breakGlassCode: 'bg-a1b2-c3d4-e5f6-7890', memberPubkey: 'o'.repeat(64) });
+        await act(async () => { renderAccess({ kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' }); });
         expect(screen.getByText('Break-Glass Emergency Recovery')).toBeInTheDocument();
-        expect(screen.getByText(/The break-glass credential can do exactly one thing: enrol a new admin key/i)).toBeInTheDocument();
-        expect(screen.getByText(/Break-glass recovery used to authorise a new admin key for @callsign/i)).toBeInTheDocument();
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Make a break-glass code/i })); });
+        const call = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/local/admin/auth/break-glass/issue'));
+        expect(call).toBeTruthy();
+        expect(JSON.parse(String((call![1] as RequestInit).body))).toEqual({});
+        expect(screen.getByTestId('break-glass-code')).toHaveTextContent('bg-a1b2-c3d4-e5f6-7890');
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /I have kept it safe/i })); });
+        expect(screen.queryByText('bg-a1b2-c3d4-e5f6-7890')).not.toBeInTheDocument();
+    });
 
-        const placeholderButton = screen.getByRole('button', { name: /Enrol Device Key via Break-Glass/i });
-        expect(placeholderButton).toBeDisabled();
+    it('the Access tab carries the Automation tokens card for an owner and not for an admin', async () => {
+        fakeFetch('/api/local/admin/automation-tokens', { tokens: [], scopes: ['read', 'backups', 'admin'] });
+        let view: ReturnType<typeof renderAccess>;
+        await act(async () => { view = renderAccess({ kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' }); });
+        expect(screen.getByText('Automation tokens')).toBeInTheDocument();
+        view!.unmount();
+        await act(async () => { renderAccess({ kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' }); });
+        expect(screen.queryByText('Automation tokens')).not.toBeInTheDocument();
+    });
+
+    it('the password names the owner; an admin is told only an owner has a code', async () => {
+        const fetchSpy = fakeFetch('/api/local/admin/auth/break-glass/issue', { success: true, breakGlassCode: 'bg-0000-1111-2222-3333' });
+        await act(async () => { renderAccess({ kind: 'password' }); });
+        fireEvent.change(screen.getByLabelText(/Owner's member key/i), { target: { value: 'p'.repeat(64) } });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Make a break-glass code/i })); });
+        const call = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/local/admin/auth/break-glass/issue'));
+        expect(JSON.parse(String((call![1] as RequestInit).body))).toEqual({ memberPubkey: 'p'.repeat(64) });
+        expect(screen.getByTestId('break-glass-code')).toHaveTextContent('bg-0000-1111-2222-3333');
+    });
+
+    it('an admin sees no break-glass button and no backup codes', async () => {
+        fakeFetch('/never', {}, true);
+        await act(async () => { renderAccess({ kind: 'key', memberPubkey: 'a'.repeat(64), role: 'admin' }); });
+        expect(screen.getByText(/Only an owner has a break-glass code/i)).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Make a break-glass code/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /Show new backup codes/i })).not.toBeInTheDocument();
+    });
+
+    it('an owner sees new 2FA backup codes only after typing a 6-digit code', async () => {
+        const codes = ['aaaa1111', 'bbbb2222', 'cccc3333', 'dddd4444', 'eeee5555', 'ffff6666', 'a1a1b2b2', 'c3c3d4d4'];
+        const fetchSpy = fakeFetch('/api/local/admin/2fa/backup-codes', { success: true, backupCodes: codes }, true);
+        await act(async () => { renderAccess({ kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' }); });
+        const button = await screen.findByRole('button', { name: /Show new backup codes/i });
+        await act(async () => { fireEvent.click(button); });
+        expect(fetchSpy.mock.calls.some(c => String(c[0]).includes('/api/local/admin/2fa/backup-codes'))).toBe(false);
+        expect(screen.getByText(/Enter the 6-digit code/i)).toBeInTheDocument();
+        fireEvent.change(screen.getByLabelText(/New backup codes/i), { target: { value: '123456' } });
+        await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Show new backup codes/i })); });
+        const call = fetchSpy.mock.calls.find(c => String(c[0]).includes('/api/local/admin/2fa/backup-codes'));
+        expect(JSON.parse(String((call![1] as RequestInit).body))).toEqual({ code: '123456' });
+        expect(screen.getByTestId('backup-codes')).toHaveTextContent('aaaa1111');
     });
 
     it('sends password in POST body when checking for updates', async () => {
@@ -214,6 +451,11 @@ describe('ApplianceSection Component', () => {
     });
 
     it('sends password and callsign in body when saving node identity in identity tab', async () => {
+        // The contacts come from the admin route; this node has none stored, so the empty boxes are what it has.
+        const generic = global.fetch as any;
+        vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string, init?: unknown) => (String(url).includes('/api/local/admin/diagnostics')
+            ? Promise.resolve({ ok: true, json: () => Promise.resolve({ ...mockDiag, contactEmail: null, contactPhone: null }) })
+            : generic(url, init))));
         await act(async () => {
             render(
                 <ApplianceSection
@@ -235,6 +477,7 @@ describe('ApplianceSection Component', () => {
                 />
             );
         });
+        await waitFor(() => expect(document.getElementById('contact-email')).not.toBeDisabled());
 
         const saveIdentityBtn = screen.getByRole('button', { name: /save identity/i });
         await act(async () => {
@@ -264,7 +507,8 @@ describe('ApplianceSection Component', () => {
                     password: mockProfile.adminPassword,
                     publishLocation: true,
                     publishMembers: true,
-                    publishContacts: true,
+                    publishContactEmail: false,
+                    publishContactPhone: false,
                     publishHealth: true,
                     directoryPushIntervalHours: 12,
                     serviceRadius: null,
@@ -521,6 +765,61 @@ describe('ApplianceSection Component', () => {
         expect(screen.getByText(/It opens with: @anna, recovery code #1/)).toBeInTheDocument();
         expect(screen.getByRole('button', { name: "Open with an owner's phone" })).toBeInTheDocument();
         expect(screen.getByLabelText(/printed recovery code/)).toBeInTheDocument();
+    });
+
+    // A retired password took its 2FA with it, and the server refuses to set either up again (routes/settings.ts
+    // refuse2faWhileRetired): one line instead of the password and 2FA cards, at 320px with 130% text.
+    it('on a server whose password is retired, Access & Security shows one line instead of the password and 2FA cards', async () => {
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: any) => {
+            const url = String(input);
+            if (url.includes('/api/local/admin/2fa/status')) {
+                return new Response(JSON.stringify({ success: true, totpEnabled: false, passwordRetired: true, backupCodesRemaining: 0 }), { status: 200 });
+            }
+            return new Response('{}', { status: 200 });
+        });
+        await act(async () => {
+            render(
+                <div style={{ width: 320, fontSize: '130%' }}>
+                    <ApplianceSection
+                        activeNode={mockProfile}
+                        diag={mockDiag}
+                        gateway={mockGateway}
+                        gatewayLoading={false}
+                        gatewaySuccess={null}
+                        gatewaySaving={false}
+                        nodeLogs={[]}
+                        onChangeGateway={vi.fn()}
+                        onSaveGateway={vi.fn()}
+                        onRefreshDiag={vi.fn()}
+                        onRefreshLogs={vi.fn()}
+                        onDownloadBackup={vi.fn()}
+                        onRunLedgerAudit={vi.fn()}
+                        auditState={{ running: false, result: null }}
+                        initialSubTab="access"
+                        rolesViewer={{ kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' }}
+                    />
+                </div>
+            );
+        });
+        const line = await screen.findByTestId('no-server-2fa');
+        expect(line).toHaveTextContent("This server has no admin password, so it has no server 2FA: your phone's lock is your second factor.");
+        // It wraps at 320px: nothing in it keeps it on one line.
+        expect(line.className).not.toMatch(/nowrap|truncate|\bw-\[|min-w-\[/);
+        expect(screen.queryByText('Two-Factor Authentication (2FA)')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /setup 2fa authenticator/i })).not.toBeInTheDocument();
+        expect(screen.queryByText('Change Admin Password')).not.toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /update password/i })).not.toBeInTheDocument();
+        // The rest of the tab is still there.
+        expect(screen.getByText('Break-Glass Emergency Recovery')).toBeInTheDocument();
+        expect(fetchSpy.mock.calls.some(c => String(c[0]).includes('/api/local/admin/2fa/setup'))).toBe(false);
+    });
+
+    it('a server that does not say passwordRetired (not retired, or older) still shows both cards', async () => {
+        fakeFetch('/never', {});
+        await act(async () => { renderAccess({ kind: 'key', memberPubkey: 'o'.repeat(64), role: 'owner' }); });
+        expect(await screen.findByText('Two-Factor Authentication (2FA)')).toBeInTheDocument();
+        expect(screen.getByText('Change Admin Password')).toBeInTheDocument();
+        expect(screen.queryByTestId('no-server-2fa')).not.toBeInTheDocument();
     });
 
     it('correctly maps totpEnabled to enabled when rendering 2FA card in access subtab', async () => {
@@ -855,7 +1154,11 @@ describe('ApplianceSection Component', () => {
         });
 
         expect(setTokenSpy).toHaveBeenCalledWith(mockProfile.id, 'mock-tfa-session-token-12345');
-        expect(sessionStorage.getItem('bp-2fa-session')).toBe('mock-tfa-session-token-12345');
+        // Held in memory, and never written to the origin's web storage (Fable's web review, M1). Until 2026-10-01 this
+        // asserted it WAS in sessionStorage.
+        expect(nodeClient.getTfaSessionToken(mockProfile.id)).toBe('mock-tfa-session-token-12345');
+        expect(sessionStorage.getItem('bp-2fa-session')).toBeNull();
+        expect(sessionStorage.getItem(`bp_tfa_session_${mockProfile.id}`)).toBeNull();
     });
 
     it('remounts NodeIdentityPanel when activeNode changes in identity subtab', async () => {

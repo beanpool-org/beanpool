@@ -25,6 +25,9 @@ delete process.env.ENFORCE_WS_AUTH;
 
 import crypto from 'node:crypto';
 import WebSocket from 'ws';
+import { lockedDm } from './dm-test-payload.js';
+import { lockedGroupLine } from './group-test-payload.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -76,8 +79,9 @@ async function main() {
 
     const member = (callsign: string): Id => {
         const id = keypair();
-        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, avatar_url)
-                    VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed', '/uploads/avatar.jpg')`).run(id.pubKeyHex, callsign);
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                    VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'seed', 'seed')`).run(id.pubKeyHex, callsign);
+        setMemberPhoto(db, id.pubKeyHex, '/uploads/avatar.jpg');
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(id.pubKeyHex);
         return id;
     };
@@ -96,11 +100,14 @@ async function main() {
     // ── 1. A DM between A and B ──
     console.log('— a DM —');
     const conv = se.createConversation('dm', [A.pubKeyHex, B.pubKeyHex], A.pubKeyHex)!;
-    const CT = 'dm-ct-' + crypto.randomBytes(4).toString('hex');
-    const msg = se.sendMessage(conv.id, A.pubKeyHex, CT, 'nonce-1')!;
+    // A DM line and its edit are in the encrypted form; each random ciphertext is the marker the checks look for.
+    const sent = lockedDm();
+    const CT = sent.ciphertext;
+    const msg = se.sendMessage(conv.id, A.pubKeyHex, CT, sent.nonce)!;
     se.toggleMessageReaction(msg.id, B.pubKeyHex, '👍');
-    const CT2 = 'dm-ct-edited-' + crypto.randomBytes(4).toString('hex');
-    se.editMessage(msg.id, A.pubKeyHex, CT2, 'nonce-2');
+    const edit = lockedDm();
+    const CT2 = edit.ciphertext;
+    se.editMessage(msg.id, A.pubKeyHex, CT2, edit.nonce);
     await sleep(300);
     const DM_TYPES = ['conversation_created', 'new_message', 'message_reaction', 'message_edited'];
     for (const [name, s] of [['A', aWs], ['B', bWs]] as const) {
@@ -166,8 +173,10 @@ async function main() {
     const group = se.createGroup({ name: 'Quiet Room', joinPolicy: 'request_to_join', createdBy: A.pubKeyHex } as any);
     se.joinGroup(group.id, B.pubKeyHex);
     se.approveGroupMember(group.id, A.pubKeyHex, B.pubKeyHex);
-    const GTEXT = 'group-line-' + crypto.randomBytes(4).toString('hex');
-    se.postGroupThreadMessage(group.id, B.pubKeyHex, GTEXT);
+    // The group's line is sealed: its random ciphertext is the marker the checks look for, as a DM's is.
+    const gLine = lockedGroupLine(db, group.id);
+    const GTEXT = gLine.ciphertext;
+    se.postGroupThreadMessage(group.id, B.pubKeyHex, gLine);
 
     const ev = se.createPost('event', 'social', 'Street picnic', 'Bring a plate', 0, 'fixed', A.pubKeyHex, -28.55, 153.5,
         undefined, undefined, undefined, undefined, { eventStartAt: new Date(Date.now() + 86_400_000).toISOString(), eventPlaceName: 'The park' })!;

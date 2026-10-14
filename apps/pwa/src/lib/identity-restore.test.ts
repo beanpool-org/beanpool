@@ -122,8 +122,8 @@ describe('the pending restore', () => {
     });
 
     it('clearing it touches nothing else', async () => {
-        await importIdentity(JOINER);
         await savePendingJoin(join({ identity: { ...JOINER, publicKey: '3'.repeat(64) } }));
+        await importIdentity(JOINER);
         await savePendingRestore(restore());
         await clearPendingRestore();
         expect(peek('pending-restore')).toBeUndefined();

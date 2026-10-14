@@ -23,8 +23,8 @@ import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 
-const PORT = 8544;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const ENDPOINT = '/api/messages/mark-read';
 
 let run = 0, passed = 0;
@@ -74,7 +74,8 @@ async function main() {
     console.log('Running X-1 request-auth tests (real middleware)...\n');
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const body = { pubkey: pubKeyHex, conversationId: 'test-conv' };
 

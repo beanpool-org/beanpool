@@ -141,6 +141,7 @@ vi.mock('@thoughtbot/react-native-social-auth', () => ({
 import * as WebBrowser from 'expo-web-browser';
 import { DeviceEventEmitter } from 'react-native';
 import { signedPost } from '../node-post';
+import { vaultTicketNonce } from '@beanpool/core';
 import {
     GOOGLE_WEB_CLIENT_ID,
     SsoSignInError,
@@ -148,12 +149,13 @@ import {
     readGoogleCallback,
     signInWithFacebook,
     signInWithGoogle,
-    startSsoSignIn,
+    signInWithProvider,
 } from '../sso-signin';
 import { redirectSystemPath } from '../../app/+native-intent';
 
 const NODE_NONCE = 'bm9kZS1pc3N1ZWQtbm9uY2UtZm9yLXRoaXMtYXR0ZW1wdA';
-const identity = { publicKey: 'aa', privateKey: 'bb', callsign: 'm', createdAt: '2026-09-25T00:00:00Z' } as any;
+/** What a key vault ticket's nonce looks like: base64url(SHA-256(ticket)), 43 characters (utils/vault.ts). */
+const VAULT_NONCE = vaultTicketNonce('eyJ2IjoxfQ.c2lnbmF0dXJl');
 
 beforeEach(() => {
     rn.Platform.OS = 'ios';
@@ -333,18 +335,16 @@ describe('Android: Credential Manager with the nonce', () => {
         expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
     });
 
-    it('the nonce is the one the node issued, end to end through startSsoSignIn', async () => {
-        vi.mocked(signedPost).mockResolvedValueOnce({
-            ok: true, status: 200,
-            json: async () => ({ nonce: NODE_NONCE, providers: ['google', 'apple'] }),
-        } as any);
-
-        const res = await startSsoSignIn('google', 'https://test.example', identity);
+    // Was "the one the node issued, end to end through startSsoSignIn". Since V4 the nonce is the hash of BeanPool's key
+    // vault's ticket (utils/vault.ts), and no community is asked for one: the sheet is handed it, and nothing else.
+    it("the nonce is the key vault ticket's, end to end through signInWithProvider, and no node is asked for one", async () => {
+        const res = await signInWithProvider('google', VAULT_NONCE);
 
         expect(res.provider).toBe('google');
-        expect(res.nonce).toBe(NODE_NONCE);
-        expect(decode(res.idToken).nonce).toBe(NODE_NONCE);
-        expect(tb.state.configured).toMatchObject({ webClientId: GOOGLE_WEB_CLIENT_ID, nonce: NODE_NONCE });
+        expect(res.nonce).toBe(VAULT_NONCE);
+        expect(decode(res.idToken).nonce).toBe(VAULT_NONCE);
+        expect(tb.state.configured).toMatchObject({ webClientId: GOOGLE_WEB_CLIENT_ID, nonce: VAULT_NONCE });
+        expect(signedPost).not.toHaveBeenCalled();
     });
 
     it('clears the remembered choice first, so the member sees which account is used', async () => {
@@ -437,20 +437,20 @@ describe("Android: Google's web page when Credential Manager's sheet cannot appe
         expect(res).toEqual({ idToken: token, nonce: NODE_NONCE, email: 'a@example.com' });
     });
 
-    it('asks the node for one nonce only: the sheet that never appeared spent nothing', async () => {
-        vi.mocked(signedPost).mockResolvedValueOnce({
-            ok: true, status: 200,
-            json: async () => ({ nonce: NODE_NONCE, providers: ['google', 'apple'] }),
-        } as any);
+    // Was "asks the node for one nonce only". The one nonce is now the key vault ticket's (one ticket per sign-in,
+    // utils/sso-sheet-connect.ts): the sheet that never appeared spent nothing, so the page takes the same one.
+    it('one nonce for the sheet and the page: the sheet that never appeared spent nothing', async () => {
         tb.state.failWith = { code: 'NO_CREDENTIALS', message: 'No credentials available on this device' };
-        returnsThroughAppLink(pageToken(NODE_NONCE));
+        returnsThroughAppLink(pageToken(VAULT_NONCE), VAULT_NONCE);
 
-        const res = await startSsoSignIn('google', 'https://test.example', identity);
+        const res = await signInWithProvider('google', VAULT_NONCE);
 
-        expect(signedPost).toHaveBeenCalledTimes(1);
+        expect(tb.state.configured).toMatchObject({ nonce: VAULT_NONCE });
+        expect(new URL(vi.mocked(WebBrowser.openAuthSessionAsync).mock.calls[0][0]).searchParams.get('nonce')).toBe(VAULT_NONCE);
+        expect(signedPost).not.toHaveBeenCalled();
         expect(res.provider).toBe('google');
-        expect(res.nonce).toBe(NODE_NONCE);
-        expect(decode(res.idToken).nonce).toBe(NODE_NONCE);
+        expect(res.nonce).toBe(VAULT_NONCE);
+        expect(decode(res.idToken).nonce).toBe(VAULT_NONCE);
     });
 
     it('a member who cancels the sheet gets a cancel, and no web page', async () => {
@@ -621,7 +621,12 @@ describe('the old library is out of every sign-in path', () => {
         expect(read(rel)).not.toMatch(/@react-native-google-signin\/google-signin/);
     });
 
+    // Was `signInResult = await signInWithGoogle(nonce)` in sso-recovery.ts. Since V4 a restore signs in through
+    // signInWithProvider with the key vault ticket's nonce, and that reaches Google only through signInWithGoogle.
     it('recovery signs in to Google through signInWithGoogle, the nonce-bearing path', () => {
-        expect(read('../sso-recovery.ts')).toMatch(/signInResult = await signInWithGoogle\(nonce\)/);
+        expect(read('../sso-recovery.ts')).toMatch(/signInWithProvider\(p, nonce\)/);
+        const provider = read('../sso-signin.ts');
+        const body = provider.slice(provider.indexOf('export async function signInWithProvider('));
+        expect(body).toMatch(/return \{ provider, \.\.\.await signInWithGoogle\(nonce\) \};/);
     });
 });

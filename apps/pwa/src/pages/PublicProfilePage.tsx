@@ -8,11 +8,14 @@ import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { ChannelChips } from '../components/ChannelChips';
 import { ArchetypeQuizModal } from '../components/ArchetypeQuizModal';
-import { parseArchetype, calculateSynergy, ARCHETYPES, type QuizResult } from '@beanpool/core';
+import { parseArchetype, calculateSynergy, ARCHETYPES, listPhotoUrl, type QuizResult } from '@beanpool/core';
 import { buildSynergyCollabMessage, buildSynergyNudgeMessage, setChatPrefill } from '../lib/archetypes';
 import { isUserBlocked, blockUser, unblockUser, onBlocklistUpdated, getBlocklistFullNote } from '../lib/blocklist';
 import { ReportModal } from '../components/ReportModal';
 import { ImageLightbox } from '../components/ImageLightbox';
+import { marked, useFeatureMode } from '../lib/features';
+import { LocalCommunityLine } from '../components/LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -25,6 +28,8 @@ interface Props {
 }
 
 export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavigatePost, onEditProfile, onNavigateTab }: Props) {
+    // Beans live in a local community here (preview or read-only): the trust card's slot carries the line (§1 row 9).
+    const beansMarked = marked(useFeatureMode('beans'));
     const [profile, setProfile] = useState<MemberProfile | null>(null);
     const [viewerProfile, setViewerProfile] = useState<MemberProfile | null>(null);
     const [showQuizModal, setShowQuizModal] = useState(false);
@@ -242,7 +247,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                 {isSelf ? (
                     <button 
                         onClick={onEditProfile}
-                        className="shrink-0 min-h-[48px] flex items-center gap-1 px-3 py-1 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 font-extrabold text-sm cursor-pointer hover:bg-emerald-100/50"
+                        className="shrink-0 min-h-[48px] flex items-center gap-1 px-3 py-1 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 font-extrabold text-sm cursor-pointer hover:bg-emerald-100/50 dark:hover:bg-emerald-950/40"
                     >
                         ✏️ Edit
                     </button>
@@ -253,7 +258,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             onClick={() => setShowReportModal(true)}
                             title="Report member"
                             aria-label={`Report user ${profile?.callsign || ''}`}
-                            className="min-h-[48px] min-w-[48px] px-2.5 py-1 rounded-lg border border-nature-300 dark:border-nature-700 bg-white/80 dark:bg-nature-800 text-nature-600 dark:text-nature-300 font-bold text-xs cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 transition-colors flex items-center justify-center gap-1"
+                            className="min-h-[48px] min-w-[48px] px-2.5 py-1 rounded-lg border border-nature-300 dark:border-nature-700 bg-white/80 dark:bg-nature-800 text-nature-600 dark:text-nature-300 font-bold text-xs cursor-pointer hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors flex items-center justify-center gap-1"
                         >
                             <span aria-hidden="true">🚩</span><span className="hidden sm:inline">Report</span>
                         </button>
@@ -265,7 +270,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             aria-label={`${isBlocked ? 'Unblock' : 'Block'} user ${profile?.callsign || ''}`}
                             className={`min-h-[48px] min-w-[48px] px-2.5 py-1 rounded-lg border font-bold text-xs cursor-pointer transition-colors flex items-center justify-center gap-1 ${
                                 isBlocked
-                                    ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200'
+                                    ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                     : 'border-red-300 dark:border-red-800/80 bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30'
                             }`}
                         >
@@ -299,7 +304,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 <img src={avatarResolved} alt="avatar" className="w-full h-full object-cover" />
                             </button>
                         ) : (
-                            <span className="text-4xl font-bold text-nature-400 dark:text-nature-500">{initial}</span>
+                            <span className="text-4xl font-bold text-nature-400 dark:text-nature-400">{initial}</span>
                         )}
                     </div>
                     
@@ -308,7 +313,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         <span className="text-emerald-500">✓</span>
                     </div>
                     
-                    <div className="text-xs text-nature-400 dark:text-nature-500 font-mono bg-nature-200/50 dark:bg-nature-900 px-2 py-1 rounded mt-1">
+                    <div className="text-xs text-nature-400 dark:text-nature-400 font-mono bg-nature-200/50 dark:bg-nature-900 px-2 py-1 rounded mt-1">
                         {pubkey.slice(0, 16)}...
                     </div>
 
@@ -341,7 +346,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                         ) : (
                             <button 
                                 onClick={() => onMessage(pubkey)}
-                                className="mt-6 bg-emerald-600 hover:bg-emerald-500 text-white border-none rounded-xl px-6 py-2.5 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex items-center gap-2"
+                                className="mt-6 bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none rounded-xl px-6 py-2.5 font-bold cursor-pointer shadow-sm transition-transform active:scale-95 flex items-center gap-2"
                             >
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -423,7 +428,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         setChatPrefill(message, pubkey);
                                         onMessage(pubkey);
                                     }}
-                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
                                 >
                                     💬 Collaborate with {profile?.callsign || 'Member'}
                                 </button>
@@ -450,7 +455,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         setQuizInitialMode('quick');
                                         setShowQuizModal(true);
                                     }}
-                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
                                 >
                                     ⚡ Take 60s Quiz
                                 </button>
@@ -478,7 +483,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         setChatPrefill(message, pubkey);
                                         onMessage(pubkey);
                                     }}
-                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
                                 >
                                     💬 Nudge {profile?.callsign || 'Member'} in Chat
                                 </button>
@@ -505,7 +510,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         setQuizInitialMode('quick');
                                         setShowQuizModal(true);
                                     }}
-                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                    className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
                                 >
                                     ⚡ Take 60s Quiz
                                 </button>
@@ -516,8 +521,17 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                     return null;
                 })()}
 
+                {/* Where Beans live in a local community: the line in the trust card's slot, on every profile */}
+                {beansMarked && (
+                    <div className="mx-4 mt-4" data-testid="profile-local-line">
+                        <LocalCommunityLine feature="beans" text={LOCAL_COMMUNITY_LINES.profile}
+                            onNearYou={onNavigateTab ? () => onNavigateTab('home') : undefined}
+                            onGuide={onNavigateTab ? (slug) => onNavigateTab('guide', slug) : undefined} />
+                    </div>
+                )}
+
                 {/* Trust summary card (self only) — links to Ledger */}
-                {isSelf && balanceInfo && (
+                {!beansMarked && isSelf && balanceInfo && (
                     <div 
                         onClick={() => onNavigateTab && onNavigateTab('ledger')}
                         className="flex items-center justify-between bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl mx-4 mt-4 p-4 shadow-sm cursor-pointer hover:shadow-md transition-all duration-200"
@@ -526,7 +540,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             <span className="text-3xl select-none">{balanceInfo.tier?.emoji || '🌱'}</span>
                             <div className="min-w-0">
                                 <h4 className="font-extrabold text-nature-950 dark:text-white text-base truncate">{balanceInfo.tier?.name || 'Member'}</h4>
-                                <p className="text-xs text-nature-450 dark:text-nature-500 mt-0.5">{Math.round(balanceInfo.earnedCredit || 0)} trust points</p>
+                                <p className="text-xs text-nature-450 dark:text-nature-400 mt-0.5">{Math.round(balanceInfo.earnedCredit || 0)} trust points</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-1.5">
@@ -615,7 +629,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                 setQuizInitialMode('deep');
                                                 setShowQuizModal(true);
                                             }}
-                                            className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
+                                            className="flex-1 py-2.5 px-3 rounded-xl text-xs font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm truncate"
                                         >
                                             🧭 More accurate
                                         </button>
@@ -656,7 +670,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     setQuizInitialMode('quick');
                                     setShowQuizModal(true);
                                 }}
-                                className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 hover:bg-emerald-500 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
+                                className="w-full py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white border-none cursor-pointer transition-colors shadow-sm mt-1"
                             >
                                 ⚡ Take 60s Quiz
                             </button>
@@ -676,7 +690,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 flex flex-col items-center justify-center shadow-sm">
                                     <div className="text-amber-500 text-sm mb-1">{renderStars(stats.average)}</div>
                                     <div className="text-xl font-black text-nature-900 dark:text-white">{stats.average.toFixed(1)}</div>
-                                    <div className="text-[10px] font-bold text-nature-400 dark:text-nature-500 uppercase mt-1">Overall</div>
+                                    <div className="text-[10px] font-bold text-nature-400 dark:text-nature-400 uppercase mt-1">Overall</div>
                                 </div>
                                 <div className="bg-emerald-50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-900/30 rounded-xl p-3 flex flex-col items-center justify-center shadow-sm">
                                     <div className="text-sm mb-1">📤</div>
@@ -686,7 +700,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 <div className="bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-900/30 rounded-xl p-3 flex flex-col items-center justify-center shadow-sm">
                                     <div className="text-sm mb-1">📥</div>
                                     <div className="text-xl font-black text-indigo-600 dark:text-indigo-400">{stats.asReceiver?.average.toFixed(1) || '-'}</div>
-                                    <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-500 uppercase mt-1">As Payer</div>
+                                    <div className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase mt-1">As Payer</div>
                                 </div>
                             </div>
                         )}
@@ -697,7 +711,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all ${
                                     activeTab === 'listings'
                                         ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-extrabold'
-                                        : 'border-transparent text-nature-400 dark:text-nature-500 hover:text-nature-600'
+                                        : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600 dark:hover:text-nature-200'
                                 }`}
                                 onClick={() => setActiveTab('listings')}
                             >
@@ -707,7 +721,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all ${
                                     activeTab === 'reviews'
                                         ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-extrabold'
-                                        : 'border-transparent text-nature-400 dark:text-nature-500 hover:text-nature-600'
+                                        : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600 dark:hover:text-nature-200'
                                 }`}
                                 onClick={() => setActiveTab('reviews')}
                             >
@@ -718,7 +732,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                     className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all ${
                                         activeTab === 'given'
                                             ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-extrabold'
-                                            : 'border-transparent text-nature-400 dark:text-nature-500 hover:text-nature-600'
+                                            : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600 dark:hover:text-nature-200'
                                     }`}
                                     onClick={() => setActiveTab('given')}
                                 >
@@ -808,7 +822,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                     aria-label={`View enlarged photo: ${p.title}`}
                                                                     className="w-14 h-14 rounded-lg overflow-hidden border border-nature-100 dark:border-nature-800 shrink-0 cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                                                                 >
-                                                                    <img src={coverImage} alt={p.title} className="w-full h-full object-cover bg-nature-100 dark:bg-nature-800" />
+                                                                    <img src={listPhotoUrl(coverImage)} alt={p.title} className="w-full h-full object-cover bg-nature-100 dark:bg-nature-800" />
                                                                 </button>
                                                             ) : (
                                                                 <div className="w-14 h-14 rounded-lg bg-nature-100 dark:bg-nature-800 flex items-center justify-center text-2xl opacity-50">
@@ -825,7 +839,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                                         {p.type?.toUpperCase()}
                                                                     </div>
                                                                     <div className="flex items-center gap-1">
-                                                                        <span className="font-black text-sm text-indigo-600 dark:text-indigo-400">{p.credits ?? '?'}</span>
+                                                                        <span className="font-black text-sm text-indigo-600 dark:text-indigo-300">{p.credits ?? '?'}</span>
                                                                         <span className="text-[10px]">🫘</span>
                                                                     </div>
                                                                 </div>
@@ -858,7 +872,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                             <div className={`text-[9px] font-bold uppercase px-1.5 py-0.5 rounded ${
                                                                 r.role === 'provider'
                                                                     ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
-                                                                    : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400'
+                                                                    : 'bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-300'
                                                             }`}>
                                                                 {r.role === 'provider' ? 'Provided Service' : 'Paid for Service'}
                                                             </div>
@@ -957,7 +971,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                 disabled={isBlocking}
                                 className={`flex-1 py-3 px-4 rounded-xl border font-bold text-sm cursor-pointer transition-colors flex items-center justify-center gap-2 shadow-sm disabled:opacity-60 ${
                                     isBlocked
-                                        ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200'
+                                        ? 'border-nature-300 dark:border-nature-700 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                         : 'border-red-300 dark:border-red-900/60 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30'
                                 }`}
                             >
@@ -996,7 +1010,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                         aria-label={`Rate ${star} star${star === 1 ? '' : 's'}`}
                                         className="text-4xl hover:scale-110 transition-transform bg-transparent border-none cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-lg"
                                     >
-                                        <span className={star <= reviewStars ? "text-amber-400" : "text-nature-200 dark:text-nature-700"}>★</span>
+                                        <span className={star <= reviewStars ? "text-amber-400" : "text-nature-200 dark:text-nature-500"}>★</span>
                                     </button>
                                 ))}
                             </div>
@@ -1012,7 +1026,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             <div className="flex gap-2">
                                 <button
                                     onClick={() => setEditingReview(null)}
-                                    className="flex-1 py-3 text-nature-600 dark:text-nature-400 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 rounded-xl transition-colors border-none cursor-pointer"
+                                    className="flex-1 py-3 text-nature-600 dark:text-nature-300 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 dark:hover:text-nature-200 rounded-xl transition-colors border-none cursor-pointer"
                                 >
                                     Cancel
                                 </button>

@@ -24,6 +24,7 @@ import { EscrowDisputesPanel } from './EscrowDisputesPanel';
 import { DecisionsAdminPanel } from './DecisionsAdminPanel';
 import { EnterpriseLocationPicker } from './EnterpriseLocationPicker';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { nodeCredential } from '../../lib/profiles';
 
 interface EconomySectionProps {
     activeNode: NodeProfile;
@@ -175,7 +176,7 @@ export function EconomySection({
     const loadTreasuries = async () => {
         setLoadingTreasuries(true);
         try {
-            const list = await fetchNodeTreasuries(activeNode.url);
+            const list = await fetchNodeTreasuries(activeNode.url, nodeCredential(activeNode), effectiveTfaToken);
             setTreasuries(list || []);
 
             // Populate keepers from list or fetch individually if not returned
@@ -196,7 +197,7 @@ export function EconomySection({
                             const keepers = await fetchTreasuryKeepers(
                                 activeNode.url,
                                 t.publicKey,
-                                activeNode.adminPassword,
+                                nodeCredential(activeNode),
                                 effectiveTfaToken
                             );
                             return { pubkey: t.publicKey, keepers: Array.isArray(keepers) ? keepers : [] };
@@ -227,7 +228,7 @@ export function EconomySection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/commons/projects');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, effectiveTfaToken),
+                headers: buildAdminHeaders(nodeCredential(activeNode), effectiveTfaToken),
             });
             if (res.ok) {
                 const data = await res.json();
@@ -261,7 +262,7 @@ export function EconomySection({
                     workingCapitalCeiling: ceilingNum,
                     purpose: newEnterprisePurpose.trim() || undefined,
                 },
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 effectiveTfaToken
             );
 
@@ -272,7 +273,7 @@ export function EconomySection({
                         activeNode.url,
                         res.publicKey,
                         newEnterpriseKeeper.trim(),
-                        activeNode.adminPassword,
+                        nodeCredential(activeNode),
                         effectiveTfaToken
                     );
                 } catch (assignErr) {
@@ -312,7 +313,7 @@ export function EconomySection({
             const keepers = await fetchTreasuryKeepers(
                 activeNode.url,
                 t.publicKey,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 effectiveTfaToken
             );
             setKeepersMap((prev) => ({ ...prev, [t.publicKey]: Array.isArray(keepers) ? keepers : [] }));
@@ -337,7 +338,7 @@ export function EconomySection({
                 activeNode.url,
                 manageKeepersTreasury.publicKey,
                 targetPubkey,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 effectiveTfaToken
             );
             setKeepersMap((prev) => ({
@@ -374,7 +375,7 @@ export function EconomySection({
                 activeNode.url,
                 manageKeepersTreasury.publicKey,
                 keeperPubkey,
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 effectiveTfaToken
             );
             setKeepersMap((prev) => ({
@@ -404,7 +405,7 @@ export function EconomySection({
                     credits: Number(offerCredits) || 10,
                     description: `${seedOfferTreasury.name} community offer`,
                 },
-                activeNode.adminPassword,
+                nodeCredential(activeNode),
                 effectiveTfaToken
             );
             setSeedOfferTreasury(null);
@@ -424,7 +425,7 @@ export function EconomySection({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/commons/reject');
             await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, effectiveTfaToken),
+                headers: buildAdminHeaders(nodeCredential(activeNode), effectiveTfaToken),
                 body: JSON.stringify({ projectId }),
             });
             await loadCommonsData();
@@ -520,7 +521,10 @@ export function EconomySection({
                     </div>
 
                     {loadingTreasuries ? (
-                        <div className="p-8 text-center text-xs text-nature-400">Loading enterprises...</div>
+                        <div className="p-8 text-center text-xs text-nature-400 flex items-center justify-center gap-2 font-mono">
+                            <span className="animate-spin text-terra-400">⏳</span>
+                            <span>Loading enterprises...</span>
+                        </div>
                     ) : treasuries.length === 0 ? (
                         <div className="p-8 text-center bg-nature-900/40 border border-nature-800 rounded-2xl">
                             <p className="text-sm font-semibold text-white mb-1">No enterprises created yet</p>
@@ -707,7 +711,12 @@ export function EconomySection({
                     {/* Proposed Projects */}
                     <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4">
                         <h3 className="text-base font-bold text-white m-0">Pending Commons Proposals ({commonsData.proposed.length})</h3>
-                        {commonsData.proposed.length === 0 ? (
+                        {loadingCommons ? (
+                            <div className="py-6 text-center text-xs text-nature-400 flex items-center justify-center gap-2 font-mono">
+                                <span className="animate-spin text-terra-400">⏳</span>
+                                <span>Loading proposals...</span>
+                            </div>
+                        ) : commonsData.proposed.length === 0 ? (
                             <div className="py-6 text-center text-xs text-nature-400">
                                 No pending proposals.
                             </div>

@@ -1,6 +1,6 @@
 /**
- * Joining in a browser (design G11-b): the requests to the providers, the return page's parser, the GitHub wait, and
- * what each door answer turns into. No provider and no node is contacted: the door is a stubbed fetch.
+ * Joining in a browser (design G11-b): the requests to the providers, the return page's parser, and what each door
+ * answer turns into. No provider and no node is contacted: the door is a stubbed fetch.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -23,14 +23,11 @@ import {
     matchAuthReturn,
     nameSuggestionFor,
     offeredProviders,
-    parseRetryAfter,
     probeMembership,
     readAuthReturn,
     refusalMessage,
     requestJoinNonce,
     resetCapturedAuthReturn,
-    runGithubPoll,
-    startGithubJoin,
     submitJoin,
     suggestCallsigns,
     SENT_JOIN_CAN_LAND_MS,
@@ -257,103 +254,8 @@ describe('capturing the return scrubs the address bar (design §5.1)', () => {
     });
 });
 
-describe('the GitHub wait (design §3.3)', () => {
-    function answer(status: number, body: Record<string, unknown> = {}, retryAfterSeconds: number | null = null): DoorAnswer {
-        return { status, body, retryAfterSeconds };
-    }
-
-    function harness(answers: Array<DoorAnswer | Error>, { expiresAt = Number.MAX_SAFE_INTEGER } = {}) {
-        const waits: number[] = [];
-        let clock = 0;
-        const poll = vi.fn(async () => {
-            const next = answers.shift();
-            if (!next) throw new Error('polled more than expected');
-            if (next instanceof Error) throw next;
-            return next;
-        });
-        const run = () => runGithubPoll({
-            poll,
-            sleep: async (ms) => { waits.push(ms); clock += ms; },
-            intervalSeconds: 5,
-            expiresAt,
-            now: () => clock,
-        });
-        return { waits, poll, run };
-    }
-
-    it('polls at the interval until ok, and returns the sub', async () => {
-        const h = harness([answer(200, { status: 'pending', intervalSeconds: 5 }), answer(200, { status: 'ok', sub: 'gh-42', email: 'e@x' })]);
-        expect(await h.run()).toEqual({ status: 'ok', sub: 'gh-42' });
-        expect(h.waits).toEqual([5000, 5000]);
-    });
-
-    it("follows a longer interval the node passes on (GitHub's slow_down)", async () => {
-        const h = harness([answer(200, { status: 'pending', intervalSeconds: 10 }), answer(200, { status: 'ok', sub: 'gh-1' })]);
-        await h.run();
-        expect(h.waits).toEqual([5000, 10000]);
-    });
-
-    it('a 429 is still pending: the next poll waits the Retry-After it came with', async () => {
-        const h = harness([answer(429, { error: 'Too many' }, 37), answer(200, { status: 'ok', sub: 'gh-1' })]);
-        expect(await h.run()).toEqual({ status: 'ok', sub: 'gh-1' });
-        expect(h.waits).toEqual([5000, 37000]);
-    });
-
-    it('a 429 with no Retry-After waits the interval', async () => {
-        const h = harness([answer(429), answer(200, { status: 'ok', sub: 'gh-1' })]);
-        await h.run();
-        expect(h.waits).toEqual([5000, 5000]);
-    });
-
-    it('a 429 with a Retry-After of 0 (or a date already past) still waits the interval: never a poll straight after', async () => {
-        const h = harness([answer(429, {}, 0), answer(429, {}, 0), answer(429, {}, 2), answer(200, { status: 'ok', sub: 'gh-1' })]);
-        expect(await h.run()).toEqual({ status: 'ok', sub: 'gh-1' });
-        expect(h.waits).toEqual([5000, 5000, 5000, 5000]);
-        expect(parseRetryAfter(new Date(Date.now() - 60_000).toUTCString())).toBe(0);
-    });
-
-    it('denied and expired end the wait', async () => {
-        expect(await harness([answer(200, { status: 'denied' })]).run()).toEqual({ status: 'denied' });
-        expect(await harness([answer(200, { status: 'expired' })]).run()).toEqual({ status: 'expired' });
-    });
-
-    it('no answer, or a 503, is waited through; the code\'s own deadline ends it', async () => {
-        const h = harness([new DoorUnreachableError(new Error('offline')), answer(503, { error: 'GitHub is down' }), answer(200, { status: 'ok', sub: 'gh-9' })]);
-        expect(await h.run()).toEqual({ status: 'ok', sub: 'gh-9' });
-        const late = harness([answer(200, { status: 'pending' }), answer(200, { status: 'pending' })], { expiresAt: 7000 });
-        expect(await late.run()).toEqual({ status: 'expired' });
-        expect(late.poll).toHaveBeenCalledTimes(1);
-    });
-
-    it('any other refusal stops, with the answer, rather than waiting forever', async () => {
-        const refused = answer(409, { error: 'This key is already a member of this community.', code: 'already_member' });
-        expect(await harness([refused]).run()).toEqual({ status: 'failed', answer: refused });
-        expect(await harness([answer(200, { status: 'ok' })]).run()).toMatchObject({ status: 'failed' });
-    });
-
-    it('stops at once when the page leaves the screen', async () => {
-        const controller = new AbortController();
-        const poll = vi.fn();
-        const result = runGithubPoll({
-            poll,
-            sleep: async () => { controller.abort(); },
-            intervalSeconds: 5,
-            expiresAt: Number.MAX_SAFE_INTEGER,
-            signal: controller.signal,
-        });
-        expect(await result).toEqual({ status: 'aborted' });
-        expect(poll).not.toHaveBeenCalled();
-    });
-
-    it('Retry-After in seconds or as a date', () => {
-        expect(parseRetryAfter('12')).toBe(12);
-        expect(parseRetryAfter(null)).toBeNull();
-        expect(parseRetryAfter(new Date(Date.now() + 30_000).toUTCString())).toBeGreaterThanOrEqual(28);
-    });
-});
-
 describe('each door answer → its screen (design §2 screen 4)', () => {
-    const a = (status: number, body: Record<string, unknown>): DoorAnswer => ({ status, body, retryAfterSeconds: null });
+    const a = (status: number, body: Record<string, unknown>): DoorAnswer => ({ status, body });
 
     it('200: joined, with the name the node gave and what it said about recovery', () => {
         expect(doorOutcome(a(200, { success: true, member: { callsign: 'Alice2' }, provider: 'google' }), 'google'))
@@ -389,7 +291,7 @@ describe('each door answer → its screen (design §2 screen 4)', () => {
     });
 
     it('404: the door is shut', () => {
-        expect(doorOutcome(a(404, { code: 'invite_only', error: 'This community is invite-only.' }), 'github').kind).toBe('door_closed');
+        expect(doorOutcome(a(404, { code: 'invite_only', error: 'This community is invite-only.' }), 'facebook').kind).toBe('door_closed');
     });
 
     it("403 and 400: the node's words", () => {
@@ -399,11 +301,11 @@ describe('each door answer → its screen (design §2 screen 4)', () => {
 });
 
 describe('the join body and the sign-ins offered', () => {
-    it('an OIDC sign-in sends idToken and nonce; GitHub sends proof.sessionId; sub is never sent', () => {
+    it('every sign-in sends its idToken and nonce, and nothing else of it; sub is never sent', () => {
         expect(joinBody('Alice', { provider: 'google', idToken: 't', nonce: NONCE, sub: 'g' }))
             .toEqual({ callsign: 'Alice', provider: 'google', idToken: 't', nonce: NONCE });
-        expect(joinBody('Alice', { provider: 'github', sessionId: 'sess', sub: 'gh' }))
-            .toEqual({ callsign: 'Alice', provider: 'github', proof: { sessionId: 'sess' } });
+        expect(joinBody('Alice', { provider: 'apple', idToken: 'a', nonce: NONCE, sub: 'ap' }))
+            .toEqual({ callsign: 'Alice', provider: 'apple', idToken: 'a', nonce: NONCE });
     });
 
     it('recovery rides along only when given (the G11-c seam)', () => {
@@ -411,14 +313,15 @@ describe('the join body and the sign-ins offered', () => {
         expect(joinBody('Alice', { provider: 'google', idToken: 't', nonce: NONCE, sub: 'g' }, recovery)).toMatchObject({ recovery });
     });
 
-    it("offers what the node takes and a browser can do: a provider with no client id stays hidden, GitHub needs the node's flow", () => {
+    it('offers what the node takes and a browser can do: a provider with no client id stays hidden', () => {
         const n: JoinNonce = {
-            nonce: NONCE, expiresInSeconds: 600, providers: ['google', 'apple', 'facebook', 'github'], githubFlow: 'node',
+            nonce: NONCE, expiresInSeconds: 600, providers: ['google', 'apple', 'facebook'],
             clientIds: { google: 'g', apple: null, facebook: 'f' },
         };
-        expect(offeredProviders(n)).toEqual(['google', 'facebook', 'github']);
-        expect(offeredProviders({ ...n, githubFlow: undefined })).toEqual(['google', 'facebook']);
-        expect(offeredProviders({ ...n, clientIds: {} })).toEqual(['github']);
+        expect(offeredProviders(n)).toEqual(['google', 'facebook']);
+        expect(offeredProviders({ ...n, clientIds: { ...n.clientIds, apple: 'org.beanpool.web' } })).toEqual(['google', 'apple', 'facebook']);
+        expect(offeredProviders({ ...n, providers: ['facebook', 'google'] })).toEqual(['facebook', 'google']);
+        expect(offeredProviders({ ...n, clientIds: {} })).toEqual([]);
     });
 });
 
@@ -432,11 +335,11 @@ describe('the door calls are signed by the joining key', () => {
 
     it('the nonce request carries the pending key in X-Public-Key and a signature', async () => {
         const fetchMock = vi.fn(async () => new Response(JSON.stringify({
-            nonce: NONCE, expiresInSeconds: 600, providers: ['google', 'github'], githubFlow: 'node', clientIds: { google: 'g', apple: null, facebook: null },
+            nonce: NONCE, expiresInSeconds: 600, providers: ['google', 'apple'], clientIds: { google: 'g', apple: 'org.beanpool.web', facebook: null },
         }), { status: 200 }));
         vi.stubGlobal('fetch', fetchMock);
         const got = await requestJoinNonce(identity);
-        expect(got).toMatchObject({ nonce: { nonce: NONCE, providers: ['google', 'github'] } });
+        expect(got).toMatchObject({ nonce: { nonce: NONCE, providers: ['google', 'apple'] } });
         const [path, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
         expect(path).toBe('/api/join/sso-nonce');
         const headers = init.headers as Record<string, string>;
@@ -445,43 +348,21 @@ describe('the door calls are signed by the joining key', () => {
         expect(init.method).toBe('POST');
     });
 
-    it('only the four sign-ins are read from the answer: not a name every object has, which would draw a function as a button', async () => {
+    it('only the sign-ins this app offers are read from the answer: not a name every object has, which would draw a function as a button', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-            nonce: NONCE, expiresInSeconds: 600, providers: ['google', 'toString', 'constructor', '__proto__', 'hasOwnProperty', 7, 'github'],
-            githubFlow: 'node', clientIds: { google: 'g', toString: 'x', constructor: 'x' },
+            nonce: NONCE, expiresInSeconds: 600, providers: ['google', 'toString', 'constructor', '__proto__', 'hasOwnProperty', 7, 'myspace', 'facebook'],
+            clientIds: { google: 'g', facebook: 'f', toString: 'x', constructor: 'x', myspace: 'm' },
         }), { status: 200 })));
         const got = await requestJoinNonce(identity);
-        expect(got).toMatchObject({ nonce: { providers: ['google', 'github'] } });
-        expect(offeredProviders((got as { nonce: JoinNonce }).nonce)).toEqual(['google', 'github']);
+        expect((got as { nonce: JoinNonce }).nonce.providers).toEqual(['google', 'facebook']);
+        expect(offeredProviders((got as { nonce: JoinNonce }).nonce)).toEqual(['google', 'facebook']);
     });
 
     it('no answer at all is DoorUnreachableError, never a guess', async () => {
         vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
         await expect(requestJoinNonce(identity)).rejects.toBeInstanceOf(DoorUnreachableError);
     });
-
-    it("GitHub's start: a link to anywhere but GitHub is replaced with GitHub's own page", async () => {
-        vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-            sessionId: 's', userCode: 'ABCD-1234', verificationUri: 'javascript:alert(1)', expiresInSeconds: 900, intervalSeconds: 5,
-        }), { status: 200 })));
-        expect(await startGithubJoin(identity)).toMatchObject({ start: { userCode: 'ABCD-1234', verificationUri: 'https://github.com/login/device' } });
-    });
-
-    it("GitHub's start: another page on github.com is replaced too, an OAuth app's consent screen included", async () => {
-        for (const elsewhere of [
-            'https://github.com/login/oauth/authorize?client_id=Iv1.someone-else&scope=repo',
-            'https://github.com/someone/phish',
-            'https://github.com/login/device/../../someone/phish',
-            'https://github.com/login/device.evil.example',
-        ]) {
-            vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
-                sessionId: 's', userCode: 'ABCD-1234', verificationUri: elsewhere, expiresInSeconds: 900, intervalSeconds: 5,
-            }), { status: 200 })));
-            expect(await startGithubJoin(identity)).toMatchObject({ start: { verificationUri: 'https://github.com/login/device' } });
-        }
-    });
 });
-
 
 describe('a join that went out: only the node says whether its key may go (checkSentJoin)', () => {
     let identity: BeanPoolIdentity;
@@ -566,7 +447,7 @@ describe('a join that went out: only the node says whether its key may go (check
 describe('what an answer to a join says for sure (joinVerdict, review round 2)', () => {
     const KEY = { publicKey: 'a'.repeat(64), privateKey: 'b'.repeat(96), callsign: 'Alice', createdAt: '2026-09-26T00:00:00.000Z' };
     const SENT = { identity: KEY, sentAt: 1_800_000_000_000 };
-    const at = (status: number, body: Record<string, unknown> = {}): DoorAnswer => ({ status, body, retryAfterSeconds: null });
+    const at = (status: number, body: Record<string, unknown> = {}): DoorAnswer => ({ status, body });
 
     it('a yes only from a 2xx that parsed with success, or a 409 that parsed with already_member', () => {
         expect(joinVerdict(at(200, { success: true, member: { callsign: 'Alice2' } }), SENT, 'google')).toEqual({ kind: 'joined', callsign: 'Alice2', recovery: null });

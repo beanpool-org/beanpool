@@ -13,8 +13,11 @@
 //
 // A typed handle is still only a *claim*. Nothing here proves the member owns it — Instagram
 // serves no readable bio to a plain HTTP client, so the bio-code trick is not available, and OAuth
-// (`oauth_verified_at`) is the only real proof. Claims are visible on the member's public profile
-// and reportable, which is how the rest of this network's trust model works.
+// (`oauth_verified_at`) is the only real proof. It is set only by `badgeChannelFromIdentity`, after
+// the node itself asked the platform who a token belongs to and the platform named exactly this
+// channel's account (engine/platform-identity.ts, #1830); the phone's word is never taken for it.
+// Claims are visible on the member's public profile and reportable, which is how the rest of this
+// network's trust model works.
 //
 // ## 2. Deleting a link must not preserve the link
 //
@@ -25,6 +28,7 @@
 import { db } from '../db/db.js';
 import crypto from 'node:crypto';
 import { scrubPulseItems } from './pulse-resolver.js';
+import { channelIdentityFromRow, matchIdentity, type ChannelIdentity, type PlatformIdentity } from './platform-identity.js';
 
 export type ChannelPlatform = 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'soundcloud' | 'website' | 'rss';
 export type ChannelCategory = 'community' | 'food' | 'craft' | 'business' | 'repair' | 'art' | 'learn' | 'other';
@@ -115,6 +119,10 @@ export interface CreatorChannel {
     isPrimaryVideo: boolean;
     supportsAutolist: boolean;
     oauthVerifiedAt: string | null;
+    /** The platform's stable id for the verified account. Owner-only; never on the public projection. */
+    platformAccountId: string | null;
+    /** The handle the platform named at the last verification. */
+    verifiedHandle: string | null;
     postCountSeen: number | null;
     autopublish: boolean;
     syndicateToNode: boolean;
@@ -156,6 +164,8 @@ function rowToChannel(row: any): CreatorChannel {
         isPrimaryVideo: row.is_primary_video === 1,
         supportsAutolist: row.supports_autolist === 1,
         oauthVerifiedAt: row.oauth_verified_at || null,
+        platformAccountId: row.platform_account_id ?? null,
+        verifiedHandle: row.verified_handle ?? null,
         postCountSeen: row.post_count_seen ?? null,
         autopublish: row.autopublish === 1,
         syndicateToNode: row.syndicate_to_node === 1,
@@ -615,7 +625,8 @@ export function scrubChannelRows(criteria: { ownerPubkey: string; id?: string },
             SET deleted_at = ?, url = NULL, handle = NULL, is_primary_video = 0,
                 platform = 'deleted', category = 'other', supports_autolist = 0,
                 autopublish = 0, syndicate_to_node = 0, post_count_seen = NULL,
-                oauth_verified_at = NULL, last_error = NULL, fail_count = 0, is_stale = 0,
+                oauth_verified_at = NULL, platform_account_id = NULL, verified_handle = NULL,
+                last_error = NULL, fail_count = 0, is_stale = 0,
                 updated_at = ?
           WHERE ${conditions.join(' AND ')} AND deleted_at IS NULL`
     ).run(at, at, ...params).changes;
@@ -899,67 +910,102 @@ export function deleteChannel(ownerPubkey: string, id: string): boolean {
     return changed > 0;
 }
 
+/** A channel a member is connecting: theirs, live, of the platform they signed in to, and verifiable. */
+export interface ConnectTarget {
+    row: any;
+    claimed: ChannelIdentity;
+}
+
 /**
- * Attach OAuth verification to a channel (The Pulse, Phase 5).
+ * The checks that run BEFORE any code is exchanged, so a refused connect never puts a token in hand.
  *
- * Setting `oauth_verified_at` is a claim of cryptographic/platform proof that the authenticated
- * member actually owns the connected platform account.
- *
- * Rules:
- * 1. Takes owner from `ctx.state.actor` (ownerPubkey). Never trusts a body claim.
- * 2. Confirms the channel belongs to this owner and is not deleted.
- * 3. Confirms the connected platform matches the channel platform.
- * 4. Confirms the platform username matches the channel's handle or URL (prevent attaching own OAuth to someone else's channel).
- * 5. Sets `oauth_verified_at = now`, `supports_autolist = 1`, and updates `updated_at = now`.
+ * Owner is `ctx.state.actor`; the channel must be theirs (403), live (404), of this platform (400),
+ * and carry an identity a platform can confirm (400 NOT_VERIFIABLE).
  */
-export function verifyChannelOauth(
-    ownerPubkey: string,
-    id: string,
-    proof: { platform: string; platformUsername: string }
-): CreatorChannel {
+export function connectTarget(ownerPubkey: string, id: string, platform: string): ConnectTarget {
     const row = db.prepare(
         `SELECT * FROM creator_channels WHERE id = ? AND deleted_at IS NULL`
     ).get(id) as any;
     if (!row) throw new ChannelError('NOT_FOUND', 'Channel not found.');
     if (row.owner_pubkey !== ownerPubkey) throw new ChannelError('NOT_YOURS', 'That is not your channel.');
-
-    if (row.platform !== proof.platform) {
-        throw new ChannelError('BAD_PLATFORM', `Channel platform is ${row.platform}, but verification is for ${proof.platform}.`);
+    if (row.platform !== platform) {
+        throw new ChannelError('BAD_PLATFORM', `Channel platform is ${row.platform}, but verification is for ${platform}.`);
     }
-
-    const cleanUsername = (proof.platformUsername || '').replace(/^@/, '').toLowerCase().trim();
-    if (!cleanUsername) {
-        throw new ChannelError('EMPTY', 'Platform account username is required.');
+    const claimed = channelIdentityFromRow(row.platform, row.url, row.handle);
+    if (!claimed) {
+        throw new ChannelError('NOT_VERIFIABLE', 'Add this channel as @handle to verify it.');
     }
+    return { row, claimed };
+}
 
-    const cleanHandle = (row.handle || '').replace(/^@/, '').toLowerCase().trim();
-    // normaliseChannelInput already clears .hash and strips tracking params on the way in, so this is defence for URLs that predate normalisation or arrive by another path
-    const urlWithoutQueryOrHash = (row.url || '').split(/[?#]/)[0];
-    const cleanUrl = urlWithoutQueryOrHash.toLowerCase();
+/** Whether a refresh may skip the identity call: the row is badged by a connect that stored its stable id. */
+export function connectTargetIsProven(target: ConnectTarget): boolean {
+    return Boolean(target.row.oauth_verified_at && target.row.platform_account_id);
+}
 
-    // Check handle match or URL match
-    const matchesHandle = cleanHandle === cleanUsername;
-    const matchesUrl = cleanUrl.includes(`/@${cleanUsername}`) ||
-        cleanUrl.includes(`/${cleanUsername}/`) ||
-        cleanUrl.endsWith(`/${cleanUsername}`);
-
-    if (!matchesHandle && !matchesUrl) {
+/**
+ * Set the badge from what the PLATFORM said (The Pulse, #1830).
+ *
+ * `found` comes from `readPlatformIdentity`, called by the node with the token in hand; nothing
+ * here reads a body field. Matches exactly (`matchIdentity`), or by the stable id an earlier
+ * connect stored when the member has since renamed the account. Sets `oauth_verified_at`,
+ * `supports_autolist = 1`, `platform_account_id` and `verified_handle`. The stored url and handle
+ * are never rewritten: the URL is the channel's identity.
+ */
+export function badgeChannelFromIdentity(ownerPubkey: string, target: ConnectTarget, found: PlatformIdentity): CreatorChannel {
+    const { row, claimed } = target;
+    if (!matchIdentity(claimed, found, row.platform_account_id)) {
         throw new ChannelError(
             'ACCOUNT_MISMATCH',
-            `The connected ${PLATFORM_DISPLAY[row.platform as ChannelPlatform] || proof.platform} account (@${cleanUsername}) does not match this channel.`
+            `The ${PLATFORM_DISPLAY[row.platform as ChannelPlatform]} account you signed in to is not the one on this channel. Sign in to that account and connect again.`
         );
     }
 
     const now = new Date().toISOString();
-    db.prepare(
+    // `platform = ?` and `deleted_at IS NULL` again: the platform call ran between the checks and
+    // this write, and a channel deleted or re-scrubbed meanwhile must not come back with a badge.
+    const changed = db.prepare(
         `UPDATE creator_channels
             SET oauth_verified_at = ?,
                 supports_autolist = 1,
+                platform_account_id = ?,
+                verified_handle = ?,
                 updated_at = ?
-          WHERE id = ? AND owner_pubkey = ?`
-    ).run(now, now, id, ownerPubkey);
+          WHERE id = ? AND owner_pubkey = ? AND platform = ? AND deleted_at IS NULL`
+    ).run(now, found.accountId, found.handle, now, row.id, ownerPubkey, row.platform).changes;
+    if (changed === 0) throw new ChannelError('NOT_FOUND', 'Channel not found.');
 
-    return getChannel(id)!;
+    return getChannel(row.id)!;
+}
+
+/**
+ * Clears every badge no platform was asked about (#1830, Marty 13 Oct: clear and re-verify).
+ *
+ * Before #1830 `verify-oauth` set the badge on a username the phone supplied, so a badge with no
+ * `platform_account_id` proves nothing. Each such row goes back to the platform's native autolist
+ * support; ingested items stay (the disconnect precedent). Runs at every boot and is a no-op once
+ * done: a badge set since carries its stable id. Returns the number of rows cleared.
+ */
+export function clearUnprovenOauthBadges(): number {
+    const rows = db.prepare(
+        `SELECT id, platform, url FROM creator_channels
+          WHERE oauth_verified_at IS NOT NULL AND platform_account_id IS NULL`
+    ).all() as any[];
+    if (rows.length === 0) return 0;
+    const now = new Date().toISOString();
+    const clear = db.prepare(
+        `UPDATE creator_channels
+            SET oauth_verified_at = NULL, verified_handle = NULL, supports_autolist = ?, updated_at = ?
+          WHERE id = ? AND oauth_verified_at IS NOT NULL AND platform_account_id IS NULL`
+    );
+    let cleared = 0;
+    db.transaction(() => {
+        for (const r of rows) {
+            const native = r.platform !== 'deleted' && canAutolist(r.platform as ChannelPlatform, r.url || '') ? 1 : 0;
+            cleared += clear.run(native, now, r.id).changes;
+        }
+    })();
+    return cleared;
 }
 
 /**
@@ -981,6 +1027,8 @@ export function disconnectChannelOauth(ownerPubkey: string, id: string): Creator
     db.prepare(
         `UPDATE creator_channels
             SET oauth_verified_at = NULL,
+                platform_account_id = NULL,
+                verified_handle = NULL,
                 supports_autolist = ?,
                 updated_at = ?
           WHERE id = ? AND owner_pubkey = ?`

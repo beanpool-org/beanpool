@@ -9,10 +9,13 @@
 
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { loadIdentity, type BeanPoolIdentity } from './lib/identity';
+import { beginAccountEpoch } from './lib/account-epoch';
 import { openWithNodeName } from './lib/member-name';
 import { connectToAnchor, onSyncActivity } from './lib/sync';
 import { registerLivePostTie, openDealTie } from './lib/live-posts';
-import { getConversations, getMyMarketplaceTransactions, getCommunityHealth, type CommunityInfo, type MarketplaceTransaction } from './lib/api';
+import { getConversations, getMyMarketplaceTransactions, getCommunityHealth, getNodeApiUrl, type CommunityInfo, type MarketplaceTransaction, type Group } from './lib/api';
+import { GroupDetailModal } from './components/GroupDetailModal';
+import { GroupVotesSheet, landOnGroup, routeLanding } from './components/GroupVotesSheet';
 import { withJitter } from './lib/jitter';
 import { useTheme } from './lib/useTheme';
 import { SyncStatus } from './components/SyncStatus';
@@ -22,15 +25,24 @@ import { communityInfoOnce, joinInFlight } from './lib/visitor-lobby-gate';
 import { visitorsSeeListings, takeKeptLinkedPost } from './lib/visitor-lobby';
 import { MarketplacePage } from './pages/MarketplacePage';
 import { LedgerPage } from './pages/LedgerPage';
+import { LedgerPreview } from './components/ShowcasePreviews';
+import { useFeatureMode } from './lib/features';
 import { SettingsPage } from './pages/SettingsPage';
 import { lazy, Suspense } from 'react';
-import { normaliseVersion, isVersionOlder } from './lib/app-version';
+import { webAppBehindServer } from './lib/app-version';
 import { retryPendingReports, startBlocklist } from './lib/blocklist';
 const MapPage = lazy(() => import('./pages/MapPage').then(m => ({ default: m.MapPage })));
 import { PeoplePage } from './pages/PeoplePage';
 import { MessagesPage } from './pages/MessagesPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
+import { HomePage } from './pages/HomePage';
+import { HeaderControls, HeaderTitle, HelpIcon, useDotOnlyChip } from './components/HeaderControls';
+import { helpSheetFor, tourStepForTab, tourSteps, webHelpKey } from '@beanpool/core';
+import { TourBar } from './components/TourBar';
+import { HelpDialog } from './components/HelpDialog';
+import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, openHelp, useTour } from './lib/tour-store';
+import { getBundledGuide } from './lib/guide';
 import { InstallPrompt } from './components/InstallPrompt';
 import { PublicProfilePage } from './pages/PublicProfilePage';
 import { TreasuryDetailPage } from './pages/TreasuryDetailPage';
@@ -38,64 +50,24 @@ import { ProfileSetup } from './components/ProfileSetup';
 import { RecoveryAlertBanner } from './components/RecoveryAlertBanner';
 import { OwnerWordsPrompt } from './components/OwnerWordsPrompt';
 import { NewAccountCard } from './components/NewAccountCard';
+import { OneWayBackCard } from './components/OneWayBack';
+import { captureAuthReturn, consumeCapturedAuthReturn } from './lib/web-join';
+import { clearPendingLink, finishLink, isLinkReturn, type LinkResult } from './lib/link-signin';
 import { ModerationPauseCard } from './components/ModerationPauseCard';
 import { SystemAlerts, type ShownAlert } from './components/SystemAlerts';
 import { FormerAddressBanner } from './components/FormerAddressBanner';
 import { takeProfileFragment } from './lib/profile-link';
 import { takePostParam } from './lib/event-extras';
 
-function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenProfile }: { showSettings: boolean, setShowSettings: (v: boolean) => void, identityPubkey?: string, onOpenProfile: (pk: string) => void }) {
-    return (
-        <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.4rem',
-            padding: '0.3rem 0.6rem',
-            borderRadius: '9999px',
-            background: 'var(--bg-card)',
-            border: '1px solid var(--border-secondary)',
-            height: '26px', // Geometric balance with SyncStatus
-            width: '72px',
-            justifyContent: 'center',
-        }}>
-            <button
-                onClick={() => identityPubkey && onOpenProfile(identityPubkey)}
-                aria-label="My profile"
-                title="My profile"
-                className="text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-nature-200 transition-colors flex items-center justify-center p-0"
-            >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M17.982 18.725A7.488 7.488 0 0 0 12 15.75a7.488 7.488 0 0 0-5.982 2.975m11.963 0a9 9 0 1 0-11.963 0m11.963 0A8.966 8.966 0 0 1 12 21a8.966 8.966 0 0 1-5.982-2.275M15 9.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                </svg>
-            </button>
-
-            <div className="w-[1px] h-[12px] bg-nature-200 dark:bg-nature-700 mx-[1px]" />
-
-            <button
-                onClick={() => setShowSettings(!showSettings)}
-                aria-label="Settings"
-                aria-pressed={showSettings}
-                title="Settings"
-                className={`flex items-center justify-center transition-colors p-0 ${
-                    showSettings 
-                        ? 'text-accent dark:text-accent' 
-                        : 'text-nature-600 dark:text-nature-400 hover:text-nature-900 dark:hover:text-nature-200'
-                }`}
-            >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
-                </svg>
-            </button>
-        </div>
-    );
-}
-
-type Tab = 'map' | 'marketplace' | 'pulse' | 'messages' | 'people' | 'ledger' | 'projects';
+type Tab = 'home' | 'map' | 'marketplace' | 'pulse' | 'messages' | 'people' | 'ledger' | 'projects';
 
 // Bottom nav sizing for a 320px phone at 1.3x text (docs: the audience runs old, small Androids).
 // Each tab's share of the row follows its label length, with a floor for the emoji above it.
+// Measured (e2e/home-check.mjs): "Home" in extrabold, its H and m wide, is cut by a pixel on four shares at 320px; it
+// takes the fifth the Pulse had before the Pulse became a card on Home.
+const WIDER_THAN_ITS_LENGTH: Record<string, number> = { Home: 5 };
 export function navTabWeight(label: string): number {
-    return Math.max(4, label.length);
+    return WIDER_THAN_ITS_LENGTH[label] ?? Math.max(4, label.length);
 }
 // Measured in headless Chrome at 320px: "Commons" in extrabold needs ~4.9px of row per px of
 // font and gets ~54px, so 3.3vw (10.6px there) keeps it whole; 0.6rem caps it on wider screens.
@@ -135,15 +107,61 @@ export function App() {
             });
         return () => { cancelled = true; };
     }, [loading, identity, visitorView.kind]);
-    const [activeTab, setActiveTab] = useState<Tab>('marketplace');
+    // Members land on Home (DESIGN-home-dashboard-fable.md §8): the Market is one tap away, and every link into it still opens it.
+    const [activeTab, setActiveTab] = useState<Tab>('home');
+    // Beans off here and the node shows previews (DESIGN-global-showcase-fable.md §4): the Ledger is Example Valley's.
+    const beansMode = useFeatureMode('beans');
     const [peopleSubView, setPeopleSubView] = useState<'friends' | 'community' | 'invites'>('friends');
     const [showSettings, setShowSettings] = useState(false);
-    const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile'>('menu');
+    const [settingsInitialMode, setSettingsInitialMode] = useState<'menu' | 'profile' | 'seed' | 'guide'>('menu');
+    // The guide page Settings opens at (Home's Tips card, Read more); null: the guide's front page.
+    const [settingsGuidePage, setSettingsGuidePage] = useState<string | null>(null);
+    // A sign-in added to an account made with 12 words (lib/link-signin.ts): what came of it, said in Settings.
+    const [linkResult, setLinkResult] = useState<LinkResult | null>(null);
     // "Check now" on the owners' 12-words prompt opens Settings with that card open; closing Settings resets it.
     const [ownerWordsOpen, setOwnerWordsOpen] = useState(false);
     useEffect(() => { if (!showSettings) setOwnerWordsOpen(false); }, [showSettings]);
+    // Where Settings opens is for that one open ("See my 12 words" → the words, Edit profile → the profile): closing
+    // Settings, by any way, sets it back, so the next open from the header is the menu, never the 12 words on screen.
+    useEffect(() => { if (!showSettings) { setSettingsInitialMode('menu'); setSettingsGuidePage(null); } }, [showSettings]);
+
+    // ── The tour (DESIGN-getting-started-fable.md §2) and the "?" (§4) ──
+    // Home starts the tour and owns what it writes (lib/tour-store.ts); the bar is drawn here, over the real tabs.
+    const { run: tour, home: tourHomeNow } = useTour();
+    const tourRunning = !!tour && !!identity && tour.publicKey === identity.publicKey;
+    const steps = tour ? tourSteps('web', tour.node) : [];
+    const tourIndex = tour ? Math.min(tour.step, steps.length - 1) : 0;
+    const tourTab = tourRunning ? steps[tourIndex]?.tab ?? null : null;
+    // Each step shows its own tab (Settings and an open profile close for it).
+    useEffect(() => {
+        if (!tourTab) return;
+        setShowSettings(false);
+        setOpenProfilePubkey(null);
+        setActiveTab(tourTab as Tab);
+    }, [tourTab, tourIndex]);
+    // A tab the member opens during the tour moves the tour to that tab's step: it follows, never scolds.
+    useEffect(() => {
+        if (!tourRunning || activeTab === tourTab) return;
+        const at = tourStepForTab(steps, activeTab);
+        if (at >= 0) moveTour(at);
+    }, [activeTab]);
+    const finishTour = (kind: 'done' | 'skipped') => {
+        endTour(kind);
+        setShowSettings(false);
+        setActiveTab('home');
+    };
+    const [helpOpen, setHelpOpen] = useState(false);
+    useEffect(() => {
+        const open = () => setHelpOpen(true);
+        window.addEventListener(OPEN_HELP_EVENT, open);
+        return () => window.removeEventListener(OPEN_HELP_EVENT, open);
+    }, []);
+    const helpWords = helpSheetFor(getBundledGuide(), webHelpKey({ tab: activeTab, settings: showSettings }));
     const [openConversationId, setOpenConversationId] = useState<string | null>(null);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
+    // A saved search's See more on Home: the words the Market's search opens with.
+    const [openMarketSearch, setOpenMarketSearch] = useState<string | null>(null);
+    const clearMarketSearch = useCallback(() => setOpenMarketSearch(null), []);
     const [openNewPost, setOpenNewPost] = useState(false);
     const [openNewPostGroupId, setOpenNewPostGroupId] = useState<string | undefined>(undefined);
     // An event's "Show on map" (docs/events-on-the-map.md §3): the map centres on it.
@@ -158,6 +176,10 @@ export function App() {
     const clearEditEventPost = useCallback(() => setEditEventPostId(null), []);
     const [openProfilePubkey, setOpenProfilePubkey] = useState<string | null>(null);
     const [openTreasuryPubkey, setOpenTreasuryPubkey] = useState<string | null>(null);
+    // A chat group's info, opened over whatever is on screen: Home's vote line lands here (DESIGN-group-decisions S3).
+    const [openGroup, setOpenGroup] = useState<Group | null>(null);
+    // A group whose own read is refused, but whose votes still hold the reader (removed mid-vote from an invite-only group).
+    const [openGroupVotes, setOpenGroupVotes] = useState<{ groupId: string; canVote: boolean } | null>(null);
     const isBottomNavVisible = !openProfilePubkey && !openTreasuryPubkey;
 
     useEffect(() => {
@@ -171,7 +193,7 @@ export function App() {
                 document.documentElement.setAttribute('data-bottom-nav', 'hidden');
                 document.documentElement.classList.add('bottom-nav-hidden');
                 document.documentElement.style.setProperty('--bottom-nav-height', '0px');
-                document.documentElement.style.setProperty('--bottom-nav-offset', 'env(safe-area-inset-bottom, 0px)');
+                document.documentElement.style.setProperty('--bottom-nav-offset', 'calc(env(safe-area-inset-bottom, 0px) + var(--tour-bar-height, 0px))');
             }
         }
         return () => {
@@ -218,7 +240,10 @@ export function App() {
     const [communityHealth, setCommunityHealth] = useState<NodeHealthState | null>(null);
     // The node's own version, once health has answered; the baked-in bundle version until then.
     const displayVersion = communityHealth?.version?.trim() || __APP_VERSION__;
-    const isVersionOutdated = !!(communityHealth?.minAppVersion && isVersionOlder(__APP_VERSION__, communityHealth.minAppVersion));
+    // A page left open across this server's upgrade: a reload loads the new one (lib/app-version.ts webAppBehindServer). Not
+    // the phone app's floor, which no reload could meet: the web app is this server's own copy, and has no block.
+    const serverVersionAhead = webAppBehindServer(__APP_VERSION__, communityHealth,
+        !!getNodeApiUrl() && getNodeApiUrl() !== (typeof window !== 'undefined' ? window.location.origin : ''));
 
     const toggleCommunityStatus = () => {
         if (showCommunityStatus) {
@@ -272,6 +297,40 @@ export function App() {
         }
         if (tab === 'enterprise' || tab === 'treasury') {
             if (contextId) setOpenTreasuryPubkey(contextId);
+            return;
+        }
+        // A group's vote: the group's info, where its Decisions block is. Read first, so the sheet opens whole; a group
+        // that can't be read now opens just its votes when they still hold the reader (#1784 review B1), else Commons.
+        if (tab === 'group') {
+            if (contextId) {
+                landOnGroup(contextId).then(l => routeLanding(l, {
+                    group: setOpenGroup, votes: setOpenGroupVotes, commons: () => setActiveTab('projects'),
+                }));
+            }
+            return;
+        }
+        // From Home's cards: People's community list or its invites, and Settings at the profile.
+        if (tab === 'people-community' || tab === 'people-invites') {
+            setPeopleSubView(tab === 'people-invites' ? 'invites' : 'community');
+            setActiveTab('people');
+            return;
+        }
+        if (tab === 'settings-profile') {
+            setSettingsInitialMode('profile');
+            setShowSettings(true);
+            return;
+        }
+        // A saved search's See more: the Market with the words in its search.
+        if (tab === 'marketplace-search') {
+            setActiveTab('marketplace');
+            setOpenMarketSearch(contextId ?? '');
+            return;
+        }
+        // The Tips card's Read more: the members' guide in Settings, open at that page (Back walks to its front page).
+        if (tab === 'guide') {
+            setSettingsGuidePage(contextId ?? null);
+            setSettingsInitialMode('guide');
+            setShowSettings(true);
             return;
         }
         setActiveTab(tab as Tab);
@@ -333,6 +392,31 @@ export function App() {
             window.removeEventListener('online', handleOnline);
         };
     }, []);
+
+    /*
+     * A member back from a provider (two-doors design §2.5): a sign-in this browser left to add to an account made with
+     * 12 words. The answer is read and taken out of the address bar at once (captureAuthReturn), matched to the link this
+     * browser started for this account, and finished; Settings opens with the result. A return nobody here started for
+     * this account is dropped, and so is the link record: nothing else on a member's page takes a sign-in.
+     */
+    useEffect(() => {
+        if (!identity) return;
+        const ret = captureAuthReturn();
+        if (!ret) return;
+        consumeCapturedAuthReturn();
+        if (!isLinkReturn(ret, identity)) {
+            clearPendingLink();
+            return;
+        }
+        let cancelled = false;
+        finishLink(identity, ret).then((result) => {
+            if (cancelled) return;
+            setLinkResult(result);
+            setSettingsInitialMode('menu');
+            setShowSettings(true);
+        });
+        return () => { cancelled = true; };
+    }, [identity]);
 
     // The account's block list, which the community keeps for it (lib/blocklist): read from the node now, again when the
     // node rings, and never kept in this browser. A list an older build kept here moves up to this account, once.
@@ -502,6 +586,22 @@ export function App() {
         };
     }, [identity]);
 
+    // Home first; the Pulse is a card on Home with its page one tap away, so Home takes its slot (design §8, §13 Q1).
+    const TABS: { id: Tab; label: string; emoji: string }[] = [
+        { id: 'home', label: 'Home', emoji: '🏠' },
+        { id: 'marketplace', label: 'Market', emoji: '🤝' },
+        { id: 'map', label: 'Map', emoji: '🗺️' },
+        { id: 'projects', label: 'Commons', emoji: '🌱' },
+        { id: 'messages', label: 'Chat', emoji: '💬' },
+        { id: 'people', label: 'People', emoji: '👥' },
+        { id: 'ledger', label: 'Ledger', emoji: '📊' },
+    ];
+
+    // The mobile header's title (none on the map, which shows the community's name), and the sync chip as its dot alone
+    // where the title wouldn't fit beside the chip's words (a hook, so above the returns before the app).
+    const headerTitle = activeTab !== 'map' || showSettings ? ((activeTab === 'pulse' ? 'The Pulse' : TABS.find(t => t.id === activeTab)?.label) ?? '') : null;
+    const [headerRef, chipDotOnly] = useDotOnlyChip(headerTitle);
+
     if (loading || (!identity && visitorView.kind === 'checking')) {
         return (
             <div style={{
@@ -519,27 +619,58 @@ export function App() {
 
     // First-run gate: the global lobby for a visitor with no key, where the node shows visitors its listings (G9b).
     if (!identity) {
+        // Signed in here, with no reload: the account is this page's own from now (lib/account-epoch.ts), whatever
+        // sign-out in another tab this page heard while it held no account.
+        const signedInHere = (signedIn: BeanPoolIdentity) => {
+            beginAccountEpoch();
+            setIdentity(signedIn);
+        };
         if (visitorView.kind === 'lobby') {
-            return <GuestLobby info={visitorView.info} onComplete={setIdentity} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} />;
+            return <GuestLobby info={visitorView.info} onComplete={signedInHere} linkedPostId={linkedPost} onLinkedPostTaken={clearLinkedPost} />;
         }
         // The node's answer, read once above, so the welcome page doesn't ask again; with none it asks, and says so.
         return (
             <>
                 <FormerAddressBanner />
-                <WelcomePage onComplete={setIdentity} initialInfo={visitorView.kind === 'welcome' ? visitorView.info ?? undefined : undefined} />
+                <WelcomePage onComplete={signedInHere} initialInfo={visitorView.kind === 'welcome' ? visitorView.info ?? undefined : undefined} />
             </>
         );
     }
 
-    const TABS: { id: Tab; label: string; emoji: string }[] = [
-        { id: 'marketplace', label: 'Market', emoji: '🤝' },
-        { id: 'pulse', label: 'Pulse', emoji: '📡' },
-        { id: 'map', label: 'Map', emoji: '🗺️' },
-        { id: 'projects', label: 'Commons', emoji: '🌱' },
-        { id: 'messages', label: 'Chat', emoji: '💬' },
-        { id: 'people', label: 'People', emoji: '👥' },
-        { id: 'ledger', label: 'Ledger', emoji: '📊' },
-    ];
+    // The community's status, opened from the header's title (or, on the map, its name).
+    const communityStatus = showCommunityStatus && communityHealth && (
+        <div 
+            className="absolute top-full mt-2 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700 rounded-xl shadow-xl p-4 min-w-[220px] z-50 pointer-events-auto"
+            onClick={e => e.stopPropagation()}
+        >
+            <div className="flex items-center gap-2 mb-3">
+                <span className={`w-2.5 h-2.5 rounded-full ${communityHealth.online ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]' : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]'}`} />
+                <span className="font-bold text-sm text-nature-900 dark:text-white">
+                    {communityHealth.online ? 'Online' : 'Offline'}
+                </span>
+            </div>
+            <div className="space-y-1.5 text-xs text-nature-600 dark:text-nature-300">
+                <div className="flex justify-between">
+                    <span>Node:</span>
+                    <span className="font-mono font-semibold">{communityHealth.nodeName || communityHealth.callsign || 'Local'}</span>
+                </div>
+                <div className="flex justify-between">
+                    <span>Members:</span>
+                    <span className="font-mono font-semibold">{communityHealth.memberCount ?? communityHealth.tree?.totalMembers ?? 0}</span>
+                </div>
+                <div className="flex justify-between">
+                    <span>Active Posts:</span>
+                    <span className="font-mono font-semibold">{communityHealth.postCount ?? communityHealth.activity?.totalPosts ?? 0}</span>
+                </div>
+            </div>
+            <button
+                onClick={() => setShowCommunityStatus(false)}
+                className="mt-3 w-full py-1 text-xs font-semibold text-center text-nature-500 dark:text-nature-400 hover:text-nature-800 dark:hover:text-white transition-colors"
+            >
+                Close
+            </button>
+        </div>
+    );
 
     return (
         <div 
@@ -548,7 +679,7 @@ export function App() {
             style={{
                 ...(!isBottomNavVisible ? {
                     '--bottom-nav-height': '0px',
-                    '--bottom-nav-offset': 'env(safe-area-inset-bottom, 0px)',
+                    '--bottom-nav-offset': 'calc(env(safe-area-inset-bottom, 0px) + var(--tour-bar-height, 0px))',
                 } : {})
             } as React.CSSProperties}
         >
@@ -559,7 +690,7 @@ export function App() {
                     <div 
                         className="flex items-center gap-2 cursor-pointer"
                         onClick={() => {
-                            setActiveTab('marketplace');
+                            setActiveTab('home');
                             setShowSettings(false);
                             setOpenProfilePubkey(null);
                         }}
@@ -619,11 +750,20 @@ export function App() {
                     <div className="flex items-center justify-between px-2 py-1">
                         <SyncStatus isMember={!isGuest} />
                         <button
+                            onClick={openHelp}
+                            aria-label="Help for this screen"
+                            title="Help for this screen"
+                            data-testid="sidebar-help"
+                            className="ml-auto p-2 rounded-lg transition-colors cursor-pointer text-nature-600 dark:text-nature-300 hover:bg-nature-200/60 dark:hover:bg-nature-800/60"
+                        >
+                            <HelpIcon className="w-5 h-5" />
+                        </button>
+                        <button
                             onClick={() => setShowSettings(!showSettings)}
                             aria-label="Settings"
                             aria-pressed={showSettings}
                             className={`p-2 rounded-lg transition-colors cursor-pointer ${
-                                showSettings ? 'bg-nature-200 dark:bg-nature-800 text-nature-900 dark:text-white' : 'text-nature-600 dark:text-nature-400 hover:bg-nature-200/60 dark:hover:bg-nature-800/60'
+                                showSettings ? 'bg-nature-200 dark:bg-nature-800 text-nature-900 dark:text-white' : 'text-nature-600 dark:text-nature-300 hover:bg-nature-200/60 dark:hover:bg-nature-800/60'
                             }`}
                             title="Settings"
                         >
@@ -653,8 +793,8 @@ export function App() {
 
             {/* Main Content Viewport */}
             <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-                {/* Minimum Version Gate Banner (Non-dismissible) */}
-                {isVersionOutdated && (
+                {/* This page is older than the server it came from: Refresh loads the server's own (non-dismissible) */}
+                {serverVersionAhead && (
                     <div
                         role="alert"
                         aria-live="assertive"
@@ -663,9 +803,9 @@ export function App() {
                         <div className="flex items-center gap-2 flex-1 min-w-[200px]">
                             <span className="text-lg shrink-0" aria-hidden="true">⚠️</span>
                             <div className="leading-tight">
-                                <span className="font-bold">App update required: </span>
+                                <span className="font-bold">BeanPool has been updated: </span>
                                 <span className="text-amber-100 text-xs sm:text-sm">
-                                    Your app version ({__APP_VERSION__}) is too old for this community (minimum required: v{normaliseVersion(communityHealth?.minAppVersion)}). Please refresh or reinstall to update.
+                                    this page is version {__APP_VERSION__} and your community now runs {serverVersionAhead}. Refresh to load it.
                                 </span>
                             </div>
                         </div>
@@ -683,7 +823,7 @@ export function App() {
                 <FormerAddressBanner signedIn />
 
                 {/* Header with Premium Dynamic AI Banner (Mobile only) */}
-                <header className="relative shadow-md md:hidden" style={{
+                <header ref={headerRef} className="relative shadow-md md:hidden" style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',
@@ -700,20 +840,17 @@ export function App() {
                 }}>
                     <div className="absolute inset-0 bg-black/10 dark:bg-black/50 pointer-events-none" />
 
-                    <div className="relative z-10" style={{ marginTop: '12px' }}>
-                        <SyncStatus isMember={!isGuest} />
+                    <div className="relative z-10 shrink-0" style={{ marginTop: '12px' }}>
+                        <SyncStatus isMember={!isGuest} stacked dotOnly={chipDotOnly} />
                     </div>
 
-                    <div className="absolute left-1/2 -translate-x-1/2 flex justify-center items-center z-10">
-                        {activeTab !== 'map' || showSettings ? (
-                            <span 
-                                className="font-extrabold text-[1.4rem] tracking-tight text-rainbow drop-shadow-[0_2px_4px_rgba(0,0,0,0.9)] pointer-events-auto text-center cursor-pointer" 
-                                style={{ marginTop: '8px' }}
-                                onClick={toggleCommunityStatus}
-                            >
-                                {TABS.find(t => t.id === activeTab)?.label === 'Market' ? 'Marketplace' : TABS.find(t => t.id === activeTab)?.label === 'Pulse' ? 'The Pulse' : TABS.find(t => t.id === activeTab)?.label}
-                            </span>
-                        ) : (
+                    {headerTitle !== null ? (
+                        // The tab's own name, as the lobby's, in the room between the chip and the pill (never under either).
+                        <HeaderTitle title={headerTitle} onClick={toggleCommunityStatus}>
+                            {communityStatus}
+                        </HeaderTitle>
+                    ) : (
+                        <div className="absolute left-1/2 -translate-x-1/2 flex justify-center items-center z-10">
                             <div 
                                 className="relative flex items-center gap-1.5 pointer-events-auto cursor-pointer" 
                                 style={{ transform: 'translateX(-12px) translateY(-2px)' }}
@@ -726,42 +863,9 @@ export function App() {
                                     aria-label={`Version ${displayVersion}`}
                                 >v{displayVersion}</span>
                             </div>
-                        )}
-
-                        {showCommunityStatus && communityHealth && (
-                            <div 
-                                className="absolute top-full mt-2 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-700 rounded-xl shadow-xl p-4 min-w-[220px] z-50 pointer-events-auto"
-                                onClick={e => e.stopPropagation()}
-                            >
-                                <div className="flex items-center gap-2 mb-3">
-                                    <span className={`w-2.5 h-2.5 rounded-full ${communityHealth.online ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.6)]' : 'bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.6)]'}`} />
-                                    <span className="font-bold text-sm text-nature-900 dark:text-white">
-                                        {communityHealth.online ? 'Online' : 'Offline'}
-                                    </span>
-                                </div>
-                                <div className="space-y-1.5 text-xs text-nature-600 dark:text-nature-300">
-                                    <div className="flex justify-between">
-                                        <span>Node:</span>
-                                        <span className="font-mono font-semibold">{communityHealth.nodeName || communityHealth.callsign || 'Local'}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Members:</span>
-                                        <span className="font-mono font-semibold">{communityHealth.memberCount ?? communityHealth.tree?.totalMembers ?? 0}</span>
-                                    </div>
-                                    <div className="flex justify-between">
-                                        <span>Active Posts:</span>
-                                        <span className="font-mono font-semibold">{communityHealth.postCount ?? communityHealth.activity?.totalPosts ?? 0}</span>
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={() => setShowCommunityStatus(false)}
-                                    className="mt-3 w-full py-1 text-xs font-semibold text-center text-nature-500 dark:text-nature-400 hover:text-nature-800 dark:hover:text-white transition-colors"
-                                >
-                                    Close
-                                </button>
-                            </div>
-                        )}
-                    </div>
+                            {communityStatus}
+                        </div>
+                    )}
 
                     <HeaderControls
                         showSettings={showSettings}
@@ -790,10 +894,12 @@ export function App() {
                             <SettingsPage
                                 identity={identity}
                                 onIdentityUpdated={(updated) => { setIdentity(updated); setShowSettings(false); }}
-                                onBack={() => setShowSettings(false)}
+                                onBack={() => { setShowSettings(false); setLinkResult(null); }}
                                 themePreference={themePreference}
                                 onThemePreferenceChange={setThemePreference}
                                 initialMode={settingsInitialMode}
+                                initialGuidePage={settingsGuidePage}
+                                linkResult={linkResult}
                                 openOwnerWordsCheck={ownerWordsOpen}
                                 onReRunSetup={() => { setShowSettings(false); setShowProfileSetup(true); }}
                                 nodeVersion={communityHealth?.version?.trim() || undefined}
@@ -828,6 +934,15 @@ export function App() {
                                     {isGuest === false && !newAccountCardClosed && (
                                         <NewAccountCard onClose={closeNewAccountCard} />
                                     )}
+                                    {/* Joined with 12 words alone: one way back, said plainly, with a sign-in to add. On Home it is
+                                        the `safety` card, in its place among the cards (pages/HomePage.tsx). */}
+                                    {isGuest === false && activeTab !== 'home' && (
+                                        <OneWayBackCard
+                                            identity={identity}
+                                            placement="landing"
+                                            onSeeWords={() => { setSettingsInitialMode('seed'); setShowSettings(true); }}
+                                        />
+                                    )}
                                 </div>
                             )}
                             {activeTab === 'map' && (
@@ -850,12 +965,21 @@ export function App() {
                                     />
                                 </Suspense>
                             )}
+                            {activeTab === 'home' && (
+                                <HomePage
+                                    identity={identity}
+                                    onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
+                                    onSeeWords={() => { setSettingsInitialMode('seed'); setShowSettings(true); }}
+                                />
+                            )}
                             {activeTab === 'marketplace' && (
                                 <MarketplacePage
                                     identity={identity}
                                     marketClickCount={marketClickCount}
                                     openPostId={openMarketPostId}
                                     onPostOpened={() => setOpenMarketPostId(null)}
+                                    openSearch={openMarketSearch}
+                                    onSearchOpened={clearMarketSearch}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                     transactions={myTransactions}
@@ -871,7 +995,9 @@ export function App() {
                             )}
                             {activeTab === 'messages' && <MessagesPage identity={identity} openConversationId={openConversationId} onConversationOpened={() => setOpenConversationId(null)} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} />}
                             {activeTab === 'people' && <PeoplePage identity={identity} initialView={peopleSubView} onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)} onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)} />}
-                            {activeTab === 'ledger' && <LedgerPage identity={identity} onNavigate={navigateToTab} isMember={!isGuest} />}
+                            {activeTab === 'ledger' && (beansMode === 'preview'
+                                ? <LedgerPreview onNearYou={() => setActiveTab('home')} onGuide={(slug) => navigateToTab('guide', slug)} />
+                                : <LedgerPage identity={identity} onNavigate={navigateToTab} isMember={!isGuest} />)}
                             {activeTab === 'projects' && (
                                 <ProjectsPage
                                     identity={identity}
@@ -881,6 +1007,18 @@ export function App() {
                                 />
                             )}
                         </>
+                    )}
+
+                    {openGroup && (
+                        <GroupDetailModal
+                            group={openGroup}
+                            isOpen
+                            onClose={() => setOpenGroup(null)}
+                            myPubkey={identity?.publicKey}
+                        />
+                    )}
+                    {openGroupVotes && (
+                        <GroupVotesSheet groupId={openGroupVotes.groupId} canVote={openGroupVotes.canVote} myPubkey={identity?.publicKey ?? null} onClose={() => setOpenGroupVotes(null)} />
                     )}
 
                     {/* Treasury Detail Overlay */}
@@ -924,6 +1062,8 @@ export function App() {
                             onNavigateTab={(tab, subView) => {
                                 setOpenProfilePubkey(null);
                                 setOpenTreasuryPubkey(null);
+                                // The 🏘️ sheet's How it works: a guide page, as every other screen opens one.
+                                if (tab === 'guide') { navigateToTab('guide', subView); return; }
                                 if (tab === 'people' && subView) {
                                     setPeopleSubView(subView as any);
                                 }
@@ -1009,7 +1149,7 @@ export function App() {
                                             top: '-6px',
                                             right: '-10px',
                                             background: 'var(--danger)',
-                                            color: '#fff',
+                                            color: 'var(--on-danger, #fff)',
                                             fontSize: '0.6rem',
                                             fontWeight: 700,
                                             minWidth: '16px',
@@ -1032,7 +1172,7 @@ export function App() {
                                             top: '-6px',
                                             right: '-10px',
                                             background: 'var(--danger)',
-                                            color: '#fff',
+                                            color: 'var(--on-danger, #fff)',
                                             fontSize: '0.6rem',
                                             fontWeight: 700,
                                             minWidth: '16px',
@@ -1066,6 +1206,46 @@ export function App() {
 
             {/* The node's alerts: live, and the moderation notices kept while the web app was closed. */}
             <SystemAlerts memberPubkey={identity?.publicKey} isGuest={isGuest} onShown={onAlertShown} />
+
+            {/* The tour's bar over the real tabs, and the "?"'s dialog (DESIGN-getting-started-fable.md §2, §4). */}
+            {tourRunning && (
+                <TourBar
+                    steps={steps}
+                    index={tourIndex}
+                    home={activeTab === 'home' ? tourHomeNow : null}
+                    onNext={() => moveTour(tourIndex + 1)}
+                    onSkip={() => finishTour('skipped')}
+                    onDone={() => finishTour('done')}
+                />
+            )}
+            {helpOpen && (
+                <HelpDialog
+                    sheet={helpWords}
+                    tourOpen={tourRunning}
+                    canTour={!!identity && !isGuest}
+                    onClose={() => setHelpOpen(false)}
+                    onReadPage={() => {
+                        setHelpOpen(false);
+                        setSettingsGuidePage(helpWords.slug);
+                        setSettingsInitialMode('guide');
+                        setShowSettings(true);
+                    }}
+                    onSearch={() => {
+                        setHelpOpen(false);
+                        setSettingsGuidePage(null);
+                        setSettingsInitialMode('guide');
+                        setShowSettings(true);
+                    }}
+                    onTour={() => {
+                        setHelpOpen(false);
+                        if (!identity || tourRunning) return;
+                        // Take the tour again: Home opens it on the account (`open`) and puts its card back.
+                        setShowSettings(false);
+                        setActiveTab('home');
+                        askTourAgain(identity.publicKey);
+                    }}
+                />
+            )}
 
             {/* PWA Install Banner */}
             <InstallPrompt />

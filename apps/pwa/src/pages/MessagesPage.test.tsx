@@ -3,8 +3,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { MessagesPage } from './MessagesPage';
 import type { BeanPoolIdentity } from '../lib/identity';
-import { getConversationMessages, getEventChat, createConversationApi, sendMessageApi, type Conversation, type ApiMessage } from '../lib/api';
+import { getConversationMessages, getEventChat, createConversationApi, sendMessageApi, editMessageApi, type Conversation, type ApiMessage } from '../lib/api';
 import { blockUser, unblockUser, isUserBlocked } from '../lib/blocklist';
+import { sealDmLine, encodePlaintext } from '../lib/e2e-crypto';
+import { dmNotLockedLine } from '../lib/dm-lock';
+import { memoryIndexedDB } from '../lib/memory-indexeddb';
+import { resetGroupChatLockStoreForTest } from '../lib/group-chat-lock-store';
 
 // Polyfill scrollIntoView for jsdom
 if (typeof window !== 'undefined' && window.HTMLElement) {
@@ -38,12 +42,24 @@ vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
 }));
 
-vi.mock('../lib/e2e-crypto', () => ({
+vi.mock('../lib/e2e-crypto', async (importOriginal) => ({
+    // The thread's order is the real one: by the node's timestamps (core dmThreadInShownOrder).
+    dmThreadInShownOrder: (await importOriginal<typeof import('../lib/e2e-crypto')>()).dmThreadInShownOrder,
+    dmQuoteFrom: (await importOriginal<typeof import('../lib/e2e-crypto')>()).dmQuoteFrom,
+    dmQuoteLabel: (await importOriginal<typeof import('../lib/e2e-crypto')>()).dmQuoteLabel,
+    dmLineShownText: vi.fn((v: { text: string | null } | undefined) => v?.text ?? ''),
+    dmLineIsUnattributed: vi.fn(() => false),
+    dmReplyToOf: vi.fn(() => null),
     decodePlaintext: vi.fn((c: string) => c),
     encodePlaintext: vi.fn((text: string) => ({ ciphertext: text, nonce: '00000' })),
-    decryptDM: vi.fn((c: string) => c),
-    encryptDM: vi.fn((text: string) => ({ ciphertext: text, nonce: '00000' })),
+    sealDmLine: vi.fn((text: string) => ({ ciphertext: text, nonce: '00000' })),
+    openDmLine: vi.fn((p: { ciphertext: string }) => ({ text: p.ciphertext, format: 3, after: null, conversationId: '', moved: false })),
+    checkDmThread: vi.fn(() => new Map()),
+    dmAfterReference: vi.fn(() => null),
+    dmLineMarkText: vi.fn(() => null),
+    newDmMessageId: vi.fn(() => crypto.randomUUID()),
     isEncryptedNonce: vi.fn(() => false),
+    DM_LINE_NOT_VERIFIED_TEXT: "🔒 This message couldn't be verified, so it isn't shown.",
 }));
 
 vi.mock('../components/ReportModal', () => ({
@@ -85,6 +101,10 @@ vi.mock('../lib/api', () => ({
     getMessageAttachmentApi: vi.fn(),
     completeMarketplaceTransaction: vi.fn(),
     cancelMarketplaceTransaction: vi.fn(),
+    // A group's chat on a node from before locked chats (no `encryption`), unless a test says otherwise.
+    getGroupChat: vi.fn(async (groupId: string) => ({ conversation: mockConversationDetails[groupId], messages: mockMessagesByConv[groupId] || [], canPost: true })),
+    getGroupMembers: vi.fn(async () => []),
+    groupKeysNet: { get: vi.fn(async () => new Response('{}', { status: 404 })), post: vi.fn(async () => new Response('{}', { status: 404 })) },
 }));
 
 const mockIdentity: BeanPoolIdentity = {
@@ -93,6 +113,14 @@ const mockIdentity: BeanPoolIdentity = {
     callsign: 'Alice',
     createdAt: '2026-09-14T00:00:00Z',
 };
+
+// A browser's own storage: the record of group chats held locked here reads, and holds nothing (lib/group-hold.ts).
+// Without it the page fails closed (nothing new opens or leaves on a guess), as it must when that record can't be read.
+beforeEach(() => {
+    vi.stubGlobal('indexedDB', memoryIndexedDB());
+    resetGroupChatLockStoreForTest();
+});
+afterEach(() => { vi.unstubAllGlobals(); });
 
 describe('MessagesPage Stage 5: Chat Over Push & Backstop Polling', () => {
     beforeEach(() => {
@@ -651,12 +679,17 @@ describe('MessagesPage: paste or drop a picture into a chat', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
         await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(1));
+        // The picture and its caption are sealed to the same new message id, each as its own part, and the id goes too.
+        const [picture, caption] = vi.mocked(sealDmLine).mock.calls.map(c => c[2]);
+        expect(picture).toMatchObject({ senderPubHex: 'my-pubkey', part: 'attachment' });
+        expect(caption).toMatchObject({ senderPubHex: 'my-pubkey', part: 'body', messageId: picture.messageId });
         expect(sendMessageApi).toHaveBeenCalledWith(
             'conv-1', 'my-pubkey',
             'the back fence', '00000',        // the caption, encrypted into the message body
             'image',
             { data: 'data:image/jpeg;base64,resized', nonce: '00000', mime: 'image/jpeg' },
             undefined,
+            picture.messageId,
         );
 
         // Sent: the preview closes and the draft is cleared, as an ordinary send does.
@@ -786,6 +819,24 @@ describe('MessagesPage: paste or drop a picture into a chat', () => {
         expect(vi.mocked(sendMessageApi).mock.calls[0][2]).toBe('look at this');
     });
 
+    it("a DM whose other person's key isn't known yet: the picture isn't sent, the preview and caption stay, one line says why", async () => {
+        mockConversationDetails = { ...mockConversationDetails, 'conv-1': { ...mockConversations[0], participants: ['my-pubkey'] } };
+        mockConversations = [mockConversationDetails['conv-1'], mockConversations[1]];
+        const composer = await openDm();
+        fireEvent.change(composer, { target: { value: 'the back fence' } });
+        fireEvent.paste(composer, { clipboardData: imageClipboard(pictureFile()) });
+        await screen.findByTestId('chat-image-preview');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+        expect((await screen.findByTestId('chat-refusal')).querySelector('span')!.textContent).toBe(dmNotLockedLine('Bob'));
+        expect(sendMessageApi).not.toHaveBeenCalled();
+        expect(encodePlaintext).not.toHaveBeenCalled();
+        expect(screen.getByTestId('chat-image-preview')).toBeInTheDocument();
+        expect((composer as HTMLTextAreaElement).value).toBe('the back fence');
+        expect(window.alert).not.toHaveBeenCalled();
+    });
+
     it('refuses a picture past the size limit, in plain words, without opening the preview', async () => {
         const composer = await openDm();
         const huge = pictureFile('raw.tiff', 'image/tiff', 21 * 1024 * 1024);
@@ -881,7 +932,8 @@ describe("MessagesPage: the node's refusal in the composer (G11-e, design G11 §
         vi.mocked(sendMessageApi).mockRejectedValueOnce(new Error('Network down'));
         fireEvent.change(composer, { target: { value: 'second' } });
         await act(async () => { fireEvent.keyDown(composer, { key: 'Enter' }); });
-        expect(window.alert).toHaveBeenCalledWith('Network down');
+        // A send asks the record of locked group chats first (lib/group-hold.ts): the failure comes a few ticks later.
+        await waitFor(() => expect(window.alert).toHaveBeenCalledWith('Network down'));
         expect(screen.queryByTestId('chat-refusal')).toBeNull();
     });
 
@@ -907,6 +959,147 @@ describe("MessagesPage: the node's refusal in the composer (G11-e, design G11 §
         await act(async () => {});
         expect(screen.queryByTestId('chat-refusal')).toBeNull();
         expect(window.alert).not.toHaveBeenCalled();
+    });
+});
+
+describe('MessagesPage: a DM that cannot be locked is not sent (PR #1283 review)', () => {
+    const LOCKED_NONCE = 'x25519-xc20p-v2:bG9ja2VkLWZvci10ZXN0cy1vbmx5LTI0Yg==';
+    const BOB_LINE = dmNotLockedLine('Bob');
+    const dmWith = (participants: string[]): Conversation => ({
+        id: 'conv-1', type: 'dm', name: null, participants, createdBy: 'my-pubkey',
+        peerCallsign: 'Bob', unreadCount: 0, createdAt: '2026-09-14T00:00:00Z',
+    } as Conversation);
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        window.alert = vi.fn();
+        // Bob's key isn't known yet: the conversation, here and on the node, holds only me.
+        mockConversations = [dmWith(['my-pubkey'])];
+        mockConversationDetails = { 'conv-1': mockConversations[0] };
+        mockMessagesByConv = { 'conv-1': [] };
+        vi.mocked(getConversationMessages).mockImplementation(async (convId: string) => ({
+            conversation: mockConversationDetails[convId],
+            messages: mockMessagesByConv[convId] || [],
+        }));
+        vi.mocked(sealDmLine).mockImplementation((text: string) => ({ ciphertext: `locked:${text}`, nonce: LOCKED_NONCE }));
+    });
+
+    afterEach(() => {
+        vi.mocked(sealDmLine).mockImplementation((text: string) => ({ ciphertext: text, nonce: '00000' }));
+    });
+
+    async function openDm() {
+        render(<MessagesPage identity={mockIdentity} openConversationId="conv-1" />);
+        const composer = await screen.findByPlaceholderText('Message...');
+        await act(async () => {});
+        return composer as HTMLTextAreaElement;
+    }
+    async function pressEnter(composer: HTMLElement) {
+        await act(async () => { fireEvent.keyDown(composer, { key: 'Enter' }); });
+    }
+    const said = () => screen.queryByTestId('chat-refusal')?.querySelector('span')?.textContent ?? null;
+
+    it("no key for Bob yet: nothing is sent, the words stay in the box, and one plain line says why", async () => {
+        const composer = await openDm();
+        fireEvent.change(composer, { target: { value: 'meet at the gate at 6' } });
+        const fetchesBefore = vi.mocked(getConversationMessages).mock.calls.length;
+        await pressEnter(composer);
+
+        await waitFor(() => expect(said()).toBe(BOB_LINE));
+        expect(sendMessageApi).not.toHaveBeenCalled();
+        expect(encodePlaintext).not.toHaveBeenCalled();
+        expect(composer.value).toBe('meet at the gate at 6');
+        expect(window.alert).not.toHaveBeenCalled();
+        // It asked the node for the conversation again before giving up.
+        expect(vi.mocked(getConversationMessages).mock.calls.length).toBeGreaterThan(fetchesBefore);
+    });
+
+    it("Send again once Bob's key has arrived: it goes, locked, once, and the line goes with it", async () => {
+        const composer = await openDm();
+        fireEvent.change(composer, { target: { value: 'meet at the gate at 6' } });
+        await pressEnter(composer);
+        await waitFor(() => expect(said()).toBe(BOB_LINE));
+
+        mockConversationDetails = { 'conv-1': dmWith(['my-pubkey', 'peer-pubkey']) };
+        vi.mocked(sendMessageApi).mockResolvedValueOnce({ success: true } as any);
+        await pressEnter(composer);
+
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(1));
+        // Sealed as me, to a new message id, and that id goes to the node with it: the node stores the line under it.
+        const sealedTo = vi.mocked(sealDmLine).mock.calls.at(-1)![2];
+        expect(sealedTo.senderPubHex).toBe('my-pubkey');
+        expect(sealedTo.messageId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+        expect(sendMessageApi).toHaveBeenCalledWith('conv-1', 'my-pubkey', 'locked:meet at the gate at 6', LOCKED_NONCE, undefined, undefined, undefined, sealedTo.messageId);
+        expect(encodePlaintext).not.toHaveBeenCalled();
+        await waitFor(() => expect(said()).toBeNull());
+        expect(composer.value).toBe('');
+    });
+
+    it('the encryption throws: nothing is sent, and the same line', async () => {
+        mockConversations = [dmWith(['my-pubkey', 'peer-pubkey'])];
+        mockConversationDetails = { 'conv-1': mockConversations[0] };
+        vi.mocked(sealDmLine).mockImplementation(() => { throw new Error('bad point'); });
+        const composer = await openDm();
+        fireEvent.change(composer, { target: { value: 'hello' } });
+        await pressEnter(composer);
+
+        await waitFor(() => expect(said()).toBe(BOB_LINE));
+        expect(sendMessageApi).not.toHaveBeenCalled();
+        expect(encodePlaintext).not.toHaveBeenCalled();
+        expect(composer.value).toBe('hello');
+        expect(window.alert).not.toHaveBeenCalled();
+    });
+
+    it('an edit follows the same rule: not sent, still editing, the new words kept; sent locked once the key is there', async () => {
+        mockMessagesByConv = {
+            'conv-1': [{
+                id: 'msg-mine', conversationId: 'conv-1', authorPubkey: 'my-pubkey',
+                ciphertext: 'meet at 6', nonce: '00000', timestamp: new Date().toISOString(),
+            } as ApiMessage],
+        };
+        const composer = await openDm();
+        await act(async () => { fireEvent.click(await screen.findByRole('button', { name: 'Edit message' })); });
+        fireEvent.change(composer, { target: { value: 'actually 7' } });
+        await pressEnter(composer);
+
+        await waitFor(() => expect(said()).toBe(BOB_LINE));
+        expect(editMessageApi).not.toHaveBeenCalled();
+        expect(composer.value).toBe('actually 7');
+        expect(composer).toHaveAttribute('placeholder', 'Edit message...');
+
+        mockConversationDetails = { 'conv-1': dmWith(['my-pubkey', 'peer-pubkey']) };
+        vi.mocked(editMessageApi).mockResolvedValueOnce({ success: true } as any);
+        await pressEnter(composer);
+        await waitFor(() => expect(editMessageApi).toHaveBeenCalledTimes(1));
+        expect(editMessageApi).toHaveBeenCalledWith('msg-mine', 'my-pubkey', 'locked:actually 7', LOCKED_NONCE);
+        // An edit is sealed to its own line's id.
+        expect(vi.mocked(sealDmLine).mock.calls.at(-1)![2]).toMatchObject({ senderPubHex: 'my-pubkey', messageId: 'msg-mine' });
+        expect(encodePlaintext).not.toHaveBeenCalled();
+    });
+
+    it('a group chat on a node from before locked chats, never seen locked here, still goes readable (§14.3), and the chat says so', async () => {
+        mockConversations = [{
+            id: 'group-1', type: 'group_thread' as any, name: 'Garden crew', participants: ['my-pubkey', 'peer-pubkey'],
+            createdBy: 'my-pubkey', unreadCount: 0, createdAt: '2026-09-14T00:00:00Z',
+        } as Conversation];
+        mockConversationDetails = { 'group-1': mockConversations[0] };
+        mockMessagesByConv = { 'group-1': [] };
+        vi.mocked(sendMessageApi).mockResolvedValueOnce({ success: true } as any);
+        // A browser whose lock store reads (with none, nothing readable goes: group-chat-lock-store fails closed).
+        vi.stubGlobal('indexedDB', memoryIndexedDB());
+        resetGroupChatLockStoreForTest();
+        render(<MessagesPage identity={mockIdentity} openConversationId="group-1" />);
+        const composer = await screen.findByPlaceholderText('Message...');
+        await act(async () => {});
+        fireEvent.change(composer, { target: { value: 'swap day on Saturday' } });
+        await pressEnter(composer);
+
+        await waitFor(() => expect(sendMessageApi).toHaveBeenCalledTimes(1));
+        expect(encodePlaintext).toHaveBeenCalledWith('swap day on Saturday');
+        expect(sealDmLine).not.toHaveBeenCalled();
+        // The app's own words for such a chat, never the node's notice.
+        expect(screen.getByTestId('group-chat-notice').textContent).toContain('This community\'s node is older and can read this group\'s chat.');
+        vi.unstubAllGlobals();
     });
 });
 

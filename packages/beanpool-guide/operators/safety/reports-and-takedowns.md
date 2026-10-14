@@ -7,10 +7,10 @@ related: pulse-and-announcements, members-and-invites, decisions-and-emergencies
 
 ## How members report
 
-In the app, members report a post, a person or a Pulse item and choose a reason: spam or scam, offensive content, misleading post, or other. A note of up to 500 characters goes with it. Blocking someone in the phone app also files a report.
+In the app, members report a post, an event, a Pulse item, a project or an enterprise (and, in the web app, a person) and choose a reason: spam or scam, offensive content, misleading post, child safety, or other. Every report screen offers the same list. A note of up to 500 characters goes with it. Blocking someone in the phone app also files a report.
 
 - A member can file at most **10 reports an hour**.
-- Reporting the same thing again, while the first report is still open, does nothing new.
+- Reporting the same thing again, while the first report is still open, does nothing new, unless the member now chooses **Child safety**: the open report changes to it, and you are told as for a new child-safety report.
 - Nobody can report themselves.
 
 The report form tells members their note goes to moderators. It goes to everyone who looks after reports: the owners, the admins, and any moderators you have made (see Owners, admins and moderators).
@@ -20,7 +20,8 @@ The report form tells members their note goes to moderators. It goes to everyone
 Owners and admins: **People & Safety**, then **Triage & Moderation**. Moderators: **Reports**, the only screen they have (below).
 
 - In **Triage & Moderation** the list opens on **Open** reports, with tabs to see **Dismissed**, **Actioned** or **All**. The count beside the tab counts open reports only, and falls as you handle them.
-- Each row shows which post the report is about, who wrote it, and whether it has already been removed.
+- A **Child safety** report is marked so. While it is open it is listed first, before newer reports of any other kind (see below). Once handled it stays marked, and under **All** it takes its place by date.
+- Each row shows which post the report is about, who wrote it, and whether it has already been removed. A report about a post is about its author, whoever the reporter named: its **Target**, **Freeze Accounts** and a suspension from it all act on the post's author. A report on a post that isn't on this server is refused.
 
 ![The Triage and Moderation screen in Settings](images/people-moderation.webp)
 
@@ -33,14 +34,16 @@ Owners and admins: **People & Safety**, then **Triage & Moderation**. Moderators
 
 ## If you are a moderator
 
-You open Settings from the app's **🛡️ Moderate** button, or on a computer by scanning the code with the app. Settings shows **Moderator** at the top and one screen, **Reports**. Every link from the app lands there.
+You open Settings from the app's **🛡️ Moderate** button (it reads "Moderate" and your community's name), or on a computer by scanning the code with the app ("Moderate this community from a computer"). Settings shows **Moderator** at the top and one screen, **Reports**. Every link from the app lands there.
 
 - **Open**, **Handled**, **Dismissed** and **All** choose which reports you see. The count beside Open is how many are waiting.
 - Each report shows what was reported: a post (its title, what it says and who wrote it), a Pulse item, or a member; then the reporter's words, who reported it and when.
+- A **Child safety** report is marked so. While it is open it is listed first, before newer reports of any other kind; once handled it stays marked, and under **All** it takes its place by date. That covers a member who picked **Child safety**, and one whose words say it (from an older app). The owners' alert asks you to look at these first.
 - **Remove the post**: choose a reason (or none) and press **Remove it**. The post comes down exactly as below, and the report is marked handled.
 - **Remove from the Pulse** (for a Pulse item): takes it off the Pulse and marks the report handled.
 - **Dismiss (keep the post)**, or **Dismiss**: the report is closed and nothing happens to anyone. Whoever reported a post is told it was reviewed and kept.
 - **Mark handled** (for a report about a member, or a post already down): closes it without removing anything. Suspending a member is for the owners and admins: tell them, then mark it handled.
+- **Who joined with them** (on the global community, on an open report): the accounts that joined from the same internet connection within a day of the reported one. You can hide all their posts in one go, and undo that. Removing them is for the owners and admins. See "On the global community: accounts that joined together" below.
 
 The server lets a moderator do exactly these things and refuses everything else. A moderator can only take down a post, or a Pulse item, while a report on it is still open, whichever button they use: once its reports are dismissed or handled, only an owner or admin can remove it. Marking a report handled never removes anything, so a moderator can still do that.
 
@@ -56,6 +59,52 @@ In **Triage & Moderation**, find the post in the posts list and delete it.
 - A moderator's **Remove the post** offers a reason (spam or a scam, offensive, misleading, unsafe or illegal, against the community's rules); the one you pick is added to the author's alert. The owners' posts list does not offer one yet. To explain more, message them yourself.
 
 **Prune Stale Posts** removes every post older than the age you pick, including ones that are still live and wanted. Use it with care. Each author whose posts it clears gets one alert with the count, however many posts that was: "The community cleared 15 of your listings older than 92 days. This is routine tidying, not a report." The age is that of the newest post it cleared for them. It never uses the takedown wording. Open reports on the cleared posts are closed, and each of their reporters is told once that the posts were removed.
+
+## On the global community: posts hidden by reports
+
+On the global community, reports can hide a post before anyone looks at it. On a local community they never do: every report waits for you.
+
+A post is hidden when reporters from **three independent circles** count towards it. A reporter counts when all of these hold:
+
+- they were a member for at least **7 days** when they reported it;
+- they are **established**: past the new-account limits themselves (see Members and invites), so at least 3 of their posts have stayed up. Owners, admins and moderators have no such limits. So a newcomer's report hides nothing, however long ago they joined;
+- their **standing** is at least **half the author's**, rounded up. Standing is points: 1 for each full week as a member (up to 26), 1 for each post of theirs that is up and not hidden (up to 3), and 1 for each person they have finished a deal with (up to 3). Trust badges play no part;
+- no moderator has already dismissed their report on this post;
+- moderators have not kept **3 or more** posts they reported in the last **30 days** (dismissed their report on a post that is still up).
+
+Reporters who joined through the open door from the same internet address within **24 hours** of each other are one circle, and so are reporters who came in on invites traced back to the same member. The trace stops at an owner, admin or moderator, who let each of those people in themselves.
+
+So established members from three circles can hide a newcomer's spam, but not the posts of someone who has been there for months unless they are at least half as established themselves: otherwise those reports wait in the list like any other. A post they hide stops counting towards its author's 3 posts until a moderator keeps it, so it can put someone who has only just passed the new-account limits back on them.
+
+A post by someone who joined with **12 words** and is still on the new-account limits needs only **one circle**: one report from an established member hides it. Their account cost nothing to make, so what protects the community is how cheaply a real member can hide its spam. Once its author is past the limits, or adds a sign-in, it needs three circles like anyone's.
+
+A hidden post's reports stay open, marked as on a hidden post. Its author still sees it, and so do you. **Dismiss (keep the post)** on its reports brings it back once too few circles count to hide it; **Remove the post** takes it down as above.
+
+On the global community, a member whose posts moderators have removed 3 times in 30 days is muted. They can still read, but cannot post, edit a post or send messages until a moderator lifts it, and they are told. Pruning stale posts never counts towards this. Settings has no button to lift a mute yet.
+
+## On the global community: accounts that joined together
+
+Anyone can join the global community, with 12 secret words or a sign-in, so one person can make several accounts in a row from one place and fill the Market with spam. The server notes which accounts joined through the open door from the same internet connection within a day of the first of them (see Privacy and what your server can see). You are shown only that they joined together: never the connection, its address or anything else about the network. On a local community none of this exists.
+
+**Who joined with them.** On a report, **Who joined with them** lists the other accounts that joined from the same connection within a day of the reported one, oldest first. For each you see when they joined, their standing (the same points as above: weeks as a member, posts that stayed up, people they finished a deal with), how many of their posts are up or hidden, and their open reports. On a report about a post, the account is always the post's author, whoever the reporter named. A moderator sees this from an account with an open report filed by someone else (about them, or about a post they wrote: a moderator's own report doesn't count), or from a group listed at the top of Reports; owners and admins from any account. That is a limit that leaves a record, not a wall: a moderator could file a report from a second account, but every report names who filed it. Someone who joined another way, by invite or before the server noted this, has nobody listed.
+
+**At the top of Reports** (in **Triage & Moderation** for owners and admins): a line for each group of 5 or more accounts that joined together in the last 7 days, saying how many were reported, how many of their posts are hidden and how many were removed, with **See them**; and a line for each action taken on such a group in the last 30 days.
+
+**Tick, then act.** A shared connection can be a household, a meetup, a campus or a phone network, so real people can be in a group with a spammer:
+
+- Accounts that are established (standing 4 or more: a month as a member, or a week with posts that stayed up) start unticked. Here a post hidden for review still counts as up, so hiding an account's posts first never makes it easier to remove. Anyone who holds a role (owner, admin or moderator) can never be included. Untick anyone you are not sure of.
+- Before anything happens you are told again how many accounts, their standing, and which of them are established.
+- The server acts only on the accounts you ticked: one that joined after you opened the list is never included. It does nothing at all if one of them is no longer in the group, or if an established account is included without your saying so. The list then loads again as the group is now, with the reason on screen; **Load again** reads it again at any time.
+
+**Hide their posts** (owners, admins and moderators): every post of the ticked accounts is hidden, as a post hidden by reports is: its author and you still see it, nobody else does. Each of them gets one alert, "Your posts are hidden for review", which says neither why nor who acted. **Undo**, on the action's line at the top, brings back every post it hid, but not one that reports from three independent circles would hide now (weighed as if the whole hide were undone, so the author's other posts count as up; then every post of it again, as the last round left them, until nothing changes: a post kept hidden lowers the bar for its author's other posts, and can put its author back on probation, so a report of theirs no longer counts and a post they reported comes back), nor one you restored or removed on its own since. Each author is told once that their posts are back. A hide can be undone for 30 days. Posts they make after the hide are not hidden.
+
+**Remove them** (owners and admins only): each ticked account is removed exactly as removing one member removes them (see Members and invites): their posts come down, their key is refused from then on, and the sign-in account they joined with, if any, can't join again. For those that joined within a day, every 12-words join from their connection asks for much more setting up, for a week from their join (see Members and invites). You type the number of accounts to confirm. A removal can't be undone.
+
+What removal can't do: someone determined can come back in about a minute with new 12 words, or with another sign-in account. That account starts again from nothing: a new name, the new-account limits, and posts that reports hide (one report, while a 12-words account is new). Removing it again is one more action.
+
+Nor does removing an account take back its votes in polls: they still count, as every vote does. Instead, when an anonymous poll for everyone on the global community closes, it says how many of its votes came from new or 12-word accounts (see Polls in the members' guide), so a burst of votes from new accounts shows on the result, to everyone. It says nothing while the poll is open, since checking after each vote would show each vote's kind of account and its choice. An open vote, a group's poll and a poll for one person never say it.
+
+If a standby takes over from this server, the hidden posts stay hidden, but the list of actions and their **Undo** stay behind on the old server: restore those posts one at a time.
 
 ## Be fair
 

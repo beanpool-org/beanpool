@@ -70,6 +70,7 @@ import { ed25519 } from '@noble/curves/ed25519.js';
 import { db } from '../db/db.js';
 import { getNodeRole } from '../state-engine.js';
 import { logger } from '../logger.js';
+import { noteSecurityEvent, NAME_ALERT_WORDS } from './security-signal.js';
 import { forgetOwnAddresses } from '../engine/own-addresses.js';
 import { setLostAddressRefusedHandler } from '../engine/member-signature.js';
 import {
@@ -276,8 +277,11 @@ async function ask(url: string, timeoutMs: number): Promise<Answer | null> {
     }
 }
 
-/** An attestation (registrar-client.ts buildAttestation) and whether it is valid over `nonce`, or null for anything else. */
-function attestationOf(body: unknown, nonce: string): { pubkey: string; valid: boolean } | null {
+/**
+ * An attestation (registrar-client.ts buildAttestation) and whether it is valid over `nonce`, or null for anything else.
+ * Valid means strict RFC 8032, as every other verifier here: noble's default (ZIP-215) takes non-canonical encodings.
+ */
+export function attestationOf(body: unknown, nonce: string): { pubkey: string; valid: boolean } | null {
     const b = body as Record<string, unknown> | null;
     if (!b || typeof b !== 'object' || typeof b.pubkey !== 'string' || typeof b.signature !== 'string') return null;
     const pubkey = b.pubkey.toLowerCase();
@@ -288,7 +292,7 @@ function attestationOf(body: unknown, nonce: string): { pubkey: string; valid: b
         const ts = b.timestamp;
         if (b.nonce === nonce && (typeof ts === 'number' || typeof ts === 'string') && typeof proto === 'string'
             && Object.hasOwn(PROTOCOLS, proto) && /^[0-9a-f]{128}$/i.test(b.signature)) {
-            valid = ed25519.verify(Buffer.from(b.signature, 'hex'), new TextEncoder().encode(attestMessage(proto, nonce, ts)), Buffer.from(pubkey, 'hex'));
+            valid = ed25519.verify(Buffer.from(b.signature, 'hex'), new TextEncoder().encode(attestMessage(proto, nonce, ts)), Buffer.from(pubkey, 'hex'), { zip215: false });
         }
     } catch {
         valid = false;
@@ -449,7 +453,32 @@ function standingOf(lost: RegistrarNameLost | null, w: NameWatch): Standing {
 
 const key16 = (k: string | null) => (k ? `${k.slice(0, 16)}…` : 'a key it did not name');
 
+/**
+ * The owners' alert for a name lost or back (services/alerts.ts sec.name): never the other community's key, nor which
+ * address. It lasts while any recorded name is lost, and ends only when none is. That is read from the record's `lost`
+ * marks, never kept in memory: after a restart a name still lost is in no round's change, and a name gone from the
+ * record is lost no more. `host`'s own mark is written after this, so it is left out. This tells a change at once; the
+ * alert book's tick reads the same marks every minute and sees it through (services/alerts.ts nameConditions).
+ */
+function noteNameStanding(host: string, standing: Standing): void {
+    if (standing === 'lost-another-key') {
+        noteSecurityEvent({ key: 'sec.name', state: true, detail: NAME_ALERT_WORDS['another-key'] });
+    } else if (standing === 'lost-released') {
+        noteSecurityEvent({ key: 'sec.name', state: true, detail: NAME_ALERT_WORDS.released });
+    } else if (standing === 'held' && !registrarNames().some((e) => e.address !== host && e.lost)) {
+        noteSecurityEvent({ key: 'sec.name', state: false, detail: NAME_ALERT_WORDS.back });
+    }
+}
+
+/** The owners' alert as a round tells it, and the mark the round writes after it, for a suite (test-alerts-security). */
+export function noteNameStandingForTests(standing: Standing, host: string): void {
+    noteNameStanding(host, standing);
+    const lost = standing === 'lost-another-key' ? 'another-key' : standing === 'lost-released' ? 'released' : null;
+    if (standing === 'held' || lost) setRegistrarNameLost(host, lost ? { since: new Date().toISOString(), why: lost, holderKey: null } : null);
+}
+
 function logChange(host: string, standing: Standing, w: NameWatch, lost: RegistrarNameLost | null): void {
+    noteNameStanding(host, standing);
     switch (standing) {
         case 'lost-another-key':
             logger.security('AUTH', `[Names] ${host}: the address service names another community's key (${key16(lost?.holderKey ?? null)}) as its holder, `

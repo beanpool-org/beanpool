@@ -29,15 +29,20 @@ import { initTls } from './services/tls.js';
 import { initStateEngine, getMember, getPosts, createPost, reconcileLedgerFromDb } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
 import { ledger } from './engine/ledger.js';
+import { setMemberPhoto } from '@beanpool/engine';
 import {
     cacheRemoteListings, listingsForPeer, REMOTE_ID_PREFIX, LISTING_PULL_INTERVAL_MS,
 } from './federation-listings.js';
 
-const PORT = 8554;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const PW = 'TestAdmin123!';
+// Step 7c: with the node's 2FA off the admin password alone opens no admin route. Once main() has turned 2FA on, a
+// body that carries a password also carries a fresh code, as an owner with an authenticator sends it.
+let tfa: ReturnType<typeof turnOn2faForTests> | null = null;
 
 const BYRON = '12D3KooWByronPullTestPeer00000000000';
 const BYRON_ADDR = `/ip4/172.18.0.31/tcp/4001/p2p/${BYRON}`;
@@ -52,9 +57,10 @@ function assert(cond: boolean, msg: string): void {
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
 
-async function post(path: string, body: unknown): Promise<{ status: number; json: any }> {
+async function post(path: string, body: Record<string, unknown>): Promise<{ status: number; json: any }> {
+    const sent = tfa && 'password' in body ? { ...body, totpCode: tfa.code() } : body;
     const res = await fetch(`${BASE}${path}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sent),
     });
     let json: any = null;
     try { json = await res.json(); } catch { /* no json */ }
@@ -66,8 +72,9 @@ const TINY_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAf
 function makeLocalMember(callsign: string): string {
     const { publicKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, avatar_url)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?)`).run(pk, callsign, TINY_PNG);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500)`).run(pk, callsign);
+    setMemberPhoto(db, pk, TINY_PNG);
     // TWO THINGS THE FIXTURE HAS TO DO, both learned the hard way when §8h became the first check in this
     // suite to drive a real ledger write:
     //
@@ -93,8 +100,9 @@ function makeLocalMember(callsign: string): string {
 function makeSigner(callsign: string): { publicKey: string; privateKey: crypto.KeyObject } {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pk = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit, avatar_url)
-                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500, ?)`).run(pk, callsign, TINY_PNG);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at, earned_credit)
+                VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 500)`).run(pk, callsign);
+    setMemberPhoto(db, pk, TINY_PNG);
     // TWO THINGS THE FIXTURE HAS TO DO, both learned the hard way when §8h became the first check in this
     // suite to drive a real ledger write:
     //
@@ -165,11 +173,17 @@ async function main() {
     initAdminPassword();
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
+    const alone = await post('/api/local/connectors', { password: PW, address: BYRON_ADDR, trustLevel: 'peer', callsign: 'byron', publicUrl: BYRON_URL, enabled: true });
+    assert(alone.status === 403 && alone.json?.code === 'password_needs_2fa',
+        `setup: 2FA off, the password alone → 403 password_needs_2fa (got ${alone.status} ${alone.json?.code})`);
+    tfa = turnOn2faForTests(PW);
     for (const [addr, callsign, url] of [[BYRON_ADDR, 'byron', BYRON_URL], [BRISBANE_ADDR, 'brisbane', BRISBANE_URL]] as const) {
-        await post('/api/local/connectors', { password: PW, address: addr, trustLevel: 'peer', callsign, publicUrl: url, enabled: true });
-        await post('/api/local/connectors/credit-cap', { password: PW, address: addr, cap: 500 });
+        const added = await post('/api/local/connectors', { password: PW, address: addr, trustLevel: 'peer', callsign, publicUrl: url, enabled: true });
+        const capped = await post('/api/local/connectors/credit-cap', { password: PW, address: addr, cap: 500 });
+        assert(added.status === 200 && capped.status === 200, `setup: ${callsign} added and capped over HTTP (got ${added.status}, ${capped.status})`);
     }
     // EVERY local member seeded BEFORE the baseline. `makeLocalMember` mints — a fixture's privilege, not the
     // code's — so one created later reads as a conservation failure at check 8. The purchase-route suite

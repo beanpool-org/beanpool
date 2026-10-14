@@ -17,8 +17,8 @@ import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { createPairingSession, encryptPairingPayload } from '@beanpool/core';
 
-const PORT = 8553;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -36,7 +36,8 @@ async function main() {
 
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // ── 1. POST /api/pair/init Validation & Success ─────────────────────────────
     const badInitRes = await fetch(`${BASE}/api/pair/init`, {

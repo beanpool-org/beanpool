@@ -2,12 +2,15 @@
 slug: your-balance
 title: Your balance and history
 summary: How many beans you have, what is held, and every trade and gift.
-related: credit-line, gifts, circulation-fee, my-deals
+help: Your Beans: what you have, what is held in a deal, and every trade and gift. Everyone starts at zero.
+related: credit-line, gifts, circulation-fee, my-deals, beans-and-the-global-community
 ---
 
 ## Opening it
 
 Tap **Ledger** in the row of tabs. Your balance is at the top right, in **BEANS**. It can be below zero; see "Your credit line".
+
+On the global community there are no Beans, so the Ledger shows an example member of a local community, Example Valley, marked **🏘️ Local community**. Its buttons say why Beans live in a local community, and send nothing. See "Beans and the global community".
 
 The Ledger has two tabs: **Levels** (your trust, see "Trust badges") and **Wallet**. Tap your balance to go straight to Wallet.
 
@@ -24,6 +27,8 @@ The Ledger has two tabs: **Levels** (your trust, see "Trust badges") and **Walle
 ## Recent transactions
 
 Every trade, gift and fee, newest first, with who it was with, a note, the time, and plus or minus. If a note mentions a post, tap **View Offer** to open it.
+
+Only you can see your balance and these transactions. Nobody else in your community can read them. **Export CSV** (**Export mine** in the web app) saves your own transactions as a file.
 
 The list has no search or filters yet.
 

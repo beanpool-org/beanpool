@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { MemberAvatar } from '../../components/MemberAvatar';
+import { AddedYouLines } from '../../components/AddedYouLines';
 import { View, Text, StyleSheet, FlatList, Pressable, Image, ActivityIndicator, Platform, DeviceEventEmitter } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { getDb, getFriendsLocal, addFriendLocal, removeFriendLocal, createConversationApi } from '../../utils/db';
@@ -7,6 +8,7 @@ import { getBlockedUsers, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist'
 import { useIdentity } from '../IdentityContext';
 import { buildSignedHeaders } from '../../utils/crypto';
 import { makeOfflineTicket } from '../../utils/member-statements';
+import { fetchMembership } from '../../utils/membership-probe';
 import QRCode from 'react-native-qrcode-svg';
 import { TextInput, Alert, ScrollView, Share, Keyboard } from 'react-native';
 import { KeyboardAvoidingView, KeyboardAwareScrollView } from 'react-native-keyboard-controller';
@@ -20,10 +22,26 @@ import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { initialPeopleView, isPeopleView, type PeopleView } from '../../utils/talk-views';
 import { useNodeProfile } from '../../utils/use-node-profile';
+import { useShowcaseModeOnceKnown } from '../../utils/use-reader-features';
+import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { invitesOn } from '../../utils/node-profile';
+import {
+    guestDoorButton, guestDoorText, joinWays, guestNoInvitesText, communityLinkMessage, invitesOffRefusal, bringSomeoneHereText, onlyAdminsInvite, mayInviteHere,
+    mayMakeOfflineTicket, adminsOnlyText, adminsOnlyRefusal, offlineTicketRefusal, type InviteRole,
+} from '../../utils/invite-entries';
+import { doorOfferedToAccount, isGlobalCommunity } from '../../utils/global-join-existing';
+import { useGlobalDoorOpen } from '../../utils/use-global-door-open';
+import { useAccountClosedAtGlobal } from '../../utils/use-account-closed';
+import { askNodeRole, persistNodeRole, readPersistedNodeRole, rememberNodeRole } from '../../utils/node-admin';
 import { fetchJoinRequests } from '../../utils/knock-inbox';
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../../utils/join-another-community';
 import { WantsToJoin } from '../../components/WantsToJoin';
 import { MyJoinRequests } from '../../components/MyJoinRequests';
+import { communitySwitched } from '../../utils/community-switch';
+import { lookUpMembers, nearPath, searchPath } from '../../utils/members-lookup';
+import { readNearbyAreaCopy } from '../../utils/nearby-area';
+import { communityListEmpty, communityListNote, type CommunityListNote } from '../../utils/community-list-note';
 
 type SubView = PeopleView;
 type SortOption = 'newest' | 'name' | 'friends' | 'trusted' | 'active';
@@ -78,45 +96,47 @@ export default function PeopleScreen() {
         textStack: { justifyContent: 'center', flex: 1, minWidth: 0 },
         callsign: { fontSize: 16, fontWeight: '700', color: colors.text.heading, flexShrink: 1 },
         dateText: { fontSize: 12, color: colors.text.muted, marginTop: 2, fontWeight: '500' },
-        addBtn: { backgroundColor: colors.brand.dark, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, flexShrink: 0, marginLeft: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
+        // The distance a member on demand reads (the near list): 4.5:1 on a card, light and dark.
+        distanceText: { color: colors.text.secondary },
+        addBtn: { backgroundColor: colors.brand.fill, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, flexShrink: 0, marginLeft: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
         addBtnText: { color: colors.text.inverse, fontWeight: 'bold', fontSize: 12 },
 
         searchWrap: { paddingHorizontal: 16, paddingTop: 16, backgroundColor: colors.surface.app },
         searchInput: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 12, padding: 12, fontSize: 15, color: colors.text.heading, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
         sortRow: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 10, paddingBottom: 4, backgroundColor: colors.surface.app, gap: 6 },
         sortPill: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 16, backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default },
-        sortPillActive: { backgroundColor: colors.brand.dark, borderColor: colors.brand.dark },
+        sortPillActive: { backgroundColor: colors.brand.fill, borderColor: colors.brand.dark },
         sortPillText: { fontSize: 11, fontWeight: '600', color: colors.text.secondary },
         sortPillTextActive: { color: colors.text.inverse },
 
         sectionHeader: { fontSize: 20, fontWeight: '800', color: colors.text.heading, marginBottom: 6 },
         sectionDesc: { fontSize: 13, color: colors.text.secondary, marginBottom: 20, lineHeight: 18 },
         input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, padding: 16, borderRadius: 12, fontSize: 15, fontWeight: '500', marginBottom: 16, color: colors.text.heading },
-        btnGenerate: { backgroundColor: colors.brand.dark, padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 24, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
+        btnGenerate: { backgroundColor: colors.brand.fill, padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 24, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4 },
         btnGenerateText: { color: colors.text.inverse, fontSize: 15, fontWeight: 'bold' },
 
         qrCard: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50, borderWidth: 2, borderColor: colors.brand.primary, borderRadius: 16, padding: 20, alignItems: 'center', marginBottom: 24 },
-        qrTitle: { color: theme === 'dark' ? colors.text.body : palette.emerald700, fontSize: 14, fontWeight: '600', marginBottom: 16 },
+        qrTitle: { color: theme === 'dark' ? colors.text.body : colors.brand.primary, fontSize: 14, fontWeight: '600', marginBottom: 16 },
         qrBox: { backgroundColor: colors.surface.card, padding: 16, borderRadius: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2, marginBottom: 16 },
         btnCopyQR: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 10 },
         btnCopyQRText: { color: colors.text.body, fontSize: 14, fontWeight: '700' },
 
         pendingHeader: { fontSize: 12, fontWeight: '800', color: colors.text.muted, marginBottom: 12, letterSpacing: 1 },
         pendingCard: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.default, borderRadius: 14, padding: 14, marginBottom: 10, flexDirection: 'row', alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.03, shadowRadius: 3, elevation: 1 },
-        pendingFor: { fontSize: 12, fontWeight: '700', color: colors.brand.dark, marginBottom: 4 },
+        pendingFor: { fontSize: 12, fontWeight: '700', color: colors.brand.primary, marginBottom: 4 },
         pendingCode: { fontSize: 13, fontFamily: 'monospace', color: colors.text.heading, fontWeight: '600' },
         btnCopySmall: { backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.default, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, marginLeft: 12 },
         btnCopySmallText: { fontSize: 12, fontWeight: '600', color: colors.text.secondary },
 
         // Friend-specific styles
-        friendChip: { fontSize: 10, fontWeight: '800', color: palette.amber500, backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, overflow: 'hidden', flexShrink: 0 },
+        friendChip: { fontSize: 10, fontWeight: '800', color: colors.feedback.warning.fg, backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, overflow: 'hidden', flexShrink: 0 },
         addBtnFriended: { backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong, shadowOpacity: 0 },
-        addBtnTextFriended: { color: colors.brand.dark },
+        addBtnTextFriended: { color: colors.brand.primary },
         friendActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
         msgBtn: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.green50, width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.green100 },
         msgBtnText: { fontSize: 18 },
         removeFriendBtn: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.red50, width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red200 },
-        removeFriendBtnText: { fontSize: 16, color: colors.feedback.danger.solid, fontWeight: '700' },
+        removeFriendBtnText: { fontSize: 16, color: colors.feedback.danger.fg, fontWeight: '700' },
 
         // Community virtualized row (fixed height)
         communityRow: {
@@ -135,7 +155,7 @@ export default function PeopleScreen() {
         },
         communityFriendDot: {
             position: 'absolute', bottom: -2, right: -2, width: 16, height: 16, borderRadius: 8,
-            backgroundColor: palette.amber500, justifyContent: 'center', alignItems: 'center',
+            backgroundColor: colors.feedback.warning.solid, justifyContent: 'center', alignItems: 'center',
             borderWidth: 2, borderColor: colors.text.inverse,
         },
     }));
@@ -177,6 +197,9 @@ export default function PeopleScreen() {
     const [isOnline, setIsOnline] = useState(true);
 
     const [members, setMembers] = useState<any[]>([]);
+    // The search the list on screen was read for, set with it; null until the first read lands. Only a list read for no
+    // search is the node's members to count (review of #1899, NB-A).
+    const [listedFor, setListedFor] = useState<string | null>(null);
     const { identity } = useIdentity();
 
     // Requests to join (design §3.3): members of a local community see "Wants to join (n)"; on the worldwide
@@ -184,6 +207,55 @@ export default function PeopleScreen() {
     const nodeProfile = useNodeProfile();
     const isGlobalNode = nodeProfile?.profile === 'global';
     const takesKnocks = !isGlobalNode && nodeProfile?.features.knocks !== false;
+    // Where the node takes no invites (the worldwide community: anyone joins with 12 words or a sign-in), nothing here makes one: no
+    // code, QR or offline ticket, only the community's own link to share. Unknown (not heard yet, or an older node): as before.
+    const makesInvites = invitesOn(nodeProfile?.features);
+    // On a community that says `membersOnDemand` (the worldwide one) this phone holds only the people it has dealt with:
+    // the list is the 50 nearest and a search, both asked of the node (utils/members-lookup.ts), and the cards held
+    // offline. Anywhere else, the whole list from the copy as always.
+    const membersOnDemand = nodeProfile?.features.membersOnDemand === true;
+    const [listNote, setListNote] = useState<CommunityListNote | null>(null);
+    const onDemandOpened = useRef(false);
+    // Where the node previews invites (the showcase), how a local community grows, as the marker's line (design §1 row 8).
+    // `undefined` until the phone's copy of the node's profile is read (a moment, no network): the member's own codes are
+    // not asked for until then, and never where invites are previewed (the node takes none).
+    const invitesMode = useShowcaseModeOnceKnown('invites');
+    const invitesPreview = invitesMode === 'preview';
+    const invitesModeNow = useRef(invitesMode);
+    invitesModeNow.current = invitesMode;
+    // A guest on a node that takes no invites has no code to enter: say so rather than offer a form every code fails.
+    const guestNoInvites = isGuest && !makesInvites;
+    // A guest of the global community joins it through its door, as the account on this phone (utils/global-join-existing.ts),
+    // once the global community has said its door is open. Only there: the door is the global community's alone, so a phone
+    // anywhere else never asks it.
+    const guestAtGlobal = guestNoInvites && isGlobalCommunity(anchorUrl);
+    const globalDoorOpen = useGlobalDoorOpen(guestAtGlobal);
+    const accountClosed = useAccountClosedAtGlobal(identity?.publicKey);
+    const guestDoor = guestAtGlobal && doorOfferedToAccount({ doorOpen: globalDoorOpen, hasAccount: !!identity, standing: 'guest', accountClosed });
+    // Where only its admins invite (features.door, the community's choice), a member who is no owner or admin there makes
+    // none. Their role is the node's answer (GET /api/node-admin/me), asked only there; not heard yet (or offline) counts
+    // as before, and the node refuses a member's invite itself (adminsOnlyRefusal). A role, never a tier.
+    const doorAdminsOnly = onlyAdminsInvite(nodeProfile?.features);
+    const [inviteRole, setInviteRole] = useState<InviteRole | undefined>(undefined);
+    useEffect(() => {
+        setInviteRole(undefined);
+        if (!doorAdminsOnly || !identity || !anchorUrl || isGuest) return;
+        let alive = true;
+        askNodeRole(anchorUrl, identity).then(async r => {
+            if (r) {
+                // Heard: remember it (header cache and phone storage) for the next time there is no signal.
+                rememberNodeRole(anchorUrl, identity.publicKey, r);
+                void persistNodeRole(anchorUrl, identity.publicKey, r.role);
+                if (alive) setInviteRole(r.role);
+                return;
+            }
+            // No answer (offline): the last role this node gave for this key, so an owner or admin can still make a ticket.
+            const last = await readPersistedNodeRole(anchorUrl, identity.publicKey);
+            if (alive && last !== undefined) setInviteRole(last);
+        });
+        return () => { alive = false; };
+    }, [doorAdminsOnly, identity, anchorUrl, isGuest, view]);
+    const mayInvite = mayInviteHere(nodeProfile?.features, inviteRole);
     const [knockCount, setKnockCount] = useState(0);
     const profileKnown = nodeProfile !== null;
     useEffect(() => {
@@ -212,9 +284,11 @@ export default function PeopleScreen() {
         if (view === 'community') {
             setSearchQuery('');
             loadMembers('', sortOption);
+            // On a community that says `membersOnDemand` the list is a read of the node: made here, not again by the
+            // debounced effect's run 400 ms later for the same empty search.
+            onDemandOpened.current = membersOnDemand;
         }
         if (view === 'invites') {
-            loadOfflineInvites();
             checkOnlineStatus();
         }
         AsyncStorage.getItem('beanpool_anchor_url').then(async val => {
@@ -222,7 +296,8 @@ export default function PeopleScreen() {
                 setAnchorUrl(val);
                 if (identity?.publicKey) {
                     try {
-                        const res = await fetch(`${val}/api/community/membership/${identity.publicKey}`);
+                        // Signed by the key (utils/membership-probe.ts): the community answers only its own key.
+                        const res = await fetchMembership(val, identity);
                         if (res.ok) {
                             const data = await res.json();
                             setIsGuest(!data.isMember);
@@ -243,6 +318,10 @@ export default function PeopleScreen() {
             }).catch(() => {});
         }
     }, [view]);
+
+    useEffect(() => {
+        if (view === 'invites' && invitesMode !== undefined && invitesMode !== 'preview') loadOfflineInvites();
+    }, [view, invitesMode]);
 
     useEffect(() => {
         const sub = DeviceEventEmitter.addListener('sync_data_updated', () => {
@@ -286,6 +365,8 @@ export default function PeopleScreen() {
             const activeAnchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
             if (activeAnchorUrl) {
                 const res = await fetch(`${activeAnchorUrl}/api/invite/mine/${identity.publicKey}`);
+                // An answer that lands after a switch to preview is dropped.
+                if (invitesModeNow.current === 'preview') return;
                 if (res.ok) {
                     const data = await res.json();
                     if (data && data.invites) {
@@ -393,9 +474,34 @@ export default function PeopleScreen() {
                         setGenerating(false);
                         return;
                     }
+                } else {
+                    // The node takes no invites (this phone's copy of its profile was older than the switch): say so, and
+                    // make no offline ticket, which it would refuse just the same.
+                    const body = await res.json().catch(() => null);
+                    const refusal = invitesOffRefusal(res.status, body, nodeProfile?.features);
+                    if (refusal) {
+                        Alert.alert('No invites here', refusal);
+                        return;
+                    }
+                    // Only admins invite here (this phone hadn't heard it yet, or the member's role changed): the node's
+                    // words, and no offline ticket, which it would refuse at the join.
+                    const adminsOnly = adminsOnlyRefusal(res.status, body);
+                    if (adminsOnly) {
+                        setInviteRole(null);
+                        if (identity) void persistNodeRole(anchorUrl, identity.publicKey, null);
+                        Alert.alert('Only admins invite here', adminsOnly);
+                        return;
+                    }
                 }
             } catch (err) {
                 console.log('Online invite generation failed. Falling back to offline ticket...', err);
+            }
+
+            // Where only admins invite, a ticket only from a member the node has said is one (invite-entries.ts).
+            if (!mayMakeOfflineTicket(nodeProfile?.features, inviteRole)) {
+                const refusal = offlineTicketRefusal(inviteRole);
+                Alert.alert(refusal.title, refusal.text);
+                return;
             }
 
             // Offline Fallback
@@ -440,6 +546,11 @@ export default function PeopleScreen() {
         await Share.share({ message });
     };
 
+    // A node with no invites: its plain address, which opens its front door. No code rides along.
+    const shareCommunityLink = () => {
+        if (anchorUrl) Share.share({ message: communityLinkMessage(anchorUrl) }).catch(() => {});
+    };
+
     const handleRedeem = async () => {
         const rawInvite = redeemCode.trim();
         if (!rawInvite) return;
@@ -462,7 +573,8 @@ export default function PeopleScreen() {
             if (targetNodeUrl === anchorUrl) {
                 let isMember = false;
                 try {
-                    const res = await fetch(`${targetNodeUrl}/api/community/membership/${identity?.publicKey}`);
+                    // Signed by the key (utils/membership-probe.ts): the community answers only its own key.
+                    const res = await fetchMembership(targetNodeUrl, identity ?? '');
                     if (res.ok) {
                         const data = await res.json();
                         isMember = !!data.isMember;
@@ -511,12 +623,16 @@ export default function PeopleScreen() {
             setRedeemCode('');
             setRedeemNodeUrl('');
             // Joined a new community → run the profile wizard for THIS node so the member picks a name that's
-            // unique here (callsigns are per-node) and confirms their photo, then home or, if they choose, to
-            // protect their account here too: sign-in recovery is kept by each community (design §3.6).
+            // unique here (callsigns are per-node) and confirms their photo, then home or, in a build without a key
+            // vault, if they choose, to protect their account here too: there sign-in recovery is kept by each
+            // community (design §3.6). With a vault, a linked sign-in already covers this community.
             const nudge = joinedNudge(joined.name);
             Alert.alert(nudge.title, nudge.body, [
                 { text: nudge.later, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: HOME_REDIRECT } }) },
-                { text: nudge.protect, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: PROTECT_REDIRECT } }) },
+                // Only where each community keeps its own sign-in copy (a build without a key vault).
+                ...(nudge.protect
+                    ? [{ text: nudge.protect, onPress: () => router.replace({ pathname: '/profile-setup', params: { redirect: PROTECT_REDIRECT } }) }]
+                    : []),
             ], { cancelable: false });
         } catch (e: any) {
             Alert.alert('Redemption Failed', e.message);
@@ -538,10 +654,15 @@ export default function PeopleScreen() {
                         try {
                             const { clearDB } = await import('../../utils/db');
                             await clearDB();
+                            // Its cursors go with the copy (a held posts read among them), so the rejoin reads it whole.
+                            const { forgetSyncCursors } = await import('../../services/pillar-sync');
+                            await forgetSyncCursors();
                             
                             const activeUrl = anchorUrl;
                             await AsyncStorage.removeItem('beanpool_anchor_url');
-                            
+                            // No community on the phone: the update screen's block comes down (utils/community-switch.ts).
+                            communitySwitched();
+
                             if (activeUrl) {
                                 const { removeSavedNode } = await import('../../utils/nodes');
                                 await removeSavedNode(activeUrl);
@@ -570,14 +691,55 @@ export default function PeopleScreen() {
     // Debounced Search Effect
     useEffect(() => {
         if (view !== 'community') return;
+        if (onDemandOpened.current && membersOnDemand && searchQuery.trim() === '') {
+            onDemandOpened.current = false;
+            return;
+        }
+        onDemandOpened.current = false;
         const timeout = setTimeout(() => {
             loadMembers(searchQuery, sortOption);
         }, 400);
         return () => clearTimeout(timeout);
-    }, [searchQuery, sortOption]);
+    }, [searchQuery, sortOption, membersOnDemand]);
+
+    /** The list asked of the node on a community that says `membersOnDemand`; false when it couldn't be (offline). */
+    const loadMembersOnDemand = async (query: string): Promise<boolean> => {
+        const typed = query.trim();
+        let rows: any[] | null;
+        let note: CommunityListNote;
+        if (typed !== '') {
+            const path = searchPath(typed);
+            // One letter asks the node nothing: the cards held, searched as always.
+            if (!path) return false;
+            rows = await lookUpMembers(path);
+            note = 'search';
+        } else {
+            const copy = await readNearbyAreaCopy(anchorUrl || await AsyncStorage.getItem('beanpool_anchor_url'), identity?.publicKey);
+            if (!copy?.area) {
+                rows = [];
+                note = 'noArea';
+            } else {
+                rows = await lookUpMembers(nearPath(copy.area));
+                note = 'near';
+            }
+        }
+        if (rows === null) return false;
+        const blocked = await getBlockedUsers();
+        setMembers(rows.filter(m => !blocked.includes(m.public_key)));
+        setListedFor(typed);
+        setListNote(note);
+        return true;
+    };
 
     const loadMembers = async (query = '', sort: SortOption = 'newest') => {
         try {
+            if (membersOnDemand) {
+                if (await loadMembersOnDemand(query)) return;
+                // One letter asked the node nothing: the cards held, but not "Connect" to a phone that is online.
+                setListNote(query.trim() !== '' && searchPath(query) === null ? 'short' : 'held');
+            } else {
+                setListNote(null);
+            }
             const database = await getDb();
             
             let sql = 'SELECT * FROM members WHERE public_key NOT LIKE \'escrow_%\' AND public_key NOT LIKE \'project_%\'';
@@ -620,6 +782,7 @@ export default function PeopleScreen() {
             const blocked = await getBlockedUsers();
             const filteredRows = rows.filter(m => !blocked.includes(m.public_key));
             setMembers(filteredRows);
+            setListedFor(query.trim());
         } catch (e) {
             console.error('Error loading members:', e);
         }
@@ -667,6 +830,7 @@ export default function PeopleScreen() {
                     </View>
                 ) : friends.length === 0 ? (
                     <View style={styles.emptyContainer}>
+                        {identity?.publicKey ? <View style={{ alignSelf: 'stretch' }}><AddedYouLines myKey={identity.publicKey} onAddedBack={() => loadFriends(true)} /></View> : null}
                         <Text style={styles.emptyEmoji}>👫</Text>
                         <Text style={styles.emptyTitle}>No friends yet</Text>
                         <Text style={styles.emptyDesc}>Go to Community to browse members and add friends.</Text>
@@ -675,6 +839,7 @@ export default function PeopleScreen() {
                     <FlatList
                         ref={listRef}
                         data={friends}
+                        ListHeaderComponent={identity?.publicKey ? <AddedYouLines myKey={identity.publicKey} onAddedBack={() => loadFriends(true)} /> : null}
                         keyExtractor={(item, index) => `${item.publicKey}_${index}`}
                         contentContainerStyle={[styles.list, { paddingBottom: keyboardHeight > 0 ? keyboardHeight + 20 : 16 }]}
                         renderItem={({ item, index }) => {
@@ -758,7 +923,7 @@ export default function PeopleScreen() {
                             autoCorrect={false}
                         />
                     </View>
-                    <View style={styles.sortRow}>
+                    {!membersOnDemand && <View style={styles.sortRow}>
                         {([['newest', 'clock-outline', 'Newest'], ['name', 'sort-alphabetical-ascending', 'Name'], ['friends', 'account-heart-outline', 'Friends'], ['trusted', 'shield-star-outline', 'Trusted'], ['active', 'lightning-bolt', 'Active']] as [SortOption, string, string][]).map(([key, icon, label]) => (
                             <Pressable
                                 key={key}
@@ -771,7 +936,7 @@ export default function PeopleScreen() {
                                 <Text style={[styles.sortPillText, sortOption === key && styles.sortPillTextActive]}>{label}</Text>
                             </Pressable>
                         ))}
-                    </View>
+                    </View>}
                     <FlatList
                         ref={listRef}
                         data={members}
@@ -790,15 +955,26 @@ export default function PeopleScreen() {
                         keyboardDismissMode="on-drag"
                         ListHeaderComponent={
                             <View style={styles.infoBanner}>
+                                {listNote ? (
+                                    <Text style={styles.infoText}>{communityListNote(listNote, searchQuery)}</Text>
+                                ) : profileKnown && !membersOnDemand && listedFor === '' && searchQuery.trim() === '' ? (
                                 <Text style={styles.infoText}>
                                     {members.length} members on this node. Tap <Text style={styles.boldGreen}>+ Add</Text> to follow as a friend.
                                 </Text>
+                                ) : (
+                                // The node's profile not known yet, or its list not read yet on a community that says
+                                // `membersOnDemand`: the cards held are not the node's members, so no count (review of #1859, NB-1).
+                                // Nor before the whole list has been read, nor over a search's matches (review of #1899, NB-A).
+                                <Text style={styles.infoText}>
+                                    Tap <Text style={styles.boldGreen}>+ Add</Text> to follow as a friend.
+                                </Text>
+                                )}
                             </View>
                         }
                         ListEmptyComponent={
                             <View style={{ padding: 40, alignItems: 'center' }}>
-                                <Text style={{ color: colors.text.muted, fontSize: 15, fontWeight: '500' }}>
-                                    {searchQuery ? 'No members match your search.' : 'Loading community...'}
+                                <Text style={{ color: colors.text.secondary, fontSize: 15, fontWeight: '500', textAlign: 'center' }}>
+                                    {communityListEmpty(listNote, searchQuery)}
                                 </Text>
                             </View>
                         }
@@ -824,7 +1000,7 @@ export default function PeopleScreen() {
                                     <MemberAvatar avatarUrl={item.avatar_url} pubkey={item.public_key} callsign={item.callsign || '?'} size={44} />
                                     {isFriend && (
                                         <View style={styles.communityFriendDot}>
-                                            <Text style={{ fontSize: 8, color: colors.text.inverse, fontWeight: '800' }}>★</Text>
+                                            <Text style={{ fontSize: 8, color: colors.text.onGold, fontWeight: '800' }}>★</Text>
                                         </View>
                                     )}
                                 </View>
@@ -834,7 +1010,7 @@ export default function PeopleScreen() {
                                         {isFriend && <Text style={styles.friendChip}>Friend</Text>}
                                     </View>
                                     <Text style={styles.dateText} numberOfLines={1}>
-                                        {joinDateText}
+                                        {joinDateText}{typeof item.distance_km === 'number' ? <Text style={styles.distanceText}>{` · about ${item.distance_km} km`}</Text> : null}
                                     </Text>
                                 </View>
                             </Pressable>
@@ -848,7 +1024,12 @@ export default function PeopleScreen() {
                                         if (isFriend) {
                                             await removeFriendLocal(identity.publicKey, item.public_key);
                                         } else {
-                                            await addFriendLocal(identity.publicKey, item.public_key);
+                                            // Refused by the node (100 adds a day, or someone you blocked): said, not dropped.
+                                            try {
+                                                await addFriendLocal(identity.publicKey, item.public_key);
+                                            } catch (e: any) {
+                                                Alert.alert('Not added', e?.message || 'Your community did not add them.');
+                                            }
                                         }
                                         loadFriends();
                                     }}
@@ -871,12 +1052,26 @@ export default function PeopleScreen() {
                 <KeyboardAwareScrollView ref={listRef} contentContainerStyle={[styles.list, { paddingBottom: 16 }]} bottomOffset={16}>
                     {isGuest ? (
                         <View style={{ backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber50, borderRadius: 12, padding: 16, marginBottom: 24, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.amber200 }}>
-                            <Text style={{ color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber600, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>
+                            <Text style={{ color: colors.feedback.warning.fg, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>
                                 ⚠️ Guest Connection Mode
                             </Text>
                             <Text style={{ color: theme === 'dark' ? colors.text.body : palette.amber700, fontSize: 13, lineHeight: 18 }}>
-                                You are currently connected to this node in **Guest Mode**. You cannot generate invites or participate in community trade until you register your identity.
+                                {guestDoor
+                                    ? guestDoorText(nodeProfile?.features)
+                                    : guestNoInvites
+                                    ? guestNoInvitesText(guestAtGlobal && !globalDoorOpen && !accountClosed)
+                                    : 'You are currently connected to this node in **Guest Mode**. You cannot generate invites or participate in community trade until you register your identity.'}
                             </Text>
+                            {guestDoor && (
+                                <Pressable
+                                    accessibilityRole="button"
+                                    accessibilityLabel={`Join the global community with ${joinWays(nodeProfile?.features)}`}
+                                    style={[styles.btnGenerate, { marginTop: 12, marginBottom: 0 }]}
+                                    onPress={() => router.push('/join-global')}
+                                >
+                                    <Text style={styles.btnGenerateText}>{guestDoorButton(nodeProfile?.features)}</Text>
+                                </Pressable>
+                            )}
                         </View>
                     ) : (
                         <>
@@ -885,6 +1080,42 @@ export default function PeopleScreen() {
                             )}
                             {identity && isGlobalNode && <MyJoinRequests identity={identity} />}
 
+                            {!makesInvites ? (
+                                // No invites here: anyone joins without one (the helper's words say how), so the community's link is all there is to share.
+                                <>
+                                    <Text style={styles.sectionHeader}>📤 Bring someone here</Text>
+                                    <Text style={styles.sectionDesc}>{bringSomeoneHereText(nodeProfile?.features)}</Text>
+                                    {invitesPreview && <LocalCommunityMark variant="line" feature="invites" text={LOCAL_COMMUNITY_LINES.invites} />}
+                                    <Pressable
+                                        accessibilityRole="button"
+                                        accessibilityLabel="Share this community's link"
+                                        style={[styles.btnGenerate, !anchorUrl && { opacity: 0.6 }]}
+                                        onPress={shareCommunityLink}
+                                        disabled={!anchorUrl}
+                                    >
+                                        <Text style={styles.btnGenerateText}>📤 Share the link</Text>
+                                    </Pressable>
+                                </>
+                            ) : !mayInvite ? (
+                                // Only its admins invite here, and this member is no owner or admin: no code, QR or offline
+                                // ticket. Where the community takes requests to join, its link lets someone ask, for an admin to answer.
+                                <>
+                                    <Text style={styles.sectionHeader}>📤 Bring someone here</Text>
+                                    <Text style={styles.sectionDesc}>{adminsOnlyText(takesKnocks)}</Text>
+                                    {takesKnocks && (
+                                        <Pressable
+                                            accessibilityRole="button"
+                                            accessibilityLabel="Share this community's link"
+                                            style={[styles.btnGenerate, !anchorUrl && { opacity: 0.6 }]}
+                                            onPress={shareCommunityLink}
+                                            disabled={!anchorUrl}
+                                        >
+                                            <Text style={styles.btnGenerateText}>📤 Share the link</Text>
+                                        </Pressable>
+                                    )}
+                                </>
+                            ) : (
+                            <>
                             {/* GENERATE INVITE SECTION */}
                             <Text style={styles.sectionHeader}>📤 Invite Someone</Text>
                             <Text style={styles.sectionDesc}>Invite links are single-use and valid for 30 days. If you are offline, a cryptographic voucher ticket will be generated instead.</Text>
@@ -949,9 +1180,13 @@ export default function PeopleScreen() {
                                     ))}
                                 </View>
                             )}
+                            </>
+                            )}
                         </>
                     )}
 
+                    {!guestNoInvites && (
+                    <>
                     <View style={{ height: 1, backgroundColor: colors.border.default, marginVertical: 32 }} />
 
                     {/* REDEEM INVITE SECTION */}
@@ -987,7 +1222,7 @@ export default function PeopleScreen() {
                         )}
                         <Pressable
                             accessibilityRole="button"
-                            style={{ backgroundColor: colors.brand.primary, paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 8 }}
+                            style={{ backgroundColor: colors.brand.fill, paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 8 }}
                             onPress={handleRedeem}
                             disabled={redeeming || !redeemCode.trim()}
                         >
@@ -999,10 +1234,12 @@ export default function PeopleScreen() {
                             </Text>
                         </Pressable>
                     </View>
+                    </>
+                    )}
 
                     {isGuest && (
                         <View style={{ marginTop: 8, backgroundColor: theme === 'dark' ? colors.feedback.danger.bg : palette.red50, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: theme === 'dark' ? colors.feedback.danger.border : palette.red300, marginBottom: 32 }}>
-                            <Text style={{ color: theme === 'dark' ? colors.feedback.danger.fg : palette.red600, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>
+                            <Text style={{ color: colors.feedback.danger.fg, fontSize: 15, fontWeight: '700', marginBottom: 4 }}>
                                 🛠️ Connection Troubleshooting
                             </Text>
                             <Text style={{ color: theme === 'dark' ? colors.text.body : palette.red800, fontSize: 13, lineHeight: 18, marginBottom: 12 }}>

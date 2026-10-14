@@ -6,22 +6,31 @@
  * Tapping a post opens a full detail view.
  */
 
-import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS, formatNodeName, type PostType } from '../lib/marketplace';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { MarketplaceCard } from '../components/MarketplaceCard';
+import { MembersOnlyListings, isMembersOnlyRefusal } from '../components/MembersOnlyListings';
 import { PollCard } from '../components/PollCard';
 import { EventCard, EventDetail } from '../components/EventCard';
 import { YourEvents } from '../components/YourEvents';
-import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, isEventOpen, type EventWindow } from '../lib/events';
+import { CLIENT_POST_TYPES, EVENT_WINDOWS, eventsFeedFilter, formatDistance, isEventOpen, type EventWindow } from '../lib/events';
 import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
+import { DealsPreviewDialog } from '../components/ShowcasePreviews';
+import { LocalCommunityAction, LocalCommunityLine, DEAL_ACTION_LABEL } from '../components/LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { NO_BEANS_TERMS_TEXT } from '../lib/visitor-lobby';
+import { marked, useFeatureMode } from '../lib/features';
 import { ProfileGateModal } from '../components/ProfileGateModal';
 import { PricingGuideModal } from '../components/PricingGuideModal';
 import { ActivityWaterfall } from '../components/ActivityWaterfall';
 import { ExampleListings } from '../components/ExampleListings';
 import { exampleListingsOn, showExampleListings } from '../lib/example-listings';
+import { pollsInformal } from '../lib/informal-polls';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
+import { useMembersOnDemand } from '../lib/members-on-demand';
+import { nearRead, nearParams, listingDistanceKm } from '../lib/listings-near';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { lazy, Suspense } from 'react';
 const RadiusPickerPage = lazy(() => import('../components/RadiusPickerPage').then(m => ({ default: m.RadiusPickerPage })));
@@ -43,18 +52,21 @@ import {
     cancelMarketplaceTransaction, getMyMarketplaceTransactions, getNodeConfig,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
     getMembers, getTreasuries, getTreasury, getEnterpriseStatuses,
-    getCommissionCapacity, commissionListing,
+    getCommissionCapacity, commissionListing, getCommunityMe,
     getGroups, deleteGroupPost, type Group,
     type MarketplacePost, type MemberProfile, type NodeInfo, type MarketplaceTransaction, type NodeConfig,
     type CommissionCapacity,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 
-import { matchesExpandedSearch } from '../lib/search';
+import { marketSearchFromLink, matchesExpandedSearch } from '../lib/search';
 import { getProfileStatus, describeMissing } from '../lib/profile-status';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { VisitorCard, VisitorPostDetail } from '../components/VisitorListing';
 import { VISITOR_LIST_NOTE } from '../lib/visitor-lobby';
+import { shareInterests } from '../lib/home-interests';
+import { accountEpochHolds } from '../lib/account-epoch';
+import { CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, REPORT_REASONS } from '../lib/reportReasons';
 
 /**
  * The Market as a visitor to the global lobby sees it (design G9a §7, G9b): no identity at all, the node's guest view
@@ -75,6 +87,9 @@ interface Props {
     marketClickCount?: number;
     openPostId?: string | null;
     onPostOpened?: () => void;
+    /** Words to put in the search (a saved search's See more on Home); taken once, then `onSearchOpened`. */
+    openSearch?: string | null;
+    onSearchOpened?: () => void;
     onNavigate?: (tab: string, conversationId?: string) => void;
     onOpenProfile?: (pubkey: string) => void;
     transactions?: MarketplaceTransaction[];
@@ -143,7 +158,10 @@ function feedListFilter(typeFilter: PostType | 'all' | 'for-you', categoryFilter
     return filter;
 }
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
+/** How long the first read waits to learn whether this node reads by area, before it reads as before. */
+const NEAR_WAIT_MS = 1500;
+
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, openSearch, onSearchOpened, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
     const isVisitor = !!visitor;
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
@@ -153,7 +171,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // #108: beans-only browse, so a cash requirement can't ambush anyone. A browse preference,
     // so it persists across sessions.
     // Never for a visitor, whose list has no such chip to undo it.
-    const [beansOnly, setBeansOnly] = useState(() => !visitor && localStorage.getItem('bp_beans_only') === 'true');
+    const [beansOnlyPicked, setBeansOnly] = useState(() => !visitor && localStorage.getItem('bp_beans_only') === 'true');
     const [foundingOnly, setFoundingOnly] = useState(false); // show only newcomers needing a founding trade
     const [categoryFilter, setCategoryFilter] = useState<string | 'all'>('all');
     const [groupFilter, setGroupFilter] = useState<string>('all');
@@ -184,15 +202,23 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             ? favCategories.filter(c => c !== catId)
             : [...favCategories, catId];
         setFavCategories(updated);
-        try {
-            localStorage.setItem('bp_fav_categories', JSON.stringify(updated));
-        } catch (e) {
-            console.error(e);
+        // A member's favourites are their interests: none kept once the account has left this browser (Sign Out in
+        // another tab, lib/account-epoch.ts), as shareInterests keeps none.
+        if (!identity?.publicKey || visitor || accountEpochHolds()) {
+            try {
+                localStorage.setItem('bp_fav_categories', JSON.stringify(updated));
+            } catch (e) {
+                console.error(e);
+            }
         }
+        // One truth with Home's interests (DESIGN-home-dashboard-fable.md §4.3): kept on the member's account too.
+        if (identity?.publicKey && !visitor) void shareInterests(identity.publicKey, updated);
     };
     const [deleting, setDeleting] = useState<string | null>(null);
     const [toggling, setToggling] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // The node refused its listings: this reader is no member of this local community (MembersOnlyListings).
+    const [membersOnly, setMembersOnly] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
 
     // Federation — multi-toggle (home always on, peers toggled independently)
@@ -229,16 +255,64 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         getNodeConfig().then(setNodeConfig).catch(console.error);
     }, []);
 
-    // Whether this node asks for example cards on a nearly empty Market, from the page's one shared read of
-    // /api/community/info (the lobby has already made it). Unknown, or a read that fails, draws none.
+    // Whether this node asks for example cards on a nearly empty Market, and whether its polls are labelled informal (the
+    // global community), from the page's one shared read of /api/community/info (the lobby has already made it).
+    // Unknown, or a read that fails, draws no examples and no label.
     const [examplesOn, setExamplesOn] = useState(false);
+    const [informalPolls, setInformalPolls] = useState(false);
+    // Where the list is read from on a node that keeps each member to the listings near their area (lib/listings-near,
+    // DESIGN-global-sync-by-area §5): the node's radius, and this member's stored area. The first read waits until both
+    // are known, or NEAR_WAIT_MS has passed, so it is made once, from the right place; a node without the switch, a
+    // visitor, and a read that fails all read as before.
+    const [nearbyListings, setNearbyListings] = useState<{ radiusKm: number } | null>(null);
+    const [memberArea, setMemberArea] = useState<{ lat: number; lng: number } | null>(null);
+    const [nearKnown, setNearKnown] = useState(false);
+    // "Show everywhere" under the area line: this visit reads the node's newest, as a node without the switch does.
+    const [everywhere, setEverywhere] = useState(false);
+    // The member's area could not be read (the node busy or down): the line says so, with Try again, rather than
+    // pointing at the picker as if they had no area.
+    const [areaFailed, setAreaFailed] = useState(false);
+    const [areaTry, setAreaTry] = useState(0);
     useEffect(() => {
         let cancelled = false;
+        const known = () => { if (!cancelled) setNearKnown(true); };
+        const timer = setTimeout(known, NEAR_WAIT_MS);
         communityInfoOnce()
-            .then(info => { if (!cancelled) setExamplesOn(exampleListingsOn(info)); })
-            .catch(() => {});
-        return () => { cancelled = true; };
-    }, []);
+            .then(async info => {
+                if (cancelled) return;
+                setExamplesOn(exampleListingsOn(info));
+                setInformalPolls(pollsInformal(info));
+                const nearby = info?.features?.nearbyListings ?? null;
+                setNearbyListings(nearby);
+                if (nearby && identity?.publicKey && !isVisitor) {
+                    let failed = false;
+                    const me = await getCommunityMe().catch(() => { failed = true; return null; });
+                    if (!cancelled) {
+                        setAreaFailed(failed);
+                        setMemberArea(me?.area ? { lat: me.area.lat, lng: me.area.lng } : null);
+                    }
+                }
+            })
+            .catch(() => {})
+            .finally(() => { clearTimeout(timer); known(); });
+        return () => { cancelled = true; clearTimeout(timer); };
+    }, [identity?.publicKey, isVisitor, areaTry]);
+    // Under Events the list is not cut, as on a local node: no point on the read and none on a pushed listing. The
+    // Distance chip is off screen there, so nothing on that screen could undo the cut.
+    const near = useMemo(
+        () => nearKnown && typeFilter !== 'event'
+            ? nearRead({ nearbyListings, setting: radiusSettings, area: memberArea, visitor: isVisitor, everywhere })
+            : null,
+        [nearKnown, typeFilter, nearbyListings, radiusSettings, memberArea, isVisitor, everywhere],
+    );
+    // How far a listing is: the node's word when it measured from `near`, else from the picked centre in the browser.
+    const measureFrom = near ?? radiusSettings;
+    const distanceOf = (p: MarketplacePost): number | null => listingDistanceKm(
+        p, measureFrom ? (lat, lng) => haversineDistance(measureFrom.lat, measureFrom.lng, lat, lng) : null,
+    );
+    // A listing pushed over the live feed joins the list only inside the radius the list was read with.
+    const fitsNear = useCallback((p: MarketplacePost): boolean => !near
+        || (p.lat != null && p.lng != null && haversineDistance(near.lat, near.lng, p.lat, p.lng) <= near.radiusKm), [near]);
 
     // Layout configuration — default to 'grid' (Card View)
     const [viewMode, setViewMode] = useState<'grid' | 'list' | 'compact'>(() => {
@@ -252,6 +326,19 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [showCategoryPicker, setShowCategoryPicker] = useState(false);
     const [showPricingGuide, setShowPricingGuide] = useState(false);
     const [showDealsModal, setShowDealsModal] = useState(false);
+    // Deals off here and the node shows previews: My Deals opens Example Valley's two deals (DESIGN-global-showcase-fable.md §1 row 5).
+    const dealsMode = useFeatureMode('escrow');
+    // Beans and deals that live in a local community (preview or read-only): the price slot and the deal action carry the
+    // 🏘️ marker instead of a price and a Request that would move Beans (design §1 rows 2 and 4). Live and hidden: as before.
+    const priceMarked = marked(useFeatureMode('beans'));
+    // There the Beans-only chip and the Pricing Guide are hidden (design §1, "Hidden on global"), and a Beans-only picked
+    // before does not quietly filter the feed.
+    const beansOnly = beansOnlyPicked && !priceMarked;
+    const dealMarked = marked(dealsMode);
+    const markWays = {
+        onNearYou: onNavigate ? () => { setSelectedPost(null); onNavigate('home'); } : undefined,
+        onGuide: onNavigate ? (slug: string) => { setSelectedPost(null); onNavigate('guide', slug); } : undefined,
+    };
     const [dealsInitialTab, setDealsInitialTab] = useState<'active' | 'pending' | 'history'>('pending');
 
     // Detail view
@@ -307,6 +394,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     // read again — otherwise leaving an event still shows it in the row until the next full load.
     const [yourEventsKey, setYourEventsKey] = useState(0);
 
+    // A saved search's See more on Home: its words in the search box, as if typed.
+    useEffect(() => {
+        if (openSearch === undefined || openSearch === null) return;
+        const q = marketSearchFromLink(openSearch);
+        if (q) setSearchQuery(q);
+        onSearchOpened?.();
+    }, [openSearch, onSearchOpened]);
+
     // Handle deep-link from Map pins or routes
     const deepLinkFetched = useRef<string | null>(null);
     useEffect(() => {
@@ -314,7 +409,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
              setShowDealsModal(true);
              setDealsInitialTab('pending');
              onPostOpened?.();
-        } else if (openPostId && posts.length > 0) {
+        } else if (openPostId && !loading) {
+            // Once the first read has settled, not once it holds something: where the node reads by area the list
+            // can be empty (nothing near), and the link must still open its listing (DESIGN-global-sync-by-area §5).
             const found = posts.find(p => p.id === openPostId);
             if (found) {
                 setSelectedPost(found);
@@ -330,7 +427,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     .catch(() => { });
             }
         }
-    }, [openPostId, posts, onPostOpened]);
+    }, [openPostId, posts, loading, onPostOpened]);
 
     // A Live Pulse chip names a listing that the browse list need not be holding — an older post, or one
     // the current filters hide. Same two steps as the deep-link above: open what we already have, else
@@ -445,7 +542,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     }, [identity]);
 
     const refresh = useCallback(async () => {
-        const refreshKey = `${typeFilter}|${categoryFilter}|${groupFilter}`;
+        // Not before this node's way of reading is known (NEAR_WAIT_MS at most), so the first read is made once.
+        if (!nearKnown) return;
+        const refreshKey = `${typeFilter}|${categoryFilter}|${groupFilter}|${near ? `${near.lat},${near.lng},${near.radiusKm}` : ''}`;
         if (refreshPromiseRef.current && refreshKeyRef.current === refreshKey) {
             return refreshPromiseRef.current;
         }
@@ -461,7 +560,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // A visitor has no enterprises to hide: on the global node they are off, and their reads are members' only.
                 const statusesPromise = isVisitor ? Promise.resolve(null) : getEnterpriseStatuses().catch(() => null);
                 const [homeData, myOwnPosts, statusesData, fallbackTreasuries] = await Promise.all([
-                    getMarketplacePosts(filter),
+                    // Nearest first within the radius where the node reads by area (lib/listings-near); the viewer's own
+                    // listings wherever they are.
+                    getMarketplacePosts({ ...filter, ...nearParams(near) }),
                     identity ? getMarketplacePosts({ ...filter, author: identity.publicKey }).catch(() => []) : Promise.resolve([]),
                     statusesPromise,
                     // Fallback to getTreasuries only if lightweight endpoint is unavailable (e.g. older node or unit test mock)
@@ -504,14 +605,20 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     }
                 }
 
-                setPosts(replayLiveChanges(liveMark, allPosts, post => postFitsList(post, filter)));
+                setPosts(replayLiveChanges(liveMark, allPosts, post => postFitsList(post, filter) && fitsNear(post)));
                 setError(null);
+                setMembersOnly(false);
                 // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
                 // so the cooldown then suppressed the retry — a blip could leave the view stale
                 // until the 300s backstop, which is exactly the window this stage widened.
                 lastRefreshTimeRef.current = Date.now();
             } catch (e: any) {
-                setError(e.message || 'Failed to load');
+                if (isMembersOnlyRefusal(e)) {
+                    setMembersOnly(true);
+                    setError(null);
+                } else {
+                    setError(e.message || 'Failed to load');
+                }
                 throw e;
             } finally {
                 setLoading(false);
@@ -520,7 +627,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         })();
         refreshPromiseRef.current = p;
         return p;
-    }, [typeFilter, categoryFilter, groupFilter, beansOnly, enabledPeers, identity, isVisitor]);
+    }, [typeFilter, categoryFilter, groupFilter, beansOnly, enabledPeers, identity, isVisitor, nearKnown, near, fitsNear]);
 
     // Fetch peer nodes on mount
     useEffect(() => {
@@ -602,11 +709,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     useLayoutEffect(() => { postsRef.current = posts; }, [posts]);
     useEffect(() => {
         const filter = feedListFilter(typeFilter, categoryFilter, beansOnly, groupFilter);
-        const fits = (p: MarketplacePost) => postFitsList(p, filter);
+        const fits = (p: MarketplacePost) => postFitsList(p, filter) && fitsNear(p);
         const offView = onLivePostChange(change => setPosts(prev => applyLivePostChange(prev, change, fits)));
         const offTie = registerLivePostTie(heldPostTie(() => postsRef.current, identity?.publicKey));
         return () => { offView(); offTie(); };
-    }, [typeFilter, categoryFilter, beansOnly, groupFilter, identity?.publicKey]);
+    }, [typeFilter, categoryFilter, beansOnly, groupFilter, identity?.publicKey, fitsNear]);
 
     // Fetch ratings for all unique post authors — cached by author in ref to prevent fan-out on every 15s poll
     useEffect(() => {
@@ -650,9 +757,17 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         });
     }, [posts]);
 
+    // On a community where people are asked for, not read whole (lib/members-on-demand, the worldwide one), each listing
+    // carries its author's face (authorAvatarUrl) and nothing is read for it. Elsewhere, and while the node hasn't said,
+    // the faces come from the member directory, as before.
+    const membersOnDemand = useMembersOnDemand();
+    const authorFaceOf = (post: MarketplacePost): string | null => membersOnDemand
+        ? (post.authorAvatarUrl ?? null)
+        : (authorAvatarCache[post.authorPublicKey] || null);
+
     // Fetch avatar cache from members list (members only: a visitor's list names nobody)
     useEffect(() => {
-        if (isVisitor) return;
+        if (isVisitor || membersOnDemand !== false) return;
         getMembers()
             .then(members => {
                 const cache: Record<string, string | null> = {};
@@ -662,7 +777,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 setAuthorAvatarCache(cache);
             })
             .catch(() => {});
-    }, []);
+    }, [membersOnDemand]);
 
     // The ids of the open Need's outstanding bids, as a plain string so it compares by VALUE in the
     // dependency array below. This page no longer polls transactions itself — App.tsx owns that —
@@ -831,11 +946,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             <VisitorPostDetail
                 post={selectedPost}
                 beans={visitor.beans}
-                distanceKm={radiusSettings && selectedPost.lat != null && selectedPost.lng != null
-                    ? haversineDistance(radiusSettings.lat, radiusSettings.lng, selectedPost.lat, selectedPost.lng)
-                    : null}
+                distanceKm={distanceOf(selectedPost)}
                 onBack={() => setSelectedPost(null)}
                 onJoin={visitor.onJoin}
+                pollsInformal={informalPolls}
             />
         );
     }
@@ -850,16 +964,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             setEditMode(false);
                             setEditPhotos([]);
                         }}
-                        className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 font-bold transition-colors cursor-pointer"
+                        className="mb-4 min-h-[48px] flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:hover:text-nature-400 font-bold transition-colors cursor-pointer"
                     >
                         <span className="text-xl leading-none">←</span> Back to Market
                     </button>
                     <EventDetail
                         post={selectedPost}
                         identity={identity}
-                        distanceKm={radiusSettings && selectedPost.lat != null && selectedPost.lng != null
-                            ? haversineDistance(radiusSettings.lat, radiusSettings.lng, selectedPost.lat, selectedPost.lng)
-                            : null}
+                        distanceKm={distanceOf(selectedPost)}
                         onShowOnMap={(p) => onNavigate?.('map-event', p.id)}
                         onOpenChat={(p) => onNavigate?.('messages', p.id)}
                         onCopyToNewDate={(p) => onNavigate?.('map-copy-event', p.id)}
@@ -881,7 +993,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             setEditMode(false);
                             setEditPhotos([]);
                         }}
-                        className="mb-4 flex items-center gap-2 text-nature-500 hover:text-nature-700 font-bold transition-colors cursor-pointer"
+                        className="mb-4 flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:hover:text-nature-400 font-bold transition-colors cursor-pointer"
                     >
                         <span className="text-xl leading-none">←</span> Back to Market
                     </button>
@@ -892,6 +1004,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             refresh();
                         }}
                         onOpenProfile={onOpenProfile}
+                        informal={informalPolls} localWays={markWays}
                     />
                 </div>
             );
@@ -953,7 +1066,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         setEditMode(false);
                         setEditPhotos([]);
                     }}
-                    className="mb-4 flex items-center gap-2 text-nature-500 hover:text-nature-700 font-bold transition-colors"
+                    className="mb-4 flex items-center gap-2 text-nature-500 hover:text-nature-700 dark:hover:text-nature-400 font-bold transition-colors"
                 >
                     <span className="text-xl leading-none">←</span> Back to Market
                 </button>
@@ -974,7 +1087,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 {isPulsePost ? '🗞️ DAILY PULSE' : `${selectedPost.type === 'offer' ? '🔵 Offer' : '🟠 Need'} · ${cat?.label ?? selectedPost.category}`}
                             </span>
                         </div>
-                        <span className="text-xs font-semibold text-nature-500">{ago}</span>
+                        <span className="text-xs font-semibold text-nature-500 dark:text-nature-400">{ago}</span>
                     </div>
 
                     {/* Content */}
@@ -1041,7 +1154,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         )}
 
                         {selectedPost.description && (
-                            <p className="text-base text-nature-600 leading-relaxed mb-5 whitespace-pre-wrap">
+                            <p className="text-base text-nature-600 dark:text-nature-300 leading-relaxed mb-5 whitespace-pre-wrap">
                                 {selectedPost.description}
                             </p>
                         )}
@@ -1075,8 +1188,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             </div>
                         )}
 
-                        {/* Credits */}
-                        {!isPulsePost && (
+                        {/* Credits; where Beans live in a local community, what the description asks in return and the line */}
+                        {!isPulsePost && priceMarked && (
+                            <div className="bg-oat-50 dark:bg-nature-900 rounded-xl p-4 border border-nature-100 dark:border-nature-800 shadow-inner" data-testid="listing-in-return">
+                                <span className="text-xs font-bold text-nature-500 dark:text-nature-400 uppercase tracking-widest block mb-1">In return</span>
+                                <p className="font-bold text-nature-900 dark:text-white mb-2">{NO_BEANS_TERMS_TEXT}</p>
+                                <LocalCommunityLine feature="beans" text={LOCAL_COMMUNITY_LINES.price} {...markWays} />
+                            </div>
+                        )}
+                        {!isPulsePost && !priceMarked && (
                             <div className="bg-oat-50 dark:bg-nature-900 rounded-xl p-4 text-center border border-nature-100 dark:border-nature-800 shadow-inner block">
                                 <span className="text-xs font-bold text-nature-500 dark:text-nature-400 uppercase tracking-widest block mb-1">
                                     {selectedPost.type === 'offer' ? 'Asking Price' : 'Willing to Pay'}
@@ -1100,7 +1220,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                 {/* Author section */}
                 <div className="bg-white dark:bg-nature-950 rounded-2xl border border-nature-200 dark:border-nature-800 p-4 shadow-sm mb-4">
-                    <p className="text-[0.65rem] text-nature-400 dark:text-nature-500 font-bold uppercase tracking-widest mb-3">
+                    <p className="text-[0.65rem] text-nature-400 dark:text-nature-400 font-bold uppercase tracking-widest mb-3">
                         Posted by
                     </p>
                     <button 
@@ -1109,7 +1229,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         {/* Avatar */}
                         {loadingProfile ? (
-                            <div className="w-14 h-14 rounded-full bg-nature-100 animate-pulse shrink-0" />
+                            <div className="w-14 h-14 rounded-full bg-nature-100 dark:bg-nature-800 animate-pulse shrink-0" />
                         ) : resolveAvatarUrl(authorProfile?.avatar) ? (
                             <img
                                 src={resolveAvatarUrl(authorProfile?.avatar)!}
@@ -1133,7 +1253,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <>
                                             {`${authorAvgRating.average.toFixed(1)} (${authorAvgRating.count})`}
                                             {authorAvgRating.asProvider && authorAvgRating.asProvider.count > 0 && (
-                                                <span className="ml-2 text-[0.65rem] bg-amber-50 px-1.5 py-0.5 rounded text-amber-700">
+                                                <span className="ml-2 text-[0.65rem] bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded text-amber-700 dark:text-amber-300">
                                                     📤 {authorAvgRating.asProvider.average.toFixed(1)}
                                                 </span>
                                             )}
@@ -1147,12 +1267,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 </span>
                             </p>
                             {authorProfile?.bio && (
-                                <p className="text-sm text-nature-600 leading-snug mb-0">
+                                <p className="text-sm text-nature-600 dark:text-nature-400 leading-snug mb-0">
                                     {authorProfile.bio}
                                 </p>
                             )}
                             {authorProfile?.contact && authorProfile.contact.visibility !== 'hidden' && (
-                                <p className="text-xs text-nature-500 mt-2 font-medium bg-oat-50 px-2 py-1 rounded-lg inline-block border border-nature-100">
+                                <p className="text-xs text-nature-500 dark:text-nature-300 mt-2 font-medium bg-oat-50 dark:bg-nature-900 px-2 py-1 rounded-lg inline-block border border-nature-100 dark:border-nature-800">
                                     📧 {authorProfile.contact.value}
                                 </p>
                             )}
@@ -1306,7 +1426,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                              }}
                              disabled={accepting}
                              className={`w-full py-3 mt-2 rounded-xl border font-bold text-sm transition-colors ${
-                                 accepting ? 'border-red-200 text-red-300 cursor-not-allowed' : 'border-red-300 text-red-500 hover:bg-red-50'
+                                 accepting ? 'border-red-200 text-red-300 cursor-not-allowed' : 'border-red-300 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 dark:hover:text-red-300'
                              }`}
                          >
                              ❌ Cancel Hold
@@ -1326,14 +1446,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <div className="flex flex-col mb-3">
                                         <button 
                                             onClick={() => { if (onOpenProfile) onOpenProfile(req.sellerPublicKey || req.buyerPublicKey); }}
-                                            className="font-bold text-nature-900 dark:text-white text-sm text-left hover:text-emerald-600 transition-colors flex items-center gap-1"
+                                            className="font-bold text-nature-900 dark:text-white text-sm text-left hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors flex items-center gap-1"
                                         >
-                                            <span className="text-amber-600">🤝</span> <span className="underline decoration-nature-300 underline-offset-2">{req.sellerCallsign}</span>
+                                            <span className="text-amber-600 dark:text-amber-400">🤝</span> <span className="underline decoration-nature-300 underline-offset-2">{req.sellerCallsign}</span>
                                         </button>
                                         <span className="text-xs text-amber-500 mt-0.5 font-semibold">
                                             {req.bidderRating?.count > 0 ? `★ ${req.bidderRating.average.toFixed(1)} (${req.bidderRating.count} reviews)` : '☆☆☆☆☆ No ratings yet'}
                                         </span>
-                                        <span className="text-xs text-nature-500 mt-1">
+                                        <span className="text-xs text-nature-500 dark:text-nature-400 mt-1">
                                             {req.hours ? `${req.hours} hours estimated` : 'Offered to fulfill'}
                                         </span>
                                     </div>
@@ -1356,7 +1476,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 }
                                             }}
                                             disabled={accepting}
-                                            className="flex-1 py-1.5 rounded-md border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-400 font-bold text-xs hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/30 transition-colors"
+                                            className="flex-1 py-1.5 rounded-md border border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-400 font-bold text-xs hover:bg-red-50 hover:text-red-600 hover:border-red-200 dark:hover:bg-red-900/30 dark:hover:text-red-300 transition-colors"
                                         >
                                             Deny
                                         </button>
@@ -1377,7 +1497,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 }
                                             }}
                                             disabled={accepting}
-                                            className="flex-1 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-colors"
+                                            className="flex-1 py-1.5 rounded-md bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-colors"
                                         >
                                             Approve & Hold in Trust
                                         </button>
@@ -1441,7 +1561,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 }
                                             }}
                                             disabled={accepting}
-                                            className="w-full py-2.5 rounded-lg border border-red-200 text-red-600 font-bold hover:bg-red-50 transition-colors text-sm"
+                                            className="w-full py-2.5 rounded-lg border border-red-200 text-red-600 dark:text-red-300 font-bold hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors text-sm"
                                         >
                                             {accepting ? 'Canceling...' : 'Cancel Offer'}
                                         </button>
@@ -1449,6 +1569,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 );
                             }
 
+                            // Deals live in a local community: the action keeps its place and words, and opens the sheet.
+                            if (dealMarked) {
+                                return <LocalCommunityAction feature="escrow" label={DEAL_ACTION_LABEL} className="w-full py-3.5 text-[15px]" {...markWays} />;
+                            }
                             return showAcceptConfirm ? (
                             <div className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 shadow-inner mt-2">
                                 <p className="font-bold text-nature-900 dark:text-white mb-2 text-center text-sm">
@@ -1485,14 +1609,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             const net = Math.round(tot * 0.985 * 100) / 100;
                                             return (
                                                 <span>
-                                                    By proceeding, you commit {tot} B{duration} to a Trust Wallet. When finalized, the provider will receive {net.toFixed(2)} B (net of 1.5% transaction fee <span className="text-emerald-600 dark:text-emerald-500 font-bold">(100% community owned)</span> to fund the Commons Pool).
+                                                    By proceeding, you commit {tot} B{duration} to a Trust Wallet. When finalized, the provider will receive {net.toFixed(2)} B (net of 1.5% transaction fee <span className="text-emerald-600 dark:text-emerald-400 font-bold">(100% community owned)</span> to fund the Commons Pool).
                                                 </span>
                                             );
                                         } else {
                                             const net = Math.round(tot * 0.985 * 100) / 100;
                                             return (
                                                 <span>
-                                                    You will receive {net.toFixed(2)} B (after 1.5% transaction fee <span className="text-emerald-600 dark:text-emerald-500 font-bold">(100% community owned)</span> is deducted to fund the Commons Pool) when the job is completed.
+                                                    You will receive {net.toFixed(2)} B (after 1.5% transaction fee <span className="text-emerald-600 dark:text-emerald-400 font-bold">(100% community owned)</span> is deducted to fund the Commons Pool) when the job is completed.
                                                 </span>
                                             );
                                         }
@@ -1734,7 +1858,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 className={`w-full py-3.5 rounded-xl font-bold text-white text-[15px] transition-all shadow-md ${
                                     accepting
                                         ? 'bg-nature-400 cursor-not-allowed opacity-60'
-                                        : selectedPost.type === 'offer' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-terra-600 hover:bg-terra-700'
+                                        : selectedPost.type === 'offer' ? 'bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700' : 'bg-terra-600 hover:bg-terra-700'
                                 }`}
                             >
                                  {accepting ? 'Processing...' : (selectedPost.type === 'offer' ? '🤝 Accept Offer' : '✋ Offer to Fulfill')}
@@ -1758,7 +1882,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             {messaging ? 'Opening chat...' : '💬 Message'}
                         </button>
                         {isRemotePost && (
-                            <p className="mt-1.5 text-xs text-nature-600 text-center">
+                            <p className="mt-1.5 text-xs text-nature-600 dark:text-nature-400 text-center">
                                 This post is from another community — messaging across communities isn't available yet.
                             </p>
                         )}
@@ -1790,8 +1914,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     ? 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-500' 
                                                     : 'bg-amber-100 dark:bg-amber-900/40 border-amber-300 dark:border-amber-800 text-amber-800 dark:text-amber-500') 
                                                 : (hasExistingRating 
-                                                    ? 'bg-white dark:bg-nature-900 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-500 hover:bg-emerald-50 dark:hover:bg-nature-800 shadow-sm' 
-                                                    : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-nature-800 shadow-sm')
+                                                    ? 'bg-white dark:bg-nature-900 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-nature-800 shadow-sm' 
+                                                    : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-nature-800 shadow-sm')
                                         }`}
                                     >
                                         {hasExistingRating ? `⭐ Edit rating for ${targetName} (as ${targetRole})` : `⭐ Rate ${targetName} as ${targetRole}`}
@@ -1799,8 +1923,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                                     {showRatingForm && (
                                         <div className="bg-oat-50 dark:bg-nature-950 border border-nature-200 dark:border-nature-800 rounded-xl p-4 mt-2 shadow-inner">
-                                            <p className="text-sm text-nature-600 mb-3 text-center">
-                                                How was <strong className="text-nature-900">{targetName}</strong> as a <strong className="text-nature-900">{targetRole}</strong>?
+                                            <p className="text-sm text-nature-600 dark:text-nature-400 mb-3 text-center">
+                                                How was <strong className="text-nature-900 dark:text-text-primary">{targetName}</strong> as a <strong className="text-nature-900 dark:text-text-primary">{targetRole}</strong>?
                                             </p>
                                             <div className="flex justify-center gap-2 mb-3">
                                                 {[1, 2, 3, 4, 5].map(star => (
@@ -1820,7 +1944,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 onChange={(e) => setRatingComment(e.target.value)}
                                                 placeholder="Leave a comment (optional)..."
                                                 maxLength={200}
-                                                className="w-full p-2.5 rounded-lg border border-nature-200 bg-white text-nature-900 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none mb-2"
+                                                className="w-full p-2.5 rounded-lg border border-nature-200 bg-white text-nature-900 text-sm dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-amber-300 resize-none mb-2"
                                                 rows={2}
                                             />
                                             <button
@@ -1859,25 +1983,25 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                         <button
                             onClick={() => setShowReportForm(!showReportForm)}
-                            className="w-full py-2.5 mt-3 rounded-xl border border-nature-200 bg-transparent text-nature-500 font-semibold text-sm hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-colors"
+                            className="w-full py-2.5 mt-3 rounded-xl border border-nature-200 bg-transparent text-nature-500 font-semibold text-sm hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-300 hover:border-red-200 transition-colors"
                         >
                             🚩 Report
                         </button>
 
                         {showReportForm && (
-                            <div className="bg-red-50 border border-red-100 rounded-xl p-4 mt-2 shadow-inner">
+                            <div className="bg-red-50 dark:bg-red-950/40 border border-red-100 dark:border-red-900 rounded-xl p-4 mt-2 shadow-inner">
                                 <select
                                     value={reportReason}
                                     onChange={(e) => setReportReason(e.target.value)}
-                                    className="w-full p-2.5 rounded-lg bg-white border border-red-200 text-nature-900 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 cursor-pointer mb-2"
+                                    className="w-full p-2.5 rounded-lg bg-white border border-red-200 text-nature-900 text-sm dark:bg-bg-input dark:text-text-primary dark:border-red-700 focus:outline-none focus:ring-2 focus:ring-red-300 cursor-pointer mb-2"
                                 >
                                     <option value="">Select a reason...</option>
-                                    <option value="Spam or scam">Spam or scam</option>
-                                    <option value="Offensive content">Offensive content</option>
-                                    <option value="Misleading post">Misleading post</option>
-                                    <option value="Harassment">Harassment</option>
-                                    <option value="Other">Other</option>
+                                    {/* The one shared list (lib/reportReasons.ts), as in ReportModal: "Child safety" is told at once. */}
+                                    {REPORT_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
                                 </select>
+                                <p className="text-xs text-nature-800 dark:text-nature-200 mb-2">
+                                    <span className="font-bold">{CHILD_SAFETY_REASON}:</span> {CHILD_SAFETY_HINT}
+                                </p>
                                 <button
                                     onClick={async () => {
                                         if (!identity || !selectedPost || !reportReason) return;
@@ -1933,8 +2057,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         disabled={toggling}
                                         className={`w-full py-3 rounded-xl border font-bold text-sm transition-colors ${
                                             selectedPost.status === 'paused'
-                                                ? 'border-emerald-300 text-emerald-600 hover:bg-emerald-50'
-                                                : 'border-amber-300 text-amber-600 hover:bg-amber-50'
+                                                ? 'border-emerald-300 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 dark:hover:text-emerald-300'
+                                                : 'border-amber-300 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/30 dark:hover:text-amber-300'
                                         }`}
                                     >
                                         {toggling ? 'Updating…' : selectedPost.status === 'paused' ? '▶️ Activate Offer' : '⏸️ Pause Offer'}
@@ -1952,7 +2076,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setEditPhotos(selectedPost.photos || []);
                                         setEditMode(true);
                                     }}
-                                    className="w-full py-3.5 rounded-xl bg-terra-500 hover:bg-terra-600 font-bold text-white text-[15px] transition-all shadow-md"
+                                    className="w-full py-3.5 rounded-xl bg-terra-500 dark:bg-terra-600 hover:bg-terra-600 font-bold text-white text-[15px] transition-all shadow-md"
                                 >
                                     ✏️ Edit Post
                                 </button>
@@ -1974,7 +2098,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     }}
                                     disabled={deleting === selectedPost.id}
                                     className={`w-full py-3 rounded-xl border font-bold text-sm transition-colors mt-2 ${
-                                        deleting === selectedPost.id ? 'border-red-200 text-red-300 cursor-not-allowed' : 'border-red-300 text-red-500 hover:bg-red-50'
+                                        deleting === selectedPost.id ? 'border-red-200 text-red-300 cursor-not-allowed' : 'border-red-300 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 dark:hover:text-red-300'
                                     }`}
                                 >
                                     {deleting === selectedPost.id ? 'Deleting...' : '🗑️ Delete Post'}
@@ -1993,7 +2117,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             className={`flex-1 py-2.5 rounded-xl border text-sm font-bold capitalize transition-colors ${
                                                 editType === t
                                                     ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-orange-600 border-orange-600 text-white shadow-sm')
-                                                    : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-500 dark:text-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800'
+                                                    : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-500 dark:text-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 dark:hover:text-nature-300'
                                             }`}
                                         >
                                             {t === 'offer' ? '🔵 Offer' : '🟠 Need'}
@@ -2005,7 +2129,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <select
                                     value={editCategory}
                                     onChange={(e) => setEditCategory(e.target.value)}
-                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
+                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
                                     style={inputStyle}
                                 >
                                     {MARKETPLACE_CATEGORIES.map(cat => (
@@ -2018,7 +2142,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     value={editTitle}
                                     onChange={(e) => setEditTitle(e.target.value)}
                                     placeholder="Title"
-                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm"
+                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm"
                                     style={inputStyle}
                                 />
 
@@ -2027,7 +2151,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     value={editDescription}
                                     onChange={(e) => setEditDescription(e.target.value)}
                                     placeholder="Description"
-                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-h-[100px] resize-y"
+                                    className="w-full mb-3 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-h-[100px] resize-y"
                                     style={{ ...inputStyle, minHeight: '100px' }}
                                 />
 
@@ -2038,13 +2162,13 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         value={editCredits}
                                         onChange={(e) => setEditCredits(Number(e.target.value) || 0)}
                                         placeholder="Credits (B)"
-                                        className="flex-1 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-w-0"
+                                        className="flex-1 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm min-w-0"
                                         style={{...inputStyle, marginBottom: 0, width: undefined}}
                                     />
                                     <select
                                         value={editPriceType}
                                         onChange={(e) => setEditPriceType(e.target.value as any)}
-                                        className="w-28 shrink-0 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
+                                        className="w-28 shrink-0 py-3 px-4 rounded-xl border border-nature-200 bg-white text-nature-900 text-[15px] dark:bg-bg-input dark:text-text-primary dark:border-nature-500 focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm appearance-auto cursor-pointer"
                                         style={{...inputStyle, marginBottom: 0, width: undefined}}
                                     >
                                         <option value="fixed">Total</option>
@@ -2057,7 +2181,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                                 {/* Repeatable Toggle */}
                                 <div className="mb-4">
-                                    <label className="flex items-center gap-3 p-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50 dark:bg-nature-900/50 cursor-pointer hover:bg-white transition-colors cursor-pointer group">
+                                    <label className="flex items-center gap-3 p-3 rounded-xl border border-nature-200 dark:border-nature-800 bg-nature-50 dark:bg-nature-900/50 cursor-pointer hover:bg-white dark:hover:bg-nature-900 transition-colors cursor-pointer group">
                                         <div className="relative flex items-center justify-center w-6 h-6 shrink-0">
                                             <input 
                                                 type="checkbox" 
@@ -2070,8 +2194,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             </svg>
                                         </div>
                                         <div className="flex flex-col">
-                                            <span className="text-[14px] font-bold text-nature-900 dark:text-white group-hover:text-terra-600 transition-colors">Recurring Need / Offer</span>
-                                            <span className="text-[11px] text-nature-500 font-medium">Post remains active after completion for repeat business.</span>
+                                            <span className="text-[14px] font-bold text-nature-900 dark:text-white group-hover:text-terra-600 dark:group-hover:text-terra-400 transition-colors">Recurring Need / Offer</span>
+                                            <span className="text-[11px] text-nature-500 dark:text-nature-400 font-medium">Post remains active after completion for repeat business.</span>
                                         </div>
                                     </label>
                                 </div>
@@ -2093,7 +2217,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             </div>
                                         ))}
                                         {editPhotos.length < 5 && (
-                                            <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 flex items-center justify-center cursor-pointer text-nature-400 text-2xl hover:bg-nature-50 hover:border-nature-400 transition-colors">
+                                            <label className="w-16 h-16 rounded-xl border-2 border-dashed border-nature-300 flex items-center justify-center cursor-pointer text-nature-400 text-2xl hover:bg-nature-50 dark:hover:bg-nature-800 dark:hover:text-nature-200 hover:border-nature-400 transition-colors">
                                                 +
                                                 <input
                                                     type="file"
@@ -2132,7 +2256,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 <div className="flex gap-2">
                                     <button
                                         onClick={() => setEditMode(false)}
-                                        className="flex-1 py-3 is-bold rounded-xl border border-nature-300 text-nature-600 bg-white hover:bg-nature-50 transition-colors text-[15px] font-bold shadow-sm"
+                                        className="flex-1 py-3 is-bold rounded-xl border border-nature-300 text-nature-600 bg-white hover:bg-nature-50 dark:bg-nature-900 dark:text-nature-200 dark:border-nature-600 dark:hover:bg-nature-800 transition-colors text-[15px] font-bold shadow-sm"
                                     >
                                         Cancel
                                     </button>
@@ -2205,7 +2329,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 )}
 
                 {error && (
-                    <div className="bg-red-50 border border-red-200 rounded-xl p-3 mt-4 text-red-600 text-sm text-center shadow-sm">
+                    <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3 mt-4 text-red-600 dark:text-red-300 text-sm text-center shadow-sm">
                         {error}
                     </div>
                 )}
@@ -2256,7 +2380,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             placeholder="Search marketplace..."
-                            className="w-full py-2 pl-10 pr-4 rounded-full border border-nature-200 dark:border-nature-800 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all hover:shadow-md"
+                            className="w-full py-2 pl-10 pr-4 rounded-full border border-nature-200 dark:border-nature-600 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:outline-none focus:ring-2 focus:ring-terra-300 shadow-sm transition-all hover:shadow-md"
                         />
                     </div>
 
@@ -2281,7 +2405,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             try { localStorage.setItem('marketplace_view_mode', next); } catch {}
                             return next;
                         })}
-                        className="w-9 h-9 rounded-full flex-shrink-0 border bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-600 dark:text-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 transition-colors shadow-sm flex items-center justify-center text-md hover:shadow-md cursor-pointer"
+                        className="w-9 h-9 rounded-full flex-shrink-0 border bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-800 transition-colors shadow-sm flex items-center justify-center text-md hover:shadow-md cursor-pointer"
                         title={viewMode === 'grid' ? "Switch to List View" : (viewMode === 'list' ? "Switch to Compact View" : "Switch to Card View")}
                         aria-label={viewMode === 'grid' ? "Switch to List View" : (viewMode === 'list' ? "Switch to Compact View" : "Switch to Card View")}
                     >
@@ -2296,11 +2420,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     {(['all', 'for-you', 'offer', 'need', 'event', 'poll'] as const).map((t) => {
                         const isSelected = typeFilter === t;
                         let activeStyles = 'bg-nature-800 dark:bg-white text-white dark:text-nature-900 border border-nature-900/10 shadow-sm scale-[1.01]';
-                        if (t === 'offer') activeStyles = 'bg-emerald-600 dark:bg-emerald-500 text-white border border-emerald-700/25 shadow-sm scale-[1.01]';
-                        if (t === 'need') activeStyles = 'bg-terra-600 dark:bg-terra-500 text-white border border-terra-700/25 shadow-sm scale-[1.01]';
-                        if (t === 'poll') activeStyles = 'bg-purple-600 dark:bg-purple-500 text-white border border-purple-700/25 shadow-sm scale-[1.01]';
-                        if (t === 'event') activeStyles = 'bg-violet-700 dark:bg-violet-500 text-white border border-violet-800/25 shadow-sm scale-[1.01]';
-                        if (t === 'for-you') activeStyles = 'bg-violet-600 dark:bg-violet-500 text-white border border-violet-700/25 shadow-sm scale-[1.01]';
+                        if (t === 'offer') activeStyles = 'bg-emerald-600 dark:bg-emerald-700 text-white border border-emerald-700/25 shadow-sm scale-[1.01]';
+                        if (t === 'need') activeStyles = 'bg-terra-600 dark:bg-terra-600 text-white border border-terra-700/25 shadow-sm scale-[1.01]';
+                        if (t === 'poll') activeStyles = 'bg-purple-600 dark:bg-purple-600 text-white border border-purple-700/25 shadow-sm scale-[1.01]';
+                        if (t === 'event') activeStyles = 'bg-violet-700 dark:bg-violet-600 text-white border border-violet-800/25 shadow-sm scale-[1.01]';
+                        if (t === 'for-you') activeStyles = 'bg-violet-600 dark:bg-violet-600 text-white border border-violet-700/25 shadow-sm scale-[1.01]';
 
                         return (
                             <button
@@ -2323,6 +2447,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     new members and the pricing guide are about listings. */}
                 <div className="flex flex-wrap items-center gap-2 my-1.5">
                     {typeFilter !== 'event' && !isVisitor && (<>
+                    {!priceMarked && (
                     <button
                         onClick={() => {
                             const next = !beansOnly;
@@ -2332,13 +2457,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         aria-pressed={beansOnly}
                         className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
                             beansOnly
-                                ? 'bg-emerald-600 dark:bg-emerald-500 text-white border-emerald-700/25 shadow-sm'
+                                ? 'bg-emerald-600 dark:bg-emerald-700 text-white border-emerald-700/25 shadow-sm'
                                 : 'bg-transparent text-nature-500 dark:text-nature-400 border-nature-200 dark:border-nature-800 hover:text-nature-800 dark:hover:text-nature-200'
                         }`}
                         title="Hide listings that also need cash for fuel or materials"
                     >
                         🫘 Beans only{beansOnly ? ' ✓' : ''}
                     </button>
+                    )}
 
                     <button
                         onClick={() => setFoundingOnly(v => !v)}
@@ -2352,13 +2478,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         🌱 New members{foundingOnly ? ' ✓' : ''}
                     </button>
 
+                    {!priceMarked && (
                     <button
                         onClick={() => setShowPricingGuide(true)}
-                        className="px-3 py-1 rounded-full text-xs font-extrabold border transition-colors cursor-pointer bg-white dark:bg-nature-900 text-indigo-700 dark:text-indigo-400 border-indigo-300/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                        className="px-3 py-1 rounded-full text-xs font-extrabold border transition-colors cursor-pointer bg-white dark:bg-nature-900 text-indigo-700 dark:text-indigo-300 border-indigo-300/50 hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
                         title="Browse benchmark community prices"
                     >
                         💡 Pricing Guide
                     </button>
+                    )}
                     </>)}
 
                     {userGroups.length > 0 && (
@@ -2368,8 +2496,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 onChange={(e) => setGroupFilter(e.target.value)}
                                 className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
                                     groupFilter !== 'all'
-                                        ? 'bg-emerald-600 dark:bg-emerald-500 text-white border-emerald-700/25 shadow-sm'
-                                        : 'bg-white dark:bg-nature-900 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-800'
+                                        ? 'bg-emerald-600 dark:bg-emerald-700 text-white border-emerald-700/25 shadow-sm'
+                                        : 'bg-white dark:bg-nature-900 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-600'
                                 }`}
                                 aria-label="Filter feed by group"
                             >
@@ -2419,8 +2547,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onClick={() => setShowCategoryPicker(true)}
                         className={`w-full py-2 rounded-2xl border text-xs font-black transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer hover:shadow-sm ${
                             categoryFilter !== 'all'
-                                ? 'bg-indigo-600 border-indigo-700 text-white shadow-soft dark:bg-indigo-500 dark:border-indigo-500'
-                                : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-850 text-nature-600 dark:text-nature-350 hover:bg-oat-50 dark:hover:bg-nature-900/60'
+                                ? 'bg-indigo-600 border-indigo-700 text-white shadow-soft dark:bg-indigo-600 dark:border-indigo-500'
+                                : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-900/60'
                         }`}
                     >
                         {(MARKETPLACE_CATEGORIES_BY_ID.get(categoryFilter)?.emoji) || '🏷️'}
@@ -2448,8 +2576,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onClick={() => setShowRadiusPicker(true)}
                         className={`w-full py-2 rounded-2xl border text-xs font-black transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer hover:shadow-sm ${
                             radiusSettings
-                                ? 'bg-amber-600 border-amber-700 text-white shadow-soft dark:bg-amber-500 dark:border-amber-500'
-                                : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-850 text-nature-600 dark:text-nature-350 hover:bg-oat-50 dark:hover:bg-nature-900/60'
+                                ? 'bg-amber-600 border-amber-700 text-white shadow-soft dark:bg-amber-700 dark:border-amber-500'
+                                : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-900/60'
                         }`}
                     >
                         <span>📍</span>
@@ -2478,7 +2606,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 {/* Connected Communities — multi-toggle (only if peer nodes exist) */}
                 {peerNodes.length > 0 && (
                     <div className="flex gap-2 mt-2 overflow-x-auto pb-1 scrollbar-hide">
-                        <span className="px-3 py-1.5 rounded-lg border-2 border-emerald-300 bg-emerald-50 text-emerald-700 text-xs font-black uppercase tracking-widest whitespace-nowrap inline-flex items-center shadow-sm">
+                        <span className="px-3 py-1.5 rounded-lg border-2 border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 text-xs font-black uppercase tracking-widest whitespace-nowrap inline-flex items-center shadow-sm">
                             🏠 Internal
                         </span>
                         {peerNodes.map(peer => {
@@ -2498,9 +2626,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </div>
                 )}
 
+            {/* Not a member here: a local community's listings are its members' */}
+            {membersOnly && <MembersOnlyListings />}
+
             {/* Error */}
             {error && (
-                <div className="bg-red-50 border border-red-200 rounded-xl p-3 mb-4 text-red-600 text-sm text-center shadow-sm">
+                <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3 mb-4 text-red-600 dark:text-red-300 text-sm text-center shadow-sm">
                     {error}
                 </div>
             )}
@@ -2509,7 +2640,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             {/* Posts */}
             {loading ? (
                 <p className="text-nature-500 text-center py-8">Loading...</p>
-            ) : (() => {
+            ) : membersOnly ? null : (() => {
                 let filtered = posts.filter(p => {
                     if (p.type === 'poll') {
                         return p.status === 'active' || p.status === 'completed';
@@ -2597,11 +2728,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     return 0;
                 });
 
-                // Distance on an event card, from the centre the viewer picked for "near me" (§3).
-                const eventDistance = (p: MarketplacePost): number | null =>
-                    radiusSettings && p.lat != null && p.lng != null
-                        ? haversineDistance(radiusSettings.lat, radiusSettings.lng, p.lat, p.lng)
-                        : null;
+                // Distance on a card: the node's, where it read from a point, else from the centre the viewer picked for
+                // "near me" (§3).
+                const eventDistance = distanceOf;
 
                 // Listings posted today — the local calendar day, not the last 24 hours (a post from 11 pm last
                 // night is not "today" at 9 am). Events are not listings; their cards carry their own date.
@@ -2616,6 +2745,37 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // A few example cards while the Market is nearly empty, where the node asks for them
                 // (lib/example-listings.ts): never under a search or a filter, and never in the posts themselves, so
                 // nothing counts them, opens them or pins them. Before the empty state, or after the real listings.
+                // Where the list was read from, on a node that reads by area (lib/listings-near): one line, and always a
+                // way to the rest (DESIGN-global-sync-by-area §5, never a dead end). Under Events the list is not cut.
+                const nearLine = !isVisitor && nearbyListings && nearKnown && typeFilter !== 'event' ? (
+                    <p data-testid="market-near-line" className="m-0 mb-2 px-1 text-sm text-nature-600 dark:text-nature-300 flex flex-wrap items-center gap-x-2 gap-y-1">
+                        {near?.from === 'area' ? (
+                            <>
+                                <span>{`Nearest to your area first, within ${formatDistance(near.radiusKm)}.`}</span>
+                                <button type="button" onClick={() => setEverywhere(true)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">Show everywhere</button>
+                            </>
+                        ) : near ? (
+                            // Not the setting's label: the picker sets it to "<n>km radius", never a place's name.
+                            <span>{`Nearest first, within ${formatDistance(near.radiusKm)} of the place you picked.`}</span>
+                        ) : areaFailed && !everywhere ? (
+                            <>
+                                <span>Couldn't check your area just now, so this is the newest from everywhere.</span>
+                                <button type="button" onClick={() => setAreaTry(n => n + 1)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">Try again</button>
+                            </>
+                        ) : everywhere && memberArea ? (
+                            <>
+                                <span>Newest from everywhere.</span>
+                                <button type="button" onClick={() => setEverywhere(false)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">Near your area</button>
+                            </>
+                        ) : (
+                            <>
+                                <span>Newest from everywhere.</span>
+                                <button type="button" onClick={() => setShowRadiusPicker(true)} className="min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 cursor-pointer">See what's near you</button>
+                            </>
+                        )}
+                    </p>
+                ) : null;
+
                 const narrowed = !!searchQuery.trim() || !!radiusSettings || categoryFilter !== 'all' || typeFilter !== 'all'
                     || groupFilter !== 'all' || beansOnly || foundingOnly;
                 const examples = showExampleListings({ on: examplesOn, narrowed, failed: !!error, realInView: filtered.length })
@@ -2659,7 +2819,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedPost(post); } }}
                                                     aria-label={`Open poll: ${post.title}`}
                                                     className="self-start rounded-2xl cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500">
-                                                    <PollCard post={post} visitor viewMode="list" />
+                                                    <PollCard post={post} visitor viewMode="list" informal={informalPolls} localWays={markWays} />
                                                 </div>
                                             ) : (
                                                 <VisitorCard post={post} beans={visitor.beans} distanceKm={eventDistance(post)} onOpen={() => setSelectedPost(post)} />
@@ -2689,7 +2849,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     <h4 className="text-xs font-black text-violet-800 dark:text-violet-400 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
                                         <span>★</span> Customize Interests
                                     </h4>
-                                    <p className="text-nature-500 dark:text-nature-450 text-xs mb-3">
+                                    <p className="text-nature-500 dark:text-nature-400 text-xs mb-3">
                                         Select categories to prioritize in your personalized "★ For You" feed.
                                     </p>
                                     <div className="flex flex-wrap gap-1.5">
@@ -2701,7 +2861,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     onClick={() => toggleFavCategory(cat.id)}
                                                     className={`px-3 py-1.5 rounded-full border text-xs font-bold transition-all duration-200 flex items-center gap-1 cursor-pointer hover:scale-105 active:scale-95 shadow-sm ${
                                                         isFav
-                                                            ? 'bg-violet-600 border-violet-700 text-white dark:bg-violet-500 dark:border-violet-500'
+                                                            ? 'bg-violet-600 border-violet-700 text-white dark:bg-violet-600 dark:border-violet-500'
                                                             : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-600 dark:text-nature-400'
                                                     }`}
                                                 >
@@ -2716,7 +2876,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             ) : (
                                 <div 
                                     onClick={() => setIsCustomizerExpanded(true)}
-                                    className="mb-4 p-3 rounded-2xl border border-violet-200/60 dark:border-violet-850 bg-violet-50/20 dark:bg-violet-950/10 backdrop-blur-sm flex items-center justify-between text-xs font-medium text-violet-850 dark:text-violet-300 hover:bg-violet-50/50 dark:hover:bg-violet-950/25 transition-all cursor-pointer shadow-sm"
+                                    className="mb-4 p-3 rounded-2xl border border-violet-200/60 dark:border-violet-900 bg-violet-50/20 dark:bg-violet-950/10 backdrop-blur-sm flex items-center justify-between text-xs font-medium text-violet-850 dark:text-violet-300 hover:bg-violet-50/50 dark:hover:bg-violet-950/25 transition-all cursor-pointer shadow-sm"
                                 >
                                     <div className="flex items-center gap-2 overflow-hidden">
                                         <span className="text-violet-600 dark:text-violet-400 font-bold">★</span>
@@ -2742,7 +2902,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         <span className="text-xs font-bold text-orange-950 dark:text-orange-400">
                                             {freshTodayCount} fresh listing{freshTodayCount > 1 ? 's' : ''} posted today!
                                         </span>
-                                        <span className="text-[10px] text-orange-600/80 dark:text-orange-450/60 font-medium">
+                                        <span className="text-[10px] text-orange-600/80 dark:text-orange-300 font-medium">
                                             Scroll down to explore what is new in the community.
                                         </span>
                                     </div>
@@ -2781,6 +2941,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             />
                         )}
 
+                        {nearLine}
                         {filtered.length === 0 && examples}
                         {filtered.length === 0 ? (
                             (searchQuery.trim() || radiusSettings || categoryFilter !== 'all' || typeFilter !== 'all' || beansOnly || foundingOnly || posts.length > 0) ? (
@@ -2836,6 +2997,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                             viewMode={viewMode}
                                                             onVoteSuccess={() => refresh()}
                                                             onOpenProfile={onOpenProfile}
+                                                            informal={informalPolls} localWays={markWays}
                                                         />
                                                     </div>
                                                 );
@@ -2864,13 +3026,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     post={post as any}
                                                     authorRating={authorRatingsCache[post.authorPublicKey]}
                                                     authorEnergy={(post as any).authorEnergyCycled || 0}
-                                                    authorAvatarUrl={authorAvatarCache[post.authorPublicKey] || null}
+                                                    authorAvatarUrl={authorFaceOf(post)}
                                                     // `_remoteNode` = the client-side peer fetch; `originNode` = a listing
                                                     // the SERVER pulled and cached (#143 step 4). Same badge either way:
                                                     // a member wants the community it came from, not the mechanism.
                                                     remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
                                                     viewMode={viewMode}
                                                     isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
+                                                    distanceKm={near ? distanceOf(post) : null}
                                                     onPhotoClick={(photos, idx, e) => {
                                                         setLightboxState({
                                                             isOpen: true,
@@ -2914,7 +3077,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 return (
                                     <div key={title} className="flex flex-col gap-1.5 mb-2">
                                         <div className="flex items-center gap-3 mt-2 mb-1">
-                                            <span className="text-xs font-black uppercase tracking-widest text-nature-450 dark:text-nature-500 whitespace-nowrap">
+                                            <span className="text-xs font-black uppercase tracking-widest text-nature-450 dark:text-nature-400 whitespace-nowrap">
                                                 {title}
                                             </span>
                                             <div className="h-[1px] w-full bg-nature-200 dark:bg-nature-800" />
@@ -2944,6 +3107,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                                 viewMode={viewMode}
                                                                 onVoteSuccess={() => refresh()}
                                                                 onOpenProfile={onOpenProfile}
+                                                                informal={informalPolls} localWays={markWays}
                                                             />
                                                         </div>
                                                     );
@@ -2963,13 +3127,14 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                         post={post as any}
                                                         authorRating={authorRatingsCache[post.authorPublicKey]}
                                                         authorEnergy={(post as any).authorEnergyCycled || 0}
-                                                        authorAvatarUrl={authorAvatarCache[post.authorPublicKey] || null}
+                                                        authorAvatarUrl={authorFaceOf(post)}
                                                         // `_remoteNode` = the client-side peer fetch; `originNode` = a listing
                                                     // the SERVER pulled and cached (#143 step 4). Same badge either way:
                                                     // a member wants the community it came from, not the mechanism.
                                                     remoteNode={(post as any)._remoteNode ?? (post as any).originNode}
                                                     viewMode={viewMode}
                                                     isOwnPost={!!(identity?.publicKey && post.authorPublicKey === identity.publicKey)}
+                                                    distanceKm={near ? distanceOf(post) : null}
                                                     onPhotoClick={(photos, idx, e) => {
                                                         setLightboxState({
                                                             isOpen: true,
@@ -3009,10 +3174,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             {/* Post-Release Review Modal */}
             {promptReviewForTx && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="w-full max-w-sm bg-white dark:bg-nature-900 rounded-3xl shadow-2xl border border-nature-200 dark:border-nature-800 overflow-hidden animate-in slide-in-from-bottom-4 zoom-in-95 duration-300">
+                    <div role="dialog" aria-modal="true" aria-labelledby="post-release-review-title" className="w-full max-w-sm bg-white dark:bg-nature-900 rounded-3xl shadow-2xl border border-nature-200 dark:border-nature-800 overflow-hidden animate-in slide-in-from-bottom-4 zoom-in-95 duration-300">
                         <div className="p-6 text-center">
-                            <div className="text-4xl mb-4">🎉</div>
-                            <h3 className="text-xl font-black text-nature-900 dark:text-white mb-2">Deal Complete!</h3>
+                            <div className="text-4xl mb-4" aria-hidden="true">🎉</div>
+                            <h3 id="post-release-review-title" className="text-xl font-black text-nature-900 dark:text-white mb-2">Deal Complete!</h3>
                             <p className="text-nature-600 dark:text-nature-400 text-sm mb-6">
                                 How was your experience with <strong>{promptReviewForTx.targetCallsign}</strong>?
                             </p>
@@ -3021,10 +3186,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 {[1, 2, 3, 4, 5].map(star => (
                                     <button
                                         key={star}
+                                        type="button"
                                         onClick={() => setReviewStars(star)}
-                                        className="text-4xl hover:scale-110 transition-transform focus:outline-none"
+                                        aria-label={`Rate ${star} star${star === 1 ? '' : 's'}`}
+                                        className="text-4xl hover:scale-110 transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 rounded-lg"
                                     >
-                                        <span className={star <= reviewStars ? "text-amber-400" : "text-nature-200 dark:text-nature-700"}>★</span>
+                                        <span className={star <= reviewStars ? "text-amber-400" : "text-nature-200 dark:text-nature-500"}>★</span>
                                     </button>
                                 ))}
                             </div>
@@ -3033,18 +3200,20 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 value={reviewComment}
                                 onChange={e => setReviewComment(e.target.value)}
                                 placeholder="Write a short review (optional)..."
-                                className="w-full p-3 bg-nature-50 border border-nature-200 dark:bg-nature-950 dark:border-nature-800 rounded-xl text-sm focus:outline-none focus:border-amber-300 focus:ring-1 focus:ring-amber-300 mb-6 font-medium text-nature-900 dark:text-white resize-none"
+                                className="w-full p-3 bg-nature-50 border border-nature-200 dark:bg-nature-950 dark:border-nature-800 rounded-xl text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 mb-6 font-medium text-nature-900 dark:text-white resize-none"
                                 rows={3}
                             />
 
                             <div className="flex gap-2">
                                 <button
+                                    type="button"
                                     onClick={() => setPromptReviewForTx(null)}
-                                    className="flex-1 py-3 text-nature-600 dark:text-nature-400 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 rounded-xl transition-colors outline-none"
+                                    className="flex-1 py-3 text-nature-600 dark:text-nature-300 text-sm font-bold bg-nature-100 hover:bg-nature-200 dark:bg-nature-800 dark:hover:bg-nature-700 dark:hover:text-nature-200 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-500"
                                 >
                                     Skip for now
                                 </button>
                                 <button
+                                    type="button"
                                     disabled={submittingReview}
                                     onClick={async () => {
                                         if (!identity) return;
@@ -3088,7 +3257,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             {!selectedPost && !isVisitor && (
                 <button
                     onClick={() => onNavigate?.('map-post')}
-                    className="fixed bottom-[calc(var(--bottom-nav-offset)+1.25rem)] md:bottom-6 right-4 z-50 flex items-center justify-center gap-1.5 px-4 py-3 bg-gradient-to-r from-terra-500 to-terra-600 hover:from-terra-600 hover:to-terra-700 text-white font-bold rounded-full shadow-[0_6px_20px_rgb(203,83,38,0.35)] hover:shadow-[0_8px_25px_rgb(203,83,38,0.45)] transition-all hover:-translate-y-1 group text-sm"
+                    className="fixed bottom-[calc(var(--bottom-nav-offset)+1.25rem)] md:bottom-6 right-4 z-50 flex items-center justify-center gap-1.5 px-4 py-3 bg-gradient-to-r from-terra-500 to-terra-600 hover:from-terra-600 hover:to-terra-700 dark:from-terra-700 dark:to-terra-800 dark:hover:from-terra-800 dark:hover:to-terra-900 text-white font-bold rounded-full shadow-[0_6px_20px_rgb(203,83,38,0.35)] hover:shadow-[0_8px_25px_rgb(203,83,38,0.45)] transition-all hover:-translate-y-1 group text-sm"
                     style={{ bottom: 'calc(var(--bottom-nav-offset) + 1.25rem)' }}
                 >
                     <span className="text-lg leading-none block group-hover:rotate-90 transition-transform duration-300">+</span> ADD POST
@@ -3103,8 +3272,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 onClose={() => setShowCategoryPicker(false)}
             />
 
+            {showDealsModal && dealsMode === 'preview' && (
+                <DealsPreviewDialog onClose={() => setShowDealsModal(false)} onNearYou={onNavigate ? () => { setShowDealsModal(false); onNavigate('home'); } : undefined} onGuide={onNavigate ? (slug) => { setShowDealsModal(false); onNavigate('guide', slug); } : undefined} />
+            )}
             <MyDealsModal
-                visible={showDealsModal}
+                visible={showDealsModal && dealsMode !== 'preview'}
                 identity={identity}
                 onClose={() => setShowDealsModal(false)}
                 posts={posts}
@@ -3154,7 +3326,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         </p>
                         <button
                             onClick={() => { setShowContributionRequired(false); onNavigate?.('map-post'); }}
-                            className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-colors mb-2"
+                            className="w-full py-3 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white font-bold transition-colors mb-2"
                         >
                             ➕ Create an Offer
                         </button>

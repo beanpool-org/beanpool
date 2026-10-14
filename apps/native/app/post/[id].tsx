@@ -13,7 +13,7 @@ import {
     getPost, updatePost, deletePost, pausePost, resumePost,
     requestMarketplacePost, approveMarketplaceRequest, rejectMarketplaceRequest, cancelMarketplaceRequest,
     acceptMarketplacePost, completeMarketplaceTransaction, cancelMarketplaceTransaction,
-    submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, getUnreadCountForPost, getBalance,
+    submitRating, reportAbuse, getDb, getMemberRatings, createConversationApi, insertMessage, getUnreadCountForPost, getBalance,
     treasuryApprove, treasuryComplete, treasuryReject,
     fetchGroupDetails, deleteGroupPostApi
 } from '../../utils/db';
@@ -28,12 +28,19 @@ import { PhotoCarousel } from '../../components/PhotoCarousel';
 import { POST_CATEGORIES, categoryEmoji, categoryLabel } from '../../constants/categories';
 import { hapticSuccess, hapticWarning, hapticTick } from '../../utils/haptics';
 import { blockUser } from '../../utils/blocklist';
-import { colors, palette } from '../../constants/colors';
+import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { EventDetail } from '../../components/EventDetail';
 import { isHiddenAuthor } from '../../utils/posts-view';
+import { shownPostAfterReload } from '../../utils/shown-post';
 import { useNodeProfile } from '../../utils/use-node-profile';
-import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE } from '../../utils/market-global';
+import { useReaderFeatures } from '../../utils/use-reader-features';
+import { showcaseMode } from '../../utils/node-profile';
+import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI } from '@beanpool/core';
+import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
+import { isDmNotLocked, dmNotLockedLine } from '../../utils/dm-lock';
+import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT } from '../../utils/reportReasons';
 
 // Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
 // / holiday gates carry a stable "PREFIX: <human text>" so we can give them a helpful heading.
@@ -63,7 +70,7 @@ export default function PostDetailModal() {
         container: { flex: 1, backgroundColor: colors.surface.page },
         errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: colors.surface.app },
         errorText: { color: colors.text.secondary, fontSize: 16, textAlign: 'center', marginBottom: 24, lineHeight: 24 },
-        closeBtn: { backgroundColor: palette.orangeAlt500, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12 },
+        closeBtn: { backgroundColor: colors.action.cta, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12 },
         closeBtnText: { color: colors.text.inverse, fontWeight: 'bold' },
 
         header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle },
@@ -105,20 +112,20 @@ export default function PostDetailModal() {
 
         // Own Post Actions
         ownPostActions: { paddingHorizontal: 20, gap: 10 },
-        editPostBtn: { backgroundColor: palette.orangeAlt500, borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+        editPostBtn: { backgroundColor: colors.action.cta, borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
         editPostBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: '800' },
         deletePostBtn: { borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 2, borderColor: colors.feedback.danger.border },
-        deletePostBtnText: { color: colors.feedback.danger.solid, fontSize: 14, fontWeight: '700' },
+        deletePostBtnText: { color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '700' },
         pauseOfferBtn: { borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 2, borderColor: '#f59e0b' },
-        pauseOfferBtnText: { color: '#d97706', fontSize: 14, fontWeight: '700' },
+        pauseOfferBtnText: { color: colors.feedback.warning.fg, fontSize: 14, fontWeight: '700' },
 
         // Other's Post Actions
         otherPostActions: { paddingHorizontal: 20, gap: 10 },
         messageBtn: { backgroundColor: colors.surface.card, borderRadius: 14, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: colors.border.default },
         messageBtnText: { color: colors.text.body, fontSize: 16, fontWeight: '700' },
         acceptBtn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
-        acceptBtnOffer: { backgroundColor: colors.brand.primary },
-        acceptBtnNeed: { backgroundColor: palette.orange600 },
+        acceptBtnOffer: { backgroundColor: colors.brand.fill },
+        acceptBtnNeed: { backgroundColor: colors.action.fab },
         acceptBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: '800' },
 
         // Edit Section
@@ -126,8 +133,8 @@ export default function PostDetailModal() {
         editSectionTitle: { color: colors.text.body, fontSize: 18, fontWeight: '800', marginBottom: 16 },
         editTypeRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
         editTypeBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.app, alignItems: 'center' },
-        editTypeBtnOffer: { backgroundColor: colors.brand.primary, borderColor: colors.brand.primary },
-        editTypeBtnNeed: { backgroundColor: palette.orange600, borderColor: palette.orange600 },
+        editTypeBtnOffer: { backgroundColor: colors.brand.fill, borderColor: colors.brand.primary },
+        editTypeBtnNeed: { backgroundColor: colors.action.fab, borderColor: palette.orange600 },
         editTypeBtnText: { fontSize: 14, fontWeight: '800', color: colors.text.muted },
         editTypeBtnTextActive: { color: colors.text.inverse },
         editPickerWrap: { backgroundColor: colors.surface.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 10, overflow: 'hidden' },
@@ -144,7 +151,7 @@ export default function PostDetailModal() {
         editBtnRow: { flexDirection: 'row', gap: 10 },
         editCancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card, alignItems: 'center' },
         editCancelBtnText: { color: colors.text.secondary, fontSize: 15, fontWeight: '700' },
-        editSaveBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: palette.orangeAlt500, alignItems: 'center' },
+        editSaveBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: colors.action.cta, alignItems: 'center' },
         editSaveBtnDisabled: { backgroundColor: colors.border.strong },
         editSaveBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '800' },
 
@@ -156,10 +163,10 @@ export default function PostDetailModal() {
         cancelActionBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center' },
         cancelActionBtnText: { color: colors.text.secondary, fontSize: 14, fontWeight: '700' },
         confirmActionBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-        confirmActionBtnGreen: { backgroundColor: colors.brand.primary },
+        confirmActionBtnGreen: { backgroundColor: colors.brand.fill },
         confirmActionBtnText: { color: colors.text.inverse, fontSize: 14, fontWeight: '800' },
         cancelTxBtn: { marginTop: 12, borderWidth: 1, borderColor: colors.feedback.danger.border, backgroundColor: colors.surface.card, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-        cancelTxBtnText: { color: colors.feedback.danger.solid, fontSize: 14, fontWeight: '700' },
+        cancelTxBtnText: { color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '700' },
         requestsContainer: {
             marginTop: 20,
             backgroundColor: colors.surface.card,
@@ -195,7 +202,7 @@ export default function PostDetailModal() {
             fontWeight: '700'
         },
         approveBtn: {
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             paddingHorizontal: 16,
             paddingVertical: 8,
             borderRadius: 10
@@ -214,7 +221,7 @@ export default function PostDetailModal() {
             borderColor: colors.feedback.danger.border
         },
         rejectBtnText: {
-            color: colors.feedback.danger.solid,
+            color: colors.feedback.danger.fg,
             fontSize: 13,
             fontWeight: 'bold'
         },
@@ -360,6 +367,10 @@ export default function PostDetailModal() {
     // not "Post not found".
     const [postMissing, setPostMissing] = useState(false);
     const notFoundTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+    // The id whose last read found no row on the phone, and the id the node said it holds no such listing for (utils/db.ts
+    // post_not_on_node): together, the shown listing goes (utils/shown-post.ts).
+    const readNoRow = React.useRef<string | null>(null);
+    const goneOnNode = React.useRef<string | null>(null);
     const [editMode, setEditMode] = useState(false);
     const [saving, setSaving] = useState(false);
     const [deleting, setDeleting] = useState(false);
@@ -377,9 +388,14 @@ export default function PostDetailModal() {
 
     // On a community with Beans off (the worldwide one) a post has no price and nothing to accept through escrow:
     // its terms are in the description, and the member messages the poster (utils/market-global.ts).
+    // The reader's own features (design §4); where the node previews what it has off, the price slot carries the
+    // marker's line and the deal action keeps its place as the marker's action (DESIGN-global-showcase-fable §1 rows 2, 4).
     const nodeProfile = useNodeProfile();
-    const showsBeans = marketShowsBeans(nodeProfile?.features);
-    const escrowOn = nodeProfile?.features.escrow !== false;
+    const reader = useReaderFeatures();
+    const showsBeans = marketShowsBeans(reader.effective ?? nodeProfile?.features);
+    const escrowOn = (reader.effective ?? nodeProfile?.features)?.escrow !== false;
+    const beansPreview = showcaseMode('beans', reader.node, reader.reader) === 'preview';
+    const escrowPreview = showcaseMode('escrow', reader.node, reader.reader) === 'preview';
 
     // Transactions / Reporting state
     const [accepting, setAccepting] = useState(false);
@@ -428,8 +444,12 @@ export default function PostDetailModal() {
                 const singleTxId = Array.isArray(txId) ? txId[0] : txId;
                 const reload = async () => {
                     getPost(singleId).then(p => {
-                        setPost(p);
+                        // A read with no row keeps the listing shown: its by-id refetch replaces it (utils/shown-post.ts),
+                        // unless the node has answered that it holds no such listing.
+                        setPost((prev: any) => shownPostAfterReload(prev, p, singleId, goneOnNode.current === singleId));
+                        readNoRow.current = p ? null : singleId;
                         if (p) {
+                            goneOnNode.current = null;
                             if (notFoundTimer.current) { clearTimeout(notFoundTimer.current); notFoundTimer.current = null; }
                             setPostMissing(false);
                             const targetGroupId = p.target_group_id || p.targetGroupId;
@@ -561,8 +581,16 @@ export default function PostDetailModal() {
                 
                 const { DeviceEventEmitter } = require('react-native');
                 const sub = DeviceEventEmitter.addListener('sync_data_updated', reload);
+                // The by-id read found no such listing on the node (utils/db.ts). With no row on the phone either, the
+                // shown listing goes, and the not-found timer's text shows; a row the phone holds stays until the sync drops it.
+                const goneSub = DeviceEventEmitter.addListener('post_not_on_node', (goneId: unknown) => {
+                    if (goneId !== singleId) return;
+                    goneOnNode.current = singleId;
+                    if (readNoRow.current === singleId) setPost((prev: any) => shownPostAfterReload(prev, null, singleId, true));
+                });
                 return () => {
                     sub.remove();
+                    goneSub.remove();
                     if (notFoundTimer.current) { clearTimeout(notFoundTimer.current); notFoundTimer.current = null; }
                 };
             }
@@ -736,8 +764,9 @@ export default function PostDetailModal() {
             const updated = await getPost(post.id);
             setPost(updated);
             setEditMode(false);
-        } catch (e) {
-            Alert.alert('Error', 'Failed to save changes');
+        } catch (e: any) {
+            // The node's own words when it gave any: a price held by an open deal says so, and how to change it.
+            Alert.alert('Error', String(e?.message || 'Failed to save changes'));
         }
         setSaving(false);
     };
@@ -823,12 +852,27 @@ export default function PostDetailModal() {
                 await rejectMarketplaceRequest(rejectModalTxId, identity.publicKey);
             }
             
-            // Optionally send the reject message if provided
+            // The optional message goes as a message in the DM, locked like any other. It used to ride as the new
+            // conversation's name, where the node could read it (and was dropped when the two already had a chat).
             if (rejectMessage.trim() && peerPubkey) {
+                const words = rejectMessage.trim();
+                let convId: string | null = null;
                 try {
-                    await createConversationApi('dm', [peerPubkey, identity.publicKey], identity.publicKey, rejectMessage.trim(), post.id);
-                } catch (e) {
-                    console.error('Failed to send rejection message', e);
+                    const conv = await createConversationApi('dm', [peerPubkey, identity.publicKey], identity.publicKey, undefined, post.id);
+                    convId = conv?.id ?? null;
+                    if (!convId) throw new Error('The chat could not be opened.');
+                    await insertMessage(convId, identity.publicKey, words);
+                } catch (e: any) {
+                    // The offer is declined either way. The words are not lost: the chat opens with them in the box.
+                    console.error('Failed to send the decline message', e);
+                    if (convId) {
+                        Alert.alert('Offer declined', isDmNotLocked(e)
+                            ? dmNotLockedLine(null)
+                            : "Your message wasn't sent. It's in the chat, ready to send again.");
+                        router.push({ pathname: '/chat/[id]', params: { id: convId, prefill: words } });
+                    } else {
+                        Alert.alert('Offer declined', `Your message wasn't sent: ${e?.message || 'the chat could not be opened'}`);
+                    }
                 }
             }
             
@@ -910,7 +954,7 @@ export default function PostDetailModal() {
                 <View style={styles.typeBadgeRow}>
                     <View style={styles.catBadge}>
                         <Text style={styles.catEmoji}>{isPulsePost ? '🗞️' : emoji}</Text>
-                        <Text style={[styles.catLabel, { color: isPulsePost ? (theme === 'dark' ? colors.feedback.warning.fg : '#92400e') : (isOffer ? colors.brand.primary : palette.orange600) }]} numberOfLines={1}>
+                        <Text style={[styles.catLabel, { color: isPulsePost ? colors.feedback.warning.fg : (isOffer ? colors.brand.primary : colors.market.need.fg) }]} numberOfLines={1}>
                             {isPulsePost ? '● DAILY PULSE' : `${isOffer ? '● ' : '● '}${post.type.toUpperCase()} · ${categoryLabel(post.category).toUpperCase()}${post.repeatable ? ' · RECURRING' : ''}`}
                         </Text>
                     </View>
@@ -950,11 +994,16 @@ export default function PostDetailModal() {
                 )}
 
                 {/* Price Card: where there are no Beans, what the poster would like in return is in the description. */}
+                {/* The words are one element to a screen reader; the marker's line sits beside them, in the card but outside
+                    that group, so VoiceOver reads it and reaches it as a button (review of #1852, finding 8). */}
                 {!isPulsePost && !showsBeans && (
-                    <View style={styles.priceCard} accessible accessibilityLabel={`${NO_BEANS_TERMS.value}. ${NO_BEANS_TERMS.note}`}>
-                        <Text style={styles.priceLabel}>{NO_BEANS_TERMS.label}</Text>
-                        <Text style={[styles.priceValue, { fontSize: 22, textAlign: 'center', paddingHorizontal: 12 }]}>{NO_BEANS_TERMS.value}</Text>
-                        <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 6, paddingHorizontal: 16 }}>{NO_BEANS_TERMS.note}</Text>
+                    <View style={styles.priceCard} testID="no-beans-terms">
+                        <View style={{ alignSelf: 'stretch', alignItems: 'center' }} accessible accessibilityLabel={`${NO_BEANS_TERMS.value}. ${noBeansTermsNote(beansPreview)}`}>
+                            <Text style={styles.priceLabel}>{NO_BEANS_TERMS.label}</Text>
+                            <Text style={[styles.priceValue, { fontSize: 22, textAlign: 'center', paddingHorizontal: 12 }]}>{NO_BEANS_TERMS.value}</Text>
+                            <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, textAlign: 'center', marginTop: 6, paddingHorizontal: 16 }}>{noBeansTermsNote(beansPreview)}</Text>
+                        </View>
+                        {beansPreview && <View style={{ paddingHorizontal: 16 }}><LocalCommunityMark variant="line" feature="beans" text={LOCAL_COMMUNITY_LINES.price} /></View>}
                     </View>
                 )}
                 {!isPulsePost && showsBeans && (
@@ -1091,7 +1140,7 @@ export default function PostDetailModal() {
                             </>
                         ) : (
                             <>
-                                <Text style={{ color: palette.amber500, fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8, marginBottom: 8 }}>
+                                <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8, marginBottom: 8 }}>
                                     ⏳ Pending Release by {targetPeerCallsign}
                                 </Text>
                                 <View style={{ paddingHorizontal: 16, marginBottom: 16, gap: 8 }}>
@@ -1099,7 +1148,7 @@ export default function PostDetailModal() {
                                         You are the Payee. Fulfill the terms exactly as agreed, then ask the Payer to release your credits. You will receive the net amount minus 1.5% transaction fee<Text style={{ color: colors.brand.primary, fontWeight: 'bold' }}> (100% community owned)</Text> (retained to balance the pool).
                                     </Text>
                                     <View style={{ backgroundColor: colors.feedback.danger.bg, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.border }}>
-                                        <Text style={{ color: palette.red700, fontSize: 13, textAlign: 'center', fontWeight: '700' }}>
+                                        <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, textAlign: 'center', fontWeight: '700' }}>
                                             Note: If this post is still visible here, you have not yet received your credits.
                                         </Text>
                                     </View>
@@ -1167,7 +1216,7 @@ export default function PostDetailModal() {
                 {isOwnPost && (post.status === 'completed' || activeTx?.status === 'completed') && (
                     <View style={styles.confirmBox}>
                         <Text style={[styles.confirmBoxTitle, { color: colors.brand.primary }]}>✅ Deal Completed</Text>
-                        <Text style={{ color: palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
+                        <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
                             This deal has concluded successfully and credits have been processed on the Ledger.
                         </Text>
                     </View>
@@ -1204,7 +1253,10 @@ export default function PostDetailModal() {
 
                             {/* Credits + Price Type; where there are no Beans, a note instead */}
                             {!showsBeans ? (
-                                <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18, marginBottom: 10 }}>{NO_BEANS_EDIT_NOTE}</Text>
+                                <View style={{ marginBottom: 10 }}>
+                                    <Text style={{ color: colors.text.secondary, fontSize: 13, lineHeight: 18 }}>{NO_BEANS_EDIT_NOTE}</Text>
+                                    {beansPreview && <LocalCommunityMark variant="line" feature="beans" text={LOCAL_COMMUNITY_LINES.price} />}
+                                </View>
                             ) : (
                             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 10 }}>
                                 <TextInput accessibilityLabel="Credits" style={[styles.editInput, { flex: 1, marginBottom: 0 }]} value={editCredits} onChangeText={setEditCredits} placeholder="Credits (B)" placeholderTextColor={colors.text.muted} keyboardType="numeric" />
@@ -1226,7 +1278,7 @@ export default function PostDetailModal() {
                                 onPress={() => setEditRepeatable(!editRepeatable)}
                                 style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.app, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 15 }}
                             >
-                                <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: editRepeatable ? palette.orange500 : colors.border.strong, backgroundColor: editRepeatable ? palette.orange500 : 'transparent', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: editRepeatable ? palette.orange500 : colors.border.strong, backgroundColor: editRepeatable ? colors.action.fab : 'transparent', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
                                     {editRepeatable && <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 14 }}>✓</Text>}
                                 </View>
                                 <View style={{ flex: 1 }}>
@@ -1286,17 +1338,24 @@ export default function PostDetailModal() {
                 {isOwnPost && post.status === 'paused' && (
                     <View style={styles.ownPostActions}>
                         <View style={styles.confirmBox}>
-                            <Text style={[styles.confirmBoxTitle, { color: '#d97706' }]}>⏸️ Offer paused</Text>
-                            <Text style={{ color: palette.gray600, fontSize: 13, textAlign: 'center' }}>
+                            <Text style={[styles.confirmBoxTitle, { color: colors.feedback.warning.fg }]}>⏸️ Offer paused</Text>
+                            <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center' }}>
                                 This offer is hidden from the marketplace and isn't counting toward your credit line. Re-activate it to make it live again.
                             </Text>
                         </View>
-                        <Pressable accessibilityRole="button" style={[styles.editPostBtn, { backgroundColor: colors.brand.primary }]} onPress={handleToggleActive} disabled={toggling}>
+                        <Pressable accessibilityRole="button" style={[styles.editPostBtn, { backgroundColor: colors.brand.fill }]} onPress={handleToggleActive} disabled={toggling}>
                             <Text style={styles.editPostBtnText}>{toggling ? 'Activating…' : '▶️ Activate Offer'}</Text>
                         </Pressable>
                         <Pressable accessibilityRole="button" accessibilityHint="Permanently deletes this post" style={styles.deletePostBtn} onPress={handleDelete} disabled={deleting}>
                             <Text style={styles.deletePostBtnText}>{deleting ? 'Deleting...' : '🗑️ Delete Post'}</Text>
                         </Pressable>
+                    </View>
+                )}
+
+                {/* Where deals are previewed, the deal action keeps its place as the marker's action: it opens the sheet. */}
+                {!isPulsePost && !isOwnPost && post.status === 'active' && escrowPreview && (
+                    <View style={styles.otherPostActions}>
+                        <LocalCommunityMark variant="action" feature="escrow" label={LOCAL_COMMUNITY_LINES.dealAction.replace(LOCAL_COMMUNITY_EMOJI, '').trim()} />
                     </View>
                 )}
 
@@ -1329,7 +1388,7 @@ export default function PostDetailModal() {
                         {myRequest ? (
                             <View style={styles.confirmBox}>
                                 <Text style={[styles.confirmBoxTitle, { color: colors.brand.primary }]}>Deal Established</Text>
-                                <Text style={{ color: palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
+                                <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center', marginBottom: 12 }}>
                                     {isOffer ? (
                                         `You have committed ${myRequest.credits} credits ${myRequest.hours ? `(${myRequest.hours} hours)` : ''} to a Trust Wallet for this offer.`
                                     ) : (
@@ -1349,8 +1408,8 @@ export default function PostDetailModal() {
                                 <Text style={styles.confirmBoxTitle}>{isOffer ? 'Accept this Offer?' : 'Offer to Fulfill?'}</Text>
                                 
                                 <View style={{ backgroundColor: colors.feedback.warning.bg, padding: 12, borderRadius: 8, borderColor: colors.feedback.warning.border, borderWidth: 1, marginBottom: 16 }}>
-                                    <Text style={{ color: palette.orange700, fontSize: 12, fontWeight: 'bold', marginBottom: 4 }}>🔒 Trust Wallet Protocol</Text>
-                                    <Text style={{ color: palette.gray600, fontSize: 12, lineHeight: 18 }}>
+                                    <Text style={{ color: theme === 'dark' ? colors.feedback.warning.fg : palette.orange700, fontSize: 12, fontWeight: 'bold', marginBottom: 4 }}>🔒 Trust Wallet Protocol</Text>
+                                    <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 12, lineHeight: 18 }}>
                                         {isOffer ? (
                                             <>
                                                 {`By proceeding, you commit ${post.price_type === 'fixed' ? post.credits : `your authorized`} credits to a temporary Trust Wallet. Upon completion, the provider receives the credits net of 1.5% transaction fee`}
@@ -1408,7 +1467,7 @@ export default function PostDetailModal() {
                                             }
                                             
                                             // Fallback if chat fails
-                                            router.replace({ pathname: '/(tabs)', params: { tab: 'deals', dealsTab: 'pending' } });
+                                            router.replace({ pathname: '/(tabs)/market', params: { tab: 'deals', dealsTab: 'pending' } });
                                         } catch (e: any) {
                                             if (e.message?.includes('not found') || e.message?.includes('not active')) {
                                                 Alert.alert('Already Updated', 'This post was already accepted or modified elsewhere. Refreshing your screen...');
@@ -1480,11 +1539,11 @@ export default function PostDetailModal() {
                                             <Pressable accessibilityRole="button" onPress={() => {
                                                 if (reqPubkey) router.push({ pathname: '/public-profile', params: { publicKey: reqPubkey, callsign: reqCallsign } });
                                             }}>
-                                                <Text style={[styles.requestName, { textDecorationLine: 'underline', color: palette.amber400 }]} numberOfLines={1}>
+                                                <Text style={[styles.requestName, { textDecorationLine: 'underline', color: colors.feedback.warning.fg }]} numberOfLines={1}>
                                                     🤝 {reqCallsign}
                                                 </Text>
                                             </Pressable>
-                                            <Text style={{ fontSize: 12, color: palette.amber400, marginTop: 2, fontWeight: '600' }}>
+                                            <Text style={{ fontSize: 12, color: colors.feedback.warning.fg, marginTop: 2, fontWeight: '600' }}>
                                                 {req.count > 0 ? `★ ${req.avgRating.toFixed(1)} (${req.count} reviews)` : '☆☆☆☆☆ No ratings yet'}
                                             </Text>
                                             <Text style={styles.requestAmt}>{req.hours ? `${req.hours} hours estimated` : 'Offered to fulfill'}</Text>
@@ -1548,7 +1607,7 @@ export default function PostDetailModal() {
                         {identity && (post.status === 'completed' || activeTx?.status === 'completed') && (activeTx?.id || post.pending_transaction_id) && targetPeerPubkey && (
                             <View style={{ marginTop: 16 }}>
                                 <Pressable accessibilityRole="button" style={[styles.messageBtn, { borderColor: hasExistingRating ? colors.brand.primary : colors.feedback.warning.border, backgroundColor: hasExistingRating ? colors.feedback.success.bg : colors.feedback.warning.bg }]} onPress={() => setShowRatingForm(!showRatingForm)}>
-                                    <Text style={[styles.messageBtnText, { color: hasExistingRating ? colors.brand.primary : palette.amber500 }]}>
+                                    <Text style={[styles.messageBtnText, { color: hasExistingRating ? colors.brand.primary : colors.feedback.warning.fg }]}>
                                         {hasExistingRating ? `★ Edit rating for ${targetPeerCallsign}` : `★ Rate ${targetPeerCallsign}`}
                                     </Text>
                                 </Pressable>
@@ -1562,7 +1621,7 @@ export default function PostDetailModal() {
                                             ))}
                                         </View>
                                         <TextInput accessibilityLabel="Rating comment" style={[styles.editInput, { minHeight: 60, marginBottom: 12 }]} value={ratingComment} onChangeText={setRatingComment} placeholder="Leave an optional comment..." placeholderTextColor={colors.text.muted} multiline />
-                                        <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, { backgroundColor: myRating >= 1 ? (hasExistingRating ? colors.brand.primary : palette.amber500) : colors.border.default }]} disabled={myRating < 1 || submittingRating} onPress={async () => {
+                                        <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, { backgroundColor: myRating >= 1 ? (hasExistingRating ? colors.brand.fill : colors.feedback.warning.solid) : colors.border.default }]} disabled={myRating < 1 || submittingRating} onPress={async () => {
                                             const txToRate = activeTx?.id || post.pending_transaction_id;
                                             if(!identity || !txToRate) return;
                                             try {
@@ -1574,7 +1633,7 @@ export default function PostDetailModal() {
                                                 Alert.alert('Success', hasExistingRating ? 'Rating updated!' : 'Rating submitted!');
                                             } catch(e:any) { hapticWarning(); Alert.alert('Error', e.message); } finally { setSubmittingRating(false); }
                                         }}>
-                                            <Text style={styles.confirmActionBtnText}>
+                                            <Text style={[styles.confirmActionBtnText, myRating >= 1 && !hasExistingRating && { color: colors.text.onGold }]}>
                                                 {submittingRating ? 'Submitting...' : hasExistingRating ? 'Update Rating' : 'Submit Rating'}
                                             </Text>
                                         </Pressable>
@@ -1645,7 +1704,7 @@ export default function PostDetailModal() {
                                     }
                                 }}
                             >
-                                <Text style={{ color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700' }}>🚩 Report Post</Text>
+                                <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, fontWeight: '700' }}>🚩 Report Post</Text>
                             </Pressable>
                             <Text style={{ color: colors.text.muted }}>•</Text>
                             <Pressable
@@ -1685,9 +1744,9 @@ export default function PostDetailModal() {
                                 }}
                             >
                                 {isBlocking ? (
-                                    <ActivityIndicator size="small" color={colors.feedback.danger.solid} style={{ marginRight: 4 }} />
+                                    <ActivityIndicator size="small" color={colors.feedback.danger.fg} style={{ marginRight: 4 }} />
                                 ) : null}
-                                <Text style={{ color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700', opacity: isBlocking ? 0.6 : 1 }}>
+                                <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, fontWeight: '700', opacity: isBlocking ? 0.6 : 1 }}>
                                     {isBlocking ? 'Blocking…' : (<><Text aria-hidden={true} importantForAccessibility="no">🚫 </Text>Block User</>)}
                                 </Text>
                             </Pressable>
@@ -1696,7 +1755,7 @@ export default function PostDetailModal() {
                             <View style={[styles.confirmBox, { backgroundColor: colors.feedback.danger.bg, borderColor: colors.feedback.danger.border }]}>
                                 <Text style={styles.confirmBoxLabel}>SELECT REPORT REASON</Text>
                                 <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
-                                    {['Spam or scam', 'Offensive content', 'Misleading post', 'Other'].map((r) => {
+                                    {REPORT_REASONS.map((r) => {
                                         const isSelected = reportReason === r;
                                         return (
                                             <Pressable
@@ -1723,6 +1782,9 @@ export default function PostDetailModal() {
                                         );
                                     })}
                                 </View>
+                                <Text style={{ fontSize: 13, color: colors.text.body, marginBottom: 12 }}>
+                                    <Text style={{ fontWeight: '700' }}>{CHILD_SAFETY_REASON}:</Text> {CHILD_SAFETY_HINT}
+                                </Text>
 
                                 <TextInput
                                     style={[styles.editInput, { minHeight: 48, marginBottom: 12, backgroundColor: colors.surface.card }]}
@@ -1822,7 +1884,7 @@ export default function PostDetailModal() {
                             </Text>
                             <Pressable
                                 accessibilityRole="button"
-                                style={{ marginTop: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: palette.emerald600 || '#059669', alignItems: 'center' }}
+                                style={{ marginTop: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: colors.brand.fill, alignItems: 'center' }}
                                 onPress={() => { setShowContributionRequired(false); router.push({ pathname: '/(tabs)/map', params: { newPost: 'true' } }); }}
                             >
                                 <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>➕ Create an Offer</Text>

@@ -6,8 +6,17 @@
  * - Options list with live progress bars, vote counts, and percentages.
  * - Tap-to-vote: one member, one vote; re-voting overwrites choice.
  * - Turnout tally & close date or "Closed" badge.
- * - Open ballot: collapsible list of who voted for what (open, not secret).
+ * - Anonymous by default (Marty, 2026-09-28): everyone sees the counts. On a poll its creator made an open vote
+ *   (`pollOpenVote`, `poll_open_vote` in the phone's cache), members also get a collapsible list of who voted for what.
+ *   The card says which.
  * - Author "Close Poll" action for early closure.
+ * - On the worldwide community (`informal`), "An informal poll; it decides nothing": anyone may join there with a sign-in,
+ *   so a count can be tipped by one person with several accounts (utils/node-profile.ts pollsInformal).
+ * - Once an anonymous poll has closed, where the node says (the worldwide community's public polls), how many votes came
+ *   from new or 12-word accounts (never while it is open, never on an open vote), and
+ *   under each answer how many of its own when the node gives that split (@beanpool/core poll-vote-origins; the count is
+ *   `poll_new_or_words_votes` in the phone's cache). Every vote still counts; the lines say where votes came from, never
+ *   whose they are.
  */
 
 import React, { useState } from 'react';
@@ -21,13 +30,19 @@ import {
 } from 'react-native';
 import { MemberAvatar } from './MemberAvatar';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
+import { palette } from '../constants/colors';
 import { votePoll, closePoll } from '../utils/db';
+import { INFORMAL_POLL_NOTE } from '../utils/node-profile';
+import { pollVoteOriginsLine, pollOptionOriginsLine, pollOriginsShown, LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { LocalCommunityMark } from './showcase/LocalCommunityMark';
 
 export interface PollOption {
     id: string;
     text: string;
     votes?: number;
     percentage?: number;
+    /** Of this option's votes, how many came from new or 12-word accounts, where the node gives the split. */
+    newOrWordsVotes?: number;
 }
 
 export interface PollVoteRecord {
@@ -41,9 +56,13 @@ interface PollCardProps {
     post: any;
     currentPubkey?: string | null;
     onVoteSuccess?: () => void;
+    /** The worldwide community's polls (utils/node-profile.ts pollsInformal): the card says it decides nothing. */
+    informal?: boolean;
+    /** Where the node previews Decisions (the showcase): the marker's line under the note, "a Decision binds" (design §1 row 7). */
+    decisionsPreview?: boolean;
 }
 
-export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) {
+export function PollCard({ post, currentPubkey, onVoteSuccess, informal = false, decisionsPreview = false }: PollCardProps) {
     const { colors, theme } = useTheme();
     const styles = useStyles(makeStyles);
 
@@ -81,6 +100,14 @@ export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) 
     const totalVotes = livePost.totalVotes ?? options.reduce((sum, o) => sum + (o.votes || 0), 0);
     const userVotedOptionId = livePost.userVotedOptionId;
     const votesList: PollVoteRecord[] = livePost.pollVotes || [];
+    // Only a poll its creator made an open vote names its voters. A node before the choice sends no flag, and its polls
+    // showed voters to members, so a list that comes with such a poll is shown as before.
+    const openFlag = livePost.pollOpenVote ?? livePost.poll_open_vote;
+    const openVote = openFlag === true || openFlag === 1 || (openFlag === undefined && votesList.length > 0);
+    // Where its votes came from: only once an anonymous poll has closed. While it is open the card says nothing about it,
+    // not even that it will (the node sends nothing then either: @beanpool/engine pollOriginsMayShow).
+    const showOrigins = pollOriginsShown(isClosed, openVote);
+    const originsLine = showOrigins ? pollVoteOriginsLine(totalVotes, livePost.pollNewOrWordsVotes ?? livePost.poll_new_or_words_votes) : null;
 
     // ⚡ Bolt: O(1) Map lookup for poll option metadata in open ballot voter list instead of O(O) .find() scans
     const optionsById = React.useMemo(() => new Map(options.map(o => [o.id, o])), [options]);
@@ -208,6 +235,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) 
                     const isVotingThis = votingOptionId === opt.id;
                     const pct = opt.percentage ?? (totalVotes > 0 ? Math.round(((opt.votes || 0) / totalVotes) * 100) : 0);
                     const count = opt.votes ?? 0;
+                    const optionOrigins = showOrigins ? pollOptionOriginsLine(count, opt.newOrWordsVotes) : null;
 
                     return (
                         <Pressable
@@ -221,7 +249,7 @@ export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) 
                             ]}
                             accessibilityRole="button"
                             accessibilityState={{ selected: isVoted, disabled: isClosed || Boolean(votingOptionId) }}
-                            accessibilityLabel={`${opt.text}, ${pct} percent, ${count} ${count === 1 ? 'vote' : 'votes'}${isVoted ? ', your vote' : ''}`}
+                            accessibilityLabel={`${opt.text}, ${pct} percent, ${count} ${count === 1 ? 'vote' : 'votes'}${optionOrigins ? `, ${optionOrigins}` : ''}${isVoted ? ', your vote' : ''}`}
                         >
                             {/* Background percentage fill bar */}
                             <View
@@ -254,22 +282,48 @@ export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) 
                                     </Text>
                                 </View>
                             </View>
+                            {optionOrigins && (
+                                <Text style={styles.optionOrigins} testID="poll-option-origins">
+                                    {optionOrigins}
+                                </Text>
+                            )}
                         </Pressable>
                     );
                 })}
             </View>
 
-            {/* Polls are an open ballot — say so before anyone votes (Decisions, by contrast, are secret). */}
-            <Text style={styles.openBallotNote} testID="poll-open-ballot-note">
-                👁️ Your vote is visible to members
-            </Text>
+            {/* On the worldwide community: a show of opinion, never a decision. */}
+            {informal && (
+                <Text style={styles.informalNote} testID="poll-informal-note">
+                    💬 {INFORMAL_POLL_NOTE}
+                </Text>
+            )}
+            {informal && decisionsPreview && <LocalCommunityMark variant="line" feature="decisions" text={LOCAL_COMMUNITY_LINES.poll} />}
+
+            {/* Where its votes came from, once it has closed, where the node says: all of them still count. */}
+            {originsLine && (
+                <Text style={styles.originsNote} testID="poll-vote-origins">
+                    🌱 {originsLine}
+                </Text>
+            )}
+
+            {/* Which ballot this is, said before anyone votes: anonymous unless its creator made it an open vote. */}
+            {openVote ? (
+                <Text style={styles.openBallotNote} testID="poll-open-ballot-note">
+                    👁️ Open vote: members can see who chose what
+                </Text>
+            ) : (
+                <Text style={styles.openBallotNote} testID="poll-anonymous-note">
+                    🔒 Anonymous: everyone sees only the totals
+                </Text>
+            )}
 
             {/* Turnout Tally */}
             <View style={styles.turnoutRow}>
                 <Text style={styles.turnoutText}>
                     📊 {totalVotes} total {totalVotes === 1 ? 'vote' : 'votes'} cast
                 </Text>
-                {votesList.length > 0 && (
+                {openVote && votesList.length > 0 && (
                     <Pressable
                         onPress={() => setShowVoters(prev => !prev)}
                         style={styles.votersToggleBtn}
@@ -284,11 +338,11 @@ export function PollCard({ post, currentPubkey, onVoteSuccess }: PollCardProps) 
                 )}
             </View>
 
-            {/* Open / Non-Secret Ballot: Collapsible Voter List */}
-            {showVoters && votesList.length > 0 && (
+            {/* An open vote's collapsible voter list */}
+            {openVote && showVoters && votesList.length > 0 && (
                 <View style={styles.votersSection}>
                     <Text style={styles.votersNotice}>
-                        Village voting is open and transparent. Every vote is signed and visible to members.
+                        This is an open vote: its creator chose to let members see who chose what.
                     </Text>
                     {votesList.map((v, i) => {
                         const matchedOpt = optionsById.get(v.optionId);
@@ -361,7 +415,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         statusActiveText: {
             fontSize: 11,
             fontWeight: '700',
-            color: theme === 'dark' ? '#34d399' : '#047857',
+            color: colors.feedback.success.fg,
         },
         statusClosed: {
             backgroundColor: theme === 'dark' ? 'rgba(107, 114, 128, 0.2)' : '#f3f4f6',
@@ -387,7 +441,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         closeBtnText: {
             fontSize: 11,
             fontWeight: '700',
-            color: '#ef4444',
+            color: colors.feedback.danger.fg,
         },
         authorRow: {
             flexDirection: 'row',
@@ -492,7 +546,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             color: colors.text.body,
         },
         optionPctVoted: {
-            color: '#7c3aed',
+            color: theme === 'dark' ? palette.violet300 : '#7c3aed', // violet600 is 2.9:1 on the dark card; violet300 9.43:1
         },
         optionVotes: {
             fontSize: 11,
@@ -504,6 +558,28 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
             color: colors.text.muted,
             marginTop: 4,
             marginBottom: 2,
+        },
+        informalNote: {
+            fontSize: 12,
+            fontWeight: '700',
+            color: colors.text.secondary,
+            marginTop: 4,
+        },
+        // Where the votes came from: a wrapping line, never cut short.
+        originsNote: {
+            fontSize: 12,
+            fontWeight: '600',
+            color: colors.text.secondary,
+            marginTop: 4,
+        },
+        // An answer's own share, on a line of its own under the answer, inside its row.
+        optionOrigins: {
+            fontSize: 11,
+            fontWeight: '600',
+            color: colors.text.secondary,
+            paddingHorizontal: 12,
+            paddingBottom: 8,
+            marginTop: -4,
         },
         turnoutRow: {
             flexDirection: 'row',
@@ -528,7 +604,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         votersToggleText: {
             fontSize: 12,
             fontWeight: '700',
-            color: '#7c3aed',
+            color: theme === 'dark' ? palette.violet300 : '#7c3aed', // violet600 is 2.9:1 on the dark card; violet300 9.43:1
         },
         votersSection: {
             marginTop: 10,

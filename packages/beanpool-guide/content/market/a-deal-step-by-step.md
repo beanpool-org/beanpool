@@ -9,6 +9,8 @@ related: my-deals, when-a-deal-goes-wrong, posting, how-it-works
 
 When a deal starts, the person paying has their beans **held in trust**. Nobody can spend held beans. When the job is done, the person paying releases them and the other person is paid. The screens call the beans "credits" in a few places; they mean the same thing.
 
+You can ask for, accept or approve up to 100 deals in any 24 hours. A deal you pay for counts as one of your 100 payments a day too (see "Sending a gift"). Releasing beans, cancelling and being paid are never limited.
+
 ## Taking up someone's Offer
 
 - Open the Offer and tap **Accept Offer**.
@@ -30,10 +32,12 @@ You need to have posted an Offer of your own first. If you have not, the app off
 Both of you see a **Message** button to talk, and **Cancel Trust Hold** to call it off.
 
 - Do the job, or hand over the thing.
-- The person paying taps **Release Credits**, then **Release Credits** again to confirm. For hourly work they first enter the hours actually worked. If it was less, the rest goes back to them. If it was more, the extra is taken from them.
+- The person paying taps **Release Credits**, then **Release Credits** again to confirm. For hourly work they first enter the hours actually worked. If it was less, the rest goes back to them. If it was more, the extra is taken from them. Every hour is paid at the rate the deal was made at.
 - The seller is paid at once, less the 1.5% market fee, which goes to your community's Commons.
 
 Only the person paying can release the beans. There is no time limit: beans stay held until they are released or the deal is cancelled. After a week, and every week after that, the person paying gets a reminder.
+
+The price on the post cannot change while someone is asking for it or their beans are held. The deal keeps the price it was made at. To change the price, the person who posted it declines or cancels the deal first.
 
 ## A Repeatable post
 

@@ -4,8 +4,8 @@
 # WHY THIS EXISTS
 #
 # apps/server/src/test-*.ts suites are script-style, not vitest, so `turbo run test` cannot see
-# them. The only thing that runs them is a hand-maintained list inside test-all.sh, and adding a
-# file does not add it to that list. On 2026-08-08 an audit found TWENTY-ONE suites — roughly 250
+# them. The only thing that runs them is a hand-maintained list, scripts/server-suites.mjs (it was inside
+# test-all.sh until 2026-09-30), and adding a file does not add it to that list. On 2026-08-08 an audit found TWENTY-ONE suites — roughly 250
 # assertions covering wash/Sybil defence, DoS caps, request auth, messaging IDOR, logger
 # sanitization and treasury economics — that no CI path had ever executed. Every one of them
 # passed. They were not failing; they were simply invisible, and a suite nobody runs is a suite
@@ -19,18 +19,9 @@
 #
 # HOW IT DECIDES
 #
-# "Registered" means a name appears in a real INVOCATION, never in prose. Comments in test-all.sh
-# mention suite names freely (there is a `test-x hangs` example in one), so a naive grep over the
-# file reports false positives. Only these shapes actually run a suite:
-#
-#     SUITES=(                                   ← the batch lists, one name per line,
-#       test-a                                     iterated by `for t in "${SUITES[@]}"`
-#       test-b
-#     )
-#     for t in a b c; do ... tsx "src/$t.ts"     ← a short inline batch loop
-#     tsx src/test-name.ts                       ← the env-flag variants
-#
-# All three shapes are matched below. Prose is not.
+# "Registered" means named by a run in scripts/server-suites.mjs: SUITES (the plain runs) or VARIANTS (the same
+# suites under another env, and the few that only run under one). It imports that file rather than grepping it, so a
+# name in a comment there never counts.
 #
 # It also flags the reverse — a registered name with no file — which is how a typo in the list
 # turns into a suite that quietly never runs.
@@ -38,7 +29,7 @@
 set -o pipefail
 cd "$(dirname "$0")/.." || exit 1
 
-RUNNER="scripts/test-all.sh"
+RUNNER="scripts/server-suites.mjs"
 SUITE_DIR="apps/server/src"
 
 # ── Deliberate exclusions ────────────────────────────────────────────────────
@@ -50,19 +41,14 @@ ALLOW=(
 
 on_disk=$(find "$SUITE_DIR" -maxdepth 1 -name 'test-*.ts' -exec basename {} .ts \; | sort)
 
-# Names in a batch list: every line between a `...SUITES=(` line and its closing `)`.
-array_names=$(awk '/^[[:space:]]*[A-Z_]*SUITES=\([[:space:]]*$/ { inside = 1; next }
-                   inside && /^[[:space:]]*\)/ { inside = 0 }
-                   inside { sub(/#.*/, ""); print }' "$RUNNER" | tr -s ' \t' '\n\n')
-# Names reached by an inline batch loop: pull each `for t in ...; do` list and split it.
-loop_names=$(grep -oE '^[[:space:]]*for t in [a-z0-9 _-]+;' "$RUNNER" \
-             | sed -E 's/^[[:space:]]*for t in //; s/;$//' | tr ' ' '\n')
-# Names invoked directly, with or without quotes.
-direct_names=$(grep -oE 'tsx "?src/test-[a-z0-9-]+\.ts' "$RUNNER" \
-               | sed -E 's|.*src/||; s|\.ts$||')
-
-registered=$(printf '%s\n%s\n%s\n' "$array_names" "$loop_names" "$direct_names" \
-             | grep -E '^test-[a-z0-9-]+$' | sort -u)
+registered=$(node --input-type=module -e "
+  const m = await import(process.argv[1]);
+  for (const name of [...m.SUITES, ...m.VARIANTS.map((v) => v.name)]) console.log(name);
+" "$PWD/$RUNNER" | grep -E '^test-[a-z0-9-]+$' | sort -u)
+if [ -z "$registered" ]; then
+  echo "❌ Could not read the suite list from $RUNNER"
+  exit 1
+fi
 
 allowed=$(printf '%s\n' "${ALLOW[@]}" | grep -E '^test-' | sort -u)
 
@@ -76,9 +62,9 @@ if [ -n "$unregistered" ]; then
   echo "❌ Test suites exist that CI never runs:"
   echo "$unregistered" | sed 's/^/     /'
   echo ""
-  echo "   Add each, on its own line, to the SUITES list in $RUNNER — or, if it needs an env"
-  echo "   flag, to its own invocation beside the other flag variants. If a suite genuinely should"
-  echo "   not run in CI, add it to ALLOW in $0 with a reason."
+  echo "   Add each, on its own line, to SUITES in $RUNNER — or, if it needs an env flag,"
+  echo "   to VARIANTS there beside the other flag variants. If a suite genuinely should not"
+  echo "   run in CI, add it to ALLOW in $0 with a reason."
   rc=1
 fi
 

@@ -3,6 +3,7 @@ import { getMemberDisplayName } from './MembersModule';
 import type { NodeProfile } from '../../lib/profiles';
 import { useTimeout } from '../../lib/use-timeout';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { reportSubject } from '../../lib/node-client';
 
 export interface ThreatItem {
     id?: string;
@@ -12,6 +13,12 @@ export interface ThreatItem {
     reason?: string;
     isReport?: boolean;
     targetPubkey?: string;
+    /** A report on a post: the post, and its author as the node read it from the post (who a freeze acts on). */
+    postId?: string | null;
+    postAuthorPubkey?: string | null;
+    /** A report on a Pulse item: about the item's owner, whatever post id it carries. */
+    targetPulseItemId?: string;
+    pulseItem?: unknown;
 }
 
 export interface MemberItem {
@@ -85,8 +92,11 @@ export function ThreatReviewModal({
     // Extract involved pubkeys from description or report target and resolve full pubkeys from roster
     const extractPubkeys = (): string[] => {
         let rawKeys: string[] = [];
-        if (isReport && threat?.targetPubkey) {
-            rawKeys = [threat.targetPubkey];
+        if (isReport) {
+            // The member the report is about: on a post, its author as the node read it from the post, never the key the
+            // reporter wrote beside it (reportSubject). Nobody, when the node doesn't say who wrote the post.
+            const subject = threat ? reportSubject(threat) : null;
+            rawKeys = subject ? [subject] : [];
         } else {
             const str = threat?.description || '';
             // Match terms like wash1-17, ring0-17, etc., or standard pubkey patterns
@@ -336,7 +346,7 @@ export function ThreatReviewModal({
                         </button>
                         <button
                             onClick={() => handleAction('freeze')}
-                            disabled={freezing}
+                            disabled={freezing || (isReport && involvedPubkeys.length === 0)}
                             className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold transition-all border border-red-500 flex items-center gap-1 shadow-lg shadow-red-950/50"
                         >
                             <span>{freezing ? 'Freezing...' : '🛑 Freeze Accounts'}</span>

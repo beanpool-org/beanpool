@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { nodeCredential } from '../../lib/profiles';
+import { passwordField } from '../../lib/node-client';
 
 export interface StandbyReplicationPanelProps {
     activeNode: NodeProfile;
@@ -12,6 +14,12 @@ export interface BackupStatusData {
     role?: 'primary' | 'backup' | string;
     primaryUrl?: string | null;
     intervalMs?: number;
+    /** What the node sends (routes/backup.ts backup-status, services/backup-puller.ts getBackupStatus). */
+    lastSuccessAt?: number | null;
+    consecutiveFailures?: number;
+    /** What the next whole copy, first copy or force-resync waits on, in words; null when none waits. */
+    copyWait?: { until?: number; waitingOn?: string } | null;
+    /** Older names, read when the node sends no others. */
     lastSuccess?: number | string | null;
     failStreak?: number;
     lastError?: string | null;
@@ -61,14 +69,14 @@ export function StandbyReplicationPanel({
     const loadData = useCallback(async () => {
         setLoadingStatus(true);
         try {
-            const headers = buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id));
+            const headers = buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
 
             // 1. Fetch live backup status
             const statusUrl = resolveNodeApiUrl(activeNode.url, '/api/local/admin/backup-status');
             const statusRes = await fetch(statusUrl, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ password: activeNode.adminPassword }),
+                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
             }).catch(() => null);
 
             if (statusRes && statusRes.ok) {
@@ -84,7 +92,7 @@ export function StandbyReplicationPanel({
             const configRes = await fetch(configUrl, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ password: activeNode.adminPassword }),
+                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
             }).catch(() => null);
 
             if (configRes && configRes.ok) {
@@ -101,7 +109,7 @@ export function StandbyReplicationPanel({
         } finally {
             setLoadingStatus(false);
         }
-    }, [activeNode.id, activeNode.url, activeNode.adminPassword]);
+    }, [activeNode.id, activeNode.url, nodeCredential(activeNode)]);
 
     useEffect(() => {
         loadData();
@@ -114,7 +122,7 @@ export function StandbyReplicationPanel({
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/replication-config/save');
             const body: Record<string, unknown> = {
-                password: activeNode.adminPassword,
+                ...passwordField(nodeCredential(activeNode)),
                 primaryUrl: primaryUrl.trim(),
             };
             if (primaryToken.trim()) {
@@ -125,7 +133,7 @@ export function StandbyReplicationPanel({
 
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify(body),
             });
             const data = await res.json().catch(() => ({}));
@@ -157,8 +165,8 @@ export function StandbyReplicationPanel({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/replication-resync');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ password: activeNode.adminPassword }),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.success) {
@@ -178,10 +186,17 @@ export function StandbyReplicationPanel({
 
     const role = typeof statusData?.role === 'string' ? statusData.role.toLowerCase() : 'primary';
     const isStandby = role === 'backup';
-    const lastSuccessStr = statusData?.lastSuccess
-        ? new Date(statusData.lastSuccess).toLocaleString()
+    // The node sends lastSuccessAt and consecutiveFailures; lastSuccess and failStreak were never sent, so this read
+    // "Never" and "Idle" on every standby.
+    const lastSuccess = typeof statusData?.lastSuccessAt === 'number' ? statusData.lastSuccessAt : statusData?.lastSuccess;
+    const lastSuccessStr = lastSuccess && !Number.isNaN(new Date(lastSuccess).getTime())
+        ? new Date(lastSuccess).toLocaleString()
         : 'Never';
-    const failStreak = typeof statusData?.failStreak === 'number' ? statusData.failStreak : 0;
+    const hasLastSuccess = lastSuccessStr !== 'Never';
+    const failStreak = typeof statusData?.consecutiveFailures === 'number' ? statusData.consecutiveFailures
+        : typeof statusData?.failStreak === 'number' ? statusData.failStreak : 0;
+    const copyWait = isStandby && statusData?.copyWait && typeof statusData.copyWait.waitingOn === 'string' ? statusData.copyWait : null;
+    const copyWaitUntil = typeof copyWait?.until === 'number' ? new Date(copyWait.until).toLocaleString() : null;
     const intervalSec = statusData?.intervalMs ? Math.round(statusData.intervalMs / 1000) : 60;
 
     return (
@@ -229,14 +244,14 @@ export function StandbyReplicationPanel({
                         <span
                             id="backup-health-badge"
                             className={`px-2 py-0.5 rounded text-xs font-bold ${
-                                failStreak === 0 && statusData?.lastSuccess
+                                failStreak === 0 && hasLastSuccess
                                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                                     : failStreak > 0
                                         ? 'bg-red-500/20 text-red-300 border border-red-500/30'
                                         : 'bg-nature-800 text-nature-400'
                             }`}
                         >
-                            {failStreak === 0 && statusData?.lastSuccess ? '🟢 Healthy' : failStreak > 0 ? `⚠️ Diverged (${failStreak} fails)` : 'Idle'}
+                            {failStreak === 0 && hasLastSuccess ? '🟢 Healthy' : failStreak > 0 ? `⚠️ Diverged (${failStreak} fails)` : 'Idle'}
                         </span>
                     </div>
                 </div>
@@ -259,6 +274,18 @@ export function StandbyReplicationPanel({
                     </span>
                 </div>
             </div>
+
+            {/* What the next whole copy waits on, in the node's words */}
+            {copyWait && (
+                <div
+                    role="status"
+                    id="standby-copy-wait"
+                    className="p-3 rounded-xl border bg-amber-950 border-amber-800 text-amber-200 text-xs font-semibold space-y-1"
+                >
+                    <p className="m-0 font-bold">⏳ {copyWaitUntil ? `Waiting until ${copyWaitUntil}` : 'Waiting'}</p>
+                    <p className="m-0 font-normal">{copyWait.waitingOn}</p>
+                </div>
+            )}
 
             {/* Resync Status Messages */}
             {resyncMsg && (
@@ -429,7 +456,7 @@ export function StandbyReplicationPanel({
                                 Rebuild replica tables from primary snapshot?
                             </p>
                             <p className="m-0 text-[11px] text-nature-300">
-                                This will clear local replica tables and reconstruct the full state from the primary node&apos;s signed snapshot. Any unmerged local divergence will be discarded.
+                                This rebuilds the replica tables from the primary node&apos;s signed snapshot. They are replaced only if that copy is accepted: if it is refused, this server keeps the copy it has. Any unmerged local divergence will be discarded.
                             </p>
                         </div>
 

@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex, hexToBytes, utf8ToBytes } from '@noble/hashes/utils.js';
-import { sealSeedToSso, toEd25519Seed } from '@beanpool/core';
+import { KEEPER_ALG_RELEASE, sealReleaseToDevice, sealSeedToSso, toEd25519Seed } from '@beanpool/core';
 import { WebRestore } from './WebRestore';
 import {
     generateIdentity,
@@ -69,11 +69,9 @@ function recoveryNode(copy: () => Promise<unknown>, overrides: Record<string, Ha
     return stubNode({
         '/api/recovery/lookup/': () => json(200, [{ publicKey: account.publicKey, callsign: 'Alice', canRecoverBySso: true }]),
         '/api/recovery/collect/sso-nonce': () => json(200, {
-            nonce: `rn-${++nonces}`, expiresInSeconds: 600, githubFlow: 'node',
+            nonce: `rn-${++nonces}`, expiresInSeconds: 600,
             clientIds: { google: 'web-client', apple: 'org.beanpool.web', facebook: '818892721251369' },
         }),
-        '/api/recovery/collect/github/start': () => json(200, { sessionId: 'gh-1', userCode: 'WDJB-MJHT', expiresInSeconds: 900, intervalSeconds: 0.01 }),
-        '/api/recovery/collect/github/poll': () => json(200, { status: 'ok', sub: 'gh-sub-1' }),
         '/api/recovery/collect/sso': () => json(200, { collected: 1, threshold: 1, enough: true }),
         '/api/recovery/collect/fragments': async () => json(200, { collected: 1, threshold: 1, enough: true, fragments: [await copy()] }),
         '/api/recovery/collect': () => json(200, { collectionId: 'col-1', threshold: 1 }),
@@ -131,7 +129,7 @@ describe('from the name to the provider', () => {
         const { navigate } = renderRestore();
         await pickAlice();
         await screen.findByTestId('restore-screen-providers');
-        for (const p of ['google', 'apple', 'facebook', 'github']) await screen.findByTestId(`restore-provider-${p}`);
+        for (const p of ['google', 'apple', 'facebook']) await screen.findByTestId(`restore-provider-${p}`);
 
         const [open, nonce] = node.recovery();
         expect(open).toMatchObject({ path: '/api/recovery/collect', body: { callsign: 'Alice' } });
@@ -229,7 +227,8 @@ describe('each provider\'s return: the copy released to the throwaway key, opene
             const calls = node.recovery();
             expect(calls.map((c) => c.path)).toEqual(['/api/recovery/collect/sso', '/api/recovery/collect/fragments']);
             for (const c of calls) expect(c.headers['X-Public-Key']).toBe(eph.publicKey);
-            expect(calls[0].body).toMatchObject({ collectionId: 'col-1', provider, nonce: 'rn-9' });
+            // The token and its nonce, and nothing else of the sign-in: never its sub.
+            expect(calls[0].body).toEqual({ collectionId: 'col-1', provider, idToken: expect.any(String), nonce: 'rn-9' });
             expect(calls[0].body.idToken.split('.')).toHaveLength(3);
             expect(await loadPendingRestore()).toBeNull();
             // Saving is WelcomePage's, through the guarded write: nothing here wrote the identity.
@@ -303,7 +302,7 @@ describe('each provider\'s return: the copy released to the throwaway key, opene
         recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
             '/api/recovery/collect/sso-nonce': () => {
                 if (down) throw new TypeError('Failed to fetch');
-                return json(200, { nonce: 'rn-2', expiresInSeconds: 600, githubFlow: 'node', clientIds: { google: 'web-client' } });
+                return json(200, { nonce: 'rn-2', expiresInSeconds: 600, clientIds: { google: 'web-client' } });
             },
         });
         renderRestore();
@@ -315,18 +314,53 @@ describe('each provider\'s return: the copy released to the throwaway key, opene
         expect(screen.queryByTestId('join-notice')).toBeNull();
     });
 
-    it('GitHub: the code, the wait, released with the node\'s session', async () => {
-        const node = recoveryNode(() => copyOf(account, 'github', 'gh-sub-1'));
-        const { onRestored } = renderRestore();
-        await pickAlice();
-        fireEvent.click(await screen.findByTestId('restore-provider-github'));
-        expect(await screen.findByTestId('restore-github-code')).toHaveTextContent('WDJB-MJHT');
+    // FABLE-sec-sso finding 2: a community with the seal sends the copy sealed to the throwaway key when asked.
+    it('the copy comes back sealed to the throwaway key, and opens to Alice', async () => {
+        const eph = makeEphemeralKey();
+        await leftFor('google', eph);
+        const node = recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
+            '/api/recovery/collect/fragments': async (body) => {
+                const f = await copyOf(account, 'google', 'g-sub-1');
+                if (body?.seal !== KEEPER_ALG_RELEASE) return json(200, { fragments: [f] });
+                const s = sealReleaseToDevice({ encryptedShare: f.payload, shareIv: f.payloadIv, shareTag: f.payloadTag, kdfParams: f.kdfParams },
+                    eph.publicKey, { collectionId: 'col-1', holderType: 'sso' });
+                return json(200, { fragments: [{ holderType: 'sso', shareIndex: 1, payload: s.encryptedShare, payloadIv: s.shareIv,
+                    payloadTag: s.shareTag, ephemeralPubkey: s.ephemeralPubkey, kdfParams: s.kdfParams }] });
+            },
+        });
+        const { onRestored } = renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-1') });
         await waitFor(() => expect(onRestored).toHaveBeenCalledTimes(1));
         expect(onRestored.mock.calls[0][0].publicKey).toBe(account.publicKey);
-        const eph = node.recovery()[0].headers['X-Public-Key'];
-        const release = node.recovery().find((c) => c.path === '/api/recovery/collect/sso')!;
-        expect(release.body).toEqual({ collectionId: 'col-1', provider: 'github', proof: { sessionId: 'gh-1' } });
-        for (const c of node.recovery()) expect(c.headers['X-Public-Key']).toBe(eph);
+        expect(node.recovery().find((c) => c.path === '/api/recovery/collect/fragments')?.body).toEqual({ collectionId: 'col-1', seal: KEEPER_ALG_RELEASE });
+    });
+
+    it("a sealed copy that doesn't open with this restore's key: nothing handed on, nothing saved, and said", async () => {
+        await leftFor('google', makeEphemeralKey());
+        recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
+            '/api/recovery/collect/fragments': async () => {
+                const f = await copyOf(account, 'google', 'g-sub-1');
+                const s = sealReleaseToDevice({ encryptedShare: f.payload, shareIv: f.payloadIv, shareTag: f.payloadTag, kdfParams: f.kdfParams },
+                    makeEphemeralKey().publicKey, { collectionId: 'col-1', holderType: 'sso' });
+                return json(200, { fragments: [{ holderType: 'sso', shareIndex: 1, payload: s.encryptedShare, payloadIv: s.shareIv,
+                    payloadTag: s.shareTag, ephemeralPubkey: s.ephemeralPubkey, kdfParams: s.kdfParams }] });
+            },
+        });
+        const { onRestored } = renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-1') });
+        expect(await screen.findByTestId('restore-no-copy')).toHaveTextContent("didn't open in this browser, so nothing was changed");
+        expect(onRestored).not.toHaveBeenCalled();
+        expect(await loadIdentity()).toBeNull();
+    });
+
+    // FABLE-sec-sso finding 4: a session its owner stopped hands nothing over, even a copy it already released.
+    it('the session was stopped between the release and the fetch: back to the name, said, nothing restored', async () => {
+        await leftFor('google', makeEphemeralKey());
+        recoveryNode(() => copyOf(account, 'google', 'g-sub-1'), {
+            '/api/recovery/collect/fragments': () => json(400, { error: 'That recovery session was cancelled.' }),
+        });
+        const { onRestored } = renderRestore({ authReturn: returnFrom('google', 'rn-9', 'g-sub-1') });
+        expect(await screen.findByTestId('join-notice')).toHaveTextContent('That restore was stopped on the community, or has ended. Start again.');
+        await screen.findByTestId('restore-screen-name');
+        expect(onRestored).not.toHaveBeenCalled();
     });
 
     it("a copy that opens to another account than the name's: nothing handed on, nothing saved, and said", async () => {

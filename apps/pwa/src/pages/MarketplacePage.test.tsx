@@ -6,6 +6,8 @@ import type { BeanPoolIdentity } from '../lib/identity';
 import * as api from '../lib/api';
 import { livePostChange } from '@beanpool/core';
 import { routeLivePostChange, resetLivePostsForTest } from '../lib/live-posts';
+import { ACCOUNT_EPOCH_KEY, resetAccountEpochForTest } from '../lib/account-epoch';
+import { epochEndsInAnotherTab } from '../lib/another-tab';
 
 vi.mock('../lib/avatar', () => ({
     resolveAvatarUrl: vi.fn((url) => url),
@@ -90,6 +92,35 @@ describe('MarketplacePage: the viewer balance is a member-only request', () => {
     it('still asks for a member when isMember is omitted', async () => {
         render(<MarketplacePage identity={identity} />);
         await waitFor(() => expect(api.getBalance).toHaveBeenCalledTimes(1));
+    });
+});
+
+describe("MarketplacePage: a saved search's See more on Home fills the search (CARD-FRAME §4; slice F4)", () => {
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([
+            ...posts,
+            { ...posts[0], id: 'post-2', title: 'Fresh eggs', description: 'A dozen', category: 'food' },
+        ] as any);
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getMembers').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+    });
+
+    it('opens with the words in the search box, once, and the list narrowed to them', async () => {
+        const onSearchOpened = vi.fn();
+        render(<MarketplacePage identity={identity} openSearch="  eggs " onSearchOpened={onSearchOpened} />);
+        await screen.findByText('Fresh eggs');
+        expect(screen.getByPlaceholderText('Search marketplace...')).toHaveValue('eggs');
+        await waitFor(() => expect(screen.queryByText('Bicycle Repair')).not.toBeInTheDocument());
+        expect(onSearchOpened).toHaveBeenCalledTimes(1);
+    });
+
+    it('no words leaves the search as it was', async () => {
+        render(<MarketplacePage identity={identity} openSearch="   " onSearchOpened={vi.fn()} />);
+        await screen.findByText('Bicycle Repair');
+        expect(screen.getByPlaceholderText('Search marketplace...')).toHaveValue('');
     });
 });
 
@@ -226,6 +257,31 @@ describe('MarketplacePage: "Your events" under ★ For You', () => {
         // Nothing is starred in this test, so the ★ For You feed is empty and says so.
         expect(await screen.findByTestId('your-events')).toHaveTextContent('Working bee');
         expect(screen.getByText('No items found')).toBeInTheDocument();
+    });
+
+    it("a category starred here is kept on the member's account too, one truth with Home's interests (Home design §4.3)", async () => {
+        localStorage.removeItem('bp_fav_categories');
+        const save = vi.spyOn(api, 'saveHomePreferences').mockResolvedValue({ success: true });
+        await openForYou();
+        await act(async () => { screen.getByRole('button', { name: /Food & Produce/ }).click(); });
+        expect(JSON.parse(localStorage.getItem('bp_fav_categories')!)).toEqual(['food']);
+        await waitFor(() => expect(save).toHaveBeenCalledWith(identity.publicKey, { interests: ['food'] }));
+        localStorage.removeItem('bp_fav_categories');
+    });
+
+    it('after Sign Out in another tab, a star in this Market keeps no favourites and sends nothing (PR #1479 round 2)', async () => {
+        localStorage.removeItem('bp_fav_categories');
+        const save = vi.spyOn(api, 'saveHomePreferences').mockResolvedValue({ success: true });
+        await openForYou();
+        epochEndsInAnotherTab('signed-out');
+        try {
+            await act(async () => { screen.getByRole('button', { name: /Food & Produce/ }).click(); });
+            expect(localStorage.getItem('bp_fav_categories')).toBeNull();
+            expect(save).not.toHaveBeenCalled();
+        } finally {
+            localStorage.removeItem(ACCOUNT_EPOCH_KEY);
+            resetAccountEpochForTest();
+        }
     });
 
     it('is not there at all on a node without the route (decision 7)', async () => {
@@ -497,5 +553,27 @@ describe('MarketplacePage: links in a post stay plain text (G11-e)', () => {
         await waitFor(() => expect(container.textContent).toContain(DESCRIPTION));
         expect(phishLinks(container)).toHaveLength(0);
         expect(phishLinks(document.body)).toHaveLength(0);
+    });
+});
+
+// A local community's listings are its members' (2026-09-28): the node refuses them to anyone else with code members_only,
+// and the Market says so, with the way to the global community, instead of an error or an empty board.
+describe('MarketplacePage: a local community refuses its listings to a non-member', () => {
+    beforeEach(() => {
+        vi.restoreAllMocks();
+        const refusal = Object.assign(new Error("Refused by the node."), { status: 403, code: 'members_only' });
+        vi.spyOn(api, 'getMarketplacePosts').mockRejectedValue(refusal);
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getMembers').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeInfo').mockResolvedValue({ peerNodes: [] } as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+    });
+
+    it('shows the members-only card with a link to the global community, and no error box', async () => {
+        render(<MarketplacePage identity={identity} isMember={false} />);
+        const card = await screen.findByTestId('members-only-listings');
+        expect(card.textContent).toContain("This community's listings are for its members");
+        expect(screen.getByTestId('look-around-global').getAttribute('href')).toBe('https://global.beanpool.org');
+        expect(screen.queryByText('Refused by the node.')).not.toBeInTheDocument();
     });
 });

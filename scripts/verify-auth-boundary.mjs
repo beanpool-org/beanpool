@@ -64,6 +64,8 @@ const PROTECTED_ROUTES = [
 // Routes that are deliberately public (no signature required). The script
 // does NOT POST to these — listed here for documentation only.
 const PUBLIC_POST_ROUTES = [
+    // The middleware skips these (the joiner is no member yet), but the route itself requires the joiner's own
+    // signature (routes/community.ts requireRedeemSignature, 2026-10-01).
     '/api/invite/redeem',
     '/api/invite/redeem-offline',
     // A leave statement carries the leaving key's own signature (POST /api/push-tokens/leave/:publicKey).

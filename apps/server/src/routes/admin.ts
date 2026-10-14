@@ -16,36 +16,52 @@ import {
     type EscrowRefundShortfall,
     adminPruneBranch, adminBroadcastAnnouncement, adminSendMessage,
     dismissReport, actionReport,
-    getFirstNodeAdminPubkey, getAdminPubkey, isAdminPubkey, listNodeRoles, grantNodeRole, revokeNodeRole, isNodeOwner, isNodeAdmin, nodeRoleOf, heldNodeRoleOf, type MemberNodeRole,
+    getFirstNodeAdminPubkey, getAdminPubkey, isAdminPubkey, listNodeRoles, grantNodeRole, revokeNodeRole, isNodeOwner, isNodeAdmin, isOwnerLevelActor, nodeRoleOf, heldNodeRoleOf, type MemberNodeRole,
     canVouch, getMemberTrustProfile,
     getMemberStats,
+    getTradeTotals,
     getConversationsByMember, getConversationMessages, getUnreadCounts,
     getNodeConfig, updateNodeConfig,
     adminRejectProject,
     adminHaltDecision, adminAccelerateDecision,
     adminEmergencySuspend, adminLiftSuspension,
-    getAllDecisions, tallyDecision,
+    getAllDecisions, tallyDecision, decisionForAdmin,
     getCommonsBalance,
     runLedgerAudit,
     getEscrowDisputes, countEscrowDisputes, getEscrowDispute, resolveEscrowDispute, type EscrowDisputeAction,
     lastActiveForViewer,
-    restoreHiddenPost, liftModerationMute,
+    restoreHiddenPost, liftModerationMute, pushServiceRefusals,
+    hideBurst, undoBurst,
 } from '../state-engine.js';
 import { listMutedMembers } from '../engine/auto-moderation.js';
-import { decisionsOn } from '../decisions-engine.js';
+import { listBrokenBalances, BROKEN_BALANCE_REPAIR, answerPotPaused } from '../engine/audit.js';
+import { logAlertsLook, logBalanceLook, logDisputesLook, type TradeLookAction } from '../engine/community-health.js';
 import {
-    getLocalConfig, verifyPasswordAsync, verifyReplicationToken,
+    BURST, burstCleanupOn, burstKey, isBurstAccount, moderatorMayOpen, readBurst, checkBurstSelection, removeBurst, burstDigest,
+    type BurstActorRole, type BurstRefusal,
+} from '../engine/burst-cleanup.js';
+import { decisionsOn, adminActionNeedsOwner, type OwnerOnlyAdminAction } from '../decisions-engine.js';
+import {
+    getLocalConfig, verifyPasswordAsync,
     getGatewayConfig, updateGatewayConfig,
 } from '../config/local-config.js';
 import { getConnectors } from '../connector-manager.js';
 import { logger } from '../logger.js';
+import { admitSuggestion, settleSuggestion, suggestionAuditSuffix } from '../agent/suggestions.js';
+import { noteSecurityEvent } from '../services/security-signal.js';
 import { db, getCrowdfundProjects } from '../db/db.js';
 import { getFunnel, clampDays } from '../engine/funnel.js';
-import { issueCsrfToken, issueWsTicket, requireAdminRole } from '../admin-auth.js';
+import { getProfileSwitches } from '../config/node-profile.js';
+import { expoAccessTokenStatus } from '../config/expo-access-token.js';
+import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/web-visits.js';
+import { getAppVersionCounts } from '../app-version-counts.js';
+import { APP_PLATFORMS, getMinAppVersion, getMinAppVersionFrom, getPlatformFloorDetail, getAppStoreVersions } from '../app-store-versions.js';
+import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING, passwordSessionNeedsTotpSetup, TOKEN_REFUSED_CODE, refusePasswordRetired, lookTokenOf } from '../admin-auth.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
-import { SIGNED_FOR_HEADER } from '@beanpool/core';
+import { SIGNED_FOR_HEADER, avatarUrlOf } from '@beanpool/core';
 import { listStrandedEscrows, writeOffStrandedEscrow } from '../engine/escrow-write-off.js';
+import { describeRefundShortfall } from '../engine/posts.js';
 import type { RouteDeps } from './types.js';
 import { ensureBeanPoolIdentity, BEANPOOL_LEARN_CHANNEL_ID } from '../engine/pulse-seed.js';
 import { addChannel, deleteChannel, getChannel, ChannelError, type ChannelPlatform } from '../engine/creator-channels.js';
@@ -56,24 +72,41 @@ import {
     getAdminChallenge,
     verifyAndSolveChallenge,
     consumeHandshakeToken,
+    PHONE_HANDOFF_IDLE_TTL_MS,
     validateAdminSession,
     revokeAllMemberSessions,
     revokeAdminSession,
     enrolAdminOwnerKey,
+    issueBreakGlassCode,
+    retireBreakGlassCode,
+    createPasswordSession,
+    setAdminSessionCookie,
+    clearAdminSessionCookie,
+    ADMIN_SESSION_COOKIE,
+    endPasswordSessions,
 } from '../admin-key-auth.js';
-import { isBreakGlassMode, setBreakGlassMode } from '../config/local-config.js';
+import { isBreakGlassMode, setBreakGlassMode, isPasswordRetired, updateLocalConfig, removeFirstPasswordFile } from '../config/local-config.js';
 import {
     issueRekeyCode,
+    cancelRekeyCode,
     completeRekey,
     getRekeyStatus,
     getOffboardPreview,
     executeOffboard,
     type OffboardOptions,
 } from '../engine/member-wizards.js';
+import { bindRekeyByMatch, declineRekeyProposal, rekeyCodeUnderAttack, RekeyRedeemRefusal } from '../engine/rekey-redeem.js';
 import { getShutdownStatus, acknowledgeShutdownRecovery } from '../engine/shutdown-recovery.js';
 import { getStandbyHealthBanner, watchesStandbys } from '../services/standby-health.js';
+import { getOffboxHealth } from '../services/offbox-backups.js';
 import { getUnhandledRejectionSummary } from '../process-handlers.js';
 import { getDiskHealth, getStorageCleanPreview, cleanStorageAndCompressLogs, type DiskHealth } from '../engine/storage-health.js';
+import { ANNOUNCEMENT_LIMITS } from '../engine/push-notices.js';
+import { likeContains, withoutTradeParty } from '@beanpool/engine';
+
+// The most post ids one POST /api/local/admin/posts/bulk-delete takes. The manager (PeopleSafetySection.tsx) and the
+// node's own settings page (static/settings.js) send longer lists in batches of this size, one after another.
+export const MAX_BULK_DELETE_POSTS = 200;
 
 export function createAdminRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -84,7 +117,13 @@ export function createAdminRoutes(deps: RouteDeps): Router {
 // admin passwords in URL query strings (which browser console & proxy logs capture).
 router.post('/api/local/admin/ws-ticket', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const ticket = issueWsTicket();
+    // Bound to the session this request rides (none for the password itself): the log socket ends with it.
+    const ticket = issueWsTicket((ctx.state as any)?.adminSessionId);
+    if (!ticket) {
+        ctx.status = 401;
+        ctx.body = { error: 'Your sign-in has ended' };
+        return;
+    }
     ctx.body = { ticket };
 });
 
@@ -95,7 +134,9 @@ router.post('/api/local/admin/ws-ticket', async (ctx) => {
 
 router.post('/api/local/admin/csrf-token', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const token = issueCsrfToken();
+    // For the session this request rides, and no other (admin-auth.ts, CSRF TOKEN STORE); a password caller's token is
+    // for password callers.
+    const token = issueCsrfToken((ctx.state as any)?.adminSessionId || PASSWORD_CSRF_BINDING);
     ctx.set('X-CSRF-Token', token);
     ctx.body = { csrfToken: token };
 });
@@ -126,28 +167,26 @@ router.post('/api/local/admin/auth/challenge', async (ctx) => {
  */
 router.post('/api/local/admin/auth/verify-challenge', async (ctx) => {
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
-    const { challengeId, memberPubkey, signature, totpCode, signedFor } = body;
+    const { challengeId, memberPubkey, signature, signedFor } = body;
     if (!challengeId || !memberPubkey || !signature) {
         ctx.status = 400;
         ctx.body = { error: 'challengeId, memberPubkey, and signature are required' };
         return;
     }
 
-    const res = verifyAndSolveChallenge({ challengeId, memberPubkey, signature, totpCode, signedFor });
+    const res = verifyAndSolveChallenge({ challengeId, memberPubkey, signature, signedFor });
     if (!res.ok) {
         let status = 400;
         if (res.status) {
             // 421 wrong_community, 426 app_too_old (engine/member-signature.ts)
             status = res.status;
-        } else if (res.totpRequired) {
-            status = 401;
         } else if (res.error?.includes('Challenge not found')) {
             status = 404;
         } else if (res.error?.includes('signature') || res.error?.includes('Signature') || res.error?.includes('role') || res.error?.includes('inactive') || res.error?.includes('Member not found')) {
             status = 403;
         }
         ctx.status = status;
-        ctx.body = { error: res.error, totpRequired: res.totpRequired, ...(res.code ? { code: res.code } : {}) };
+        ctx.body = { error: res.error, ...(res.code ? { code: res.code } : {}) };
         return;
     }
 
@@ -179,8 +218,10 @@ router.get('/api/local/admin/auth/challenge/:challengeId', async (ctx) => {
 
 /**
  * POST /api/local/admin/auth/exchange
- * Exchanges single-use 60s handshake token for a browser session (2h idle / 12h hard).
+ * Exchanges single-use 60s handshake token for a browser session (15 min idle / 12h hard).
  * Single-use: burned immediately, replays rejected.
+ * Its one caller is /settings redeeming the phone app's "Manage" hand-off (#handoff=…, apps/manager/src/lib/key-session.ts),
+ * a page in the phone's in-app browser that App Lock can't always cover: so the short idle (PHONE_HANDOFF_IDLE_TTL_MS).
  */
 router.post('/api/local/admin/auth/exchange', async (ctx) => {
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
@@ -191,7 +232,7 @@ router.post('/api/local/admin/auth/exchange', async (ctx) => {
         return;
     }
 
-    const res = consumeHandshakeToken(token);
+    const res = consumeHandshakeToken(token, Date.now(), { idleTtlMs: PHONE_HANDOFF_IDLE_TTL_MS });
     if (!res.ok) {
         ctx.status = 401;
         ctx.body = {
@@ -199,22 +240,21 @@ router.post('/api/local/admin/auth/exchange', async (ctx) => {
             replay: res.replay,
             expired: res.expired,
             revoked: res.revoked,
+            // Whose link it was (only to the holder of the token): /settings compares it with any sign-in still live here.
+            mintedFor: res.mintedFor,
         };
         return;
     }
 
-    ctx.cookies.set('admin_session', res.sessionId, {
-        httpOnly: true,
-        sameSite: 'lax',
-        maxAge: 12 * 3600 * 1000,
-        path: '/',
-    });
+    // The session's id goes in the httpOnly cookie and nowhere else: in the body, a script on the page could read it
+    // and use it from anywhere, without the cookie or a CSRF token (Fable's web review, L3).
+    setAdminSessionCookie(ctx, res.sessionId!);
     if (res.csrfToken) {
         ctx.set('X-CSRF-Token', res.csrfToken);
     }
+    ctx.set('Cache-Control', 'no-store');
     ctx.body = {
         success: true,
-        sessionId: res.sessionId,
         csrfToken: res.csrfToken,
         memberPubkey: res.memberPubkey,
         role: res.role,
@@ -223,29 +263,94 @@ router.post('/api/local/admin/auth/exchange', async (ctx) => {
     };
 });
 
+/**
+ * POST /api/local/admin/auth/password — Settings' password sign-in. Body: { password, totpCode? }.
+ *
+ * The password (and, with 2FA on, a code) is checked once, exactly as checkAdminAuth checks it on any route (the brake,
+ * the tarpit, break-glass mode, which refuses it here), and exchanged for an admin session: the httpOnly, SameSite
+ * strict admin_session cookie and a CSRF token bound to it, as a key sign-in gets. The browser keeps no copy of the
+ * password, in web storage or anywhere else (Fable's web review, M1): the members' web app shares this origin, so
+ * anything stored there is one script away. A session the browser already held is ended. Answers the role (owner),
+ * the CSRF token and the session's limits; never the session's id.
+ */
+router.post('/api/local/admin/auth/password', async (ctx) => {
+    ctx.set('Cache-Control', 'no-store');
+    if (isPasswordRetired()) { refusePasswordRetired(ctx); return; }
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    if (typeof body.password !== 'string' || !body.password.trim()) {
+        ctx.status = 400;
+        ctx.body = { error: 'Enter the admin password' };
+        return;
+    }
+    // opensSession: this session is held to the 2FA setup card while the node's 2FA is off (admin-auth.ts step 7c).
+    if (!(await checkAdminPasswordAuth(ctx as any, { opensSession: true }))) return;
+    // checkAdminAuth hands a header client a 2FA session for its next requests (X-Admin-2FA-Session); this sign-in's
+    // next requests ride the cookie, so it is not handed out.
+    const tfa = (ctx.state as any)?.tfaSessionToken;
+    if (tfa) {
+        revoke2faSession(tfa);
+        delete (ctx.state as any).tfaSessionToken;
+    }
+    const held = ctx.cookies.get(ADMIN_SESSION_COOKIE);
+    if (held) revokeAdminSession(held);
+    const session = createPasswordSession();
+    setAdminSessionCookie(ctx, session.sessionId);
+    ctx.set('X-CSRF-Token', session.csrfToken);
+    logger.security('AUTH', 'Successful administrative login.');
+    ctx.body = {
+        success: true,
+        role: 'owner',
+        // With the node's 2FA off this session opens only the 2FA setup card (admin-auth.ts TOTP_SETUP_ROUTES).
+        totpSetupRequired: passwordSessionNeedsTotpSetup(),
+        csrfToken: session.csrfToken,
+        hardExpiresAt: session.hardExpiresAt,
+        idleExpiresAt: session.idleExpiresAt,
+    };
+});
+
 // "Sign me out everywhere" from the app: its own nonces, within a 60-second window (engine/member-signature.ts).
 const revocationNonces = new NonceStore(60_000);
 
 /**
- * POST /api/local/admin/auth/revoke-all
- * Revoke all web sessions for a member by bumping session_epoch in SQLite.
- * Gated by checkAdminAuth or signature header.
+ * POST /api/local/admin/auth/revoke-all — "Sign out everywhere" (Settings' Owners & admins, the app's admin rows).
+ * Revoke all web sessions for a member by bumping session_epoch in SQLite. Who can end whose:
+ *   - a key session (owner, admin, moderator) or the app's signed request: the caller's own; the signed request always
+ *     the signer's, whatever the body names;
+ *   - an owner's key session, or the password: another member's too, named in the body (from the phone, after its
+ *     unlock again); the password naming nobody is refused (400), as it has no sessions of its own;
+ *   - an automation token: nobody's (403 token_not_allowed, as on every sign-in route).
+ * test-automation-tokens section 4b measures each over HTTP.
  */
 router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     let targetPubkey = body.memberPubkey || body.pubkey;
+    // The caller's own key, from their authentication alone (a key session, or the app's signature), never the body.
+    let selfPubkey = '';
 
     // Check if called with an active admin session or password auth
     const isAuthed = await checkAdminAuth(ctx as any);
+    // An automation token has no sessions of its own, so it signs out nobody: checkAdminAuth refuses it here as on every
+    // sign-in route (403 token_not_allowed), and that answer stands rather than falling through to the app's signature.
+    if (!isAuthed && ctx.status === 403 && (ctx.body as any)?.code === TOKEN_REFUSED_CODE) return;
     if (isAuthed) {
         const callerPubkey = (ctx.state as any)?.actor;
         const callerRole = (ctx.state as any)?.adminRole;
+        if ((ctx.state as any)?.isKeySession && typeof callerPubkey === 'string') selfPubkey = callerPubkey;
         if (callerRole !== 'owner' && callerPubkey && targetPubkey && targetPubkey !== callerPubkey) {
             ctx.status = 403;
             ctx.body = { error: 'Non-owner administrators can only revoke their own sessions' };
             return;
         }
-        targetPubkey = targetPubkey || callerPubkey || getFirstNodeAdminPubkey();
+        // Signing someone else out everywhere is owner-only (above): from the phone it asks for its unlock again. Ending
+        // your own sessions is not asked.
+        if (targetPubkey && targetPubkey !== callerPubkey && !requirePhoneStepUp(ctx)) return;
+        // The password is nobody's own session: it signs out only the member it names, never one picked for it.
+        if (!targetPubkey && !callerPubkey) {
+            ctx.status = 400;
+            ctx.body = { error: 'Name the member to sign out everywhere (memberPubkey)' };
+            return;
+        }
+        targetPubkey = targetPubkey || callerPubkey;
     } else {
         // Allow mobile app with signed headers (X-Public-Key, X-Signature). This path skips the signature middleware, so
         // the signer is taken here as the middleware takes it: in the one spelling (engine/member-key.ts
@@ -272,6 +377,7 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
             }, { consumeNonce: true, freshnessMs: 60_000, nonces: revocationNonces });
             if (verdict.ok) {
                 targetPubkey = verdict.signer;
+                selfPubkey = verdict.signer;
             } else {
                 ctx.status = verdict.status === 403 || verdict.status === 400 ? 401 : verdict.status;
                 ctx.body = verdict.code ? { error: verdict.error, code: verdict.code } : { error: verdict.error };
@@ -292,12 +398,18 @@ router.post('/api/local/admin/auth/revoke-all', async (ctx) => {
     }
 
     const newEpoch = revokeAllMemberSessions(targetPubkey);
-    ctx.cookies.set('admin_session', '', { maxAge: 0, path: '/' });
+    // An owner signing out their OWN sessions everywhere (a key session naming itself or nobody, or the app's signed
+    // request) also retires their break-glass code (#1531), so a code a stolen session made does not outlive it. Signing
+    // someone else out leaves their code alone, as does the password, which is nobody's own session.
+    const breakGlassCodeRetired = !!selfPubkey && selfPubkey === targetPubkey && nodeRoleOf(targetPubkey) === 'owner'
+        && retireBreakGlassCode(targetPubkey);
+    clearAdminSessionCookie(ctx);
     ctx.status = 200;
     ctx.body = {
         success: true,
         memberPubkey: targetPubkey,
         sessionEpoch: newEpoch,
+        breakGlassCodeRetired,
     };
 });
 
@@ -315,11 +427,26 @@ router.get('/api/local/admin/auth/session', async (ctx) => {
 
     if (sessionToken) {
         const res = validateAdminSession(sessionToken);
+        if (res.valid && res.session?.kind === 'password') {
+            ctx.body = {
+                authenticated: true,
+                isKeySession: false,
+                isPasswordSession: true,
+                memberPubkey: null,
+                role: 'owner',
+                totpSetupRequired: passwordSessionNeedsTotpSetup(),
+                hardExpiresAt: res.session.hardExpiresAt,
+                idleExpiresAt: res.session.idleExpiresAt,
+            };
+            return;
+        }
         if (res.valid && res.session) {
             ctx.body = {
                 authenticated: true,
                 isKeySession: true,
                 memberPubkey: res.session.memberPubkey,
+                // Whose session, in words: /settings names it when a link from the phone finds someone else signed in.
+                callsign: getMember(res.session.memberPubkey)?.callsign ?? null,
                 role: res.session.role,
                 sessionEpoch: res.session.sessionEpoch,
                 hardExpiresAt: res.session.hardExpiresAt,
@@ -368,7 +495,7 @@ router.post('/api/local/admin/auth/logout', async (ctx) => {
     if (sessionToken) {
         revokeAdminSession(sessionToken);
     }
-    ctx.cookies.set('admin_session', '', { maxAge: 0, path: '/' });
+    clearAdminSessionCookie(ctx);
     ctx.body = { success: true };
 });
 
@@ -378,7 +505,35 @@ router.post('/api/local/admin/auth/logout', async (ctx) => {
  * Enrols a member key and generates a unique per-owner break-glass code.
  * In break-glass mode, this is the ONLY route password/break-glass credentials can access.
  */
+/**
+ * Whether a role change needs an owner (engine/node-roles.ts): it names 'owner' or 'admin', or its target holds owner or
+ * admin now (a grant replaces the role the target holds, so "grant moderator" to a co-owner removes an owner). Such a
+ * change from the phone's Manage hand-off asks for its unlock again (admin-auth.ts requirePhoneStepUp), as every
+ * owner-only route does; an admin appointing or removing a moderator is not asked.
+ */
+function roleChangeNeedsOwner(targetPubkey: string, role: string): boolean {
+    if (role === 'owner' || role === 'admin') return true;
+    const held = heldNodeRoleOf(targetPubkey);
+    return held === 'owner' || held === 'admin';
+}
+
+/**
+ * The step-up on a suspension or Decision action that only an owner may make on this target (decisions-engine
+ * adminActionNeedsOwner, the engine's own owner-only conditions): suspending an owner, lifting or halting what gives back
+ * an owner's or admin's role, cutting short an owner's or admin's removal, removing (pruning, offboarding) or re-keying an
+ * owner or admin. From the phone's Manage hand-off it asks for its unlock again (requirePhoneStepUp). `actor` is the one the
+ * engine is given. Answers 403 and returns false when that is due.
+ */
+function stepUpIfOwnerOnly(ctx: any, action: OwnerOnlyAdminAction, target: string, actor = ''): boolean {
+    // An automation token acts for the owner who made it but never as them: what an owner may do to themselves (prune
+    // their own branch) is still an owner's action, so it is refused to the token (requirePhoneStepUp).
+    const asActor = ctx.state?.automationTokenId ? '' : actor;
+    return !adminActionNeedsOwner(action, target, asActor) || requirePhoneStepUp(ctx);
+}
+
 const handleEnrol = async (ctx: any) => {
+    // First, so a refusal is never cached either: a new owner's answer carries their break-glass code (#1531).
+    ctx.set('Cache-Control', 'no-store');
     if (!(await checkAdminAuth(ctx as any))) return;
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     const targetPubkey = body.memberPubkey || body.publicKey || body.pubkey || (ctx.state as any)?.actor;
@@ -408,6 +563,7 @@ const handleEnrol = async (ctx: any) => {
         ctx.body = { error: 'Only a node owner can enrol an owner key or generate break-glass credentials' };
         return;
     }
+    if (roleChangeNeedsOwner(targetPubkey, requestedRole) && !requirePhoneStepUp(ctx)) return;
 
     try {
         const res = enrolAdminOwnerKey({
@@ -415,6 +571,7 @@ const handleEnrol = async (ctx: any) => {
             actorPubkey: (ctx.state as any)?.actor || (isBreakGlass ? 'break-glass:enrolment' : 'owner:password'),
             isBreakGlass,
             role: requestedRole,
+            madeBy: (ctx.state as any)?.isKeySession ? 'key-session' : isBreakGlass ? 'break-glass' : 'password',
         });
         ctx.body = {
             success: true,
@@ -436,6 +593,57 @@ router.post('/api/local/admin/auth/enrol', handleEnrol);
 router.post('/api/local/admin/auth/break-glass/enrol', handleEnrol);
 
 /**
+ * POST /api/local/admin/auth/break-glass/issue
+ * Settings' "Make a break-glass code": a new code for an owner, shown once; the owner's earlier code stops working.
+ * Owners only. A key session makes one for its own key and nobody else's. The password (an owner with no key behind it)
+ * names the owner in `memberPubkey`, which must hold the owner role already: this grants nothing. A break-glass code is
+ * a wrong password here (admin-auth.ts opens only the enrol routes to it), and break-glass mode closes it to the
+ * password, as it does every route but enrolment.
+ */
+router.post('/api/local/admin/auth/break-glass/issue', async (ctx) => {
+    // First, so a refusal is never cached either (#1531).
+    ctx.set('Cache-Control', 'no-store');
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only a node owner can make a break-glass code')) return;
+    const state = ctx.state as any;
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    let target: string;
+    if (state.isKeySession) {
+        target = state.actor;
+        if (body.memberPubkey && body.memberPubkey !== target) {
+            ctx.status = 403;
+            ctx.body = { error: 'A break-glass code is made by its own owner: sign in with that owner\'s key' };
+            return;
+        }
+    } else {
+        target = typeof body.memberPubkey === 'string' ? body.memberPubkey : '';
+        if (!target) {
+            ctx.status = 400;
+            ctx.body = { error: 'memberPubkey is required: name the owner the code is for' };
+            return;
+        }
+        if (!isMemberKeySpelling(target)) {
+            ctx.status = 400;
+            ctx.body = { error: BAD_KEY_ERROR, code: BAD_KEY_CODE };
+            return;
+        }
+    }
+    try {
+        const code = issueBreakGlassCode(target, state.isKeySession ? `their own key session` : 'the admin password',
+            state.isKeySession ? 'key-session' : 'password');
+        ctx.body = {
+            success: true,
+            memberPubkey: target,
+            breakGlassCode: code,
+            message: 'Store this break-glass code securely. It will only be shown once.',
+        };
+    } catch (e: any) {
+        ctx.status = Number(e?.status) || 400;
+        ctx.body = { error: e?.message || 'Could not make a break-glass code' };
+    }
+});
+
+/**
  * POST /api/local/admin/auth/break-glass-mode
  * Toggles break-glass mode on or off.
  */
@@ -446,6 +654,8 @@ router.post('/api/local/admin/auth/break-glass-mode', async (ctx) => {
         ctx.body = { error: 'Only node owners can toggle break-glass mode' };
         return;
     }
+    // Owner-only, checked here rather than by requireAdminRole: from the phone it asks for its unlock again too.
+    if (!requirePhoneStepUp(ctx)) return;
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
     if (typeof body.enabled !== 'boolean') {
         ctx.status = 400;
@@ -466,6 +676,109 @@ router.get('/api/local/admin/auth/break-glass/status', async (ctx) => {
     ctx.body = { breakGlassMode: isBreakGlassMode() };
 });
 
+// ===================== RETIRE THE ADMIN PASSWORD (node sign-in design step 10, D1(c), D6) =====================
+
+/** The owners whose role acts now (a visitor's old row or a suspended owner is not one). */
+function actingOwners() {
+    return listNodeRoles().filter(r => r.role === 'owner' && nodeRoleOf(r.member_pubkey) === 'owner');
+}
+
+/** What Access & Security's "Retire the admin password" card shows. */
+function passwordRetirementView(callerPubkey: string | null) {
+    const retired = getLocalConfig().passwordRetired || null;
+    const owners = actingOwners();
+    return {
+        passwordRetired: !!retired,
+        retiredAt: retired?.at ?? null,
+        retiredByCallsign: retired?.byCallsign ?? null,
+        owners: owners.length,
+        // The caller's own break-glass code: retiring needs one (below). Null for a caller with no key (the password).
+        hasBreakGlassCode: callerPubkey ? !!owners.find(o => o.member_pubkey === callerPubkey)?.has_break_glass : null,
+    };
+}
+
+/**
+ * GET /api/local/admin/auth/password-retirement — owners only.
+ */
+router.get('/api/local/admin/auth/password-retirement', async (ctx) => {
+    ctx.set('Cache-Control', 'no-store');
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!requireAdminRole(ctx, ['owner'], 'Only a node owner can see whether the admin password is retired')) return;
+    const state = ctx.state as any;
+    ctx.body = passwordRetirementView(state.isKeySession ? state.actor : null);
+});
+
+/**
+ * POST /api/local/admin/auth/retire-password { acceptOneOwner?: true } — retires the admin password for good.
+ * An owner signed in with their own key only (never the password itself, never a token), with the phone step-up of every
+ * owner-only change. Refused while the caller has no break-glass code: with the password gone it is how an owner whose
+ * phone is lost gets back in without the server's shell, and Settings makes one in a tap (step 3). Refused with one owner
+ * unless the owner ticks "I accept one owner" (D6), which is logged. Then: the hash, the salt and the 2FA that guarded the
+ * password are deleted, passwordRetired records when and by whom, every password session ends now (and the log sockets
+ * they opened), the first-password file goes, a SECURITY line is logged and the community gets a critical announcement.
+ * No route sets a password again; ADMIN_PASSWORD in .env is ignored on every later start (initAdminPassword).
+ */
+router.post('/api/local/admin/auth/retire-password', async (ctx) => {
+    ctx.set('Cache-Control', 'no-store');
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const state = ctx.state as any;
+    if (!state.isKeySession || state.adminRole !== 'owner') {
+        ctx.status = 403;
+        ctx.body = {
+            error: 'Only an owner signed in with their own key (Manage in the app, or "Sign in with your phone" on a computer) can retire the admin password',
+            code: 'owner_key_required',
+        };
+        return;
+    }
+    if (!requirePhoneStepUp(ctx)) return;
+    if (isPasswordRetired()) {
+        ctx.status = 409;
+        ctx.body = { error: 'The admin password is already retired', code: 'password_retired', ...passwordRetirementView(state.actor) };
+        return;
+    }
+    const owners = actingOwners();
+    const me = owners.find(o => o.member_pubkey === state.actor);
+    if (!me?.has_break_glass) {
+        ctx.status = 409;
+        ctx.body = {
+            error: 'Make your break-glass code first (Access & Security, Break-glass code) and keep it somewhere safe: once the password is gone, it is how you get back in if your phone is lost.',
+            code: 'break_glass_code_needed',
+        };
+        return;
+    }
+    const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    const oneOwner = owners.length < 2;
+    if (oneOwner && body.acceptOneOwner !== true) {
+        ctx.status = 409;
+        ctx.body = {
+            error: 'This community has one owner. Add a second owner first, or tick "I accept one owner": if your phone and your 12 words are both lost, only your break-glass code or "beanpool recover" on the server get you back in.',
+            code: 'one_owner',
+            owners: owners.length,
+        };
+        return;
+    }
+    const at = Date.now();
+    const callsign = me.callsign || null;
+    updateLocalConfig({
+        adminHash: null, salt: null,
+        totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], totpPendingSecret: null, totpPendingBackupCodesHashes: [],
+        passwordRetired: { at, by: state.actor, byCallsign: callsign, acceptedOneOwner: oneOwner },
+    });
+    removeFirstPasswordFile('The admin password was retired');
+    const ended = endPasswordSessions();
+    const who = `${callsign || 'an owner'} (${String(state.actor).slice(0, 12)}…)`;
+    logger.security('AUTH', `The admin password was retired for good by ${who}${oneOwner ? ', who accepted being the only owner' : ''}; ${ended} password session(s) ended`);
+    noteSecurityEvent({
+        key: 'sec.keys',
+        detail: `The admin password was retired for good, by an owner; ${ended} password session${ended === 1 ? '' : 's'} ended. Owners now sign in with their keys.`,
+        actor: String(state.actor), actorRole: 'owner', high: true,
+    });
+    adminBroadcastAnnouncement('Admin Password Retired',
+        `${callsign || 'An owner'} retired this community's admin password. Settings now opens only with an owner's or admin's phone. If you did not expect this, tell your community's owners.`,
+        'critical');
+    ctx.body = { success: true, ...passwordRetirementView(state.actor), acceptedOneOwner: oneOwner, endedSessions: ended };
+});
+
 // ===================== LEDGER AUDIT ENDPOINTS =====================
 // #129: On-demand audit + drift acknowledgment endpoints.
 // Operators can call ledger-audit to inspect the current conservation state,
@@ -475,13 +788,17 @@ router.post('/api/local/admin/ledger-audit', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
         const result = runLedgerAudit();
+        // Which balances aren't a number, and what to do (#1445 re-review): a count alone left the operator to find them.
+        const broken = result.badBalances > 0 ? listBrokenBalances() : null;
         ctx.body = {
             success: true,
             sumBalances: result.sumBalances,
             baseline: result.baseline,
             drift: result.drift,
             strandedEscrows: result.strandedEscrows,
+            badBalances: result.badBalances,
             ok: result.ok,
+            ...(broken ? { brokenBalances: broken.accounts, ...(broken.total > broken.accounts.length ? { brokenBalancesMore: broken.total - broken.accounts.length } : {}), repair: BROKEN_BALANCE_REPAIR } : {}),
         };
     } catch (e: any) {
         ctx.status = 500;
@@ -508,6 +825,23 @@ router.post('/api/local/admin/ledger-rebaseline', async (ctx) => {
     const sanitizedReason = String(reason).replace(/[\r\n\t\x00-\x1F\x7F]/g, ' ').trim().slice(0, 500);
     try {
         const result = runLedgerAudit();
+        // A ledger holding a balance that isn't a finite number has no sum to set a baseline at: one of 9e999 makes the
+        // sum Infinity, which this wrote as the baseline and answered "ok". Those rows are mended first (#1445 review).
+        if (result.badBalances > 0 || !Number.isFinite(result.sumBalances)) {
+            // Named, with the way to mend them (#1445 re-review): no route or Settings control mends a balance.
+            const broken = listBrokenBalances();
+            const named = broken.accounts.map((b) => `${b.account}${b.callsign ? ` (${b.callsign})` : ''} holds ${b.holds}`).join('; ');
+            const more = broken.total > broken.accounts.length ? `; and ${broken.total - broken.accounts.length} more` : '';
+            ctx.status = 409;
+            ctx.body = {
+                success: false,
+                error: `${result.badBalances} account balance(s) are not a number, so the ledger has no total to set a new baseline at. `
+                    + `Nothing was changed. ${named ? `They are: ${named}${more}. ` : ''}${BROKEN_BALANCE_REPAIR}`,
+                brokenBalances: broken.accounts,
+                repair: BROKEN_BALANCE_REPAIR,
+            };
+            return;
+        }
         const normalizedBaseline = (Math.round(result.sumBalances * 10000) / 10000).toString();
         const note = `[${new Date().toISOString()}] rebaselined at ${result.sumBalances.toFixed(4)} (drift was ${result.drift.toFixed(4)}): ${sanitizedReason}`;
         // Wrap both writes in a transaction so baseline and note are always consistent.
@@ -530,7 +864,12 @@ router.post('/api/local/admin/ledger-rebaseline', async (ctx) => {
 router.get('/api/local/admin/stranded-escrows', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        ctx.body = { success: true, ...listStrandedEscrows() };
+        const listed = listStrandedEscrows();
+        // A look at the trades these escrows were stuck in, like a look at the disputes (review r4177560417 item 4): a
+        // line of its own in the log the owner and admins read, naming each trade (or the escrow, when its trade is
+        // gone), first.
+        if (!logDisputesOrRefuse(ctx, 'stranded_escrows_read', listed.escrows.map(e => e.tradeId ?? e.escrowId))) return;
+        ctx.body = { success: true, ...listed };
     } catch (e: any) {
         ctx.status = 500;
         ctx.body = { success: false, error: e?.message || 'Failed to list stranded escrows' };
@@ -608,8 +947,58 @@ router.get('/api/local/admin/sync-audit-log', async (ctx) => {
  */
 router.post('/api/local/admin/health', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    ctx.body = getCommunityHealth();
+    ctx.body = healthFor(ctx);
 });
+
+/**
+ * A background check of the alerts (the manager's five-minute tick, the built-in page's reloads) is no admin's look: it
+ * asks with `alerts: 'summary'` and gets each alert's kind and severity, the ones that name members with no member, no
+ * description and no Beans, and nothing is logged (review r4177560410).
+ */
+function wantsAlertsSummary(ctx: any): boolean {
+    const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
+    return body?.alerts === 'summary' || ctx.query?.alerts === 'summary';
+}
+
+function alertsSummary<T extends { flags: Array<{ type: string; severity: string; description: string; members: string[] }> }>(health: T): T {
+    return {
+        ...health,
+        flags: health.flags.map(f => (Array.isArray(f.members) && f.members.length)
+            ? { type: f.type, severity: f.severity, description: 'An alert that names members: open the alerts to see it.', members: [], namesHidden: true }
+            : f),
+    } as T;
+}
+
+/**
+ * The manager's background check: each alert's kind and severity, names-free, the reports' count, and each report's id
+ * (the same reports /admin/data lists, no reporter, member or reason), which is what lights the manager's ALERT dot for a
+ * report filed since its last full read and keeps a report it dismissed dark (confirmation 1, r4177719213). Logs nothing.
+ */
+router.post('/api/local/admin/alerts-summary', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    ctx.set('Cache-Control', 'no-store');
+    const reportIds = db.prepare('SELECT id FROM abuse_reports ORDER BY created_at DESC').pluck().all() as string[];
+    ctx.body = { flags: alertsSummary(getCommunityHealth()).flags, reportCount: getReportCount(), reportIds };
+});
+
+function healthFor(ctx: any) {
+    const health = getCommunityHealth();
+    return wantsAlertsSummary(ctx) ? alertsSummary(health) : withLoggedAlerts(ctx, health);
+}
+
+/**
+ * The fraud alerts that name members are an admin's look at those members' trades (queue item 29, Marty 4 Oct): a line
+ * per member named in the log the owner and admins read, first. Not logged (a standby, which writes no plain table):
+ * the alerts that name someone are left out of the answer.
+ */
+function withLoggedAlerts<T extends { flags: Array<{ members: string[] }> }>(ctx: any, health: T): T {
+    try {
+        logAlertsLook((ctx.state as any)?.actor || 'owner:password', health.flags, lookTokenOf(ctx));
+        return health;
+    } catch {
+        return { ...health, flags: health.flags.filter(f => !(Array.isArray(f.members) && f.members.length)) };
+    }
+}
 
 router.post('/api/local/admin/data', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
@@ -639,11 +1028,14 @@ router.post('/api/local/admin/data', async (ctx) => {
             // only you can see it", and the manager never shows them. `profiles` below goes through the same rule as
             // the profile page (contactVisibleTo) with no viewer, and a password proves no member, so it carries no
             // contact details at all. The rest of the row stays: the manager draws the invite tree, pruning and roles
-            // from it.
-            const { contactValue, contactVisibility, ...row } = m;
+            // from it. Each photo as its URL (avatarUrlOf, from the row's avatar_ref), which the manager, served by this node,
+            // shows as it shows a photo: a list of every member never reads every photo (it sent each one twice, here and in
+            // `profiles`, which at 30,000 members with photos would be 1.6 GB).
+            const { contactValue, contactVisibility, avatarRef, ...row } = m;
             void contactValue; void contactVisibility;
             return {
                 ...row,
+                avatarUrl: avatarUrlOf(m.publicKey, avatarRef),
                 // Admins see the day too: a node admin could otherwise match secret-ballot votes to voters.
                 lastActiveAt: lastActiveForViewer(m.lastActiveAt, m.publicKey),
                 tier,
@@ -655,9 +1047,12 @@ router.post('/api/local/admin/data', async (ctx) => {
         }),
         profiles: getAllProfiles(),
         // The admins see posts hidden by reports too (G3), marked hiddenByReportsAt. Polls carry their counts and not
-        // who voted for what: that is for members (includeVoters), and the manager never shows it.
-        posts: getPosts({ includeHidden: true }).filter(p => p.status !== 'cancelled'),
-        health: getCommunityHealth(),
+        // who voted for what: that is for members (includeVoters), and the manager never shows it. A listing someone took
+        // shows its status and dates, not who took it or its deal (withoutTradeParty): a trade shows only its two people,
+        // and an admin's look at one is the logged one, /admin/disputes (queue item 29, Marty 4 Oct). The manager and
+        // the settings page read none of the three.
+        posts: getPosts({ includeHidden: true }).filter(p => p.status !== 'cancelled').map(withoutTradeParty),
+        health: healthFor(ctx),
         reports: getReports().reports,
         reportCount: getReportCount(),
         escrowDisputesCount: (db.prepare(`
@@ -666,7 +1061,9 @@ router.post('/api/local/admin/data', async (ctx) => {
             WHERE status = 'pending'
               AND (julianday('now') - julianday(created_at)) >= 7
         `).pluck().get() as number) || 0,
+        // Each member's posts and messages; of trades, only the community's totals (queue item 29, Marty 4 Oct).
         memberStats: getMemberStats(),
+        tradeTotals: getTradeTotals(),
     };
 });
 
@@ -678,10 +1075,9 @@ router.post('/api/local/admin/ws-connections', async (ctx) => {
     };
 });
 
+// Not with the replication token: it lets a standby copy this server and does nothing else (routes/backup.ts).
 router.post('/api/local/admin/logs', async (ctx) => {
-    const token = ctx.request.header['x-replication-token'] || (ctx as any).requestBody?.token;
-    const isTokenValid = token && (await verifyReplicationToken(String(token)));
-    if (!isTokenValid && !(await checkAdminAuth(ctx as any))) return;
+    if (!(await checkAdminAuth(ctx as any))) return;
     const body = (ctx as any).requestBody || {};
     const { level, category, searchQuery } = body;
     const parsedLimit = parseInt(String(body.limit), 10);
@@ -689,7 +1085,17 @@ router.post('/api/local/admin/logs', async (ctx) => {
     const parsedOffset = parseInt(String(body.offset), 10);
     const offset = Math.max(0, isNaN(parsedOffset) ? 0 : parsedOffset);
 
-    let sql = 'SELECT * FROM system_logs WHERE 1=1';
+    // A removal's settled balance is a look at another member's balance, which an admin has only while removing them
+    // (logged: health_access_log). So this answers none, to any reader: not the metadata's balanceSettled, and not the
+    // "(settled balance: N)" a node wrote into the message before; the search reads the message as answered, so it can't
+    // find the number either (review r4176631042).
+    const message = `CASE WHEN instr(message, ' (settled balance: ') > 0
+        THEN substr(message, 1, instr(message, ' (settled balance: ') - 1)
+            || substr(substr(message, instr(message, ' (settled balance: ') + 19), instr(substr(message, instr(message, ' (settled balance: ') + 19), ')') + 1)
+        ELSE message END`;
+    let sql = `SELECT id, timestamp, level, category, ${message} AS message,
+        CASE WHEN json_valid(metadata) THEN json_remove(metadata, '$.balanceSettled') ELSE metadata END AS metadata
+        FROM system_logs WHERE 1=1`;
     const params: any[] = [];
 
     if (level && level !== 'ALL') {
@@ -701,8 +1107,8 @@ router.post('/api/local/admin/logs', async (ctx) => {
         params.push(category);
     }
     if (searchQuery) {
-        sql += ' AND message LIKE ?';
-        params.push(`%${searchQuery}%`);
+        sql += ` AND ${message} LIKE ? ESCAPE '\\'`;
+        params.push(likeContains(String(searchQuery)));
     }
 
     sql += ' ORDER BY timestamp DESC LIMIT ? OFFSET ?';
@@ -803,16 +1209,30 @@ const getDiagnosticsHandler = async (ctx: any) => {
             userCount,
             communityName: config.communityName || 'BeanPool Community Node',
             callsign: config.callsign || 'admin',
+            // The community's contacts as stored, for the owner's Node Identity screens (the manager, static/settings.js):
+            // the public /api/local/community-info says each only when it is published. Null for none, so a screen
+            // can tell "none stored" from an answer that didn't load.
+            contactEmail: config.contactEmail || null,
+            contactPhone: config.contactPhone || null,
             shutdownStatus: getShutdownStatus(),
             // The Settings banner when this server's standby needs its owners (services/standby-health.ts): the
             // community's owners only, so null to an admin or a moderator, and on a server that is not the main one (or
             // was, until another took it over).
             standbyHealth: ctx.state?.adminRole === 'owner' && watchesStandbys() ? getStandbyHealthBanner() : null,
+            // Off-box backups (services/offbox-backups.ts) when they need the owners: failing, stale, a destination that
+            // can't be used, or none sent for want of a recovery code. In words; nothing about any member. Owners only.
+            offboxBackups: ctx.state?.adminRole === 'owner' ? getOffboxHealth() : null,
             diskHealth: getCachedDiskHealth(),
             // Stray rejected promises the process-level net caught and kept serving through. The error
             // text only — no request body, no parameter, no key — and already redacted on the way in.
             // Zeroes on a node that has had none, which is every healthy node.
             unhandledRejections: getUnhandledRejectionSummary(),
+            // Whether this server's pushes go with an Expo access token (config/expo-access-token.ts): 'set', 'not set',
+            // or 'unusable' (set, but nothing a header can carry). Never the token.
+            pushAccessToken: expoAccessTokenStatus(),
+            // What Expo refused since this server started, by Expo's code (`UNAUTHORIZED`: it wants an access token this
+            // server doesn't send), with a count and when: state-engine.ts readExpoAnswer. Empty on a healthy node.
+            pushRefusals: pushServiceRefusals(),
             diagnostics: {
                 cpuLoad,
                 cpusCount,
@@ -896,7 +1316,9 @@ router.post('/api/local/admin/storage/clean', async (ctx) => {
  * when an operator actually opens the panel.
  *
  * Aggregate rows only: (day, event, variant, count). There is no per-member data to
- * return because none is stored — see M2 in docs/ONBOARDING.md.
+ * return because none is stored — see M2 in docs/ONBOARDING.md. Beside them, `openDoor`:
+ * whether the open door takes joins now (config/node-profile.ts `openJoin`, as
+ * /api/community/info says it), so the screen can say why nobody came through it.
  */
 const getOnboardingFunnelHandler = async (ctx: any) => {
     if (!(await checkAdminAuth(ctx as any))) return;
@@ -905,7 +1327,7 @@ const getOnboardingFunnelHandler = async (ctx: any) => {
         // carrying {"days": 90} silently answers with 30 and looks like the window
         // control is broken. Clamped rather than trusted; see clampDays.
         const days = clampDays(ctx.query?.days ?? ctx.requestBody?.days ?? 30);
-        ctx.body = { days, rows: getFunnel(days) };
+        ctx.body = { days, rows: getFunnel(days), openDoor: getProfileSwitches().openJoin };
     } catch (e: any) {
         ctx.status = 500;
         ctx.body = { error: e.message };
@@ -915,13 +1337,48 @@ const getOnboardingFunnelHandler = async (ctx: any) => {
 router.get('/api/local/admin/onboarding-funnel', getOnboardingFunnelHandler);
 router.post('/api/local/admin/onboarding-funnel', getOnboardingFunnelHandler);
 
+/**
+ * The web app's visits a day (engine/web-visits.ts), for the manager's Home: the last `days` days (30 unless asked, at
+ * most the 400 kept), oldest first and ending today (UTC), a day with none as zeros. Counts only: the table holds nothing
+ * else. Read-only, owners and admins (a moderator's session reaches reports only, admin-auth.ts).
+ */
+router.get('/api/local/admin/web-visits', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const days = clampVisitDays(ctx.query?.days ?? 30);
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { days, retentionDays: VISIT_RETENTION_DAYS, series: getWebVisits(days) };
+});
+
+/**
+ * The phone app's versions in this community and each platform's floor, for the manager's "App versions" card: whom a
+ * raised floor would stop, before it is raised. Counts only (app-version-counts.ts: members seen in the last 30 days, or
+ * since the server started), never who. Each platform's floor as set, its store's build, whether the floor is enforced
+ * or held for the store, its grace date and whether it stops apps yet (app-store-versions.ts). Read-only, owners and
+ * admins (a moderator's session reaches reports only, admin-auth.ts).
+ */
+router.get('/api/local/admin/app-versions', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const now = new Date();
+    const counts = getAppVersionCounts(now.getTime());
+    const platforms = Object.fromEntries(APP_PLATFORMS.map(p => [p, { ...getPlatformFloorDetail(p, now), versions: counts.platforms[p] }]));
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = {
+        since: counts.since,
+        windowDays: counts.windowDays,
+        minAppVersion: getMinAppVersion(),
+        minAppVersionFrom: getMinAppVersionFrom(),
+        storeCheckedAt: getAppStoreVersions().checkedAt,
+        platforms,
+    };
+});
+
 
 router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     // A moderator takes down reported posts only (admin-auth.ts, MODERATOR_ROUTES): the post needs an open
     // report. A dismissed ('reviewed') or actioned one no longer counts.
     if ((ctx.state as any)?.adminRole === 'moderator'
-        && !db.prepare("SELECT 1 FROM abuse_reports WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL) LIMIT 1").get(ctx.params.id)) {
+        && !db.prepare("SELECT 1 FROM abuse_reports WHERE target_post_id = ? AND target_pulse_item_id IS NULL AND (status = 'pending' OR status IS NULL) LIMIT 1").get(ctx.params.id)) {
         ctx.status = 403;
         ctx.body = { success: false, error: 'Moderators can remove a post only while a report on it is open' };
         return;
@@ -944,12 +1401,14 @@ router.post('/api/local/admin/posts/:id/delete', async (ctx) => {
             ? {
                 success: true,
                 refundShortfalls,
-                warning: `Removed, but ${refundShortfalls.length} escrow refund(s) were short: `
-                    + refundShortfalls.map(s => `trade ${s.transactionId} owed ${s.owed}, refunded ${s.refunded}`).join('; '),
+                warning: `Removed, but ${refundShortfalls.length} escrow refund(s) didn't match their trade: `
+                    + refundShortfalls.map(describeRefundShortfall).join('; '),
             }
             : { success: true };
     } catch (e: any) {
         console.error('Error deleting post:', e);
+        // A Commons pot that isn't a number pauses every Bean move (engine/audit.ts COMMONS_POT_PAUSED): plain words, 503.
+        if (answerPotPaused(ctx, e)) return;
         ctx.status = 500;
         ctx.body = { error: e.message };
     }
@@ -990,6 +1449,8 @@ function refuseModeratorsOwnPost(ctx: any, postId: string | null | undefined, do
 router.post('/api/local/admin/posts/:id/restore', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     if (refuseModeratorsOwnPost(ctx, ctx.params.id, 'restore')) return;
+    // An assistant's suggestion is approved by this same call (agent/suggestions.ts): it must match before anything changes.
+    if (!admitSuggestion(ctx, { kind: 'restore_post', postId: ctx.params.id })) return;
     const result = restoreHiddenPost(ctx.params.id);
     if (result === 'not_found') {
         ctx.status = 404;
@@ -1002,8 +1463,9 @@ router.post('/api/local/admin/posts/:id/restore', async (ctx) => {
         return;
     }
     const by = ctx.state?.actor ? String(ctx.state.actor).substring(0, 12) : 'owner:password';
-    logger.info('ADMIN', `Restored post ${ctx.params.id}, hidden by reports, by ${by} (${(ctx.state as any)?.adminRole})`);
+    logger.info('ADMIN', `Restored post ${ctx.params.id}, hidden by reports, by ${by} (${(ctx.state as any)?.adminRole})${suggestionAuditSuffix(ctx)}`);
     ctx.body = { success: true };
+    settleSuggestion(ctx, '', { logged: true });
 });
 
 /**
@@ -1041,6 +1503,130 @@ router.post('/api/local/admin/members/:pubkey/unmute', async (ctx) => {
     ctx.body = { success: true };
 });
 
+// ── Clean-up by burst (engine/burst-cleanup.ts; global two-doors design §4.4, slice S9) ──────────────────────────────
+// From one account, the others that joined through the open door from the same connection within a day of it: hide all
+// their posts (and undo that), or remove them, in one action. Owners, admins and moderators, except removing, which is
+// the owners' and admins' as removing one member is. Where the door labels no joins (every local community) each route
+// is 404 once the caller is signed in, as every admin route asks checkAdminAuth first (test-moderator-routes).
+
+function burstsHere(ctx: any): boolean {
+    if (burstCleanupOn()) return true;
+    ctx.status = 404;
+    ctx.body = { error: 'Not Found' };
+    return false;
+}
+
+/** The role this request acts with: a key session's live role, or 'owner' for the password (admin-auth.ts). */
+function burstActorRole(ctx: any): BurstActorRole | null {
+    const role = ctx.state?.adminRole;
+    return role === 'owner' || role === 'admin' || role === 'moderator' ? role : null;
+}
+
+/**
+ * The account a burst is opened from, from the path: null after answering 400 (no key), 404 (no member here) or 403 (a
+ * moderator, for an account with no open report by someone else and in no burst the digest lists).
+ */
+function burstAnchor(ctx: any): string | null {
+    const key = burstKey(ctx.params.pubkey);
+    if (!key) {
+        ctx.status = 400;
+        ctx.body = { success: false, error: 'That is not a member key', code: 'bad_key' };
+        return null;
+    }
+    if (!isBurstAccount(key)) {
+        ctx.status = 404;
+        ctx.body = { success: false, error: 'No member here has that key', code: 'not_found' };
+        return null;
+    }
+    // A moderator's own report doesn't count: a moderator is always a key session, so `actor` is their member key.
+    const actor = typeof ctx.state?.actor === 'string' ? ctx.state.actor : null;
+    if (burstActorRole(ctx) === 'moderator' && !moderatorMayOpen(key, actor)) {
+        ctx.status = 403;
+        ctx.body = {
+            success: false,
+            error: 'A moderator sees who joined together from an account with an open report, or from a group listed at the top of Reports.',
+            code: 'not_reported',
+        };
+        return null;
+    }
+    return key;
+}
+
+function answerBurstRefusal(ctx: any, refusal: BurstRefusal): void {
+    ctx.status = refusal.status;
+    ctx.body = { success: false, error: refusal.error, code: refusal.code, ...(refusal.established ? { established: refusal.established } : {}) };
+}
+
+/** The digest: recent bursts of 5 or more, and the burst actions of the last 30 days. */
+router.get('/api/local/admin/bursts', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!burstsHere(ctx)) return;
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { success: true, ...burstDigest() };
+});
+
+/** One account's burst, each account with its standing, for the moderator to look at before acting. */
+router.get('/api/local/admin/members/:pubkey/burst', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!burstsHere(ctx)) return;
+    const anchor = burstAnchor(ctx);
+    if (!anchor) return;
+    const burst = readBurst(anchor)!;
+    ctx.set('Cache-Control', 'no-store');
+    ctx.body = { success: true, ...burst, count: burst.others.length, establishedStanding: BURST.establishedStanding };
+});
+
+/** Hide every post of the named accounts of this burst, in one action that can be undone. Body: { members, count, includeEstablished? }. */
+router.post('/api/local/admin/members/:pubkey/burst/hide', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!burstsHere(ctx)) return;
+    const role = burstActorRole(ctx);
+    const anchor = burstAnchor(ctx);
+    if (!anchor || !role) return;
+    const selection = checkBurstSelection(anchor, (ctx as any).requestBody || {});
+    if (!selection.ok) return answerBurstRefusal(ctx, selection);
+    const action = hideBurst(anchor, selection.keys, role);
+    const by = ctx.state?.actor ? String(ctx.state.actor).substring(0, 12) : 'owner:password';
+    logger.info('ADMIN', `Hid ${action.posts} post(s) of ${action.accounts} account(s) that joined together with ${anchor.substring(0, 12)} (action ${action.id}) by ${by} (${role})`);
+    ctx.body = { success: true, action };
+});
+
+/** Undo a burst hide: its posts back, but for one reports would hide now. */
+router.post('/api/local/admin/bursts/:id/undo', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!burstsHere(ctx)) return;
+    const outcome = undoBurst(String(ctx.params.id));
+    if (!outcome.ok) {
+        ctx.status = outcome.status;
+        ctx.body = { success: false, error: outcome.error, code: outcome.code };
+        return;
+    }
+    const by = ctx.state?.actor ? String(ctx.state.actor).substring(0, 12) : 'owner:password';
+    logger.info('ADMIN', `Undid burst hide ${ctx.params.id}: ${outcome.restored} post(s) back, ${outcome.keptHidden} kept hidden, by ${by} (${(ctx.state as any)?.adminRole})`);
+    ctx.body = { success: true, restored: outcome.restored, keptHidden: outcome.keptHidden };
+});
+
+/**
+ * Remove the named accounts of this burst, each as one removal removes a member (adminPruneUser, with its rules and the
+ * signed actor): owners and admins only. A removed account's sign-in can't join again. Body: { members, count,
+ * includeEstablished? }.
+ */
+router.post('/api/local/admin/members/:pubkey/burst/remove', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    if (!burstsHere(ctx)) return;
+    if (!requireAdminRole(ctx, ['owner', 'admin'], 'Removing accounts is for the owners and admins. Hide their posts, and tell them.')) return;
+    const actor = resolveAdminActor(ctx);
+    const role = burstActorRole(ctx);
+    if (!actor || !role) return;
+    const anchor = burstAnchor(ctx);
+    if (!anchor) return;
+    const selection = checkBurstSelection(anchor, (ctx as any).requestBody || {});
+    if (!selection.ok) return answerBurstRefusal(ctx, selection);
+    const result = removeBurst((pubkey) => adminPruneUser(pubkey, actor), anchor, selection.keys, role);
+    logger.info('ADMIN', `Removed ${result.removed} account(s) that joined together with ${anchor.substring(0, 12)} (action ${result.action.id}) by ${actor.substring(0, 12)} (${role})${result.failed.length ? `; ${result.failed.length} refused` : ''}`);
+    ctx.body = { success: true, action: result.action, removed: result.removed, failed: result.failed };
+});
+
 /**
  * The admin acting on a Decision or a suspension. A key session carries its member's pubkey, which must
  * still hold an admin or owner node role; a password session is owner-level ('owner:password' — only owners
@@ -1066,6 +1652,7 @@ router.post('/api/local/admin/users/:pubkey/suspend', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'suspend', ctx.params.pubkey)) return;
     const { reason } = (ctx as any).requestBody || {};
     const result = adminEmergencySuspend(ctx.params.pubkey, actor, typeof reason === 'string' ? reason : '');
     if (!result.success) {
@@ -1096,12 +1683,14 @@ router.post('/api/local/admin/users/:pubkey/status', async (ctx) => {
     }
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'lift', ctx.params.pubkey)) return;
     const result = adminLiftSuspension(ctx.params.pubkey, actor);
     if (!result.success) {
         ctx.status = result.status || 400;
         ctx.body = { error: result.error };
         return;
     }
+    logger.info('ADMIN', `Lifted the suspension of ${ctx.params.pubkey.substring(0, 12)} by ${actor.substring(0, 12)}`);
     ctx.body = { success: true };
 });
 
@@ -1181,6 +1770,7 @@ router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'prune', ctx.params.pubkey, actor)) return;
     try {
         adminPruneUser(ctx.params.pubkey, actor);
         ctx.body = { success: true };
@@ -1194,6 +1784,7 @@ router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'prune-branch', ctx.params.pubkey, actor)) return;
     try {
         adminPruneBranch(ctx.params.pubkey, actor);
         ctx.body = { success: true };
@@ -1206,6 +1797,18 @@ router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
 router.post('/api/local/admin/announcements', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { title, body, severity } = (ctx as any).requestBody || {};
+    // Members whose app was closed read the announcement from the notice's details, which hold this much: refuse a longer
+    // one rather than send it cut.
+    if (typeof body === 'string' && body.length > ANNOUNCEMENT_LIMITS.body) {
+        ctx.status = 400;
+        ctx.body = { error: `An announcement can be at most ${ANNOUNCEMENT_LIMITS.body.toLocaleString('en-US')} characters; this one is ${body.length.toLocaleString('en-US')}. Shorten it and send again.` };
+        return;
+    }
+    if (typeof title === 'string' && title.length > ANNOUNCEMENT_LIMITS.title) {
+        ctx.status = 400;
+        ctx.body = { error: `An announcement's title can be at most ${ANNOUNCEMENT_LIMITS.title} characters; this one is ${title.length}. Shorten it and send again.` };
+        return;
+    }
     adminBroadcastAnnouncement(title || 'System Announcement', body || '', severity || 'info');
     ctx.body = { success: true };
 });
@@ -1252,8 +1855,10 @@ router.get('/api/local/admin/reports', async (ctx) => {
 router.post('/api/local/admin/reports/:id/dismiss', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
-        const reported = db.prepare('SELECT target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as { target_post_id: string | null } | undefined;
+        // A Pulse report is about its item, whatever post id it carries (state-engine reportSubjectOf).
+        const reported = db.prepare('SELECT CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as { target_post_id: string | null } | undefined;
         if (refuseModeratorsOwnPost(ctx, reported?.target_post_id, 'dismiss a report on')) return;
+        if (!admitSuggestion(ctx, { kind: 'dismiss_report', reportId: ctx.params.id })) return;
         const ok = dismissReport(ctx.params.id);
         if (!ok) {
             ctx.status = 404;
@@ -1261,6 +1866,7 @@ router.post('/api/local/admin/reports/:id/dismiss', async (ctx) => {
             return;
         }
         ctx.body = { success: true, message: 'Report dismissed' };
+        settleSuggestion(ctx, `Dismissed report ${ctx.params.id}`);
     } catch (e: any) {
         ctx.status = 500;
         ctx.body = { success: false, error: e?.message || 'Failed to dismiss report' };
@@ -1271,13 +1877,19 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
         const { deletePost, suspendUser, removePulseItem, reasonCategory } = (ctx as any).requestBody || {};
+        if (!admitSuggestion(ctx, { kind: 'remove_reported', reportId: ctx.params.id, body: (ctx as any).requestBody || {} })) return;
         // Moderators remove what was reported; suspending a member stays with owners and admins.
         if (suspendUser && (ctx.state as any)?.adminRole === 'moderator') {
             ctx.status = 403;
             ctx.body = { success: false, error: 'Moderators cannot suspend members' };
             return;
         }
-        const report = db.prepare('SELECT status, target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as
+        // Suspending through a report takes the member's role away: an owner's or admin's, only an owner may (the engine
+        // refuses anyone else, given the actor). Read only to suspend: a moderator, refused that above, is no node admin.
+        const actor = suspendUser ? resolveAdminActor(ctx) : null;
+        if (suspendUser && !actor) return;
+        if (suspendUser && !stepUpIfOwnerOnly(ctx, 'report-suspend', ctx.params.id)) return;
+        const report = db.prepare('SELECT status, CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id FROM abuse_reports WHERE id = ?').get(ctx.params.id) as
             { status: string | null; target_post_id: string | null } | undefined;
         // Closing a report on a moderator's own post, or one by an enterprise they keep, without taking the post down
         // is a dismissal by another name (G3): a closed report no longer counts towards the 3 that hide it, and its
@@ -1301,6 +1913,7 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
         const ok = actionReport(ctx.params.id, !!deletePost, !!suspendUser, !!removePulseItem, {
             reasonCategory,
             onRefundShortfall: s => refundShortfalls.push(s),
+            actor,
         });
         if (!ok) {
             ctx.status = 404;
@@ -1320,12 +1933,14 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
                 success: true,
                 message: 'Report actioned successfully',
                 refundShortfalls,
-                warning: `Removed, but ${refundShortfalls.length} escrow refund(s) were short: `
-                    + refundShortfalls.map(s => `trade ${s.transactionId} owed ${s.owed}, refunded ${s.refunded}`).join('; '),
+                warning: `Removed, but ${refundShortfalls.length} escrow refund(s) didn't match their trade: `
+                    + refundShortfalls.map(describeRefundShortfall).join('; '),
             }
             : { success: true, message: 'Report actioned successfully' };
+        settleSuggestion(ctx, `Removed what report ${ctx.params.id} was about`);
     } catch (e: any) {
-        ctx.status = 500;
+        if (answerPotPaused(ctx, e)) return;
+        ctx.status = e?.status || 500;
         ctx.body = { success: false, error: e?.message || 'Failed to action report' };
     }
 });
@@ -1338,17 +1953,45 @@ router.post('/api/local/admin/posts/bulk-delete', async (ctx) => {
         ctx.body = { error: 'postIds array required' };
         return;
     }
-    const refundShortfalls: EscrowRefundShortfall[] = [];
-    const deleted = adminBulkDeletePosts(postIds, { onRefundShortfall: s => refundShortfalls.push(s) });
-    ctx.body = refundShortfalls.length > 0
-        ? { success: true, deleted, deletedCount: deleted, refundShortfalls }
-        : { success: true, deleted, deletedCount: deleted };
+    if (postIds.length > MAX_BULK_DELETE_POSTS) {
+        ctx.status = 400;
+        ctx.body = { error: `Bulk delete limit exceeded (maximum ${MAX_BULK_DELETE_POSTS} posts per request)` };
+        return;
+    }
+    try {
+        const refundShortfalls: EscrowRefundShortfall[] = [];
+        const deleted = adminBulkDeletePosts(postIds, { onRefundShortfall: s => refundShortfalls.push(s) });
+        ctx.body = refundShortfalls.length > 0
+            ? { success: true, deleted, deletedCount: deleted, refundShortfalls }
+            : { success: true, deleted, deletedCount: deleted };
+    } catch (e: any) {
+        console.error('Error bulk deleting posts:', e);
+        if (answerPotPaused(ctx, e)) return;
+        ctx.status = 500;
+        ctx.body = { success: false, error: e?.message || 'Failed to bulk delete posts' };
+    }
 });
 
 
+/**
+ * The node's inbox: the conversations of the first owner (getFirstNodeAdminPubkey), whose key the node's notices go out
+ * under (adminSendMessage), plus legacy 'system' ones. That list is that owner's own: who they talk to, when, unread
+ * counts. An admin needs none of it: the members' replies are encrypted to that owner's key, so an admin could read no
+ * reply, and the node's own lines are the notices they sent. So only an owner (the password is one), or that member
+ * themselves, reads it; an admin is refused before anything is looked up. Sending a notice (inbox/send) stays an
+ * admin's (#1534).
+ */
 router.post('/api/local/admin/inbox', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
+    const viewer = resolveAdminActor(ctx);
+    if (!viewer) return;
     const adminPubkey = getFirstNodeAdminPubkey() || getAdminPubkey();
+    // A token acts for its owner but is not them: it never reads the owner's own conversations (#1546 review).
+    if ((ctx.state as any)?.viaToken || (!isOwnerLevelActor(viewer) && !(adminPubkey && viewer === adminPubkey))) {
+        ctx.status = 403;
+        ctx.body = { error: "Only an owner can read the node's inbox" };
+        return;
+    }
     if (!adminPubkey) {
         ctx.body = { conversations: [], adminPubkey: '' };
         return;
@@ -1409,14 +2052,20 @@ router.post('/api/local/admin/commons/reject', async (ctx) => {
 });
 
 // Admin: the Decisions an admin can still act on — open votes and removals in their grace window — with
-// totals only. Like every other Decision response, never who voted how.
+// totals only. Like every other Decision response, never who voted how. A vote on removing a member carries their
+// balance and debt only to an admin who may vote in it (decisionForAdmin); every other admin gets balanceHidden.
 router.post('/api/local/admin/decisions', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const actionable = [...getAllDecisions('open'), ...getAllDecisions('execution_pending_grace')];
+    // The subject's name only: getMember read their photo too, once a Decision (#1478).
+    const callsignOfKey = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
+    // The admin's own key, from their key session only. An automation token carries its maker's key as the actor, but a
+    // token is a script, not a voter (#1613's deciding review); a password session has no key at all.
+    const reader = (ctx.state as any)?.isKeySession ? (ctx.state as any).actor as string | undefined : undefined;
     ctx.body = {
         decisions: actionable.map(d => {
-            const subject = d.subject ? getMember(d.subject) : null;
-            return { ...d, subjectName: subject?.callsign ?? null, tally: tallyDecision(d.id) };
+            const subject = d.subject ? callsignOfKey.get(d.subject) as { callsign: string } | undefined : null;
+            return { ...decisionForAdmin(d, reader), subjectName: subject?.callsign ?? null, tally: tallyDecision(d.id) };
         }),
     };
 });
@@ -1432,6 +2081,7 @@ router.post('/api/local/admin/decisions/:id/halt', async (ctx) => {
         ctx.body = { error: 'reason (signed justification) required to halt decision' };
         return;
     }
+    if (!stepUpIfOwnerOnly(ctx, 'halt', ctx.params.id)) return;
     const result = adminHaltDecision(ctx.params.id, signedActor, reason);
     if (!result.success) {
         ctx.status = result.status || 400;
@@ -1446,6 +2096,7 @@ router.post('/api/local/admin/decisions/:id/accelerate', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const signedActor = resolveAdminActor(ctx);
     if (!signedActor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'accelerate', ctx.params.id)) return;
     const result = adminAccelerateDecision(ctx.params.id, signedActor);
     if (!result.success) {
         ctx.status = result.status || 400;
@@ -1679,6 +2330,8 @@ router.post('/api/local/admin/node-roles', async (ctx) => {
         ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
+    // A change that needs an owner, from the phone, asks for its unlock again (roleChangeNeedsOwner).
+    if (roleChangeNeedsOwner(targetPubkey, role) && !requirePhoneStepUp(ctx)) return;
     // No spelling rule here, unlike the enrol route above: grantNodeRole grants only to a member row under exactly this
     // key, no door makes a row under any other spelling now (engine/member-key.ts), and a role on one a door made before
     // opens no session (authorizeKeySigner) and signs nothing (the signature middleware). test-node-roles drives this
@@ -1706,6 +2359,8 @@ router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
         ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
+    // Taking an owner's or an admin's role, from the phone, asks for its unlock again (roleChangeNeedsOwner).
+    if (roleChangeNeedsOwner(pubkey, role) && !requirePhoneStepUp(ctx)) return;
 
     try {
         // The role the row holds, acting or not: an owner takes away a visitor's row's role too (heldNodeRoleOf).
@@ -1741,6 +2396,8 @@ router.get('/api/local/admin/disputes', async (ctx) => {
     const total = counts[status];
 
     const disputes = getEscrowDisputes(minDays, limit, offset, status);
+    // Every look at the disputes is a line in the log the owner and admins read, naming the trades shown: first.
+    if (!logDisputesOrRefuse(ctx, 'disputes_listed', disputes.map(d => d.id))) return;
     ctx.body = {
         disputes,
         total,
@@ -1761,8 +2418,21 @@ router.get('/api/local/admin/disputes/:id', async (ctx) => {
         ctx.body = { error: 'Dispute not found' };
         return;
     }
+    if (!logDisputesOrRefuse(ctx, 'dispute_opened', [dispute.id])) return;
     ctx.body = { dispute };
 });
+
+/** A look at the disputes that can't be logged (a standby writes no plain table) isn't answered. */
+function logDisputesOrRefuse(ctx: any, action: TradeLookAction, tradeIds: string[]): boolean {
+    try {
+        logDisputesLook((ctx.state as any)?.actor || 'owner:password', action, tradeIds, lookTokenOf(ctx));
+        return true;
+    } catch {
+        ctx.status = 503;
+        ctx.body = { error: 'This server cannot log a look at the disputes right now, so it shows none.', code: 'LOOK_NOT_LOGGED' };
+        return false;
+    }
+}
 
 router.post('/api/local/admin/disputes/:id/resolve', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
@@ -1802,10 +2472,17 @@ router.post('/api/local/admin/disputes/:id/resolve', async (ctx) => {
 
 router.get('/api/local/admin/members/:pubkey/rekey/status', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
+    // The reader decides whether a pending owner's or admin's code is in the answer (getRekeyStatus); a phone session
+    // past its step-up window reads that code only after Manage again, as completing the re-key asks (#1534).
+    const viewer = resolveAdminActor(ctx);
+    if (!viewer) return;
     try {
         const { pubkey } = ctx.params;
-        const status = getRekeyStatus(pubkey);
-        ctx.body = status;
+        // An automation token is never a fresh phone session, so it never reads an owner's or admin's code (#1546 review).
+        const status = getRekeyStatus(pubkey, viewer, { viewerStepUpDue: !!(ctx.state as any)?.phoneStepUpDue || !!(ctx.state as any)?.viaToken });
+        // Beside the code only: whether codes starting like it are being guessed at this hour (#1783 review N3).
+        const underAttack = status.pendingRequest?.code ? rekeyCodeUnderAttack(status.pendingRequest.code) : null;
+        ctx.body = underAttack ? { ...status, codeUnderAttack: underAttack } : status;
     } catch (e: any) {
         ctx.status = 400;
         ctx.body = { error: e?.message || 'Failed to fetch re-key status' };
@@ -1817,6 +2494,8 @@ router.post('/api/local/admin/members/:pubkey/rekey/issue-code', async (ctx) => 
     const { pubkey } = ctx.params;
     const effectiveActor = resolveAdminActor(ctx);
     if (!effectiveActor) return;
+    // Spelt as issueRekeyCode spells it (member-wizards cleanOld).
+    if (!stepUpIfOwnerOnly(ctx, 'rekey', String(pubkey).trim().toLowerCase())) return;
 
     try {
         const result = issueRekeyCode(pubkey, effectiveActor);
@@ -1831,18 +2510,62 @@ router.post('/api/local/admin/members/:pubkey/rekey/issue-code', async (ctx) => 
     }
 });
 
+// Undo an unused code (engine/member-wizards cancelRekeyCode): who may make it may cancel it, as issue-code asks.
+router.post('/api/local/admin/members/:pubkey/rekey/cancel', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { pubkey } = ctx.params;
+    const effectiveActor = resolveAdminActor(ctx);
+    if (!effectiveActor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'rekey', String(pubkey).trim().toLowerCase())) return;
+
+    try {
+        ctx.body = { success: true, ...cancelRekeyCode(pubkey, effectiveActor) };
+    } catch (e: any) {
+        ctx.status = e?.status || (e?.message?.includes('not found') ? 404 : 400);
+        ctx.body = { error: e?.message || 'Failed to cancel the re-key code' };
+    }
+});
+
+// "Not theirs" (engine/rekey-redeem.ts declineRekeyProposal): a phone that asked on the member's code is declined, and
+// its poll answers `declined`. Who may make the code may decline, as issue-code asks.
+router.post('/api/local/admin/members/:pubkey/rekey/proposals/:newPubkey/decline', async (ctx) => {
+    if (!(await checkAdminAuth(ctx as any))) return;
+    const { pubkey, newPubkey } = ctx.params;
+    const effectiveActor = resolveAdminActor(ctx);
+    if (!effectiveActor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'rekey', String(pubkey).trim().toLowerCase())) return;
+
+    try {
+        ctx.body = { success: true, ...declineRekeyProposal(pubkey, newPubkey, effectiveActor) };
+    } catch (e: any) {
+        ctx.status = e?.status || 400;
+        ctx.body = { error: e?.message || 'Failed to decline the phone', ...(e instanceof RekeyRedeemRefusal ? { code: e.code } : {}) };
+    }
+});
+
+// Binding the member's new phone. Two explicit ways, never both in one request:
+// - `{ code, match }`: the number the admin typed from the member's phone; the node binds the live, undeclined phone that
+//   shows it (engine/rekey-redeem.ts bindRekeyByMatch), and three wrong numbers stop the code (#1783 review B2);
+// - `{ code, newPubkey }`: the wizard's folded "Paste a key instead", for a phone that can't ask (completeRekey, which
+//   refuses a phone the admins declined on this code).
 router.post('/api/local/admin/members/:pubkey/rekey/complete', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     const { pubkey } = ctx.params;
     const body = (ctx as any).requestBody || (ctx as any).request?.body || {};
-    const { code, newPubkey } = body;
+    const { code, newPubkey, match } = body;
 
     if (!code || typeof code !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'Re-enrolment code is required' };
         return;
     }
-    if (!newPubkey || typeof newPubkey !== 'string') {
+    const byMatch = match !== undefined && match !== null;
+    if (byMatch === (newPubkey !== undefined && newPubkey !== null)) {
+        ctx.status = 400;
+        ctx.body = { error: 'Type the number on their phone, or paste their key: one of the two' };
+        return;
+    }
+    if (!byMatch && typeof newPubkey !== 'string') {
         ctx.status = 400;
         ctx.body = { error: 'New public key is required' };
         return;
@@ -1850,11 +2573,20 @@ router.post('/api/local/admin/members/:pubkey/rekey/complete', async (ctx) => {
 
     const effectiveActor = resolveAdminActor(ctx);
     if (!effectiveActor) return;
+    if (!stepUpIfOwnerOnly(ctx, 'rekey', String(pubkey).trim().toLowerCase())) return;
 
     try {
-        const result = completeRekey(pubkey, newPubkey, code, effectiveActor);
+        const result = byMatch
+            ? bindRekeyByMatch(pubkey, code, match, effectiveActor)
+            : completeRekey(pubkey, newPubkey, code, effectiveActor);
         ctx.body = result;
     } catch (e: any) {
+        if (e instanceof RekeyRedeemRefusal) {
+            ctx.status = e.status;
+            const triesLeft = (e as RekeyRedeemRefusal & { triesLeft?: number }).triesLeft;
+            ctx.body = { error: e.message, code: e.code, ...(triesLeft !== undefined ? { triesLeft } : {}) };
+            return;
+        }
         ctx.status = e?.status || (e?.message?.includes('not found') || e?.message?.includes('unrecognised') ? 404 : 400);
         ctx.body = { error: e?.message || 'Failed to complete re-keying' };
     }
@@ -1864,17 +2596,19 @@ router.get('/api/local/admin/members/:pubkey/offboard/preview', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     try {
         const { pubkey } = ctx.params;
+        const actor = resolveAdminActor(ctx);
+        if (!actor) return;
         const preview = getOffboardPreview(pubkey);
 
         // Security / Privacy: Only return active members roster to key-authenticated sessions.
         // Password-only sessions cannot execute gift_to_member, so withholding the list
         // prevents leaking the member roster.
-        const actor = resolveAdminActor(ctx);
-        if (!actor) return;
         if (actor === 'owner:password') {
             preview.activeMembers = [];
         }
 
+        // The member's balance, outside their consent: a line in the access log the admins and the owner read, first.
+        logBalanceLook(actor, preview.member.publicKey, 'offboard_preview', lookTokenOf(ctx));
         ctx.body = preview;
     } catch (e: any) {
         const msg = e?.message || 'Failed to get offboard preview';
@@ -1905,6 +2639,8 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
         };
         return;
     }
+    // Spelt as executeOffboard spells them (member-wizards cleanPub, cleanOperator).
+    if (!stepUpIfOwnerOnly(ctx, 'prune', String(pubkey).trim().toLowerCase(), effectiveActor.trim().toLowerCase())) return;
 
     try {
         const result = executeOffboard(
@@ -1912,7 +2648,13 @@ router.post('/api/local/admin/members/:pubkey/offboard', async (ctx) => {
             { resolution: resolution as OffboardOptions['resolution'], giftRecipientPubkey },
             effectiveActor
         );
-        ctx.body = result;
+        // The balance it settled is a look at the member's balance too: logged, or left out of the answer.
+        try {
+            logBalanceLook(effectiveActor, result.memberPubkey, 'offboard_settled', lookTokenOf(ctx));
+            ctx.body = result;
+        } catch {
+            ctx.body = { ...result, balanceSettled: undefined };
+        }
     } catch (e: any) {
         ctx.status = e?.statusCode || e?.status || 400;
         ctx.body = { error: e?.message || 'Failed to offboard member', code: e?.code };

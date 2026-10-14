@@ -4,7 +4,7 @@
 --   npx wrangler d1 execute beanpool-registrar --remote --file scripts/bootstrap-d1-migrations.sql
 --
 -- The live database predates `wrangler d1 migrations`: it was made from schema.sql (now migrations/0001_init.sql,
--- which must never run against it), and 0002–0005 are applied by hand with `d1 execute --file` (README "Schema and
+-- which must never run against it), and 0002 on are applied by hand with `d1 execute --file` (README "Schema and
 -- migrations"). This records, in the table wrangler keeps its migrations in, each migration whose objects the
 -- database already has, so `wrangler d1 migrations apply --remote` applies only the ones it doesn't. A migration
 -- not recorded here is applied by the workflow; one only half there fails at its first statement, changing nothing.
@@ -62,5 +62,27 @@ CREATE TABLE IF NOT EXISTS name_policy (
 INSERT OR IGNORE INTO d1_migrations (name)
 SELECT '0005_reserve_global.sql'
 WHERE (SELECT COUNT(*) FROM name_policy WHERE pattern IN ('global', 'earth', 'ssh-global')) = 3;
+
+-- 0006: its table and index.
+INSERT OR IGNORE INTO d1_migrations (name)
+SELECT '0006_request_nonces.sql'
+WHERE (SELECT COUNT(*) FROM sqlite_master WHERE (type = 'table' AND name = 'request_nonces') OR (type = 'index' AND name = 'idx_request_nonces_ts')) = 2;
+
+-- 0007: its column.
+INSERT OR IGNORE INTO d1_migrations (name)
+SELECT '0007_content_swap.sql'
+WHERE (SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'name_allocations') LIKE '%swap_fails INTEGER%';
+
+-- 0008: its four tables and four indexes.
+INSERT OR IGNORE INTO d1_migrations (name)
+SELECT '0008_alerts.sql'
+WHERE (SELECT COUNT(*) FROM sqlite_master WHERE (type = 'table' AND name IN ('alert_settings', 'alert_state', 'alert_outbox', 'alert_channel'))
+       OR (type = 'index' AND name IN ('idx_alert_outbox_waiting', 'idx_alert_outbox_at', 'idx_alert_outbox_once', 'idx_alert_outbox_claim'))) = 8;
+
+-- 0009: its two tables and three indexes.
+INSERT OR IGNORE INTO d1_migrations (name)
+SELECT '0009_watch.sql'
+WHERE (SELECT COUNT(*) FROM sqlite_master WHERE (type = 'table' AND name IN ('watch_log', 'watch_marks'))
+       OR (type = 'index' AND name IN ('idx_watch_log_target', 'idx_watch_log_ran', 'idx_watch_log_target_ran'))) = 5;
 
 SELECT id, name, applied_at FROM d1_migrations ORDER BY id;

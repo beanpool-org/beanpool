@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { mergeIncomingMessage, isRemovedPayload, type LocalMessageRow } from '../chat-sync';
+import { mergeIncomingMessage, isRemovedPayload, withoutSendState, type LocalMessageRow } from '../chat-sync';
 
 const local = (over: Partial<LocalMessageRow> = {}): LocalMessageRow => ({
     ciphertext: 'OLD',
@@ -108,5 +108,17 @@ describe('a tombstone', () => {
         };
         const m = mergeIncomingMessage(local(), removed);
         expect(JSON.parse(m.metadata!).removedBy).toBe('convenor-key');
+    });
+});
+
+describe('the node\'s metadata never carries this phone\'s send state', () => {
+    it('drops __sendState from what the node sends, and keeps the rest', () => {
+        expect(withoutSendState('{"__sendState":"sending"}')).toBeNull();
+        expect(withoutSendState('{"__sendState":"failed","replyToId":"r1"}')).toBe('{"replyToId":"r1"}');
+        expect(withoutSendState('{"replyToId":"r1"}')).toBe('{"replyToId":"r1"}');
+        expect(withoutSendState(null)).toBeNull();
+        expect(withoutSendState('not json')).toBe('not json');
+        const merged = mergeIncomingMessage(null, { id: 'm1', ciphertext: 'x', nonce: 'n', metadata: '{"__sendState":"sending","reactions":[]}' });
+        expect(merged.metadata).toBe('{"reactions":[]}');
     });
 });

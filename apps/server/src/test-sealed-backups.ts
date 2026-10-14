@@ -43,6 +43,7 @@ import zlib from 'node:zlib';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import type { AddressInfo } from 'node:net';
+import { localFetch } from './keepalive-test-fetch.js';
 
 const IS_CHILD = process.argv[2] === '--child';
 
@@ -140,6 +141,9 @@ async function child(): Promise<void> {
     const pw = 'Fresh-Server-Pw-551!';
     const { hash, salt } = hashPassword(pw);
     updateLocalConfig({ adminHash: hash, salt });
+    // Step 7c: with 2FA off the password alone opens no admin route. A fresh server's operator (no member yet, so no owner
+    // key) turns 2FA on and sends the password with a code, as the manual's lines then do.
+    const twoFa = (await import('./admin-auth-test-harness.js')).turnOn2faForTests(pw);
     const before = {
         key: sha(fs.readFileSync(path.join(dataDir, 'libp2p_key'))),
         communityId: JSON.parse(fs.readFileSync(path.join(dataDir, 'genesis.json'), 'utf-8')).communityId,
@@ -161,23 +165,23 @@ async function child(): Promise<void> {
     if (mode === 'sealed') {
         const backupLocked = async () => {
             resetAdminAuthTarpit();
-            const r = await fetch(`https://localhost:${port}/api/local/admin/backup`, { method: 'POST', headers: { 'X-Admin-Password': pw } });
+            const r = await localFetch(`https://localhost:${port}/api/local/admin/backup`, { method: 'POST', headers: twoFa.headers() });
             const b = Buffer.from(await r.arrayBuffer());
             return { status: r.status, locked: r.headers.get('x-backup-locked'), why: r.headers.get('x-backup-not-locked'), gzip: b[0] === 0x1f && b[1] === 0x8b };
         };
         const beforeCode = await backupLocked();
         resetAdminAuthTarpit();
-        const made = await fetch(`https://localhost:${port}/api/local/admin/takeover/recovery-code`, {
-            method: 'POST', headers: { 'X-Admin-Password': pw, 'Content-Type': 'application/json' }, body: '{}',
+        const made = await localFetch(`https://localhost:${port}/api/local/admin/takeover/recovery-code`, {
+            method: 'POST', headers: { ...twoFa.headers(), 'Content-Type': 'application/json' }, body: '{}',
         });
         const madeBody: any = await made.json();
         const afterCode = await backupLocked();
         makeCode = { beforeCode, status: made.status, looksLikeCode: /^BPRC-\d+ /.test(madeBody?.code || ''), afterCode };
     }
     resetAdminAuthTarpit();
-    const headers: Record<string, string> = { 'X-Admin-Password': pw, 'Content-Type': 'application/x-www-form-urlencoded' };
+    const headers: Record<string, string> = { ...twoFa.headers(), 'Content-Type': 'application/x-www-form-urlencoded' };
     if (mode === 'sealed') headers['X-Recovery-Code'] = process.env.TEST_RECOVERY_CODE!;
-    const res = await fetch(`https://localhost:${port}/api/local/admin/restore`, { method: 'POST', headers, body: new Uint8Array(fs.readFileSync(file)) });
+    const res = await localFetch(`https://localhost:${port}/api/local/admin/restore`, { method: 'POST', headers, body: new Uint8Array(fs.readFileSync(file)) });
     const body = await res.json();
 
     const read = (f: string) => { try { return fs.readFileSync(path.join(dataDir, f)); } catch { return null; } };
@@ -217,6 +221,9 @@ async function child(): Promise<void> {
             sealKey: sealKeyOf(), sealKeyMode: fs.existsSync(path.join(dataDir, 'recovery-seal.key'))
                 ? (fs.statSync(path.join(dataDir, 'recovery-seal.key')).mode & 0o777).toString(8) : null,
             retired: retiredKeys(),
+            doorKey: fs.existsSync(path.join(dataDir, 'open-join.key')) ? sha(fs.readFileSync(path.join(dataDir, 'open-join.key'))) : null,
+            doorKeyMode: fs.existsSync(path.join(dataDir, 'open-join.key'))
+                ? (fs.statSync(path.join(dataDir, 'open-join.key')).mode & 0o777).toString(8) : null,
         },
     }));
     process.exit(0);
@@ -290,6 +297,9 @@ async function main(): Promise<void> {
     assert(deposited.status === 200 && deposited.body?.threshold === 1, `S2 setup: @Dee deposits a sign-in copy on the main server over HTTPS (${deposited.status})`);
     const mainSealKeyBytes = fs.readFileSync(path.join(dataDir!, 'recovery-seal.key'));
     const mainSealKey = sha(mainSealKeyBytes);
+    // C12: the open door's key (services/open-join-key.ts), made at its first use, travels the same way.
+    (await import('./engine/open-join.js')).openJoinAddressHash('198.51.100.9');
+    const mainDoorKeyBytes = fs.readFileSync(path.join(dataDir!, 'open-join.key'));
     const main = {
         key: sha(nodeKeyBytes),
         communityKey: sha(fs.readFileSync(path.join(dataDir!, 'community.key'))),
@@ -322,6 +332,8 @@ async function main(): Promise<void> {
         const bundleText = spawnSync('tar', ['-xzOf', tarFile, './takeover-bundle.json'], { encoding: 'utf-8' }).stdout;
         assert(JSON.parse(bundleText).files['recovery-seal.key'] === mainSealKeyBytes.toString('base64'),
             "S2: the sealed backup's take-over bundle carries data/recovery-seal.key, byte for byte");
+        assert(JSON.parse(bundleText).files['open-join.key'] === mainDoorKeyBytes.toString('base64'),
+            "C12: and data/open-join.key, byte for byte");
     }
     updateLocalConfig({ totpEnabled: false, totpSecret: null });
 
@@ -349,6 +361,8 @@ async function main(): Promise<void> {
     assert(rt.after.leftovers.length === 0, `1. no restore temp files left (${rt.after.leftovers.join(', ')})`);
     assert(rt.before.sealKey && rt.before.sealKey !== mainSealKey && rt.after.sealKey === mainSealKey && rt.after.sealKeyMode === '600',
         "1. S2: the restore installs the community's recovery-seal key, byte for byte, 0600 (the fresh server had made its own)");
+    assert(rt.after.doorKey === sha(mainDoorKeyBytes) && rt.after.doorKeyMode === '600',
+        "1. C12: the restore installs the community's open-door key too, byte for byte, 0600");
     const keptOwn = Object.values(rt.after.retired as Record<string, { sha: string; mode: string }>);
     assert(keptOwn.length === 1 && keptOwn[0].sha === rt.before.sealKey && keptOwn[0].mode === '600',
         "1. S2: …and keeps the fresh server's own key beside it, never lost");
@@ -513,10 +527,13 @@ async function main(): Promise<void> {
 
     // ── This process as the restoring server, for the refusals (nothing below reaches the database swap) ──
     const { server, base } = await serveBackupRoutes();
+    // Step 7c: the password alone opens no admin route with 2FA off; the refusals are asked under Olive's owner key session.
+    const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
+    const asOlive = ownerSessionHeaders(ownerPub);
     const restore = async (bytes: Buffer, headers: Record<string, string> = {}) => {
         resetAdminAuthTarpit();
-        const res = await fetch(base + '/api/local/admin/restore', {
-            method: 'POST', headers: { 'X-Admin-Password': PW, 'Content-Type': 'application/octet-stream', ...headers }, body: new Uint8Array(bytes),
+        const res = await localFetch(base + '/api/local/admin/restore', {
+            method: 'POST', headers: { ...asOlive, 'Content-Type': 'application/octet-stream', ...headers }, body: new Uint8Array(bytes),
         });
         return { status: res.status, body: await res.json() as any };
     };

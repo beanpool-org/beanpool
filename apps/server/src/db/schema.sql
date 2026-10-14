@@ -6,8 +6,16 @@ CREATE TABLE IF NOT EXISTS members (
     invited_by TEXT REFERENCES members(public_key),
     invite_code TEXT,
     home_node_url TEXT,
-    
-    avatar_url TEXT,
+
+    -- The member's avatar without the photo (member_photos below holds it): what its URL is made from, written with the
+    -- photo by its one writer (@beanpool/engine members.ts setMemberPhoto). NULL: no avatar. A shipped picture's
+    -- `bundled://<name>`, as it is emitted. Otherwise the photo's content version (@beanpool/core avatarRefOf), the URL's
+    -- `v`. So a list, a count or a URL reads no photo: while photos sat in this row, every scan of members read them (at
+    -- ~6,400 photos one full member list ran a 256 MB heap out of memory: the global node's load rehearsal, 2026-10-02).
+    avatar_ref TEXT,
+    -- What member_photos holds for this member, in bytes; NULL: nothing. A copy in pages counts it towards a page
+    -- without reading the photo (engine/copy-pages.ts).
+    avatar_bytes INTEGER,
     bio TEXT,
     contact_value TEXT,
     contact_visibility TEXT,
@@ -38,7 +46,7 @@ CREATE TABLE IF NOT EXISTS members (
     -- db.exec(schemaSql) — where on a fresh install the table does not exist yet, so the ALTER is a no-op and
     -- this line is the only thing that creates the column. Both are needed: this one for a fresh install, the
     -- ALTER for a node that already has data. A hoisted ALTER without a declaration here silently gives fresh
-    -- installs a table missing the column, which is caught by test-schema-upgrade.ts.
+    -- installs a table missing the column, which is caught by test-schema-upgrade-fresh-shape.ts.
     -- Pre-seeded earned credit for the dynamic floor formula (Protocol v1).
     earned_credit REAL DEFAULT 0,
     -- Enterprise Credit Model (Rules 6 & 7)
@@ -115,9 +123,38 @@ CREATE INDEX IF NOT EXISTS idx_members_updated_at ON members(updated_at);
 -- The Market delta's author half (engine posts.ts getPosts): the authors whose standing changed since the cursor, from
 -- the index alone.
 CREATE INDEX IF NOT EXISTS idx_members_board_standing_changed_at ON members(board_standing_changed_at, public_key);
+-- A member's set on a node that syncs by area (engine posts.ts getNearbySet), which reads no author's row. The authors
+-- the board leaves off for a paused or finished enterprise (ENTERPRISE_ON_BOARD_BY_KEY_SQL: the same expression, so the
+-- planner takes this index), and the standing of the authors whose standing ever moved, by key (the set's ETag), each
+-- from the few rows they hold. Joined per listing instead, the busy town's set took 18 ms at 100k posts (2026-10-10).
+CREATE INDEX IF NOT EXISTS idx_members_off_board ON members(public_key)
+    WHERE NOT ((paused IS NULL OR paused = 0) AND (status IS NULL OR status NOT IN ('winding_up', 'completed')));
+CREATE INDEX IF NOT EXISTS idx_members_standing_by_key ON members(public_key, board_standing_changed_at)
+    WHERE board_standing_changed_at IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_members_invited_by ON members(invited_by);
+-- The member directory's delta (GET /api/members?updatedAfter=, engine members.ts getMemberDirectoryRows): who joined, or
+-- changed their profile, since a phone's cursor, from these alone. Without them every phone's sync read every member's
+-- row (at 26,000 members: ~76 ms of CPU for a 513-byte answer, found in the global node's load rehearsal).
+CREATE INDEX IF NOT EXISTS idx_members_joined_at ON members(joined_at);
+CREATE INDEX IF NOT EXISTS idx_members_profile_updated_at ON members(profile_updated_at);
 CREATE INDEX IF NOT EXISTS idx_members_is_treasury ON members(public_key, callsign, paused, status) WHERE is_treasury = 1;
 CREATE INDEX IF NOT EXISTS idx_members_pubkey_nocase ON members(public_key COLLATE NOCASE);
+-- The members' own keys (is_visitor 0), from the index alone: the rule on which of push_tokens, push_token_leaves and
+-- pricing_reports travel to a standby (engine/replication-manifest.ts MEMBERS_OWN, MEMBERS_REPORTS) reads them on every
+-- page and hash slice of a copy, and without it walks every member's row, inline photo and all (at 6,000 members with
+-- 60 KB photos: 7.8 ms a count, 1.2 ms with it).
+CREATE INDEX IF NOT EXISTS idx_members_member_keys ON members(is_visitor, public_key);
+
+-- A member's avatar as they set it: a photo as a data URL (≤ 800 px, as the apps send it), or a shipped picture's
+-- `bundled://<name>`. Out of the members row (members.avatar_ref above), so a scan of members never reads a photo.
+-- Written only with that row's avatar_ref and avatar_bytes (@beanpool/engine members.ts setMemberPhoto), so a write here
+-- stamps the member's row: a standby's copy carries it inside each member's row, as `avatar_url`, where a standby of any
+-- version reads it (engine/replication-manifest.ts). Read by the avatar route (engine/avatar.ts) and by the reads of one
+-- member that hand it out as it is (@beanpool/engine members.ts MEMBER_WITH_PHOTO_SQL).
+CREATE TABLE IF NOT EXISTS member_photos (
+    public_key TEXT PRIMARY KEY,
+    photo TEXT NOT NULL
+);
 
 -- 2. Invite Codes
 CREATE TABLE IF NOT EXISTS invite_codes (
@@ -134,13 +171,23 @@ CREATE TABLE IF NOT EXISTS invite_codes (
     -- Who issued an admin (seed) invite: the owner/admin's pubkey under a key session, 'owner:password' under the
     -- node password. created_by stays the genesis member the invite hangs off in the tree; this is the audit trail.
     -- NULL for member-made invites (created_by already says who). Declared here for the same reason as genesis_type.
-    issued_by TEXT
+    issued_by TEXT,
+    -- An invite bound to a names-list entry (community modes slice 3, engine/names-list.ts): redeeming it confirms the
+    -- joiner against that entry, by the invite's maker. Only the entry's id: the server never sees the name. NULL for
+    -- every other invite. `names_bind_outcome` is what the redeem did with the binding: 'confirmed', or why it didn't
+    -- (the joiner is a member either way). Declared here for the same reason as genesis_type.
+    names_entry_id TEXT,
+    names_bind_outcome TEXT,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 -- 3. Ledger Accounts & Transactions
 CREATE TABLE IF NOT EXISTS accounts (
     public_key TEXT PRIMARY KEY,
-    balance REAL DEFAULT 0.0,
+    -- NOT NULL: better-sqlite3 binds NaN as NULL, so a nullable column took a NaN balance silently (review F1,
+    -- 2026-10-01). A node whose table predates this is rebuilt at boot (db.ts makeAccountBalanceNotNull).
+    balance REAL NOT NULL DEFAULT 0.0,
     last_updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     last_demurrage_epoch INTEGER DEFAULT 0
 );
@@ -174,6 +221,9 @@ CREATE INDEX IF NOT EXISTS idx_transactions_to ON transactions(to_pubkey);
 CREATE INDEX IF NOT EXISTS idx_transactions_timestamp ON transactions(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_transactions_project_id ON transactions(project_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_auth_signer ON transactions(auth_signer) WHERE auth_signer IS NOT NULL;
+-- Has this account ever paid that one (engine/money-limits.ts, before each payment to someone): one seek, where either
+-- single-column index above would scan all of a busy account's rows.
+CREATE INDEX IF NOT EXISTS idx_transactions_from_to ON transactions(from_pubkey, to_pubkey);
 
 -- 4. Marketplace Posts & Photos
 CREATE TABLE IF NOT EXISTS posts (
@@ -221,6 +271,10 @@ CREATE TABLE IF NOT EXISTS posts (
     -- Community Polls (§3.2, §8): JSON array of {id, text} options, and expiration timestamp
     poll_options TEXT,
     poll_closes_at DATETIME,
+    -- A poll's ballot (Marty, 2026-09-28): 0, anonymous, everyone sees the counts only (the default, and every poll an
+    -- app that predates the choice makes); 1, an open vote, members also see who chose what. Set when the poll is made;
+    -- fixed once its first vote is cast (engine/posts.ts updatePost).
+    poll_open_vote INTEGER NOT NULL DEFAULT 0,
     -- Audience scoping on posts (docs/the-commons.md §9, Item 10)
     audience_scope TEXT NOT NULL DEFAULT 'public' CHECK (audience_scope IN ('public', 'group', 'direct')),
     target_group_id TEXT REFERENCES groups(id) ON DELETE CASCADE,
@@ -260,6 +314,9 @@ CREATE TABLE IF NOT EXISTS poll_votes (
     option_id TEXT NOT NULL,
     signature TEXT NOT NULL,
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Where the node keeps it (probation on: the global profile), whether the voter was a new or 12-word account when
+    -- they first voted: 1 yes, 0 no, NULL not kept (engine/probation.ts pollVoterNewOrWords). Never changed after.
+    voter_new_or_words INTEGER,
     PRIMARY KEY (post_id, voter_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_poll_votes_voter_pubkey ON poll_votes(voter_pubkey);
@@ -284,20 +341,26 @@ CREATE TABLE IF NOT EXISTS event_rsvps (
 CREATE INDEX IF NOT EXISTS idx_event_rsvps_member ON event_rsvps(member_pubkey);
 CREATE INDEX IF NOT EXISTS idx_event_rsvps_updated_at ON event_rsvps(updated_at);
 
--- One row per reminder this node has actually sent (docs/events-on-the-map.md §2.2). The primary key IS
+-- One row per reminder the community has actually sent (docs/events-on-the-map.md §2.2). The primary key IS
 -- the de-duplication: the scheduler claims a due reminder with INSERT OR IGNORE and sends only when the
 -- insert won, so a restart mid-sweep, a second tick or a slow Expo call can never double-send.
 --
--- Deliberately NOT replicated: it is this node's delivery log, not member data, and only the primary ever
--- sends (§2.2). The rows are deleted with the rest of an event by the 30-day scrub.
+-- Only the main server ever sends (§2.2). Copied to a standby verbatim (a plain table, engine/replication-manifest.ts),
+-- so a server that takes over sends no reminder a second time. The rows are deleted with the rest of an event by the
+-- 30-day scrub, each with a tombstone.
 CREATE TABLE IF NOT EXISTS event_reminders_sent (
     post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
     member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     offset_min INTEGER NOT NULL,
     sent_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (post_id, member_pubkey, offset_min)
 );
 CREATE INDEX IF NOT EXISTS idx_posts_event_author ON posts(author_pubkey, event_end_at) WHERE type = 'event';
+-- "Coming up" on Home (engine posts.ts PostFilter.upcomingUntil): the events in start order, so the soonest few are read
+-- without sorting every event the node holds.
+CREATE INDEX IF NOT EXISTS idx_posts_event_start ON posts(event_start_at, id) WHERE type = 'event';
 
 -- The pull serves one peer at a time and asks for active, locally-authored, travelling listings. Partial
 -- so the index holds only rows that can ever be served: 'local' is the overwhelming majority and would
@@ -337,6 +400,10 @@ CREATE TABLE IF NOT EXISTS post_photos (
     PRIMARY KEY (post_id, order_num)
 );
 CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at);
+-- A listing photo's object by its content address, as a standby asks for one (routes/backup.ts sync-object).
+CREATE INDEX IF NOT EXISTS idx_post_photos_sha256 ON post_photos(sha256) WHERE sha256 IS NOT NULL;
+-- Whether a row still names an object, asked before every delete of one (storage/image-columns.ts storageKeyStillReferenced).
+CREATE INDEX IF NOT EXISTS idx_post_photos_storage_key ON post_photos(storage_key COLLATE NOCASE) WHERE storage_key IS NOT NULL;
 
 -- Encrypted message attachments (lazy-loaded; the node only ever holds ciphertext).
 -- data = base64 AEAD ciphertext of the image; nonce = its x25519-xc20p-v2 nonce.
@@ -351,6 +418,7 @@ CREATE TABLE IF NOT EXISTS message_attachments (
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     storage_key TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_message_attachments_storage_key ON message_attachments(storage_key COLLATE NOCASE) WHERE storage_key IS NOT NULL;
 
 -- 5. Marketplace Transactions
 CREATE TABLE IF NOT EXISTS marketplace_transactions (
@@ -384,6 +452,9 @@ CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_buyer_status ON marketpl
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_seller_status ON marketplace_transactions(seller_pubkey, status);
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_buyer_status_created ON marketplace_transactions(buyer_pubkey, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_seller_status_created ON marketplace_transactions(seller_pubkey, status, created_at DESC);
+-- A listing's open or held deals: both sides of its open deals hear its pushes on a node that reads by area, and a
+-- removal or hide asks whether it holds one. Without this each read searched every open deal on the node (#1769).
+CREATE INDEX IF NOT EXISTS idx_marketplace_transactions_post_status ON marketplace_transactions(post_id, status);
 
 -- 6. Messaging & Chat
 CREATE TABLE IF NOT EXISTS conversations (
@@ -426,6 +497,57 @@ CREATE TABLE IF NOT EXISTS messages (
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_time ON messages(conversation_id, timestamp ASC);
 CREATE INDEX IF NOT EXISTS idx_messages_updated_at ON messages(updated_at);
 
+-- The old conversation ids each line names (chat consolidation): a line folded into a pair's one DM keeps the id it was
+-- encrypted under in its metadata, as `originalConversationId` or in the list `originalConversationIds`, and a send to an
+-- old id goes to the conversation such a line is in (engine/messaging.ts consolidatedConversationOf). Kept from
+-- messages.metadata by the three triggers below, on each server, and never copied: a standby keeps its own from the lines
+-- it imports, as posts_fts is kept from posts. An index, so an id nobody has is answered as fast as a real one: scanning
+-- every line's metadata told a hidden group's chat id from an id nobody has by time (#1333 review). db.ts fills it once
+-- from the lines already there (migration_message_old_conversation_ids_v1).
+CREATE TABLE IF NOT EXISTS message_old_conversation_ids (
+    old_conversation_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    PRIMARY KEY (old_conversation_id, message_id)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_message_old_conversation_ids_message ON message_old_conversation_ids(message_id);
+
+-- Each trigger reads the metadata only once json_valid() says it is JSON, inside a CASE: a malformed line must fail no
+-- write, and SQLite may evaluate a WHERE's terms in any order. `typeof(key) = 'integer'` keeps a list's items only.
+CREATE TRIGGER IF NOT EXISTS messages_old_conversation_ids_ai
+AFTER INSERT ON messages
+FOR EACH ROW
+WHEN instr(NEW.metadata, 'originalConversationId') > 0
+BEGIN
+    INSERT OR IGNORE INTO message_old_conversation_ids (old_conversation_id, message_id)
+    SELECT json_extract(m, '$.originalConversationId'), NEW.id
+      FROM (SELECT CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata END AS m)
+     WHERE json_type(m, '$.originalConversationId') = 'text'
+    UNION
+    SELECT value, NEW.id FROM json_each(CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata END, '$.originalConversationIds')
+     WHERE type = 'text' AND typeof(key) = 'integer';
+END;
+CREATE TRIGGER IF NOT EXISTS messages_old_conversation_ids_au
+AFTER UPDATE OF metadata ON messages
+FOR EACH ROW
+WHEN OLD.metadata IS NOT NEW.metadata
+BEGIN
+    DELETE FROM message_old_conversation_ids WHERE message_id = OLD.id;
+    INSERT OR IGNORE INTO message_old_conversation_ids (old_conversation_id, message_id)
+    SELECT json_extract(m, '$.originalConversationId'), NEW.id
+      FROM (SELECT CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata END AS m)
+     WHERE json_type(m, '$.originalConversationId') = 'text'
+    UNION
+    SELECT value, NEW.id FROM json_each(CASE WHEN json_valid(NEW.metadata) THEN NEW.metadata END, '$.originalConversationIds')
+     WHERE type = 'text' AND typeof(key) = 'integer';
+END;
+CREATE TRIGGER IF NOT EXISTS messages_old_conversation_ids_ad
+AFTER DELETE ON messages
+FOR EACH ROW
+WHEN OLD.metadata IS NOT NULL
+BEGIN
+    DELETE FROM message_old_conversation_ids WHERE message_id = OLD.id;
+END;
+
 -- 7. Relations (Friends, Ratings, Abuse)
 CREATE TABLE IF NOT EXISTS friends (
     owner_pubkey TEXT REFERENCES members(public_key),
@@ -460,18 +582,38 @@ CREATE TABLE IF NOT EXISTS abuse_reports (
     reason TEXT NOT NULL,
     status TEXT DEFAULT 'pending',
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Whether actioning it suspended its member: 1 it did, 0 it didn't, NULL not actioned or actioned before this was kept
+    -- (state-engine.ts actionReport; read by member-wizards.ts cancelRekeyCode for a code with no prior status).
+    suspended_member INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_ratings_created_at ON ratings(created_at);
+-- A member's ratings: every trust floor averages them (engine trust.ts, on each spend check and listing row), and so do
+-- getRatings and getAverageRating. Without it each floor scanned the whole table (#1793's review, finding 1).
+CREATE INDEX IF NOT EXISTS idx_ratings_target_pubkey ON ratings(target_pubkey);
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_updated_at ON abuse_reports(updated_at);
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_status_created ON abuse_reports(status, created_at DESC);
 -- The reports on one post: auto-hide counts them on every new report (engine/auto-moderation.ts).
 CREATE INDEX IF NOT EXISTS idx_abuse_reports_target_post ON abuse_reports(target_post_id) WHERE target_post_id IS NOT NULL;
+-- One reporter's reports: auto-hide reads how many of theirs a moderator kept lately, and the hourly report limit.
+CREATE INDEX IF NOT EXISTS idx_abuse_reports_reporter ON abuse_reports(reporter_pubkey, status);
 
 -- 8. Config
 CREATE TABLE IF NOT EXISTS node_config (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
+);
+
+-- Where each key's heal of its listing-photo URLs is, on a node with more listings with a photo than one answer holds
+-- (engine/photo-keys.ts photoHealFor): this server's own, for the shape it began under (`since`, photoKeysSince). The
+-- last page went to `cursor`, from `from_key`; the next starts at `after_key` (NULL: none is left). One row per key.
+CREATE TABLE IF NOT EXISTS photo_url_heals (
+    viewer    TEXT PRIMARY KEY,
+    since     TEXT NOT NULL,
+    cursor    TEXT NOT NULL,
+    from_key  TEXT NOT NULL,
+    after_key TEXT,
+    served_at TEXT NOT NULL
 );
 
 -- 9. Community Crowdfunding Projects
@@ -494,37 +636,101 @@ CREATE INDEX IF NOT EXISTS idx_projects_updated_at ON projects(updated_at);
 CREATE INDEX IF NOT EXISTS idx_projects_unmigrated ON projects(id) WHERE migrated_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_projects_enterprise ON projects(enterprise_pubkey);
 
--- 10. Invite Links (Deferred Deep Linking Shortener)
-CREATE TABLE IF NOT EXISTS invite_links (
-    hash_id TEXT PRIMARY KEY,
-    payload TEXT NOT NULL,
-    created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-);
-
 -- 11. Push Notification Tokens (Expo Push)
+-- Copied to a standby verbatim (a plain table, engine/replication-manifest.ts), so a server that takes over reaches every
+-- phone at once; a standby sends no push itself (state-engine.ts dispatchPushNotification).
+-- Locked at rest (services/push-token-seal.ts): no token is stored in the clear. `token_id` is the token's HMAC and
+-- `token_box` the token sealed, both under keys from data/recovery-seal.key, which the database never holds; a standby
+-- opens none until a take-over brings the key.
 CREATE TABLE IF NOT EXISTS push_tokens (
     public_key TEXT NOT NULL REFERENCES members(public_key),
-    token TEXT NOT NULL,
+    -- HMAC-SHA256 of the phone's token, hex: what a tombstone (`<key>|<token_id>`), a leave statement and a dead-token
+    -- ticket name the row by.
+    token_id TEXT NOT NULL,
+    -- The token, XChaCha20-Poly1305, bound to public_key and token_id; base64 of nonce, ciphertext and tag.
+    token_box TEXT NOT NULL,
     platform TEXT DEFAULT 'ios',
     created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     -- The phone's own ordering stamp for this registration (ms, never compared with this node's clock), or NULL from
     -- an app before leave statements. A leave statement removes the row only when this is not later than its own.
     registered_at INTEGER,
-    PRIMARY KEY (public_key, token)
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (public_key, token_id)
 );
 
 -- 11b. Leave statements applied here (state-engine.ts applyPushLeave): for a day after one is applied, a registration of
--- the same key and token stamped no later than it (one the phone sent before it left, delivered late) is refused.
+-- the same key and token stamped no later than it (one the phone sent before it left, delivered late) is refused. Copied
+-- to a standby with the tokens, so a server that takes over refuses the same late registration. A key applies at most
+-- so many a day (state-engine.ts KEY_PUSH_RULES), counted from `applied_at`. The token by its id (push_tokens.token_id).
 CREATE TABLE IF NOT EXISTS push_token_leaves (
     public_key TEXT NOT NULL,
-    token TEXT NOT NULL,
+    token_id TEXT NOT NULL,
     left_at INTEGER NOT NULL,
     applied_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    PRIMARY KEY (public_key, token)
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (public_key, token_id)
 );
 -- Every leave applied clears the day-old ones (state-engine.ts PUSH_LEAVE_PRUNE_SQL), and keys with no row here can add
 -- leaves: a search on this, never a scan of the table per leave.
 CREATE INDEX IF NOT EXISTS idx_push_token_leaves_applied_at ON push_token_leaves(applied_at);
+-- A new token of a key with no row here prunes such keys' tokens not registered again for a month (state-engine.ts
+-- STRANGER_PUSH_RULES): a search on this too.
+CREATE INDEX IF NOT EXISTS idx_push_tokens_created_at ON push_tokens(created_at);
+
+-- 11c. Where each write only a day cap by address bounds came from, for a day (db/writes-by-address.ts): a new push token
+-- or leave statement of a key with no row here (state-engine.ts STRANGER_PUSH_RULES, STRANGER_LEAVE_RULES) and a price
+-- report without a member's key (db/pricing-guide-db.ts PRICE_REPORT_RULES). What one address, and every address
+-- together, may add of each `kind` in a day. `ip_hash` is the address as a keyed hash (engine/open-join.ts
+-- writeAddressHash), NULL for this server's own code. This server's own, never copied, and deleted once a day old
+-- (engine/open-join.ts forgetOldJoinAddresses).
+CREATE TABLE IF NOT EXISTS writes_by_address (
+    kind TEXT NOT NULL,
+    ip_hash TEXT,
+    made_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_writes_by_address_kind ON writes_by_address(kind, ip_hash);
+CREATE INDEX IF NOT EXISTS idx_writes_by_address_made_at ON writes_by_address(made_at);
+
+-- 11d. The money limits' day (engine/money-limits.ts; the numbers are config/writer-limits.ts MONEY_LIMITS): one row per
+-- payment, marketplace request or pledge change an account made, for the account whose Beans or deal it was (a member's
+-- own key, or the enterprise a keeper acted for), written in the same step as the check so a restart keeps the day's
+-- counts. `recipient` is who a payment goes to when that is someone (a member, a visitor or an enterprise; NULL for the
+-- Commons or a crowdfund's escrow); `new_recipient` is 1 when this account had never completed a payment to them before.
+-- `keeper` is who did it when the account is an enterprise (the keeper who signed): one person's enterprise work is
+-- counted across every enterprise they keep. `for_enterprise` is set instead when a keeper acted for an enterprise whose own
+-- day was spent: the act is then the keeper's own (`account` is the keeper), counted against their own limits, and
+-- `new_recipient` says whether the enterprise had paid them. A purchase from another community is counted from its own
+-- settlements row instead; a commission's row (`settlement_key`, the settlement's key) is there only for its keeper's
+-- count, as the enterprise's is its settlement, unless it is the keeper's own (`for_enterprise`), when it is the count and
+-- the enterprise's leaves that settlement out. This server's own, never copied, and deleted once a day old.
+CREATE TABLE IF NOT EXISTS money_acts (
+    account TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (kind IN ('payment', 'request', 'pledge')),
+    recipient TEXT,
+    new_recipient INTEGER NOT NULL DEFAULT 0,
+    made_at TEXT NOT NULL,
+    keeper TEXT,
+    settlement_key TEXT,
+    for_enterprise TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_money_acts_account ON money_acts(account, kind, made_at);
+CREATE INDEX IF NOT EXISTS idx_money_acts_made_at ON money_acts(made_at);
+CREATE INDEX IF NOT EXISTS idx_money_acts_keeper ON money_acts(keeper, kind, made_at) WHERE keeper IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_money_acts_settlement ON money_acts(settlement_key) WHERE settlement_key IS NOT NULL;
+
+-- 11e. The posts a keeper put up for an enterprise once its own day's posts (WRITER_LIMITS.enterprisePostsPerDay) were
+-- up (engine/writer-bounds.ts): each counts against the keeper's own posts instead, as on a member's own, so one keeper
+-- who uses up an enterprise's day can't stop its other keepers posting for it. One row per such post, its created_at as
+-- `made_at`. This server's own, never copied, and deleted once a day old.
+CREATE TABLE IF NOT EXISTS keeper_own_posts (
+    post_id TEXT PRIMARY KEY,
+    keeper TEXT NOT NULL,
+    made_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_keeper_own_posts_keeper ON keeper_own_posts(keeper, made_at);
+CREATE INDEX IF NOT EXISTS idx_keeper_own_posts_made_at ON keeper_own_posts(made_at);
 
 -- 12. Member Notification Preferences
 CREATE TABLE IF NOT EXISTS member_preferences (
@@ -533,6 +739,11 @@ CREATE TABLE IF NOT EXISTS member_preferences (
     pref_value TEXT NOT NULL DEFAULT 'true',
     PRIMARY KEY (public_key, pref_key)
 );
+-- The authors on holiday (engine posts.ts ON_HOLIDAY_SQL, the same terms, so the planner takes this index), asked by every
+-- board read and every member's set on a node that syncs by area: from the few rows that hold one, not every preference
+-- of every member. At 20,000 members with three preferences each, the scan was 1.5 ms of each read (2026-10-10).
+CREATE INDEX IF NOT EXISTS idx_member_preferences_on_holiday ON member_preferences(public_key)
+    WHERE pref_key = 'holiday_mode' AND pref_value = 'true';
 
 -- 13. Full-Text Search Index (FTS5)
 CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5(
@@ -661,6 +872,9 @@ CREATE TABLE IF NOT EXISTS recovery_collections (
 );
 CREATE INDEX IF NOT EXISTS idx_recovery_collections_owner ON recovery_collections(owner_pubkey, status);
 CREATE INDEX IF NOT EXISTS idx_recovery_collections_updated_at ON recovery_collections(updated_at);
+-- The prune and the node-wide sweep (engine/recovery-release.ts sweepRecoveryCollections) walk one owner's sessions
+-- newest first, a batch at a time: without this each batch sorted the owner's whole pile (PR #1456 re-review).
+CREATE INDEX IF NOT EXISTS idx_recovery_collections_owner_created ON recovery_collections(owner_pubkey, status, created_at);
 
 -- One fragment released into one collection. The unique constraint is what makes a release
 -- idempotent rather than cumulative: a keeper tapping Approve twice, or a client retrying a
@@ -691,35 +905,80 @@ CREATE TABLE IF NOT EXISTS recovery_releases (
     released_by TEXT,
     released_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Whose account the fragment is of: the collection's owner, written with the release (engine/recovery-release.ts
+    -- recordRelease) and copied to a standby with the row. The sessions (recovery_collections) stay each server's own, so
+    -- on a server that took over this is the only thing naming the owner, and the owner's own account delete finds
+    -- their releases by it (state-engine.ts purgeMemberSelf). db.ts fills it at boot for a release whose session is here.
+    owner_pubkey TEXT,
     UNIQUE(collection_id, share_id)
 );
 CREATE INDEX IF NOT EXISTS idx_recovery_releases_collection ON recovery_releases(collection_id);
+CREATE INDEX IF NOT EXISTS idx_recovery_releases_owner ON recovery_releases(owner_pubkey);
 CREATE INDEX IF NOT EXISTS idx_recovery_releases_updated_at ON recovery_releases(updated_at);
 
--- 14c. The open door (global profile, design §2.2): who joined with a sign-in instead of an invite.
+-- 14c. The open door (global profile, design §2.2): who joined with a sign-in, or with 12 words alone (provider
+-- 'words', a random 'words:' join_hash), instead of an invite.
 --
 -- Created on EVERY node whatever its profile, and empty where the door is shut, so every node has one schema
--- (snapshots, restores and a later Postgres move see the same tables). Replicated to standbys with its key (the
--- node_config row) and carried in the take-over bundle, all but `ip_hash`; `updated_at` is the replication
--- watermark, stamped by a join, a release and a re-key (engine/open-join.ts). `join_hash` UNIQUE is the rule "one sign-in
+-- (snapshots, restores and a later Postgres move see the same tables). Replicated to standbys (never its key) and
+-- carried in the take-over bundle, all but `ip_hash` and `ip_kept_until`; `updated_at` is the replication
+-- watermark, stamped by a join, a release, a re-key and adding a sign-in (engine/open-join.ts). `join_hash` UNIQUE is the rule "one sign-in
 -- account, one identity here". It is HMAC-SHA-256 over the provider and the provider's subject, keyed by a
--- secret per node (node_config `openJoinSalt`): the raw subject and the email are never stored, and two nodes'
--- hashes for the same person do not match. `ip_hash` (same key, its own domain) feeds the sign-up limit, 5 an
--- hour and 20 a day per address, and is cleared once it is a day old, when the limiter no longer needs it.
+-- secret per node kept in a file, never in this database (data/open-join.key, services/open-join-key.ts; node_config
+-- `openJoinKeyId` says which key): the raw subject and the email are never stored, and two nodes'
+-- hashes for the same person do not match. `ip_hash` (same key, its own domain) feeds the door's signal, the work a
+-- join asks for and the ceilings per address (engine/door-signal.ts), and is cleared once it is a day old, when the
+-- signal no longer needs it (7 days for a newcomer the community removed: `ip_kept_until`).
 -- A member in good standing who deletes their own account frees their sign-in account: the row stays, still
 -- counting for its address's limit, with `join_hash` overwritten by a random 'released:' tombstone. A member
 -- the community removes, or one who deletes their account while suspended, keeps it used, so that account cannot
 -- come straight back in.
+-- `join_cohort` is a random label, the same for everyone who joined through the door from one address within 24 hours
+-- of each other (chained: it is copied from the earliest such join still in the window). Never the address, never a
+-- key. Auto-hide reads it, so that such reporters count as one (engine/auto-moderation.ts), and the moderators' clean-up
+-- by burst, to show which accounts joined together and act on them at once (engine/burst-cleanup.ts). Replicated and
+-- bundled with the row; NULL for a join before it existed, and cleared when the member deletes their account.
 CREATE TABLE IF NOT EXISTS open_joins (
     member_pubkey TEXT PRIMARY KEY REFERENCES members(public_key),
     provider TEXT NOT NULL,
     join_hash TEXT NOT NULL UNIQUE,
     joined_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     ip_hash TEXT,
-    updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    join_cohort TEXT,
+    -- A member the community removed within a day of joining: their `ip_hash` is kept until this time (7 days from the
+    -- join) instead of a day, so their network asks the most door work meanwhile (engine/door-signal.ts). Local only.
+    ip_kept_until TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_open_joins_ip ON open_joins(ip_hash, joined_at) WHERE ip_hash IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_open_joins_updated_at ON open_joins(updated_at);
+-- A burst: the joins that share a connection label (engine/burst-cleanup.ts reads them by label, and the digest the
+-- recent ones by time).
+CREATE INDEX IF NOT EXISTS idx_open_joins_cohort ON open_joins(join_cohort, joined_at) WHERE join_cohort IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_open_joins_cohort_joined ON open_joins(joined_at) WHERE join_cohort IS NOT NULL;
+
+-- What the moderators did to a burst of the open door's joins in one action (engine/burst-cleanup.ts): a hide of its
+-- posts, with the posts it hid so it can be undone, or a removal. This server's own record (a standby never copies it),
+-- each kept 30 days. `by_role`: the role of whoever acted, never their key. `anchor_pubkey`: the account the burst was
+-- opened from, so the screens can name it. When a member deletes their own account their posts leave the record, and
+-- so does their key as its anchor. Foreign keys are off on this database: the posts go with their action by hand.
+CREATE TABLE IF NOT EXISTS burst_actions (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL CHECK (kind IN ('hide', 'remove')),
+    at TEXT NOT NULL,
+    by_role TEXT NOT NULL CHECK (by_role IN ('owner', 'admin', 'moderator')),
+    anchor_pubkey TEXT,
+    accounts INTEGER NOT NULL CHECK (accounts >= 0),
+    posts INTEGER NOT NULL DEFAULT 0 CHECK (posts >= 0),
+    undone_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_burst_actions_at ON burst_actions(at);
+CREATE TABLE IF NOT EXISTS burst_action_posts (
+    action_id TEXT NOT NULL,
+    post_id TEXT NOT NULL,
+    PRIMARY KEY (action_id, post_id)
+);
+CREATE INDEX IF NOT EXISTS idx_burst_action_posts_post ON burst_action_posts(post_id);
 
 -- 14d. The communities directory as this node last fetched it (global profile G5, services/directory-mirror.ts).
 --
@@ -842,8 +1101,10 @@ CREATE INDEX IF NOT EXISTS idx_moderation_notices_updated_at ON moderation_notic
 -- web-blocklist-where, 2026-09-27), so the web app has it back on any browser after signing in and leaves nothing about it
 -- on a shared computer.
 --
--- Only `owner_pubkey` reads or changes it (routes/blocks.ts, the signer's own); nothing else here reads it, sends it or
--- counts it for anyone: not another member, a visitor, the activity feed or a broadcast. The community's operator can see
+-- Only `owner_pubkey` reads or changes it (routes/blocks.ts, the signer's own), and their own rows are read for them
+-- alone where their set of listings is worked out (engine getNearbySet, on a node that syncs by area: the listings of an
+-- author they blocked take none of its slots); nothing else here reads it, sends it or counts it for anyone: not another
+-- member, a visitor, the activity feed or a broadcast. The community's operator can see
 -- it, as they see reports. `blocked_pubkey` is any key in the one spelling, a member's or not, never the owner's own. At
 -- most 500 per member (MEMBER_BLOCKS_MAX). Replicated to a standby (SyncPayload.memberBlocks, watermarked on
 -- `updated_at`), with a `member_blocks` tombstone for each removal, stamped no earlier than the rows it deletes: keyed
@@ -863,12 +1124,86 @@ CREATE TABLE IF NOT EXISTS member_blocks (
 CREATE INDEX IF NOT EXISTS idx_member_blocks_blocked ON member_blocks(blocked_pubkey);
 CREATE INDEX IF NOT EXISTS idx_member_blocks_updated_at ON member_blocks(updated_at);
 
+-- 14i. The details of each push this server sent (engine/push-notices.ts; @beanpool/core push-notice.ts). A push carries
+-- only its kind's fixed words and a signed notice id; what the sender wrote (`title`, `body`, and `data`: where a tap
+-- lands) stays here, one row per notice id, which is 128 random bits and new for each recipient. Only `recipient` reads
+-- it (GET /api/notices/push/:id, the signer's own). `sent_at` is the notice's time in whole seconds. Bounded: 7 days, and
+-- a member's newest 100 (the hourly hygiene job); the CHECKs cap a row's size. This server's own: never copied to a
+-- standby, which sends no push. Goes with the member on a prune, a self-deletion or a re-key.
+CREATE TABLE IF NOT EXISTS push_notices (
+    id TEXT PRIMARY KEY CHECK (length(id) = 32),
+    recipient TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK (length(kind) BETWEEN 1 AND 40),
+    title TEXT NOT NULL CHECK (length(title) <= 200),
+    body TEXT NOT NULL CHECK (length(body) <= 4000),
+    data TEXT NOT NULL DEFAULT '{}' CHECK (length(data) <= 1000),
+    sent_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_push_notices_recipient ON push_notices(recipient, sent_at);
+CREATE INDEX IF NOT EXISTS idx_push_notices_sent_at ON push_notices(sent_at);
+
+-- 14j. Withheld lines (engine/withheld-lines.ts). A direct message to someone who has blocked its sender is answered as
+-- sent and kept here for its sender alone, never in `messages`: the person who blocked them never gets it, then or after
+-- an unblock, and nothing that reads `messages` (the chats, unread counts, pushes, a standby's copy) can show it to them.
+-- A conversation such a sender opens with them, where the two have none, is kept here too, until either of them opens
+-- the real one or the sender writes in it after the block is lifted: then it becomes the real conversation, under the same
+-- id. Local to this server, never in a copy. Goes with its sender on a prune or a self-deletion; a re-key moves it.
+CREATE TABLE IF NOT EXISTS withheld_conversations (
+    id TEXT PRIMARY KEY,
+    owner_pubkey TEXT NOT NULL,
+    other_pubkey TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    owner_last_read_at TEXT,
+    CHECK (owner_pubkey != other_pubkey)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_withheld_conversations_pair ON withheld_conversations(owner_pubkey, other_pubkey);
+CREATE INDEX IF NOT EXISTS idx_withheld_conversations_other ON withheld_conversations(other_pubkey);
+CREATE TABLE IF NOT EXISTS withheld_lines (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    author_pubkey TEXT NOT NULL,
+    ciphertext TEXT NOT NULL,
+    nonce TEXT NOT NULL,
+    type TEXT NOT NULL DEFAULT 'text',
+    metadata TEXT,
+    timestamp TEXT NOT NULL,
+    edited_at TEXT,
+    attachment_data TEXT,
+    attachment_nonce TEXT,
+    attachment_mime TEXT,
+    storage_key TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_withheld_lines_conversation ON withheld_lines(conversation_id, author_pubkey, timestamp);
+CREATE INDEX IF NOT EXISTS idx_withheld_lines_author ON withheld_lines(author_pubkey);
+-- What a blocked member did to a line in `messages` that would show on the screen of someone who has blocked them: their
+-- reaction on a line of a DM with that person, or their edit of their own line in it. Kept for them alone and laid over
+-- their own reads of the line, never written into the line, so the person who blocked them never sees it, then or after
+-- an unblock. One row per line and author. Local, as the lines above are.
+CREATE TABLE IF NOT EXISTS withheld_overlays (
+    message_id TEXT NOT NULL,
+    author_pubkey TEXT NOT NULL,
+    reaction TEXT,
+    ciphertext TEXT,
+    nonce TEXT,
+    edited_at TEXT,
+    changed_at TEXT NOT NULL,
+    PRIMARY KEY (message_id, author_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_withheld_overlays_author ON withheld_overlays(author_pubkey);
+-- The note on Beans a member sent to someone who has blocked them (engine/withheld-notes.ts): the Beans move as any send's,
+-- the ledger row stores no note (`transactions.memo` = ''), and the note is kept here, for its sender alone, laid over
+-- their own reads of the row. One row per ledger row. Local, as the lines above are: never in a copy.
+CREATE TABLE IF NOT EXISTS withheld_notes (
+    transaction_id TEXT PRIMARY KEY,
+    memo TEXT NOT NULL
+);
+
 -- 15. Administrative System Logs
 CREATE TABLE IF NOT EXISTS system_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     level TEXT NOT NULL CHECK (level IN ('INFO', 'WARN', 'ERROR', 'SECURITY', 'SYNC')),
-    category TEXT NOT NULL CHECK (category IN ('P2P', 'LEDGER', 'TLS', 'ADMIN', 'AUTH', 'DB', 'SYS')),
+    category TEXT NOT NULL CHECK (category IN ('P2P', 'LEDGER', 'TLS', 'ADMIN', 'AUTH', 'DB', 'SYS', 'AGENT')),
     message TEXT NOT NULL,
     metadata TEXT -- JSON string metadata
 );
@@ -913,7 +1248,7 @@ CREATE TABLE IF NOT EXISTS sync_cursors (
 -- admin's ceiling are each written by a statement that sets nothing else.
 CREATE TRIGGER IF NOT EXISTS members_touch_updated_at
 AFTER UPDATE OF
-    callsign, invited_by, invite_code, home_node_url, avatar_url, bio,
+    callsign, invited_by, invite_code, home_node_url, avatar_ref, avatar_bytes, bio,
     contact_value, contact_visibility, status, earned_credit, profile_updated_at,
     archetype, elder_vouched_by, can_vouch, vouch_credit, credit_frozen, is_treasury, can_operate, joined_at, public_key,
     legacy_credit_floor, earned_surplus, working_capital_ceiling,
@@ -1118,7 +1453,11 @@ CREATE TABLE IF NOT EXISTS node_roles (
     granted_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     granted_by       TEXT,
     session_epoch    INTEGER NOT NULL DEFAULT 0,
-    break_glass_hash TEXT
+    break_glass_hash TEXT,
+    -- When the owner's break-glass code was last made, and from which kind of session (engine/node-roles.ts
+    -- BreakGlassMadeBy). Both NULL when there is no code, or for a code made before they were recorded.
+    break_glass_made_at TEXT,
+    break_glass_made_by TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_node_roles_role ON node_roles(role);
 
@@ -1159,8 +1498,288 @@ CREATE TABLE IF NOT EXISTS suspended_node_roles (
     granted_at       DATETIME,
     granted_by       TEXT,
     session_epoch    INTEGER NOT NULL DEFAULT 0,
-    break_glass_hash TEXT
+    break_glass_hash TEXT,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
+
+-- 22e. The names list (community modes slice 2; scratch/global-node/DESIGN-community-modes-fable.md §4.1, §4.3; the trust
+-- model is scratch/global-node/DESIGN-names-list-trust-fable.md; Marty's answers 2026-10-01): the community's admins' list
+-- of who its members are, by real name, kept here ENCRYPTED on the admins' phones (engine/names-list.ts, @beanpool/core
+-- names-list-crypto.ts and names-list-trust.ts). This server, BeanPool, a backup, a standby's copy and a thief hold
+-- sealed text, signed statements and sealed boxes; the names open only on an admin's phone. Every table here is a plain
+-- table (engine/replication-manifest.ts): a standby copies them as they are, and a take-over needs nothing more.
+--
+-- One entry: a name and a note, sealed under the key of generation `key_id` (a statement's id below), bound to the
+-- entry's id (which the admin's phone chooses, because it seals the entry before this server sees it) and that key id.
+-- Sealed when written or edited, and never again: a new key carries nothing over.
+CREATE TABLE IF NOT EXISTS names_entries (
+    id              TEXT PRIMARY KEY,
+    ciphertext      TEXT NOT NULL,
+    key_id          TEXT NOT NULL,
+    created_by      TEXT NOT NULL,
+    created_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Who last wrote it: an edit.
+    updated_by      TEXT,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_names_entries_key ON names_entries(key_id);
+
+-- The list's key history: one signed statement per generation (maker, parent, drops), chained by parent. `statement` is
+-- the exact text its maker signed (`signature`, Ed25519) and `id` its SHA-256; the other columns are read from it, for
+-- this server's own checks. The phones never take this server's word for any of it: each recomputes the id and checks
+-- the signature, and appends a statement only off its own head and from a maker it trusts. The key itself never
+-- reaches this server. One statement per number: a new one lands only off the current one (the highest `n`).
+CREATE TABLE IF NOT EXISTS names_generations (
+    id          TEXT PRIMARY KEY,
+    n           INTEGER NOT NULL UNIQUE CHECK (n >= 1),
+    parent_id   TEXT,
+    maker       TEXT NOT NULL,
+    drops       TEXT NOT NULL DEFAULT '',
+    statement   TEXT NOT NULL,
+    signature   TEXT NOT NULL,
+    created_at  DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at  DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- A share: every key one admin's phone holds, sealed in one box to another admin's account key, under a header the
+-- giver signs (`header`, the exact text; `signature`): its head, the key ids in the box, every key it trusts (its vouch),
+-- and the box's digest. The newest per pair. The header is public to every admin (keys and ids only); the box goes only
+-- to its recipient. A share is never cleared when someone stops being an admin: the box is useless to them (they
+-- can't sign requests here any more) and its keys are ones they already had.
+CREATE TABLE IF NOT EXISTS names_shares (
+    from_pubkey       TEXT NOT NULL,
+    to_pubkey         TEXT NOT NULL,
+    head_id           TEXT NOT NULL,
+    key_ids           TEXT NOT NULL,
+    trusts            TEXT NOT NULL,
+    sealed_ring       TEXT NOT NULL,
+    ring_iv           TEXT NOT NULL,
+    ring_tag          TEXT NOT NULL,
+    ephemeral_pubkey  TEXT NOT NULL,
+    kdf_params        TEXT NOT NULL,
+    box_digest        TEXT NOT NULL,
+    header            TEXT NOT NULL,
+    signature         TEXT NOT NULL,
+    created_at        DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (from_pubkey, to_pubkey)
+);
+
+-- An admin's locked copy of their own names-list record (scratch/global-node/DESIGN-names-locked-copy-opus.md §4): the keys
+-- their phone holds and whom it trusts, sealed to their own member key and signed by it (@beanpool/core
+-- names-list-crypto.ts sealNamesCopy, names-list-trust.ts makeNamesCopy), so Sign Out, a reinstall or a new phone loses
+-- nothing. One row per admin key, written only by that key (routes/names-list.ts PUT /api/names/copy) and read only by it.
+-- This server never opens or changes one: it keeps the header's numbers for `myCopy` and the rest as sent. Kept when an
+-- admin is demoted; deleted when the key stops being a member here (removed, account deleted, or replaced by a re-key).
+CREATE TABLE IF NOT EXISTS names_copies (
+    owner_pubkey      TEXT PRIMARY KEY,
+    seq               INTEGER NOT NULL,
+    head_n            INTEGER NOT NULL,
+    -- '-' with an empty chain.
+    head_id           TEXT NOT NULL,
+    -- The phone's clock, as signed: shown to the admin, never compared.
+    saved_at          TEXT NOT NULL,
+    -- base64, at most 1 MiB decoded (NAMES_COPY_MAX_BYTES).
+    sealed_copy       TEXT NOT NULL,
+    copy_iv           TEXT NOT NULL,
+    copy_tag          TEXT NOT NULL,
+    ephemeral_pubkey  TEXT NOT NULL,
+    kdf_params        TEXT NOT NULL,
+    box_digest        TEXT NOT NULL,
+    header            TEXT NOT NULL,
+    signature         TEXT NOT NULL,
+    created_at        DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- A holder of a key who stopped being an owner or admin (engine/names-list.ts reconcileHolders): marked once, logged
+-- once, and no longer counted as holding it. While a holder of the current key is marked, nothing is written until an
+-- admin who holds it makes a new generation (the write freeze, 409 `new_key_first`).
+CREATE TABLE IF NOT EXISTS names_dropped_holders (
+    holder_pubkey  TEXT NOT NULL,
+    key_id         TEXT NOT NULL,
+    dropped_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (holder_pubkey, key_id)
+);
+
+-- A confirmation (design §4.1): this key is the person on that entry, confirmed by that admin on that date. It carries no
+-- name. Where a community asks two admins to confirm (node_config `names_two_admins`), one made while it has two or more
+-- admins waits for a second (`needs_second`). Never deleted: a revoked one stays as history. One live confirmation per
+-- member and per entry (the two partial indexes).
+CREATE TABLE IF NOT EXISTS confirmations (
+    id             TEXT PRIMARY KEY,
+    member_pubkey  TEXT NOT NULL,
+    entry_id       TEXT NOT NULL,
+    confirmed_by   TEXT NOT NULL,
+    confirmed_at   DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    needs_second   INTEGER NOT NULL DEFAULT 0 CHECK (needs_second IN (0, 1)),
+    seconded_by    TEXT,
+    seconded_at    DATETIME,
+    revoked_by     TEXT,
+    revoked_at     DATETIME,
+    -- `admin`: an admin revoked it; `removed`: the community or an admin removed the member; `account_deleted`: the member
+    -- deleted their account.
+    revoke_reason  TEXT CHECK (revoke_reason IS NULL OR revoke_reason IN ('admin', 'removed', 'account_deleted')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_confirmations_live_member ON confirmations(member_pubkey) WHERE revoked_at IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_confirmations_live_entry ON confirmations(entry_id) WHERE revoked_at IS NULL;
+
+-- Debts and a second chance (community modes slice 5, engine/names-debts.ts): a confirmed member who left in debt. The
+-- debt went to the Commons when they left; this says so, on the entry (by id only: the names are sealed). While `open`, no
+-- key is confirmed against the entry. Settled by a payment to the Commons (`settle_ref` the transaction), worked off
+-- (`repaying_pubkey`: every Bean above 0 they receive goes to the Commons until `repaid` reaches `amount`), or forgiven by
+-- a community Decision (`settle_ref` the Decision). Each record goes 3 years after `removed_at`, whatever its status.
+CREATE TABLE IF NOT EXISTS names_debts (
+    id               TEXT PRIMARY KEY,
+    entry_id         TEXT NOT NULL,
+    amount           REAL NOT NULL CHECK (amount > 0),
+    reason           TEXT NOT NULL CHECK (reason IN ('removed', 'account_deleted')),
+    removed_at       DATETIME NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'settled', 'forgiven')),
+    repaying_pubkey  TEXT,
+    repaid           REAL NOT NULL DEFAULT 0,
+    settled_how      TEXT CHECK (settled_how IS NULL OR settled_how IN ('pay_back', 'work_off', 'forgiven')),
+    settled_by       TEXT,
+    settled_at       DATETIME,
+    settle_ref       TEXT,
+    note             TEXT,
+    -- The work-off under way (engine/names-debts.ts): the confirmation that started it, and, once it set the 0 known
+    -- floor, the member's floor before ('default', 'frozen' or Beans) and the set_at it wrote. Its revoke puts back that
+    -- floor and nothing else, only while the floor is still the one it wrote.
+    work_off_confirmation_id TEXT,
+    work_off_floor_before    TEXT,
+    work_off_floor_set_at    TEXT,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_names_debts_entry ON names_debts(entry_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_names_debts_repaying ON names_debts(repaying_pubkey) WHERE status = 'open' AND repaying_pubkey IS NOT NULL;
+-- A member's payment to the Commons made FOR an open debt (POST /api/commons/pay with `debtId`), written with the payment.
+-- Only such a payment settles that debt by paying it back (engine/names-debts.ts settleByPayment), and only once: never a
+-- payment made for another debt or for none, never a repayment sweep's own row. Kept off the memo, which others may read.
+CREATE TABLE IF NOT EXISTS names_debt_payments (
+    transaction_id   TEXT PRIMARY KEY,
+    debt_id          TEXT NOT NULL,
+    payer_pubkey     TEXT NOT NULL,
+    amount           REAL NOT NULL CHECK (amount > 0),
+    paid_at          DATETIME NOT NULL,
+    updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_names_debt_payments_debt ON names_debt_payments(debt_id);
+
+-- A member's money write made safe to retry (engine/money-requests.ts; POST /api/commons/pay first): the id the app made
+-- for one payment, written with the payment, and the answer it got, which a repeat with the same id gets back without paying
+-- again. `fingerprint` is what the payment was, so the same id for a different one is refused. Kept 7 days (the age rule).
+CREATE TABLE IF NOT EXISTS money_requests (
+    payer_pubkey     TEXT NOT NULL,
+    request_id       TEXT NOT NULL,
+    route            TEXT NOT NULL,
+    fingerprint      TEXT NOT NULL,
+    answer           TEXT NOT NULL,
+    created_at       DATETIME NOT NULL,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (payer_pubkey, request_id)
+);
+CREATE INDEX IF NOT EXISTS idx_money_requests_created ON money_requests(created_at);
+
+-- The Community health panel (community modes slice 6, engine/community-health.ts): every opening of the exceptions list,
+-- who and when (design §4.4, §7.1: the watchers are watched), and every other look an admin takes at one member's
+-- balance outside that member's consent: while removing them (`subject_pubkey` is whose). And every look an admin takes
+-- at trades and alerts (queue item 29, Marty 4 Oct): the disputes list and one dispute (`detail` is a JSON array of the
+-- trade ids shown), the escrows a member's removal left stuck on an older node (`detail` the same), and the fraud
+-- alerts, one line per member they named (`subject_pubkey`). A look an automation token made names the token
+-- (`token_id`, `token_name`; never its secret) beside its maker (`actor_pubkey`), so a script's look isn't taken for a
+-- person's; NULL for a person's own session. Every owner and admin reads it; no member does.
+CREATE TABLE IF NOT EXISTS health_access_log (
+    id             TEXT PRIMARY KEY,
+    actor_pubkey   TEXT NOT NULL,
+    action         TEXT NOT NULL CHECK (action IN ('exceptions_opened', 'offboard_preview', 'offboard_settled',
+                                                   'disputes_listed', 'dispute_opened', 'alerts_read',
+                                                   'stranded_escrows_read')),
+    subject_pubkey TEXT,
+    detail         TEXT,
+    token_id       TEXT,
+    token_name     TEXT,
+    at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- A member's consent at joining a known community (design §4.4, §7.5): when, and which text (`version` = wording:debt
+-- line:days). Without a row, a member is in no exception. One row per member; consenting again replaces it.
+CREATE TABLE IF NOT EXISTS known_consents (
+    member_pubkey  TEXT PRIMARY KEY,
+    version        TEXT NOT NULL,
+    consented_at   DATETIME NOT NULL,
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- A member's consent history: every agreement and every withdrawal (GDPR Art. 7(3): a member withdraws at any time, as
+-- easily as they agreed). Withdrawing deletes their known_consents row with its tombstone, so they are in no exception from
+-- that moment, on a standby too;
+-- this keeps that it happened, and to which text. Only the member reads their own.
+CREATE TABLE IF NOT EXISTS known_consent_log (
+    id             TEXT PRIMARY KEY,
+    member_pubkey  TEXT NOT NULL,
+    action         TEXT NOT NULL CHECK (action IN ('agreed', 'withdrawn')),
+    version        TEXT NOT NULL,
+    at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_known_consent_log_member ON known_consent_log(member_pubkey, at);
+
+-- The known floor (community modes slice 4, config/known-floor.ts): an admin's exception for one member's known grant.
+-- `amount` replaces the community's known floor for them (lower: a training limit; higher: up to the cap); `frozen` makes
+-- it 0. Lowering never takes Beans back: a member below their new floor is spend-frozen until they climb back.
+CREATE TABLE IF NOT EXISTS known_floor_exceptions (
+    member_pubkey  TEXT PRIMARY KEY,
+    amount         INTEGER,
+    frozen         INTEGER NOT NULL DEFAULT 0 CHECK (frozen IN (0, 1)),
+    set_by         TEXT NOT NULL,
+    set_at         DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- Every change to the known floor, the cap, the dial or a member's exception (design §4.2, §7.3): every owner and admin
+-- reads it. `member_pubkey` is null for a community-wide setting.
+CREATE TABLE IF NOT EXISTS known_floor_log (
+    id             TEXT PRIMARY KEY,
+    actor_pubkey   TEXT NOT NULL,
+    action         TEXT NOT NULL,
+    member_pubkey  TEXT,
+    old_value      TEXT,
+    new_value      TEXT,
+    at             DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at     DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
+-- Who opened, exported or changed the names list, and when (design §4.4, §7.1: the watchers are watched). Every owner and
+-- admin reads it. `actor_pubkey` is the admin, or `node` for what the node did itself (a holder dropped); `subject_pubkey`
+-- the member confirmed or the admin the keys were sent to (every automatic send is a line: `key_shared`). A phone taking
+-- its admin's locked copy back is a line (`copy_restored`); saving one is not.
+CREATE TABLE IF NOT EXISTS names_access_log (
+    id              TEXT PRIMARY KEY,
+    actor_pubkey    TEXT NOT NULL,
+    action          TEXT NOT NULL CHECK (action IN ('read', 'export', 'add', 'edit', 'delete', 'confirm', 'second', 'revoke',
+                                                    'key_made', 'key_changed', 'key_shared', 'holder_dropped', 'settings',
+                                                    'copy_restored')),
+    entry_id        TEXT,
+    subject_pubkey  TEXT,
+    at              DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_names_access_log_at ON names_access_log(at);
 
 -- 20b. Deferred Wage Claims (docs/the-commons.md §2.4 Rule 6)
 -- A keeper payment refused by Rule 5 (in deficit) or Rule 6 (capped by earned surplus)
@@ -1175,7 +1794,9 @@ CREATE TABLE IF NOT EXISTS deferred_wage_claims (
     amount            REAL NOT NULL,
     status            TEXT NOT NULL DEFAULT 'pending',
     created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    paid_at           DATETIME
+    paid_at           DATETIME,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_deferred_claims_tx_active
 ON deferred_wage_claims(transaction_id)
@@ -1293,12 +1914,30 @@ CREATE TABLE IF NOT EXISTS federation_links (
     -- Starts at 0 — a link with no ceiling can hold a balance and show it, but cannot spend. Deliberate:
     -- the link is created automatically, so anything it could do unattended must start switched off.
     commission_ceiling REAL NOT NULL DEFAULT 0 CHECK (commission_ceiling >= 0),
-    created_at         DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    created_at         DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 -- Answers "is this treasury a federation link?" for the Commons list, which reads every treasury and
 -- would otherwise scan this table per row. UNIQUE because one treasury backs exactly one peer: sharing
 -- one across two links would pool two separate obligations into one pot.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_federation_links_treasury ON federation_links(treasury_pubkey);
+
+-- Which treasury was made as the link for which peer: written by ensureFederationLink (federation-link.ts) in the same
+-- transaction that creates the link's treasury, and by nothing else, so no route or member path can set it. It is the
+-- only evidence findLinkTreasury takes that a treasury no link row names is a link's, for this peer: never its name,
+-- its callsign or a missing photo, which a member's own enterprise can have. It outlives a lost link row, and it is
+-- copied to a standby verbatim (a plain table, engine/replication-manifest.ts), so a promoted server has it too.
+CREATE TABLE IF NOT EXISTS federation_link_treasuries (
+    treasury_pubkey TEXT PRIMARY KEY REFERENCES members(public_key),
+    -- The libp2p peer id the treasury was made for (federation_links.peer_id). Not unique: a peer whose linked
+    -- treasury was pruned gets a new one.
+    peer_id         TEXT NOT NULL,
+    created_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_federation_link_treasuries_peer ON federation_link_treasuries(peer_id);
 
 -- Onboarding funnel: how many people try to join, and where they stop. Counts only the steps the node
 -- cannot reconstruct afterwards — a rejected invite code leaves no row behind, so it has to be counted
@@ -1328,6 +1967,17 @@ CREATE TABLE IF NOT EXISTS onboarding_funnel (
 -- visitor is not a signup, and a federated listing is not somebody getting started here.
 CREATE INDEX IF NOT EXISTS idx_members_joined_at_local ON members(joined_at) WHERE home_node_url IS NULL;
 CREATE INDEX IF NOT EXISTS idx_posts_author_created_local ON posts(author_pubkey, created_at) WHERE origin_node IS NULL;
+
+-- 20b. Web app visits a day (engine/web-visits.ts), shown to the operator on the manager's Home.
+-- One row per UTC day and these three columns only: never an address, a browser, a hash, a cookie or a member.
+-- `uniques` is counted in memory under a key that lives for the day and is never stored; only the count is here.
+-- Rows older than 400 days are deleted with no tombstone. Node-local: a standby counts its own
+-- (engine/replication-manifest.ts).
+CREATE TABLE IF NOT EXISTS web_visit_days (
+    day     TEXT PRIMARY KEY,                          -- YYYY-MM-DD, UTC
+    visits  INTEGER NOT NULL DEFAULT 0 CHECK (visits >= 0),
+    uniques INTEGER NOT NULL DEFAULT 0 CHECK (uniques >= 0)
+);
 
 -- 21. Mirror Sync Audit Log (#134)
 -- Permanent audit trail: every importRemoteState() call writes one row recording
@@ -1384,11 +2034,17 @@ CREATE TABLE IF NOT EXISTS pricing_reports (
     report_type     TEXT NOT NULL CHECK (report_type IN ('too_high', 'too_low', 'other')),
     comment         TEXT,
     status          TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'dismissed')),
-    created_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    created_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_pricing_reports_status ON pricing_reports(status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_pricing_reports_item ON pricing_reports(item_id);
+-- A member's reports of the last day, counted at each one they send (db/pricing-guide-db.ts PRICE_REPORT_RULES), and the
+-- month-old reports without a member's key, pruned at each such report: searches, never a scan of the table.
+CREATE INDEX IF NOT EXISTS idx_pricing_reports_reporter ON pricing_reports(reporter_pubkey, created_at);
+CREATE INDEX IF NOT EXISTS idx_pricing_reports_created ON pricing_reports(created_at);
 
 -- ===================== LIVING ACTIVITY WATERFALL (#208) =====================
 -- Real-time ambient community activity feed (joins, completed trades, ratings, new posts).
@@ -1398,7 +2054,9 @@ CREATE TABLE IF NOT EXISTS activity_feed (
     actor_pubkey  TEXT NOT NULL,
     target_pubkey TEXT,
     metadata      TEXT,
-    created_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    created_at    DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_activity_feed_created ON activity_feed(created_at DESC, id DESC);
@@ -1431,9 +2089,15 @@ CREATE TABLE IF NOT EXISTS creator_channels (
     -- Whether the node can list this channel's items unaided (YouTube/RSS = 1). Instagram and
     -- TikTok cannot be enumerated without OAuth, so they arrive one item at a time and stay 0.
     supports_autolist INTEGER NOT NULL DEFAULT 0,
-    -- Set only by a completed OAuth connection. It is the ONLY proof that a handle belongs to the
-    -- member claiming it — a typed handle is a claim, not a fact.
+    -- Set only when THIS node asked the platform who a token belongs to and the platform named
+    -- exactly this channel's account (engine/platform-identity.ts, #1830). It is the ONLY proof that
+    -- a handle belongs to the member claiming it — a typed handle is a claim, not a fact.
     oauth_verified_at DATETIME,
+    -- The platform's stable id for that account (TikTok open_id, Instagram user_id), so a renamed
+    -- account keeps its badge on reconnect. Owner-only; NULLed with the badge and on delete.
+    platform_account_id TEXT,
+    -- The handle the platform named at the last verification. NULLed with the badge and on delete.
+    verified_handle   TEXT,
     -- Last post count seen on the channel, for the "you've posted 2 new things" nudge. A
     -- watermark, never a backlog: it advances on dismissal as well as on action.
     post_count_seen   INTEGER,
@@ -1528,7 +2192,7 @@ CREATE TABLE IF NOT EXISTS decisions (
     author_pubkey        TEXT NOT NULL REFERENCES members(public_key),
     title                TEXT NOT NULL,
     description          TEXT NOT NULL,
-    touches              TEXT NOT NULL CHECK (touches IN ('member', 'pool')),
+    touches              TEXT NOT NULL CHECK (touches IN ('member', 'pool', 'scope')),
     effect               TEXT NOT NULL,
     subject              TEXT,
     params               TEXT,
@@ -1555,7 +2219,14 @@ CREATE TABLE IF NOT EXISTS decisions (
     admin_halted_at      DATETIME,
     admin_halted_by      TEXT REFERENCES members(public_key) ON DELETE SET NULL,
     admin_halt_reason    TEXT,
-    updated_at           DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+    updated_at           DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- Whose Decision it is (DESIGN-group-decisions §2.1): the whole community, one enterprise's keepers (scope_id = the
+    -- enterprise's pubkey) or one chat group's members (scope_id = the group's id, slice S3). A scoped Decision touches only
+    -- its own scope ('scope') and its roll is frozen in decision_electors.
+    scope_kind           TEXT NOT NULL DEFAULT 'community' CHECK (scope_kind IN ('community', 'enterprise', 'group')),
+    scope_id             TEXT,
+    CHECK ((scope_kind = 'community') = (scope_id IS NULL)),
+    CHECK ((scope_kind = 'community') = (touches != 'scope'))
 );
 CREATE INDEX IF NOT EXISTS idx_decisions_status ON decisions(status);
 CREATE INDEX IF NOT EXISTS idx_decisions_closes_at ON decisions(closes_at);
@@ -1563,9 +2234,8 @@ CREATE INDEX IF NOT EXISTS idx_decisions_author ON decisions(author_pubkey);
 CREATE INDEX IF NOT EXISTS idx_decisions_created_at ON decisions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_decisions_tick_open ON decisions(status, closes_at ASC);
 CREATE INDEX IF NOT EXISTS idx_decisions_tick_grace ON decisions(status, grace_period_ends_at ASC);
--- One open Decision per member author. The node itself (SYSTEM) opens one "Keep this suspension?" vote per
--- emergency suspension, so its own Decisions are exempt.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_decisions_member_author_open ON decisions(author_pubkey) WHERE status = 'open' AND author_pubkey != 'SYSTEM';
+-- One open Decision per member author per scope (idx_decisions_member_author_open) is made in db.ts after the scope columns
+-- exist on an older table (decision-scope-migration.ts). The node itself (SYSTEM) is exempt.
 CREATE INDEX IF NOT EXISTS idx_decisions_status_created ON decisions(status, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS decision_votes (
@@ -1581,6 +2251,32 @@ CREATE TABLE IF NOT EXISTS decision_votes (
 );
 CREATE INDEX IF NOT EXISTS idx_decision_votes_voter ON decision_votes(voter_pubkey);
 -- idx_decision_votes_decision dropped: redundant with PRIMARY KEY (decision_id, voter_pubkey) prefix
+
+-- The roll of a scoped Decision, frozen when it opens (DESIGN-group-decisions §2.2, §2.6). Written only by the engine:
+-- every keeper on the roll at opening is 'on'; one who leaves (steps down, or is suspended) is 'left' and their vote is
+-- dropped; one removed by the lead stays 'on'. A community Decision has no rows here.
+CREATE TABLE IF NOT EXISTS decision_electors (
+    decision_id   TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
+    member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
+    role_at_open  TEXT NOT NULL,
+    status        TEXT NOT NULL DEFAULT 'on' CHECK (status IN ('on', 'left')),
+    created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (decision_id, member_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_decision_electors_member ON decision_electors(member_pubkey);
+
+-- A chat group its members closed by a Decision (close_group, DESIGN-group-decisions §2.3, slice S3). The group's row stays,
+-- so "Your groups" and its history stay honest: it is shown closed, its chat is read-only, it takes nobody new and no new
+-- vote, and its posts are cancelled. Written only by decisions-engine (closeGroupByVote). A plain table: copied to a standby
+-- verbatim (engine/replication-manifest.ts).
+CREATE TABLE IF NOT EXISTS group_closures (
+    group_id      TEXT PRIMARY KEY REFERENCES groups(id) ON DELETE CASCADE,
+    decision_id   TEXT NOT NULL,
+    closed_at     DATETIME NOT NULL,
+    created_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    updated_at    DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
 
 -- 24. Enterprise Backing Pledges (docs/the-commons.md §2.4 Rules 1-4, §6 Slice 4)
 -- A keeper pledges a portion of their own earned credit to back an enterprise's credit floor.
@@ -1606,7 +2302,12 @@ CREATE TABLE IF NOT EXISTS groups (
     name TEXT NOT NULL,
     slug TEXT UNIQUE NOT NULL,
     description TEXT,
-    avatar_url TEXT,
+    -- The group's own picture is in group_pictures (#1486), as a member's photo is in member_photos: this row keeps only
+    -- its reference (@beanpool/core avatarRefOf: its version, or a shipped picture's name), which its URL is made from,
+    -- and its size. Written together by one writer (@beanpool/engine groups.ts setGroupPicture). db.ts
+    -- moveGroupPicturesOutOfRows moved the pictures out of the old `avatar_url` column.
+    avatar_ref TEXT,
+    avatar_bytes INTEGER,
     category TEXT DEFAULT 'social' CHECK (category IN ('working_group', 'social', 'guild', 'project', 'general')),
     created_by TEXT NOT NULL REFERENCES members(public_key),
     -- The LEAD convenor (2026-09-23). One per group: the creator to begin with, and it moves only by hand-over,
@@ -1624,6 +2325,15 @@ CREATE INDEX IF NOT EXISTS idx_groups_updated_at ON groups(updated_at);
 CREATE INDEX IF NOT EXISTS idx_groups_slug ON groups(slug);
 CREATE INDEX IF NOT EXISTS idx_groups_created_by ON groups(created_by);
 
+-- A group's own picture, exactly as it was set (a data URL, bare base64 or a shipped `bundled://` name), out of its row
+-- so no read of groups reads it (#1486; a list of 100 groups with a 1.84 MB picture each ran a 256 MB heap out of
+-- memory). Served by GET /api/groups/:id/picture to a URL carrying its key; travels to a standby in its group's row
+-- (engine/replication-manifest.ts).
+CREATE TABLE IF NOT EXISTS group_pictures (
+    group_id TEXT PRIMARY KEY,
+    picture TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS group_members (
     group_id TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
     member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
@@ -1640,6 +2350,12 @@ CREATE TABLE IF NOT EXISTS group_members (
     -- Only people who were convenors before a silent lead's last activity vote on replacing them
     -- (engine/group-succession.ts). NULL on a row written before the column existed: read as joined_at.
     role_since DATETIME,
+    -- The first epoch of the group's chat this membership holds keys from (engine/group-keys.ts fromEpochOf), set BY
+    -- NUMBER in the transaction that makes the row active: the epoch that admission stored, or the next one when it
+    -- carried none (1 for a group's creator). A timestamp is not the rule: two clocks' stamps cannot say which epoch
+    -- came after a join (DESIGN-group-chat-epochs-over-time-fable.md §4). A re-key keeps it; a re-join sets it afresh.
+    -- NULL only on a row no code wrote, read by the old stored_at >= joined_at rule.
+    from_epoch INTEGER,
     PRIMARY KEY (group_id, member_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_group_members_pubkey ON group_members(member_pubkey);
@@ -1679,27 +2395,82 @@ END;
 -- list and unread counts; every read and post re-checks group_members, never the mirror.
 
 -- Per-member, per-chat mute (decision 12): 8 hours, a week, or always (muted_until NULL). An @mention of the
--- member still notifies. Works for any conversation the member is in — DM, group, event, enterprise.
+-- member still notifies. Works for any conversation the member is in — DM, group, event, enterprise. Copied to a
+-- standby verbatim (a plain table, engine/replication-manifest.ts), so a muted chat stays muted after a take-over.
 CREATE TABLE IF NOT EXISTS chat_mutes (
     conversation_id TEXT NOT NULL,
     member_pubkey   TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     muted_until     DATETIME,
     created_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (conversation_id, member_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_chat_mutes_member ON chat_mutes(member_pubkey);
 
 -- A keeper's read cursor on their enterprise's thread, for the unread count in "Your groups". Deliberately NOT a
 -- conversation_participants row: the generic messaging routes read a participant row as the right to post, and an
--- enterprise thread is written only through its own route (engine/enterprise-thread.ts). Node-local, like mutes.
+-- enterprise thread is written only through its own route (engine/enterprise-thread.ts). Copied to a standby verbatim,
+-- like mutes (a plain table, engine/replication-manifest.ts).
 CREATE TABLE IF NOT EXISTS thread_read_cursors (
     conversation_id TEXT NOT NULL,
     member_pubkey   TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     last_read_at    DATETIME NOT NULL,
     created_at      DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (conversation_id, member_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_thread_read_cursors_member ON thread_read_cursors(member_pubkey);
+
+-- A group chat's keys (group chats step 2; scratch/global-node/DESIGN-group-chat-encryption-fable.md §2 and
+-- DESIGN-group-chat-wrap-provenance-fable.md §5.3). Each membership state of a group is an epoch with a random key made
+-- on a member's phone; the node holds each epoch's signed record (who made it, why, and three digests: a commitment to
+-- the key, the recipients, the wraps) and one wrap of the key per member. It can open none. No secret here: a wrap opens
+-- only with its recipient's private key. Copied to a standby verbatim (plain tables, engine/replication-manifest.ts).
+-- No foreign keys: a standby's copy may bring a wrap before its member's row, and a re-key deletes the old key's wraps
+-- itself (engine/key-move.ts).
+CREATE TABLE IF NOT EXISTS group_key_epochs (
+    group_id        TEXT NOT NULL,
+    epoch           INTEGER NOT NULL,
+    created_by      TEXT NOT NULL,
+    reason          TEXT NOT NULL CHECK (reason IN ('start', 'join', 'approve', 'invite', 'remove', 'leave', 'rekey', 'rotate')),
+    -- Whose membership changed; NULL for 'start' and 'rotate'.
+    subject_pubkey  TEXT,
+    -- The maker's own time, exactly as signed.
+    created_at      TEXT NOT NULL,
+    key_commit      TEXT NOT NULL,
+    members_digest  TEXT NOT NULL,
+    wraps_digest    TEXT NOT NULL,
+    sig             TEXT NOT NULL,
+    -- When this node stored it. Informational: which epochs a member holds is group_members.from_epoch, a number.
+    stored_at       TEXT NOT NULL,
+    -- Set on the current epoch when the membership changed without a new one (a leaver, a prune, an app that sent none):
+    -- the next line refused until a member rotates.
+    stale_since     TEXT,
+    updated_at      DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (group_id, epoch)
+);
+CREATE TABLE IF NOT EXISTS group_key_wraps (
+    group_id         TEXT NOT NULL,
+    epoch            INTEGER NOT NULL,
+    recipient_pubkey TEXT NOT NULL,
+    wrapper_pubkey   TEXT NOT NULL,
+    eph_pub          TEXT NOT NULL,
+    nonce            TEXT NOT NULL,
+    wrapped          TEXT NOT NULL,
+    -- A top-up's signature by its wrapper; NULL for a wrap that came in its epoch's record (the record's maker made it).
+    sig              TEXT,
+    created_at       TEXT NOT NULL,
+    updated_at       DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- When the recipient said this wrap does not open (POST …/keys/:epoch/reject; DESIGN-group-chat-epochs-over-time-fable.md
+    -- §1). Kept, never deleted: a record's wraps are its maker's signed set, and the row names who handed out a bad key.
+    -- A live wrap has none; a slot holds at most one live wrap, and one row per wrapper ever.
+    rejected_at      TEXT,
+    PRIMARY KEY (group_id, epoch, recipient_pubkey, wrapper_pubkey)
+);
+CREATE INDEX IF NOT EXISTS idx_group_key_wraps_recipient ON group_key_wraps(recipient_pubkey);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_group_key_wraps_live ON group_key_wraps(group_id, epoch, recipient_pubkey) WHERE rejected_at IS NULL;
 
 -- Convenor succession (answer B): when a group's only convenor has shown no node activity for 30 days, any
 -- member may propose a member as convenor. Members vote yes or no for 14 days; more than half of those who
@@ -1715,7 +2486,9 @@ CREATE TABLE IF NOT EXISTS group_convenor_proposals (
     deadline_at      DATETIME NOT NULL,
     executed_at      DATETIME,
     -- Why a cancelled proposal closed: 'rejected', 'convenor_returned', 'candidate_gone', 'candidate_ineligible', 'no_longer_needed'.
-    closed_reason    TEXT
+    closed_reason    TEXT,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_group_convenor_proposals_active_unique
 ON group_convenor_proposals(group_id) WHERE status = 'active';
@@ -1728,6 +2501,8 @@ CREATE TABLE IF NOT EXISTS group_convenor_votes (
     voter_pubkey TEXT NOT NULL,
     choice       TEXT NOT NULL CHECK (choice IN ('yes', 'no')),
     voted_at     DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (proposal_id, voter_pubkey)
 );
 
@@ -1743,10 +2518,32 @@ CREATE TABLE IF NOT EXISTS rekey_requests (
     status           TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'cancelled', 'expired')),
     created_at       DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     expires_at       DATETIME NOT NULL,
-    completed_at     DATETIME
+    completed_at     DATETIME,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The member’s status before the code suspended them; a cancelled code puts it back (NULL on a code made before it was kept).
+    prior_status     TEXT,
+    -- Wrong numbers the admin typed for this code's phones (engine/rekey-redeem.ts bindRekeyByMatch); the third stops the code.
+    wrong_matches    INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_rekey_requests_code ON rekey_requests(code);
 CREATE INDEX IF NOT EXISTS idx_rekey_requests_old ON rekey_requests(old_pubkey);
+
+-- A phone that asked for a re-key code (engine/rekey-redeem.ts, design scratch/global-node/DESIGN-rekey-redeem-fable.md §4): the
+-- key it wants bound and the two digits it shows. Scanning or typing the code binds nothing: the admin binds the key whose
+-- digits match the phone in front of them, or declines it. One row per key per code; they live as long as the code's row.
+CREATE TABLE IF NOT EXISTS rekey_proposals (
+    code         TEXT NOT NULL,
+    new_pubkey   TEXT NOT NULL,
+    match        TEXT NOT NULL CHECK (length(match) = 2),
+    proposed_at  DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    declined_at  DATETIME,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at   DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    PRIMARY KEY (code, new_pubkey)
+);
+-- Two phones waiting on one code never show the same digits.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_rekey_proposals_live_match ON rekey_proposals(code, match) WHERE declined_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS rekey_audit_log (
     id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1761,11 +2558,18 @@ CREATE TABLE IF NOT EXISTS rekey_audit_log (
 CREATE INDEX IF NOT EXISTS idx_rekey_audit_log_old ON rekey_audit_log(old_pubkey);
 CREATE INDEX IF NOT EXISTS idx_rekey_audit_log_new ON rekey_audit_log(new_pubkey);
 
+-- A completed re-key's succession statement (group chats, DESIGN-group-chat-line-display-fable.md §5): the new key's
+-- signature naming this key as its own before it (`succession_sig`), over the `succession_at` it signed. Set once, by the
+-- member's new key (POST /api/community/me/key-succession), never changed. `succession_stored_at` is this node's clock
+-- when it was set: a delta finds an attested row by it, since `invalidated_at` does not move.
 CREATE TABLE IF NOT EXISTS invalidated_keys (
-    public_key     TEXT PRIMARY KEY,
-    reason         TEXT NOT NULL,
-    invalidated_at DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    rekeyed_to     TEXT
+    public_key           TEXT PRIMARY KEY,
+    reason               TEXT NOT NULL,
+    invalidated_at       DATETIME NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    rekeyed_to           TEXT,
+    succession_sig       TEXT,
+    succession_at        TEXT,
+    succession_stored_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_invalidated_keys_rekeyed_to ON invalidated_keys(rekeyed_to);
 
@@ -1779,7 +2583,9 @@ CREATE TABLE IF NOT EXISTS enterprise_keeper_requests (
     status            TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined', 'cancelled')),
     created_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     decided_at        DATETIME,
-    decided_by        TEXT REFERENCES members(public_key) ON DELETE SET NULL
+    decided_by        TEXT REFERENCES members(public_key) ON DELETE SET NULL,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_keeper_requests_enterprise ON enterprise_keeper_requests(enterprise_pubkey, status);
 CREATE INDEX IF NOT EXISTS idx_keeper_requests_member ON enterprise_keeper_requests(member_pubkey, status);
@@ -1801,7 +2607,9 @@ CREATE TABLE IF NOT EXISTS enterprise_succession_proposals (
     deadline_at       DATETIME,
     -- Why a cancelled proposal closed: 'rejected' (a yes majority is out of reach), 'expired',
     -- 'lead_returned', 'candidate_gone'.
-    closed_reason     TEXT
+    closed_reason     TEXT,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_succession_enterprise ON enterprise_succession_proposals(enterprise_pubkey, status);
 -- recordActivity looks up a lead's active proposals on every signed write.
@@ -1816,6 +2624,8 @@ CREATE TABLE IF NOT EXISTS enterprise_succession_votes (
     voter_pubkey      TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     voted_at          DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     choice            TEXT NOT NULL DEFAULT 'yes' CHECK (choice IN ('yes', 'no')),
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     PRIMARY KEY (proposal_id, voter_pubkey)
 );
 
@@ -1835,7 +2645,9 @@ CREATE TABLE IF NOT EXISTS enterprise_keeper_changes (
     applies_at        DATETIME NOT NULL,
     resolved_at       DATETIME,
     resolved_by       TEXT,
-    reason            TEXT
+    reason            TEXT,
+    -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
+    updated_at        DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
 );
 CREATE INDEX IF NOT EXISTS idx_keeper_changes_enterprise ON enterprise_keeper_changes(enterprise_pubkey, status);
 CREATE INDEX IF NOT EXISTS idx_keeper_changes_due ON enterprise_keeper_changes(applies_at) WHERE status = 'pending';

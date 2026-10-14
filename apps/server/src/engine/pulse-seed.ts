@@ -57,8 +57,8 @@ export function ensureBeanPoolIdentity(): string {
         if (existing.is_treasury === 1) return existing.public_key;
         // A person holds the reserved name. Rename them — same remedy Daily Pulse uses — and
         // leave their status entirely alone.
-        db.prepare(`UPDATE members SET callsign = ? WHERE public_key = ?`)
-            .run(`${BEANPOOL_CALLSIGN} ${existing.public_key.substring(0, 6)}`, existing.public_key);
+        db.prepare(`UPDATE members SET callsign = ?, profile_updated_at = ? WHERE public_key = ?`)
+            .run(`${BEANPOOL_CALLSIGN} ${existing.public_key.substring(0, 6)}`, new Date().toISOString(), existing.public_key);
     }
     return createTreasury(BEANPOOL_CALLSIGN, 'bundled://sprout', 0, { systemCreated: true }).publicKey;
 }

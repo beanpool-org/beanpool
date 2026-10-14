@@ -58,11 +58,12 @@ export function membersOnlyHere(ctx: Context): boolean {
 }
 
 /**
- * membersOnlyHere for a route that only READS other members (a member's standing and who brought them in), on the same
- * nodes: only a reader who reads as a member (viewerTier, readsAsMember) gets an answer. A suspended or disabled member
- * and a visitor are refused too, as a guest is.
+ * For a route that only READS other members (a member's standing and who brought them in): only a reader who reads as a
+ * member (viewerTier, readsAsMember) gets an answer, on every node (G9a on the global node; a local community since
+ * 2026-10-01, "nothing on a private node should be public now that we have a global node", where any key could walk the
+ * invite tree from one name). A suspended or disabled member and a visitor are refused too, as a guest is.
  */
 export function memberReadsOnlyHere(ctx: Context): boolean {
-    if (viewerTier(ctx) === 'member' || !getProfileSwitches().guestListingsOnly) return true;
+    if (viewerTier(ctx) === 'member') return true;
     return refuseMembersOnly(ctx);
 }

@@ -15,9 +15,10 @@
  *   7. the reverse migration (the rollback command, run as a command) restores the rows byte for byte;
  *   8. a standby (NODE_ROLE=backup) makes no key file, a main server makes one (0600), and an unreadable key
  *      file never stops a boot;
- *   9. moving a member to a new key (the re-key wizard) keeps their copy openable, and stamps what it moves;
- *  10. without the key file, a re-key is refused and changes nothing, and the same code works once the key is back;
- *  11. a copy locked with another key stays under the old key it is bound to, and the re-key does not wait on it.
+ *   9. moving a member to a new key (the re-key) deletes their own copies, which rebuild the replaced seed, with a
+ *      tombstone, and renames and stamps a copy they keep for someone else (#1768, Marty's pick 2, 2026-10-11);
+ *  10. without the key file, a re-key still completes: the copies are deleted, never opened;
+ *  11. a copy locked with another key is deleted with the rest, and the re-key completes.
  *  12. copies a main server dropped BEFORE the seal (re-deposits, removals, a purge, the way the code before it deleted:
  *      secure_delete off) are gone from state.db and its WAL after the upgrade's boot: one VACUUM, once, retried at the
  *      next boot when the disk has no room, and posts' search still finds the right post after it;
@@ -66,7 +67,7 @@ import { sealSeedToSso, openSeedFromSso, openShareFromSso } from '@beanpool/core
 import {
     CHILD, SEAL_CLI, SENTENCE, KEY_FILE, GOOGLE_SUB, WORDS, SEED, OLD_SEED_HEX, OLD_LOOKUP_SALT, OLD_ENROLMENTS, CLEARED_KEY,
     FTS_PROBE_WORD, type Sealed, type History, type StandbyScript, type Id, fakeCopy, needlesOf, copiesFoundIn, exportRow, idFromSeed,
-    newId, tempDir, runChild, resultOf, thrown, child, check, section, finish, sealLines, bootParent,
+    newId, tempDir, runChild, resultOf, thrown, child, check, section, finish, sealLines, bootParent, sealDay, SEAL_SINCE_DAY,
 } from './recovery-seal-test-harness.js';
 
 const SCRIPT = fileURLToPath(import.meta.url);
@@ -303,15 +304,17 @@ async function main(): Promise<void> {
         check(fs.readFileSync(path.join(badDir, KEY_FILE)).toString() === 'short', '...and is never overwritten: it may be the only copy someone can repair');
     });
 
-    // ── 9. a member moved to a new key keeps an openable copy ───────────────────────────────────
-    await section('9. moving a member to a new key keeps their copy openable', async () => {
+    // ── 9. a member moved to a new key: their own copies go, a copy they keep for someone moves ──
+    // Since #1768 (DESIGN-rekey-redeem-fable.md §4, Marty's pick 2, 2026-10-11) a re-key deletes the member's own copies:
+    // they rebuild the replaced seed, so a sign-in restore after the move would land on the key just replaced.
+    await section('9. moving a member to a new key deletes their own copies (with a tombstone) and renames a copy they keep', async () => {
         const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
         const m9 = newId();
         addMember(m9, 'SealRekey');
         const sealed9 = await sealSeedToSso(new Uint8Array(m9.seed), 'google', GOOGLE_SUB) as Sealed;
         const { res } = await deposit(m9, sealed9);
         check(res.status === 200, `setup: the member deposits a copy (got ${res.status})`);
-        // A copy another member holds for m9 (a member keeper), so the rename is seen too. Both rows stamped long ago.
+        // A copy m9 keeps for another member (a member keeper), so the rename is seen too. Stamped long ago.
         const other9 = newId();
         addMember(other9, 'SealRekeyOther');
         const keeperRowId = Number(db.prepare(`INSERT INTO recovery_shares
@@ -321,22 +324,20 @@ async function main(): Promise<void> {
         db.prepare('UPDATE recovery_shares SET updated_at = ? WHERE id IN (?, ?)').run(STALE, ownRowId, keeperRowId);
         const moved = newId();
         const { code } = issueRekeyCode(m9.pk, 'owner:password');
-        completeRekey(m9.pk, moved.pk, code, 'owner:password');
-        const shares = getCurrentShares(moved.pk);
-        check(shares.length === 1 && shares[0].encryptedShare === sealed9.encryptedShare && shares[0].kdfParams === sealed9.kdfParams,
-            'after the move, the copy is filed under the new key and still opens with the server\'s key');
-        const seed = shares[0] ? await openShareFromSso(shares[0] as Sealed, 'google', GOOGLE_SUB) : null;
-        check(!!seed && Buffer.from(seed).equals(m9.seed), '...to the seed it was made from');
-        const own = db.prepare('SELECT owner_pubkey, updated_at FROM recovery_shares WHERE id = ?').get(ownRowId) as any;
-        check(own?.owner_pubkey === moved.pk && own.updated_at > STALE,
-            `the moved copy is stamped, so a standby is sent the move (updated_at ${own?.updated_at})`);
+        const done = completeRekey(m9.pk, moved.pk, code, 'owner:password');
+        check(done.signInCopiesRemoved === 1, `the move removes the member's own copy (${done.signInCopiesRemoved})`);
+        check(getCurrentShares(moved.pk).length === 0 && getCurrentShares(m9.pk).length === 0,
+            'neither key holds a copy of the replaced seed: the member links their sign-in again');
+        check(!db.prepare('SELECT 1 FROM recovery_shares WHERE id = ?').get(ownRowId), '...its row is gone from the table');
+        check(!!db.prepare("SELECT 1 FROM tombstones WHERE table_name = 'recovery_shares' AND row_key LIKE ?").get(`${m9.pk}|%`),
+            '...with a tombstone, so a standby drops it too');
         const keeper = db.prepare('SELECT holder_ref, updated_at FROM recovery_shares WHERE id = ?').get(keeperRowId) as any;
         check(keeper?.holder_ref === moved.pk && keeper.updated_at > STALE,
-            `...and so is a copy the member keeps for someone else, renamed to the new key (updated_at ${keeper?.updated_at})`);
+            `a copy the member keeps for someone else is renamed to the new key, and stamped (updated_at ${keeper?.updated_at})`);
     });
 
-    // ── 10. without the key file, a re-key moves nothing, and runs once the key is back ────────
-    await section('10. without the key file, a re-key is refused and changes nothing, and runs once the key is back', async () => {
+    // ── 10. without the key file, a re-key still completes: nothing is opened ───────────────────
+    await section('10. without the key file, a re-key completes: the member\'s copies are deleted, never opened', async () => {
         const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
         const { getMember } = await import('./state-engine.js');
         const m10 = newId();
@@ -352,26 +353,16 @@ async function main(): Promise<void> {
         try {
             let refused = '';
             try { completeRekey(m10.pk, moved.pk, code, 'owner:password'); } catch (e) { refused = (e as Error)?.message ?? String(e); }
-            check(refused === SENTENCE, `the re-key is refused with the sentence (got ${refused || 'no refusal'})`);
+            check(refused === '' && !!getMember(moved.pk) && !getMember(m10.pk), `the re-key completes without the key (${refused || 'no refusal'})`);
             const under = (pk: string) => (db.prepare('SELECT COUNT(*) AS n FROM recovery_shares WHERE owner_pubkey = ?').get(pk) as any).n;
-            check(under(m10.pk) === 1 && under(moved.pk) === 0, 'the copy stays under the old key, where it is bound');
-            check(!!getMember(m10.pk) && !getMember(moved.pk), '...and nothing else moved: the whole re-key rolled back');
-            const req = db.prepare('SELECT status FROM rekey_requests WHERE code = ?').get(code) as any;
-            check(req?.status === 'pending', `the re-enrolment code is still pending (got ${req?.status})`);
-
-            if (saved) fs.writeFileSync(keyPath, saved, { mode: 0o600 });
-            completeRekey(m10.pk, moved.pk, code, 'owner:password');
-            const shares = getCurrentShares(moved.pk);
-            const seed = shares[0] ? await openShareFromSso(shares[0] as Sealed, 'google', GOOGLE_SUB) : null;
-            check(shares.length === 1 && !!seed && Buffer.from(seed).equals(m10.seed),
-                'with the key back, the same code moves the member, and the copy opens under the new key to their seed');
+            check(under(m10.pk) === 0 && under(moved.pk) === 0, 'and the copy is gone from both keys');
         } finally {
             if (saved && !fs.existsSync(keyPath)) fs.writeFileSync(keyPath, saved, { mode: 0o600 });
         }
     });
 
-    // ── 11. a copy another key locked stays where it is bound, and the re-key does not wait on it ──
-    await section('11. a copy locked with another key stays under the old key, where it still opens, and the re-key completes', async () => {
+    // ── 11. a copy another key locked goes too: it rebuilds the replaced seed all the same ──────
+    await section('11. a copy locked with another key is deleted with the rest, and the re-key completes', async () => {
         const { issueRekeyCode, completeRekey } = await import('./engine/member-wizards.js');
         const { getMember } = await import('./state-engine.js');
         const m11 = newId();
@@ -389,15 +380,9 @@ async function main(): Promise<void> {
             let threw = '';
             try { completeRekey(m11.pk, moved.pk, code, 'owner:password'); } catch (e) { threw = (e as Error)?.message ?? String(e); }
             check(threw === '' && !!getMember(moved.pk) && !getMember(m11.pk), `the re-key completes (${threw || 'no error'})`);
-            const row = db.prepare('SELECT owner_pubkey FROM recovery_shares WHERE id = ?').get(rowId) as any;
-            check(row?.owner_pubkey === m11.pk, 'the copy it cannot open stays under the old key it is bound to');
-            check(getCurrentShares(moved.pk).length === 0, '...so the new key holds no copy that could never open');
-
+            check(!db.prepare('SELECT 1 FROM recovery_shares WHERE id = ?').get(rowId), 'the copy it cannot open is deleted too: it rebuilds the replaced seed');
             fs.writeFileSync(keyPath, saved, { mode: 0o600 });
-            const back = getCurrentShares(m11.pk);
-            const seed = back[0] ? await openShareFromSso(back[0] as Sealed, 'google', GOOGLE_SUB) : null;
-            check(back.length === 1 && back[0].encryptedShare === sealed11.encryptedShare && !!seed && Buffer.from(seed).equals(m11.seed),
-                'with the key that locked it back, the copy left there still opens, to the seed it was made from');
+            check(getCurrentShares(moved.pk).length === 0 && getCurrentShares(m11.pk).length === 0, '...so no key holds it');
         } finally {
             fs.writeFileSync(keyPath, saved, { mode: 0o600 });
         }
@@ -476,7 +461,7 @@ async function main(): Promise<void> {
 
         // The main server upgrades: the wrap stamps every copy it holds, and its VACUUM runs. SINCE: its standby's last pull
         // before that, after the deletions.
-        const SINCE = '2026-06-03T00:00:00.000Z';
+        const SINCE = SEAL_SINCE_DAY;
         const me = resultOf(await runChild([SCRIPT], mainDir, { RECOVERY_SEAL_CHILD: 'main-export', NODE_ROLE: 'primary', SEAL_SINCE: SINCE }));
         const wrappedOnly = (rows: any[]) => rows.every(r => String(r.kdfParams).includes('node-wrap-xc20p-v1'));
         check(typeof me.cleared === 'string' && me.delta.length === current.length && me.full.length === current.length
@@ -630,7 +615,7 @@ async function main(): Promise<void> {
             put.run(o, ref, c.encryptedShare, c.shareIv, c.shareTag, crypto.randomBytes(16).toString('hex'), c.kdfParams, generation);
         const held = fakeCopy(), deleted = fakeCopy(), otherSignIn = fakeCopy();
         add(owner, 'google', 2, held);          // still held by the main server in the old form (one rolled back, say)
-        add(owner, 'github', 2, otherSignIn);   // same owner and generation, a sign-in the main server no longer holds
+        add(owner, 'apple', 2, otherSignIn);    // same owner and generation, a sign-in the main server no longer holds
         add(other, 'google', 1, deleted);       // deleted there before the seal
         add(other, 'facebook', 1, seal.sealRecoveryFields(fakeCopy(), seal.shareRowAad(other, 'sso')));  // deleted there after it: wrapped
         const count = () => db.prepare('SELECT COUNT(*) FROM recovery_shares').pluck().get() as number;
@@ -642,7 +627,7 @@ async function main(): Promise<void> {
             `after a delta nothing is removed, and the puller is asked once for a whole copy (${before - count()} removed)`);
 
         const wholeCopy = (db.prepare('SELECT owner_pubkey, generation, holder_type, holder_ref FROM recovery_shares').all() as any[])
-            .filter(r => !(r.owner_pubkey === other || (r.owner_pubkey === owner && r.holder_ref === 'github')))
+            .filter(r => !(r.owner_pubkey === other || (r.owner_pubkey === owner && r.holder_ref === 'apple')))
             .map(r => ({ ownerPubkey: r.owner_pubkey, generation: r.generation, holderType: r.holder_type, holderRef: r.holder_ref }));
         seal.clearCopiesDroppedBeforeSeal({ standby: true, wholeCopy });
         check(count() === before - 2 && JSON.stringify(refsOf(owner)) === '["google"]' && JSON.stringify(refsOf(other)) === '["facebook"]',
@@ -663,7 +648,7 @@ async function main(): Promise<void> {
         fs.writeFileSync(historyFile, JSON.stringify(h));
         // Its main server, on the code before the seal: every member deposits, then re-deposits. Then it upgrades: the wrap
         // stamps every copy, and its next delta carries them all, wrapped.
-        const SINCE = '2026-06-03T00:00:00.000Z';
+        const SINCE = SEAL_SINCE_DAY;
         resultOf(await runChild([SCRIPT], mainDir, { RECOVERY_SEAL_CHILD: 'pre-seal-history', SEAL_HISTORY: historyFile, SEAL_SIDE: 'main' }));
         const me = resultOf(await runChild([SCRIPT], mainDir, { RECOVERY_SEAL_CHILD: 'main-export', NODE_ROLE: 'primary', SEAL_SINCE: SINCE }));
         check(me.delta.length === N && me.delta.every((r: any) => String(r.kdfParams).includes('node-wrap-xc20p-v1')),
@@ -675,8 +660,8 @@ async function main(): Promise<void> {
         const script: StandbyScript = {
             resyncFirst: true, reconcileMinutes: 0, pulls: 4, watch: [...h.gen1, ...h.gen2],
             steps: [
-                owners.map((o, i) => exportRow(o, i, h.gen1[i], 1, '2026-06-01T00:00:00.000Z')),
-                owners.map((o, i) => exportRow(o, i, h.gen2[i], 2, '2026-06-02T00:00:00.000Z')),
+                owners.map((o, i) => exportRow(o, i, h.gen1[i], 1, sealDay(1))),
+                owners.map((o, i) => exportRow(o, i, h.gen2[i], 2, sealDay(2))),
                 me.delta,
             ],
         };
@@ -741,28 +726,34 @@ async function main(): Promise<void> {
             `at boot it waits: every copy it holds is in the old form (${brief(s.atBoot)})`);
         check(whole?.route === 'snapshot' && whole.snapshotCursor === null && delta?.route === 'delta',
             `its first pull is a routine whole copy, never a 304, then a delta (${JSON.stringify((s.pulls ?? []).map((p: any) => p.route))})`);
-        check(delta?.before?.rows === 0 && /removed 12 sign-in recovery copies its main server deleted before the seal/.test(r.stdout),
-            `the whole copy, which holds none of them, removes all ${N} (${brief(delta?.before)}; ${sealLines(r)})`);
+        // A whole copy is built from nothing in a staging database and swapped in at a restart (P2, services/stager.ts): the
+        // copies the main server no longer holds are never written to the new database, so there is nothing to remove from
+        // it and no free page to clear; the database it replaced, which holds them, is kept beside it until the next copy
+        // lands, and then deleted. (Before P2: the whole copy was imported over the standby's rows, removed all 12, and
+        // the standby cleared state.db by a VACUUM it didn't record.)
+        check(delta?.before?.rows === 0 && delta.before.previous === true && delta.before.inPrevious > 0,
+            `the whole copy, which holds none of them, is swapped in without them; the database it replaced still holds ${delta?.before?.inPrevious} (${brief(delta?.before)})`);
         check(delta?.before?.inFiles === 0,
             `...after which its running state.db, -wal and -shm hold none of the ${watch.length} copies deleted or dropped before the seal (found ${delta?.before?.inFiles}; ${before} older ones before)`);
         check(delta?.before?.cleared === null,
             `...and it records no clear: nothing yet shows its main server has sealed (${brief(delta?.before)})`);
-        const unrecorded = /holds no sign-in recovery copy now: the 12 sign-in recovery copies it held in the form stored before the seal are gone\. It cleared state\.db/;
-        check(unrecorded.test(r.stdout), '...and says so');
+        check(next?.before?.previous === false && next.before.inPrevious === 0,
+            `...and the delta after it lands and deletes the database it replaced: no file holds them any more (${JSON.stringify(next?.before && { previous: next.before.previous, inPrevious: next.before.inPrevious })})`);
         check(typeof next?.before?.cleared === 'string' && next.before.rows === 1 && next.before.unwrapped === 0 && next.before.inFiles === 0,
             `the delta that brings the first wrapped copy is when it records the clear (${brief(next?.before)})`);
 
         // (2) The same standby force-resynced from the main server, which holds no copy.
         const resyncDir = copyOf(pristine, 'all-deleted-resync');
         const resyncFile = path.join(tempDir('all-deleted-resync-script'), 'script.json');
-        fs.writeFileSync(resyncFile, JSON.stringify({ resyncFirst: true, reconcileMinutes: 0, pulls: 1, watch, steps: [[]] } satisfies StandbyScript));
+        fs.writeFileSync(resyncFile, JSON.stringify({ resyncFirst: true, reconcileMinutes: 0, pulls: 2, watch, steps: [[]] } satisfies StandbyScript));
         const rr = await runChild([SCRIPT], resyncDir, { RECOVERY_SEAL_CHILD: 'standby-script', NODE_ROLE: 'backup', SEAL_SCRIPT: resyncFile });
         const t = resultOf(rr);
         check(t.atBoot?.rows === N && t.resync?.ok === true && t.final?.rows === 0,
             `a force-resync from it leaves the standby holding no copy (${JSON.stringify({ boot: t.atBoot?.rows, resync: t.resync, after: t.final?.rows })})`);
         check(t.final?.inFiles === 0,
             `...and its running state.db, -wal and -shm hold none of the ${watch.length} copies deleted or dropped before the seal (found ${t.final?.inFiles})`);
-        check(t.final?.cleared === null && unrecorded.test(rr.stdout), `...and it records no clear, and says so (${brief(t.final)}; ${sealLines(rr)})`);
+        check(t.final?.cleared === null && t.final?.previous === false && t.final?.inPrevious === 0,
+            `...and it records no clear, and the delta after it deletes the database the copy replaced, which held them (${brief(t.final)}; ${JSON.stringify(t.final && { previous: t.final.previous, inPrevious: t.final.inPrevious })})`);
     });
 
     // ── 18. a rollback after the standby recorded its clear ────────────────────────────────────────
@@ -782,10 +773,10 @@ async function main(): Promise<void> {
         const script: StandbyScript = {
             resyncFirst: true, reconcileMinutes: 0, pulls: 5, watch: [...gen2, ...gen3],
             steps: [
-                wrapped(gen2, 2, '2026-06-02T00:00:00.000Z'),      // its main server has sealed: the seed is all wrapped
-                clientForm(gen2, 2, '2026-06-05T00:00:00.000Z'),   // the rollback command unwraps and stamps every copy
-                clientForm(gen3, 3, '2026-06-06T00:00:00.000Z'),   // the older code stores the re-deposits as the app sealed them
-                wrapped(gen3, 3, '2026-06-07T00:00:00.000Z'),      // the upgrade again: the wrap stamps every copy
+                wrapped(gen2, 2, sealDay(2)),      // its main server has sealed: the seed is all wrapped
+                clientForm(gen2, 2, sealDay(5)),   // the rollback command unwraps and stamps every copy
+                clientForm(gen3, 3, sealDay(6)),   // the older code stores the re-deposits as the app sealed them
+                wrapped(gen3, 3, sealDay(7)),      // the upgrade again: the wrap stamps every copy
             ],
         };
         fs.writeFileSync(scriptFile, JSON.stringify(script));

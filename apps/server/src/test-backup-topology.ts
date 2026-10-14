@@ -63,7 +63,7 @@ async function run() {
     console.log('Running Phase 1 one-directional backup topology tests...\n');
 
     initStateEngine();
-    const p2pNode = await startP2P(4018, 4019);
+    const p2pNode = await startP2P(0, 0);
     const nodeId = p2pNode.peerId.toString();
     const trustedAddr = `/ip4/127.0.0.1/tcp/4019/p2p/${nodeId}`;
 

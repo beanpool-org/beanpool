@@ -36,7 +36,7 @@
  * tells no watcher about them again (engine/place-watches.ts). It also lists the directory from its first minute. A
  * standby never fetches; a copy is its only writer until it takes over.
  */
-import { db } from '../db/db.js';
+import { db, rethrowUnlessRowRefused } from '../db/db.js';
 import { audienceOf } from '@beanpool/core';
 import { haversineKm, type SyncDirectoryCommunity } from '@beanpool/engine';
 
@@ -313,6 +313,7 @@ export function mergeReplicatedDirectory(communities: unknown): DirectoryMerge {
                 upsert.run(row.key, c.listed ? 1 : 0, ...columns(row), c.firstSeenAt, c.updatedAt);
                 merge.written++;
             } catch (e: any) {
+                rethrowUnlessRowRefused(e);
                 console.warn(`[Directory] A copied community could not be stored here, left out: ${e?.message || e}`);
                 merge.invalid++;
             }

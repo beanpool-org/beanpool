@@ -37,6 +37,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { spawnNode, runNodeChild, type NodeProc } from './takeover-test-harness.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 delete process.env.CF_RECORD_NAME;
 delete process.env.NODE_PROFILE;
@@ -58,8 +59,9 @@ async function child(): Promise<void> {
             se.seedGenesisMember(genesis, 'Gwen');
             setReplicationToken(a.replicationToken);
             for (const [key, name] of [[a.pat, 'Pat'], [a.hana, 'Hana'], [a.olly, 'Olly']]) {
-                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url)
-                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, ?)`).run(key, name, genesis, `INV-${name}`, AVATAR);
+                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code)
+                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?)`).run(key, name, genesis, `INV-${name}`);
+                setMemberPhoto(db, key, AVATAR);
                 db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(key);
             }
             const { publicKey: mill } = se.createTreasury('Mill', AVATAR, 100);

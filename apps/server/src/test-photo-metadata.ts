@@ -39,11 +39,16 @@ import { initTls } from './services/tls.js';
 import { initStateEngine } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
+import { lockedGroupLine } from './group-test-payload.js';
 import { runPricingAggregationCycle } from './pricing-aggregator.js';
+import { getMemberPhoto, postPhotoUrl, setMemberPhoto } from '@beanpool/engine';
 
-const PORT = 8757;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
+// Step 7c: the password alone opens no admin route with 2FA off; the operator's calls carry an owner's automation token.
+let ADMIN: Record<string, string> = {};
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -616,6 +621,16 @@ async function signed(method: string, path: string, body: unknown, signer: Ident
     return { status: res.status, json };
 }
 
+/**
+ * A listing photo's address as a read of its listing hands it out, its key included on a local community, whose
+ * listings are its members' (engine/photo-keys.ts): the address of the photo as its row is now.
+ */
+function photoPathOf(postId: string, orderNum: number): string {
+    const row = db.prepare(`SELECT pp.updated_at, p.audience_scope FROM post_photos pp LEFT JOIN posts p ON p.id = pp.post_id
+                            WHERE pp.post_id = ? AND pp.order_num = ?`).get(postId, orderNum) as { updated_at: string | null; audience_scope: string | null } | undefined;
+    return postPhotoUrl(postId, orderNum, row?.updated_at, row?.audience_scope);
+}
+
 /** What an anonymous <img> gets. */
 async function fetchBytes(path: string): Promise<{ status: number; bytes: Buffer; type: string }> {
     const res = await fetch(`${BASE}${path}`);
@@ -649,13 +664,16 @@ async function partTwo(): Promise<void> {
     await initTls();
     initStateEngine();
     initAdminPassword();
+    ADMIN = ownerTokenHeaders('admin');
     const member = keypair();
     // Joined long ago with a photo and a name, so no new-account limit or profile gate is what answers.
-    db.prepare(`INSERT INTO members (public_key, callsign, avatar_url, status, joined_at, invited_by, invite_code)
-                VALUES (?, ?, ?, 'active', '2025-01-01T00:00:00.000Z', 'genesis', 'genesis')`)
-        .run(member.pub, `photo-${member.pub.slice(0, 6)}`, dataUrl('image/jpeg', CLEAN_JPEG));
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                VALUES (?, ?, 'active', '2025-01-01T00:00:00.000Z', 'genesis', 'genesis')`)
+        .run(member.pub, `photo-${member.pub.slice(0, 6)}`);
+    setMemberPhoto(db, member.pub, dataUrl('image/jpeg', CLEAN_JPEG));
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(member.pub);
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     console.log('\n── 2a. A post with a photo in each format: POST /api/marketplace/posts → GET …/photos/:n ──');
     const create = await signed('POST', '/api/marketplace/posts', {
@@ -668,7 +686,7 @@ async function partTwo(): Promise<void> {
     if (postId) {
         const photos = [[CAMERA_JPEG_STRIPPED, 'image/jpeg'], [CLEAN_PNG, 'image/png'], [CAMERA_WEBP_STRIPPED, 'image/webp']] as const;
         for (const [n, [expected, mime]] of photos.entries()) {
-            const got = await fetchBytes(`/api/marketplace/posts/${postId}/photos/${n}`);
+            const got = await fetchBytes(photoPathOf(postId, n));
             assert(got.status === 200 && got.type.startsWith(mime), `photo ${n} is served as ${mime} (${got.status} ${got.type})`);
             await served(`post photo ${n} (${mime})`, got.bytes, expected);
         }
@@ -679,8 +697,8 @@ async function partTwo(): Promise<void> {
             id: postId, authorPublicKey: member.pub, photos: [kept, dataUrl('image/jpeg', CAMERA_PROGRESSIVE_JPEG)],
         }, member);
         assert(edit.status === 200, `the edit is saved (${edit.status} ${edit.json?.error ?? ''})`);
-        await served('the photo the edit kept', (await fetchBytes(`/api/marketplace/posts/${postId}/photos/0`)).bytes, CAMERA_JPEG_STRIPPED);
-        await served('the photo the edit added', (await fetchBytes(`/api/marketplace/posts/${postId}/photos/1`)).bytes, CLEAN_PROGRESSIVE_JPEG);
+        await served('the photo the edit kept', (await fetchBytes(photoPathOf(postId, 0))).bytes, CAMERA_JPEG_STRIPPED);
+        await served('the photo the edit added', (await fetchBytes(photoPathOf(postId, 1))).bytes, CLEAN_PROGRESSIVE_JPEG);
     }
 
     console.log('\n── 2c. An event\'s photo: POST /api/marketplace/posts (type event) ──');
@@ -691,7 +709,7 @@ async function partTwo(): Promise<void> {
     }, member);
     const eventId = event.json?.post?.id as string | undefined;
     assert(event.status === 200 && !!eventId, `the event is created (${event.status} ${event.json?.error ?? ''})`);
-    if (eventId) await served('event photo', (await fetchBytes(`/api/marketplace/posts/${eventId}/photos/0`)).bytes, CAMERA_JPEG_STRIPPED);
+    if (eventId) await served('event photo', (await fetchBytes(photoPathOf(eventId, 0))).bytes, CAMERA_JPEG_STRIPPED);
 
     // The photo route serves the stored bytes under the declared type without looking at them, so bytes that are not
     // a picture the strip knows are refused, whatever the data URL says they are.
@@ -717,8 +735,8 @@ async function partTwo(): Promise<void> {
             id: postId, authorPublicKey: member.pub, photos: [`/api/marketplace/posts/${postId}/photos/0`, mislabelled],
         }, member);
         assert(heicEdit.status === 400, `and on an edit (${heicEdit.status} ${heicEdit.json?.error ?? ''})`);
-        await served('the post photo after the refused edit', (await fetchBytes(`/api/marketplace/posts/${postId}/photos/0`)).bytes, CAMERA_JPEG_STRIPPED);
-        const second = await fetchBytes(`/api/marketplace/posts/${postId}/photos/1`);
+        await served('the post photo after the refused edit', (await fetchBytes(photoPathOf(postId, 0))).bytes, CAMERA_JPEG_STRIPPED);
+        const second = await fetchBytes(photoPathOf(postId, 1));
         assert(leak(second.bytes) === null && second.bytes.equals(CLEAN_PROGRESSIVE_JPEG), `the refused edit left the second photo as it was (${second.status})`);
     }
 
@@ -762,12 +780,12 @@ async function partTwo(): Promise<void> {
     }, member);
     assert(bareHeicEnt.status === 400, `an enterprise photo sent as bare base64 of a HEIC (GPS inside) is refused, not stored (${bareHeicEnt.status})`);
 
-    // The operator's form, POST /api/local/admin/treasury, writes the same members.avatar_url, and the enterprise
+    // The operator's form, POST /api/local/admin/treasury, writes the same enterprise photo (member_photos), and the enterprise
     // routes hand it out as stored (avatarUrl): the same photo rule, bare base64 included.
     const adminTreasury = async (name: string, avatar: string): Promise<{ status: number; json: any }> => {
         const res = await fetch(`${BASE}/api/local/admin/treasury`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Admin-Password': process.env.ADMIN_PASSWORD! },
+            headers: { 'Content-Type': 'application/json', ...ADMIN },
             body: JSON.stringify({ name, avatar }),
         });
         return { status: res.status, json: await res.json().catch(() => null) };
@@ -791,21 +809,22 @@ async function partTwo(): Promise<void> {
     assert(adminBundled.status === 200, `a bundled:// avatar still passes the operator's form (${adminBundled.status} ${adminBundled.json?.error ?? ''})`);
 
     console.log('\n── 2f. A crowdfund project: POST /api/crowdfund/projects (+ /update) → GET /api/crowdfund/projects/:id and /api/avatar ──');
-    const projectId = crypto.randomUUID();
+    // The server makes a project's id (routes/commons.ts): the rest of the step uses the one it answers with.
     const proj = await signed('POST', '/api/crowdfund/projects', {
-        id: projectId, title: 'Community oven', description: 'A wood-fired oven', goalAmount: 300,
+        title: 'Community oven', description: 'A wood-fired oven', goalAmount: 300,
         photos: [dataUrl('image/jpeg', CAMERA_JPEG), dataUrl('image/png', CAMERA_PNG)],
     }, member);
-    assert(proj.status === 200, `the project is created (${proj.status} ${proj.json?.error ?? ''})`);
+    const projectId = String(proj.json?.project?.id ?? '');
+    assert(proj.status === 200 && projectId.length > 0, `the project is created (${proj.status} ${proj.json?.error ?? ''})`);
     const projectPhotos = async (): Promise<unknown[]> => {
-        const res = await fetch(`${BASE}/api/crowdfund/projects/${projectId}`);
-        const body = await res.json().catch(() => null) as any;
+        // Read as the member: the crowdfunds are members' reads on every node (2026-10-01).
+        const body = (await signed('GET', `/api/crowdfund/projects/${projectId}`, undefined, member)).json;
         const photos = body?.photos ?? body?.project?.photos;
         return typeof photos === 'string' ? JSON.parse(photos) : (Array.isArray(photos) ? photos : []);
     };
     let listed = await projectPhotos();
-    await served('crowdfund photo 0, as the public project route serves it', decodeDataUrl(listed[0]), CAMERA_JPEG_STRIPPED);
-    await served('crowdfund photo 1, as the public project route serves it', decodeDataUrl(listed[1]), CLEAN_PNG);
+    await served('crowdfund photo 0, as the project route serves it', decodeDataUrl(listed[0]), CAMERA_JPEG_STRIPPED);
+    await served('crowdfund photo 1, as the project route serves it', decodeDataUrl(listed[1]), CLEAN_PNG);
     await served('crowdfund project avatar', (await fetchBytes(`/api/avatar/${projectId}`)).bytes, CAMERA_JPEG_STRIPPED);
     const projUpd = await signed('POST', '/api/crowdfund/projects/update', {
         id: projectId, title: 'Community oven', description: 'A wood-fired oven', goalAmount: 300,
@@ -816,7 +835,7 @@ async function partTwo(): Promise<void> {
     await served('crowdfund photo after the edit', decodeDataUrl(listed[0]), CAMERA_WEBP_STRIPPED);
     await served('crowdfund project avatar after the edit', (await fetchBytes(`/api/avatar/${projectId}`)).bytes, CAMERA_WEBP_STRIPPED);
     const heicProject = await signed('POST', '/api/crowdfund/projects', {
-        id: crypto.randomUUID(), title: 'Tool library', description: 'Shared tools', goalAmount: 200,
+        title: 'Tool library', description: 'Shared tools', goalAmount: 200,
         photos: [dataUrl('image/jpeg', CLEAN_JPEG), dataUrl('image/heic', CAMERA_HEIC)],
     }, member);
     assert(heicProject.status === 400, `a second photo the node cannot strip (a HEIC, GPS inside) is refused, not stored (${heicProject.status})`);
@@ -828,7 +847,7 @@ async function partTwo(): Promise<void> {
     listed = await projectPhotos();
     assert(listed.length === 1 && leak(Buffer.from(JSON.stringify(listed), 'latin1')) === null, 'the refused edit left the project as it was');
     const bareHeicProject = await signed('POST', '/api/crowdfund/projects', {
-        id: crypto.randomUUID(), title: 'Seed library', description: 'Shared seeds', goalAmount: 200,
+        title: 'Seed library', description: 'Shared seeds', goalAmount: 200,
         photos: [dataUrl('image/jpeg', CLEAN_JPEG), CAMERA_HEIC.toString('base64')],
     }, member);
     assert(bareHeicProject.status === 400, `a HEIC sent as bare base64, no data: prefix, is refused too (${bareHeicProject.status})`);
@@ -847,7 +866,10 @@ async function partTwo(): Promise<void> {
     }, member);
     assert(selfUrlEdit.status === 200, `an edit sending back the node's own avatar address and a bare photo is saved (${selfUrlEdit.status} ${selfUrlEdit.json?.error ?? ''})`);
     listed = await projectPhotos();
-    assert(listed[0] === `/api/avatar/${projectId}`, 'the avatar address is kept as sent');
+    // The address stands for the photo it opens and is never stored as itself (#1486, #1475's rule): photos[0] is the
+    // enterprise's photo, which the edit left as it was.
+    assert(typeof listed[0] === 'string' && !String(listed[0]).includes('/api/avatar/'), 'the avatar address is stored as the photo it opens, not as itself');
+    await served('crowdfund photo sent back as the avatar address', decodeDataUrl(listed[0]), CAMERA_WEBP_STRIPPED);
     await served('crowdfund photo sent as bare URL-safe base64', typeof listed[1] === 'string' ? Buffer.from(listed[1], 'base64') : null, CAMERA_JPEG_STRIPPED);
     await served('crowdfund project avatar after the address edit (unchanged)', (await fetchBytes(`/api/avatar/${projectId}`)).bytes, CAMERA_WEBP_STRIPPED);
 
@@ -858,20 +880,26 @@ async function partTwo(): Promise<void> {
     const groupId = group.json?.id as string | undefined;
     assert(group.status === 201 && !!groupId, `the group is created (${group.status} ${group.json?.error ?? ''})`);
     if (groupId) {
+        // A group's read carries its picture's URL, never the picture (#1486): the bytes are what that URL serves.
+        const groupPicture = async (value: unknown): Promise<Buffer | null> => {
+            if (typeof value !== 'string' || !value.startsWith(`/api/groups/${groupId}/picture?`)) return null;
+            const got = await fetchBytes(value);
+            return got.status === 200 ? got.bytes : null;
+        };
         let read = await signed('GET', `/api/groups/${groupId}`, undefined, member);
-        await served('group picture', decodeDataUrl(read.json?.avatarUrl), CAMERA_JPEG_STRIPPED);
+        await served('group picture', await groupPicture(read.json?.avatarUrl), CAMERA_JPEG_STRIPPED);
         const patch = await signed('PATCH', `/api/groups/${groupId}`, { avatarUrl: dataUrl('image/png', CAMERA_PNG) }, member);
         assert(patch.status === 200, `the group picture is changed (${patch.status} ${patch.json?.error ?? ''})`);
         read = await signed('GET', `/api/groups/${groupId}`, undefined, member);
-        await served('group picture after the edit', decodeDataUrl(read.json?.avatarUrl), CLEAN_PNG);
+        await served('group picture after the edit', await groupPicture(read.json?.avatarUrl), CLEAN_PNG);
         const heicPatch = await signed('PATCH', `/api/groups/${groupId}`, { avatarUrl: dataUrl('image/heic', CAMERA_HEIC) }, member);
         assert(heicPatch.status === 400, `a group picture the node cannot strip (a HEIC, GPS inside) is refused (${heicPatch.status})`);
         read = await signed('GET', `/api/groups/${groupId}`, undefined, member);
-        await served('group picture after the refused edit', decodeDataUrl(read.json?.avatarUrl), CLEAN_PNG);
+        await served('group picture after the refused edit', await groupPicture(read.json?.avatarUrl), CLEAN_PNG);
         const bareHeicPatch = await signed('PATCH', `/api/groups/${groupId}`, { avatarUrl: CAMERA_HEIC.toString('base64') }, member);
         assert(bareHeicPatch.status === 400, `a group picture sent as bare base64 of a HEIC is refused (${bareHeicPatch.status})`);
         read = await signed('GET', `/api/groups/${groupId}`, undefined, member);
-        await served('group picture after the refused bare edit', decodeDataUrl(read.json?.avatarUrl), CLEAN_PNG);
+        await served('group picture after the refused bare edit', await groupPicture(read.json?.avatarUrl), CLEAN_PNG);
     }
     const heicGroup = await signed('POST', '/api/groups', {
         name: 'Bike Kitchen', description: 'We fix bikes', joinPolicy: 'open', avatarUrl: dataUrl('image/heic', CAMERA_HEIC),
@@ -885,7 +913,7 @@ async function partTwo(): Promise<void> {
     console.log('\n── 2h. The operator\'s pricing-guide thumbnail: POST /api/pricing-guide/admin/item → GET /api/pricing-guide ──');
     const saved = await fetch(`${BASE}/api/pricing-guide/admin/item`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Admin-Password': process.env.ADMIN_PASSWORD! },
+        headers: { 'Content-Type': 'application/json', ...ADMIN },
         body: JSON.stringify({
             id: 'custom-photo-meta', category: 'food', emoji: '🍋', name: 'Lemons (bag)', priceBeans: 5,
             thumbnailUrl: dataUrl('image/jpeg', CAMERA_JPEG),
@@ -897,7 +925,7 @@ async function partTwo(): Promise<void> {
     await served('pricing-guide thumbnail', decodeDataUrl(item?.thumbnailUrl), CAMERA_JPEG_STRIPPED);
     const saveThumbnail = (thumbnailUrl: string) => fetch(`${BASE}/api/pricing-guide/admin/item`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Admin-Password': process.env.ADMIN_PASSWORD! },
+        headers: { 'Content-Type': 'application/json', ...ADMIN },
         body: JSON.stringify({ id: 'custom-photo-meta', category: 'food', emoji: '🍋', name: 'Lemons (bag)', priceBeans: 5, thumbnailUrl }),
     });
     for (const [label, value] of [
@@ -912,14 +940,15 @@ async function partTwo(): Promise<void> {
     assert(link.status === 200, `a link as the thumbnail still passes (${link.status})`);
 
     console.log('\n── 2i. A member\'s photo as other members read it: POST /api/profile/update → groups, profile, chats ──');
-    // members.avatar_url is not only served by /api/avatar/:pk, which sniffs. The group, group-members and profile
+    // A member's photo (member_photos) is not only served by /api/avatar/:pk, which sniffs. The group, group-members and profile
     // routes hand it out exactly as stored; the chats turn it into an avatar address. A second member reads each.
     const reader = keypair();
-    db.prepare(`INSERT INTO members (public_key, callsign, avatar_url, status, joined_at, invited_by, invite_code)
-                VALUES (?, ?, ?, 'active', '2025-01-01T00:00:00.000Z', 'genesis', 'genesis')`)
-        .run(reader.pub, `reader-${reader.pub.slice(0, 6)}`, dataUrl('image/jpeg', CLEAN_JPEG));
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code)
+                VALUES (?, ?, 'active', '2025-01-01T00:00:00.000Z', 'genesis', 'genesis')`)
+        .run(reader.pub, `reader-${reader.pub.slice(0, 6)}`);
+    setMemberPhoto(db, reader.pub, dataUrl('image/jpeg', CLEAN_JPEG));
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(reader.pub);
-    const storedAvatar = () => (db.prepare('SELECT avatar_url FROM members WHERE public_key = ?').get(member.pub) as { avatar_url: string | null }).avatar_url;
+    const storedAvatar = () => getMemberPhoto(db, member.pub);
 
     const bare = await signed('POST', '/api/profile/update', { avatar: CAMERA_JPEG.toString('base64') }, member);
     assert(bare.status === 200, `a camera JPEG sent as bare base64 is saved (${bare.status} ${bare.json?.error ?? ''})`);
@@ -934,7 +963,7 @@ async function partTwo(): Promise<void> {
     if (openId) {
         const join = await signed('POST', `/api/groups/${openId}/join`, {}, reader);
         assert(join.status === 200, `the reader joins the open group (${join.status} ${join.json?.error ?? ''})`);
-        const line = await signed('POST', `/api/groups/${openId}/chat/message`, { text: 'The lemons are ripe' }, member);
+        const line = await signed('POST', `/api/groups/${openId}/chat/message`, lockedGroupLine(db, openId), member); // a group chat line is sealed
         assert(line.status === 200 || line.status === 201, `the member writes in the group chat (${line.status} ${line.json?.error ?? ''})`);
     }
     if (invitedId) {
@@ -1005,7 +1034,7 @@ async function partTwo(): Promise<void> {
         }, member);
         const id = post.json?.post?.id as string | undefined;
         assert(post.status === 200 && !!id, `a post photo with ${label} is saved (${post.status} ${post.json?.error ?? ''})`);
-        if (id) await served(`the post photo with ${label}, GET …/photos/0`, (await fetchBytes(`/api/marketplace/posts/${id}/photos/0`)).bytes, expected);
+        if (id) await served(`the post photo with ${label}, GET …/photos/0`, (await fetchBytes(photoPathOf(id, 0))).bytes, expected);
 
         const ent = await signed('POST', '/api/treasury', {
             name: `${tag} Orchard Co-op`, purpose: 'We grow pears', lifecycle: 'bounded', goalAmount: 500, avatar: dataUrl('image/jpeg', camera),
@@ -1055,18 +1084,21 @@ async function partTwo(): Promise<void> {
     const guideItem = async () => ((await signed('GET', '/api/pricing-guide', undefined, member)).json?.items as any[] | undefined)?.find(i => i.id === 'custom-photo-meta');
     const readBack = await guideItem();
     const photoLink = `/api/marketplace/posts/${listingId}/photos/0`;
-    assert(readBack?.thumbnailUrl === photoLink, `the aggregator gave the item the listing's photo link (${readBack?.thumbnailUrl})`);
+    // To a member, the link is the listing's own, with its key on this local community (routes/pricing-guide.ts).
+    const listingsLink = listing.json?.post?.photos?.[0] as string | undefined;
+    assert(!!listingsLink?.startsWith(`${photoLink}?v=`) && readBack?.thumbnailUrl === listingsLink,
+        `the aggregator gave the item the listing's photo link (${readBack?.thumbnailUrl})`);
     if (readBack) {
         const { id, category, emoji, name, description, priceBeans, unit, seasonalityHint, thumbnailUrl } = readBack;
         const resaved = await fetch(`${BASE}/api/pricing-guide/admin/item`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Admin-Password': process.env.ADMIN_PASSWORD! },
+            headers: { 'Content-Type': 'application/json', ...ADMIN },
             body: JSON.stringify({ id, category, emoji, name, description, priceBeans: priceBeans + 1, unit, isPinned: true, seasonalityHint, thumbnailUrl }),
         });
         assert(resaved.status === 200, `the item, read back and saved with a new price and its own photo link, is saved (${resaved.status})`);
         const after = await guideItem();
         assert(after?.priceBeans === priceBeans + 1 && after?.isPinned === true, `the new price and pin are saved (${after?.priceBeans}, ${after?.isPinned})`);
-        assert(after?.thumbnailUrl === photoLink, `the photo link is kept (${after?.thumbnailUrl})`);
+        assert(after?.thumbnailUrl === listingsLink, `the photo link is kept (${after?.thumbnailUrl})`);
     }
     for (const link of [`${photoLink}?v=1`, `${BASE}${photoLink}`]) {
         const res = await saveThumbnail(link);

@@ -12,7 +12,8 @@
  *   3. a member who took part in the trade → 200 with the trade in it
  *   4. a member who took NO part in it → 200 with the same trade (it is a community feed, not a
  *      per-participant one)
- *   5. every public read a guest needs still returns 200, unsigned and signed by the non-member
+ *   5. every public read a guest needs still returns 200, unsigned and signed by the non-member; the enterprises and
+ *      the Pulse feed, which name members, are members' since 2026-10-01 and refused to both
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-activity-feed-members-only.ts
  */
@@ -25,8 +26,8 @@ delete process.env.ENFORCE_LEDGER_AUTH;
 
 import crypto from 'node:crypto';
 
-const PORT = 8598;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -67,7 +68,8 @@ async function main() {
 
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const member = (callsign: string): Id => {
         const id = keypair();
@@ -99,24 +101,23 @@ async function main() {
     assert(asGuest.status === 403, `non-member guest, signed, is refused with 403 (got ${asGuest.status})`);
     assert(!hasTrade(asGuest.body), 'the guest response carries no trade');
 
-    console.log('\n── any member of the community reads it ──');
+    console.log('\n── any member of the community reads it, and a trade only its two people ──');
     const asAlice = await get(FEED, alice);
     assert(asAlice.status === 200, `alice (in the trade), signed, gets 200 (got ${asAlice.status})`);
     assert(hasTrade(asAlice.body), 'alice sees the alice→bob trade');
+    const asBob = await get(FEED, bob);
+    assert(asBob.status === 200 && hasTrade(asBob.body), 'bob, the other side of it, sees it too');
     const asCarol = await get(FEED, carol);
     assert(asCarol.status === 200, `carol (NOT in the trade), signed, gets 200 (got ${asCarol.status})`);
-    assert(hasTrade(asCarol.body), 'carol sees the same alice→bob trade — it is a community feed');
+    // Trades are private to their two people (Marty, 2026-09-28). This said "carol sees the same trade — it is a community
+    // feed" while members saw each other's trades.
+    assert(!hasTrade(asCarol.body) && !JSON.stringify(asCarol.body).includes('Sourdough'), 'carol does not see the alice→bob trade');
 
-    console.log('\n── a guest can still browse the public community ──');
+    console.log('\n── a guest can still read what is public, and nothing that names members ──');
     const enterprise = createTreasury('Guest Visible Bakery', 'data:image/png;base64,iVBORw0KGgo=', 0, { leadKeeperPubkey: alice.pubKeyHex }).publicKey;
     const guestReads: string[] = [
         '/api/community/info',
         '/api/node/info',
-        '/api/marketplace/posts',
-        '/api/enterprises',
-        '/api/enterprises/map',
-        `/api/enterprise/${enterprise}`,
-        '/api/pulse/feed',
         '/api/invite/check?code=NOT-A-REAL-CODE',
     ];
     for (const path of guestReads) {
@@ -124,6 +125,16 @@ async function main() {
         assert(u.status === 200, `unsigned GET ${path.split('?')[0]} is 200 (got ${u.status})`);
         const g = await get(path, guest);
         assert(g.status === 200, `non-member guest, signed, GET ${path.split('?')[0]} is 200 (got ${g.status})`);
+    }
+    // Not /api/marketplace/posts: a local community's listings are its members' since 2026-09-28, and its enterprises and
+    // Pulse feed, which name members, since 2026-10-01 (test-privacy-defaults).
+    for (const path of ['/api/enterprises', '/api/enterprises/map', `/api/enterprise/${enterprise}`, '/api/pulse/feed']) {
+        const u = await get(path);
+        assert(u.status === 401, `unsigned GET ${path} is refused, 401 (got ${u.status})`);
+        const g = await get(path, guest);
+        assert(g.status === 403, `non-member guest, signed, GET ${path} is refused, 403 (got ${g.status})`);
+        const m = await get(path, carol);
+        assert(m.status === 200, `a member reads ${path} (got ${m.status})`);
     }
 
     console.log(`\n${passed}/${run} checks passed.`);

@@ -449,7 +449,7 @@ export const makeStyles = ({ colors, theme }: { colors: typeof lightColors; them
             paddingVertical: 8,
             paddingHorizontal: 16,
             borderRadius: 10,
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             minHeight: 38,
             justifyContent: 'center',
             alignItems: 'center',

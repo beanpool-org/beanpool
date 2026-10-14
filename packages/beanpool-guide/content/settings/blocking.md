@@ -2,6 +2,7 @@
 slug: blocking
 title: Blocking someone
 summary: Hide someone's posts and messages from you, and undo it later.
+help: People you have blocked. Their posts and messages are hidden from you; unblock someone here.
 related: reporting, messages, privacy, getting-help
 ---
 
@@ -17,12 +18,33 @@ Confirm with **Block User**.
 
 - Their posts in the Market are hidden from you.
 - They disappear from your People list and your chats, and you cannot message each other.
-- Their pins on the Map, their Pulse posts, and their messages in event chats still show.
+- Their pins on the Map and their Pulse posts still show.
+- On your Ledger, Beans from them show "Beans from a member you blocked" instead of any note they sent.
 - A report goes to your community's moderators, who can look into it.
+
+## What your community does about it
+
+Your community does this for blocks it keeps for you. Today that is a block made in the web app. A block made in the phone app stays on that phone, and your community does not know about it.
+
+- Their direct messages never reach you. Your community does not deliver them to you, on any phone or computer, and you get no notification and no unread count for them.
+- If they start a new chat with you, it does not appear in your chats.
+- If you unblock them, nothing they sent while blocked arrives. Only messages they send after that reach you.
+- If they react to one of your messages, or change one of their old messages, you do not see it.
+- You get no notification when they write in a group chat, even when they mention you with @.
+- If they ask for a deal on one of your listings, the request waits in your deals with no notification. If you leave it, it ends after 7 days, also with no notification.
+- If they accept one of your Offers straight away, you get no notification, and none if they then cancel that deal. The deal still shows in your deals, and its messages in your chat with them, as with anyone. Their Beans are held and given back as usual.
+- They cannot make a listing addressed only to you.
+- You can't add them. If they add you, you aren't told. If they had added you, the "added you" line on your People tab goes. Your friends no longer see you as a connection in common on their profile.
+- If they send you Beans with a note, the Beans arrive in full and the note does not. You see "Beans from a member you blocked" instead, and you still do after you unblock them.
 
 ## What it does not do
 
-- They are not told.
+- They are not told. To them, their messages look sent, and so do the notes with their Beans.
+- It does not end the friendship: they still have you as a friend, and if your contact is set to Friends they still see it. To end that too, take them off your Friends tab on the phone; on the web, where a blocked member is hidden from your lists, unblock them, take them off your friends, then block them again. They can notice a removal.
+- Group chats, event chats and project and enterprise chats are shared: everyone in them sees the same messages. Their messages there still show, to you as to everyone else.
+- A deal you already have with them goes on as before, with its notices and notifications.
+- If you have traded with them before, they can still send you Beans. Every Bean arrives, with no notification.
+- Notices from your community still come, even when they started them. For example, you are told when someone opens a vote to replace you as a group's lead convenor, and you get messages from the people who run your community.
 - They can still see your posts.
 - In the phone app, the block is kept on this phone, for your account only. Another account on this phone does not get your blocks.
 - In the phone app, if you sign out, or replace this phone's account with another one, your blocks stay on the phone. Come back with the same account and they are still there.

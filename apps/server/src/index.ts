@@ -3,7 +3,7 @@
  *
  * Boots the independent local gateway:
  * 1. Genesis check (first-run community_id + genesis block)
- * 2. Admin password init (from ADMIN_PASSWORD env or auto-generate)
+ * 2. Admin password init (an existing node keeps its own; a new install has none and is claimed with its claim code)
  * 3. TLS certificates (Let's Encrypt or self-signed)
  * 4. DNS shim for beanpool.local resolution
  * 5. Trust Bootstrap (HTTP :80 — redirect or CA cert)
@@ -19,6 +19,9 @@
 // state crash-loops, so no boot ever reaches the scrub either. See report-privacy.ts; it imports nothing,
 // deliberately.
 import './report-privacy.js';
+// SECOND, and before anything that imports db/db.ts, which opens state.db as it is imported: a standby's whole copy built
+// in data/staging and made ready is swapped in here, by rename, before the database opens (db/swap-at-boot.ts).
+import './db/swap-at-boot.js';
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -51,7 +54,8 @@ if (fs.existsSync(envPath)) {
 scrubReportEnvironment();
 
 import { ensureGenesis } from './genesis.js';
-import { initAdminPassword } from './config/local-config.js';
+import { initAdminPassword, localConfigRestoredNotice } from './config/local-config.js';
+import { burnClaimFromShell, initClaimCode } from './claim-code.js';
 import { initTls, startRenewalScheduler } from './services/tls.js';
 import { startDnsShim } from './dns-shim.js';
 import { startHttpServer } from './http-server.js';
@@ -63,16 +67,27 @@ import { registerFederationHandler, federatedReceiptStatus } from './federation-
 import { startListingPull } from './federation-listings.js';
 import { reconcileFederationLinks } from './federation-link.js';
 import { recoverSettlements } from './federation-settlement-exchange.js';
-import { initStateEngine, migrateAdminConversations, getNodeRole, createTreasury } from './state-engine.js';
+import { initStateEngine, migrateAdminConversations, getNodeRole, createTreasury, adminBroadcastAnnouncement, startWashTradingRefreshAtBoot } from './state-engine.js';
+import { startRecoverNoticeWatch } from './recover-command.js';
+import { logger } from './logger.js';
+import { bumpMembersVersion } from './engine/versions.js';
+import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
 import { initDirectoryPublisher } from './services/directory-publisher.js';
 import { initDirectoryMirror } from './services/directory-mirror.js';
 import { initPublicAddress } from './services/public-address-agent.js';
-import { initBackupPuller } from './services/backup-puller.js';
+import { initTunnelConnector } from './services/tunnel-connector.js';
+import { initBackupPuller, registerSwapRestart } from './services/backup-puller.js';
 import { startStandbyHealthWatch } from './services/standby-health.js';
+import { recordBoot, startServerAlerts } from './services/alerts.js';
 import { initSnapshotScheduler } from './services/snapshot-scheduler.js';
+import { initOffboxBackups } from './services/offbox-backups.js';
 import { startTakeoverEnvelopeService } from './services/takeover-envelope.js';
-import { resumeTakeoverAtBoot, finishTakeoverAfterBoot } from './services/takeover.js';
+import { resumeTakeoverAtBoot, finishTakeoverAfterBoot, settleTakeoverBeforeDatabaseBoot } from './services/takeover.js';
 import { installRecoverySealAtBoot } from './services/recovery-seal-key.js';
+import { installPushTokenSealAtBoot } from './services/push-token-seal.js';
+import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
+import { announceVaultTicketKeysAtBoot } from './services/vault-ticket-keys.js';
+import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
 import { startIdentityEpochWatch } from './services/identity-epoch.js';
 import { startRegistrarNameWatch } from './services/registrar-name-watch.js';
 import { scheduleDailyPulse } from './daily-pulse.js';
@@ -81,7 +96,8 @@ import { startImageEvacuation } from './services/image-evacuation.js';
 import { checkImageStoreAtBoot } from './storage/image-store.js';
 import { startOrphanObjectSweep } from './engine/storage-health.js';
 import { initAppStoreVersionChecks } from './app-store-versions.js';
-import { initShutdownRecovery } from './engine/shutdown-recovery.js';
+import { initShutdownRecovery, startFollowedUncleanStop } from './engine/shutdown-recovery.js';
+import { secureDataDirAtBoot } from './boot-file-safety.js';
 
 const PORT_HTTP = Number(process.env.PORT_HTTP ?? 8080);
 const PORT_HTTPS = Number(process.env.PORT_HTTPS ?? 8443);
@@ -91,16 +107,23 @@ const PORT_P2P_WS = PORT_P2P + 1; // 4002
 async function main() {
     console.log('\n🫘  BeanPool Node starting...\n');
 
+    // Step 0.5: the data dir's files before anything reads them: a crash's temp files removed, key files made 0600,
+    // local-config.json's last good copy written when it has none (boot-file-safety.ts).
+    secureDataDirAtBoot(process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data'));
+
     // Step 1: Ensure genesis state exists
     const genesis = await ensureGenesis();
     console.log(`✅ Community: ${genesis.communityId}`);
     console.log(`   Genesis hash: ${genesis.genesisHash}\n`);
 
-    // Step 2: Admin password (first boot: env var or auto-generate)
+    // Step 2: Admin password (an existing node keeps its own or takes a rotated one; a new install makes none)
     initAdminPassword();
 
     // Step 2.1: Unclean shutdown detection & SQLite PRAGMA integrity_check
     const shutdownRecovery = initShutdownRecovery();
+    // This start, for the alerts' crash-loop row (services/alerts.ts): three after unclean stops in 15 minutes is told at
+    // the third. A clean restart is not counted.
+    recordBoot(startFollowedUncleanStop());
     if (shutdownRecovery.uncleanShutdown) {
         if (shutdownRecovery.ok) {
             console.log(`🛡️  ${shutdownRecovery.message}`);
@@ -110,14 +133,33 @@ async function main() {
         }
     }
 
+    // Step 2.4: a take-over stopped after it made this server the main server, before its restart, is resumed or rolled
+    // back here, before the database's boot reads the role: the database boots as the main server only once the take-over
+    // has gone on, never first and then rolled back (services/takeover.ts settleTakeoverBeforeDatabaseBoot). Never blocks the
+    // boot.
+    settleTakeoverBeforeDatabaseBoot();
+
     // Step 2.5: Initialize state engine (ledger, members, marketplace)
     initStateEngine();
+    // local-config.json was broken and this start took its last good copy (config/local-config.ts): into the security log
+    // the owner reads in Settings, not only the container log.
+    const restored = localConfigRestoredNotice();
+    if (restored) {
+        logger.security('SYS', `local-config.json was unreadable (${restored.why}): this server started from its last good copy, local-config.json.bak. Check the address and settings.` + (restored.brokenCopy ? ` The broken file is kept as ${restored.brokenCopy}.` : ''));
+    }
     migrateAdminConversations();
 
-    // Step 2.55: Auto-snapshot scheduler — periodic local DB snapshots into
-    // data/snapshots/ (Backup tab). Defaults to daily, keeping the last 7.
-    // Wired after initStateEngine() so the DB connection + node_config exist.
-    initSnapshotScheduler();
+    // Step 2.51: `beanpool recover`, run in this container, leaves a notice in the data dir for each owner it adds: the
+    // community is told and the log keeps it, at boot and within 5 s while running (recover-command.ts). Never blocks the boot.
+    startRecoverNoticeWatch({
+        announce: adminBroadcastAnnouncement,
+        log: message => logger.security('AUTH', message),
+        changed: () => { bumpMembersVersion(); noteTakeoverInputsChanged('beanpool recover added an owner'); },
+        burnClaim: burnClaimFromShell,
+    });
+    // Step 2.55: a node with no owner gets a one-time claim code in data/claim-code.txt (claim-code.ts). After the database
+    // (it asks whether there is an owner). Never throws: the admin password works as before either way.
+    initClaimCode();
 
     // Step 2.6: Take-over (sealed-keys.md §5.4). BEFORE the node key is loaded (step 7) and before anything else
     // reads the role: finish any take-over step a crash interrupted, take the role from local-config.json (over
@@ -125,10 +167,31 @@ async function main() {
     // the boot; a failure is in data/takeover-journal.json and Settings.
     resumeTakeoverAtBoot();
 
+    // Step 2.61: Auto-snapshot scheduler — periodic local DB snapshots into data/snapshots/ (Backup tab), on the main
+    // server only. Defaults to daily, keeping the last 7, none older than 14 days. After the take-over step (2.6), so it
+    // arms for the role as it now stands; a role change after re-arms it (services/snapshot-scheduler.ts). On every
+    // role it removes, each hour, the snapshots past their count or age.
+    initSnapshotScheduler();
+    // Step 2.62: off-box backups (services/offbox-backups.ts): the main server's LOCKED backups to the S3-compatible
+    // stores its operator set, if any — none is built in or required. Each check reads the role, so a standby sends
+    // nothing; a server with no recovery code sends nothing and says why. The first check is a couple of minutes in.
+    initOffboxBackups();
+
     // Step 2.65: the recovery seal for the role as it now stands. initStateEngine installed it for the role it read; a
     // take-over finished at this boot (2.6) makes this the main server, which needs its key before anything serves.
     // Does nothing when the role did not change; never throws (services/recovery-seal-key.ts).
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
+    // And members' push tokens, locked with a key from the same file (services/push-token-seal.ts): the server that took
+    // over opens the rows it copied with the key the take-over brought, and removes, with one line, any it can't open.
+    // Does nothing when the role did not change.
+    installPushTokenSealAtBoot({ standby: getNodeRole() === 'backup' });
+    // And the open door's key for that role (services/open-join-key.ts). Does nothing when the role did not change.
+    installOpenJoinKeyAtBoot({ standby: getNodeRole() === 'backup' });
+    // And which key vault tickets the door takes, from .env (services/vault-ticket-keys.ts): one line, or none.
+    announceVaultTicketKeysAtBoot();
+    // And GitHub's rows for that role (engine/github-sign-in-removal.ts): a standby that became the main server at this
+    // boot removes the GitHub copies it inherited before anything serves. Does nothing when the role did not change.
+    removeGithubSignInsAtBoot({ standby: getNodeRole() === 'backup' });
 
     // Step 2.7: The image store (storage design §7). IMAGE_STORE=s3 with a setting missing, a bucket these
     // credentials cannot reach or cannot write to (proved with a test object, written, read back and deleted),
@@ -147,6 +210,9 @@ async function main() {
 
     // Step 6: HTTPS server (PWA + Settings API)
     await startHttpsServer(PORT_HTTPS);
+    // Step 6.1: the wash analysis's first refresh, in the background, now the server listens (state-engine.ts
+    // startWashTradingRefreshAtBoot): the first floor read finds it landed. Not awaited.
+    void startWashTradingRefreshAtBoot();
 
     // Step 7: libp2p (persistent identity, no auto-discovery)
     const p2pNode = await startP2P(PORT_P2P, PORT_P2P_WS);
@@ -254,7 +320,9 @@ async function main() {
     // NODE_ROLE=backup, periodically pull the primary's signed snapshot over
     // HTTPS and import it. No-op on a primary (which imports from nobody). Wired
     // after the connector manager so the primary's `mirror` connector — the
-    // trust anchor the import signature gate checks — is already loaded.
+    // trust anchor the import signature gate checks — is already loaded. A whole copy made ready restarts the server,
+    // and the swap at the next start puts it in place (db/swap-at-boot.ts): only a process that registers it does.
+    registerSwapRestart();
     initBackupPuller();
 
     // Step 8.6: Automated Fleet Harvester (drift-triggered backups + 30-day archiving)
@@ -290,10 +358,18 @@ async function main() {
     // Step 10.2: The watch on this server's standbys (design G8): when one stops copying or copies wrongly, the community's
     // owners are told. Set on every node like the mirror: each tick reads the role.
     startStandbyHealthWatch();
+    // Step 10.3: this server's own alerts to its owners (services/alerts.ts): the disk, backups, restarts, the standby,
+    // its certificate. The owners' push and the admin queue always; the operator's own channel only when one is set.
+    startServerAlerts();
+    // Step 10.4: the tunnel for <name>.beanpool.org runs inside this server (services/tunnel-connector.ts), on the token in
+    // node_config, on the main server only, and after a take-over's own tunnel step. On every server: it also deletes a
+    // leftover data/tunnel-token and warns when docker-compose.yml still mounts Docker's control socket. Never throws;
+    // not awaited, so the boot never waits on it.
+    void initTunnelConnector();
     if (getNodeRole() === 'primary') {
         initDirectoryPublisher();
-        // Step 10.5: Auto public-address (opt-in via PUBLIC_ADDRESS_* env). Claims <name>.beanpool.org
-        // from the registrar on boot and writes the tunnel token for the cloudflared sidecar. No-op unless enabled.
+        // Step 10.5: the public-address agent. Every 5 min it refreshes a tunnel address this server holds (the tunnel
+        // above runs the answer), and with PUBLIC_ADDRESS_* set it also claims <name>.beanpool.org from the registrar.
         initPublicAddress();
     }
 

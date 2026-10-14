@@ -11,9 +11,10 @@ import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useIdentity } from '../IdentityContext';
-import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind } from '../../utils/db';
+import { getMessages, getConversation, insertMessage, editMessage, sendImageMessage, getDecryptedAttachment, syncMessages, syncSingleConversation, markConversationRead, completeMarketplaceTransaction, cancelMarketplaceTransaction, getDealsBetween, getDb, toggleMessageReactionApi, deleteLocalMessage, deleteMessageApi, muteChatApi, getKnownChatMute, getConversationKind, knownDmConversationId, isHeldGroupChat } from '../../utils/db';
 import { EventChatView } from '../../components/EventChatView';
 import { GroupChatView } from '../../components/GroupChatView';
+import { routeChat, type ChatRoute as ChatRouteAnswer, type ChatRouteAsks } from '../../utils/chat-route';
 import { isUserBlocked, BLOCKLIST_UPDATED_EVENT } from '../../utils/blocklist';
 import { hapticSuccess, hapticWarning } from '../../utils/haptics';
 import { ReviewModal } from '../../components/ReviewModal';
@@ -29,8 +30,9 @@ import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from '../../components/chat/ChatBanners';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
+import { refusedSendNotice, restoredDraft } from '../../utils/dm-lock';
 import {
-    buildChatListItems, chatActionErrorMessage, hasAnyAction, isTombstone, messageActions, tombstoneText,
+    buildChatListItems, chatActionErrorMessage, dmQuoteFor, hasAnyAction, isTombstone, messageActions, tombstoneText,
     shouldFollowNewMessages, shouldShowChatLoadError, type ChatViewer,
 } from '../../utils/chat-actions';
 import { normaliseTappedUrl } from '../../utils/chat-links';
@@ -78,46 +80,52 @@ function ChatImage({ conversationId, messageId, onOpen }: { conversationId: stri
     );
 }
 
+/** What the route asks the phone (utils/chat-route.ts tests these wirings). */
+const ROUTE_ASKS: ChatRouteAsks = { isHeldGroupChat, knownDmConversationId, getConversationKind };
+
 /**
- * `/chat/:id` serves two kinds of conversation. A DM or group is the screen below. An event chat is its
- * own screen (docs/events-on-the-map.md §2.2): node-readable `plaintext-v1`, members that follow the
- * RSVPs, a host who can remove a message, read-only once the event ends — none of which the DM pipeline
- * below (E2E, edits, reactions, deals) knows about, and all of which it would quietly get wrong.
+ * `/chat/:id` serves several kinds of conversation, and utils/chat-route.ts decides which screen, in this order: a group
+ * whose keys this phone has held (its group chat, sealed or refused), a known DM (the DM screen), an event chat, a group's
+ * or an enterprise's thread, else a DM. An event chat is its own screen (docs/events-on-the-map.md §2.2): node-readable
+ * `plaintext-v1`, members that follow the RSVPs, a host who can remove a message, read-only once the event ends — none of
+ * which the DM pipeline below (E2E, edits, reactions, deals) knows about, and all of which it would quietly get wrong.
  *
- * Both callers that can open one — the Inbox row and the event detail — say so with `event=1`, so a DM
- * never waits on a database read to decide. The lookup is the fallback for an older link or a push.
+ * Nothing draws until the phone has asked its own key memory, its DM list and the conversation's kind (a SecureStore read
+ * and a few small SQLite reads; the node only when there is no row yet): every screen here can post, and which one may is
+ * what is being decided. The held check is asked of the id lower-cased, and a group's screen gets that id; the DM guard is
+ * asked of the link's own spelling, which it folds itself and answers whenever the phone knows a DM under it. So no
+ * spelling is a DM to one check and a group to the next, and a link to a DM's own id opens that DM, never a twin in other
+ * capitals (routeChat; #1841 review, findings 1 and 4; #1863 review). The Inbox row, the event detail and "Your groups"
+ * say the kind on the way in (`event=1`, `group=1`, `enterprise=1`); the conversation's type is the fallback for an older
+ * link or a push.
  */
 export default function ChatRoute() {
-    const { id, event, group, enterprise, created, name } = useLocalSearchParams<{
-        id?: string; event?: string; group?: string; enterprise?: string; created?: string; name?: string;
+    const { id, event, group, enterprise, created, name, info } = useLocalSearchParams<{
+        id?: string; event?: string; group?: string; enterprise?: string; created?: string; name?: string; info?: string;
     }>();
-    const [isEventChat, setIsEventChat] = useState(event === '1');
-    // A group's chat and an enterprise's public discussion thread are node-readable threads like the event chat, on
-    // their own screen with the one owner header (groups decision 9). "Your groups" says which on the way in.
-    const [threadKind, setThreadKind] = useState<'group' | 'enterprise' | null>(
-        group === '1' ? 'group' : enterprise === '1' ? 'enterprise' : null,
-    );
-
+    // The answer for the id it was asked of: a new id draws nothing until its own answer is in.
+    const [route, setRoute] = useState<{ for: string; answer: ChatRouteAnswer } | null>(null);
     useEffect(() => {
-        if (isEventChat || threadKind || !id) return;
+        if (!id) return;
         let alive = true;
-        getConversationKind(String(id)).then(kind => {
-            if (!alive) return;
-            if (kind === 'event_thread') setIsEventChat(true);
-            else if (kind === 'group_thread') setThreadKind('group');
-            else if (kind === 'enterprise_thread') setThreadKind('enterprise');
-        });
+        setRoute(null);
+        routeChat(ROUTE_ASKS, String(id), { event: event === '1', thread: group === '1' ? 'group' : enterprise === '1' ? 'enterprise' : null })
+            .then(answer => { if (alive) setRoute({ for: String(id), answer }); });
         return () => { alive = false; };
-    }, [id, isEventChat, threadKind]);
+    }, [id, event, group, enterprise]);
 
-    if (isEventChat && id) return <EventChatView eventId={String(id)} />;
-    if (threadKind && id) return <GroupChatView kind={threadKind} id={String(id)} justCreated={created === '1'} initialName={name} />;
-    return <ChatScreen />;
+    if (!id || !route || route.for !== String(id)) return null;
+    const { view, screenId } = route.answer;
+    if (view === 'group' || view === 'group_thread') return <GroupChatView kind="group" id={screenId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
+    if (view === 'event') return <EventChatView eventId={screenId} />;
+    if (view === 'enterprise_thread') return <GroupChatView kind="enterprise" id={screenId} justCreated={created === '1'} initialName={name} openInfo={info === '1'} />;
+    return <ChatScreen id={screenId} />;
 }
 
-function ChatScreen() {
+/** The DM screen, on routeChat's id: a known DM's own spelling, else the link's. */
+function ChatScreen({ id }: { id: string }) {
     const { theme, colors } = useTheme();
-    const { id, triggerReview, txId: txIdParam, focusTx, prefill } = useLocalSearchParams<{ id?: string; triggerReview?: string; txId?: string; focusTx?: string; prefill?: string }>();
+    const { triggerReview, txId: txIdParam, focusTx, prefill } = useLocalSearchParams<{ triggerReview?: string; txId?: string; focusTx?: string; prefill?: string }>();
     const { identity } = useIdentity();
     const [messages, setMessages] = useState<any[]>([]);
     const [activeMessageActionsId, setActiveMessageActionsId] = useState<string | null>(null);
@@ -145,6 +153,8 @@ function ChatScreen() {
     // The first local read has come back (a cold database open is not instant), and what went wrong if it did not.
     const [firstLoadDone, setFirstLoadDone] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
+    // A DM line that couldn't be locked was not sent (utils/dm-lock): one plain line above the box, until a send goes.
+    const [lockNotice, setLockNotice] = useState<string | null>(null);
     const [menuOpen, setMenuOpen] = useState(false);
     const [muteOpen, setMuteOpen] = useState(false);
     const [mute, setMute] = useState<YourChatMute | null>(() => getKnownChatMute(String(id ?? '')));
@@ -206,7 +216,7 @@ function ChatScreen() {
         stickyHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.emerald50, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: theme === 'dark' ? colors.border.default : palette.emerald100 },
         stickyHeaderLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, paddingRight: 16 },
         stickyPostTitle: { fontSize: 15, fontWeight: '700', color: theme === 'dark' ? colors.text.body : palette.emerald800 },
-        stickyPostCredits: { fontSize: 13, color: colors.brand.dark, fontWeight: '600', marginTop: 2 },
+        stickyPostCredits: { fontSize: 13, color: colors.brand.primary, fontWeight: '600', marginTop: 2 },
         statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
         statusBadgeText: { fontSize: 11, fontWeight: '800' },
         keyboardView: { flex: 1 },
@@ -217,12 +227,12 @@ function ChatScreen() {
         dealCardMeta: { fontSize: 12, color: colors.text.secondary, marginTop: 2, marginBottom: 8 },
         dealCardActions: { flexDirection: 'row', gap: 6, alignItems: 'center' },
         dealBtn: { paddingVertical: 7, paddingHorizontal: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-        dealBtnRelease: { backgroundColor: colors.brand.dark, flex: 1 },
+        dealBtnRelease: { backgroundColor: colors.brand.fill, flex: 1 },
         dealBtnReleaseText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },
         dealBtnCancel: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.red50, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red200 },
-        dealBtnCancelText: { color: colors.feedback.danger.solid, fontWeight: '700', fontSize: 13 },
+        dealBtnCancelText: { color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 13 },
         dealBtnReview: { backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.amber50, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.amber200, flex: 1 },
-        dealBtnReviewText: { color: theme === 'dark' ? colors.text.body : palette.amber600, fontWeight: '800', fontSize: 13 },
+        dealBtnReviewText: { color: theme === 'dark' ? colors.text.body : colors.feedback.warning.fg, fontWeight: '800', fontSize: 13 },
         dealAwaiting: { color: colors.text.secondary, fontSize: 12, fontWeight: '600', fontStyle: 'italic' },
         // Full-screen image viewer
         imageViewerOverlay: { flex: 1, backgroundColor: colors.overlay.imageViewerBg, alignItems: 'center', justifyContent: 'center' },
@@ -231,12 +241,12 @@ function ChatScreen() {
         // Inline Action Bar
         inlineActionBar: { flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 10, gap: 8, backgroundColor: theme === 'dark' ? colors.surface.subtle : palette.yellow50, borderBottomWidth: 1, borderBottomColor: theme === 'dark' ? colors.border.default : palette.yellow200 },
         inlineActionBtn: { flex: 1, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 10, borderRadius: 10 },
-        inlineActionRelease: { backgroundColor: colors.brand.dark },
+        inlineActionRelease: { backgroundColor: colors.brand.fill },
         inlineActionReleaseText: { color: colors.text.inverse, fontWeight: '800', fontSize: 14 },
         inlineActionCancel: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: theme === 'dark' ? colors.border.default : palette.red300 },
-        inlineActionCancelText: { color: colors.feedback.danger.solid, fontWeight: '700', fontSize: 14 },
+        inlineActionCancelText: { color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 14 },
         blockedNotice: { padding: 14, alignItems: 'center', marginHorizontal: 12, borderRadius: 12, backgroundColor: colors.feedback.danger.bg, borderWidth: 1, borderColor: colors.feedback.danger.border },
-        blockedNoticeText: { color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700' },
+        blockedNoticeText: { color: colors.feedback.danger.fg, fontSize: 13, fontWeight: '700' },
     }));
 
     const promptedRef = useRef(false);
@@ -476,7 +486,7 @@ function ChatScreen() {
     // what made ticks expensive once the history window grew. Metadata stays in
     // (it's tiny and carries reactions/reply refs/send state).
     const messagesSignature = (rows: any[]) => rows.map(m =>
-        [m.id, m.rawTimestamp, m.editedAt ?? '', m.readByPeer ? 1 : 0, m.sendState ?? '', m.type ?? '', m.text?.length ?? 0, m.metadata ? JSON.stringify(m.metadata) : ''].join('\u0001')
+        [m.id, m.rawTimestamp, m.editedAt ?? '', m.readByPeer ? 1 : 0, m.sendState ?? '', m.type ?? '', m.text?.length ?? 0, m.metadata ? JSON.stringify(m.metadata) : '', m.integrityNote ?? '', m.unattributed ? 1 : 0].join('\u0001')
     ).join('\u0002');
 
     const loadMessages = async (isBackgroundPoll = false) => {
@@ -534,7 +544,17 @@ function ChatScreen() {
                 setReplyToMessage(null);
                 loadMessages();
             }
+            setLockNotice(null);
         } catch (err: any) {
+            const refused = refusedSendNotice(err, peerPubkey ? peerName : null);
+            if (refused) {
+                // Nothing went (the line couldn't be locked, or the phone couldn't read its group key memory). The words
+                // go back in the box (with anything typed since), an edit stays an edit, and the next Send tries again.
+                hapticWarning();
+                composerRef.current?.setText(restoredDraft(currentDraft, composerRef.current?.currentText() ?? ''));
+                setLockNotice(refused);
+                return;
+            }
             Alert.alert(wasEditing ? "Edit Failed" : "Message Failed", err.message || "Could not execute send.");
             if (wasEditing) setEditingMessage(null); // drop back to normal compose on failure (e.g. window expired)
         } finally {
@@ -596,14 +616,18 @@ function ChatScreen() {
                 const meta = { ...(item.metadata || {}) };
                 delete meta.__sendState;
                 const metaStr = Object.keys(meta).length ? JSON.stringify(meta) : undefined;
-                await deleteLocalMessage(item.id).catch(() => {});
                 try {
                     // Reuse the failed row's id: if the original POST actually landed
                     // (timeout after server commit), the retry is idempotent instead
-                    // of a duplicate the peer sees twice.
+                    // of a duplicate the peer sees twice. insertMessage replaces the
+                    // failed row only once the words are locked, so a resend that
+                    // can't be locked leaves it here to try again.
                     await insertMessage(id as string, identity.publicKey, item.text, metaStr, item.id);
+                    setLockNotice(null);
                 } catch (e: any) {
-                    Alert.alert('Message Failed', e.message || 'Could not resend.');
+                    const refused = refusedSendNotice(e, peerPubkey ? peerName : null);
+                    if (refused) setLockNotice(refused);
+                    else Alert.alert('Message Failed', e.message || 'Could not resend.');
                 }
                 loadMessages(true);
             }},
@@ -633,11 +657,14 @@ function ChatScreen() {
                 // the timeout keeps a dead network from latching sendingRef forever.
                 await withTimeout(sendImageMessage(id as string, `data:image/jpeg;base64,${manip.base64}`, '', metadata), 60_000, 'Sending the image');
                 setReplyToMessage(null);
+                setLockNotice(null);
                 hapticSuccess();
                 loadMessages();
             } catch (err: any) {
                 hapticWarning();
-                Alert.alert('Image Failed', err.message || 'Could not send image.');
+                const refused = refusedSendNotice(err, peerPubkey ? peerName : null);
+                if (refused) setLockNotice(refused);
+                else Alert.alert('Image Failed', err.message || 'Could not send image.');
             } finally {
                 sendingRef.current = false;
             }
@@ -870,13 +897,13 @@ function ChatScreen() {
         }
         if (item.systemType === 'ESCROW_RELEASED') {
             iconName = 'check-decagram';
-            iconColor = colors.brand.dark;
+            iconColor = colors.brand.primary;
             bgColor = colors.chatSystem.releasedBg;
             borderColor = colors.brand.dark;
         }
         if (item.systemType === 'ESCROW_CANCELLED') {
             iconName = 'cash-refund';
-            iconColor = colors.feedback.danger.solid;
+            iconColor = colors.feedback.danger.fg;
             bgColor = colors.chatSystem.cancelledBg;
             borderColor = colors.feedback.danger.solid;
         }
@@ -935,10 +962,10 @@ function ChatScreen() {
                             <MaterialCommunityIcons
                                 name={hasRated ? "star" : "star-outline"}
                                 size={14}
-                                color={hasRated ? colors.brand.primary : colors.feedback.warning.solid}
+                                color={hasRated ? colors.brand.primary : colors.feedback.warning.fg}
                                 style={{ marginRight: 4 }}
                             />
-                            <Text style={[chat.systemActionText, { color: hasRated ? colors.brand.primary : colors.feedback.warning.solid }]}>
+                            <Text style={[chat.systemActionText, { color: hasRated ? colors.brand.primary : colors.feedback.warning.fg }]}>
                                 {hasRated ? '✓ Rating submitted (Tap to edit)' : 'Rate your partner'}
                             </Text>
                         </Pressable>
@@ -948,8 +975,27 @@ function ChatScreen() {
         );
     };
 
+    // A DM row shown as nobody's (e2e-crypto dmLineIsUnattributed): a line that didn't open, a row in a member's name
+    // that wasn't encrypted, or the admin page's message. In the middle of the chat, never in its named author's bubble,
+    // and with no actions: there is nobody's line to answer or react to.
+    const renderUnattributedLine = (item: any) => (
+        <View style={[chat.systemMessageContainer, { marginTop: 12, marginBottom: 12 }]} testID="dm-line-unattributed">
+            <View style={[chat.systemMessageBubble, { maxWidth: '90%', backgroundColor: colors.chatSystem.defaultBg, borderColor: colors.chatSystem.defaultBorder, borderWidth: 1 }]}>
+                <MaterialCommunityIcons name={item.integrityNote ? 'bullhorn-outline' : 'shield-alert-outline'} size={16} color={colors.text.secondary} style={{ marginRight: 6 }} />
+                <Text style={[chat.systemMessageText, { flexShrink: 1, color: theme === 'dark' ? colors.text.secondary : palette.gray700, fontSize: 13, fontWeight: '500' }]}>
+                    {item.text}
+                </Text>
+            </View>
+            {item.integrityNote ? (
+                <Text style={[chat.systemTimestamp, { fontSize: 12, fontStyle: 'italic', textAlign: 'center', maxWidth: '90%' }]}>{item.integrityNote}</Text>
+            ) : null}
+            <Text style={chat.systemTimestamp}>{item.timestamp}</Text>
+        </View>
+    );
+
     const renderMessage = (item: any) => {
         if (item.type === 'system' || item.senderId === 'SYSTEM') return renderSystemMessage(item);
+        if (item.unattributed) return renderUnattributedLine(item);
 
         const isMe = identity?.publicKey ? item.senderId === identity.publicKey : false;
         const showActions = activeMessageActionsId === item.id;
@@ -1006,16 +1052,12 @@ function ChatScreen() {
         };
 
         const quote = item.metadata?.replyToId ? (() => {
-            const parentMsg = messagesById.get(item.metadata.replyToId);
-            const parentText = !parentMsg
-                ? 'Message not found'
-                : isTombstone(parentMsg)
-                    ? tombstoneText(parentMsg, 'dm')
-                    : parentMsg.type === 'image' ? '🔒 Photo' : parentMsg.text;
-            const parentAuthor = parentMsg ? (parentMsg.senderId === identity?.publicKey ? 'You' : (peerName || 'Someone')) : 'Someone';
+            // The answered message as the thread judged it (dmQuoteFor), never its row's raw words and named author.
+            const q = dmQuoteFor(messagesById.get(item.metadata.replyToId), identity?.publicKey, peerName);
             return {
-                author: parentAuthor,
-                text: parentText,
+                author: q.author,
+                text: q.text,
+                note: q.note,
                 onPress: () => {
                     const index = listItems.findIndex((m: any) => m.id === item.metadata.replyToId);
                     if (index > -1) {
@@ -1033,7 +1075,7 @@ function ChatScreen() {
             item.sendState === 'sending' ? (
                 <Text style={{ fontSize: 10, color: colors.chat.tickUnread }}> ◷</Text>
             ) : item.sendState === 'failed' ? (
-                <Text style={{ fontSize: 10, color: colors.feedback.danger.solid, fontWeight: '800' }}> ! not delivered</Text>
+                <Text style={{ fontSize: 10, color: colors.feedback.danger.fg, fontWeight: '800' }}> ! not delivered</Text>
             ) : (
                 <Text style={{ fontSize: 10, color: item.readByPeer ? palette.cyan200 : colors.chat.tickUnread }}>
                     {item.readByPeer ? ' ✓✓' : ' ✓'}
@@ -1064,20 +1106,30 @@ function ChatScreen() {
                     <ChatImage conversationId={id as string} messageId={item.id} onOpen={openImageViewer} />
                 ) : null}
                 status={status}
-                footer={item.type === 'image' && !item.text ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 4 }}>
-                        <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther]}>
-                            {item.timestamp}
-                        </Text>
-                        {isMe && item.outgoing && (
-                            <MaterialCommunityIcons
-                                name={item.readByPeer ? 'check-all' : 'check'}
-                                size={14}
-                                color={item.readByPeer ? palette.cyan200 : colors.chat.tickUnread}
-                                style={{ marginLeft: 3 }}
-                            />
-                        )}
-                    </View>
+                footer={(item.type === 'image' && !item.text) || item.integrityNote ? (
+                    <>
+                        {item.type === 'image' && !item.text ? (
+                            <View style={{ flexDirection: 'row', alignItems: 'center', alignSelf: isMe ? 'flex-end' : 'flex-start', marginTop: 4 }}>
+                                <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther]}>
+                                    {item.timestamp}
+                                </Text>
+                                {isMe && item.outgoing && (
+                                    <MaterialCommunityIcons
+                                        name={item.readByPeer ? 'check-all' : 'check'}
+                                        size={14}
+                                        color={item.readByPeer ? palette.cyan200 : colors.chat.tickUnread}
+                                        style={{ marginLeft: 3 }}
+                                    />
+                                )}
+                            </View>
+                        ) : null}
+                        {/* A line the node moved or reordered, or an old-format line (e2e-crypto checkDmThread). */}
+                        {item.integrityNote ? (
+                            <Text style={[chat.messageTime, isMe ? chat.messageTimeMe : chat.messageTimeOther, { fontSize: 12, fontStyle: 'italic', alignSelf: 'flex-start' }]}>
+                                ⚠️ {item.integrityNote}
+                            </Text>
+                        ) : null}
+                    </>
                 ) : null}
             />
         );
@@ -1187,7 +1239,7 @@ function ChatScreen() {
             {postContext && (
                 <Pressable accessibilityRole="button" onPress={() => router.push(`/post/${postContext.id}`)} style={styles.stickyHeader}>
                     <View style={styles.stickyHeaderLeft}>
-                        <MaterialCommunityIcons name="shopping-outline" size={24} color={colors.brand.dark} />
+                        <MaterialCommunityIcons name="shopping-outline" size={24} color={colors.brand.primary} />
                         <View style={{ marginLeft: 12 }}>
                             <Text style={styles.stickyPostTitle} numberOfLines={1}>{postContext.title}</Text>
                             {showsBeans && <Text style={styles.stickyPostCredits}>{postContext.credits} Beans{postContext.priceType === 'hourly' ? ' / hr' : ''}</Text>}
@@ -1200,7 +1252,7 @@ function ChatScreen() {
                     ]}>
                         <Text style={[styles.statusBadgeText,
                             postContext.status === 'active' ? { color: theme === 'dark' ? colors.feedback.success.fg : colors.brand.dark } :
-                            postContext.status === 'pending' ? { color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber600 } :
+                            postContext.status === 'pending' ? { color: colors.feedback.warning.fg } :
                             { color: theme === 'dark' ? colors.text.secondary : palette.gray600 }
                         ]}>{postContext.status?.toUpperCase() || 'UNKNOWN'}</Text>
                     </View>
@@ -1211,7 +1263,7 @@ function ChatScreen() {
             {pendingTx && pendingTx.isPayer && postContext?.status === 'pending' && (
                 <View style={[styles.inlineActionBar, { flexDirection: 'column' }]}>
                     <View style={{ width: '100%', marginBottom: 10 }}>
-                        <Text style={{ color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber600, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
+                        <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700', textAlign: 'center', marginBottom: 4 }}>
                             ⚠️ Action Required: Release Credits
                         </Text>
                         <Text style={{ color: theme === 'dark' ? colors.text.body : palette.amber900, fontSize: 11, textAlign: 'center', paddingHorizontal: 16 }}>
@@ -1240,7 +1292,7 @@ function ChatScreen() {
                             onPress={handleCancelEscrow}
                             disabled={actionLoading}
                         >
-                            <MaterialCommunityIcons name="close-circle-outline" size={18} color={colors.feedback.danger.solid} style={{ marginRight: 6 }} />
+                            <MaterialCommunityIcons name="close-circle-outline" size={18} color={colors.feedback.danger.fg} style={{ marginRight: 6 }} />
                             <Text style={styles.inlineActionCancelText}>Cancel</Text>
                         </Pressable>
                     </View>
@@ -1301,14 +1353,11 @@ function ChatScreen() {
                     />
                 )}
 
-                {replyToMessage && !editingMessage && (
-                    <ChatReplyBanner
-                        styles={chat}
-                        author={replyToMessage.senderId === identity?.publicKey ? 'You' : (peerName || 'Someone')}
-                        text={replyToMessage.type === 'image' ? '🔒 Photo' : replyToMessage.text}
-                        onCancel={() => setReplyToMessage(null)}
-                    />
-                )}
+                {replyToMessage && !editingMessage && (() => {
+                    // What is being answered, as the thread judged it (dmQuoteFor).
+                    const q = dmQuoteFor(replyToMessage, identity?.publicKey, peerName);
+                    return <ChatReplyBanner styles={chat} author={q.author} text={q.text} note={q.note} onCancel={() => setReplyToMessage(null)} />;
+                })()}
 
                 {isPeerBlocked ? (
                     <View accessibilityRole="alert" accessibilityLiveRegion="polite" style={[styles.blockedNotice, { marginBottom: Math.max(insets.bottom, 12) }]}>
@@ -1322,6 +1371,7 @@ function ChatScreen() {
                         styles={chat}
                         onSend={handleSend}
                         canSend={canSendNow}
+                        notice={lockNotice}
                         placeholder="Message..."
                         accessibilityLabel="Message"
                         bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}

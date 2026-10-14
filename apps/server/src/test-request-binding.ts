@@ -61,6 +61,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { setMemberPhoto } from '@beanpool/engine';
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const PW = 'Request-Binding-Pw-4471!';
@@ -105,11 +106,12 @@ async function child(): Promise<void> {
         seed: (a: { owner: { pk: string; callsign: string }; members: { pk: string; callsign: string }[]; beans: boolean; trader?: string; partner?: string }) => {
             se.seedGenesisMember(a.owner.pk, a.owner.callsign);
             db.prepare("INSERT OR IGNORE INTO node_roles (member_pubkey, role, granted_by) VALUES (?, 'owner', 'genesis')").run(a.owner.pk);
-            db.prepare('UPDATE members SET avatar_url = ? WHERE public_key = ?').run(AVATAR, a.owner.pk);
+            setMemberPhoto(db, a.owner.pk, AVATAR);
             for (const m of a.members) {
-                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, updated_at)
-                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
-                    .run(m.pk, m.callsign, AVATAR);
+                db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, updated_at)
+                            VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`)
+                    .run(m.pk, m.callsign);
+                setMemberPhoto(db, m.pk, AVATAR);
                 db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(m.pk);
                 if (a.beans) se.transfer('genesis', m.pk, 100, `seed ${m.callsign}`, 'direct', true);
             }
@@ -164,6 +166,12 @@ async function child(): Promise<void> {
             return true;
         },
         storedOwnerAddresses: () => (se.getNodeConfig() as any).ownerAddresses ?? null,
+        // Step 7c: an owner's key session made in this process (admin-auth-test-harness.ts), for Settings' calls: the password
+        // alone opens no admin route with 2FA off. The owner the seed made, else one seeded for it.
+        'owner-session': async () => {
+            const row = db.prepare("SELECT member_pubkey FROM node_roles WHERE role = 'owner' ORDER BY rowid LIMIT 1").get() as { member_pubkey: string } | undefined;
+            return (await import('./admin-auth-test-harness.js')).ownerSessionHeaders(row?.member_pubkey);
+        },
     };
 
     const rl = readline.createInterface({ input: process.stdin });
@@ -334,7 +342,13 @@ async function main(): Promise<void> {
         setTimeout(() => settle({ kind: 'error', error: 'timeout' }), 4000);
     });
     const sockShow = (s: Sock) => s.kind === 'open' ? '101' : s.kind === 'status' ? String(s.status) : s.error;
-    const adminPw = { 'X-Admin-Password': PW };
+    // Step 7c: Settings' calls go under an owner's key session each node makes (its 'owner-session' command), not the
+    // password alone, which opens no admin route with 2FA off. One per node process.
+    const sessions = new Map<Node, Record<string, string>>();
+    const adminOf = async (n: Node): Promise<Record<string, string>> => {
+        if (!sessions.has(n)) sessions.set(n, await n.send('owner-session'));
+        return sessions.get(n)!;
+    };
     /** A node's switch clock just before the switch: every step that is not about "after the switch" runs there. */
     const beforeSwitch = (n: Node) => n.send('switchClock', { at: SWITCH - 1 });
 
@@ -599,8 +613,10 @@ async function main(): Promise<void> {
             assert(v1Before.status === 200, `and before it, accepted as before (${show(v1Before)})`);
 
             const joiner = (n: string) => id(n);
-            const redeem = (node: Node, ticket: string, j: Id) =>
-                call(node, 'POST', '/api/invite/redeem-offline', {}, JSON.stringify({ ticketB64: ticket, publicKey: j.pk, callsign: j.callsign }));
+            // Signed by the joiner's key for the node it is sent to, as both apps sign a redeem (the node registers no key a
+            // redeem isn't signed by): what is tested here is the ticket's binding, not the redeem's.
+            const redeem = async (node: Node, ticket: string, j: Id) => sendTo(node, 'POST',
+                await bound(j, 'POST', `https://${node.name}.test/api/invite/redeem-offline`, { ticketB64: ticket, publicKey: j.pk, callsign: j.callsign }));
             const check = (node: Node, ticket: string) => call(node, 'GET', `/api/invite/check?code=${encodeURIComponent(`BP-${ticket}`)}`);
             const ticketA = await core.buildInviteTicket('https://a.test', mia.pk, mia.sign);
             const jA = joiner('JoA'), jB = joiner('JoB');
@@ -665,25 +681,25 @@ async function main(): Promise<void> {
             }
             // Settings offers with one tap only the host it is open at itself (engine/address-offers.ts): from a
             // Settings open anywhere else, community.example.org is held back to tick, whoever's app reached U there.
-            const heldBack = await call(U, 'GET', '/api/local/admin/app-addresses', adminPw);
+            const heldBack = await call(U, 'GET', '/api/local/admin/app-addresses', await adminOf(U));
             assert(heldBack.status === 200 && !heldBack.body?.unconfirmed?.some((u: any) => u.address === 'community.example.org')
                 && heldBack.body?.heldBack?.some((u: any) => u.address === 'community.example.org' && u.reason === 'not-this-page'),
                 `with only Mia's app, Settings holds community.example.org back (${show(heldBack)})`);
             const ownersApp = await sendTo(U, 'GET', await bound(owner, 'GET', 'https://community.example.org/api/community/me'));
             assert(ownersApp.status === 200, `the owner's app reaches U at community.example.org too (${show(ownersApp)})`);
-            const ownerBacked = await call(U, 'GET', '/api/local/admin/app-addresses', adminPw);
+            const ownerBacked = await call(U, 'GET', '/api/local/admin/app-addresses', await adminOf(U));
             assert(ownerBacked.status === 200 && !ownerBacked.body?.unconfirmed?.some((u: any) => u.address === 'community.example.org')
                 && ownerBacked.body?.heldBack?.some((u: any) => u.address === 'community.example.org' && u.reason === 'not-this-page' && u.ownerOrAdmin === true),
                 `and with the owner's app too, still held back from a Settings open elsewhere, saying an owner's or admin's app reached it (${show(ownerBacked)})`);
             // Settings open at community.example.org, as it asks (?host=).
-            const listed = await call(U, 'GET', '/api/local/admin/app-addresses?host=community.example.org', adminPw);
+            const listed = await call(U, 'GET', '/api/local/admin/app-addresses?host=community.example.org', await adminOf(U));
             assert(listed.status === 200 && listed.body?.addresses?.length === 0 && listed.body?.unconfirmed?.some((u: any) => u.address === 'community.example.org' && u.today >= 1),
                 `Settings offers community.example.org to confirm (${show(listed)})`);
             assert(![...(listed.body?.unconfirmed ?? []), ...(listed.body?.heldBack ?? [])].some((u: any) => u.address === 'spam.example'),
                 "but not spam.example: only members' apps put an address on either list");
             const noAuth = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', {}, JSON.stringify({ address: 'community.example.org' }));
             assert(noAuth.status === 401 || noAuth.status === 403, `confirming needs an owner or admin (${show(noAuth)})`);
-            const confirmed = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', adminPw, JSON.stringify({ address: 'https://Community.Example.org/settings' }));
+            const confirmed = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', await adminOf(U), JSON.stringify({ address: 'https://Community.Example.org/settings' }));
             assert(confirmed.status === 200 && confirmed.body?.addresses?.some((a: any) => a.address === 'community.example.org' && a.source === 'owner')
                 && !confirmed.body?.unconfirmed?.some((u: any) => u.address === 'community.example.org'),
                 `one tap confirms it, and it moves to the address list as the owner's (${show(confirmed)})`);
@@ -694,16 +710,16 @@ async function main(): Promise<void> {
                 `now it is this community's name: accepted, any other host → 421, the LAN address too (${nowOwn.status}, ${other.status}, ${lanNow.status})`);
             const info = await call(U, 'GET', '/api/community/info');
             assert(JSON.stringify(info.body?.addresses) === JSON.stringify(['community.example.org']), `and /api/community/info lists it (${JSON.stringify(info.body?.addresses)})`);
-            const bad = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', adminPw, JSON.stringify({ address: 'not a host' }));
+            const bad = await call(U, 'POST', '/api/local/admin/app-addresses/confirm', await adminOf(U), JSON.stringify({ address: 'not a host' }));
             assert(bad.status === 400, `something that is not an address is refused (${show(bad)})`);
-            const removed = await call(U, 'POST', '/api/local/admin/app-addresses/remove', adminPw, JSON.stringify({ address: 'community.example.org' }));
+            const removed = await call(U, 'POST', '/api/local/admin/app-addresses/remove', await adminOf(U), JSON.stringify({ address: 'community.example.org' }));
             assert(removed.status === 200 && removed.body?.addresses?.length === 0, `and it can be removed again (${show(removed)})`);
         });
 
         // ── 11. Settings on B: the list and the counts ──
         console.log('\n— 11. Settings: the address list and the old-app count —');
         await section('11', async () => {
-            const r = await call(B, 'GET', '/api/local/admin/app-addresses', adminPw);
+            const r = await call(B, 'GET', '/api/local/admin/app-addresses', await adminOf(B));
             const b = r.body || {};
             const by = (a: string) => b.addresses?.find((x: any) => x.address === a);
             assert(r.status === 200 && by('b.test')?.source === 'public-address' && by('b2.test')?.source === 'env',
@@ -726,7 +742,7 @@ async function main(): Promise<void> {
                 statuses.push((await sendTo(B, 'GET', await bound(k, 'GET', 'https://b.test/api/community/health'))).status);
             }
             assert(statuses.every((s) => s === 200), `5 keys with no row at B each send an old-format and a format-2 read, and are answered (${statuses.join(',')})`);
-            const after = (await call(B, 'GET', '/api/local/admin/app-addresses', adminPw)).body || {};
+            const after = (await call(B, 'GET', '/api/local/admin/app-addresses', await adminOf(B))).body || {};
             const bTestAfter = after.addresses?.find((x: any) => x.address === 'b.test')?.today;
             assert(after.oldApps?.today === b.oldApps?.today && bTestAfter === by('b.test')?.today,
                 `neither count moves: apps too old ${b.oldApps?.today} → ${after.oldApps?.today}, b.test ${by('b.test')?.today} → ${bTestAfter}`);
@@ -778,12 +794,12 @@ async function main(): Promise<void> {
         console.log('\n— 14. an owner-confirmed address stored in another spelling can be removed —');
         await section('14', async () => {
             await A.send('storeOwnerAddresses', { list: ['https://Mixed.Example.org/', 'kept.example.org'] });
-            const listed = await call(A, 'GET', '/api/local/admin/app-addresses', adminPw);
+            const listed = await call(A, 'GET', '/api/local/admin/app-addresses', await adminOf(A));
             const mixed = listed.body?.addresses?.find((a: any) => a.address === 'mixed.example.org');
             assert(mixed?.source === 'owner', `Settings lists it as mixed.example.org, confirmed in Settings (${show(listed)})`);
             const own = await sendTo(A, 'GET', await bound(xan, 'GET', 'https://mixed.example.org/api/community/me'));
             assert(own.status === 200, `A accepts a request signed for it (${show(own)})`);
-            const removed = await call(A, 'POST', '/api/local/admin/app-addresses/remove', adminPw, JSON.stringify({ address: 'mixed.example.org' }));
+            const removed = await call(A, 'POST', '/api/local/admin/app-addresses/remove', await adminOf(A), JSON.stringify({ address: 'mixed.example.org' }));
             assert(removed.status === 200 && !removed.body?.addresses?.some((a: any) => a.address === 'mixed.example.org'),
                 `the Remove button's request takes it off the list (${show(removed)})`);
             assert(JSON.stringify(await A.send('storedOwnerAddresses')) === JSON.stringify(['kept.example.org']), 'and off what is stored; the other stays');
@@ -797,8 +813,9 @@ async function main(): Promise<void> {
             await A.send('resetLimits');
             let n = 0;
             const joiner = () => id(`JoOnce${++n}`);
-            const redeem = (ticket: string, j: Id) =>
-                call(A, 'POST', '/api/invite/redeem-offline', {}, JSON.stringify({ ticketB64: ticket, publicKey: j.pk, callsign: j.callsign }));
+            // Signed by the joiner's key, as section 9's.
+            const redeem = async (ticket: string, j: Id) => sendTo(A, 'POST',
+                await bound(j, 'POST', 'https://a.test/api/invite/redeem-offline', { ticketB64: ticket, publicKey: j.pk, callsign: j.callsign }));
             const sigOf = (ticket: string) => JSON.parse(Buffer.from(ticket, 'base64').toString('utf8')).s as string;
             /** The ticket with its signature `s` written another way: the same 64 bytes. */
             const respell = (ticket: string, f: (s: string) => string) => {

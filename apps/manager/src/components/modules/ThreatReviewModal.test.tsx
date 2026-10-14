@@ -96,6 +96,67 @@ describe('ThreatReviewModal', () => {
         }
     });
 
+    it('a report on a post freezes its author as the node read it, never the key the reporter wrote', async () => {
+        const handleFreeze = vi.fn().mockResolvedValue(undefined);
+        render(
+            <ThreatReviewModal
+                threat={{
+                    id: 'r-post', isReport: true, reason: 'spam',
+                    // The reporter named Bob; the post is Alice's.
+                    targetPubkey: 'ring0-1784649014864567',
+                    postId: 'post-1', postAuthorPubkey: 'wash1-1784649014864123',
+                }}
+                members={mockMembers}
+                onClose={vi.fn()}
+                onFreezePubkeys={handleFreeze}
+            />
+        );
+        await act(async () => {
+            fireEvent.click(screen.getByText('🛑 Freeze Accounts'));
+        });
+        expect(handleFreeze).toHaveBeenCalledWith(['wash1-1784649014864123']);
+        expect(screen.queryByText(/Bob Ring/)).not.toBeInTheDocument();
+    });
+
+    it("a Pulse report freezes the item's owner, even when the row carries a post id and a node joined that post's author", async () => {
+        const handleFreeze = vi.fn().mockResolvedValue(undefined);
+        render(
+            <ThreatReviewModal
+                threat={{
+                    id: 'r-pulse', isReport: true, reason: 'spam',
+                    // The item is Bob's; a post of Alice's was named beside it.
+                    targetPubkey: 'ring0-1784649014864567', targetPulseItemId: 'item-1',
+                    postId: 'post-1', postAuthorPubkey: 'wash1-1784649014864123',
+                }}
+                members={mockMembers}
+                onClose={vi.fn()}
+                onFreezePubkeys={handleFreeze}
+            />
+        );
+        await act(async () => {
+            fireEvent.click(screen.getByText('🛑 Freeze Accounts'));
+        });
+        expect(handleFreeze).toHaveBeenCalledWith(['ring0-1784649014864567']);
+    });
+
+    it('a report on a post whose author the node did not say offers nobody to freeze', async () => {
+        const handleFreeze = vi.fn().mockResolvedValue(undefined);
+        render(
+            <ThreatReviewModal
+                threat={{ id: 'r-post', isReport: true, reason: 'spam', targetPubkey: 'ring0-1784649014864567', postId: 'post-1', postAuthorPubkey: null }}
+                members={mockMembers}
+                onClose={vi.fn()}
+                onFreezePubkeys={handleFreeze}
+            />
+        );
+        const freeze = screen.getByText('🛑 Freeze Accounts').closest('button')!;
+        expect(freeze).toBeDisabled();
+        await act(async () => {
+            fireEvent.click(freeze);
+        });
+        expect(handleFreeze).not.toHaveBeenCalled();
+    });
+
     it('a failed freeze shows the error, stays open and neither closes nor dismisses', async () => {
         vi.useFakeTimers();
         const handleFreeze = vi.fn().mockRejectedValue(new Error('HTTP 500: Internal Server Error'));
@@ -199,5 +260,84 @@ describe('ThreatReviewModal', () => {
             vi.advanceTimersByTime(2000);
         });
         vi.useRealTimers();
+    });
+
+    it('parses insularity and cohort metrics from threat description', () => {
+        const insularThreat: ThreatItem = {
+            description: 'Detected 0.72 insularity with 35% new members in component of 8 members',
+        };
+        const cohortThreat: ThreatItem = {
+            description: 'Detected 3 cohort anomaly in current evaluation window',
+        };
+
+        const { rerender } = render(
+            <ThreatReviewModal threat={insularThreat} onClose={vi.fn()} />
+        );
+
+        expect(screen.getByText('Cluster Insularity')).toBeInTheDocument();
+        expect(screen.getByText('0.72')).toBeInTheDocument();
+        expect(screen.getByText('New Accounts')).toBeInTheDocument();
+        expect(screen.getByText('35%')).toBeInTheDocument();
+        expect(screen.getByText('Ring Size')).toBeInTheDocument();
+        expect(screen.getByText('8 Nodes')).toBeInTheDocument();
+
+        rerender(<ThreatReviewModal threat={cohortThreat} onClose={vi.fn()} />);
+
+        expect(screen.getByText('Affected Cohorts')).toBeInTheDocument();
+        expect(screen.getByText('3')).toBeInTheDocument();
+        expect(screen.getByText('Evaluation Window')).toBeInTheDocument();
+    });
+
+    it('handles report dismissal via onDismissReport and displays error when report dismissal fails', async () => {
+        vi.useFakeTimers();
+        const handleDismissReport = vi.fn().mockResolvedValue(undefined);
+        const handleDismiss = vi.fn();
+        const reportThreat: ThreatItem = {
+            id: 'report-123',
+            isReport: true,
+            targetPubkey: 'wash1-1784649014864123',
+            reason: 'Inappropriate content',
+        };
+
+        try {
+            const { rerender } = render(
+                <ThreatReviewModal
+                    threat={reportThreat}
+                    onClose={vi.fn()}
+                    onDismiss={handleDismiss}
+                    onDismissReport={handleDismissReport}
+                />
+            );
+
+            await act(async () => {
+                fireEvent.click(screen.getByText('Dismiss Flag'));
+            });
+
+            expect(handleDismissReport).toHaveBeenCalledWith(reportThreat);
+
+            act(() => {
+                vi.advanceTimersByTime(1200);
+            });
+            expect(handleDismiss).toHaveBeenCalledWith(reportThreat);
+
+            // Error handling case
+            const failingDismissReport = vi.fn().mockRejectedValue(new Error('Network error dismissing report'));
+            rerender(
+                <ThreatReviewModal
+                    threat={reportThreat}
+                    onClose={vi.fn()}
+                    onDismiss={handleDismiss}
+                    onDismissReport={failingDismissReport}
+                />
+            );
+
+            await act(async () => {
+                fireEvent.click(screen.getByText('Dismiss Flag'));
+            });
+
+            expect(screen.getByRole('alert')).toHaveTextContent('Network error dismissing report');
+        } finally {
+            vi.useRealTimers();
+        }
     });
 });

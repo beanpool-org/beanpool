@@ -14,13 +14,68 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { BeanPoolMerkleTree, LIVE_POST_TYPES, type LivePostChange } from '@beanpool/core';
-import { applyDelta, fetchFriendsFromServer, getDb, localPostTies } from '../utils/db';
+import { applyDelta, communityCachesRenamed, copyGenerationNow, fetchFriendsFromServer, getDb, localPostTies, newCopyGeneration, readMembersOnDemandWorld, readNearbyHeld, readNearbyTag } from '../utils/db';
+import { absentAfter, cardsToDrop, membersKeysPath, planMembersCycle, readAbsent, recheckCursor } from '../utils/members-on-demand';
 import { getDatabaseFilenameForNode } from '../utils/nodes';
 import { EVENT_TYPES_QUERY } from '../utils/events';
 import { shouldBlockCleartextNodeUrl, isPlainNodeAddress } from '../utils/node-url';
 import { postsViewRefusal } from '../utils/posts-view';
+import { isMembersOnlyAnswer, noteMembersOnly } from '../utils/members-only-listings';
+import { getCachedNodeProfile } from '../utils/node-profile';
+import { nearbyIdReads, nearbyLastSet, nearbyPageOf, type NearbyPage } from '../utils/posts-nearby';
+import { nearbySetHash } from '../utils/nearby-hash';
+import {
+    nextNearbyAreaCopy, readNearbyAreaCopy, sameArea, storeNearbyAreaCopy, NEARBY_AREA_RECHECK_MS, type NearbyArea, type NearbyAreaCopy,
+} from '../utils/nearby-area';
 
 const SYNC_TIMEOUT_MS = 20_000;
+/**
+ * The node's key for the next page of a posts sync read, while the one it answers is full (apps/server
+ * routes/marketplace.ts, paged by key). None: the read is complete. A node from before it sends none, so its one page
+ * is the whole read, as it always was.
+ */
+export const POSTS_NEXT_HEADER = 'X-Posts-Next';
+/**
+ * The most pages one cycle reads (200 listings each). A read with more stops there and is held (HeldPostsRead): the
+ * cursor doesn't move past what it didn't read, and the next cycle carries on from the page it stopped at.
+ */
+export const POSTS_PAGE_CAP = 50;
+
+/** Where a posts read cut short is held (HeldPostsRead), one per community's copy (getSyncCursorKey). */
+const POSTS_HELD_READ = 'posts_held_read';
+
+/**
+ * How many cycles in a row may ask the node for a held read's page and get no further (it fails, isn't a list, or is a
+ * 304 each time: one bad row deep in the order). The next one logs it and starts the read again from its first page,
+ * so new listings still come; held again at that page, it starts over again after as many more (review of PR #1719, NB7).
+ */
+export const POSTS_HELD_TRIES = 5;
+
+/**
+ * A posts read cut short: the cursor it reads from ('' a whole read), the key of its next page, when it began, and how
+ * many cycles have asked the node for that page since (POSTS_HELD_TRIES).
+ */
+interface HeldPostsRead {
+    since: string;
+    after: string;
+    startedAt: number;
+    tries: number;
+}
+
+function heldPostsRead(raw: string | null): HeldPostsRead | null {
+    try {
+        const h = raw ? JSON.parse(raw) : null;
+        return h && typeof h.since === 'string' && typeof h.after === 'string' && h.after !== '' && Number.isFinite(h.startedAt)
+            ? { since: h.since, after: h.after, startedAt: h.startedAt, tries: Number.isFinite(h.tries) ? h.tries : 0 } : null;
+    } catch {
+        return null;
+    }
+}
+
+function nextPageKeyOf(res: { headers?: { get?(name: string): string | null } } | null | undefined): string | null {
+    const raw = res?.headers?.get?.(POSTS_NEXT_HEADER);
+    return typeof raw === 'string' && raw.trim() !== '' ? raw.trim() : null;
+}
 const MAX_STORED_TRANSACTIONS = 1000;
 const StorageKeysConfig = {
     MERKLE_ROOT: 'merkle-root',
@@ -29,6 +84,8 @@ const StorageKeysConfig = {
     TRANSACTIONS: 'transactions',
     SYNC_CHECKPOINT: 'checkpoint',
     IDENTITY_EPOCH: 'identity-epoch',
+    // When the last sync cycle completed, for display only (getLastSyncTime).
+    LAST_CYCLE: 'last-cycle',
 };
 
 /**
@@ -49,9 +106,32 @@ export function epochOf(res: { headers?: { get?(name: string): string | null } }
     return /^\d+$/.test(epoch) ? epoch : null;
 }
 
+/** The referenced keys a community that says `membersOnDemand` answered no card for lately (utils/members-on-demand.ts). */
+const MEMBERS_ABSENT = 'members_absent';
+
 export async function getSyncCursorKey(keyId: string): Promise<string> {
+    // Never read before the phone's copies and their cursors have their new names (utils/cache-file-migration.ts): a
+    // cursor read under the new name before its file moved would start a whole sync for nothing.
+    await communityCachesRenamed();
     const url = await AsyncStorage.getItem('beanpool_anchor_url');
     return `pillar_sync_${getDatabaseFilenameForNode(url)}_${keyId}`;
+}
+
+/**
+ * Every sync cursor of one community's copy, by its file name (utils/nodes.ts getDatabaseFilenameForNode): what a reset
+ * or a wipe of that copy removes, so its next sync reads it whole, from its first page. The held posts read is one: a
+ * whole read carried on after a reset resumes below its key and never reads the newest listings above it again
+ * (review of PR #1719, B1). The identity epoch is not: it says which server the phone last read, not what it holds.
+ */
+export function syncCursorKeysOf(dbFilename: string): string[] {
+    return [StorageKeysConfig.LAST_SYNC, StorageKeysConfig.SYNC_CHECKPOINT, 'members_last_sync', 'members_held_since', POSTS_HELD_READ, StorageKeysConfig.LAST_CYCLE, MEMBERS_ABSENT]
+        .map(id => `pillar_sync_${dbFilename}_${id}`);
+}
+
+/** Forget the sync cursors of the community the phone is on (syncCursorKeysOf): for a wipe of its copy. */
+export async function forgetSyncCursors(): Promise<void> {
+    await communityCachesRenamed();
+    await AsyncStorage.multiRemove(syncCursorKeysOf(getDatabaseFilenameForNode(await AsyncStorage.getItem('beanpool_anchor_url'))));
 }
 
 export interface SyncResult {
@@ -181,6 +261,41 @@ function liveChangesSince(mark: number, dbName: string): { liveChanges?: LivePos
 }
 
 /**
+ * On a community that syncs listings by area (its profile's `nearbyListings`), what every write of its listings keeps
+ * (utils/db.ts applyDelta `postsNearby`): at most `max` others besides the member's own and tied ones, nearest the area
+ * this phone holds for them (utils/nearby-area.ts). Null anywhere else, and without the phone's key.
+ */
+async function nearbyKeepFor(anchorUrl: string, selfPubkey: string | null): Promise<{ area: NearbyArea | null; max: number } | null> {
+    const limits = (await getCachedNodeProfile(anchorUrl))?.features.nearbyListings;
+    if (!limits || !selfPubkey) return null;
+    return { area: (await readNearbyAreaCopy(anchorUrl, selfPubkey))?.area ?? null, max: limits.max };
+}
+
+/**
+ * The member's area on a by-area community, for this cycle: this phone's copy, asked again of the node once it is an hour
+ * old (or there is none). A copy that moved is marked whole (utils/nearby-area.ts): the posts read is then whole. Null
+ * when there is no copy and the node can't be asked: the read is as usual, and the prune keeps the newest.
+ */
+async function nearbyAreaForSync(
+    anchorUrl: string, pubKey: string, signer: { publicKey: string; privateKey: string } | null,
+): Promise<NearbyAreaCopy | null> {
+    let copy = await readNearbyAreaCopy(anchorUrl, pubKey);
+    const now = Date.now();
+    if (signer && (!copy || now - copy.checkedAt >= NEARBY_AREA_RECHECK_MS || copy.checkedAt > now)) {
+        // Loaded here, as the identity is: only a by-area community's cycle needs the signed read.
+        const { readMemberArea } = await import('../utils/member-area');
+        const said = await readMemberArea(anchorUrl, signer);
+        if (said !== undefined) {
+            copy = nextNearbyAreaCopy(copy, pubKey, said ? { lat: said.lat, lng: said.lng } : null, now);
+            try {
+                await storeNearbyAreaCopy(anchorUrl, copy);
+            } catch (e) {}
+        }
+    }
+    return copy;
+}
+
+/**
  * Write a pushed listing change into this phone's cache, through applyDelta. Returns false — and writes
  * nothing — when the change should go through the full catch-up sync as it always did:
  *   - the socket's node is no longer the active one (the cache belongs to another community now);
@@ -209,12 +324,61 @@ export async function applyLivePostChange(
 
     liveLog.push({ seq: ++liveSeq, dbName: expectedDbName, change });
     if (liveLog.length > LIVE_LOG_MAX) liveLog.splice(0, liveLog.length - LIVE_LOG_MAX);
-    await applyDelta({ liveChanges: [change] }, expectedDbName);
+    // On a by-area community a push adds a row between reads: the phone keeps itself to its `max` after it.
+    const nearby = await nearbyKeepFor(ctx.anchorUrl, self);
+    await applyDelta({ liveChanges: [change], ...(nearby ? { postsNearby: nearby } : {}) }, expectedDbName);
     return true;
 }
 
 /** DeviceEventEmitter event fired when a performSync cycle ends, with `{ success: boolean }`. */
 export const PILLAR_SYNC_ENDED = 'pillar_sync_ended';
+
+/** performSync's answer while another cycle is running: it ran nothing. */
+export const ALREADY_SYNCING = 'Already syncing';
+/** performSync's answer when the copy it was writing was cleared under it (copyGeneration): it stored nothing. */
+export const COPY_CLEARED = 'The local copy was cleared during the sync';
+/** How long a Force Resync waits for a cycle already running to end before it runs its own (performSyncWhenFree). */
+export const RESYNC_WAIT_MS = 90_000;
+
+// Resolved as the running cycle ends, when PILLAR_SYNC_ENDED is emitted; null while none runs.
+let cycleEnd: Promise<void> | null = null;
+
+/**
+ * performSync for a reset that needs a cycle of its own on the copy it has just cleared (Force Resync). A cycle already
+ * running answered 'Already syncing', and Force Resync said "Success" over a copy nothing was refilling: the running
+ * cycle writes nothing into a cleared copy (copyGeneration). So that cycle is waited out, up to `waitMs`, and this one
+ * runs after it. Still refused after that, the answer stays ALREADY_SYNCING, never a success.
+ */
+export async function performSyncWhenFree(
+    onProgress?: (step: number, total: number, stage: string) => void,
+    waitMs = RESYNC_WAIT_MS,
+): Promise<SyncResult> {
+    const until = Date.now() + waitMs;
+    for (;;) {
+        const result = await performSync(onProgress);
+        const left = until - Date.now();
+        if (result.errorMessage !== ALREADY_SYNCING || left <= 0) return result;
+        onProgress?.(1, 5, 'Waiting for the sync already running to finish...');
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        await Promise.race([cycleEnd ?? Promise.resolve(), new Promise<void>(resolve => { timer = setTimeout(resolve, left); })]);
+        clearTimeout(timer);
+    }
+}
+
+/**
+ * What Force Resync tells the member once its own sync has answered (performSyncWhenFree): "Success" only when the copy
+ * it cleared was read again; otherwise that it was cleared and will fill with the next sync, and why not yet.
+ */
+export function forceResyncNotice(result: Pick<SyncResult, 'success' | 'errorMessage'>): { title: string; message: string } {
+    if (result.success) return { title: 'Success', message: 'Local database rebuilt, ratings restored, and re-synced from the node.' };
+    if (result.errorMessage === 'members_only') {
+        return { title: 'Local copy cleared', message: 'This community shows its listings to members only, so none were downloaded.' };
+    }
+    const why = result.errorMessage === ALREADY_SYNCING
+        ? 'A sync that was already running has not finished yet.'
+        : 'The download did not finish.';
+    return { title: 'Local copy cleared', message: `${why} Your community downloads again with the next sync, which the app runs on its own.` };
+}
 
 /**
  * True while a sync is queued (debounce window) or running. The market uses it so a sync that is
@@ -229,8 +393,15 @@ export function isPillarSyncActive(): boolean {
  * Returns immediately if hashes match (0 bytes transferred).
  */
 export async function performSync(onProgress?: (step: number, total: number, stage: string) => void): Promise<SyncResult> {
-    if (isSyncing) return { success: false, merkleRoot: null, deltaCount: 0, durationMs: 0, aborted: true, errorMessage: 'Already syncing' };
+    if (isSyncing) return { success: false, merkleRoot: null, deltaCount: 0, durationMs: 0, aborted: true, errorMessage: ALREADY_SYNCING };
+    // The copy this cycle writes to (utils/db.ts copyGeneration). Cleared under it, the cycle writes and stores nothing
+    // more; a cursor, hold, epoch or cycle time is stored only if the copy is still this one as the write is made.
+    const copyGen = copyGenerationNow();
+    const sameCopy = () => copyGenerationNow() === copyGen;
+    const storeForCopy = (key: string, value: string): Promise<void> => (sameCopy() ? AsyncStorage.setItem(key, value) : Promise.resolve());
     isSyncing = true;
+    let endCycle = () => {};
+    cycleEnd = new Promise<void>(resolve => { endCycle = resolve; });
     const startTime = Date.now();
     const deadline = startTime + SYNC_TIMEOUT_MS;
     // Pushed listing changes applied after this point are replayed over this cycle's writes (liveChangesSince).
@@ -265,9 +436,13 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // Step 2: Fetch Posts and Balance directly via standard REST APIs
         // Through the identity module, the one reader of the stored key (and a seam a test can stand in for).
         let pubKey = '';
+        // The key that signs the by-area community's area read (nearbyAreaForSync).
+        let signer: { publicKey: string; privateKey: string } | null = null;
         try {
             const { loadIdentity } = await import('../utils/identity');
-            pubKey = (await loadIdentity())?.publicKey || '';
+            const identity = await loadIdentity();
+            pubKey = identity?.publicKey || '';
+            signer = identity?.publicKey && identity?.privateKey ? { publicKey: identity.publicKey, privateKey: identity.privateKey } : null;
         } catch (e) {
             console.error('[Pillar Sync] Failed to get identity from SecureStore', e);
         }
@@ -315,7 +490,19 @@ export async function performSync(onProgress?: (step: number, total: number, sta
 
         const kLastMembersSync = await getSyncCursorKey('members_last_sync');
         const lastMembersSync = await AsyncStorage.getItem(kLastMembersSync);
-        
+        // The members delta's own cursor, set only while it trails kLastSync: a members delta that did not land (the node
+        // busy, a network error, an answer this phone did not apply) leaves it where that read asked from, and the next
+        // sync asks again from there. A delta from before the node's avatarKeysSince is answered with the whole directory
+        // (the faces heal, engine/avatar-keys.ts on the server) under the heavy-read cap, which may answer 503
+        // heavy_read_busy: moving on past it got the phone a plain delta, and its faces stayed broken until the hourly
+        // whole read (review of PR #1656). Only the members delta waits: kLastSync is the posts cursor too, and a photo
+        // heal's next page (engine/photo-keys.ts) comes only to a newer one. Unset, a sync asks what it always did.
+        const kMembersHeld = await getSyncCursorKey('members_held_since');
+        let membersHeld = await AsyncStorage.getItem(kMembersHeld);
+        // Set below by this cycle's members reads: the cursor of a delta that did not land, or that one landed.
+        let membersHoldAt = '';
+        let membersLanded = false;
+
         let localMembersCount = 0;
         try {
             const database = await getDb();
@@ -324,6 +511,11 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         } catch (e) {
             console.error('[Pillar Sync] Failed to query local members count', e);
         }
+
+        // A community that says `membersOnDemand` (the worldwide one, DESIGN-global-members-by-area §2.2): this phone never
+        // reads its directory whole nor asks for everyone who changed. It holds the cards it has a reason to show and asks
+        // for those by key once the cycle has landed (syncMembersOnDemand). Anywhere else, every request is as it was.
+        const membersOnDemand = pubKey ? (await getCachedNodeProfile(anchorUrl))?.features.membersOnDemand === true : false;
 
         let shouldFetchMembers = !lastMembersSync ||
                                    (Date.now() - parseInt(lastMembersSync, 10)) > 3600_000 ||
@@ -334,10 +526,16 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // return only recently-changed posts and the market would look empty/incomplete.
         // Force a full re-pull in that case so a wiped cache heals in one sync — this also
         // re-enables the fast-first-paint below. Steady state (posts present) stays incremental.
-        // The local count only matters when we already hold a sync cursor; without one it's a
+        // The local count only matters when we already hold a sync cursor or a held read; without either it's a
         // full pull regardless, so skip the extra COUNT query on every cursor-less cycle.
+        // A posts read the page cap cut short (POSTS_PAGE_CAP) carries on where it stopped, from the cursor it read from:
+        // only a read that reaches its last page moves kLastSync, and to the time it began, so a listing that changed
+        // while it paged (it moves to the top of the node's order, above every page key) is in the next delta.
+        const kPostsHeld = await getSyncCursorKey(POSTS_HELD_READ);
+        const postsHeldRaw = await AsyncStorage.getItem(kPostsHeld);
+        let postsHeld = heldPostsRead(postsHeldRaw);
         let localPostsCount = 0;
-        if (lastSyncParam) {
+        if (lastSyncParam || postsHeld) {
             try {
                 const database = await getDb();
                 const postsRow = await database.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM posts');
@@ -345,7 +543,60 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             } catch (e) {}
         }
         let postsIsIncremental = !!lastSyncParam && localPostsCount > 0;
-        const postsSyncParam = postsIsIncremental ? lastSyncParam : '';
+        // A held read whose cache has been emptied since (Force Resync, a wipe, the members-only drop) starts again whole,
+        // from its first page: carried on below its key, a whole read would never read the listings above it again. So
+        // does a held delta with no cursor to be a delta of. The stored hold goes with it, so no later cycle resumes it
+        // (and moves the cursor back to when it began).
+        if (postsHeld && (localPostsCount === 0 || (postsHeld.since !== '' && !postsIsIncremental))) postsHeld = null;
+        if (postsHeld && postsHeld.tries >= POSTS_HELD_TRIES) {
+            console.warn(`[Pillar Sync] The posts read has been held at one page for ${postsHeld.tries} syncs; reading it again from its first page.`);
+            // A whole read starts again whole. A kLastSync stored beside it (one left with an emptied copy, which is why
+            // the read was whole) made it a delta from that cursor, and the listings below the held key never came
+            // (review of PR #1719 fix round 1, NB-2: R8). A held delta starts again from kLastSync, where it began.
+            if (postsHeld.since === '') postsIsIncremental = false;
+            postsHeld = null;
+        }
+        // A community that syncs listings by area (utils/posts-nearby.ts, the node's profile `nearbyListings`): the posts
+        // read says `nearby=1` and gets its member's set. Anywhere else, and without the phone's key, every request below is
+        // as it always was.
+        const nearbyLimits = pubKey ? (await getCachedNodeProfile(anchorUrl))?.features.nearbyListings ?? null : null;
+        let nearbyArea: NearbyAreaCopy | null = null;
+        // The set this phone holds, the `tied` the node hashed with it, and the node's hash of them: the read sends the hash
+        // back (`setHash`), and while that is still the set the node names none, only echoes the hash; once it moved, a node
+        // that knows `setDiff=1` names what changed, which this phone applies and checks against the new hash before it
+        // writes it (utils/posts-nearby.ts nearbyLastSet).
+        let nearbyHeld: { set: string[]; tied: string[]; hash: string } | null = null;
+        // The tag of the last read that landed whole: sent with a delta, it is answered 304 while nothing in the set changed,
+        // whatever the cursor (the node's tag leaves it out: REPORT-geosync-load-B, item 3).
+        let nearbyTag: string | null = null;
+        if (nearbyLimits) {
+            nearbyArea = await nearbyAreaForSync(anchorUrl, pubKey, signer);
+            nearbyHeld = await readNearbyHeld();
+            nearbyTag = await readNearbyTag();
+            // No held read: the set is a few pages, and each of them names all of it.
+            postsHeld = null;
+            // A first read by area, or an area that moved: the new neighbourhood, whole.
+            if (nearbyArea?.whole) postsIsIncremental = false;
+        }
+        if (postsHeldRaw !== null && !postsHeld) await AsyncStorage.removeItem(kPostsHeld);
+        if (postsHeld) postsIsIncremental = postsHeld.since !== '';
+        let postsSyncParam = postsHeld
+            ? (postsHeld.since ? `&updatedAfter=${encodeURIComponent(postsHeld.since)}` : '')
+            : postsIsIncremental ? lastSyncParam : '';
+        let postsSinceIso = postsHeld ? postsHeld.since : postsIsIncremental ? incrementalSinceIso : '';
+        let postsReadStartedAt = postsHeld ? postsHeld.startedAt : Date.now();
+        // Set below when this cycle's read stops before its last page: where the next one carries on.
+        let postsHoldAt: HeldPostsRead | null = null;
+        // A 304 to the read: nothing to write, and nothing that moves the cursor.
+        let postsNotModified = false;
+        // False when a take-over's read changed under it and the rows that changed could not all be read: its rows are
+        // written, but nothing is dropped, and the epoch stays as held, so the next cycle replaces again.
+        let postsReplaceSafe = true;
+        // The ids the take-over's catch-up read carried and its pull didn't: they count as the node's, never as part of
+        // the pull's answer (utils/posts-replace.ts `sentOnly`).
+        let postsSentOnly: string[] = [];
+        // A by-area read that stopped before its last page: what it read is written and reconciled, but the cursor stays.
+        let postsCursorStays = false;
 
         // Each request gets its own 30s budget (extended for heavy initial payloads), started when
         // THAT request starts. Two controllers armed at the top of the cycle used to be shared by
@@ -363,15 +614,118 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         let epochNow: string | null = null;
         let epochHeld: string | null = null;
         let takenOver = false;
+        // Tables applied THIS cycle OUTSIDE the batch (the early fast-paint write, below).
+        // If the batch below fails we must invalidate these fingerprints too —
+        // otherwise a write that recorded its fingerprint but didn't durably land
+        // (e.g. applyDelta's node-switch contamination guard returned early) would be
+        // treated as applied and skipped forever.
+        const earlyApplied = new Set<string>();
+        // Whether the whole pull after a take-over has replaced the posts cache (utils/db.ts `postsReplace`).
+        let postsReplaced = false;
+        // Whether an early write wrote nothing (the member switched community while it waited for the sync lock,
+        // and maybe back): the cycle goes on for the other tables, but its cursor stays, so the next cycle reads those
+        // posts again, and their fingerprints go, so it writes them.
+        let postsUnwritten = false;
+        // Whether the posts this read carries were written by the early write, not the cycle's batch.
+        let postsWrittenEarly = false;
+        // The end of a cycle whose copy was cleared under it (copyGeneration): what it recorded as applied is forgotten
+        // and nothing is stored, so the next cycle reads the fresh copy whole.
+        const copyCleared = (tables: string[] = []): SyncResult => {
+            console.warn(`[Pillar Sync] The local copy of ${anchorUrl} was cleared during the sync; nothing more is written or stored.`);
+            timeouts.clear();
+            forgetCycleFingerprints(anchorUrl, [...tables, ...rawGated, 'posts', 'membersDelta', ...earlyApplied]);
+            result.aborted = true;
+            result.errorMessage = COPY_CLEARED;
+            result.durationMs = Date.now() - startTime;
+            return result;
+        };
+        // Fast first paint: on the FIRST (full) sync for this node the marketplace is
+        // still showing its loading spinner, and the remaining pillars below (balance,
+        // members, crowdfund, transactions, ratings) can add several seconds on a slow
+        // node before the single end-of-cycle applyDelta runs. Write the posts to SQLite
+        // and tell the marketplace to render NOW, then drop them from the batch so we
+        // don't re-write the same rows (the double-apply that historically starved the
+        // sync lock). Runs only on a FULL posts fetch (first sync, or a healed empty cache)
+        // — steady-state incremental cycles keep the single batched apply untouched.
+        // False when the write threw: the posts go with the batch.
+        const writePostsEarly = async (posts: any[]): Promise<boolean> => {
+            let done = false;
+            try {
+                const wrote = await applyDelta({ posts, ...(takenOver && postsReplaceSafe ? { postsReplace: true, postsSentOnly } : {}), ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName, copyGen);
+                // Not written (the member switched community while this batch waited for the sync lock, or the copy was
+                // cleared): the epoch stays as held, so the next cycle replaces the cache again.
+                postsReplaced = takenOver && postsReplaceSafe && wrote;
+                if (wrote === false) {
+                    postsUnwritten = true;
+                    forgetCycleFingerprints(anchorUrl, ['posts']);
+                }
+                earlyApplied.add('posts');
+                rawGated.delete('posts');
+                done = true;
+                if (wrote !== false) {
+                    const { DeviceEventEmitter } = require('react-native');
+                    DeviceEventEmitter.emit('sync_data_updated');
+                }
+            } catch (e) {
+                console.warn('[Pillar Sync] Early posts apply failed (will apply in batch):', e);
+            }
+            return done;
+        };
         try {
             // `types=` opts in to events (docs/events-on-the-map.md §2.6). Without it the node leaves them out, which
             // is what keeps builds that predate events from ever caching one.
-            const pullPosts = (cursor: string) => fetch(`${anchorUrl}/api/marketplace/posts?limit=1000&sync=true&${EVENT_TYPES_QUERY}${cursor}`, {
+            // `paged=1` asks for the read paged by key (POSTS_NEXT_HEADER), `pageAfter` for the page below a key. By area,
+            // `setOnce=1`: the node names the member's set on the read's last page only (utils/posts-nearby.ts nearbyPageOf),
+            // and with `setHash` not at all while the set this phone holds is still the set; with `setDiff=1` beside it, as what
+            // changed once it moved (a node before it ignores it and names the set whole).
+            const nearbyQuery = () => `limit=200&sync=true&nearby=1&setOnce=1${nearbyHeld ? `&setHash=${encodeURIComponent(nearbyHeld.hash)}&setDiff=1` : ''}`;
+            // `tag`: this phone's own If-None-Match (a by-area delta's first page), where the platform cache knows no URL it
+            // never asked; the platform passes its 304 through as one.
+            const pullPosts = (cursor: string, after: string | null = null, tag: string | null = null) => fetch(`${anchorUrl}/api/marketplace/posts?${nearbyLimits ? nearbyQuery() : 'limit=1000&sync=true'}&${EVENT_TYPES_QUERY}${cursor}&${after ? `pageAfter=${encodeURIComponent(after)}` : 'paged=1'}`, {
                 method: 'GET',
-                headers: { 'Accept': 'application/json' },
+                headers: { 'Accept': 'application/json', ...(tag ? { 'If-None-Match': tag } : {}) },
                 signal: timeouts.signal(30000)
             });
-            let postsRes = await pullPosts(postsSyncParam);
+            // A page's rows, or null for a body that isn't a list: never a throw, which would end the cycle after the first
+            // page's fingerprint was recorded, and the next cycle would skip that page as applied.
+            const rowsOf = async (res: { text(): Promise<string> }): Promise<any[] | null> => {
+                try {
+                    const rows = JSON.parse(await res.text());
+                    return Array.isArray(rows) ? rows : null;
+                } catch {
+                    return null;
+                }
+            };
+            // The pages after one, while the node hands out a next key, up to POSTS_PAGE_CAP pages in all. A page that
+            // doesn't come (a failure, a refusal, another server answering, the visitors' view, a body that isn't a list)
+            // stops the read where it is: what came is written, and `stoppedAt` is the key the next cycle asks for.
+            // With `writePage`, each page is handed to it as it comes and not kept; one it didn't write stops the read
+            // at that page too.
+            const laterPages = async (cursor: string, next: string | null, pagesRead: number, writePage: ((rows: any[]) => Promise<boolean>) | null = null) => {
+                const rows: any[] = [];
+                let pages = pagesRead;
+                while (next) {
+                    if (pages >= POSTS_PAGE_CAP) return { rows, stoppedAt: next, pages };
+                    const res = await pullPosts(cursor, next).catch(() => null);
+                    if (!res || !res.ok || epochOf(res) !== epochNow || await postsViewRefusal(res, anchorUrl, pubKey)) return { rows, stoppedAt: next, pages };
+                    const page = await rowsOf(res);
+                    if (!page) return { rows, stoppedAt: next, pages };
+                    if (!writePage) rows.push(...page);
+                    else if (!(await writePage(page))) return { rows, stoppedAt: next, pages };
+                    pages++;
+                    next = nextPageKeyOf(res);
+                }
+                return { rows, stoppedAt: null as string | null, pages };
+            };
+            // A by-area delta carries the tag of the last read that landed whole; a whole read never does (it holds nothing to
+            // confirm: a first read, a moved area, an emptied copy).
+            let postsRes = await pullPosts(postsSyncParam, postsHeld?.after ?? null, nearbyLimits && postsIsIncremental ? nearbyTag : null);
+            // The node answered the held page (whatever it said): one more cycle that asked for it. Stored now, so a cycle
+            // the answer ends counts too.
+            if (postsHeld) {
+                postsHeld = { ...postsHeld, tries: postsHeld.tries + 1 };
+                await storeForCopy(kPostsHeld, JSON.stringify(postsHeld));
+            }
             epochNow = epochOf(postsRes);
             epochHeld = epochNow === null ? null : await AsyncStorage.getItem(kEpoch);
             takenOver = epochNow !== null && epochHeld !== null && epochHeld !== epochNow;
@@ -381,24 +735,64 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 console.warn(`[Pillar Sync] ${anchorUrl} answers identity epoch ${epochNow}, not ${epochHeld}: another server took over. Syncing it whole.`);
                 await AsyncStorage.removeItem(kLastSync);
                 await AsyncStorage.removeItem(kLastMembersSync);
+                await AsyncStorage.removeItem(kMembersHeld);
+                await AsyncStorage.removeItem(kPostsHeld);
+                membersHeld = null;
                 forgetFingerprintsOf(anchorUrl);
                 lastSyncParam = '';
                 incrementalSinceIso = '';
                 shouldFetchMembers = true;
-                if (postsIsIncremental) {
+                if (postsIsIncremental || postsHeld) {
+                    // A delta, or a held read carrying on below a key: the whole read starts from its first page.
                     postsIsIncremental = false;
+                    postsHeld = null;
+                    postsSyncParam = '';
+                    postsSinceIso = '';
+                    postsReadStartedAt = Date.now();
+                    // A take-over's whole read is named its set in full: the replace never rests on a hash from before.
+                    nearbyHeld = null;
                     postsRes = await pullPosts('');
                     // The epoch stored is that of the server whose whole pull replaces the cache. If the old one
                     // answered it (the address flipping back), that is its own epoch, and the next cycle does this again.
                     epochNow = epochOf(postsRes);
                 }
             }
-            if (!postsRes.ok) {
+            if (!postsRes.ok && postsRes.status !== 304) {
+                // A local community refuses its listings to a phone whose key is no member there (2026-09-28): noted for
+                // the Market, which says so with the way to the global community (utils/members-only-listings.ts).
+                const refusal = postsRes.status === 401 || postsRes.status === 403 ? await postsRes.json().catch(() => null) : null;
+                const membersOnly = isMembersOnlyAnswer(postsRes.status, refusal);
+                // A 401 (an unsigned read) leaves the note as it was: it says nothing about membership, and the Market's
+                // members-only card must never show a member for it (PR #1286). A key-holding phone always signs, so a
+                // real non-member gets the 403.
+                if (postsRes.status !== 401) await noteMembersOnly(anchorUrl, membersOnly);
+                // Only a 403 drops: the node checked this phone's signature and says its key is no member here. A 401 means
+                // only that the read went unsigned (a locked iPhone can't read its key in a background sync; a community
+                // switch in flight), which says nothing about membership: the cache stays (PR #1286 review 4125870399).
+                if (membersOnly && postsRes.status === 403) {
+                    // What this phone cached of the community's listings before it was refused them (its key is no
+                    // member there) is not its to keep showing: it goes, never another community's and never the phone's
+                    // own posts (utils/db.ts applyDelta `postsRefused`), and the Market shows the members-only card. The
+                    // cursor and fingerprints go with it, so the sync after the phone may read them again is a whole one.
+                    const { DeviceEventEmitter } = require('react-native');
+                    try {
+                        if (await applyDelta({ postsRefused: true }, expectedDbName)) {
+                            await AsyncStorage.removeItem(kLastSync);
+                            await AsyncStorage.removeItem(kPostsHeld);
+                            forgetFingerprintsOf(anchorUrl);
+                            DeviceEventEmitter.emit('sync_data_updated');
+                        }
+                    } catch (e) {
+                        console.warn('[Pillar Sync] Could not drop the listings of a community that keeps them for its members:', e);
+                    }
+                    DeviceEventEmitter.emit('members_only_listings');
+                }
                 timeouts.clear();
                 result.durationMs = Date.now() - startTime;
-                result.errorMessage = `Posts fetch failed with status: ${postsRes.status}`;
+                result.errorMessage = membersOnly ? 'members_only' : `Posts fetch failed with status: ${postsRes.status}`;
                 return result;
             }
+            await noteMembersOnly(anchorUrl, false);
             // The visitors' view reaching a member (G9c, utils/posts-view.ts) goes the same way as a failed
             // fetch: nothing written, the cursor not moved, and the next sync asks again.
             const viewRefusal = await postsViewRefusal(postsRes, anchorUrl, pubKey);
@@ -408,9 +802,183 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 result.errorMessage = viewRefusal;
                 return result;
             }
-            postsData = await parseIfChanged(postsRes, anchorUrl, 'posts', rawGated);
-            if (postsData !== undefined) {
-                console.log(`[Pillar Sync] Received ${Array.isArray(postsData) ? postsData.length : 'non-array'} posts from server`);
+            // A by-area community's answer carries its member's set (utils/posts-nearby.ts), read below on its own. A bare
+            // list (the node's switch went off since this phone heard its profile) is read as any other. Anything else is
+            // an answer this phone can't read: a failed read, so the cursor stays and the next cycle asks again, never a
+            // plain read that writes nothing and moves the cursor past what changed (the review of #1778, finding 6). So is
+            // a read's last page that names no set: the first page here when the node hands out no next key. One that names
+            // what changed but doesn't check out (nearbyLastSet) also forgets the set this phone holds, with its hash, `tied` and
+            // tag, so the next read sends no hash and is named the set whole: never a silently wrong set.
+            let nearbyFirst: NearbyPage | null = null;
+            let nearbyPlain: any;
+            if (nearbyLimits && postsRes.status !== 304) {
+                const body = JSON.parse(await postsRes.text());
+                nearbyFirst = nearbyPageOf(body);
+                if (nearbyFirst && !nextPageKeyOf(postsRes) && !nearbyLastSet(nearbyFirst, nearbyHeld, nearbySetHash)) {
+                    if (nearbyFirst.diff) await applyDelta({ postsNearby: { forget: true } }, expectedDbName, copyGen).catch(() => false);
+                    nearbyFirst = null;
+                }
+                if (!nearbyFirst && !Array.isArray(body)) {
+                    timeouts.clear();
+                    result.durationMs = Date.now() - startTime;
+                    result.errorMessage = 'The listings answer by area was not one this phone can read';
+                    return result;
+                }
+                if (!nearbyFirst) nearbyPlain = body;
+            }
+            if (postsRes.status === 304) {
+                // Nothing changed since the copy this URL last fetched. The read stops at its first page, and the cursor
+                // stays where it is, as a held read does.
+                postsNotModified = true;
+            } else if (nearbyLimits && nearbyFirst) {
+                // The member's set, paged by key until the node hands out no next key. Each page is written as it comes, and
+                // the last one names the whole set (a node before `setOnce` names it on each): that is the set this phone
+                // keeps. Then what it holds outside the set goes (never the member's own or tied), what it lacks comes by
+                // `ids=`, and it keeps at most `max` others. After a take-over this is the replace: exact, where
+                // utils/posts-replace.ts's recency rule guesses. A last page that names no set but echoes the hash this phone
+                // sent ends the read with the set it holds; one that does neither cuts the read short (nearbyLastSet).
+                const keep = { area: nearbyArea?.area ?? null, max: nearbyLimits.max };
+                const writeNear = async (delta: any): Promise<boolean> => {
+                    const wrote = await applyDelta({ ...delta, ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName, copyGen);
+                    if (wrote === false) {
+                        postsUnwritten = true;
+                        forgetCycleFingerprints(anchorUrl, ['posts']);
+                    }
+                    return wrote !== false;
+                };
+                const changed = () => {
+                    try {
+                        const { DeviceEventEmitter } = require('react-native');
+                        DeviceEventEmitter.emit('sync_data_updated');
+                    } catch (e) {}
+                };
+                // The latest set a page named (a node before `setOnce` names it on each), for a read cut short.
+                let named = nearbyLastSet(nearbyFirst, null);
+                let last = nearbyFirst;
+                let rows = nearbyFirst.posts.length;
+                // The tag a read leaves goes with its first write, and is stored again once every row of its set is held. Only
+                // a tag every page of the read carried: each page's tag describes the set as it stood then, and a listing
+                // changed after page 1 moves above every key this read hands out, so a later page's tag names a version this
+                // phone doesn't hold, and the next delta would be answered 304 over it (review of #1805, finding 1).
+                let lastTag = postsRes.headers.get('etag');
+                let complete = await writeNear({ posts: nearbyFirst.posts, ...(nearbyTag ? { postsNearby: { tag: null } } : {}) });
+                if (complete) changed();
+                let next = complete ? nextPageKeyOf(postsRes) : null;
+                let pages = 1;
+                while (complete && next) {
+                    const res = pages < POSTS_PAGE_CAP ? await pullPosts(postsSyncParam, next).catch(() => null) : null;
+                    const page = res && res.ok && epochOf(res) === epochNow && !(await postsViewRefusal(res, anchorUrl, pubKey))
+                        ? nearbyPageOf(await res.json().catch(() => null)) : null;
+                    if (!res || !page || !(await writeNear({ posts: page.posts }))) {
+                        complete = false;
+                        break;
+                    }
+                    named = nearbyLastSet(page, null) ?? named;
+                    last = page;
+                    if (res.headers.get('etag') !== lastTag) lastTag = null;
+                    rows += page.posts.length;
+                    pages++;
+                    next = nextPageKeyOf(res);
+                }
+                const ended = complete ? nearbyLastSet(last, nearbyHeld, nearbySetHash) : null;
+                // Every page came, and the last named what changed but it doesn't check out against the set held: that set
+                // goes (set, hash, `tied`, tag) and the cursor stays, so the next read sends no hash and is named the set whole.
+                if (complete && !ended && last.diff) await writeNear({ postsNearby: { forget: true } });
+                if (!ended) complete = false;
+                const read = ended ?? named;
+                let fetched = 0;
+                // A read cut short before any page named the set: only the cap's prune, nothing dropped by a set.
+                if (!postsUnwritten && !read) await writeNear({ postsNearby: keep });
+                // The node's set is stored with its hash; one whose `tied` this phone can't read is stored without (the next
+                // read is named it in full). The set held, echoed, is reconciled with as it stands.
+                const storeHeld = read?.named ? { setHash: read.tied ? read.setHash : null } : {};
+                if (!postsUnwritten && read && await writeNear({ postsNearby: { set: read.set, ...(read.tied ? { tied: read.tied } : {}), ...storeHeld, ...keep } })) {
+                    // The set's listings this phone lacks: one that came into it without changing (a nearer one went), or one
+                    // on a page this read didn't reach. NEARBY_IDS_PER_READ a read, NEARBY_ID_READS_PER_CYCLE reads a cycle;
+                    // the rest come next cycle. One the node won't hand out is left out, and nothing else changes for it.
+                    const held = new Set((await (await getDb()).getAllAsync<{ id: string }>('SELECT id FROM posts')).map(r => r.id));
+                    const missing = [...new Set(read.set)].filter(id => !held.has(id));
+                    for (const ids of nearbyIdReads(missing)) {
+                        const res = await fetch(`${anchorUrl}/api/marketplace/posts?ids=${ids.map(encodeURIComponent).join(',')}&sync=true&${EVENT_TYPES_QUERY}`, {
+                            method: 'GET',
+                            headers: { 'Accept': 'application/json' },
+                            signal: timeouts.signal(30000),
+                        }).catch(() => null);
+                        const answer = res && res.ok && epochOf(res) === epochNow ? await res.json().catch(() => null) : null;
+                        if (!Array.isArray(answer)) break;
+                        const asked = new Set(ids);
+                        const theirs = answer.filter(p => asked.has(String(p?.id)));
+                        if (theirs.length > 0 && !(await writeNear({ posts: theirs, postsNearby: keep }))) break;
+                        fetched += theirs.length;
+                    }
+                    // Every row of the set held: the read's tag describes what this phone holds, so the next delta sends it.
+                    if (complete && fetched === missing.length && lastTag) await writeNear({ postsNearby: { tag: lastTag } });
+                    if (takenOver) postsReplaced = complete;
+                    // The whole read the area's move asked for has landed: the next ones are deltas again.
+                    if (complete && !postsIsIncremental && nearbyArea?.whole) {
+                        const now = await readNearbyAreaCopy(anchorUrl, pubKey);
+                        if (now && sameArea(now.area, nearbyArea.area)) await storeNearbyAreaCopy(anchorUrl, { ...now, whole: false }).catch(() => {});
+                    }
+                    changed();
+                }
+                if (!complete) postsCursorStays = true;
+                postsWrittenEarly = true;
+                console.log(`[Pillar Sync] Received ${rows} listing(s) of this member's set of ${read ? read.set.length : '?'}${ended && !ended.named ? ' (unchanged)' : ''} in ${pages} page(s), ${fetched} more by id${complete ? '' : '; the read stopped, the cursor stays'}`);
+            } else {
+                postsData = nearbyLimits ? nearbyPlain : await parseIfChanged(postsRes, anchorUrl, 'posts', rawGated);
+                // A whole read that isn't a take-over's is written as it comes (review of PR #1719, NB3): its first page
+                // now, so the Market draws it while the rest pages in, then each later page in its own write, so no write
+                // of up to POSTS_PAGE_CAP pages holds the sync lock. A take-over's needs every page before its replace
+                // drops anything, and a delta's goes with the cycle's batch, as they always have.
+                let asItComes = !postsIsIncremental && !takenOver;
+                if (asItComes && Array.isArray(postsData) && postsData.length > 0) {
+                    postsWrittenEarly = await writePostsEarly(postsData);
+                    asItComes = postsWrittenEarly;
+                }
+                let laterWritten = 0;
+                const writePage = async (rows: any[]): Promise<boolean> => {
+                    try {
+                        const wrote = await applyDelta({ posts: rows, ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName, copyGen);
+                        if (wrote === false) {
+                            postsUnwritten = true;
+                            forgetCycleFingerprints(anchorUrl, ['posts']);
+                            return false;
+                        }
+                        laterWritten += rows.length;
+                        return true;
+                    } catch (e) {
+                        console.warn('[Pillar Sync] A page of posts could not be written; the read is held at it:', e);
+                        return false;
+                    }
+                };
+                // Nothing more is read for a community the member has just left (the first page went unwritten).
+                const rest = await laterPages(postsSyncParam, postsUnwritten ? null : nextPageKeyOf(postsRes), 1, asItComes ? writePage : null);
+                if (laterWritten > 0) {
+                    try {
+                        const { DeviceEventEmitter } = require('react-native');
+                        DeviceEventEmitter.emit('sync_data_updated');
+                    } catch (e) {}
+                }
+                if (rest.stoppedAt) postsHoldAt = { since: postsSinceIso, after: rest.stoppedAt, startedAt: postsReadStartedAt, tries: 0 };
+                // A take-over's whole read in more than one page is no longer one moment of the node: a listing that
+                // changed while it paged moved above every key and isn't in it, and the replace would drop it. So the
+                // listings changed since it began are read too, and written after it.
+                if (takenOver && rest.pages > 1) {
+                    const sinceStart = `&updatedAfter=${encodeURIComponent(new Date(Math.max(0, postsReadStartedAt - 300_000)).toISOString())}`;
+                    const first = await pullPosts(sinceStart).catch(() => null);
+                    const firstRows = first?.ok && epochOf(first) === epochNow ? await rowsOf(first) : null;
+                    const changed = firstRows ? await laterPages(sinceStart, nextPageKeyOf(first), 1) : null;
+                    if (firstRows && changed && !changed.stoppedAt) {
+                        const pulled = new Set([...(Array.isArray(postsData) ? postsData : []), ...rest.rows].map(p => String(p?.id)));
+                        const caughtUp = [...firstRows, ...changed.rows];
+                        postsSentOnly = caughtUp.map(p => String(p?.id)).filter(id => !pulled.has(id));
+                        rest.rows.push(...caughtUp);
+                    } else postsReplaceSafe = false;
+                }
+                if (rest.rows.length > 0) postsData = [...(Array.isArray(postsData) ? postsData : []), ...rest.rows];
+                if (postsData !== undefined || laterWritten > 0) {
+                    console.log(`[Pillar Sync] Received ${Array.isArray(postsData) ? postsData.length + laterWritten : 'non-array'} posts from server in ${rest.pages} page(s)${rest.stoppedAt ? ', the rest held for the next sync' : ''}`);
+                }
             }
         } catch (e: any) {
             timeouts.clear();
@@ -418,6 +986,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             result.errorMessage = `Posts fetch exception: ${e.message || e}`;
             return result;
         }
+        // Cleared while the posts were read (a Force Resync, a wipe): the read stopped at the first page it couldn't
+        // write, and nothing else of this cycle is fetched for a copy that is gone.
+        if (!sameCopy()) return copyCleared();
 
         // Tables are added to the delta ONLY when their payload actually changed —
         // applyDelta skips absent tables, so an unchanged fetch costs no parse, no
@@ -425,38 +996,12 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         const delta: any = {
             accounts: []
         };
-        if (Array.isArray(postsData)) delta.posts = postsData;
+        if (Array.isArray(postsData) && !postsWrittenEarly) delta.posts = postsData;
 
-        // Fast first paint: on the FIRST (full) sync for this node the marketplace is
-        // still showing its loading spinner, and the remaining pillars below (balance,
-        // members, crowdfund, transactions, ratings) can add several seconds on a slow
-        // node before the single end-of-cycle applyDelta runs. Write the posts to SQLite
-        // and tell the marketplace to render NOW, then drop them from the batch so we
-        // don't re-write the same rows (the double-apply that historically starved the
-        // sync lock). Runs only on a FULL posts fetch (first sync, or a healed empty cache)
-        // — steady-state incremental cycles keep the single batched apply untouched.
-        // Tables applied THIS cycle OUTSIDE the batch (the early fast-paint write).
-        // If the batch below fails we must invalidate these fingerprints too —
-        // otherwise a write that recorded its fingerprint but didn't durably land
-        // (e.g. applyDelta's node-switch contamination guard returned early) would be
-        // treated as applied and skipped forever.
-        const earlyApplied = new Set<string>();
-        // Whether the whole pull after a take-over has replaced the posts cache (utils/db.ts `postsReplace`).
-        let postsReplaced = false;
-        if (!postsIsIncremental && Array.isArray(postsData) && (postsData.length > 0 || takenOver)) {
-            try {
-                const wrote = await applyDelta({ posts: postsData, ...(takenOver ? { postsReplace: true } : {}), ...liveChangesSince(liveMark, expectedDbName) }, expectedDbName);
-                // Not written (the member switched community while this batch waited for the sync lock): the epoch
-                // stays as held, so the next cycle replaces the cache again.
-                postsReplaced = takenOver && wrote;
-                earlyApplied.add('posts');
-                delete delta.posts;
-                rawGated.delete('posts');
-                const { DeviceEventEmitter } = require('react-native');
-                DeviceEventEmitter.emit('sync_data_updated');
-            } catch (e) {
-                console.warn('[Pillar Sync] Early posts apply failed (will apply in batch):', e);
-            }
+        // The early write of a whole read not written as it came: a take-over's, once every page is in (its replace
+        // needs them all), or one whose first early write threw.
+        if (!postsIsIncremental && !postsWrittenEarly && Array.isArray(postsData) && (postsData.length > 0 || takenOver)) {
+            if (await writePostsEarly(postsData)) delete delta.posts;
         }
 
         // Fetch balance
@@ -481,7 +1026,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         }
 
         // Fetch directory (members)
-        if (shouldFetchMembers) {
+        if (membersOnDemand) {
+            // No directory read: the cards come by key after the cycle lands (syncMembersOnDemand), never `membersComplete`.
+        } else if (shouldFetchMembers) {
             try {
                 const directoryRes = await fetch(`${anchorUrl}/api/members`, {
                     method: 'GET',
@@ -499,7 +1046,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                         delta.membersComplete = true;
                     }
                     // An unchanged directory still counts as a completed hourly check.
-                    await AsyncStorage.setItem(kLastMembersSync, String(Date.now()));
+                    await storeForCopy(kLastMembersSync, String(Date.now()));
+                    // Every member as they are now: no held delta needs to ask again.
+                    if (dirData === undefined || Array.isArray(dirData)) membersLanded = true;
                 }
             } catch (e) {
                 console.warn('[Pillar Sync] Members fetch failed:', e);
@@ -510,8 +1059,9 @@ export async function performSync(onProgress?: (step: number, total: number, sta
             // already triggers a sync on member_joined/profile_updated). This is a PARTIAL list,
             // so we must NOT set membersComplete — otherwise applyDelta would garbage-collect
             // every local member absent from this small delta.
+            const membersSinceIso = membersHeld && membersHeld < incrementalSinceIso ? membersHeld : incrementalSinceIso;
             try {
-                const deltaRes = await fetch(`${anchorUrl}/api/members?updatedAfter=${encodeURIComponent(incrementalSinceIso)}`, {
+                const deltaRes = await fetch(`${anchorUrl}/api/members?updatedAfter=${encodeURIComponent(membersSinceIso)}`, {
                     method: 'GET',
                     headers: { 'Accept': 'application/json' },
                     signal: timeouts.signal(30000)
@@ -525,9 +1075,17 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                         delta.members = deltaData;
                         // membersComplete intentionally left unset (partial list → no GC).
                     }
+                    // The same answer as the last one applied (undefined), or a list.
+                    membersLanded = deltaData === undefined || Array.isArray(deltaData);
                 }
             } catch (e) {
                 console.warn('[Pillar Sync] Incremental members fetch failed:', e);
+            }
+            if (!membersLanded) {
+                // Asked again from this cursor at the next sync, whose answer is read afresh: a body read here and not
+                // applied (no list in it) must not pass for applied when it comes again.
+                membersHoldAt = membersSinceIso;
+                forgetCycleFingerprints(anchorUrl, ['membersDelta']);
             }
         }
 
@@ -644,14 +1202,21 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // everything fetched belongs to `anchorUrl`, and applying it now would
         // contaminate the newly-active node's local DB. Bail BEFORE advancing the
         // per-table fingerprints so this node re-syncs cleanly on its next cycle.
+        // The raw fingerprints this cycle recorded as it read each body go too (parseIfChanged records one before the
+        // cycle is known to succeed): otherwise the next cycle, sent the same page for the same cursor, finds it
+        // "already applied", writes nothing, and moves the cursor past a page it never wrote (a photo heal's page,
+        // engine/photo-keys.ts on the server; review of fe4c27ce, finding 2). The member delta's is kept outside rawGated
+        // (see its read above), so it is named here and at the two forgets below.
         const activeAnchorNow = await AsyncStorage.getItem('beanpool_anchor_url');
         if (getDatabaseFilenameForNode(activeAnchorNow) !== expectedDbName) {
             console.warn(`[Pillar Sync] Node switched mid-sync (${anchorUrl} → ${activeAnchorNow}); discarding fetched delta to avoid cross-node contamination.`);
+            forgetCycleFingerprints(anchorUrl, [...rawGated, 'membersDelta', ...earlyApplied]);
             result.aborted = true;
             result.errorMessage = 'Node switched during sync';
             result.durationMs = Date.now() - startTime;
             return result;
         }
+        if (!sameCopy()) return copyCleared();
 
         // Gate applyDelta per table: skip any table whose fetched payload is identical
         // to what we last applied. applyDelta rewrites every row it's given inside one
@@ -677,18 +1242,26 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         // The full-directory GC flag must travel with the members table it describes.
         if (gatedDelta.members && delta.membersComplete) gatedDelta.membersComplete = true;
         // So must the take-over's replace, when the early write above did not land and the posts come in the batch.
-        if (gatedDelta.posts && takenOver) gatedDelta.postsReplace = true;
+        if (gatedDelta.posts && takenOver && postsReplaceSafe) {
+            gatedDelta.postsReplace = true;
+            gatedDelta.postsSentOnly = postsSentOnly;
+        }
         // Listings the node pushed while this cycle was in flight. Its posts pull may have left before them, and
         // applyDelta writes these after `posts`, so a push is never undone by the older copy this cycle carries.
         // Not a table: never fingerprinted, never a reason to tell the screens something changed.
         Object.assign(gatedDelta, liveChangesSince(liveMark, expectedDbName));
+        // On a by-area community those pushes added rows: the phone keeps itself to its `max` after them.
+        if (nearbyLimits && gatedDelta.liveChanges) gatedDelta.postsNearby = { area: nearbyArea?.area ?? null, max: nearbyLimits.max };
 
         onProgress?.(5, 5, 'Finalizing Local SQLite Database Cache...');
         // Apply physical updates to local Native device SQLite Matrix
+        // False when the batch wrote nothing: the member switched community between the check above and its lock.
+        let landed = true;
         if (Object.keys(gatedDelta).length > 0) {
             try {
-                const wrote = await applyDelta(gatedDelta, expectedDbName);
+                const wrote = await applyDelta(gatedDelta, expectedDbName, copyGen);
                 if (gatedDelta.postsReplace && wrote) postsReplaced = true;
+                if (wrote === false) landed = false;
             } catch (applyErr) {
                 // parseIfChanged / the stringify gate already recorded these payloads'
                 // fingerprints as "applied". If the write actually failed (e.g. a DB
@@ -698,12 +1271,21 @@ export async function performSync(onProgress?: (step: number, total: number, sta
                 // server having posts. Invalidate the fingerprints for every table we
                 // tried to write this cycle — the batch AND the early fast-paint apply
                 // — so the next sync re-fetches and re-applies.
-                for (const table of new Set([...Object.keys(gatedDelta), ...earlyApplied])) {
-                    delete _lastAppliedFingerprints[`raw:${anchorUrl}:${table}`];
-                    delete _lastAppliedFingerprints[`${anchorUrl}:${table}`];
-                }
+                forgetCycleFingerprints(anchorUrl, [...Object.keys(gatedDelta), 'membersDelta', ...earlyApplied]);
                 throw applyErr;
             }
+        }
+        // Cleared before the batch took the lock, or after it wrote into the copy that is gone now.
+        if (!sameCopy()) return copyCleared(Object.keys(gatedDelta));
+        if (!landed) {
+            // As a switch found above: nothing counts as applied, and the cursor stays, so the next cycle on this
+            // community asks again and writes what it is sent.
+            console.warn(`[Pillar Sync] Node switched mid-sync (${anchorUrl}); nothing written, the cursor stays.`);
+            forgetCycleFingerprints(anchorUrl, [...Object.keys(gatedDelta), ...rawGated, 'membersDelta', ...earlyApplied]);
+            result.aborted = true;
+            result.errorMessage = 'Node switched during sync';
+            result.durationMs = Date.now() - startTime;
+            return result;
         }
 
         // Notify active screens to re-render only when something actually changed —
@@ -718,13 +1300,37 @@ export async function performSync(onProgress?: (step: number, total: number, sta
 
         // Step 3: Success — save timestamp
         const kCheckpoint = await getSyncCursorKey(StorageKeysConfig.SYNC_CHECKPOINT);
-        await AsyncStorage.setItem(kLastSync, String(Date.now()));
+        // The members delta's cursor (kMembersHeld above): held where a delta that did not land asked from, let go once a
+        // members read lands. A cycle that never gets here moves neither cursor. Written before kLastSync, so a phone killed
+        // between the two writes never has kLastSync moved past a hold it didn't store.
+        if (membersHoldAt) {
+            if (membersHoldAt !== membersHeld) await storeForCopy(kMembersHeld, membersHoldAt);
+        } else if (membersLanded && membersHeld !== null) {
+            await AsyncStorage.removeItem(kMembersHeld);
+        }
+        // The posts cursor: held where a read cut short stopped (kPostsHeld), or, once a read reached its last page, moved
+        // to when that read began. A 304 or a write that didn't land moves neither.
+        if (!postsUnwritten && !postsNotModified && !postsCursorStays) {
+            if (postsHoldAt) {
+                await storeForCopy(kPostsHeld, JSON.stringify(postsHoldAt));
+            } else {
+                if (postsHeld) await AsyncStorage.removeItem(kPostsHeld);
+                await storeForCopy(kLastSync, String(postsReadStartedAt));
+            }
+        }
         await AsyncStorage.removeItem(kCheckpoint);
+        // The cycle completed (getLastSyncTime): whether its read finished, was held or was a 304. Not when its posts
+        // went unwritten (the member switched community), as the cursor before it.
+        if (!postsUnwritten) await storeForCopy(await getSyncCursorKey(StorageKeysConfig.LAST_CYCLE), String(Date.now()));
         // The epoch this phone now holds the node as: the first one it sees, or the new one once the whole sync after
         // a take-over has replaced the cache. Until then the next cycle sees the change again and does it again.
         if (epochNow !== null && epochNow !== epochHeld && (!takenOver || postsReplaced)) {
-            await AsyncStorage.setItem(kEpoch, epochNow);
+            await storeForCopy(kEpoch, epochNow);
         }
+
+        // The cards this phone has a reason to show, by key, on a community that says `membersOnDemand`. After the cursors,
+        // so a members read that fails never holds the cycle back; its own failures leave every card where it was.
+        if (membersOnDemand && pubKey && sameCopy()) await syncMembersOnDemand(anchorUrl, pubKey, expectedDbName, copyGen);
 
         // A completed pillar cycle means the marketplace posts have actually been fetched
         // and written — the true "the market has loaded" signal, as opposed to a fast
@@ -749,6 +1355,8 @@ export async function performSync(onProgress?: (step: number, total: number, sta
         return result;
     } finally {
         isSyncing = false;
+        cycleEnd = null;
+        endCycle();
         // Every finished cycle, success or not, so a screen waiting on the first sync can tell
         // "still working on a slow connection" from "this cycle failed". Emitted after isSyncing
         // is cleared.
@@ -759,9 +1367,16 @@ export async function performSync(onProgress?: (step: number, total: number, sta
     }
 }
 
+/**
+ * When this community's last sync cycle completed, for display: SyncStatus, the header's "synced recently"
+ * (GlobalHeader), the communities list. Not the posts cursor (kLastSync), which is when the last finished read BEGAN
+ * and doesn't move while a read is held or on a 304: read here, a read longer than 90 s or a held one showed a stale
+ * time, and two failed health pings the offline banner while syncs were succeeding (review of PR #1719, NB6). Until a
+ * cycle has recorded one, the cursor.
+ */
 export async function getLastSyncTime(): Promise<number | null> {
-    const kLastSync = await getSyncCursorKey(StorageKeysConfig.LAST_SYNC);
-    const raw = await AsyncStorage.getItem(kLastSync);
+    const raw = await AsyncStorage.getItem(await getSyncCursorKey(StorageKeysConfig.LAST_CYCLE))
+        ?? await AsyncStorage.getItem(await getSyncCursorKey(StorageKeysConfig.LAST_SYNC));
     return raw ? Number(raw) : null;
 }
 
@@ -788,12 +1403,22 @@ export async function getCachedTransactions(): Promise<any[]> {
 const _lastAppliedFingerprints: Record<string, number> = {};
 
 /**
- * Reset all in-memory payload fingerprints. Must be called when clearing or resetting
+ * Reset all in-memory payload fingerprints, and start a new copy generation (utils/db.ts copyGeneration): a cycle in
+ * flight writes and stores nothing more. Must be called when clearing or resetting
  * the local SQLite database so the subsequent sync doesn't skip applying payloads.
  */
 export function resetSyncFingerprints() {
+    newCopyGeneration();
     for (const key of Object.keys(_lastAppliedFingerprints)) {
         delete _lastAppliedFingerprints[key];
+    }
+}
+
+/** Forget what this cycle recorded as applied for `tables` of one node: both gates, raw and stringified. */
+function forgetCycleFingerprints(anchorUrl: string, tables: Iterable<string>): void {
+    for (const table of new Set(tables)) {
+        delete _lastAppliedFingerprints[`raw:${anchorUrl}:${table}`];
+        delete _lastAppliedFingerprints[`${anchorUrl}:${table}`];
     }
 }
 
@@ -825,6 +1450,94 @@ async function parseIfChanged(res: { text(): Promise<string> }, anchorUrl: strin
     _lastAppliedFingerprints[key] = fp;
     rawGated?.add(table);
     return JSON.parse(raw);
+}
+
+/**
+ * One cycle's members reads on a community that says `membersOnDemand` (DESIGN-global-members-by-area §2.2; the plan is
+ * utils/members-on-demand.ts): the referenced cards this phone lacks, `keys=` at most 100 at a time and at most 3
+ * requests (the rest next cycle), then the 100 held cards fetched longest ago, re-checked with `updatedAfter` = the
+ * oldest of their stamps, then past 1,000 cards the oldest that nothing references dropped. A read the node refuses
+ * (503 `heavy_read_busy`, a timeout, anything but a list) ends the reads for this cycle and drops nothing for it: the
+ * cards held stay held and the ones missing are asked for again next cycle. Never throws.
+ */
+async function syncMembersOnDemand(anchorUrl: string, ownKey: string, expectedDbName: string, copyGen: number): Promise<void> {
+    const timeouts = requestTimeouts();
+    try {
+        const world = await readMembersOnDemandWorld(ownKey);
+        if (!world || copyGenerationNow() !== copyGen) return;
+        const now = Date.now();
+        const kAbsent = await getSyncCursorKey(MEMBERS_ABSENT);
+        const absentRaw = await AsyncStorage.getItem(kAbsent);
+        const absent = readAbsent(absentRaw, now);
+        const plan = planMembersCycle(ownKey, world.referenced.filter(k => !absent.has(k)), world.held);
+        const rows: any[] = [];
+        const asked: string[] = [];
+        const read = async (path: string): Promise<any[] | null> => {
+            try {
+                const res = await fetch(`${anchorUrl}${path}`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' },
+                    signal: timeouts.signal(30000),
+                });
+                if (!res || !res.ok) return null;
+                const body = await res.json();
+                return Array.isArray(body) ? body : null;
+            } catch (e) {
+                console.warn('[Pillar Sync] Members by key failed:', e);
+                return null;
+            }
+        };
+        // Only the rows for keys this read named: a row nobody asked for is not a card this phone has a reason to hold
+        // (review of #1859, NB4), and could carry it past the bound.
+        const named = (got: any[], keys: readonly string[]) => {
+            const want = new Set(keys);
+            return got.filter(r => want.has(r?.publicKey ?? r?.public_key));
+        };
+        let refused = false;
+        for (const batch of plan.missing) {
+            const got = await read(membersKeysPath(batch));
+            if (!got) { refused = true; break; }
+            rows.push(...named(got, batch));
+            asked.push(...batch);
+        }
+        const rechecked: string[] = [];
+        if (!refused && plan.revalidate) {
+            const got = await read(membersKeysPath(plan.revalidate.keys, recheckCursor(plan.revalidate.since)));
+            if (got) {
+                rows.push(...named(got, plan.revalidate.keys));
+                rechecked.push(...plan.revalidate.keys);
+            }
+        }
+        const answered = new Set<string>(rows.map(r => r?.publicKey ?? r?.public_key).filter((k: unknown): k is string => typeof k === 'string'));
+        const fetchedAt = new Date(now).toISOString();
+        const fetched = [...asked.filter(k => answered.has(k)), ...rechecked];
+        const fetchedSet = new Set(fetched);
+        const heldKeys = new Set(world.held.map(c => c.key));
+        const heldAfter = [
+            ...world.held.map(c => (fetchedSet.has(c.key) ? { key: c.key, fetchedAt } : c)),
+            ...[...answered].filter(k => !heldKeys.has(k)).map(key => ({ key, fetchedAt })),
+        ];
+        const drop = cardsToDrop(ownKey, world.referenced, heldAfter);
+        if (copyGenerationNow() !== copyGen) return;
+        if (rows.length > 0 || fetched.length > 0 || drop.length > 0) {
+            const wrote = await applyDelta({ members: rows, membersByKey: true, membersFetched: { keys: fetched, at: fetchedAt }, membersDrop: drop }, expectedDbName, copyGen);
+            if (wrote === false) return;
+        }
+        if (asked.length > 0 || absent.size > 0 || absentRaw) {
+            const next = absentAfter(absent, asked, answered, now);
+            if (next !== absentRaw && copyGenerationNow() === copyGen) await AsyncStorage.setItem(kAbsent, next);
+        }
+        if (rows.length > 0 || drop.length > 0) {
+            try {
+                const { DeviceEventEmitter } = require('react-native');
+                DeviceEventEmitter.emit('sync_data_updated');
+            } catch (e) {}
+        }
+    } catch (e) {
+        console.warn('[Pillar Sync] Members on demand failed:', e);
+    } finally {
+        timeouts.clear();
+    }
 }
 
 /**

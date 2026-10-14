@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normaliseVersion, isVersionOlder } from './app-version';
+import { normaliseVersion, isVersionOlder, webAppBehindServer } from './app-version';
 
 describe('app-version', () => {
     describe('normaliseVersion', () => {
@@ -62,5 +62,34 @@ describe('app-version', () => {
             expect(isVersionOlder('1.2.0', '1.2.1-beta')).toBe(false);
             expect(isVersionOlder('1.2.0-rc1', '1.2.0')).toBe(false);
         });
+    });
+});
+
+describe("webAppBehindServer: the web app's update rule", () => {
+    it("a page older than the server that served it is offered a reload to the server's version", () => {
+        expect(webAppBehindServer('1.2.27', { version: '1.2.28' }, false)).toBe('1.2.28');
+    });
+
+    it('a page as new as its server says nothing', () => {
+        expect(webAppBehindServer('1.2.28', { version: '1.2.28' }, false)).toBeNull();
+        expect(webAppBehindServer('1.2.29', { version: '1.2.28' }, false)).toBeNull();
+    });
+
+    it("never reads the phone app's floor: a phone floor far above the web app's version says nothing", () => {
+        // The phone app is on 1.2.56+ while the server and its web app are on 1.2.27: raising MIN_APP_VERSION for phones
+        // used to show every web page an "update required" that no reload could clear.
+        const health = { version: '1.2.27', minAppVersion: '1.2.60', appFloors: { android: { min: '1.2.60', blocking: true } } };
+        expect(webAppBehindServer('1.2.27', health, false)).toBeNull();
+    });
+
+    it('a page talking to another server than the one that served it says nothing: a reload would not change it', () => {
+        expect(webAppBehindServer('1.2.27', { version: '1.2.28' }, true)).toBeNull();
+    });
+
+    it('unknown versions say nothing', () => {
+        expect(webAppBehindServer('1.2.27', { version: 'dev-abc123' }, false)).toBeNull();
+        expect(webAppBehindServer('1.2.27', {}, false)).toBeNull();
+        expect(webAppBehindServer('1.2.27', null, false)).toBeNull();
+        expect(webAppBehindServer('local', { version: '1.2.28' }, false)).toBeNull();
     });
 });

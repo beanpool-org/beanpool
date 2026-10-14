@@ -5,7 +5,8 @@ import Slider from '@react-native-community/slider';
 import * as Location from 'expo-location';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, palette } from '../constants/colors';
+import { palette } from '../constants/colors';
+import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { HAS_MAPS_KEY } from '../utils/maps';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
 
@@ -28,6 +29,8 @@ interface RadiusPickerModalProps {
 }
 
 export function RadiusPickerModal({ visible, initialRadius, initialLat, initialLng, onApply, onCancel, onReset }: RadiusPickerModalProps) {
+    const { colors, theme } = useTheme();
+    const styles = useStyles(makeStyles);
     const defaultRadius = 20;
     // Android draws this pageSheet full-screen under the status bar; see utils/modal-safe-area.
     const topInset = pageSheetTopInset(Platform.OS, useSafeAreaInsets().top);
@@ -157,7 +160,7 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
                         accessibilityLabel="Center on my location"
                         onPress={handleLocateUser}
                     >
-                        <MaterialCommunityIcons name="crosshairs-gps" size={22} color={palette.gray700} />
+                        <MaterialCommunityIcons name="crosshairs-gps" size={22} color={theme === 'dark' ? colors.text.body : palette.gray700} />
                     </Pressable>
                 </View>
 
@@ -174,9 +177,12 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
                         step={1}
                         value={sliderIdx}
                         onValueChange={(val) => setSliderIdx(Math.round(val))}
-                        minimumTrackTintColor={palette.amber600}
-                        maximumTrackTintColor={palette.gray600}
-                        thumbTintColor={colors.surface.subtle}
+                        // Dark: the handle (surface.subtle) was 1.15:1 and the unfilled track (gray600) 2.30:1 on the
+                        // card; amber400 is 10.43:1 and text.muted 3.60:1. The filled part moves to amber400 too, or it
+                        // would sit at 1.52:1 against the lighter unfilled track (2.90:1 now). Light keeps its values.
+                        minimumTrackTintColor={theme === 'dark' ? palette.amber400 : palette.amber600}
+                        maximumTrackTintColor={theme === 'dark' ? colors.text.muted : palette.gray600}
+                        thumbTintColor={theme === 'dark' ? palette.amber400 : colors.surface.subtle}
                         accessibilityLabel="Search radius"
                         accessibilityHint="Adjusts search distance radius"
                     />
@@ -205,7 +211,8 @@ export function RadiusPickerModal({ visible, initialRadius, initialLat, initialL
     );
 }
 
-const styles = StyleSheet.create({
+// Themed: Market's distance picker was a light sheet over the dark app. Light keeps its grays.
+const makeStyles = ({ colors, theme }: ThemeContextType) => StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: colors.surface.app,
@@ -235,7 +242,7 @@ const styles = StyleSheet.create({
         fontWeight: '600',
     },
     resetText: {
-        color: colors.feedback.danger.solid,
+        color: colors.feedback.danger.fg,
         fontSize: 16,
         fontWeight: '600',
     },
@@ -268,12 +275,12 @@ const styles = StyleSheet.create({
         marginBottom: 16,
     },
     radiusLabel: {
-        color: palette.gray600,
+        color: theme === 'dark' ? colors.text.secondary : palette.gray600,
         fontSize: 16,
         fontWeight: '600',
     },
     radiusValue: {
-        color: palette.amber600,
+        color: theme === 'dark' ? palette.amber400 : colors.feedback.warning.fg,
         fontSize: 20,
         fontWeight: '900',
     },
@@ -300,7 +307,7 @@ const styles = StyleSheet.create({
         fontWeight: '500',
     },
     applyBtn: {
-        backgroundColor: palette.orange600,
+        backgroundColor: colors.action.fab,
         paddingVertical: 15,
         borderRadius: 14,
         alignItems: 'center',

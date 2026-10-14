@@ -6,7 +6,7 @@
  * Welcome's invite effect re-ran whenever either changed and applied the invite again, switching whatever the member
  * was doing to the join form (mode `create`):
  * - `useURL()` changes on every link the app receives: a sign-in provider's return (the Android App Link), and
- *   `beanpool://foreground`, which follows every Android sign-in (utils/sso-signin.ts, `returnToApp`).
+ *   `beanpool://foreground` (node Settings' "Back to the BeanPool app", utils/settings-return.ts).
  * - `useGlobalSearchParams()` follows the focused route, so the params vanish while another screen is on top and come
  *   back when it closes.
  * A recovery in progress became the join form. Step 3 (`seedBackup`) was rebuilt, because each mode draws its own

@@ -1,10 +1,11 @@
 // Beanpool node-address registrar — Cloudflare Worker.
-//   fetch:     claim / heal / status / release / holder (signed by node key) + admin approve/pause/resume/block/release +
-//              switchboard
-//   scheduled: attestation sweep — pauses a live name's routing only on proof that ANOTHER node key answers at it,
-//              never on anything the registrar merely can't verify, and never when the sweep as a whole looks wrong;
-//              then upkeep: a live name nothing answers at whose routing Cloudflare lost is repaired, and deletions
-//              Cloudflare refused earlier (migrations/0004_teardown.sql) are retried.
+//   fetch:     claim / heal / rotate / status / release / holder (signed by node key) + admin approve/pause/resume/block/
+//              release + switchboard
+//   scheduled: attestation sweep — pauses a live name's routing only on proof that something other than its own node
+//              answers at it (ANOTHER node key, or for about an hour a page that is no attest at all), never on anything
+//              the registrar merely can't verify, and never when the sweep as a whole looks wrong; then upkeep: a live name nothing answers at whose routing Cloudflare lost is repaired, and deletions
+//              Cloudflare refused earlier (migrations/0004_teardown.sql) are retried. Beside it, the outside checks of
+//              our own servers (src/watch.js: WATCH_TARGETS) and the daily line to the admin's phone.
 // A name belongs to the node key that claimed it; the registrar can stop routing it but never hands it to another
 // key. It frees only when its owner releases it (after a 30-day hold for that key), when the admin releases it (the
 // same hold, unless the admin frees it now; a name the admin blocked or paused is held from every key, its own
@@ -14,8 +15,10 @@
 
 import * as cf from './cf.js';
 import * as db from './db.js';
-import { verifySignedRequest, verifyEd25519, requestProto, protoOf, attestMessage, ACCEPTED_PROTOS } from './sign.js';
+import { verifySignedRequest, signedQuery, verifyEd25519, requestProto, requestNonce, protoOf, PROTOCOLS, attestMessage, ACCEPTED_PROTOS, CLOCK_SKEW_S } from './sign.js';
 import { ADMIN_HTML } from './admin-html.js';
+import * as alerts from './alerts.js';
+import { watchOurServers, serversStatus, watchTargets, WATCH_CRON } from './watch.js';
 
 const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])$/; // 3–32, no leading/trailing hyphen
 const json = (obj, status = 200) =>
@@ -24,6 +27,47 @@ const json = (obj, status = 200) =>
 // speak retry once under one it does (design §3.3, §5.1).
 const badSignature = () => json({ error: 'bad signature', accepted_proto: ACCEPTED_PROTOS }, 401);
 const nowS = () => Math.floor(Date.now() / 1000);
+
+// The protocols this Worker can serve right now: all of them while D1 has the nonce table (migration 0006), and without
+// it only those that sign no nonce. Checked against D1 at most once a minute per isolate: /health and the 401s answer it.
+const nonceTable = new WeakMap();   // env.DB -> { at, ok }
+async function nonceTableExists(env) {
+    if (!env.DB) return true;   // no database to ask (a unit test of /health): nothing to say against v2
+    const seen = nonceTable.get(env.DB);
+    if (seen && Date.now() - seen.at < 60_000) return seen.ok;
+    let ok = true;
+    try { await env.DB.prepare('SELECT 1 FROM request_nonces LIMIT 0').run(); } catch { ok = false; }
+    nonceTable.set(env.DB, { at: Date.now(), ok });
+    return ok;
+}
+const protosWithoutNonce = () => ACCEPTED_PROTOS.filter((p) => !PROTOCOLS[p].nonce);
+const acceptedProtos = async (env) => ((await nonceTableExists(env)) ? ACCEPTED_PROTOS : protosWithoutNonce());
+
+// The key that signed a request, or the Response refusing it: a bad signature, or — under a protocol that signs a
+// nonce (v2) — a nonce this key has sent before: a request the Worker already took, replayed. The nonce is taken
+// before the request does anything. A v1 request signs none, and still verifies until its timestamp is too old
+// (sign.js): v1 is accepted until every node sends v2.
+async function signer(request, env, bodyText) {
+    const pubkey = await verifySignedRequest(request, bodyText);
+    if (!pubkey) return badSignature();
+    const n = requestNonce(request);
+    if (n) {
+        let taken;
+        try { taken = await db.takeNonce(env, pubkey, n.nonce, n.ts); }
+        catch (e) {
+            // A Worker deployed before migration 0006 has no nonce table. The v2 request can't be recorded, so it is
+            // not served; the node reads the accepted_proto, signs the same request under v1 (no nonce), and works.
+            console.error('[NONCE_TABLE]', e.message || e);
+            return json({ error: 'bad signature', accepted_proto: protosWithoutNonce() }, 401);
+        }
+        if (!taken) return json({ error: 'request already used' }, 401);
+    }
+    return pubkey;
+}
+
+// Why a request failed stays in the Worker's log, under a short reference the answer carries: a Cloudflare error
+// names the account and the zone, and its body is Cloudflare's (L4 of the 2026-10-01 review).
+const errorRef = () => crypto.randomUUID().slice(0, 8);
 const DEFAULT_ORIGIN = 'http://beanpool-node:8080';
 const key16 = (pubkey) => `${String(pubkey).slice(0, 16)}…`;
 
@@ -79,6 +123,13 @@ const sinceOf = (a) => ({ paused: a.paused_at, blocked: a.paused_at, released: a
 async function logEvent(env, name, event, detail) {
     try { await db.insertEvent(env, name, event, detail); }
     catch (e) { console.error('[NAME_EVENT]', name, event, e.message || e); }
+}
+
+// The admin's phone hears of it too (src/alerts.js, design §2.2): `make` builds the message — a name, its community
+// name and counts, never its contact. Like logEvent, it never undoes what it reports.
+async function tell(env, make) {
+    try { await alerts.notify(env, await make()); }
+    catch (e) { console.error('[ALERT]', e.message || e); }
 }
 
 // --- Cloudflare resources ---
@@ -209,13 +260,15 @@ async function tunnelTokenOrNothing(env, a) {
     try { return await cf.getTunnelToken(env, a.tunnel_id); } catch { return undefined; /* the node asks /status again */ }
 }
 
-const provisionFailed = (e) => {
+// A keyholder is told that it failed, and a reference to the log line; only the admin is told Cloudflare's answer.
+const provisionFailed = (e, { admin = false } = {}) => {
     if (e?.cleaningUp) {
         console.warn('[PROVISION_WAIT]', e.message);
-        return json({ error: 'cleaning up this name\'s earlier routing at Cloudflare; try again shortly', detail: String(e.message) }, 503);
+        return json({ error: 'cleaning up this name\'s earlier routing at Cloudflare; try again shortly' }, 503);
     }
-    console.error('[PROVISION_FAIL]', e.stack || e.message || e);
-    return json({ error: 'provisioning failed', detail: String(e.message || e) }, 502);
+    const ref = errorRef();
+    console.error('[PROVISION_FAIL]', ref, e.stack || e.message || e);
+    return json({ error: 'provisioning failed', ref, ...(admin ? { detail: String(e.message || e) } : {}) }, 502);
 };
 
 // --- Owed deletions ---
@@ -367,6 +420,7 @@ async function repairLive(env, name) {
             console.warn('[REPAIRED]', name, what);
             await logEvent(env, name, 'repaired', `live, but not routed as its row says: ${what} by the registrar`
                 + (ids.changed.includes('tunnel') ? ' (a new tunnel: its node gets the token from /status)' : ''));
+            await tell(env, () => alerts.repaired(env, name, ids.changed.length ? `re-made its ${ids.changed.join(' and ')}` : 'recorded the record at its hostname'));
             return { ...row, ...made };
         }
         await undoOnly(env, name, ids);
@@ -446,7 +500,84 @@ function bodyFields(b) {
     return f;
 }
 
-const LIVE = { status: 'live', pause_reason: null, paused_at: null, attest_fails: 0 };
+// --- What a keyholder may set (L3 of the 2026-10-01 review) ---
+// Display text — a community's name, its operator's contact: any script (communities are worldwide), but no control
+// characters, no line or paragraph separators and no bidi overrides, which would let a row disguise itself on the admin
+// page. An email address is at most 254 characters.
+const TEXT_MAX = { community_name: 120, communityName: 120, contact: 254 };
+const BAD_TEXT = /[\p{Cc}\u2028\u2029\u202A-\u202E\u2066-\u2069]/u;
+// Where a tunnel sends a name's traffic, as Cloudflare's ingress takes it: http(s)://host[:port], and nothing more.
+// Nodes send http://127.0.0.1:<port> (once http://beanpool-node:8080).
+const ORIGIN_MAX = 200;
+const ORIGIN_RE = /^https?:\/\/(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*|\[[0-9a-f:.]+\])(?::\d{1,5})?\/?$/i;
+// A direct name's address goes into an A record: IPv4.
+const IPV4_RE = /^(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)$/;
+const isSet = (v) => v !== undefined && v !== null && v !== '';
+
+function validOrigin(v) {
+    if (typeof v !== 'string' || v.length > ORIGIN_MAX || !ORIGIN_RE.test(v)) return false;
+    try { new URL(v); return true; } catch { return false; }   // a port over 65535, a malformed IPv6 address
+}
+
+// What is wrong with the display labels (community name, contact) a claim, heal or update body sets, or null. A label
+// absent or null is not set.
+function labelProblem(b) {
+    for (const [key, max] of Object.entries(TEXT_MAX)) {
+        const v = b[key];
+        if (v === undefined || v === null) continue;
+        if (typeof v !== 'string') return `${key} must be text`;
+        const t = v.trim();   // what is stored
+        if ([...t].length > max) return `${key} is longer than ${max} characters`;
+        if (BAD_TEXT.test(t)) return `${key} contains an invisible formatting or control character`;
+    }
+    return null;
+}
+// What is wrong with the fields that decide routing, or null.
+function routeProblem(b) {
+    if (isSet(b.origin) && !validOrigin(b.origin)) return `origin must be http(s)://host[:port], at most ${ORIGIN_MAX} characters`;
+    if (isSet(b.public_ip) && !(typeof b.public_ip === 'string' && IPV4_RE.test(b.public_ip))) return 'public_ip must be an IPv4 address';
+    return null;
+}
+// What is wrong with the fields a claim, heal or update body sets, or null. Answered with a 400 before the request
+// writes anything.
+function fieldProblem(b) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return 'the body must be a JSON object';
+    return labelProblem(b) || routeProblem(b);
+}
+// For a request by the key that already holds the name: routing outranks a label, so a label that fails its checks is
+// dropped from the body and logged here, never a reason to refuse a claim or heal (a node whose community name carries
+// a character it can't see would otherwise stay dark through every tick). Returns the problem with the routing
+// fields, which are still refused, or null; `b` is changed in place.
+function dropBadLabels(b, who) {
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return 'the body must be a JSON object';
+    for (const key of Object.keys(TEXT_MAX)) {
+        const problem = labelProblem({ [key]: b[key] });
+        if (!problem) continue;
+        console.warn('[LABEL_DROPPED]', who, problem);
+        delete b[key];
+    }
+    return routeProblem(b);
+}
+const badField = (problem) => json({ error: problem }, 400);
+
+// --- Names per key (M1 of the 2026-10-01 review) ---
+// How many names one node key may hold at once (db.countHeldBy: live, pending, paused or blocked, and its own releases
+// still inside their hold), CLAIM_LIMIT_PER_KEY, 3 unless set. A node uses one name, and its release is held for it
+// RELEASE_COOLOFF_S so it can take it back: a node that renames twice inside that hold holds three. And three per key
+// keeps one key to three Cloudflare tunnels: the account's ~1,000 would take hundreds of keys, not one script with one
+// key (claims from many keys are for a per-IP budget at Cloudflare, not this). Only a new name counts against it: a
+// name its key holds is healed and taken back whatever the count, and a key over the limit keeps every name it has.
+export function claimLimit(env) {
+    const n = parseInt(env.CLAIM_LIMIT_PER_KEY, 10);
+    return Number.isFinite(n) && n >= 1 ? n : 3;
+}
+const overLimit = (held, limit) => json({
+    error: `this node key already holds ${held} name${held === 1 ? '' : 's'}, and one key may hold ${limit}: release one first (a release counts until its hold ends)`,
+    limit, held,
+}, 403);
+
+// Routing back on: every run of foreign answers (applyVerdict) starts again from nothing.
+const LIVE = { status: 'live', pause_reason: null, paused_at: null, attest_fails: 0, swap_fails: 0 };
 
 // Routing back on for the owner's name that is not live — a pause its heal lifts, or its own release taken back —
 // only when nobody but the owner can be answering: at once on a tunnel made in this request (only this signed
@@ -526,6 +657,7 @@ async function heal(env, cur, b, now, tries = 3) {
         // An auto name whose first provisioning failed: this is that claim, finished.
         if (!(await db.updateIfUnchanged(env, cur.name, res, { ...LIVE, decided_at: now, decided_by: 'auto' }, { withIds: true }))) return missed();
         await logEvent(env, cur.name, 'healed', `pending (provisioning had failed) → live: ${ids.changed.join(', ') || 'nothing'} made`);
+        await tell(env, async () => alerts.newCommunity(env, a, await db.countLive(env)));
         return reply({ status: 'live', changed: ids.changed, newTunnel, tunnel_id: ids.tunnel_id });
     }
     const was = `paused (${cur.pause_reason || 'no reason'})`;
@@ -537,6 +669,7 @@ async function heal(env, cur, b, now, tries = 3) {
     }
     if (!(await db.updateIfUnchanged(env, cur.name, res, { dns_record_id: g.dns_record_id }, { withIds: true }))) return missed();
     await logEvent(env, cur.name, 'heal-refused', `stays ${was}: edge re-attest ${g.verdict} (${g.why})`);
+    await tell(env, () => alerts.healRefused(env, cur.name, g.verdict, cur.paused_at));
     return reply({ status: cur.status, reason: reasonOf(cur), since: sinceOf(cur), changed: ids.changed, attest: g.verdict, why: g.why });
 }
 
@@ -553,20 +686,41 @@ async function takeName(env, existing, pubkey, b, now) {
     const approved = tier === 'auto' || (sameKey && !!existing.decided_at);
     const takeBack = sameKey && approved;
     const decided = { decided_at: now, decided_by: tier === 'auto' ? 'auto' : (existing?.decided_by || 'admin') };
+    // A new name for this key counts against its limit (claimLimit). Its own release taken back inside the hold is
+    // already counted; one past the hold isn't (it was free to anyone), so it counts as a new name does.
+    const limit = claimLimit(env);
+    const since = now - releaseCooloffS(env);
+    const counted = sameKey && holdsName(env, existing, now);
+    if (!counted) {
+        const held = await db.countHeldBy(env, pubkey, since);
+        if (held >= limit) return overLimit(held, limit);
+    }
+    const set = bodyFields(b);
     const fields = {
         node_pubkey: pubkey, hostname: `${name}.${env.BASE_DOMAIN}`, mode, status: takeBack ? 'paused' : 'pending',
-        community_name: b.community_name || b.communityName || null,
-        origin: b.origin || null, public_ip: b.public_ip || null, contact: b.contact || null,
-        attest_fails: 0, requested_at: now,
+        community_name: set.community_name ?? null,
+        origin: set.origin ?? null, public_ip: set.public_ip ?? null, contact: set.contact ?? null,
+        attest_fails: 0, swap_fails: 0, requested_at: now,
         decided_at: takeBack ? decided.decided_at : null, decided_by: takeBack ? decided.decided_by : null,
         pause_reason: takeBack ? 'unverified' : null, paused_at: takeBack ? now : null,
         released_at: null, warned_at: null, last_contact_at: now,
         // The same key's own tunnel may be reused (ensure checks it); another key's never is.
         tunnel_id: sameKey ? existing.tunnel_id : null, dns_record_id: sameKey ? existing.dns_record_id : null,
     };
+    // Another claim by the same key may have landed between the count and this write: counted again once the name is
+    // won, and over the limit, this claim gives it back before it reaches Cloudflare (so racing claims may all be
+    // refused, but never all kept) — while the row is still as it wrote it. If a decision landed on it meanwhile (the
+    // admin's), the claim carries on, as any claim whose row changed does: it answers the row as it now is.
+    const overAfter = async () => {
+        if (counted) return 0;
+        const held = await db.countHeldBy(env, pubkey, since);
+        return held > limit ? held : 0;
+    };
     if (!existing) {
         try { await db.insertAllocation(env, { name, ...fields }); }
         catch { return json({ error: 'name taken' }, 409); } // UNIQUE race
+        const over = await overAfter();
+        if (over && await db.deleteIfUnchanged(env, name, { name, ...fields })) return overLimit(over - 1, limit);
         await db.updateAllocation(env, name, { last_contact_at: now });
         await logEvent(env, name, 'claimed', `claimed by key ${key16(pubkey)} (${mode}, tier ${tier})`);
     } else {
@@ -575,6 +729,12 @@ async function takeName(env, existing, pubkey, b, now) {
         if (sameKey && existing.tunnel_id) fields.tunnel_id = (await deprovision(env, { tunnel_id: existing.tunnel_id })).tunnel_id;
         Object.assign(fields, decision(existing));   // a new tenure counts as a decision; `a` below carries it
         if (!(await db.replaceAllocation(env, name, existing, fields))) return json({ error: 'name taken' }, 409); // raced
+        const over = await overAfter();
+        if (over) {
+            const was = { ...existing };   // the row exactly as it was, the old holder's ids included
+            delete was.name;
+            if (await db.updateIfUnchanged(env, name, { ...existing, ...fields }, was)) return overLimit(over - 1, limit);
+        }
         // Another key taking a freed name: whatever the old holder left at Cloudflare goes — once this claim has won.
         // What Cloudflare refuses to delete is owed, never dropped: no row will record it again.
         if (!sameKey) {
@@ -587,7 +747,10 @@ async function takeName(env, existing, pubkey, b, now) {
             : `claimed by key ${key16(pubkey)}; it was ${existing.status}, last held by ${key16(existing.node_pubkey)}`);
     }
 
-    if (!approved) return json({ status: 'pending', hostname: fields.hostname, note: 'awaiting approval' });
+    if (!approved) {
+        await tell(env, async () => alerts.nameRequest(env, { name, ...fields }, await db.countAwaitingApproval(env)));
+        return json({ status: 'pending', hostname: fields.hostname, note: 'awaiting approval' });
+    }
     const a = { name, ...fields };
     // From here every write holds only while the row is this tenure as written (`a`), then as this claim last wrote it,
     // ids and all; if it changed, the claim is undone. A failure leaves the row held by this key ('pending', or a
@@ -611,6 +774,8 @@ async function takeName(env, existing, pubkey, b, now) {
         if (g.attest) out.attest = g.attest;
     } else if (!(await db.updateIfUnchanged(env, name, a, { ...made, status: 'live', ...decided }, { withIds: true }))) {
         return missed();
+    } else {
+        await tell(env, async () => alerts.newCommunity(env, a, await db.countLive(env)));
     }
     const token = await tunnelTokenOrNothing(env, { ...a, ...made });
     if (token !== undefined) out.tunnelToken = token;
@@ -631,15 +796,21 @@ async function claimReply(env, out) {
 }
 
 async function handleClaim(request, env, bodyText) {
-    const pubkey = await verifySignedRequest(request, bodyText);
-    if (!pubkey) return badSignature();
+    const pubkey = await signer(request, env, bodyText);
+    if (pubkey instanceof Response) return pubkey;
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return badField('the body must be a JSON object');
+    const routing = routeProblem(b);
+    if (routing) return badField(routing);
 
     const name = String(b.name || '').toLowerCase();
     if (!NAME_RE.test(name)) return json({ error: 'invalid name (3–32; a–z 0–9 -; no leading/trailing hyphen)' }, 400);
     const now = nowS();
-    await db.touchContact(env, pubkey, now, requestProto(request));
     const existing = await db.getAllocation(env, name);
+    // A new claim with a label that fails its checks is refused; the key's own name drops the label instead.
+    if (isOwnRow(existing, pubkey)) dropBadLabels(b, `${name} ${key16(pubkey)}`);
+    else { const label = labelProblem(b); if (label) return badField(label); }
+    await db.touchContact(env, pubkey, now, requestProto(request));
 
     // The claimant's own name: a heal (or taking back its own release). Ownership outranks a policy row added
     // after the claim; only the admin's block stops it — and the admin's release of it, through its hold.
@@ -659,12 +830,17 @@ async function handleClaim(request, env, bodyText) {
 // POST /api/registrar/heal — the owner re-asserts its name (design §2.2). Answers a fresh tunnelToken only when the
 // tunnel had to be re-made (a node that already runs the old one keeps running it), and `changed`.
 async function handleHeal(request, env, bodyText) {
-    const pubkey = await verifySignedRequest(request, bodyText);
-    if (!pubkey) return badSignature();
+    const pubkey = await signer(request, env, bodyText);
+    if (pubkey instanceof Response) return pubkey;
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return badField('the body must be a JSON object');
+    const routing = routeProblem(b);
+    if (routing) return badField(routing);
     const now = nowS();
-    await db.touchContact(env, pubkey, now, requestProto(request));
     const cur = b.name ? await db.getAllocation(env, String(b.name).toLowerCase()) : await db.getOwnAllocation(env, pubkey);
+    if (isOwnRow(cur, pubkey)) dropBadLabels(b, `${cur.name} ${key16(pubkey)}`);
+    else { const label = labelProblem(b); if (label) return badField(label); }
+    await db.touchContact(env, pubkey, now, requestProto(request));
     if (blockedOut(env, cur, pubkey, now)) return json({ error: 'name blocked' }, 403);
     if (!isOwnRow(cur, pubkey)) return json({ error: 'no name to heal', status: 'none' }, 404);
     if (cur.status === 'blocked') return json({ error: 'name blocked' }, 403);
@@ -681,13 +857,91 @@ async function handleHeal(request, env, bodyText) {
     return json(body);
 }
 
+// POST /api/registrar/rotate {name?, origin?} — the owner's name onto a fresh tunnel (M3 of the 2026-10-01 review): a new
+// token, and the old tunnel deleted at Cloudflare, so a connector running on a copy of its token (a standby given away,
+// a token shown on a screen) is cut off. A copied data folder or backup is NOT: it holds the node key, and /status gives it the new token. `origin` re-points the tunnel at the same time.
+// Signed by the name's key, for its own tunnel name that is live, or paused by anything but the admin (then the rotate is
+// its heal, on a fresh tunnel). The record at the hostname is kept and re-pointed, never deleted: a resolver that saw the
+// name missing would remember that for up to half an hour.
+// Row first, as every take-down: the old tunnel leaves the row (a decision) before Cloudflare deletes it, so a request
+// that read the row earlier (a heal, the sweep's repair) misses its write rather than route the name onto it again. If
+// Cloudflare won't delete it, it goes back on the row and nothing has changed: 503, since its token still works and the
+// rotate must not look done. Then the owner's heal (heal()) makes the fresh tunnel, and the answer carries its token. If
+// that fails, the old tunnel is gone all the same, and the node's next heal (or the sweep's repair) makes the new one.
+// One per name every ROTATE_EVERY_S: each deletes and makes a tunnel at Cloudflare, whose API budget every community's
+// claims and heals share, so a key may not churn it. A heal is never held back by it.
+const ROTATE_EVERY_S = 300;
+async function handleRotate(request, env, bodyText) {
+    const pubkey = await signer(request, env, bodyText);
+    if (pubkey instanceof Response) return pubkey;
+    let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return badField('the body must be a JSON object');
+    const routing = routeProblem(b);
+    if (routing) return badField(routing);
+    const now = nowS();
+    const read = () => (typeof b.name === 'string' && b.name
+        ? db.getAllocation(env, b.name.toLowerCase())
+        : db.getOwnAllocation(env, pubkey));
+    const first = await read();
+    if (isOwnRow(first, pubkey)) dropBadLabels(b, `${first.name} ${key16(pubkey)}`);
+    else { const label = labelProblem(b); if (label) return badField(label); }
+    await db.touchContact(env, pubkey, now, requestProto(request));
+    return onFreshRow(read, async (cur) => {
+        if (blockedOut(env, cur, pubkey, now)) return json({ error: 'name blocked' }, 403);
+        if (!isOwnRow(cur, pubkey)) return json({ error: 'no name to rotate', status: 'none' }, 404);
+        if (cur.status === 'blocked') return json({ error: 'name blocked' }, 403);
+        if (cur.status === 'released' || cur.status === 'revoked')
+            return json({ error: 'name released — claim it to take it back (a take-back is on a fresh tunnel)', status: cur.status, name: cur.name }, 409);
+        if (cur.status === 'paused' && cur.pause_reason === 'admin') return json({ error: 'paused by the admin' }, 403);
+        if (await awaitingApproval(env, cur)) return json({ error: 'awaiting approval: the name has no tunnel yet', status: 'pending', name: cur.name }, 409);
+        if ((b.mode === 'tunnel' || b.mode === 'direct' ? b.mode : cur.mode) !== 'tunnel')
+            return json({ error: 'a direct name runs no tunnel, so it has no token to rotate: a heal with its new public_ip re-points it' }, 400);
+        const last = await db.lastEventAt(env, cur.name, 'rotated');
+        if (last !== null && now - last < ROTATE_EVERY_S) {
+            const wait = ROTATE_EVERY_S - (now - last);
+            return json({ error: `this name was given a new tunnel ${now - last} s ago: one rotate every ${ROTATE_EVERY_S / 60} minutes (try again in ${wait} s)`, retry_after: wait }, 429);
+        }
+
+        const old = cur.tunnel_id ?? null;
+        const dropped = { ...cur, tunnel_id: null, ...decision(cur) };
+        if (!(await db.updateIfUnchanged(env, cur.name, cur, { tunnel_id: null, decision_seq: dropped.decision_seq }, { withIds: true }))) return null;
+        const kept = old ? await tunnelOff(env, { tunnel_id: old }) : null;
+        if (kept) {
+            // Recorded on the row again (a tunnel nobody records would block every fresh one for the name), or — the row
+            // changed meanwhile — owed, so the sweep deletes it once Cloudflare lets it.
+            if (!(await db.updateIfUnchanged(env, cur.name, dropped, { tunnel_id: kept }, { withIds: true })))
+                await owe(env, '[ROTATE_LEFT]', cur.name, 'tunnel', kept, 'Cloudflare refused its delete, and the row changed meanwhile');
+            console.warn('[ROTATE_REFUSED]', cur.name, `Cloudflare did not delete tunnel ${kept}: nothing rotated`);
+            return json({ error: 'Cloudflare did not delete the old tunnel, so nothing changed and its token still works: try again shortly' }, 503);
+        }
+        await logEvent(env, cur.name, 'rotated', `rotated by its owner ${key16(pubkey)}: ${old ? `tunnel ${old} deleted, so nothing runs on a copy of its token any more` : 'it had no tunnel'}; a fresh one is made now`);
+        const out = await heal(env, dropped, b, now);
+        if (out instanceof Response) return out;
+        const body = { ...out, rotated: true };
+        delete body.newTunnel; delete body.tunnel_id;
+        if (body.status === 'live') {
+            const token = await tunnelTokenOrNothing(env, out);
+            if (token !== undefined) body.tunnelToken = token;
+        }
+        return json(body);
+    });
+}
+
+// Answers a live tunnel name's token: only to its key, and under v2 only to a request nobody sent before (signer), so a
+// captured /status can't be replayed for it.
+// `?name=`: the name the node stores, answered about while it is this key's row (a key can hold more than one: an
+// install's claim answered after the owner's pick). Without it, or for a name that is not this key's, the key's first
+// row as before. Read only when x-bp-signature-query covers it (sign.js signedQuery): a captured /status replayed inside
+// the clock window with another `?name=` gets the first row, as before `?name=` existed, never the row it names.
 async function handleStatus(request, env) {
-    const pubkey = await verifySignedRequest(request, '');
-    if (!pubkey) return badSignature();
+    const pubkey = await signer(request, env, '');
+    if (pubkey instanceof Response) return pubkey;
     await db.touchContact(env, pubkey, nowS(), requestProto(request));
+    const asked = ((await signedQuery(request, '', pubkey)).get('name') || '').toLowerCase();
+    const named = NAME_RE.test(asked) ? await db.getAllocation(env, asked) : null;
     // Any state: answering 'none' for a name the node still owns is what made nodes wipe their saved address
     // (2026-09-24 incident).
-    const a = await db.getOwnAllocation(env, pubkey);
+    const a = named && named.node_pubkey === pubkey ? named : await db.getOwnAllocation(env, pubkey);
     if (!a) return json({ status: 'none' });
     const out = {
         status: a.status, name: a.name, hostname: a.hostname, mode: a.mode, community_name: a.community_name, contact: a.contact,
@@ -719,12 +973,12 @@ async function handleStatus(request, env) {
 // /api/attest answers anyone); a gated claim's key still waiting for approval is not, and is named here all the same,
 // as L3's "another key holds it" needs it.
 // Signed like /status. A POST, so the name is inside the signed bytes (the signature covers the path, not the query).
-// Read-only: it writes nothing — not even the contact every other signed request records (the node's own /status
-// does that) — and asks nothing of Cloudflare or of any node. An older Worker answers 404: a node that gets that
-// learns nothing, and drops nothing.
+// Read-only: it writes nothing but a v2 request's nonce (signer) — not even the contact every other signed request
+// records (the node's own /status does that) — and asks nothing of Cloudflare or of any node. An older Worker answers
+// 404: a node that gets that learns nothing, and drops nothing.
 async function handleHolder(request, env, bodyText) {
-    const pubkey = await verifySignedRequest(request, bodyText);
-    if (!pubkey) return badSignature();
+    const pubkey = await signer(request, env, bodyText);
+    if (pubkey instanceof Response) return pubkey;
     let b; try { b = JSON.parse(bodyText || '{}') || {}; } catch { return json({ error: 'bad json' }, 400); }
     const name = typeof b.name === 'string' ? b.name.toLowerCase() : '';
     if (!NAME_RE.test(name)) return json({ error: 'invalid name (3–32; a–z 0–9 -; no leading/trailing hyphen)' }, 400);
@@ -743,12 +997,16 @@ async function handleHolder(request, env, bodyText) {
 }
 
 async function handleUpdate(request, env, bodyText) {
-    const pubkey = await verifySignedRequest(request, bodyText);
-    if (!pubkey) return badSignature();
+    const pubkey = await signer(request, env, bodyText);
+    if (pubkey instanceof Response) return pubkey;
     await db.touchContact(env, pubkey, nowS(), requestProto(request));
     const a = await db.getAllocationByPubkey(env, pubkey);
     if (!a) return json({ error: 'allocation not found' }, 404);
     let b; try { b = JSON.parse(bodyText || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+    // An update of the key's own name: a bad label is dropped, not a reason to refuse (the rest still applies).
+    if (!b || typeof b !== 'object' || Array.isArray(b)) return badField('the body must be a JSON object');
+    const problem = dropBadLabels(b, `${a.name} ${key16(pubkey)}`);
+    if (problem) return badField(problem);
     const updates = {};
     const commVal = b.community_name !== undefined ? b.community_name : b.communityName;
     if (commVal !== undefined) {
@@ -802,8 +1060,8 @@ async function onFreshRow(read, act) {
 
 // POST /api/registrar/release (and /offline, its old name) — signed by the owner.
 async function handleRelease(request, env, bodyText) {
-    const pubkey = await verifySignedRequest(request, bodyText);
-    if (!pubkey) return badSignature();
+    const pubkey = await signer(request, env, bodyText);
+    if (pubkey instanceof Response) return pubkey;
     let b = {}; try { b = JSON.parse(bodyText || '{}') || {}; } catch { /* /offline has always taken any body */ }
     const now = nowS();
     await db.touchContact(env, pubkey, now, requestProto(request));
@@ -883,7 +1141,7 @@ async function adminResume(env, a, was, now) {
         cur.tunnel_id = left;
     }
     let ids;
-    try { ids = await ensure(env, cur, cur); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e); }
+    try { ids = await ensure(env, cur, cur); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e, { admin: true }); }
     const made = recorded(ids, cur);
     if (!(await db.updateIfUnchanged(env, a.name, cur, made, { withIds: true }))) return adminMissed(env, a.name, ids);
     const res = { ...cur, ...made };
@@ -903,7 +1161,7 @@ async function adminResume(env, a, was, now) {
 // Approve: a pending claim goes live at once, as any new claim does (its tunnel is made now).
 async function adminGoLive(env, a, event, detail, extra = {}) {
     let ids;
-    try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e); }
+    try { ids = await ensure(env, a, a); } catch (e) { return e.raced ? adminMissed(env, a.name, NOTHING) : provisionFailed(e, { admin: true }); }
     const live = { ...recorded(ids, a), ...LIVE, ...extra };
     if (!(await db.updateIfUnchanged(env, a.name, a, live, { withIds: true }))) return adminMissed(env, a.name, ids);
     await logEvent(env, a.name, event, detail);
@@ -912,8 +1170,11 @@ async function adminGoLive(env, a, event, detail, extra = {}) {
 
 // Pause, block and release write the row first, and only while it is as read: if it changed in between, the action
 // is decided again on the row as it now is (onFreshRow). `opts.freeNow`: release frees the name at once.
+// What the admin did reaches the admin's phone too, as the Worker answered it (A5; a resume whose re-attest failed says so).
 async function handleAdmin(env, name, action, opts = {}) {
-    return onFreshRow(() => db.getAllocation(env, name), (a) => (a ? adminAction(env, a, action, nowS(), opts) : json({ error: 'unknown name' }, 404)));
+    const res = await onFreshRow(() => db.getAllocation(env, name), (a) => (a ? adminAction(env, a, action, nowS(), opts) : json({ error: 'unknown name' }, 404)));
+    if (res.status === 200) await tell(env, async () => alerts.adminDid(env, name, action, await res.clone().json()));
+    return res;
 }
 
 async function adminAction(env, a, action, now, { freeNow = false } = {}) {
@@ -973,13 +1234,21 @@ async function adminAction(env, a, action, now, { freeNow = false } = {}) {
 // a released, abandoned or blocked name's do not.
 const routesInvites = (alloc) => !!alloc && (alloc.status === 'live' || alloc.status === 'paused');
 
+// `?n=` names the node to join, as a label or a hostname. Only a name this registrar holds live is answered, and only
+// at its own hostname; anything else is refused (null), never sent on: beanpool.org must not vouch for a host it doesn't
+// route (M2 of the 2026-10-01 review — `?n=` sent the app's join flow to any server, under a beanpool.org link).
+async function liveHostname(env, queryN) {
+    const base = `.${env.BASE_DOMAIN || 'beanpool.org'}`;
+    const label = queryN.endsWith(base) ? queryN.slice(0, -base.length) : queryN;
+    if (!NAME_RE.test(label) || !env.DB) return null;
+    try {
+        const alloc = await db.getAllocation(env, label);
+        return alloc?.status === 'live' && alloc.hostname === `${label}${base}` ? alloc.hostname : null;
+    } catch { return null; }
+}
+
 async function resolveNodeHostname(env, code, queryN) {
-    if (queryN) {
-        const cleanN = queryN.trim().toLowerCase();
-        if (cleanN) {
-            return cleanN.includes('.') ? cleanN : `${cleanN}.${env.BASE_DOMAIN || 'beanpool.org'}`;
-        }
-    }
+    if (queryN) return liveHostname(env, queryN);
     if (!code) return null;
 
     if (env.DB) {
@@ -1006,7 +1275,7 @@ async function resolveNodeHostname(env, code, queryN) {
 
 async function handleSwitchboard(url, env) {
     const code = decodeURIComponent(url.pathname.replace(/^\/i\//, '')).trim();
-    const queryN = (url.searchParams.get('n') || '').replace(/[^a-z0-9.\-]/gi, '');
+    const queryN = (url.searchParams.get('n') || '').trim().toLowerCase();
 
     const hostname = await resolveNodeHostname(env, code, queryN);
     if (!hostname) {
@@ -1051,8 +1320,11 @@ h1{font-size:1.5rem;color:#dc2626}</style></head><body>
 //                    or a signature that verifies under no key we can check (an unknown signing format, or a
 //                    `proto` this Worker doesn't speak). That is what a sleeping solar node, a format drift, or a
 //                    bug on OUR side looks like — never evidence.
-// Content that isn't an attest at all (a swapped origin) is unverifiable here too; what to do about it is a
-// separate, slower decision (design D2). Such replies carry `swap: true` so the sweep log can count them.
+// Content that isn't an attest at all — a 2xx that is not JSON, or JSON with no signature: a page, so something other
+// than a BeanPool node answers at the name (a stranger's server at a direct name's old IP address, a connector on a
+// copy of the tunnel's token) — is unverifiable here too, and carries `swap: true`. A BeanPool node never answers it:
+// its /api/attest is an attest, or a 4xx/5xx. It is evidence only slowly, over an hour of sweeps (design D2:
+// applyVerdict).
 const ATTEST_TIMEOUT_MS = 15_000;
 
 async function classify(env, a) {
@@ -1084,69 +1356,125 @@ export async function attestOne(env, a) {
     return (await classify(env, a)).verdict;
 }
 
+// Did something other than the name's own node answer? Another node's key, or a page (design D2).
+const foreign = (r) => r.verdict === 'impostor' || !!r.swap;
+// Is a run of foreign answers open on the row?
+const runOpen = (a) => !!(a.attest_fails || a.swap_fails);
+
+// What answers at a live name in this sweep: classify, and while a run is open on the row, an 'ok' is asked again, up to
+// RUN_ASKS answers in all. Two connectors on one tunnel — its node's, and one on a copy of its token — share the name's
+// visitors between them, so the owner's own answer must not hide the other's (M3 of the 2026-10-01 review: with one
+// ask a sweep, a run of impostor answers was ended by every 'ok' in between, and never paused). The first foreign
+// answer is the sweep's; three of the node's own end the run. A name with no run open is asked once.
+const RUN_ASKS = 3;
+async function sight(env, a) {
+    const r = await classify(env, a);
+    if (r.verdict !== 'ok' || !runOpen(a)) return r;
+    for (let i = 1; i < RUN_ASKS; i++) {
+        const again = await classify(env, a);
+        if (foreign(again)) return { ...again, why: `${again.why}, between answers from its own key` };
+    }
+    return r;
+}
+
+// How many sweeps in a row of foreign answers pause a name for a content swap: SWAP_FAIL_LIMIT, 12 unless set (design
+// D2 = b, Marty 2026-09-24: about an hour of sweeps every 5 minutes).
+export function swapFailLimit(env) {
+    const n = parseInt(env.SWAP_FAIL_LIMIT, 10);
+    return Number.isFinite(n) && n >= 1 ? n : 12;
+}
+
 // Is this sweep's picture of the world believable? (design §2.4) If not, the registrar assumes it is the one at
 // fault and acts on no row.
 //   - the canary (CANARY_NAME, one of our own nodes) must be live and 'ok'. Unset = no canary check.
-//   - impostors must not exceed max(2, 10% of live): real ones are rare and independent; many at once is us.
-//     Nor may every live name be one: max(2, …) can't be exceeded while live <= 2, and a small fleet (the live
-//     set after 09-24) is where a key-comparison bug would otherwise pause every name in two sweeps.
+//   - foreign answers (impostors and content swaps together, design §2.4) must not exceed max(2, 10% of live): real
+//     ones are rare and independent; many at once is us. Nor may every live name have one: max(2, …) can't be
+//     exceeded while live <= 2, and a small fleet (the live set after 09-24) is where a key-comparison or parsing bug
+//     would otherwise pause every name.
 //   - unverifiable must not exceed half of live: a registrar that can't see most of the world shouldn't trust
 //     what it thinks it sees in the rest.
+// verifiedSweep: an applied sweep in which the verifier was seen working — the canary 'ok', or with no canary
+// configured at least one name 'ok'. Only such a sweep counts a content swap (design D2: "the canary passed in every
+// one of them").
 function judgeSweep(env, results) {
     const count = (v) => results.filter((r) => r.verdict === v).length;
     const s = {
         live: results.length, ok: count('ok'), unverifiable: count('unverifiable'), impostor: count('impostor'),
-        content_swap: results.filter((r) => r.swap).length,   // counted only; never acted on here
+        content_swap: results.filter((r) => r.swap).length,
     };
+    const many = s.impostor + s.content_swap;
     const canary = env.CANARY_NAME ? results.find((r) => r.a.name === env.CANARY_NAME) : null;
     if (env.CANARY_NAME && canary?.verdict !== 'ok') s.action = 'suspended:canary';
-    else if (s.impostor > Math.max(2, s.live * 0.1) || (s.live > 0 && s.impostor === s.live)) s.action = 'suspended:mass';
+    else if (many > Math.max(2, s.live * 0.1) || (s.live > 0 && many === s.live)) s.action = 'suspended:mass';
     else if (s.unverifiable > s.live / 2) s.action = 'suspended:unverifiable';
     else s.action = 'applied';
     return s;
 }
+const verifiedSweep = (env, s) => s.action === 'applied' && (env.CANARY_NAME ? true : s.ok > 0);
 
 // Phase 2 for one row. Re-reads it first, so a verdict is only ever applied to the allocation that was attested,
-// not one the owner re-claimed or released while the sweep ran.
-// 'unverifiable' is never evidence: it never counts and never pauses. It does end a run of impostor verdicts
-// (attest_fails counts CONSECUTIVE ones), so a sighting can't pair with another one days of silence later.
-async function applyVerdict(env, a, verdict, why, limit) {
-    if (verdict === 'unverifiable' && !a.attest_fails) return;   // no run to end: no read, no write
+// not one the owner re-claimed or released while the sweep ran. Two runs are counted, over applied sweeps in a row:
+//   attest_fails — 'impostor' verdicts (another node's key signed our nonce): ATTEST_FAIL_LIMIT (2) of them pause the
+//                  name, pause_reason 'impostor';
+//   swap_fails   — sweeps in which something other than the name's own node answered (an impostor, or a content swap:
+//                  a page, `swap`): swapFailLimit (12, about an hour) of them pause it, pause_reason 'content-swap'
+//                  (design D2 = b). A content swap counts only in a sweep that saw the verifier working (`verified`):
+//                  otherwise it neither counts nor ends a run.
+// 'ok' (three of them, while a run is open: sight) ends both runs. Any other 'unverifiable' — nothing answered, an
+// error, a signature we can't check — is never evidence: it never counts and never pauses, but it ends both runs, so a
+// sighting can't pair with another one days of silence later. A content swap ends a run of impostor verdicts, as it
+// always did (attest_fails counts consecutive ones), and continues the run of foreign answers.
+// A pause is the kill switch: it stops ROUTING, and the name stays its owner's (design §2.3). Tunnel and DNS both go: a
+// connector running on a leaked token dies with the tunnel, and the owner's heal comes back on a fresh tunnel whose
+// token only its signed request receives — or, a direct name, only after an attest through the name under its key —
+// so nobody else can ride the resume.
+async function applyVerdict(env, r, limits, verified) {
+    const { a, verdict, why } = r;
+    const swap = !!r.swap;
+    if (swap && !verified) return;                                     // not counted, and no run ended
+    if (verdict === 'unverifiable' && !swap && !runOpen(a)) return;   // no run to end: no read, no write
     const cur = await db.getAllocation(env, a.name);
     if (!cur || cur.status !== 'live' || cur.node_pubkey !== a.node_pubkey || cur.requested_at !== a.requested_at) return;
-    if (verdict === 'unverifiable') {
-        if (cur.attest_fails) await db.updateAllocation(env, a.name, { attest_fails: 0 });
-        return;
-    }
+    const ended = { ...(cur.attest_fails ? { attest_fails: 0 } : {}), ...(cur.swap_fails ? { swap_fails: 0 } : {}) };
     if (verdict === 'ok') {
         const now = nowS();
-        await db.updateAllocation(env, a.name, { attest_fails: 0, last_attest_at: now, last_ok_at: now });
+        await db.updateAllocation(env, a.name, { ...ended, attest_fails: 0, last_attest_at: now, last_ok_at: now });
         return;
     }
-    // 'impostor': the kill switch — it stops ROUTING, and the name stays its owner's (design §2.3). Tunnel and DNS
-    // both go: a connector running on a leaked token dies with the tunnel, and the owner's heal comes back on a
-    // fresh tunnel whose token only its signed request receives, so the impostor cannot ride the resume.
-    const fails = (cur.attest_fails || 0) + 1;
-    if (fails >= limit) {
-        // Row first (stopRouting): an owner's heal that read it live meanwhile then misses its write, and undoes.
-        const to = { status: 'paused', pause_reason: 'impostor', paused_at: nowS(), attest_fails: fails };
-        if (!(await stopRouting(env, cur, to))) return;   // changed since the re-read: the next sweep looks again
-        console.warn(`[ATTEST_PAUSE] ${a.name}: impostor ${fails}× (${why}) — routing off, name kept for its key`);
-        await logEvent(env, a.name, 'paused', `impostor ${fails}× in a row (${why}): tunnel and DNS removed; name kept for ${key16(cur.node_pubkey)}, whose heal resumes it`);
-    } else {
-        await db.updateAllocation(env, a.name, { attest_fails: fails });
+    if (!foreign(r)) {
+        await db.updateAllocation(env, a.name, ended);
+        return;
     }
+    const fails = verdict === 'impostor' ? (cur.attest_fails || 0) + 1 : 0;
+    const swaps = (cur.swap_fails || 0) + 1;
+    const reason = verdict === 'impostor' && fails >= limits.impostor ? 'impostor' : (swaps >= limits.swap ? 'content-swap' : null);
+    if (!reason) {
+        await db.updateAllocation(env, a.name, { attest_fails: fails, swap_fails: swaps });
+        return;
+    }
+    // Row first (stopRouting): an owner's heal that read it live meanwhile then misses its write, and undoes.
+    const to = { status: 'paused', pause_reason: reason, paused_at: nowS(), attest_fails: fails, swap_fails: swaps };
+    if (!(await stopRouting(env, cur, to))) return;   // changed since the re-read: the next sweep looks again
+    const seen = reason === 'impostor'
+        ? `impostor ${fails}× in a row (${why})`
+        : `content swap: something other than its node answered at ${cur.hostname} in ${swaps} sweeps in a row, the last ${why} — no attest`;
+    console.warn(`[ATTEST_PAUSE] ${a.name}: ${seen} — routing off, name kept for its key`);
+    await logEvent(env, a.name, 'paused', `${seen}: tunnel and DNS removed; name kept for ${key16(cur.node_pubkey)}, whose heal resumes it`);
+    await tell(env, () => alerts.routingPaused(env, a.name, reason, reason === 'impostor' ? fails : swaps));
 }
 
 // Two phases: classify every live name while writing nothing, judge the sweep as a whole, and only then act.
 // A suspended sweep resets nothing and increments nothing. Returns the judgement (also logged).
 export async function attestSweep(env) {
-    const limit = parseInt(env.ATTEST_FAIL_LIMIT || '2', 10);   // consecutive IMPOSTOR verdicts before a pause
+    const limits = {
+        impostor: parseInt(env.ATTEST_FAIL_LIMIT || '2', 10),   // consecutive IMPOSTOR verdicts before a pause
+        swap: swapFailLimit(env),                               // consecutive sweeps of foreign answers before a pause
+    };
     const live = await db.listByStatus(env, 'live');
     const BATCH = 10;                                           // bounded concurrency — don't hit the cron's wall-clock/subrequest limits at scale
     const results = [];
     for (let i = 0; i < live.length; i += BATCH) {
-        results.push(...await Promise.all(live.slice(i, i + BATCH).map(async (a) => ({ a, ...(await classify(env, a)) }))));
+        results.push(...await Promise.all(live.slice(i, i + BATCH).map(async (a) => ({ a, ...(await sight(env, a)) }))));
     }
 
     const s = judgeSweep(env, results);
@@ -1157,12 +1485,30 @@ export async function attestSweep(env) {
         console.error(`${line} — acting on NO verdict; the registrar assumes it is at fault. ${seen.join(' ')}`);
     } else {
         console.log(line);
+        const verified = verifiedSweep(env, s);
         for (let i = 0; i < results.length; i += BATCH) {
-            await Promise.all(results.slice(i, i + BATCH).map((r) => applyVerdict(env, r.a, r.verdict, r.why, limit)));
+            await Promise.all(results.slice(i, i + BATCH).map((r) => applyVerdict(env, r, limits, verified)));
         }
     }
     await upkeep(env, results, BATCH);
+    await alertConditions(env, s);
     return s;
+}
+
+// What the sweep sees of the registrar itself reaches the admin's phone (src/alerts.js; A4, A7): a suspended sweep
+// (urgent: the registrar distrusts itself), deletions Cloudflare has refused for over a day, the nonce table missing.
+// Each is told when it starts, every 24 h while it lasts, and when it ends; this run also sends whatever still waits
+// from a failed send (a try every 5 minutes, with the cron).
+async function alertConditions(env, s) {
+    try {
+        const now = nowS();
+        const conditions = [alerts.sweepCondition(env, s), alerts.nonceCondition(!(await nonceTableExists(env)))];
+        try {
+            const owed = await db.owedSince(env, now - 86400);
+            conditions.push(alerts.teardownCondition(owed.n, owed.oldest, now));
+        } catch (e) { console.error('[ALERT_CONDITION]', 'teardown-owed', e.message || e); }
+        await alerts.updateConditions(env, conditions);
+    } catch (e) { console.error('[ALERT_CONDITION]', e.message || e); }
 }
 
 // Upkeep, every sweep, applied or suspended alike: none of it is a verdict on a node, and none of it takes routing
@@ -1175,6 +1521,7 @@ export async function attestSweep(env) {
 //     so a live name left dark by any ordering of requests would otherwise stay dark. A node merely asleep costs a
 //     read or two; one that answered anything (even a reply this verifier can't check) costs nothing.
 //   - Owed deletions (teardown) are retried.
+//   - Request nonces whose timestamp can no longer verify (twice the clock window, sign.js) are dropped.
 const dark = (r) => r.verdict === 'unverifiable' && (r.why === 'unreachable' || /^http 5(2\d|30)$/.test(r.why));
 
 async function upkeep(env, results, batch) {
@@ -1187,6 +1534,7 @@ async function upkeep(env, results, batch) {
             try { await settleOwed(env, t); } catch (e) { console.error('[TEARDOWN_RETRY]', t.name, t.kind, t.cf_id, e.message || e); }
         }
     } catch (e) { console.error('[TEARDOWN_RETRY]', e.message || e); }
+    try { await db.pruneNonces(env, nowS() - 2 * CLOCK_SKEW_S); } catch (e) { console.error('[NONCE_PRUNE]', e.message || e); }
 }
 
 // Does Cloudflare route the live `row` as it says: the record it records, pointing at its target, and its tunnel?
@@ -1214,8 +1562,18 @@ async function routedOrRepaired(env, name) {
     if (row?.status === 'live') await owe(env, '[REPAIR_OWED]', name, 'dns', row.dns_record_id, 'Cloudflare does not route it as its row says');
 }
 
+// An alert's send runs after the response, or beside the sweep (src/alerts.js notify): the env, with ctx.waitUntil on it.
+const withWaitUntil = (workerEnv, ctx) => (typeof ctx?.waitUntil === 'function'
+    ? Object.assign(Object.create(workerEnv), { waitUntil: (p) => ctx.waitUntil(p) })
+    : workerEnv);
+
+// /admin's alerts panel: the alert book, and whether a daily summary is sent at all (it goes with the outside checks of
+// our servers, src/watch.js, so not while WATCH_TARGETS is unset).
+const alertPanel = async (env) => ({ ...await alerts.alertStatus(env), daily_line: watchTargets(env).length > 0 });
+
 export default {
-    async fetch(request, env, ctx) {
+    async fetch(request, workerEnv, ctx) {
+        const env = withWaitUntil(workerEnv, ctx);
         const url = new URL(request.url);
         const p = url.pathname;
         const method = request.method;
@@ -1223,10 +1581,11 @@ export default {
             // commit: the git SHA this Worker was deployed from (`wrangler deploy --var GIT_SHA:…`, the deploy workflow);
             // null for a deploy that didn't say. The workflow fails unless it is the commit it deployed.
             if (method === 'GET' && p === '/api/registrar/health')
-                return json({ status: 'ok', commit: env.GIT_SHA || null, accepted_proto: ACCEPTED_PROTOS });
+                return json({ status: 'ok', commit: env.GIT_SHA || null, accepted_proto: await acceptedProtos(env) });
             if (method === 'GET' && p === '/api/registrar/available') return await handleAvailable(url, env);
             if (method === 'POST' && p === '/api/registrar/claim') return await handleClaim(request, env, await request.text());
             if (method === 'POST' && p === '/api/registrar/heal') return await handleHeal(request, env, await request.text());
+            if (method === 'POST' && p === '/api/registrar/rotate') return await handleRotate(request, env, await request.text());
             if (method === 'GET' && p === '/api/registrar/status') return await handleStatus(request, env);
             if (method === 'POST' && p === '/api/registrar/holder') return await handleHolder(request, env, await request.text());
             if (method === 'POST' && p === '/api/registrar/update') return await handleUpdate(request, env, await request.text());
@@ -1243,6 +1602,27 @@ export default {
                 const name = (url.searchParams.get('name') || '').toLowerCase();
                 const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '200', 10) || 200, 1), 1000);
                 return json({ events: await db.listEvents(env, NAME_RE.test(name) ? name : null, limit) });
+            }
+            // The control room's alerts (src/alerts.js): their state, the category toggles, and a test message.
+            if (p === '/api/local/admin/registrar/alerts' && method === 'GET') {
+                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
+                return json(await alertPanel(env));
+            }
+            if (p === '/api/local/admin/registrar/alerts/settings' && method === 'POST') {
+                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
+                let b; try { b = JSON.parse((await request.text()) || '{}'); } catch { return json({ error: 'bad json' }, 400); }
+                if (!(await alerts.setCategoryMode(env, b?.category, b?.mode)))
+                    return json({ error: `category must be one of ${alerts.CATEGORIES.join(', ')}, and mode one of ${alerts.MODES.join(', ')}` }, 400);
+                return json(await alertPanel(env));
+            }
+            // The outside checks of our servers (src/watch.js): each one's newest look, for /admin's "Our servers".
+            if (p === '/api/local/admin/registrar/servers' && method === 'GET') {
+                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
+                return json(await serversStatus(env));
+            }
+            if (p === '/api/local/admin/registrar/alerts/test' && method === 'POST') {
+                if (!checkAdmin(request, env)) return json({ error: 'unauthorized' }, 401);
+                return json(await alerts.sendTest(env));
             }
             const m = p.match(/^\/api\/local\/admin\/registrar\/([a-z0-9-]{3,32})\/(approve|pause|resume|block|release|revoke)$/);
             if (m && method === 'POST') {
@@ -1265,11 +1645,18 @@ export default {
 
             return json({ error: 'not found' }, 404);
         } catch (e) {
-            return json({ error: 'internal', detail: String(e.message || e) }, 500);
+            const ref = errorRef();
+            console.error('[INTERNAL]', ref, method, p, e.stack || e.message || e);
+            return json({ error: 'internal', ref }, 500);
         }
     },
 
-    async scheduled(event, env, ctx) {
-        ctx.waitUntil(attestSweep(env));
+    async scheduled(event, workerEnv, ctx) {
+        // Each cron entry (wrangler.toml) runs its own job in its own invocation: the outside checks of our servers
+        // (src/watch.js, from here — never from the server they watch) on WATCH_CRON, the sweep on the other — and on
+        // anything else, as before them. Apart, servers that hang never hold the sweep's connections or subrequests.
+        // A slow ntfy never holds either: each send is its own waitUntil.
+        const env = withWaitUntil(workerEnv, ctx);
+        ctx.waitUntil(event?.cron === WATCH_CRON ? watchOurServers(env) : attestSweep(env));
     },
 };

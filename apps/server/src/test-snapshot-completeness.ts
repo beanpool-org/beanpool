@@ -34,9 +34,10 @@
  *      store DID hold.
  *  11. A restore never writes THROUGH a store object's inode: restoring an older `attachments/<id>.bin` over
  *      one a snapshot hard-links leaves the snapshot's bytes exactly as captured.
- *  12. The open door's record travels too: `open_joins` and the node key its hashes are made with
- *      (node_config `openJoinSalt`). Without both, a restored global node would let every sign-in account
- *      join a second time.
+ *  12. The open door's record travels too: `open_joins`, and which key its hashes are made with (node_config
+ *      `openJoinKeyId`), so a restored global node never lets a sign-in account join a second time: with that key
+ *      it refuses it, without it it refuses every sign-in. Never the key itself, a file (data/open-join.key,
+ *      services/open-join-key.ts), whose bytes are nowhere in the archive's database.
  *  13. So does the global node's moderation (G3): a post hidden by reports stays hidden
  *      (`posts.hidden_by_reports_at`), a moderator's takedown still counts (`posts.removed_by_moderator_at`),
  *      and a muted member stays muted (`members.moderation_muted_until`).
@@ -52,6 +53,8 @@
  *      node still shows a web member what they have not seen, and not what they have.
  *  18. And the keys a re-key replaced (`invalidated_keys`, engine/member-wizards.ts), with the key that replaced each, so a
  *      restored node still refuses a lost phone's key at every door.
+ *  19. And a member's Home (`member_preferences` keys `home.layout` and `interests`, engine/home-preferences.ts), saved by
+ *      the preferences setter, so a restored node still draws their Home as they left it.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-snapshot-completeness.ts
  */
@@ -63,9 +66,10 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import Database from 'better-sqlite3';
+import { setMemberPhoto } from '@beanpool/engine';
 
-const PORT = 8583;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
 const ADMIN_PW = 'Snapshot-Completeness-Pw-41!';
 
@@ -115,9 +119,13 @@ function extract(tarPath: string, into: string): string {
     return into;
 }
 
+// Step 7c: the password alone opens no admin route with 2FA off; the operator's calls go under an owner's key session
+// (backups and snapshots are an owner's).
+let ADMIN: Record<string, string> = {};
+
 /** Download a route to a file, with the headers it answered. */
 async function download(url: string, to: string): Promise<{ status: number; headers: Headers; body: Buffer }> {
-    const res = await fetch(url, { method: 'GET', headers: { 'X-Admin-Password': ADMIN_PW } });
+    const res = await fetch(url, { method: 'GET', headers: { ...ADMIN } });
     const body = Buffer.from(await res.arrayBuffer());
     if (res.ok) fs.writeFileSync(to, body);
     return { status: res.status, headers: res.headers, body };
@@ -199,7 +207,7 @@ async function main(): Promise<void> {
 
     const { initTls } = await import('./services/tls.js');
     const { db } = await import('./db/db.js');
-    const { initStateEngine, seedGenesisMember, createPost, updatePost } = await import('./state-engine.js');
+    const { initStateEngine, seedGenesisMember, createPost, updatePost, setMemberPreferences } = await import('./state-engine.js');
     const { ensureGenesis } = await import('./genesis.js');
     const { startHttpsServer } = await import('./https-server.js');
     const { hashPassword, updateLocalConfig } = await import('./config/local-config.js');
@@ -215,7 +223,8 @@ async function main(): Promise<void> {
     const { writeMessageTombstone } = await import('./engine/message-tombstone.js');
     const { restoreImages } = await import('./routes/backup.js');
     const { cleanStorageAndCompressLogs, getStorageCleanPreview } = await import('./engine/storage-health.js');
-    const { openJoinHash, OPEN_JOIN_KEY_ROW } = await import('./engine/open-join.js');
+    const { openJoinHash } = await import('./engine/open-join.js');
+    const { OPEN_JOIN_KEY_FILE, OPEN_JOIN_KEY_ID_ROW, LEGACY_OPEN_JOIN_KEY_ROW, openJoinKeyId } = await import('./services/open-join-key.js');
 
     await initTls();
     initStateEngine();
@@ -223,15 +232,16 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(DATA_DIR, 'libp2p_key'), privateKeyToProtobuf(await generateKeyPair('Ed25519')));
     const { hash, salt } = hashPassword(ADMIN_PW);
     updateLocalConfig({ adminHash: hash, salt, totpEnabled: false, totpSecret: null });
-    await startHttpsServer(PORT);
+    ADMIN = (await import('./admin-auth-test-harness.js')).ownerSessionHeaders();
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
     const store = getImageStore();
 
     // ── The node at T ──────────────────────────────────────────────────────────────────────────
     const author = crypto.randomBytes(32).toString('hex');
     seedGenesisMember(author, 'Snapper');
     // The marketplace refuses a post from a member with no profile photo, so give them one.
-    db.prepare('UPDATE members SET avatar_url = ? WHERE public_key = ?')
-        .run(dataUrl(makePhoto('the-author-avatar')), author);
+    setMemberPhoto(db, author, dataUrl(makePhoto('the-author-avatar')));
 
     const keptPhoto = makePhoto('kept');
     const doomedPhoto = makePhoto('doomed-by-a-replacement');
@@ -263,8 +273,8 @@ async function main(): Promise<void> {
     const openJoinHashAtT = openJoinHash('google', 'snapshot-completeness-sub');
     db.prepare('INSERT INTO open_joins (member_pubkey, provider, join_hash, joined_at, ip_hash) VALUES (?, ?, ?, ?, ?)')
         .run(openJoiner, 'google', openJoinHashAtT, new Date().toISOString(), null);
-    const openJoinKeyAtT = (db.prepare('SELECT value FROM node_config WHERE key = ?').get(OPEN_JOIN_KEY_ROW) as any)?.value as string;
-    assert(!!openJoinKeyAtT, 'setup: an open join, and the node key its hash was made with');
+    const openJoinKeyAtT = fs.readFileSync(path.join(DATA_DIR, OPEN_JOIN_KEY_FILE));
+    assert(openJoinKeyAtT.length === 32, 'setup: an open join, and the node key its hash was made with, in its file');
 
     // The global node's moderation state (G3), as engine/auto-moderation.ts writes it. The mute is on a member of its
     // own, not the author: a muted author's post takes no edits (engine updatePost), and the author edits one at T+1.
@@ -308,6 +318,10 @@ async function main(): Promise<void> {
     const replacedBy = 'cd'.repeat(32);
     db.prepare(`INSERT INTO invalidated_keys (public_key, reason, invalidated_at, rekeyed_to) VALUES (?, 'rekeyed', ?, ?), (?, 'rekey_pending', ?, NULL)`)
         .run(replacedKey, replacedAtT, replacedBy, '12'.repeat(32), replacedAtT);
+
+    // A member's Home (engine/home-preferences.ts), saved by the preferences setter itself: a layout and interests.
+    const homeAtT = { v: 1, order: ['events', 'market'], hidden: ['pulse'], dismissed: { safety: new Date(Date.now() - 540_000).toISOString() }, updatedAt: new Date(Date.now() - 530_000).toISOString() };
+    assert(setMemberPreferences(mutedMember, { 'home.layout': homeAtT, interests: ['garden', 'food'] }) === true, 'setup: a member saves a Home layout and interests');
 
     /** What every referenced object held at T. The whole suite is about reproducing this map. */
     const atT = new Map<string, Buffer>([
@@ -383,9 +397,14 @@ async function main(): Promise<void> {
         const archived = new Database(path.join(plainDir, 'state.db'), { readonly: true });
         try {
             const row = archived.prepare('SELECT join_hash FROM open_joins WHERE member_pubkey = ?').get(openJoiner) as any;
-            const key = (archived.prepare('SELECT value FROM node_config WHERE key = ?').get(OPEN_JOIN_KEY_ROW) as any)?.value;
+            const keyId = (archived.prepare('SELECT value FROM node_config WHERE key = ?').get(OPEN_JOIN_KEY_ID_ROW) as any)?.value;
+            const legacyKey = archived.prepare('SELECT 1 FROM node_config WHERE key = ?').get(LEGACY_OPEN_JOIN_KEY_ROW);
             assert(row?.join_hash === openJoinHashAtT, 'the archive carries open_joins, so a restored node still knows who joined');
-            assert(key === openJoinKeyAtT, 'and the node key those hashes were made with, so the same account still matches');
+            assert(keyId === openJoinKeyId(openJoinKeyAtT) && !legacyKey,
+                'and which key those hashes were made with, so a restored node checks a sign-in with that key or not at all');
+            const archivedBytes = fs.readFileSync(path.join(plainDir, 'state.db'));
+            const encodings = ['raw', 'base64url', 'base64', 'hex'].map((e) => e === 'raw' ? openJoinKeyAtT : Buffer.from(openJoinKeyAtT.toString(e as BufferEncoding)));
+            assert(encodings.every((b) => !archivedBytes.includes(b)), 'but never the key itself, in any encoding');
             const moderated = archived.prepare('SELECT hidden_by_reports_at, removed_by_moderator_at FROM posts WHERE id = ?').get(kept!.id) as any;
             const muted = archived.prepare('SELECT moderation_muted_until FROM members WHERE public_key = ?').get(mutedMember) as any;
             assert(moderated?.hidden_by_reports_at === hiddenAtT && moderated?.removed_by_moderator_at === removedAtT,
@@ -419,6 +438,10 @@ async function main(): Promise<void> {
             assert(replacedRows.length === 2 && replacedRows.some((r) => r.public_key === replacedKey && r.reason === 'rekeyed' && r.rekeyed_to === replacedBy && r.invalidated_at === replacedAtT)
                 && replacedRows.some((r) => r.reason === 'rekey_pending' && r.rekeyed_to === null),
                 'and the keys a re-key replaced, with the key that replaced each, so a restored node still refuses a lost phone\'s key');
+            const home = Object.fromEntries((archived.prepare(`SELECT pref_key, pref_value FROM member_preferences WHERE public_key = ? AND pref_key IN ('home.layout', 'interests')`)
+                .all(mutedMember) as { pref_key: string; pref_value: string }[]).map((r) => [r.pref_key, r.pref_value]));
+            assert(home['home.layout'] === JSON.stringify(homeAtT) && home.interests === '["garden","food"]',
+                `and a member's Home, their layout and interests, so a restored node still draws it as they left it (${JSON.stringify(home)})`);
         } finally {
             archived.close();
         }
@@ -469,7 +492,7 @@ async function main(): Promise<void> {
         'and a locked one, the same way');
 
     const anyway = await fetch(`${BASE}/api/local/admin/backup`, {
-        method: 'POST', headers: { 'X-Admin-Password': ADMIN_PW, 'Content-Type': 'application/json' }, body: '{}',
+        method: 'POST', headers: { ...ADMIN, 'Content-Type': 'application/json' }, body: '{}',
     });
     const anywayBytes = Buffer.from(await anyway.arrayBuffer());
     assert(anyway.status === 200, `the route answers with the backup rather than an error (got ${anyway.status})`);
@@ -528,7 +551,7 @@ async function main(): Promise<void> {
     assert(fs.existsSync(survivorImages), 'the surviving snapshot keeps its own');
 
     const deleted = await fetch(`${BASE}/api/local/admin/snapshots/delete`, {
-        method: 'POST', headers: { 'X-Admin-Password': ADMIN_PW, 'Content-Type': 'application/json' },
+        method: 'POST', headers: { ...ADMIN, 'Content-Type': 'application/json' },
         body: JSON.stringify({ password: ADMIN_PW, name: survivor.name }),
     });
     assert(deleted.status === 200, 'the delete route deletes a snapshot');
@@ -622,7 +645,7 @@ async function main(): Promise<void> {
 
     // The route the harvester and both UIs use. No parameter, no opt-in, no retry.
     const shortRes = await fetch(`${BASE}/api/local/admin/backup`, {
-        method: 'POST', headers: { 'X-Admin-Password': ADMIN_PW, 'Content-Type': 'application/json' }, body: '{}',
+        method: 'POST', headers: { ...ADMIN, 'Content-Type': 'application/json' }, body: '{}',
     });
     const shortBody = Buffer.from(await shortRes.arrayBuffer());
     assert(shortRes.status === 200, `a node with a lost object still produces a backup (got ${shortRes.status})`);
@@ -658,7 +681,7 @@ async function main(): Promise<void> {
     assert(wholeAgain.images.missing.length === 0 && wholeAgain.images.staged === wholeAgain.images.referenced,
         'with the object back, the very same call takes an ordinary complete backup and labels nothing');
     const wholeRes = await fetch(`${BASE}/api/local/admin/backup`, {
-        method: 'POST', headers: { 'X-Admin-Password': ADMIN_PW, 'Content-Type': 'application/json' }, body: '{}',
+        method: 'POST', headers: { ...ADMIN, 'Content-Type': 'application/json' }, body: '{}',
     });
     await wholeRes.arrayBuffer();
     assert(wholeRes.headers.get('x-backup-contents') === 'database+images'

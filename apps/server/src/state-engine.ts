@@ -1,35 +1,52 @@
 import crypto from 'node:crypto';
-import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP } from '@beanpool/core';
-import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope } from '@beanpool/core';
+import { LedgerManager, COMMONS_BALANCE, setCommonsBalance, getTier, getGenesisEarnedCredit, vouchCreditForLevel, grantedCreditForTier, offerCapForCount, offersRequiredForDepth, OFFER_BANDS, usableAllowance, PROTOCOL_CONSTANTS, TRANSACTION_FEE_RATE, isSyntheticAccount, isEscrowAccount, ESCROW_FLOOR, SYNONYM_MAP, isBeanAmount, BLOCKED_BEANS_NOTE } from '@beanpool/core';
+import type { TrustStats, TierInfo, GenesisInviteType, VouchLevel, TierName, AudienceScope, PushNoticeKind, TourRecord } from '@beanpool/core';
+import { pushNoticeWords, PUSH_NOTICE_KINDS, DM_FROM_ADMINS_KEY } from '@beanpool/core';
 export type { EscrowRefundShortfall };
 import * as engine from '@beanpool/engine';
 import type { WashAnalysis } from '@beanpool/engine';
 export type { WashAnalysis };
 import { getThresholds, getLocalConfig } from './config/local-config.js';
-import { assertLedgerWritable } from './config/node-role.js';
+import { assertLedgerWritable, assertPlainTablesWritable, standbyWritesNothing, onNodeRoleChange } from './config/node-role.js';
+import { expoPushHeaders } from './config/expo-access-token.js';
+import { sanitizeMessage } from './sanitize-message.js';
 import {
-    getNodeProfile, getNodeFeatures, getProfileSwitches, mirrorNodeProfileAtBoot, assertBeansOn, forgetLedgerHistory,
+    getNodeProfile, getNodeFeatures, getProfileSwitches, nearbyListingsLimits, mirrorNodeProfileAtBoot, isMainServerBootRefusal, assertBeansOn, forgetLedgerHistory,
     BeansOffError, BEANS_OFF_PRICE_MESSAGE, type NodeProfile, type NodeFeatures,
 } from './config/node-profile.js';
 import { installCommunitySettingsAtBoot } from './config/community-settings.js';
-import { installAvatarKeysAtBoot } from './engine/avatar-keys.js';
+import { getDoor, mayInviteHere, type Door } from './config/door.js';
+import { installAvatarKeysAtBoot, noteFaceUrlShapeNow } from './engine/avatar-keys.js';
+import { installPhotoKeysAtBoot, notePhotoUrlShapeNow } from './engine/photo-keys.js';
+import { installPollVoteOriginsAtBoot } from './engine/probation.js';
+import { loadMemberAreas, memberAreaFor, refreshMemberAreas } from './engine/member-area.js';
+import { WsClients } from './ws-area-index.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
+import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, retiredPushTokenIds, type PushTokenOpener } from './services/push-token-seal.js';
+import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
+import { reportKind } from './services/report-kind.js';
 import { getVersion } from './version.js';
-import { getAppStoreVersions, getMinAppVersion, type AppStoreVersions } from './app-store-versions.js';
-import { db, initSchema, migrateLegacyState, writeTombstone, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR } from './db/db.js';
+import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
+import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove } from './db/db.js';
 import { registerBridgeDecayExemptions, ensureBridgeAccount } from './federation-bridge.js';
-import { peerFromBridgeAccountId, audienceOf } from '@beanpool/core';
+import { peerFromBridgeAccountId, audienceOf, replaceLoneSurrogates } from '@beanpool/core';
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { getPrivateKey } from './p2p.js';
 import { publicKeyToProtobuf, publicKeyFromProtobuf } from '@libp2p/crypto/keys';
 import { ledger } from './engine/ledger.js';
 import { pruneFunnel } from './engine/funnel.js';
-import { releaseOpenJoin } from './engine/open-join.js';
-import { isAcceptableAvatarValue, isAcceptablePhotoValue, AVATAR_FORMAT_ERROR } from './engine/avatar.js';
+import { pruneWebVisits } from './engine/web-visits.js';
+import { startPruningUnusedInvites } from './engine/writer-bounds.js';
+import { startSweepingRecoveryCollections } from './engine/recovery-release.js';
+import { writeAddressHash, releaseOpenJoin } from './engine/open-join.js';
+import { noteRemovedNewcomer } from './engine/door-signal.js';
+import { admitByAddress } from './db/writes-by-address.js';
+import { pruneAgedOut } from './engine/plain-tables.js';
+import { isAcceptableAvatarValue, isAcceptablePhotoValue, AVATAR_FORMAT_ERROR, getAvatarService } from './engine/avatar.js';
 import { stripImageValue } from './storage/image-metadata.js';
-import { pruneOldActivity } from './db/activity-feed-db.js';
-import { scrubChannelRows } from './engine/creator-channels.js';
+import { pruneOldActivity, renameMemberInActivity } from './db/activity-feed-db.js';
+import { scrubChannelRows, clearUnprovenOauthBadges } from './engine/creator-channels.js';
 import { getUnhandledRejectionSummary } from './process-handlers.js';
 import { scrubPulseItems } from './engine/pulse-resolver.js';
 import { adminActorName } from './engine/admin-actor-name.js';
@@ -37,13 +54,25 @@ import { closeOpenReportsOnPost, notifyPostTakedown, notifyPostsCleared, notifyR
 import { dropPlaceWatches } from './engine/place-watches.js';
 import { scrubKnocksOf } from './engine/knocks.js';
 import { dropKeptNoticesOf, tidyKeptNotices } from './engine/kept-notices.js';
-import { dropBlocksOf } from './engine/member-blocks.js';
+import { newPushNotice, keepPushNotices, tidyPushNotices, dropPushNoticesOf, neutralisePushNoticesNaming, type PushNoticeRow } from './engine/push-notices.js';
+import { dropBlocksOf, blockersOf, blockersOfKept, hasBlocked } from './engine/member-blocks.js';
+import { dropWithheldOf } from './engine/withheld-lines.js';
+import { repaymentOf, assertPayableDebt, countDebtPayment, PAID_TO_COMMONS_MEMO } from './engine/names-debts.js';
+import { moneyRequestOf, priorAnswer, recordAnswer } from './engine/money-requests.js';
+import { dropNamesListHoldOf } from './engine/names-list.js';
+import { withholdsNote, keepWithheldNote, noteAsReadBy, dropWithheldNotesOf, WITHHELD_NOTE_COLUMN, WITHHELD_NOTE_JOIN } from './engine/withheld-notes.js';
+import { scrubPostsOf } from './engine/post-scrub.js';
+import { blankMessagesOf } from './engine/message-tombstone.js';
+import { truncateWalAfterDelete } from './db/wal-truncate.js';
+import { scrubMemberFromLogs } from './logger.js';
 import { deleteAllShares, applyRecordedRecoveryTombstones } from './engine/recovery-shares.js';
-import { forgetListedCommunities } from './engine/directory-cache.js';
+import { removeGithubSignInsAtBoot } from './engine/github-sign-in-removal.js';
+import { returnStrandedPledges } from './engine/stranded-pledges.js';
 import {
     evaluateAutoHide, recheckHiddenPost, restoreHiddenPost as restoreHiddenPostEngine, recordModeratorRemoval,
     evaluateAutoMute, liftMute as liftMuteEngine,
 } from './engine/auto-moderation.js';
+import { hideBurstPosts, undoBurstHide, forgetBurstActionsOf, type BurstActorRole, type BurstActionSummary, type UndoOutcome } from './engine/burst-cleanup.js';
 import { seedPulseCurated } from './engine/pulse-seed.js';
 import {
     nodeRoleOf,
@@ -59,8 +88,10 @@ import {
     setNodeRoleBreakGlassHash,
     getNodeRoleBreakGlassHash,
     NODE_ROLE_ACTS,
+    dropNodeRoleRow,
     type MemberNodeRole,
     type NodeRoleRecord,
+    type RoleChangeBy,
 } from './engine/node-roles.js';
 export {
     nodeRoleOf,
@@ -82,6 +113,8 @@ import {
     createDecision,
     getDecision,
     publicDecision,
+    decisionForReader,
+    decisionForAdmin,
     getAllDecisions,
     getOpenDecisions,
     castDecisionVote,
@@ -117,6 +150,8 @@ export {
     createDecision,
     getDecision,
     publicDecision,
+    decisionForReader,
+    decisionForAdmin,
     getAllDecisions,
     getOpenDecisions,
     castDecisionVote,
@@ -150,9 +185,12 @@ export {
 };
 import {
     persistCommonsBalance as persistCommonsBalanceEngine,
+    CommonsPotUnknownError,
     runWashSybilMetricsAudit as runWashSybilMetricsEngine,
+    runWashSybilMetricsAuditInSlices,
     getReplicaConsistency as getReplicaConsistencyEngine,
     exportLedgerAudit as exportLedgerAuditEngine,
+    exportLedgerFor as exportLedgerForEngine,
     persistDecayEvents as persistDecayEventsEngine,
     persistDecayAndCommons as persistDecayAndCommonsEngine,
     runLedgerAudit as runLedgerAuditEngine,
@@ -179,14 +217,20 @@ import {
     generateInvite,
     adminGenerateInvite,
     redeemInvite as redeemInviteEngine,
-    redeemOfflineTicket as redeemOfflineTicketEngine
+    redeemOfflineTicket as redeemOfflineTicketEngine,
+    previewAdmitsInvite,
 } from './engine/invites.js';
-import { avatarUrlFor, isServableAvatarValue } from '@beanpool/core';
+import { isPrivatePreview, PRIVATE_PREVIEW, PRIVATE_PREVIEW_MESSAGE } from './config/private-preview.js';
+import { avatarUrlOf } from '@beanpool/core';
 import {
     getMember as getMemberEngine,
     getMembers as getMembersEngine,
     getAllMembers as getAllMembersEngine,
+    getMemberDirectoryRows as getMemberDirectoryRowsEngine,
+    getMemberDirectoryRowsByKeys as getMemberDirectoryRowsByKeysEngine,
+    searchMemberDirectoryRows as searchMemberDirectoryRowsEngine,
     checkInvite as checkInviteEngine,
+    verifyOfflineTicket as verifyOfflineTicketEngine,
     getInvitesByMember as getInvitesByMemberEngine,
     getInviteTree as getInviteTreeEngine,
     getProfile as getProfileEngine,
@@ -204,8 +248,10 @@ import {
     publicMemberCard,
     type ContactViewer,
     rowToMember,
+    setMemberPhoto,
     rowToProfile,
     type Member,
+    type DirectoryRow,
     type InviteCode,
     type MemberProfile,
     type InviteCheckResult,
@@ -217,8 +263,11 @@ import {
     type Rating,
     type FriendEntry,
     getPosts as getPostsEngine,
+    getPostsForPhotoHeal as getPostsForPhotoHealEngine,
+    type PhotoHealRead,
     withoutPollVoters,
-    getPostCount as getPostCountEngine,
+    withoutTradeParty,
+    isTradeParty,
     getActivePostCount as getActivePostCountEngine,
     hasListedOffer as hasListedOfferEngine,
     hasLiveOffer as hasLiveOfferEngine,
@@ -260,8 +309,11 @@ import {
     getGroupMembers as getGroupMembersEngine,
     getGroupMember as getGroupMemberEngine,
     isGroupConvenor as isGroupConvenorEngine,
+    isActingGroupConvenor as isActingGroupConvenorEngine,
     isGroupMember as isGroupMemberEngine,
     getGroupLead as getGroupLeadEngine,
+    reconcileGroupLead as reconcileGroupLeadEngine,
+    membershipWriteAt as groupMembershipWriteAt,
     isGroupLead as isGroupLeadEngine,
     handOverGroupLead as handOverGroupLeadEngine,
     getMemberGroupIds as getMemberGroupIdsEngine,
@@ -273,6 +325,7 @@ import {
     approveGroupMember as approveGroupMemberEngine,
     inviteGroupMember as inviteGroupMemberEngine,
     deleteGroupPost as deleteGroupPostEngine,
+    groupAsListed,
     type Group,
     type GroupMember,
     type GroupRole,
@@ -291,15 +344,20 @@ import {
 import {
     createPost as createPostEngine,
     removePost as removePostEngine,
+    cancelClosedGroupPosts,
+    announceClosedGroupPosts,
     updatePost as updatePostEngine,
     pausePost as pausePostEngine,
     resumePost as resumePostEngine,
     closePoll as closePollEngine,
+    closeExpiredPolls,
     votePoll as votePollEngine,
     rsvpEvent as rsvpEventEngine,
     adminDeletePost as adminDeletePostEngine,
+    assertPostWagesWritable,
     type EscrowRefundShortfall
 } from './engine/posts.js';
+import { assertPostFields, type PostFieldsIn, type PostTextStored } from './engine/post-fields.js';
 import {
     requestPost as requestPostEngine,
     approvePostRequest as approvePostRequestEngine,
@@ -328,6 +386,8 @@ import {
 import {
     ensureGroupThread,
     backfillGroupThreads,
+    wipeReadableGroupLines,
+    type GroupLineIn,
     syncGroupThreadMembership,
     postGroupSystemLine,
     callsignOf,
@@ -338,6 +398,7 @@ import {
     type GroupThreadView,
 } from './engine/group-thread.js';
 export { GROUP_THREAD_NOTICE, GROUP_THREAD_MESSAGE_MAX, GroupSystemType, canReadGroupThread } from './engine/group-thread.js';
+import { withMembershipEpoch, markGroupEpochsStaleFor, markGroupEpochStale, groupKeyRoster, setMembershipFromEpoch } from './engine/group-keys.js';
 import {
     proposeGroupConvenor as proposeGroupConvenorEngine,
     voteGroupConvenor as voteGroupConvenorEngine,
@@ -381,6 +442,11 @@ export {
     dueEventReminders, runEventReminderSweep, reminderPushTitle, reminderPushBody,
     type MyEvent,
 } from './engine/event-reminders.js';
+import { HOME_PREFERENCE_KEYS, HOME_MEMBERS_ONLY_MESSAGE, homePreferenceWrites, ownHomePreferences, type HomeLayout } from './engine/home-preferences.js';
+export {
+    HOME_PREFERENCE_KEYS, HOME_CARD_IDS, INTEREST_IDS, getHomeLayout, getInterests, ownHomePreferences, homePreferencesNamed,
+    type HomeLayout, type HomeCardId,
+} from './engine/home-preferences.js';
 
 /** "Your events" and the per-event reminder write, wired to this node's db. */
 export const listMyEvents = (memberPubkey: string, nowMs?: number) => listMyEventsEngine(memberPubkey, nowMs);
@@ -395,9 +461,14 @@ import {
     recordSyncAttempt,
     getCurrentImportOrigin,
     signSyncPayload as signSyncPayloadEngine,
+    signSyncBody as signSyncBodyEngine,
     exportSyncState as exportSyncStateWrapper,
     importRemoteState as importRemoteStateEngine,
+    verifySyncPayload,
+    mergeCopyPages,
+    isCopyPage,
     writeSyncAuditLog,
+    type CopyPart,
     type ImportOptions,
     type ImportResult,
     type SyncAuditEntry,
@@ -482,11 +553,21 @@ export interface AbuseReport {
     reporterCallsign?: string;
     targetCallsign?: string;
     postTitle?: string | null;
+    /**
+     * A child-safety report, read from its reason as the alerts read it (services/report-kind.ts reportKind): the Reports
+     * queue marks it and lists it first. A flag only: the reason itself is shown as before.
+     */
+    childSafety?: boolean;
     /** The same status in the moderation list's words: 'open' (pending), 'dismissed' (reviewed), 'actioned'. */
     outcome?: 'open' | 'dismissed' | 'actioned';
     /** The reported post's id, its author's callsign, and whether it is gone (null when no post is reported). */
     postId?: string | null;
     postAuthorCallsign?: string | null;
+    /**
+     * The reported post's author's key: who a report on a post is about, read from the post, never from the reporter
+     * (a report filed before POST /api/reports set its target from the post may name someone else in targetPubkey).
+     */
+    postAuthorPubkey?: string | null;
     postDescription?: string | null;
     postRemoved?: boolean | null;
     /** The reported post is hidden by reports, waiting for a moderator (global profile, G3). */
@@ -532,7 +613,14 @@ export interface NodeConfig {
     serviceRadius?: { lat: number; lng: number; radiusKm: number };
     publishLocation?: boolean;
     publishMembers?: boolean;
-    publishContacts?: boolean;
+    /**
+     * Whether the directory is sent the community's contact email, and its phone. Off unless an owner turned each on: only
+     * a stored `true` under these keys publishes. They replace `publishContacts`, one switch for both that read unset as
+     * "publish" and was written back as true by every save, so a stored true there was no choice anyone made; it is
+     * dropped on read, and nothing of it publishes a contact.
+     */
+    publishContactEmail?: boolean;
+    publishContactPhone?: boolean;
     publishHealth?: boolean;
     directoryPushIntervalHours?: number;
     lastDirectoryPush?: string;
@@ -556,7 +644,9 @@ export interface NodeConfig {
     registrarNames?: RegistrarName[];
 }
 
-const wsClients: Set<any> = new Set();
+// Indexed by member and area for the listing pushes by area (ws-area-index.ts); otherwise a plain Set. An open socket's
+// key changes only through wsClients.setKey.
+const wsClients = new WsClients();
 
 // ===================== INIT =====================
 
@@ -564,6 +654,9 @@ export function initStateEngine(): void {
     bumpPostsVersion();
     bumpMembersVersion();
     initSchema();
+    // A verified-account badge no platform was asked about proves nothing (#1830): cleared once, re-verified on connect.
+    // Never blocks a boot: it is idempotent, so a failure here is retried at the next one.
+    try { clearUnprovenOauthBadges(); } catch (e) { console.error('[Boot] Could not clear unproven channel badges:', e); }
     clearEnterpriseFloorCache();
     migrateLegacyState();
     // NODE_PROFILE decides what the node runs as; node_config.nodeProfile records it, and a main server recorded as
@@ -577,14 +670,36 @@ export function initStateEngine(): void {
     // Members' faces behind a member-only key in every avatar URL, where visitors see the listings and not the people
     // (G9a-2, engine/avatar-keys.ts). Decided here, once, so the URLs emitted and the URLs served agree.
     installAvatarKeysAtBoot();
+    // A listing's photos behind a key in their URLs for those who may read the listing (engine/photo-keys.ts): every
+    // listing's where the listings are members' (a local community with reads enforced), and elsewhere, where they are a
+    // public read, every listing's off the board (a group's own, one for one person). An <img> cannot sign. Decided
+    // here, once, as the faces are.
+    installPhotoKeysAtBoot(READ_AUTH_ON);
+    // Each anonymous poll on the public board says, once it has closed, how many of its votes came from new or 12-word
+    // accounts, where the node has probation (the global profile; engine/probation.ts pollVotesFromNewOrWords; never on
+    // an open vote, nor while a poll is open: @beanpool/engine pollOriginsMayShow). Read with the poll, never stored.
+    installPollVoteOriginsAtBoot();
+    // Where listings sync by area, each member's area in memory for the listing pushes (listingReach).
+    if (getProfileSwitches().nearbyListings) loadMemberAreas();
     // Members' sign-in recovery copies are locked with a key kept outside this database (services/recovery-seal-key.ts):
     // a main server makes it if it has none and wraps any copy stored before it; a standby does neither. Before anything
     // serves. The key travels only inside the take-over bundle, so a take-over and a sealed-backup restore bring it.
     // Never throws.
     installRecoverySealAtBoot({ standby: getNodeRole() === 'backup' });
+    // Members' push tokens are locked with a key from the same file (services/push-token-seal.ts): a main server locks
+    // the rows stored in the clear before and checks every row opens; a standby drops those rows (it has no key). Never
+    // throws.
+    installPushTokenSealAtBoot({ standby: getNodeRole() === 'backup' });
+    // The open door's key is a file too (services/open-join-key.ts): an old node_config row holding it moves out of the
+    // database now, before any snapshot or copy is made, and a server that cannot check a sign-in says so. Never throws.
+    installOpenJoinKeyAtBoot({ standby: getNodeRole() === 'backup' });
     // Recovery copies whose deletion this database recorded without applying it (a standby on a version from before
     // recovery tombstones), deleted now (engine/recovery-shares.ts). Never throws.
     applyRecordedRecoveryTombstones();
+    // GitHub is no longer a sign-in: its recovery copies, their released copies and its open-door records go
+    // (engine/github-sign-in-removal.ts; a standby removes its open-door records only). After the seal is installed, so
+    // a released copy can be opened to tell whether it holds a GitHub copy. Never throws.
+    removeGithubSignInsAtBoot({ standby: getNodeRole() === 'backup' });
     // The one money path in db.ts (a crowdfund pledge) checks the Beans switch through this, as the hooks below do.
     setMoneyGuardHook(() => assertBeansOn());
     // The BeanPool enterprise and its learn channel, on a main server only. A standby holds its main server's, copied
@@ -621,6 +736,9 @@ export function initStateEngine(): void {
     // asked for — a request for a year of history would have pruned to 180 days first and
     // then answered as though that was all there had ever been.
     pruneFunnel();
+    // The web app's visits a day: 400 days kept. Pruned here and on each day's first visit (engine/web-visits.ts), never
+    // on the read.
+    pruneWebVisits();
 
     // CRITICAL: Restore persisted commons balance from DB
     // Without this, COMMONS_BALANCE resets to 0 on every restart, destroying accumulated demurrage
@@ -631,11 +749,28 @@ export function initStateEngine(): void {
     // already strained. A deficit is a real state now that `payFromCommons({ allowDeficit })` exists, and
     // docs/commons-pool-transparency.md's Solvency Rule requires the pot to absorb write-offs even when
     // empty. It has to survive a restart to mean anything.
-    const commonsRow = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
-    if (commonsRow && typeof commonsRow.balance === 'number') {
-        setCommonsBalance(commonsRow.balance);
-        const note = commonsRow.balance < 0 ? ' ⚠️ IN DEFICIT — write-offs have exceeded collections' : '';
-        console.log(`🏛️ Restored Commons Pool balance: ${commonsRow.balance.toFixed(2)}${note}`);
+    //
+    // A row that holds no number (NULL, or text such as 'NaN') makes the pot UNKNOWN in memory: NaN, never 0 (#1445
+    // confirmation, NB-1). Left at the module's 0, the boot's own flush wrote 0 over the row, the audit then found no
+    // broken pot, a take-over reported the old pot as drift, and a rebaseline accepted it. As NaN it is the non-finite pot
+    // every path already handles: nothing writes it (engine/audit.ts persistCommonsBalance), the audit counts the row as
+    // a balance that is not a number and names it, the rebaseline refuses, and nothing draws on it.
+    const commonsRow = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown } | undefined;
+    const restoredPot = commonsRow ? commonsPotFromRow(commonsRow.balance) : null;
+    //
+    // A row of ±Infinity is restored as it is, and is no more usable: it gets the same 🛑 line, not "Restored" (and not
+    // "IN DEFICIT", which blamed write-offs for a broken row). While the pot isn't a finite number no Beans move at all,
+    // since every move's conservingTransaction flushes the pot first and that flush refuses it (#1465 review, NB-2).
+    if (restoredPot !== null && !Number.isFinite(restoredPot)) {
+        setCommonsBalance(restoredPot);
+        console.error(`🛑 The Commons pot's row (COMMONS_POOL) holds ${describeRowBalance(commonsRow!.balance)}, not a number of Beans, so `
+            + 'the pot is unknown. Nothing will be written over the row, and no Beans move at all until it is mended: no deal, '
+            + 'refund, removal, account deletion or payment from the Commons. A Decision that comes due meanwhile waits if it '
+            + 'moves Beans. Mend it as soon as you see this (operator manual, "A balance that isn\'t a number").');
+    } else if (restoredPot !== null) {
+        setCommonsBalance(restoredPot);
+        const note = restoredPot < 0 ? ' ⚠️ IN DEFICIT — write-offs have exceeded collections' : '';
+        console.log(`🏛️ Restored Commons Pool balance: ${restoredPot.toFixed(2)}${note}`);
     } else {
         // Seed the COMMONS_POOL account if it doesn't exist
         db.prepare("INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('COMMONS_POOL', 0, 0)").run();
@@ -673,6 +808,13 @@ export function initStateEngine(): void {
         try { persistDecayAndCommons(); } catch (e) { console.warn('[Ledger] Failed to persist the demurrage flush:', e); }
     }, 5 * 60 * 1000);
 
+    // Pledges a project took after reaching its goal, stuck in its escrow for good until pledges stopped at the goal
+    // (db.ts pledgeToProject), go back to their backers: exactly what each pledged, through transfer() inside
+    // conservingTransaction, or left for the operator with a log line when that can't be worked out exactly
+    // (engine/stranded-pledges.ts). Once the ledger is loaded, and before the audit below, so the audit sees the result.
+    // A main server only; never throws.
+    returnStrandedPledges({ transfer, conservingTransaction });
+
     // #129: Run the ledger conservation audit IMMEDIATELY at startup so drift
     // appears in the boot log and cannot go unnoticed between releases.
     // The delayed versions below handle periodic re-checks during operation.
@@ -685,6 +827,7 @@ export function initStateEngine(): void {
             console.error('╠════════════════════════════════════════════════════════╣');
             console.error(`║  sum(balances) = ${String(auditResult.sumBalances.toFixed(4)).padEnd(10)} baseline = ${String(auditResult.baseline.toFixed(4)).padEnd(10)}    ║`);
             console.error(`║  drift         = ${String(auditResult.drift.toFixed(4)).padEnd(10)} stranded = ${String(auditResult.strandedEscrows).padEnd(10)}    ║`);
+            console.error(`║  balances that are not a finite number = ${String(auditResult.badBalances).padEnd(12)} ║`);
             console.error('║                                                        ║');
             console.error('║  Run POST /api/local/admin/ledger-audit to inspect.   ║');
             console.error('║  Run POST /api/local/admin/ledger-rebaseline to       ║');
@@ -707,30 +850,28 @@ export function initStateEngine(): void {
         try { runLedgerAudit(); } catch (e) { console.warn('[LedgerAudit] failed:', e); }
     }, 24 * 60 * 60 * 1000);
 
-    // Daily Wash & Sybil metrics audit (once shortly after boot, then daily)
-    setTimeout(() => {
-        try { runWashSybilMetricsAudit(); } catch (e) { console.warn('[MetricsAudit] failed:', e); }
-    }, 2.5 * 60 * 1000);
-    setInterval(() => {
-        try { runWashSybilMetricsAudit(); } catch (e) { console.warn('[MetricsAudit] failed:', e); }
-    }, 24 * 60 * 60 * 1000);
+    // Daily Wash & Sybil metrics audit (once shortly after boot, then daily). Where Beans are off it returns at once, read
+    // at each run (engine/audit.ts): its numbers are about Beans. It walks every member a slice at a time, so the node
+    // keeps answering meanwhile.
+    const metricsAudit = () => {
+        try { runWashSybilMetricsAuditInSlices().catch((e) => console.warn('[MetricsAudit] failed:', e)); }
+        catch (e) { console.warn('[MetricsAudit] failed:', e); }
+    };
+    setTimeout(metricsAudit, 2.5 * 60 * 1000);
+    setInterval(metricsAudit, 24 * 60 * 60 * 1000);
 
-    if (getNodeRole() === 'primary') {
-        // One-time migration: move escrow funds from old post-keyed wallets to transaction-keyed wallets
-        migrateEscrowWalletKeys();
-
-        // One-time migration: collapse per-post chat threads into one per-pair DM (chat consolidation)
-        migrateConsolidateConversations();
-        repairConsolidatedMessagesMetadata();
-
-        // Groups redesign slice 1 (2026-09-19): the old chat groups are deleted outright (decision 2), and
-        // every Commons group gets its chat (decision 3). Both idempotent; tombstones carry the delete to backups.
-        try { removeOldChatGroups(); } catch (e) { console.warn('[Groups] Could not remove old chat groups:', e); }
-        try {
-            const made = backfillGroupThreads();
-            if (made > 0) console.log(`[Groups] Gave ${made} existing group(s) their chat.`);
-        } catch (e) { console.warn('[Groups] Could not backfill group chats:', e); }
+    // The wash analysis on a take-over in this process (#1811): the standby's may predate the final copy by minutes, so it
+    // is dropped and a fresh one started in the background; a floor read before that lands works one out in one go.
+    if (!washTakeoverHooked) {
+        washTakeoverHooked = true;
+        onNodeRoleChange((role) => {
+            if (role !== 'primary') return;
+            engine.clearWashTradingCache(db);
+            void engine.refreshWashTradingInBackground(db);
+        });
     }
+
+    if (getNodeRole() === 'primary') runMainServerMigrations();
 
     // A convenor who comes back cancels any vote to replace them, with a line in the group's chat.
     setMemberActivityHook((pk) => {
@@ -747,38 +888,190 @@ export function initStateEngine(): void {
     // Sweep zero-balance escrow accounts from settled/cancelled transactions
     sweepSettledEscrowAccounts();
 
-    // Marketplace hygiene: expire stale requests, nudge lingering escrows (hourly + once at
-    // boot). Primary only — it dispatches real push notifications to members, which a
-    // passive backup replica must never do independently of the primary it mirrors.
-    if (getNodeRole() === 'primary') {
-        setTimeout(() => {
-            try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
-        }, 60 * 1000);
-        setInterval(() => {
-            try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
-        }, 60 * 60 * 1000);
+    // The main server's timers (armMainServerTimers): on a main server only.
+    if (getNodeRole() === 'primary') armMainServerTimers();
 
-        // Community Decisions Engine (§3.4, §3.7): periodic tick to close expired voting windows,
-        // evaluate passed grants queue, and fire expired grace-period prunes.
-        setTimeout(() => {
-            try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
-        }, 30 * 1000);
-        setInterval(() => {
-            try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
-            // Keeper changes whose 3-day objection window has ended, and succession proposals past their deadline.
-            try { tickEnterpriseKeepers(); } catch (e) { console.warn('[Keepers] Periodic tick failed:', e); }
-            // Group convenor votes past their 14-day deadline.
-            try { tickGroupSuccession(); } catch (e) { console.warn('[Groups] Convenor vote tick failed:', e); }
-            // Event reminders that have come round (docs/events-on-the-map.md §2.2). Every minute, because
-            // the tightest offer is 30 minutes and a reminder is worth nothing once it is stale; the sweep
-            // itself is bounded by one indexed range scan over events starting inside the next week.
-            try { tickEventReminders(dispatchPushNotification); } catch (e) { console.warn('[Events] Reminder sweep failed:', e); }
-        }, 60 * 1000);
-    }
+    // Unused invites go 30 days after they were made, with no tombstone (W-main, engine/writer-bounds.ts). Hourly; each
+    // tick asks the role, so only a main server prunes, and a standby that takes over starts at its next tick.
+    startPruningUnusedInvites();
+
+    // Recovery sessions that released nothing, past their window or stopped, for every owner: a pile of strangers' opens
+    // against a member who never opens the app is retired too (engine/recovery-release.ts sweepRecoveryCollections).
+    // Every role: the sessions are each server's own.
+    startSweepingRecoveryCollections();
 
     const memberCount = db.prepare("SELECT COUNT(*) as c FROM members").get() as any;
     const postCount = db.prepare("SELECT COUNT(*) as c FROM posts").get() as any;
     console.log(`📒 SQLite DB initialized: ${memberCount.c} members, ${postCount.c} posts`);
+}
+
+/** The main server's one-time passes at its boot (initStateEngine), and on a promotion in place (becomeMainServerInPlace). */
+function runMainServerMigrations(): void {
+    // No escrow is keyed on a post's id any more. The migration that moved `escrow_<post id>` into a deal's own escrow
+    // (a layout older than the first public release) is gone: it ran at every boot of every main server since, and all
+    // it could still do was move Beans out of whatever escrow a caller-chosen post id named (a project's, a deal's)
+    // into a pending deal whose escrow was empty.
+
+    // One-time migration: collapse per-post chat threads into one per-pair DM (chat consolidation)
+    migrateConsolidateConversations();
+    repairConsolidatedMessagesMetadata();
+
+    // Groups redesign slice 1 (2026-09-19): the old chat groups are deleted outright (decision 2), and
+    // every Commons group gets its chat (decision 3). Both idempotent; tombstones carry the delete to backups.
+    try { removeOldChatGroups(); } catch (e) { console.warn('[Groups] Could not remove old chat groups:', e); }
+    try {
+        const made = backfillGroupThreads();
+        if (made > 0) console.log(`[Groups] Gave ${made} existing group(s) their chat.`);
+    } catch (e) { console.warn('[Groups] Could not backfill group chats:', e); }
+    // Group chats step 2: the node keeps only locked lines. Every readable one goes, with a line in each chat saying so.
+    try {
+        const wiped = wipeReadableGroupLines(getMessagingCb());
+        if (wiped > 0) console.log(`[Groups] Removed ${wiped} readable group chat line(s): group chats are end-to-end encrypted now.`);
+    } catch (e) { console.warn('[Groups] Could not remove readable group chat lines:', e); }
+}
+
+/**
+ * The wait before the first turn of a members' photo move resumed after boot, and before a retry once one stops: short,
+ * because phones reconnect right after an upgrade, and until the move ends the members list says "no photo" for those
+ * it has not reached (armMemberPhotoMoveResume).
+ */
+export const MEMBER_PHOTO_RESUME_MS = 5 * 1000;
+/** The wait between two turns while the resumed move has rows left: the event loop is the members' between batches. */
+export const MEMBER_PHOTO_RESUME_GAP_MS = 250;
+/** The longest wait between retries of a resumed move that keeps stopping (a disk still full). */
+export const MEMBER_PHOTO_RESUME_MAX_MS = 60 * 60 * 1000;
+
+/**
+ * How long the resumed members' photo move waits before its next turn (armMemberPhotoMoveResume): a short gap while it
+ * has rows left; after `failures` turns in a row that stopped, the first wait doubled each time, never past the longest.
+ */
+export function memberPhotoResumeWait(outcome: 'more' | 'stopped', failures: number, first = MEMBER_PHOTO_RESUME_MS): number {
+    if (outcome === 'more') return MEMBER_PHOTO_RESUME_GAP_MS;
+    return Math.min(first * 2 ** Math.min(Math.max(failures - 1, 0), 20), MEMBER_PHOTO_RESUME_MAX_MS);
+}
+
+/**
+ * A members' photo move that stopped at boot (a full disk, an I/O error) carries on while the node runs (db.ts
+ * resumeMemberPhotoMove, #1482), so its photos reach member_photos without waiting for a restart: one batch a turn,
+ * a short gap between turns while rows are left, a longer wait each time a turn stops (memberPhotoResumeWait), and no
+ * more turns once the move is done. A node whose move finished at boot does one cheap turn (no old column) and stops.
+ * On a main server only, and each turn asks the role again: a standby's copy never writes the old column, and its rows
+ * are its main server's (engine/sync.ts MEMBER_PHOTO_COLUMNS). Each turn that clears a row's old value bumps the members'
+ * and the listings' versions, so no app is answered 304 from a copy made before: the members list gives a photo still
+ * inline a stand-in URL (db.ts MEMBER_PHOTO_INLINE_REF), which changes once the photo moves, or goes once a value that
+ * was no photo is cleared.
+ */
+function armMemberPhotoMoveResume(): void {
+    const first = Number(process.env.MEMBER_PHOTO_RESUME_MS) || MEMBER_PHOTO_RESUME_MS;
+    let failures = 0;
+    const turn = () => {
+        let wait: number;
+        if (getNodeRole() !== 'primary') {
+            wait = MEMBER_PHOTO_RESUME_MAX_MS;
+        } else {
+            let outcome: 'done' | 'more' | 'stopped';
+            try {
+                const done = resumeMemberPhotoMove();
+                outcome = done.outcome;
+                if (done.cleared > 0) { bumpMembersVersion(); bumpPostsVersion(); }
+            } catch (e) {
+                console.warn("[DB] Members' photos: a turn of the resumed move failed:", e);
+                outcome = 'stopped';
+            }
+            if (outcome === 'done') return;
+            failures = outcome === 'stopped' ? failures + 1 : 0;
+            wait = memberPhotoResumeWait(outcome, failures, first);
+        }
+        setTimeout(turn, wait).unref();
+    };
+    setTimeout(turn, first).unref();
+}
+
+/** Whether this process armed the main server's timers (armMainServerTimers): once, whatever promotes it. */
+let mainServerTimersArmed = false;
+
+// Marketplace hygiene: expire stale requests, nudge lingering escrows (hourly + once at
+// boot). Primary only — it dispatches real push notifications to members, which a
+// passive backup replica must never do independently of the primary it mirrors.
+//
+// Armed on a main server only, and each tick asks the role again (onMainServer): a process made a standby after its
+// boot (a role set back while it runs) runs none of them, and logs nothing, where each used to throw StandbyLedgerError
+// with a stack trace every minute (the 2026-10-02 review of #1433).
+//
+// Armed once a process, at a main server's boot or when a take-over finished at boot makes this process the main server
+// (becomeMainServerInPlace).
+function armMainServerTimers(): void {
+    if (mainServerTimersArmed) return;
+    mainServerTimersArmed = true;
+    const onMainServer = (tick: () => void) => () => { if (getNodeRole() === 'primary') tick(); };
+    armMemberPhotoMoveResume();
+    setTimeout(onMainServer(() => {
+        try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
+    }), 60 * 1000);
+    setInterval(onMainServer(() => {
+        try { runMarketplaceHygiene(); } catch (e) { console.warn('[Marketplace] Hygiene sweep failed:', e); }
+    }), 60 * 60 * 1000);
+
+    // Community Decisions Engine (§3.4, §3.7): periodic tick to close expired voting windows,
+    // evaluate passed grants queue, and fire expired grace-period prunes.
+    setTimeout(onMainServer(() => {
+        try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
+    }), 30 * 1000);
+    setInterval(onMainServer(() => {
+        try { tickDecisions(); } catch (e) { console.warn('[Decisions] Periodic tick failed:', e); }
+        // Keeper changes whose 3-day objection window has ended, and succession proposals past their deadline.
+        try { tickEnterpriseKeepers(); } catch (e) { console.warn('[Keepers] Periodic tick failed:', e); }
+        // Group convenor votes past their 14-day deadline.
+        try { tickGroupSuccession(); } catch (e) { console.warn('[Groups] Convenor vote tick failed:', e); }
+        // Event reminders that have come round (docs/events-on-the-map.md §2.2). Every minute, because
+        // the tightest offer is 30 minutes and a reminder is worth nothing once it is stale; the sweep
+        // itself is bounded by one indexed range scan over events starting inside the next week.
+        try { tickEventReminders(dispatchPushNotification); } catch (e) { console.warn('[Events] Reminder sweep failed:', e); }
+        // Polls past their closing time, closed for good: a phone's next delta then brings the closed result, and with it
+        // where an anonymous poll's votes came from, which it says only once closed (engine/posts.ts closeExpiredPolls).
+        try { closeExpiredPolls(); } catch (e) { console.warn('[Polls] Closing sweep failed:', e); }
+    }), 60 * 1000);
+}
+
+/**
+ * A standby a take-over made the main server in this process, after its database booted as a standby's (services/
+ * takeover.ts resumeTakeoverAtBoot: a take-over a crash stopped before its `role` step, finished at the next start). It
+ * runs now what a main server's boot runs and a standby's skipped, so it is the same main server a restart would give,
+ * without one (a server need not run under anything that restarts it): what initSchema runs only on a main server
+ * (db.ts runMainServerSchemaPasses), the node profile's record and the community's settings, the listing-photo URLs'
+ * shape, the BeanPool enterprise, stranded pledges returned, the one-time migrations, settled escrows swept, and the main
+ * server's timers (Decisions, Keepers, Groups, event reminders, marketplace hygiene). Without it they waited for the next restart: votes
+ * did not close, passed grants were not paid, stale requests did not expire (the 2026-10-02 review of #1448). The keys
+ * and seals for the role are installed by the boot's next steps (index.ts 2.65), which read the role as it now stands.
+ * Each part idempotent and on its own guard; nothing on a standby. Throws only the node profile's refusals, which stop a
+ * main server's boot and so stop this (config/node-profile.ts isMainServerBootRefusal).
+ */
+export function becomeMainServerInPlace(): void {
+    if (getNodeRole() !== 'primary') return;
+    const step = (what: string, fn: () => void) => {
+        try { fn(); } catch (e) { console.warn(`[Topology] Becoming the main server: ${what} failed:`, e); }
+    };
+    // The node profile first, as a main server's boot has it, with its refusals: a database that is a global node under another
+    // NODE_PROFILE, or the guest view's escape hatches set (ENFORCE_READ_AUTH=false, ENFORCE_WS_AUTH=false), stop every main
+    // server's boot, so they stop this promotion too: thrown, before anything of a main server's runs or serves, and the
+    // start ends as such a boot does (index.ts main().catch exits 1). The take-over is kept, past its restart: the next start
+    // boots as the main server and refuses with the same words until the setting is fixed, then goes on.
+    try {
+        mirrorNodeProfileAtBoot('primary');
+    } catch (e) {
+        if (isMainServerBootRefusal(e)) throw e;
+        console.warn('[Topology] Becoming the main server: the node profile failed:', e);
+    }
+    step("the community's settings", () => installCommunitySettingsAtBoot('primary'));
+    step("the database's main-server passes", () => runMainServerSchemaPasses());
+    step("the listing-photo URLs' shape", () => notePhotoUrlShapeNow());
+    step("the face URLs' shape", () => noteFaceUrlShapeNow());
+    step('the BeanPool enterprise', () => { seedPulseCurated(); });
+    step('stranded pledges', () => { returnStrandedPledges({ transfer, conservingTransaction }); });
+    step('the one-time migrations', () => runMainServerMigrations());
+    step('settled escrow accounts', () => sweepSettledEscrowAccounts());
+    step("the main server's timers", () => armMainServerTimers());
+    console.log('[Topology] This process is the main server now: it runs what a main server\'s boot runs, with no restart.');
 }
 
 /**
@@ -861,52 +1154,6 @@ function backfillSearchKeywords(): void {
 }
 
 /**
- * One-time migration: Existing pending transactions have funds in escrow_<post_id>.
- * New code expects escrow_<transaction_id>. Move funds from old to new wallet key.
- * Safe to re-run: it checks if the old wallet has a balance before attempting.
- */
-function migrateEscrowWalletKeys(): void {
-    const pending = db.prepare("SELECT id, post_id, credits FROM marketplace_transactions WHERE status='pending'").all() as any[];
-    if (pending.length === 0) return;
-
-    let migrated = 0;
-    for (const tx of pending) {
-        const oldKey = `escrow_${tx.post_id}`;
-        const newKey = `escrow_${tx.id}`;
-
-        // Check if funds are already in the new wallet (already migrated)
-        const newAcc = ledger.getAccount(newKey);
-        if (newAcc && newAcc.balance > 0) continue;
-
-        // Check if old wallet has funds to migrate
-        const oldAcc = ledger.getAccount(oldKey);
-        if (!oldAcc || oldAcc.balance <= 0) {
-            console.warn(`[Migration] Cannot migrate escrow for tx ${tx.id}: old wallet ${oldKey} has no balance`);
-            continue;
-        }
-
-        // Transfer whatever the old wallet actually has (may be slightly less than tx.credits due to demurrage).
-        // For recurring posts, the old wallet may serve multiple transactions, so take only this tx's share.
-        const amountToMove = Math.min(oldAcc.balance, tx.credits);
-
-        // Ensure the new escrow wallet has a row in the accounts table
-        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(newKey);
-
-        // Move funds: old wallet -> new wallet
-        const result = transfer(oldKey, newKey, amountToMove, `Escrow wallet key migration: ${oldKey} -> ${newKey}`, 'escrow', true);
-        if (result) {
-            migrated++;
-            console.log(`[Migration] ✅ Migrated ${amountToMove} beans from ${oldKey} to ${newKey} (original: ${tx.credits})`);
-        } else {
-            console.error(`[Migration] ❌ Failed to migrate escrow for tx ${tx.id}`);
-        }
-    }
-    if (migrated > 0) {
-        console.log(`[Migration] Escrow wallet key migration complete: ${migrated}/${pending.length} transactions migrated`);
-    }
-}
-
-/**
  * One-time migration: Remove synthetic wallet entries (escrow_*, project_*) that
  * leaked into the members table before the transfer() guard was added.
  * Safe to re-run — only deletes members whose public_key matches synthetic patterns.
@@ -934,6 +1181,8 @@ const REQUEST_TTL_DAYS = 7;
 const ESCROW_NUDGE_DAYS = 7;
 
 export function runMarketplaceHygiene(): void {
+    // A main server's alone (its timer starts only there, initStateEngine): it writes deals and the activity list, and pushes.
+    if (getNodeRole() === 'backup') return;
     // 1. Expire 'requested' transactions that nobody answered. No funds are locked
     // at the 'requested' stage, so expiry is purely a bookkeeping cleanup.
     const stale = db.prepare(`SELECT * FROM marketplace_transactions WHERE status='requested' AND created_at < datetime('now', ?)`)
@@ -942,14 +1191,18 @@ export function runMarketplaceHygiene(): void {
         db.prepare(`UPDATE marketplace_transactions SET status='cancelled', completed_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=? AND status='requested'`).run(row.id);
         const post = db.prepare(`SELECT title, type, author_pubkey FROM posts WHERE id=?`).get(row.post_id) as any;
         const requesterPubkey = post && post.type === 'need' ? row.seller_pubkey : row.buyer_pubkey;
-        dispatchPushNotification(
-            [requesterPubkey, post?.author_pubkey].filter(Boolean),
-            'SYSTEM',
-            '⌛ Request Expired',
-            `The request for "${post?.title || 'a post'}" expired after ${REQUEST_TTL_DAYS} days without a response.`,
-            { screen: 'post', postId: row.post_id },
-            'marketplace'
-        );
+        // Two people, two sentences: the requester made a request, the listing's author has a listing. (Both when they are
+        // one and the same member, as a request on their own listing can't be, but a bad row must not drop a push.)
+        const expiredBody = `The request for "${post?.title || 'a post'}" expired after ${REQUEST_TTL_DAYS} days without a response.`;
+        const expiredData = { screen: 'post', postId: row.post_id };
+        if (requesterPubkey) {
+            dispatchPushNotification([requesterPubkey], 'SYSTEM', '⌛ Request Expired', expiredBody, expiredData, 'marketplace', 'market.answer');
+        }
+        // Not to an author who has blocked the requester: their request came with no push (engine/escrow.ts requestPost),
+        // and its expiry would be one a week later (#1403 review).
+        if (post?.author_pubkey && post.author_pubkey !== requesterPubkey && !(requesterPubkey && hasBlocked(post.author_pubkey, requesterPubkey))) {
+            dispatchPushNotification([post.author_pubkey], 'SYSTEM', '⌛ Request Expired', expiredBody, expiredData, 'marketplace', 'market.listing');
+        }
     }
     if (stale.length > 0) console.log(`🧹 Expired ${stale.length} stale marketplace request(s)`);
 
@@ -969,7 +1222,8 @@ export function runMarketplaceHygiene(): void {
             '⏳ Deal Awaiting Completion',
             `"${row.post_title || 'A deal'}" has been in escrow for over ${ESCROW_NUDGE_DAYS} days — release the Beans to the seller or cancel the deal.`,
             { screen: 'post', postId: row.post_id },
-            'marketplace'
+            'marketplace',
+            'trade.update'
         );
         db.prepare(`UPDATE marketplace_transactions SET last_reminded_at=strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id=?`).run(row.id);
     }
@@ -989,6 +1243,14 @@ export function runMarketplaceHygiene(): void {
         if (tidied > 0) console.log(`🛡️ Tidied ${tidied} kept moderation notice(s) past their bounds`);
     } catch (e) {
         console.warn('[Notices] Hygiene tidy failed:', e);
+    }
+
+    // 5. The details of the pushes sent (engine/push-notices.ts): none older than 7 days, each member's newest 100.
+    try {
+        const tidied = tidyPushNotices();
+        if (tidied > 0) console.log(`🔔 Forgot ${tidied} push notice(s) past their bounds`);
+    } catch (e) {
+        console.warn('[Push] Hygiene tidy of push notices failed:', e);
     }
 }
 
@@ -1012,7 +1274,11 @@ function sweepSettledEscrowAccounts(): void {
           )
     `).get(DUST_THRESHOLD) as { dustSum: number };
 
-    if (dustSumRow && dustSumRow.dustSum !== 0) {
+    // Not while the pot is unknown or not finite (its row holds no number, or ±Infinity): the absorb below is a raw
+    // `balance + ?` on the pot's row, which SQLite reads as 0 + dust for text and would write over it (NB-1 on #1445), and
+    // zeroing the dust without crediting a pot would destroy it. The dust stays where it is until the pot is mended.
+    const potKnown = Number.isFinite(COMMONS_BALANCE);
+    if (potKnown && dustSumRow && dustSumRow.dustSum !== 0) {
         setCommonsBalance(COMMONS_BALANCE + dustSumRow.dustSum);
         db.prepare(`
             UPDATE accounts 
@@ -1022,7 +1288,7 @@ function sweepSettledEscrowAccounts(): void {
         `).run(dustSumRow.dustSum);
     }
 
-    db.prepare(`
+    if (potKnown) db.prepare(`
         UPDATE accounts 
         SET balance = 0,
             last_updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -1056,7 +1322,8 @@ function sweepSettledEscrowAccounts(): void {
 export function addWsClient(ws: any): void {
     wsClients.add(ws);
     try {
-        const counts = getCommunityInfo();
+        // The cached counts (communityCountsCached): every socket's greeting ran three full-table counts before.
+        const counts = communityCountsCached();
         ws.send(JSON.stringify({
             type: 'state_snapshot',
             memberCount: counts.memberCount,
@@ -1073,16 +1340,18 @@ export function removeWsClient(ws: any): void {
 // The ETag version counters now live in engine/versions.ts — a dependency-free module, so that
 // low-level engine code (engine/members.ts registerVisitor, for one) can bump them without
 // importing state-engine and creating a cycle. Re-exported here so existing callers are unchanged.
-import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion } from './engine/versions.js';
+import { bumpPostsVersion, bumpMembersVersion, bumpActivityVersion, getPostsVersion as postsVersionNow, getMembersVersion as membersVersionNow } from './engine/versions.js';
 import { noteTakeoverInputsChanged } from './services/takeover-signal.js';
+import { withoutOldAddresses } from './services/address-retention.js';
 import type { RegistrarName } from './engine/registrar-names.js';
 export { getPostsVersion, bumpPostsVersion, getMembersVersion, bumpMembersVersion, getActivityVersion, bumpActivityVersion } from './engine/versions.js';
 
 // SRV-4: what a /ws socket without a verified member gets (see WS_AUTH_MODE in https-server.ts).
-// Deny by default: only changes to things anyone can already read unsigned — the public
-// marketplace board, commons projects, decisions, enterprise map pins — and only as a bare
-// `{ type }` doorbell with no payload, which is all a client uses them for (it re-fetches what
-// it may see). Everything else — messages, trades, amounts, members, profiles, announcements,
+// Deny by default: only changes to the marketplace board, commons projects, decisions and
+// enterprise map pins — and only as a bare `{ type }` doorbell with no payload, which is all a
+// client uses them for (it re-fetches what it may see). A socket with no member's key at all gets
+// only those of them it may read on this node (keylessSocketMayUse); a visitor's and a suspended
+// member's, which hold a key, get them all. Everything else — messages, trades, amounts, members, profiles, announcements,
 // groups — goes to member sockets only. An event scoped with `recipients` never reaches a
 // socket without a member, whatever its type.
 export const PUBLIC_WS_EVENTS: ReadonlySet<string> = new Set([
@@ -1095,26 +1364,31 @@ export const PUBLIC_WS_EVENTS: ReadonlySet<string> = new Set([
 
 // Of PUBLIC_WS_EVENTS, the ones a socket with no member's key may still use on a node that shows visitors the
 // listings and not the people (`guestListingsOnly`). There an unsigned read, or one signed by a key that is no member
-// here, gets the listings' guest view, and the Commons decisions, projects, crowdfunds and enterprises are members-only
-// (https-server.ts MEMBERS_ONLY_ON_GUEST_LISTINGS_*) or switched off, so a doorbell for one of them changes nothing
-// such a socket can read and has every visitor's tab read the listings again for nothing. `state_synced` stays: an
-// import's counts don't cover every table it writes (poll votes, projects, photos go in uncounted, engine/sync.ts), so
-// one that counted only groups may still have changed a listing. Only a standby imports, so the node visitors reach
-// never sends it anyway.
+// here, gets the listings' guest view. On every node the Commons decisions, projects, crowdfunds and enterprises are
+// members-only (https-server.ts MEMBERS_ONLY_READS_*) or switched off, so a doorbell for one of them changes nothing
+// such a socket can read and has every stranger's tab read again for nothing. `state_synced` stays: an import's counts
+// don't cover every table it writes (poll votes, projects, photos go in uncounted, engine/sync.ts), so one that counted
+// only groups may still have changed a listing. Only a standby imports, so the node visitors reach never sends it anyway.
 const GUEST_LISTINGS_WS_EVENTS: ReadonlySet<string> = new Set(['new_post', 'post_updated', 'post_removed', 'state_synced']);
 
 // As https-server.ts reads it, once at import: only the exact value `false` turns read auth off.
 const READ_AUTH_ON = process.env.ENFORCE_READ_AUTH !== 'false';
 
+// The listings' own doorbells. A local community's listings are its members' (Marty, 2026-09-28; https-server.ts
+// PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT): a socket with no member's key reads them only where the visitors' view is on.
+const LISTING_WS_EVENTS: ReadonlySet<string> = new Set(['new_post', 'post_updated', 'post_removed']);
+
 /**
- * Whether a public doorbell (PUBLIC_WS_EVENTS) can change anything a socket with no member's key may read on this node:
- * everything in PUBLIC_WS_EVENTS, except on a node whose `guestListingsOnly` switch is on, where only the listings'
- * (GUEST_LISTINGS_WS_EVENTS). With ENFORCE_READ_AUTH=false every read is open to anyone, so every public doorbell
+ * Whether a public doorbell (PUBLIC_WS_EVENTS) can change anything a socket with no member's key may read on this node.
+ * On a node whose `guestListingsOnly` switch is on, only the listings' and state_synced (GUEST_LISTINGS_WS_EVENTS). On
+ * every other node, a local community's, only state_synced: its listings are its members' (2026-09-28), and so are the
+ * Commons' reads (2026-10-01). With ENFORCE_READ_AUTH=false every read is open to anyone, so every public doorbell
  * still is.
  */
 function keylessSocketMayUse(type: string): boolean {
-    if (!READ_AUTH_ON || GUEST_LISTINGS_WS_EVENTS.has(type)) return true;
-    return !getProfileSwitches().guestListingsOnly;
+    if (!READ_AUTH_ON) return true;
+    if (LISTING_WS_EVENTS.has(type)) return getProfileSwitches().guestListingsOnly;
+    return GUEST_LISTINGS_WS_EVENTS.has(type);
 }
 
 export type ListingDoorbell = 'post_removed' | 'post_updated';
@@ -1130,7 +1404,8 @@ let listingDoorbellsDue: Set<ListingDoorbell> | null = null;
  * user_pruned, a trade's) as before, and the open feed gets every event; every other socket has had none of those, and
  * its app kept the listings as they were: a bare `post_removed` (the listings went) or `post_updated` (they came back,
  * or changed) is a doorbell each app reads the listings again on (@beanpool/core livePostChange takes one with no id or
- * post for no listing). Every node, whatever it lets such a socket read: it may read the listings everywhere.
+ * post for no listing). A socket with no member's key hears it only where it may read the listings: on a node with the
+ * visitors' view (keylessSocketMayUse). A visitor's and a suspended member's socket, which hold a key, hear it everywhere.
  *
  * One per change, never one per post, and those asked for in the same turn go as one (each type once). Sent after the
  * work in hand, so it may be asked for inside a transaction: one that then unwinds costs a read of what is there. The
@@ -1145,8 +1420,11 @@ export function ringListingDoorbell(type: ListingDoorbell): void {
         listingDoorbellsDue = null;
         for (const t of due) {
             const out = JSON.stringify({ type: t });
+            // A socket with no member's key hears it only where it may read the listings (keylessSocketMayUse).
+            const keyless = keylessSocketMayUse(t);
             for (const ws of wsClients) {
                 if (ws._memberFeed || ws._openFeed) continue;
+                if (!ws._memberPubkey && !keyless) continue;
                 try { ws.send(out); } catch { wsClients.delete(ws); }
             }
         }
@@ -1181,8 +1459,16 @@ export function ringListingDoorbell(type: ListingDoorbell): void {
 // is a trade's step, which changes its listing on the board (spoken for, back up, or done and gone), so
 // every other socket gets the listings' doorbell for it instead (ringListingDoorbell).
 //
+// `ownCard`: a `profile_updated` for a member's edit of their own card (engine/members.ts updateProfile). Where profiles
+// are not announced (node-profile.ts announceProfiles, off on the global node) it goes only to that member's own sockets
+// and to the members who share a conversation with them (cardCircle); the versions move all the same.
+//
+// `listingParties`: members a public listing's own event reaches wherever they are on a node that syncs listings by area,
+// besides those its rows name (listingReach): the sides of the deals a removal closed just before it (engine/posts.ts
+// removePost, adminDeletePost). Never sent.
+//
 // Returns how many open sockets it was written to.
-export interface BroadcastOptions { othersGetDoorbell?: boolean }
+export interface BroadcastOptions { othersGetDoorbell?: boolean; ownCard?: boolean; listingParties?: string[] }
 export function broadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     // A post hidden by reports (engine/auto-moderation.ts) goes in full to its author only, whatever sent it (an
     // edit, a vote, an RSVP); everyone else gets `{ type, id }`, which no app applies as a listing, so each one's
@@ -1243,6 +1529,98 @@ function tradeListingVisibleToVisitors(event: any): boolean {
     return row.audience_scope === null || row.audience_scope === 'public';
 }
 
+/**
+ * Who hears a member's card edit where profiles are not announced (BroadcastOptions.ownCard): the member, on their other
+ * devices, and everyone who shares a conversation with them (a direct one or a group's), whose chats show that card.
+ */
+function cardCircle(pubkey: string): Set<string> {
+    const rows = db.prepare(`SELECT DISTINCT o.public_key FROM conversation_participants mine
+        JOIN conversation_participants o ON o.conversation_id = mine.conversation_id
+        WHERE mine.public_key = ?`).all(pubkey) as { public_key: string }[];
+    return new Set([pubkey, ...rows.map(r => r.public_key)]);
+}
+
+/** Whether `pk` is an enterprise's or a community treasury's account (members.is_treasury). */
+function isTreasuryKey(pk: string): boolean {
+    return !!(db.prepare('SELECT 1 FROM members WHERE public_key = ? AND is_treasury = 1').get(pk));
+}
+
+/**
+ * Everyone who may drive any of these enterprises, in one read: canOperateTreasury's rule for every keeper at once (a
+ * bound keeper whose row is active and no visitor's, holding the switch, members.can_operate, or a node admin).
+ */
+function keepersOf(treasuries: string[]): Set<string> {
+    if (treasuries.length === 0) return new Set();
+    const rows = db.prepare(`SELECT DISTINCT o.member_pubkey AS pk, m.can_operate FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey IN (${treasuries.map(() => '?').join(', ')}) AND m.status = 'active' AND m.is_visitor = 0`)
+        .all(...treasuries) as { pk: string; can_operate: number | null }[];
+    return new Set(rows.filter(r => !!r.can_operate || isAdminPubkey(r.pk)).map(r => r.pk));
+}
+
+/**
+ * Who a public listing's own event (new_post, post_updated, post_removed, sent to no `recipients`) reaches on a node that
+ * syncs by area (the profile's `nearbyListings`; DESIGN-global-sync-by-area §2.5): a socket whose member's area
+ * (member-area.ts memberAreaFor) is within the set's radius of the listing's place (as getNearbySet measures it), and the
+ * listing's parties always: its author, the member who took it, both sides of each open deal on it (asked for, or taken
+ * and not yet done: a member's set ties them to it, getNearbySet) or of one a removal just closed (`extraParties`,
+ * BroadcastOptions.listingParties), and an enterprise's keepers for any of them. A member near it who blocked its author
+ * is not reached, as their set holds none of that author's listings (getNearbySet: the member's own list, never the
+ * author's); a party is, blocked or not, as their set keeps the listings they are tied to. The author's blockers are
+ * kept from one event to the next until any write to member_blocks (blockersOfKept), so a block or an unblock holds from
+ * the next one (#1812), and an author blocked by thousands costs a lookup, not a read (#1831). Every other socket gets nothing, not
+ * even a doorbell (a doorbell sends an app back for every listing): one with no area, or with no member's key, among
+ * them. Their apps have the newest listings and the poll. A listing with no place reaches
+ * its parties alone. The place and the parties are the stored row's, so an event carrying only an id is measured as one
+ * carrying the post. Everything is read once for the event (the author's blockers at most once, never once a socket);
+ * each socket is then a lookup and a distance, no read.
+ *
+ * Null for an event that names no listing, or one not on this node: it goes as before. That is a bare doorbell for many
+ * listings at once (a burst's hide, engine/burst-cleanup.ts), rare and about no one place.
+ */
+interface ListingReach {
+    reaches: (pubkey: string | null | undefined) => boolean;
+    /** The keys it reaches wherever they are, the listing's place (null with none) and the radius: what it visits. */
+    parties: string[];
+    place: { lat: number; lng: number } | null;
+    radiusKm: number;
+}
+function listingReach(event: any, extraParties: string[] = []): ListingReach | null {
+    const id = typeof event.post?.id === 'string' ? event.post.id : typeof event.id === 'string' ? event.id : null;
+    if (!id) return null;
+    const row = db.prepare('SELECT author_pubkey, accepted_by, lat, lng FROM posts WHERE id = ?').get(id) as
+        { author_pubkey: string; accepted_by: string | null; lat: number | null; lng: number | null } | undefined;
+    if (!row) return null;
+    const { radiusKm } = nearbyListingsLimits();
+    const placed = row.lat != null && row.lng != null;
+    const deals = db.prepare("SELECT buyer_pubkey, seller_pubkey FROM marketplace_transactions WHERE post_id = ? AND status IN ('requested', 'pending')")
+        .all(id) as { buyer_pubkey: string; seller_pubkey: string }[];
+    const sides = [...new Set([row.author_pubkey, row.accepted_by, ...deals.flatMap(d => [d.buyer_pubkey, d.seller_pubkey]), ...extraParties])]
+        .filter((k): k is string => !!k);
+    const keepers = keepersOf(sides.filter(isTreasuryKey));
+    const blockers = placed ? blockersOfKept(row.author_pubkey) : null;
+    const reaches = (pubkey: string | null | undefined) => {
+        if (!pubkey) return false;
+        if (sides.includes(pubkey) || keepers.has(pubkey)) return true;
+        if (!placed || blockers!.has(pubkey)) return false;
+        const area = memberAreaFor(pubkey);
+        return !!area && engine.haversineKm(area.lat, area.lng, row.lat!, row.lng!) <= radiusKm;
+    };
+    return { reaches, parties: [...sides, ...keepers], place: placed ? { lat: row.lat!, lng: row.lng! } : null, radiusKm };
+}
+
+// Whether a listing's push by area visits only the sockets the index finds (wsClients.reachable), not every socket. On,
+// always; off only for the test that holds the two to the same recipients, and for measuring them
+// (test-ws-push-index-equivalence.ts).
+let listingPushIndex = true;
+export function setListingPushIndex(on: boolean): void {
+    listingPushIndex = on;
+}
+/** For the same test: what breaks the sockets' index's rules, and its sizes (WsClients.inspect). */
+export function inspectWsClients(): ReturnType<WsClients['inspect']> {
+    return wsClients.inspect();
+}
+
 function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
     if (event && typeof event.type === 'string') {
         switch (event.type) {
@@ -1286,6 +1664,8 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
                 bumpPostsVersion();
                 bumpMembersVersion();
                 bumpActivityVersion();
+                // A removal clears the member's area (adminPruneUser, purgeMemberSelf): their pushes by area stop with it.
+                if (typeof event.publicKey === 'string') refreshMemberAreas([event.publicKey]);
                 break;
         }
     }
@@ -1305,6 +1685,13 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     // news about that member.
     const joinedPubkey = event?.type === 'member_joined' && typeof event.member?.publicKey === 'string'
         ? event.member.publicKey : null;
+    // Where joins are not announced (the global node, node-profile.ts announceJoins), member_joined goes to the joiner's
+    // own sockets only, which it still makes member sockets below. The versions above moved all the same.
+    const joinToJoinerOnly = event?.type === 'member_joined' && !getProfileSwitches().announceJoins;
+    // Where profiles are not announced (the global node, node-profile.ts announceProfiles), a member's card edit goes to
+    // their circle only (cardCircle). The versions above moved all the same.
+    const toCircle = event?.type === 'profile_updated' && opts?.ownCard && typeof event.publicKey === 'string'
+        && !getProfileSwitches().announceProfiles ? cardCircle(event.publicKey) : null;
     let doorbell: string | null = null;
     // Who voted for what in a poll goes to member sockets only (withoutPollVoters). On the open feed
     // (ENFORCE_WS_AUTH=false) a socket with no verified member gets the whole event, so its copy of the post
@@ -1312,6 +1699,17 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     const carriesVoters = (event?.type === 'new_post' || event?.type === 'post_updated')
         && !!event.post && typeof event.post === 'object' && 'pollVotes' in event.post;
     let withoutVoters: string | null = null;
+    // Who took a listing, and its deal, go to that trade's two people only (withoutTradeParty): its author or the member
+    // who took it, and an enterprise's keepers for its side. Every other socket's copy leaves them off.
+    const tradePost = (event?.type === 'new_post' || event?.type === 'post_updated')
+        && !!event.post && typeof event.post === 'object' && (!!event.post.acceptedBy || !!event.post.pendingTransactionId)
+        ? event.post as MarketplacePost : null;
+    const tradeSide = (pk: string | null | undefined): boolean => !!tradePost && (isTradeParty(tradePost, pk)
+        || (!!pk && [tradePost.authorPublicKey, tradePost.acceptedBy].some(side => !!side && isTreasuryKey(side) && canOperateTreasury(pk, side))));
+    let withoutParty: string | null = null;
+    let withoutPartyNorVoters: string | null = null;
+    // Where listings sync by area, a public listing's own event reaches only the sockets near it and its parties.
+    const reach = !recipients && LISTING_WS_EVENTS.has(event?.type) && getProfileSwitches().nearbyListings ? listingReach(event, opts?.listingParties) : null;
     // The joined key's standing, asked once, and only if some socket holds that key.
     let joined: SocketStanding | undefined;
     // Whether a visitor's socket, as a party, may have this event (visitorMayReceive), asked once.
@@ -1319,19 +1717,25 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
     // Whether a socket with no member's key may use this public doorbell (keylessSocketMayUse), asked once.
     let forKeyless: boolean | undefined;
     let sent = 0;
-    for (const ws of wsClients) {
+    // A listing's push by area visits only the sockets it may reach (ws-area-index.ts), each still measured below.
+    const sockets: Iterable<any> = reach && listingPushIndex ? wsClients.reachable(reach.parties, reach.place, reach.radiusKm) : wsClients;
+    for (const ws of sockets) {
         // Someone who signed their connect before their membership existed (mid-join) becomes a member socket now, and a
         // visitor's socket whose row just became a member's gets the member feed. Only for a key that is a member now:
         // member_joined alone never makes one (a replaced key, whatever announced it, stays a stranger's socket).
-        if (joinedPubkey && (ws._pendingMemberPubkey === joinedPubkey || ws._memberPubkey === joinedPubkey)) {
+        const joinersOwn = !!joinedPubkey && (ws._pendingMemberPubkey === joinedPubkey || ws._memberPubkey === joinedPubkey);
+        if (joinersOwn) {
             joined ??= socketStanding(event.member.publicKey);
             if (joined.act) {
-                ws._memberPubkey = event.member.publicKey;
+                wsClients.setKey(ws, event.member.publicKey);
                 ws._visitor = joined.visitor;
                 ws._memberFeed = joined.feed;
                 ws._pendingMemberPubkey = null;
             }
         }
+        if (joinToJoinerOnly && !joinersOwn) continue;
+        if (toCircle && !(ws._memberPubkey && toCircle.has(ws._memberPubkey))) continue;
+        if (reach && !reach.reaches(ws._memberPubkey)) continue;
         let out = msg;
         if (recipients && (!ws._memberPubkey || !recipients.includes(ws._memberPubkey))) {
             if (!opts?.othersGetDoorbell) continue;
@@ -1346,6 +1750,11 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             out = doorbell ??= JSON.stringify({ type: event.type });
         } else if (!ws._memberFeed && carriesVoters) {
             out = withoutVoters ??= JSON.stringify({ ...event, post: withoutPollVoters(event.post) });
+        }
+        if (tradePost && (out === msg || out === withoutVoters) && !tradeSide(ws._memberPubkey)) {
+            out = out === msg
+                ? withoutParty ??= JSON.stringify({ ...event, post: withoutTradeParty(tradePost) })
+                : withoutPartyNorVoters ??= JSON.stringify({ ...event, post: withoutTradeParty(withoutPollVoters(tradePost)) });
         }
         try {
             ws.send(out);
@@ -1367,7 +1776,7 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
         for (const ws of wsClients) {
             if (ws._memberPubkey !== changedKey) continue;
             standing ??= event.type === 'user_pruned' ? { act: false, visitor: false, feed: false } : socketStanding(ws._memberPubkey);
-            if (!standing.act) ws._memberPubkey = null;
+            if (!standing.act) wsClients.setKey(ws, null);
             ws._visitor = standing.visitor;
             ws._memberFeed = standing.feed;
         }
@@ -1401,18 +1810,6 @@ export function assertMemberActive(publicKey: string): void {
     if (member.status === 'completed') throw new Error('Enterprise has wound up — account closed');
 }
 
-export function assertProfileComplete(publicKey: string): void {
-    const member = db.prepare("SELECT avatar_url, callsign FROM members WHERE public_key = ?").get(publicKey) as any;
-    if (!member) return; // Let assertMemberActive handle missing members
-    // See the identical gate in engine/posts.ts: a stored /api/avatar/ URL is not a photo.
-    if (!isServableAvatarValue(member.avatar_url)) {
-        throw new Error('Please set a profile photo before using the marketplace. Tap your profile to add one.');
-    }
-    if (!member.callsign || member.callsign.trim().length < 2) {
-        throw new Error('Please set a display name before using the marketplace.');
-    }
-}
-
 
 
 // ===================== MEMBERS =====================
@@ -1435,6 +1832,21 @@ export function getAllMembers(): Member[] {
     return getAllMembersEngine(db);
 }
 
+/** The member directory's rows, every one or those changed after a delta cursor (engine members.ts). */
+export function getMemberDirectoryRows(updatedAfter?: unknown): DirectoryRow[] {
+    return getMemberDirectoryRowsEngine(db, updatedAfter);
+}
+
+/** The directory's rows of these members, in the order asked; with `updatedAfter`, only those changed after it (engine members.ts). */
+export function getMemberDirectoryRowsByKeys(keys: string[], updatedAfter?: string): DirectoryRow[] {
+    return getMemberDirectoryRowsByKeysEngine(db, keys, updatedAfter);
+}
+
+/** The members whose name starts with `prefix`, shortest first, at most `limit` (engine members.ts). */
+export function searchMemberDirectoryRows(prefix: string, limit: number): DirectoryRow[] {
+    return searchMemberDirectoryRowsEngine(db, prefix, limit);
+}
+
 // ===================== INVITE CODES =====================
 
 export { generateInvite, adminGenerateInvite };
@@ -1448,8 +1860,26 @@ export function redeemOfflineTicket(ticketB64: string, joinerPublicKey: string, 
     return redeemOfflineTicketEngine(broadcast, ticketB64, joinerPublicKey, callsign, joinerSigned);
 }
 
-export function checkInvite(codeOrTicket: string): InviteCheckResult {
-    return checkInviteEngine(db, codeOrTicket, ticketBinding);
+/**
+ * The pre-flight before a join: what the redeem would say, without spending anything. Where only admins invite (the
+ * door, config/door.ts), a ticket a member made is `admins_only`, as redeemOfflineTicket refuses it.
+ */
+/** The check's answer: the engine's, or, in a private preview, `private_preview` with its sentence. */
+export type ServerInviteCheckResult = Omit<InviteCheckResult, 'reason'> & { reason?: InviteCheckResult['reason'] | typeof PRIVATE_PREVIEW; error?: string };
+
+export function checkInvite(codeOrTicket: string): ServerInviteCheckResult {
+    const result = checkInviteEngine(db, codeOrTicket, ticketBinding);
+    const raw = codeOrTicket.trim();
+    // A private preview (config/private-preview.ts) redeems only an owner's or admin's invite or ticket: a code it would
+    // refuse is answered as not valid, with the preview's own sentence and no inviter's name.
+    if (result.valid && isPrivatePreview() && !previewAdmitsInvite(raw)) {
+        return { valid: false, reason: PRIVATE_PREVIEW, error: PRIVATE_PREVIEW_MESSAGE };
+    }
+    if (result.valid && raw.startsWith('BP-')) {
+        const ticket = verifyOfflineTicketEngine(db, raw.substring(3), ticketBinding);
+        if (ticket.ok && !mayInviteHere(ticket.inviterPubkey)) return { valid: false, reason: 'admins_only' };
+    }
+    return result;
 }
 
 export function getInvitesByMember(pubkey: string): InviteCode[] {
@@ -1552,7 +1982,7 @@ export function isInvalidatedKey(pubkey: string | null | undefined): boolean {
  */
 export function isClosedAccountKey(pubkey: string | null | undefined): boolean {
     if (!pubkey) return false;
-    return !!db.prepare("SELECT 1 FROM members WHERE public_key IN (?, ?) AND status = 'pruned'").get(pubkey, pubkey.toLowerCase());
+    return !!engine.prepared(db, "SELECT 1 FROM members WHERE public_key IN (?, ?) AND status = 'pruned'").get(pubkey, pubkey.toLowerCase());
 }
 
 /**
@@ -1607,6 +2037,24 @@ export function clearWashTradingCache() {
     engine.clearWashTradingCache(db);
 }
 
+/** Whether initStateEngine has set the wash analysis's take-over hook (once a process). */
+let washTakeoverHooked = false;
+
+/**
+ * The wash analysis's first refresh, in the background, once the server listens (index.ts), on a node with Beans on: so
+ * the first floor read finds one landed rather than working one out in one go (engine trust.ts getWashTradingEnforcement).
+ * Where Beans are off nothing reads a floor that has trades in it. Resolves when it has landed, or not.
+ */
+export function startWashTradingRefreshAtBoot(): Promise<void> | null {
+    if (!getProfileSwitches().beans) return null;
+    return engine.refreshWashTradingInBackground(db);
+}
+
+/** How many complete wash analyses have run for the node's database, by any path (a test counts them). */
+export function washAnalysisCount(): number {
+    return engine.washAnalysisCount(db);
+}
+
 function qualifiedTradeValue(publicKey: string): number {
     return engine.qualifiedTradeValue(db, publicKey);
 }
@@ -1621,11 +2069,16 @@ export function getMemberTrustProfile(publicKey: string): {
     tier: TierInfo;
     earnedCredit: number;
     grantedCredit: number;
+    knownGrant: number;
+    otherAllowance: number;
     qualifiedValue: number;
     avgRating: number;
     reviewCount: number;
     vouched: boolean;
     activated: boolean;
+    knownFrozen: boolean;
+    creditFrozen: boolean;
+    tierCredit: number;
 } {
     return engine.getMemberTrustProfile(db, publicKey);
 }
@@ -1649,7 +2102,7 @@ export function assessTradeRisk(s: {
     tier: TierInfo;
     tradeCount: number;
     completionRate: number | null;
-    mutualCount: number;
+    mutualCount: number; // connections in common by the four-way rule (getTrustProfileForViewer); one-way rows never count
     priorTradesWithViewer: number;
     wardsCount: number;
     ageDays: number;
@@ -1732,8 +2185,9 @@ export interface ViewerTrustProfile {
     completedTrades: number;
     cancelledTrades: number;
     wardsCount: number; // how many people trust them as a recovery guardian
+    // Friends both ways with the viewer and friends both ways with the target (four rows), at most 12, callsign order.
     mutualConnections: { publicKey: string; callsign: string; avatarUrl: string | null }[];
-    mutualCount: number;
+    mutualCount: number; // mutualConnections.length: the same four-way rule, never a one-way count
     priorTradesWithViewer: number;
     vouchedInBy: {
         kind: 'member' | 'admin' | 'founder';
@@ -1752,12 +2206,6 @@ export interface ViewerTrustProfile {
     risk: TradeRiskAssessment;
 }
 
-/**
- * Assembles the viewer-aware Trust Profile for `targetPubkey` as seen by
- * `viewerPubkey`. Aggregate signals are public; identities are graduated —
- * only mutual connections (people the viewer already knows) are named.
- * See docs/trust-profile-and-trade-safety.md §2.
- */
 /**
  * "Vouched in by" — who brought this member in.
  *
@@ -1788,11 +2236,18 @@ export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vo
         kind: 'member',
         publicKey: inviterKey,
         callsign: inviter.callsign,
-        avatarUrl: avatarUrlFor(inviter.publicKey, inviter.avatarUrl),
+        avatarUrl: avatarUrlOf(inviter.publicKey, inviter.avatarRef),
         tier: getMemberTrustProfile(inviterKey).tier.name,
     };
 }
 
+/**
+ * Assembles the viewer-aware Trust Profile for `targetPubkey` as seen by
+ * `viewerPubkey`. Aggregate signals are public; identities are graduated —
+ * only connections in common are named: members who are friends both ways with
+ * the viewer AND friends both ways with the target (all four friend rows).
+ * See docs/trust-profile-and-trade-safety.md §2.
+ */
 export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: string): ViewerTrustProfile | null {
     const member = getMember(targetPubkey);
     if (!member) return null;
@@ -1814,22 +2269,36 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
 
     const wardsCount = 0;
 
-    // Mutual connections: viewer's friends ∩ target's friends. Only ever
-    // surfaces people the viewer already knows — never the target's wider graph.
+    // Connections in common: F counts only when V↔F and F↔T are both friendships both ways (V→F, F→V, F→T, T→F).
+    // A friend row is one-way and needs nobody's consent, so trusting one row on either side made this a probe and a
+    // forgery: a viewer who added everyone read the target's list by name, and a target who added everyone looked
+    // "in your circle" to every viewer. With all four rows, the viewer's only probes are people who chose the viewer,
+    // nothing the target adds alone counts, and every edge shown was chosen by both its ends. A member who turned off
+    // "show me as a connection in common" (SHOW_AS_CONNECTION_PREF) is never F. A block takes the trust out of the
+    // blocker's row to the blocked member for every reader but the blocked member; the row stays so their reads don't
+    // change: F is not counted on T's profile when F has blocked T, nor for V when V has blocked F. T's block of F does
+    // not hide F from T's profile: that would hand any blocked member a probe (F's friend reads T and watches F leave).
+    // mutualCount and the risk band read this same list. See docs/trust-profile-and-trade-safety.md §2.
     const mutualConnections = (viewerPubkey && viewerPubkey !== targetPubkey)
         ? (db.prepare(`
-            SELECT m.public_key as publicKey, m.callsign, m.avatar_url as avatarUrl
-            FROM friends fv
-            JOIN friends ft ON fv.friend_pubkey = ft.friend_pubkey
-            JOIN members m ON m.public_key = fv.friend_pubkey
-            WHERE fv.owner_pubkey = ? AND ft.owner_pubkey = ?
-              AND fv.friend_pubkey != ? AND fv.friend_pubkey != ?
+            SELECT m.public_key as publicKey, m.callsign, m.avatar_ref as avatarRef
+            FROM friends vf
+            JOIN friends fv ON fv.owner_pubkey = vf.friend_pubkey AND fv.friend_pubkey = vf.owner_pubkey
+            JOIN friends ft ON ft.owner_pubkey = vf.friend_pubkey AND ft.friend_pubkey = ?
+            JOIN friends tf ON tf.owner_pubkey = ? AND tf.friend_pubkey = vf.friend_pubkey
+            JOIN members m ON m.public_key = vf.friend_pubkey
+            WHERE vf.owner_pubkey = ?
+              AND vf.friend_pubkey != ? AND vf.friend_pubkey != ?
+              AND NOT EXISTS (SELECT 1 FROM member_preferences p
+                               WHERE p.public_key = vf.friend_pubkey AND p.pref_key = '${SHOW_AS_CONNECTION_PREF}' AND p.pref_value = 'false')
+              AND NOT EXISTS (SELECT 1 FROM member_blocks b WHERE b.owner_pubkey = vf.friend_pubkey AND b.blocked_pubkey = ?)
+              AND NOT EXISTS (SELECT 1 FROM member_blocks b WHERE b.owner_pubkey = ? AND b.blocked_pubkey = vf.friend_pubkey)
             ORDER BY m.callsign COLLATE NOCASE
             LIMIT 12
-        `).all(viewerPubkey, targetPubkey, viewerPubkey, targetPubkey) as any[]).map(r => ({
+        `).all(targetPubkey, targetPubkey, viewerPubkey, viewerPubkey, targetPubkey, targetPubkey, viewerPubkey) as any[]).map(r => ({
             publicKey: r.publicKey,
             callsign: r.callsign,
-            avatarUrl: avatarUrlFor(r.publicKey, r.avatarUrl)
+            avatarUrl: avatarUrlOf(r.publicKey, r.avatarRef)
         }))
         : [];
     const mutualCount = mutualConnections.length;
@@ -1879,7 +2348,7 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
             elderVouch = {
                 publicKey: voucher.publicKey,
                 callsign: voucher.callsign,
-                avatarUrl: avatarUrlFor(voucher.publicKey, voucher.avatarUrl),
+                avatarUrl: avatarUrlOf(voucher.publicKey, voucher.avatarRef),
             };
         }
     }
@@ -1907,10 +2376,14 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
 
 // ===================== LEDGER =====================
 
-export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; liveOffers: number; frozen: boolean; tier: TierInfo; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
-    const account = ledger.getAccount(publicKey);
-    const { floor, tier, earnedCredit, activated } = getMemberTrustProfile(publicKey);
-    const balance = Math.round(account.balance * 100) / 100;
+/** A member's balance as getBalance gives it, rounded to the cent. */
+function roundedBalance(publicKey: string): number {
+    return Math.round(ledger.getAccount(publicKey).balance * 100) / 100;
+}
+
+export function getBalance(publicKey: string): { balance: number; floor: number; usableFloor: number; knownGrant: number; liveOffers: number; frozen: boolean; knownFrozen: boolean; creditFrozen: boolean; tier: TierInfo; tierCredit: number; earnedCredit: number; commonsBalance: number; activated: boolean; canVouch: boolean; canOperate: boolean; keeperOf: string[]; isTreasury: boolean; nodeRole: MemberNodeRole | null } {
+    const { floor, tier, tierCredit, earnedCredit, activated, knownGrant, knownFrozen, creditFrozen } = getMemberTrustProfile(publicKey);
+    const balance = roundedBalance(publicKey);
     const liveOffers = liveOfferCount(publicKey);
     const isTreasury = !!(db.prepare("SELECT is_treasury FROM members WHERE public_key = ?").get(publicKey) as any)?.is_treasury;
     const effectiveFloor = isTreasury ? getEnterpriseUnderlyingFloor(publicKey).floor : floor;
@@ -1919,9 +2392,19 @@ export function getBalance(publicKey: string): { balance: number; floor: number;
         balance,
         floor: effectiveFloor,
         usableFloor: uFloor,
+        // The known floor's part of the limit (community modes slice 4): one live offer unlocks all of it. 0 elsewhere.
+        knownGrant: isTreasury ? 0 : knownGrant,
         liveOffers,
         frozen: balance < uFloor,
+        // knownFrozen / creditFrozen: the community's admins froze this member's known floor (an exception,
+        // config/known-floor.ts) / their whole line (adminSetCreditFrozen, the manager's "Freeze"). Not `frozen` above,
+        // which is the spend-freeze below the usable floor: the app tells the member the admins froze the line.
+        knownFrozen: !isTreasury && knownFrozen,
+        creditFrozen: !isTreasury && creditFrozen,
         tier,
+        // tierCredit: the credit `tier` is read from (a freeze keeps the line held unfrozen): the apps' trust figure, so
+        // a frozen member's Levels card reads the same level as its badge (memberLevel in @beanpool/core).
+        tierCredit,
         earnedCredit,
         commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100,
         // activated: has a credit line at all (earned/vouched/granted) — a brand-new member is false.
@@ -1964,7 +2447,8 @@ export function reconcileLedgerFromDb(): void {
 }
 
 
-export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string; offboardOverride?: boolean }): Transaction | null {
+export function transfer(from: string, to: string, amount: number, memo: string, method?: 'direct' | 'escrow', isFeeExempt = false, auth?: { signer: string; signature?: string; payload?: string; offboardOverride?: boolean; decisionPayOut?: boolean }): Transaction | null {
+    if (typeof memo === 'string') memo = replaceLoneSurrogates(memo);
     // Before every other guard: on a node whose `beans` switch is off nothing moves, whoever asks (a member's send,
     // an escrow, a settlement, a wizard's gift). Thrown, not null, so an enclosing transaction rolls back.
     assertBeansOn();
@@ -1976,7 +2460,10 @@ export function transfer(from: string, to: string, amount: number, memo: string,
         const dest = db.prepare("SELECT status FROM members WHERE public_key = ?").get(to) as any;
         if (dest?.status === 'completed') throw new Error('Enterprise has wound up — account closed');
     }
-    if (amount < 0) return null;
+    // Not an amount of Beans (NaN, Infinity, a string, a negative): refused here, OUTSIDE the transaction below, so it is
+    // a plain refusal and not a rollback and resync. `amount < 0` alone let NaN through (review F1); core's
+    // ledger.transfer refuses it again as a primitive.
+    if (!isBeanAmount(amount)) return null;
     // Only register real members — skip synthetic wallets. Uses the shared predicate so a new synthetic
     // kind is covered automatically; #104's bridge_<peer> accounts were caught by a test failing here
     // (registerVisitor tried to create a member row for a bridge account and hit a UNIQUE violation).
@@ -2009,7 +2496,12 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // trust profile, so the completed-trade gate would block every cross-node settlement.
     // Operator/admin-signed transfers for member offboarding wizard gifts are narrowly exempt via offboardOverride.
     const isOffboardOverride = Boolean(auth?.offboardOverride && auth?.signer && (auth.signer === 'owner:password' || isNodeAdmin(auth.signer) || isNodeOwner(auth.signer)));
-    if (!isEscrow && !isOffboardOverride && from !== 'COMMONS_POOL' && from !== 'genesis' && !from.startsWith('bridge_')) {
+    // A pay-out an enterprise's keepers voted for (decisions-engine.ts pay_out, DESIGN-group-decisions §2.3): a direct send
+    // at floor 0 like any other, so never into the enterprise's credit line, but with the 1.5% fee a Need's payment carries
+    // (Marty, 2026-10-10, §5 pick 2). The first-trade gate is for a fresh account forwarding Beans and vanishing; a vote
+    // of the keepers is not that. Only the engine's own signer can ask for it: no route passes `auth` from a body.
+    const isDecisionPayOut = Boolean(auth?.decisionPayOut && typeof auth.signer === 'string' && auth.signer.startsWith('system:decision:'));
+    if (!isEscrow && !isOffboardOverride && !isDecisionPayOut && from !== 'COMMONS_POOL' && from !== 'genesis' && !from.startsWith('bridge_')) {
         const { earnedCredit } = getMemberTrustProfile(from);
         if (earnedCredit <= 0) {
             console.log(`🚫 Send blocked (no completed trade yet): ${from.substring(0, 12)}`);
@@ -2046,7 +2538,11 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // Fee policy: the 1.5% community fee applies ONLY to marketplace/escrow settlements. Direct
     // peer "send credits" gifts are fee-free — gifting a friend beans you hold shouldn't be taxed.
     // System moves (escrow holds, refunds, admin) stay exempt via the caller's isFeeExempt.
-    const feeExempt = isFeeExempt || !isEscrow;
+    const feeExempt = isFeeExempt || (!isEscrow && !isDecisionPayOut);
+    // A note to someone who has blocked its sender is kept for the sender alone, never in the row the recipient reads
+    // (engine/withheld-notes.ts). Decided here, before the transaction: it refuses nothing and moves nothing, and the
+    // Beans go as any send's.
+    const withheldNote = withholdsNote(from, to, memo);
 
     // ATOMICITY (money). Everything from the in-memory `ledger.transfer` through the last persisted row is
     // ONE unit. It used to be five autocommitted statements, and every gap between them was a way to destroy
@@ -2063,7 +2559,7 @@ export function transfer(from: string, to: string, amount: number, memo: string,
     // Every other caller already runs transfer() inside a conservingTransaction of its own (escrow,
     // settlement, wizards, admin deletes), so for them this is a SAVEPOINT nested in their transaction and
     // the outer commit is still what makes anything durable. The two callers that did NOT wrap — the
-    // member-to-member send route and `migrateEscrowWalletKeys` — are the ones this closes.
+    // member-to-member send route and the old escrow-key boot migration (since removed) — are the ones this closed.
     const txn = conservingTransaction<Transaction | null>(() => {
         const success = ledger.transfer(from, to, amount, senderFloor, feeExempt);
         if (!success) return null;
@@ -2089,9 +2585,10 @@ export function transfer(from: string, to: string, amount: number, memo: string,
             // transaction's authorship is re-verifiable on import. NULL for
             // system/internal transfers (those become node-signed in a later step).
             db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer, auth_signature, auth_payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
-                built.id, built.from, built.to, built.amount, built.taxFee, built.memo, built.timestamp,
+                built.id, built.from, built.to, built.amount, built.taxFee, withheldNote ? '' : built.memo, built.timestamp,
                 auth?.signer ?? null, auth?.signature ?? null, auth?.payload ?? null,
             );
+            if (withheldNote) keepWithheldNote(built.id, built.memo);
         }
 
         // Sync ledger account balances to DB
@@ -2129,15 +2626,23 @@ export function transfer(from: string, to: string, amount: number, memo: string,
         const toMember = getMember(to);
         if (toMember?.isTreasury) {
             sweepEnterpriseCeiling(to);
+        } else {
+            sweepRepayment(to);
         }
     });
 
     const fromMember = getMember(from);
     const toMember = getMember(to);
-    broadcast({
-        type: 'transaction',
-        txn: { ...txn, fromCallsign: fromMember?.callsign || 'Unknown', toCallsign: toMember?.callsign || 'Unknown' },
-    }, [from, to]); // A2-20: a transfer is visible only to its two parties on the live feed
+    const live = { ...txn, fromCallsign: fromMember?.callsign || 'Unknown', toCallsign: toMember?.callsign || 'Unknown' };
+    // A2-20: a transfer is visible only to its two parties on the live feed. A withheld note goes to its sender's sockets
+    // alone; the recipient's hear the Beans with BLOCKED_BEANS_NOTE, as their history reads them.
+    if (withheldNote) {
+        broadcast({ type: 'transaction', txn: live }, [from]);
+        broadcast({ type: 'transaction', txn: { ...live, memo: BLOCKED_BEANS_NOTE } }, [to]);
+    } else {
+        broadcast({ type: 'transaction', txn: live }, [from, to]);
+    }
+    // The sender's own answer: their note as they wrote it (built.memo), in the shape any send's has.
     return txn;
 }
 
@@ -2310,6 +2815,21 @@ export function conservingTransaction<T>(fn: () => T): T {
 }
 
 /**
+ * The Commons pot as its `COMMONS_POOL` row holds it: the row's number (finite or not), or NaN, the unknown pot, for a
+ * row holding NULL or text. Never 0: a guessed 0 was flushed over the row and the pot's Beans left the books (NB-1).
+ */
+function commonsPotFromRow(balance: unknown): number {
+    return typeof balance === 'number' ? balance : NaN;
+}
+
+/** A row's balance in an operator's words, as the audit's list names it (engine/audit.ts listBrokenBalances). */
+function describeRowBalance(balance: unknown): string {
+    if (balance === null || balance === undefined) return 'NULL';
+    if (Buffer.isBuffer(balance)) return 'a BLOB';
+    return typeof balance === 'string' ? `text '${balance}'` : String(balance);
+}
+
+/**
  * Put the in-memory ledger back to what the rows say, or halt.
  *
  * Shared by both of `conservingTransaction`'s failure paths because they need almost the same thing:
@@ -2335,8 +2855,9 @@ function resyncMemoryToRows(commonsSnapshot: number | null, cause: unknown): voi
         if (commonsSnapshot !== null) {
             setCommonsBalance(commonsSnapshot);
         } else {
-            const row = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as any;
-            if (row && typeof row.balance === 'number') setCommonsBalance(row.balance);
+            // A row holding no number makes the pot unknown (NaN), as at boot: memory never keeps a pot the rows don't hold.
+            const row = db.prepare("SELECT balance FROM accounts WHERE public_key = 'COMMONS_POOL'").get() as { balance: unknown } | undefined;
+            if (row) setCommonsBalance(commonsPotFromRow(row.balance));
         }
     } catch (resyncError: any) {
         // Unrecoverable: memory and rows now disagree with no way to reconcile them, and every later
@@ -2401,7 +2922,8 @@ export function moveToCommons(
     if (!synthetic && !treasury && !opts?.allowMemberDebit) {
         throw new Error(`moveToCommons is for synthetic accounts and treasuries only, got ${from}`);
     }
-    if (amount <= 0) return null;
+    // `amount <= 0` alone let NaN through. Outside the transaction, as in transfer().
+    if (!isBeanAmount(amount) || amount === 0) return null;
     assertBeansOn();
     assertLedgerWritable();
 
@@ -2445,7 +2967,7 @@ export function moveToCommons(
  *
  * Same reasoning: `transfer('COMMONS_POOL', x, n)` moves the shadow account (pushing it negative, funded
  * from nowhere) rather than drawing on the pot, so the draw has to go through `deductFromCommons`. Returns
- * null if the pot cannot cover it — the Commons never goes into debt.
+ * null if the pot cannot cover it (unless `allowDeficit`), and always when the pot is not a finite number: nothing moves.
  */
 export function payFromCommons(
     to: string,
@@ -2460,73 +2982,95 @@ export function payFromCommons(
     // does; the memo names them in words only (adminActorName).
     opts?: { allowDeficit?: boolean; authSigner?: string },
 ): Transaction | null {
-    if (amount <= 0) return null;
+    // `amount <= 0` alone let NaN through, and `allowDeficit` below would then have set the pot to NaN.
+    if (!isBeanAmount(amount) || amount === 0) return null;
     assertBeansOn();
     // Before the pot is drawn down in memory. On a standby the flush below writes nothing (engine/audit.ts), so a payment
     // there wrote its recipient's credit and not the pot's debit: a member in debt deleting their own account left the
     // standby's rows 2,102.34 Beans over its main server's, and every copy after it was refused (review 4117546944).
     assertLedgerWritable();
-    if (!ledger.deductFromCommons(amount)) {
-        if (!opts?.allowDeficit) return null;
-        setCommonsBalance(getCommonsBalanceExact() - amount);
-        console.warn(`[Commons] Paid ${amount} with an insufficient pot — the Commons is now in deficit. Memo: ${memo}`);
+    // The recipient's balance must stay a finite number (a NULL row reads as null): checked before the pot is drawn down.
+    const recipientNow = ledger.getAccount(to).balance;
+    if (typeof recipientNow !== 'number' || !Number.isFinite(recipientNow + amount)) return null;
+    // A pot that is unknown (its row held no number at boot, so it is NaN) or not finite pays nothing, `allowDeficit` or
+    // not, and nothing moves (#1445 confirmation, NB-3). `allowDeficit` used to go on to credit the recipient and write the
+    // history row, and only the flush at the end refused the pot: called outside a conservingTransaction, the credit stayed
+    // and the pot's debit was never written, Beans minted (measured, test-commons-pot-edges: 1 Bean per call). Before
+    // anything moves, so a caller inside a conservingTransaction gets a plain refusal, not a throw and a ledger resync.
+    if (!Number.isFinite(getCommonsBalanceExact())) {
+        console.warn(`[Commons] Refused to pay ${amount} from a Commons pot that is not a number (${String(getCommonsBalanceExact())}). Memo: ${memo}`);
+        return null;
     }
+    // The pot can't cover it and no deficit is allowed: refused here, before anything moves (deductFromCommons's own test).
+    if (!opts?.allowDeficit && getCommonsBalanceExact() < amount) return null;
 
-    const toAcc = ledger.getAccount(to);
-    toAcc.balance += amount;
+    // THE WHOLE MOVE IN ONE conservingTransaction (NB-3): the pot drawn down and the recipient credited in memory, the
+    // history row, the recipient's row and the pot's row all commit together or not at all, and a failure puts memory back
+    // to the rows. It used to be the history row and the recipient's row as separate autocommits, then the pot's row in
+    // the flush: only a caller that held a conservingTransaction itself was safe. Nested in one (a prune, a settlement
+    // reversal, an escrow write-off), it is a savepoint, as transfer() is.
+    const txn = conservingTransaction((): Transaction | null => {
+        if (!ledger.deductFromCommons(amount)) {
+            if (!opts?.allowDeficit) return null;
+            setCommonsBalance(getCommonsBalanceExact() - amount);
+            console.warn(`[Commons] Paid ${amount} with an insufficient pot — the Commons is now in deficit. Memo: ${memo}`);
+        }
 
-    const txn: Transaction = {
-        id: crypto.randomUUID(),
-        from: 'COMMONS_POOL', to, amount, taxFee: 0,
-        memo: memo || '', timestamp: new Date().toISOString(),
-        authSigner: opts?.authSigner ?? null,
-    };
-    db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(txn.id, txn.from, txn.to, txn.amount, 0, txn.memo, txn.timestamp, opts?.authSigner ?? null);
-    db.prepare(`
-        INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(public_key) DO UPDATE SET
-            balance = excluded.balance,
-            last_demurrage_epoch = excluded.last_demurrage_epoch,
-            last_updated_at = excluded.last_updated_at
-    `).run(to, toAcc.balance, toAcc.lastDemurrageEpoch, txn.timestamp);
+        const toAcc = ledger.getAccount(to);
+        toAcc.balance += amount;
 
-    // ledger.getAccount(to) above applies any pending demurrage, which queues decay events. Without this
-    // they are stranded and the transactions table drifts from account balances — `moveToCommons` persists
-    // them and this must too (review finding).
-    //
-    // ONE commit for the PAIR: the decay debits and the Commons credit that matches them are never allowed
-    // to land separately, or a crash between them destroys beans on disk.
-    //
-    // NOT THE WHOLE FUNCTION, and the gap that leaves is real rather than theoretical. The history row and
-    // the recipient's account row above are still separate autocommits, so a crash after the recipient is
-    // credited but before `persistCommonsBalance` writes the drawn-down pot leaves the credit durable with
-    // the pot's debit missing — beans MINTED, the opposite direction to the pair's failure and the one this
-    // function is exposed to. Every caller but one already runs inside a `conservingTransaction`
-    // (`adminPruneUser`, the settlement reversals via `settlementTransaction`), which closes it for them;
-    // `fundCommission` (federation-commission.ts) does not. Wrapping this function changes rollback
-    // semantics for all of them, so it is a deliberate follow-up rather than something to smuggle in here.
-    persistDecayAndCommons();
+        const built: Transaction = {
+            id: crypto.randomUUID(),
+            from: 'COMMONS_POOL', to, amount, taxFee: 0,
+            memo: memo || '', timestamp: new Date().toISOString(),
+            authSigner: opts?.authSigner ?? null,
+        };
+        db.prepare(`INSERT INTO transactions (id, from_pubkey, to_pubkey, amount, tax_fee, memo, timestamp, auth_signer) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(built.id, built.from, built.to, built.amount, 0, built.memo, built.timestamp, opts?.authSigner ?? null);
+        db.prepare(`
+            INSERT INTO accounts (public_key, balance, last_demurrage_epoch, last_updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(public_key) DO UPDATE SET
+                balance = excluded.balance,
+                last_demurrage_epoch = excluded.last_demurrage_epoch,
+                last_updated_at = excluded.last_updated_at
+        `).run(to, toAcc.balance, toAcc.lastDemurrageEpoch, built.timestamp);
+
+        // ledger.getAccount(to) above applies any pending demurrage, which queues decay events. Without this they are
+        // stranded and the transactions table drifts from account balances — `moveToCommons` persists them and this must
+        // too (review finding). The decay debits and the pot's row, which carries both their credit and this payment's
+        // debit, land in the same commit as everything above.
+        persistDecayEvents();
+        persistCommonsBalance();   // must come last — it is what makes the pot's debit durable
+        return built;
+    });
+    if (!txn) return null;
 
     afterTransactionCommit(() => {
         const toMember = getMember(to);
         if (toMember?.isTreasury) {
             sweepEnterpriseCeiling(to);
+        } else {
+            sweepRepayment(to);
         }
     });
 
     return txn;
 }
 
+/**
+ * An account's history, or every account's. Read as the account named: a note withheld from someone who blocked its
+ * sender is its sender's to read, and its recipient reads BLOCKED_BEANS_NOTE (engine/withheld-notes.ts).
+ */
 export function getTransactions(publicKey?: string, limit = 50, offset = 0): Transaction[] {
     let rows;
     if (publicKey) {
-        rows = db.prepare(`SELECT * FROM transactions WHERE from_pubkey=? OR to_pubkey=? ORDER BY timestamp DESC LIMIT ? OFFSET ?`).all(publicKey, publicKey, limit, offset) as any[];
+        rows = db.prepare(`SELECT t.*, ${WITHHELD_NOTE_COLUMN} FROM transactions t ${WITHHELD_NOTE_JOIN}
+                           WHERE t.from_pubkey=? OR t.to_pubkey=? ORDER BY t.timestamp DESC LIMIT ? OFFSET ?`).all(publicKey, publicKey, limit, offset) as any[];
     } else {
         rows = db.prepare(`SELECT * FROM transactions ORDER BY timestamp DESC LIMIT ? OFFSET ?`).all(limit, offset) as any[];
     }
-    return rows.map(r => ({ id: r.id, from: r.from_pubkey, to: r.to_pubkey, amount: r.amount, taxFee: r.tax_fee || 0, memo: r.memo, timestamp: r.timestamp }));
+    return rows.map(r => ({ id: r.id, from: r.from_pubkey, to: r.to_pubkey, amount: r.amount, taxFee: r.tax_fee || 0, memo: publicKey ? noteAsReadBy(r, publicKey) : r.memo, timestamp: r.timestamp }));
 }
 // ===================== MARKETPLACE =====================
 
@@ -2620,7 +3164,7 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
         SELECT COALESCE(SUM(p.amount), 0) as total
         FROM enterprise_pledges p
         JOIN members m ON m.public_key = p.keeper
-        WHERE p.enterprise = ? AND p.released_at IS NULL
+        WHERE p.enterprise = ? AND p.released_at IS NULL AND p.id NOT LIKE 'known:%'
           AND m.status = 'active' AND COALESCE(m.credit_frozen, 0) = 0
     `).get(enterprisePubkey) as any;
     const pledgeBacking = Number(pledgeRow?.total || 0);
@@ -2639,20 +3183,39 @@ export function getEnterpriseUnderlyingFloor(enterprisePubkey: string): { floor:
         legacyFloor = 0;
     }
 
-    const effectiveAllowance = Math.max(legacyFloor, totalBacking + memberEarnedCredit);
-    if (hasExplicitBacking || legacyFloor > 0 || memberEarnedCredit > 0) {
-        const allowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, effectiveAllowance);
-        return { floor: -allowance, totalBacking, hasBacking: hasExplicitBacking || legacyFloor > 0 };
+    // A confirmed keeper's known pledges (community modes slice 4, engine known-floor.ts); 0 with the confirmation dial off.
+    const knownShare = enterpriseKnownShareOf(enterprisePubkey);
+    const effectiveAllowance = Math.max(legacyFloor, totalBacking + memberEarnedCredit + knownShare);
+    if (hasExplicitBacking || legacyFloor > 0 || memberEarnedCredit > 0 || knownShare > 0) {
+        const allowance = Math.min(engine.creditCap(db), effectiveAllowance);
+        return { floor: -allowance, totalBacking, hasBacking: hasExplicitBacking || legacyFloor > 0 || knownShare > 0 };
     }
 
     return { floor: 0, totalBacking: 0, hasBacking: false };
 }
 
+/** The keepers' known pledges to this enterprise, as its floor counts them (engine enterpriseKnownShareOf). */
+export function enterpriseKnownShareOf(enterprisePubkey: string): number {
+    return engine.enterpriseKnownShareOf(db, enterprisePubkey);
+}
+
 export function usableFloor(publicKey: string): number {
+    return usableFloorWithKnownPledge(publicKey, 0);
+}
+
+/**
+ * A member's usable floor with `extraKnownPledged` more of their known grant pledged than is written: the floor binding
+ * them with that pledge would leave (applicantCanBackPledge), read without writing it. An enterprise's own floor never
+ * counts what it pledges as a keeper, so it ignores the extra.
+ */
+function usableFloorWithKnownPledge(publicKey: string, extraKnownPledged: number): number {
     const m = db.prepare("SELECT is_treasury, paused, paused_at, paused_floor_snapshot, status FROM members WHERE public_key = ?").get(publicKey) as any;
     if (!m?.is_treasury) {
-        const { floor } = getMemberTrustProfile(publicKey);
-        return Math.max(floor, -offerCapForCount(liveOfferCount(publicKey)));
+        const { floor, knownGrant, otherAllowance } = engine.getMemberTrustProfile(db, publicKey, extraKnownPledged);
+        if (knownGrant <= 0) return Math.max(floor, -offerCapForCount(liveOfferCount(publicKey)));
+        // A confirmed member in a known community: one band for the known grant, the bands for the rest (slice 4).
+        const usable = usableAllowance({ knownGrant, otherAllowance, cap: engine.creditCap(db), liveOffers: liveOfferCount(publicKey) });
+        return Math.max(floor, -usable);
     }
 
     if (m.status === 'completed') return 0;
@@ -2835,7 +3398,7 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{
     suspended: boolean;
 }> {
     return (db.prepare(`
-        SELECT m.public_key, m.callsign, m.avatar_url, o.granted_at, o.role, o.backing, m.last_active_at, m.joined_at,
+        SELECT m.public_key, m.callsign, m.avatar_ref, o.granted_at, o.role, o.backing, m.last_active_at, m.joined_at,
                m.can_operate, m.status, m.is_visitor
         FROM treasury_operators o
         JOIN members m ON m.public_key = o.member_pubkey
@@ -2844,7 +3407,7 @@ export function treasuryKeepers(treasuryPubkey: string): Array<{
     `).all(treasuryPubkey) as any[]).map(r => ({
         publicKey: r.public_key,
         callsign: r.callsign,
-        avatarUrl: avatarUrlFor(r.public_key, r.avatar_url),
+        avatarUrl: avatarUrlOf(r.public_key, r.avatar_ref),
         grantedAt: r.granted_at ?? null,
         role: r.role || 'keeper',
         backing: Number(r.backing || 0),
@@ -2921,13 +3484,16 @@ function allowanceWithoutKeeper(treasuryPubkey: string, memberPubkey: string): n
         WHERE p.enterprise = ?
           AND p.keeper != ?
           AND p.released_at IS NULL
+          AND p.id NOT LIKE 'known:%'
           AND m.status = 'active'
           AND COALESCE(m.credit_frozen, 0) = 0
     `).get(treasuryPubkey, memberPubkey) as any;
     const otherPledges = Number(totalRow?.total || 0);
     const memberRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(treasuryPubkey) as any;
     const legacyFloor = Number(memberRow?.legacy_credit_floor || 0);
-    return Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, otherPledges));
+    // The other keepers' known share and the community's cap count as the spend check counts them (both main's with the dial off).
+    const othersKnown = engine.enterpriseKnownShareOf(db, treasuryPubkey, memberPubkey);
+    return Math.min(engine.creditCap(db), Math.max(legacyFloor, otherPledges + othersKnown));
 }
 
 /**
@@ -2947,6 +3513,75 @@ function activePledgeTotal(treasuryPubkey: string, memberPubkey: string): number
         "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
     ).get(memberPubkey, treasuryPubkey) as any;
     return Number(row?.total || 0);
+}
+
+/** The known part of one keeper's active pledge to one enterprise (engine known-floor.ts KNOWN_PLEDGE_PREFIX). */
+function activeKnownPledge(treasuryPubkey: string, memberPubkey: string): number {
+    const row = db.prepare(
+        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND enterprise = ? AND released_at IS NULL AND id LIKE 'known:%'"
+    ).get(memberPubkey, treasuryPubkey) as any;
+    return Number(row?.total || 0);
+}
+
+/** A keeper's earned credit not yet pledged (main's Rule 3 headroom; known pledges draw on their known grant instead). */
+function earnedPledgeRoom(keeperPubkey: string): number {
+    const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
+    const row = db.prepare(
+        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL AND id NOT LIKE 'known:%'"
+    ).get(keeperPubkey) as any;
+    return Math.max(0, earnedCredit - Number(row?.total || 0));
+}
+
+/**
+ * Write one keeper's pledge to one enterprise as up to two rows: the earned part as on main, the known part under the
+ * known prefix. Runs inside the caller's transaction.
+ */
+function insertPledgeRows(keeperPubkey: string, enterprisePubkey: string, earnedPart: number, knownPart: number, at: string): string {
+    let id = '';
+    if (earnedPart > 0) {
+        id = crypto.randomUUID();
+        db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
+            .run(id, keeperPubkey, enterprisePubkey, earnedPart, at);
+    }
+    if (knownPart > 0) {
+        const knownId = engine.KNOWN_PLEDGE_PREFIX + crypto.randomUUID();
+        db.prepare(`INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at) VALUES (?, ?, ?, ?, ?, NULL)`)
+            .run(knownId, keeperPubkey, enterprisePubkey, knownPart, at);
+        if (!id) id = knownId;
+    }
+    return id;
+}
+
+/**
+ * Split a new pledge: earned headroom first, then half the keeper's known grant. A known part comes off the keeper's own
+ * known line, so it is refused while their own debt is using that line (their balance would fall below their new floor):
+ * the same lock a pledge has on the enterprise side. Runs inside the caller's transaction, after the rows are written.
+ */
+function splitNewPledge(keeperPubkey: string, amount: number): { earnedPart: number; knownPart: number } {
+    const earnedRoom = earnedPledgeRoom(keeperPubkey);
+    const knownRoom = engine.knownPledgeRoom(db, keeperPubkey);
+    if (amount > earnedRoom + knownRoom) {
+        // With no known grant to draw on (the dial off, or not confirmed) it is main's refusal, word for word.
+        if (engine.memberKnownGrant(db, keeperPubkey) === 0) {
+            throw new Error(`Pledge amount (${amount}) exceeds available earned credit (${earnedRoom} available to add across all enterprises)`);
+        }
+        throw new Error(`Pledge amount (${amount}) exceeds what you can pledge (${earnedRoom + knownRoom} available: ${earnedRoom} earned credit, ${knownRoom} from your known floor)`);
+    }
+    const earnedPart = Math.min(amount, earnedRoom);
+    return { earnedPart, knownPart: amount - earnedPart };
+}
+
+/**
+ * The keeper's own figures go only into their own refusal. Where someone else reads it (the lead keeper or an admin
+ * approving them, or the scheduler storing a failed change), the caller passes `othersRefusal`, a refusal in words.
+ */
+function assertKeeperOwnDebtCovered(keeperPubkey: string, othersRefusal?: string): void {
+    const balance = roundedBalance(keeperPubkey);
+    const floor = usableFloor(keeperPubkey);
+    if (balance < floor) {
+        // A refusal, not a passing database error: the scheduler's applyKeeperChange closes the change instead of retrying it.
+        throw new KeeperChangeRefused(othersRefusal ?? `Your own balance (${balance} beans) is using your known floor. Pledging that part to an enterprise would take you below your own floor (${floor} beans); pay down first or pledge less.`);
+    }
 }
 
 /**
@@ -2978,14 +3613,13 @@ function unbindKeeper(treasuryPubkey: string, memberPubkey: string): void {
             const lockedNeeded = Math.min(keeperPledge, deficit - otherAllowance);
             const toRelease = keeperPledge - lockedNeeded;
             if (toRelease > 0) {
+                // The known part is released first, as releaseEnterpriseBacking does; what stays locked keeps its kind.
+                const knownLocked = Math.max(0, activeKnownPledge(treasuryPubkey, memberPubkey) - toRelease);
                 const nowIso = new Date().toISOString();
                 db.prepare(
                     "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
                 ).run(nowIso, memberPubkey, treasuryPubkey);
-                db.prepare(`
-                    INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
-                    VALUES (?, ?, ?, ?, ?, NULL)
-                `).run(crypto.randomUUID(), memberPubkey, treasuryPubkey, lockedNeeded, nowIso);
+                insertPledgeRows(memberPubkey, treasuryPubkey, lockedNeeded - knownLocked, knownLocked, nowIso);
             }
         }
     }
@@ -3001,6 +3635,7 @@ function unbindKeeper(treasuryPubkey: string, memberPubkey: string): void {
  * inside the caller's transaction; the caller clears the floor cache and broadcasts.
  */
 function keeperLeaves(enterprisePubkey: string, memberPubkey: string, by: string): { promoted: string | null; paused: boolean } {
+    assertPlainTablesWritable();
     const wasLead = (db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
         .get(enterprisePubkey, memberPubkey) as any)?.role === 'lead';
     unbindKeeper(enterprisePubkey, memberPubkey);
@@ -3017,6 +3652,7 @@ function keeperLeaves(enterprisePubkey: string, memberPubkey: string, by: string
  * pauses (its next step is wind-up). Runs inside the caller's transaction; the caller broadcasts.
  */
 export function promoteOrPauseAfterLeadLeft(enterprisePubkey: string, by: string): { promoted: string | null; paused: boolean } {
+    assertPlainTablesWritable();
     if (db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND role = 'lead'").get(enterprisePubkey)) {
         return { promoted: null, paused: false };
     }
@@ -3064,12 +3700,8 @@ export function getAvailableBacking(keeperPubkey: string, _forEnterprise?: strin
     if (!km || km.status === 'disabled' || km.status === 'pruned' || km.credit_frozen === 1) {
         return 0;
     }
-    const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
-    const row = db.prepare(
-        "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL"
-    ).get(keeperPubkey) as any;
-    const totalPledged = Number(row?.total || 0);
-    return Math.max(0, earnedCredit - totalPledged);
+    // Earned credit not yet pledged, plus what is left of half their known grant (0 with the dial off).
+    return earnedPledgeRoom(keeperPubkey) + engine.knownPledgeRoom(db, keeperPubkey);
 }
 
 /**
@@ -3084,7 +3716,7 @@ export function getEnterprisePledges(enterprisePubkey: string): Array<{
     pledgedAt: string;
 }> {
     return (db.prepare(`
-        SELECT p.id, p.keeper, p.amount, p.pledged_at, m.callsign, m.avatar_url
+        SELECT p.id, p.keeper, p.amount, p.pledged_at, m.callsign, m.avatar_ref
         FROM enterprise_pledges p
         JOIN members m ON m.public_key = p.keeper
         WHERE p.enterprise = ? AND p.released_at IS NULL
@@ -3093,7 +3725,7 @@ export function getEnterprisePledges(enterprisePubkey: string): Array<{
         id: r.id,
         keeper: r.keeper,
         callsign: r.callsign,
-        avatarUrl: avatarUrlFor(r.keeper, r.avatar_url),
+        avatarUrl: avatarUrlOf(r.keeper, r.avatar_ref),
         amount: Number(r.amount),
         pledgedAt: r.pledged_at,
     }));
@@ -3111,7 +3743,7 @@ export function getKeeperPledges(keeperPubkey: string): Array<{
     pledgedAt: string;
 }> {
     return (db.prepare(`
-        SELECT p.id, p.enterprise, p.amount, p.pledged_at, m.callsign, m.avatar_url
+        SELECT p.id, p.enterprise, p.amount, p.pledged_at, m.callsign, m.avatar_ref
         FROM enterprise_pledges p
         JOIN members m ON m.public_key = p.enterprise
         WHERE p.keeper = ? AND p.released_at IS NULL
@@ -3120,7 +3752,7 @@ export function getKeeperPledges(keeperPubkey: string): Array<{
         id: r.id,
         enterprise: r.enterprise,
         callsign: r.callsign,
-        avatarUrl: avatarUrlFor(r.enterprise, r.avatar_url),
+        avatarUrl: avatarUrlOf(r.enterprise, r.avatar_ref),
         amount: Number(r.amount),
         pledgedAt: r.pledged_at,
     }));
@@ -3160,25 +3792,13 @@ export function pledgeEnterpriseBacking(
             throw new Error('Pledge amount must be a positive number');
         }
 
-        const totalPledgedRow = db.prepare(
-            "SELECT COALESCE(SUM(amount), 0) as total FROM enterprise_pledges WHERE keeper = ? AND released_at IS NULL"
-        ).get(keeperPubkey) as any;
-        const totalPledgedAll = Number(totalPledgedRow?.total || 0);
-        const { earnedCredit } = getMemberTrustProfile(keeperPubkey);
-        const availableToAdd = Math.max(0, earnedCredit - totalPledgedAll);
-
-        if (parsedAmount > availableToAdd) {
-            throw new Error(`Pledge amount (${parsedAmount}) exceeds available earned credit (${availableToAdd} available to add across all enterprises)`);
-        }
+        // Earned credit first (main's Rule 3), then half the keeper's known grant (engine known-floor.ts, the bound).
+        const { earnedPart, knownPart } = splitNewPledge(keeperPubkey, parsedAmount);
 
         const pledgeToAdd = parsedAmount;
-        const pledgeId = crypto.randomUUID();
         const pledgedAt = new Date().toISOString();
-
-        db.prepare(`
-            INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
-            VALUES (?, ?, ?, ?, ?, NULL)
-        `).run(pledgeId, keeperPubkey, enterprisePubkey, pledgeToAdd, pledgedAt);
+        const pledgeId = insertPledgeRows(keeperPubkey, enterprisePubkey, earnedPart, knownPart, pledgedAt);
+        if (knownPart > 0) assertKeeperOwnDebtCovered(keeperPubkey);
 
         // Auto-clear legacy credit floor once keepers' derived pledges reach or exceed it (Slice 4)
         const legacyRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
@@ -3248,37 +3868,33 @@ export function releaseEnterpriseBacking(
         const balance = getBalance(enterprisePubkey).balance;
         const deficit = Math.max(0, -balance);
 
-        const totalPledgesRow = db.prepare(`
-            SELECT COALESCE(SUM(p.amount), 0) as total
-            FROM enterprise_pledges p
-            JOIN members m ON m.public_key = p.keeper
-            WHERE p.enterprise = ?
-              AND p.released_at IS NULL
-              AND m.status = 'active'
-              AND COALESCE(m.credit_frozen, 0) = 0
-        `).get(enterprisePubkey) as any;
-        const currentTotalPledges = Number(totalPledgesRow?.total || 0);
-        const newTotalPledges = currentTotalPledges - toRelease;
         const legacyFloor = Number(t.legacy_credit_floor || 0);
-
-        const newAllowance = Math.min(PROTOCOL_CONSTANTS.CREDIT_FLOOR_CAP, Math.max(legacyFloor, newTotalPledges));
-        if (newAllowance < deficit) {
-            throw new Error(`Cannot release backing: enterprise is in deficit (${deficit} beans) and remaining allowance (${newAllowance} beans) would not cover it`);
-        }
-
         const remainingPledge = currentKeeperPledge - toRelease;
+        // The known part goes first (it gives the keeper their own known line back); the rest is pledged again as before.
+        const knownPledge = activeKnownPledge(enterprisePubkey, keeperPubkey);
+        const knownRemaining = Math.max(0, knownPledge - toRelease);
         const nowIso = new Date().toISOString();
 
         db.prepare(
             "UPDATE enterprise_pledges SET released_at = ? WHERE keeper = ? AND enterprise = ? AND released_at IS NULL"
         ).run(nowIso, keeperPubkey, enterprisePubkey);
+        insertPledgeRows(keeperPubkey, enterprisePubkey, remainingPledge - knownRemaining, knownRemaining, nowIso);
 
-        if (remainingPledge > 0) {
-            const newPledgeId = crypto.randomUUID();
-            db.prepare(`
-                INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
-                VALUES (?, ?, ?, ?, ?, NULL)
-            `).run(newPledgeId, keeperPubkey, enterprisePubkey, remainingPledge, nowIso);
+        // The covenant, on what is pledged after the release (earned pledges + known pledges as the floor counts them);
+        // refused, the transaction writes nothing.
+        const earnedRow = db.prepare(`
+            SELECT COALESCE(SUM(p.amount), 0) as total
+            FROM enterprise_pledges p
+            JOIN members m ON m.public_key = p.keeper
+            WHERE p.enterprise = ?
+              AND p.released_at IS NULL
+              AND p.id NOT LIKE 'known:%'
+              AND m.status = 'active'
+              AND COALESCE(m.credit_frozen, 0) = 0
+        `).get(enterprisePubkey) as any;
+        const newAllowance = Math.min(engine.creditCap(db), Math.max(legacyFloor, Number(earnedRow?.total || 0) + enterpriseKnownShareOf(enterprisePubkey)));
+        if (newAllowance < deficit) {
+            throw new Error(`Cannot release backing: enterprise is in deficit (${deficit} beans) and remaining allowance (${newAllowance} beans) would not cover it`);
         }
 
         return { releasedAmount: toRelease, remainingPledge };
@@ -3304,7 +3920,13 @@ export interface KeeperJoinRequest {
     createdAt: string;
     decidedAt?: string | null;
     decidedBy?: string | null;
-    availableToBack?: number;
+    /**
+     * On a pending request, whether approving it would go through as far as the applicant's standing goes
+     * (applicantCanBackPledge: not frozen, the pledge fits, the own-debt lock wouldn't refuse); null on a closed one.
+     * Everyone who may read the request gets this yes or no; the figure itself is private (it carries their known grant,
+     * which an admin may lower, raise or freeze), so it is only ever added to the applicant's own view (myPendingRequest).
+     */
+    canBackPledge: boolean | null;
     earnedCredit?: number;
     /** Approved by the lead and waiting out the other keepers' 3-day objection window (answer A). */
     pendingChange?: KeeperChangeInfo | null;
@@ -3320,6 +3942,7 @@ export function requestToJoinEnterprise(
     memberPubkey: string,
     pledgedBacking: number
 ): KeeperJoinRequest {
+    assertPlainTablesWritable();
     const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
     if (!ent || !ent.is_treasury) {
         throw new Error('Not an enterprise');
@@ -3384,6 +4007,7 @@ export function requestToJoinEnterprise(
         pledgedBacking: parsedAmount,
         status: 'pending',
         createdAt: now,
+        canBackPledge: true, // checked just above
     };
 }
 
@@ -3393,7 +4017,7 @@ export function requestToJoinEnterprise(
 export function getKeeperRequests(enterprisePubkey: string, filterStatus?: string): KeeperJoinRequest[] {
     let sql = `
         SELECT r.id, r.enterprise_pubkey, r.member_pubkey, r.pledged_backing, r.status,
-               r.created_at, r.decided_at, r.decided_by, m.callsign, m.avatar_url
+               r.created_at, r.decided_at, r.decided_by, m.callsign, m.avatar_ref
         FROM enterprise_keeper_requests r
         JOIN members m ON m.public_key = r.member_pubkey
         WHERE r.enterprise_pubkey = ?
@@ -3412,19 +4036,20 @@ export function getKeeperRequests(enterprisePubkey: string, filterStatus?: strin
 
     return (db.prepare(sql).all(...params) as any[]).map(r => {
         const trust = getMemberTrustProfile(r.member_pubkey);
-        const available = getAvailableBacking(r.member_pubkey);
+        const pledged = Number(r.pledged_backing);
         return {
             id: r.id,
             enterprisePubkey: r.enterprise_pubkey,
             memberPubkey: r.member_pubkey,
             callsign: r.callsign,
-            avatarUrl: avatarUrlFor(r.member_pubkey, r.avatar_url),
-            pledgedBacking: Number(r.pledged_backing),
+            avatarUrl: avatarUrlOf(r.member_pubkey, r.avatar_ref),
+            pledgedBacking: pledged,
             status: r.status,
             createdAt: r.created_at,
             decidedAt: r.decided_at,
             decidedBy: r.decided_by,
-            availableToBack: available,
+            // Only while the request is open: a closed row gives no live view of someone's standing.
+            canBackPledge: r.status === 'pending' ? applicantCanBackPledge(r.enterprise_pubkey, r.member_pubkey, pledged) : null,
             earnedCredit: trust.earnedCredit,
             pendingChange: pendingByRequest.get(r.id) ?? null,
         };
@@ -3462,6 +4087,42 @@ export class KeeperChangeRefused extends Error {
 }
 
 /**
+ * What the lead keeper, an admin or the scheduler is told when an applicant's standing doesn't cover their pledge. In
+ * words only: their figure, balance, floor, known grant and any freeze are theirs alone (they see the detail in their own
+ * view), and a failed change keeps this as its reason.
+ */
+const APPLICANT_STANDING_REFUSAL = "The applicant's standing doesn't cover this pledge right now, so they can't be approved yet.";
+
+/**
+ * Whether approving this applicant with this pledge would go through now, as far as their own standing goes: their
+ * credit isn't frozen, the pledge fits what they can back (getAvailableBacking), and a known part of it would not take
+ * their own balance below their own floor (assertKeeperOwnDebtCovered). One predicate for the request rows' canBackPledge
+ * and the approval check, so a row never says "covers" for a request Approve refuses.
+ *
+ * Read only: a GET (the requests list, the lead keeper's enterprise read) never writes, waits on the write lock or fails
+ * on a write error. The own-debt part reads the floor binding would leave with the known part counted as pledged
+ * (usableFloorWithKnownPledge): a member's floor depends on their pledges only through their known pledged total
+ * (engine memberUsableKnownGrant), and the binding itself moves neither their balance nor their floor. Approve still
+ * writes the rows and checks again in its own transaction (bindApprovedKeeper).
+ *
+ * With a pledge, all three parts are read whatever the others say and combined at the end, so a freeze, a pledge with no
+ * room and the own-debt lock take the same path: the time an answer takes doesn't tell the lead keeper which one it was.
+ */
+function applicantCanBackPledge(_enterprisePubkey: string, memberPubkey: string, pledged: number): boolean {
+    const km = db.prepare("SELECT status, credit_frozen FROM members WHERE public_key = ?").get(memberPubkey) as any;
+    if (!km) return false;
+    // getAvailableBacking's 0: an inactive or frozen account has nothing to back a pledge with.
+    const blocked = km.status === 'disabled' || km.status === 'pruned' || km.credit_frozen === 1;
+    if (pledged <= 0) return km.credit_frozen !== 1;
+    const earnedRoom = earnedPledgeRoom(memberPubkey);
+    const fits = pledged <= earnedRoom + engine.knownPledgeRoom(db, memberPubkey);
+    // Split as splitNewPledge does: earned credit first, then the known grant.
+    const knownPart = Math.max(0, pledged - Math.min(pledged, earnedRoom));
+    const covered = roundedBalance(memberPubkey) >= usableFloorWithKnownPledge(memberPubkey, knownPart);
+    return !blocked && fits && (knownPart <= 0 || covered);
+}
+
+/**
  * Validate that an approved applicant may still become a keeper, then bind them with their pledge. Runs inside the
  * caller's transaction. Used by an immediate approval and by the scheduler when an objection window closes, so the
  * pledge is re-checked against the applicant's available backing at the moment the binding is made.
@@ -3477,9 +4138,6 @@ function assertApplicantStillEligible(enterprisePubkey: string, memberPubkey: st
     if (!km || km.is_visitor || km.status !== 'active') {
         throw new KeeperChangeRefused('Applicant account is not active, so they cannot be approved as a keeper');
     }
-    if (km.credit_frozen === 1) {
-        throw new KeeperChangeRefused('Applicant credit is frozen, so they cannot be approved as a keeper');
-    }
     // A lead's approval must never reverse an admin suspension (PR #838 B3).
     if (isOperatorSwitchedOff(memberPubkey)) {
         throw new KeeperChangeRefused("Applicant's operator access is switched off by a node admin, so they cannot be approved as a keeper");
@@ -3487,9 +4145,9 @@ function assertApplicantStillEligible(enterprisePubkey: string, memberPubkey: st
     if (db.prepare("SELECT 1 FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?").get(enterprisePubkey, memberPubkey)) {
         throw new KeeperChangeRefused('Already a keeper of this enterprise');
     }
-    const available = getAvailableBacking(memberPubkey);
-    if (pledged > available) {
-        throw new KeeperChangeRefused(`Pledge amount (${pledged}) exceeds available earned credit at approval (${available} available)`);
+    // A freeze, a pledge beyond what they can back, or the own-debt lock: one refusal in words, never which or by how much.
+    if (!applicantCanBackPledge(enterprisePubkey, memberPubkey, pledged)) {
+        throw new KeeperChangeRefused(APPLICANT_STANDING_REFUSAL);
     }
 }
 
@@ -3509,10 +4167,17 @@ function bindApprovedKeeper(enterprisePubkey: string, memberPubkey: string, pled
     }
 
     if (pledged > 0) {
-        db.prepare(`
-            INSERT INTO enterprise_pledges (id, keeper, enterprise, amount, pledged_at, released_at)
-            VALUES (?, ?, ?, ?, ?, NULL)
-        `).run(crypto.randomUUID(), memberPubkey, enterprisePubkey, pledged, new Date().toISOString());
+        // Checked just before (assertApplicantStillEligible); should either still refuse, the lead keeper, an admin or the
+        // scheduler reads it, so in words with no figure.
+        let split: { earnedPart: number; knownPart: number };
+        try {
+            split = splitNewPledge(memberPubkey, pledged);
+        } catch {
+            throw new KeeperChangeRefused(APPLICANT_STANDING_REFUSAL);
+        }
+        const { earnedPart, knownPart } = split;
+        insertPledgeRows(memberPubkey, enterprisePubkey, earnedPart, knownPart, new Date().toISOString());
+        if (knownPart > 0) assertKeeperOwnDebtCovered(memberPubkey, APPLICANT_STANDING_REFUSAL);
 
         // Auto-clear legacy credit floor once keepers' derived pledges reach or exceed it (Slice 4)
         const legacyRow = db.prepare("SELECT legacy_credit_floor FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
@@ -3553,6 +4218,7 @@ function broadcastKeeperBound(enterprisePubkey: string, memberPubkey: string): v
 export function approveKeeperRequest(requestId: string, actorPubkey: string): {
     ok: true; keeper: string; backing: number; applied: boolean; change: KeeperChangeInfo | null;
 } {
+    assertPlainTablesWritable();
     const req = db.prepare("SELECT * FROM enterprise_keeper_requests WHERE id = ?").get(requestId) as any;
     if (!req) throw new Error('Keeper request not found');
     if (req.status !== 'pending') throw new Error('Request is no longer pending');
@@ -3603,6 +4269,7 @@ export function approveKeeperRequest(requestId: string, actorPubkey: string): {
  * lead's hands: the other keepers object to it, or it lands.
  */
 export function declineKeeperRequest(requestId: string, actorPubkey: string): { ok: true } {
+    assertPlainTablesWritable();
     const req = db.prepare("SELECT * FROM enterprise_keeper_requests WHERE id = ?").get(requestId) as any;
     if (!req) throw new Error('Keeper request not found');
     if (req.status !== 'pending') throw new Error('Request is no longer pending');
@@ -3685,7 +4352,9 @@ export function getKeeperChange(changeId: string): KeeperChangeInfo | null {
 
 /** Keeper changes for an enterprise, newest first. Public, like the keeper list itself. */
 export function getKeeperChanges(enterprisePubkey: string, status?: KeeperChangeInfo['status']): KeeperChangeInfo[] {
-    applyDueKeeperChanges(enterprisePubkey);
+    // A read that applies what is due first, on a main server. A standby's changes are its main server's, which applies
+    // them (config/node-role.ts assertPlainTablesWritable): it answers them as they are.
+    if (getNodeRole() !== 'backup') applyDueKeeperChanges(enterprisePubkey);
     const rows = status
         ? db.prepare(`${KEEPER_CHANGE_SELECT} WHERE c.enterprise_pubkey = ? AND c.status = ? ORDER BY c.created_at DESC`).all(enterprisePubkey, status)
         : db.prepare(`${KEEPER_CHANGE_SELECT} WHERE c.enterprise_pubkey = ? ORDER BY c.created_at DESC`).all(enterprisePubkey);
@@ -3697,6 +4366,7 @@ export function getKeeperChanges(enterprisePubkey: string, status?: KeeperChange
  * made it. Runs inside the caller's transaction.
  */
 export function closePendingKeeperChangesFor(enterprisePubkey: string, memberPubkey: string, reason: string): void {
+    assertPlainTablesWritable();
     const now = new Date().toISOString();
     const rows = db.prepare(`
         SELECT id, request_id FROM enterprise_keeper_changes
@@ -3721,6 +4391,7 @@ export function closePendingKeeperChangesFor(enterprisePubkey: string, memberPub
 export function proposeKeeperRemoval(enterprisePubkey: string, actorPubkey: string, memberPubkey: string): {
     ok: true; applied: boolean; change: KeeperChangeInfo | null;
 } {
+    assertPlainTablesWritable();
     const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
     if (!ent || !ent.is_treasury) throw new Error('Not an enterprise');
     if (ent.status === 'completed') throw new Error('Enterprise has already wound up');
@@ -3766,6 +4437,7 @@ export function proposeKeeperRemoval(enterprisePubkey: string, actorPubkey: stri
  * for a removal, other than the keeper being removed — may object while the window is open. One objection cancels.
  */
 export function objectToKeeperChange(changeId: string, actorPubkey: string): { ok: true; change: KeeperChangeInfo } {
+    assertPlainTablesWritable();
     const c = db.prepare("SELECT * FROM enterprise_keeper_changes WHERE id = ?").get(changeId) as any;
     if (!c) throw new Error('Keeper change not found');
     applyDueKeeperChanges(c.enterprise_pubkey);
@@ -3854,12 +4526,14 @@ function applyKeeperChange(c: any, nowIso: string): 'applied' | 'failed' | 'retr
             broadcast({ type: 'enterprise_pledge_updated', enterprise: c.enterprise_pubkey, keeper: c.member_pubkey });
         }
     }
-    broadcast({ type: 'enterprise_keeper_change_resolved', enterprisePubkey: c.enterprise_pubkey, changeId: c.id, kind: c.kind, memberPubkey: c.member_pubkey, status: outcome, reason: failReason });
+    // To the people who heard of the request (keeperRequestRecipients: the member, the lead or sole keeper, node admins), never every socket.
+    broadcast({ type: 'enterprise_keeper_change_resolved', enterprisePubkey: c.enterprise_pubkey, changeId: c.id, kind: c.kind, memberPubkey: c.member_pubkey, status: outcome, reason: failReason }, keeperRequestRecipients(c.enterprise_pubkey, c.member_pubkey));
     return outcome;
 }
 
 /** Apply every change whose objection window has ended (optionally for one enterprise). */
 export function applyDueKeeperChanges(enterprisePubkey?: string, asOfTime?: number): { applied: number; failed: number; retrying: number } {
+    assertPlainTablesWritable();
     const nowIso = new Date(asOfTime ?? Date.now()).toISOString();
     const rows = (enterprisePubkey
         ? db.prepare("SELECT * FROM enterprise_keeper_changes WHERE status = 'pending' AND applies_at <= ? AND enterprise_pubkey = ? ORDER BY applies_at ASC").all(nowIso, enterprisePubkey)
@@ -3876,6 +4550,65 @@ export function applyDueKeeperChanges(enterprisePubkey?: string, asOfTime?: numb
 }
 
 /**
+ * A keeper who steps down leaves the roll of every open Decision of this enterprise (DESIGN-group-decisions §2.6): they
+ * chose to have no say, so a vote they cast is no longer counted (decisions-engine.ts reads only electors still 'on').
+ * Only stepping down does this. One removed by the lead, an admin or a vote stays on the roll: a removal must not be a
+ * way to swing a vote. Runs in the caller's transaction.
+ */
+function dropFromOpenScopedRolls(enterprisePubkey: string, memberPubkey: string): void {
+    db.prepare(`
+        UPDATE decision_electors SET status = 'left', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE member_pubkey = ? AND status = 'on' AND decision_id IN (
+            SELECT id FROM decisions WHERE scope_kind = 'enterprise' AND scope_id = ? AND status = 'open'
+        )
+    `).run(memberPubkey, enterprisePubkey);
+}
+
+/**
+ * Why a keeper can't be removed from an enterprise by its keepers' vote now (decisions-engine.ts remove_keeper), or
+ * null: the rules stepping down obeys (stepDownAsKeeper). Never the lead (a vote replaces the lead instead), never the
+ * last keeper, and not while their pledge is part of what covers the enterprise's debt.
+ */
+export function keeperRemovalByVoteRefusal(enterprisePubkey: string, memberPubkey: string): string | null {
+    const op = db.prepare("SELECT role FROM treasury_operators WHERE treasury_pubkey = ? AND member_pubkey = ?")
+        .get(enterprisePubkey, memberPubkey) as { role: string } | undefined;
+    if (!op) return 'They no longer keep this enterprise';
+    if (op.role === 'lead') return 'The lead keeper is replaced by a vote, not removed';
+    if (keeperBindingCount(enterprisePubkey) <= 1) return 'They are the only keeper left';
+    const pledge = activePledgeTotal(enterprisePubkey, memberPubkey);
+    const deficit = Math.max(0, -getBalance(enterprisePubkey).balance);
+    if (pledge > 0 && allowanceWithoutKeeper(enterprisePubkey, memberPubkey) < deficit) {
+        return 'Not yet: their pledge is part of what covers this enterprise\'s debt. They can be removed once the debt is '
+            + 'covered without it.';
+    }
+    return null;
+}
+
+/**
+ * Removes a keeper as their fellow keepers voted (decisions-engine.ts remove_keeper): the binding goes and their pledge
+ * is settled exactly as when the lead removes them (keeperLeaves). Runs in the caller's transaction; the caller clears
+ * the floor cache and broadcasts. `by` is the Decision's signer.
+ */
+export function removeKeeperByVote(enterprisePubkey: string, memberPubkey: string, by: string): void {
+    keeperLeaves(enterprisePubkey, memberPubkey, by);
+}
+
+/**
+ * Makes `memberPubkey`, a keeper, the lead of an ongoing enterprise as its keepers voted (decisions-engine.ts
+ * replace_lead): what a passed succession vote does (settleSuccession). The old lead becomes a keeper and keeps their
+ * backing. Runs in the caller's transaction.
+ */
+export function replaceLeadByVote(enterprisePubkey: string, memberPubkey: string): void {
+    db.prepare("UPDATE treasury_operators SET role = 'keeper', auto_promoted_at = NULL WHERE treasury_pubkey = ? AND role = 'lead'")
+        .run(enterprisePubkey);
+    db.prepare("UPDATE treasury_operators SET role = 'lead', auto_promoted_at = NULL WHERE treasury_pubkey = ? AND member_pubkey = ?")
+        .run(enterprisePubkey, memberPubkey);
+    db.prepare(`UPDATE enterprise_succession_proposals SET status = 'cancelled', closed_reason = 'lead_changed'
+                WHERE enterprise_pubkey = ? AND status = 'active'`).run(enterprisePubkey);
+    engine.keepersChanged(db, enterprisePubkey);
+}
+
+/**
  * Any keeper may step down (answer M, 2026-09-19).
  * - The only keeper cannot: there would be nobody left to run or wind up the enterprise.
  * - A keeper whose pledge is still needed to cover the enterprise's debt cannot yet: the message says how much
@@ -3886,6 +4619,7 @@ export function applyDueKeeperChanges(enterprisePubkey?: string, asOfTime?: numb
 export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string): {
     ok: true; promoted: string | null; paused: boolean; releasedBacking: number;
 } {
+    assertPlainTablesWritable();
     const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
     if (!ent || !ent.is_treasury) throw new Error('Not an enterprise');
     if (ent.status === 'completed') throw new Error('Enterprise has already wound up');
@@ -3915,6 +4649,7 @@ export function stepDownAsKeeper(enterprisePubkey: string, memberPubkey: string)
     let result = { promoted: null as string | null, paused: false };
     db.transaction(() => {
         result = keeperLeaves(enterprisePubkey, memberPubkey, memberPubkey);
+        dropFromOpenScopedRolls(enterprisePubkey, memberPubkey);
     })();
 
     clearEnterpriseFloorCache(enterprisePubkey);
@@ -4055,6 +4790,7 @@ function closeSuccession(prop: any, reason: SuccessionClosedReason): void {
 
 /** Close active proposals past their 14-day deadline (optionally for one enterprise). */
 export function expireSuccessionProposals(enterprisePubkey?: string, asOfTime?: number): number {
+    assertPlainTablesWritable();
     const nowIso = new Date(asOfTime ?? Date.now()).toISOString();
     const rows = (enterprisePubkey
         ? db.prepare("SELECT * FROM enterprise_succession_proposals WHERE status = 'active' AND deadline_at <= ? AND enterprise_pubkey = ?").all(nowIso, enterprisePubkey)
@@ -4068,7 +4804,8 @@ export function expireSuccessionProposals(enterprisePubkey?: string, asOfTime?: 
  * An auto-promoted lead's activity cancels nothing (answer G), nor a visitor's row's (getLeadInactivity).
  */
 export function cancelActiveSuccessionIfLeadActive(leadPubkey: string): void {
-    if (isVisitorKey(leadPubkey)) return;
+    // A standby writes no vote of its own (config/node-role.ts assertPlainTablesWritable): the main server closes it.
+    if (isVisitorKey(leadPubkey) || getNodeRole() === 'backup') return;
     const activeProps = db.prepare(
         "SELECT * FROM enterprise_succession_proposals WHERE lead_pubkey = ? AND status = 'active'"
     ).all(leadPubkey) as any[];
@@ -4185,6 +4922,7 @@ export function proposeLeadSuccession(
     proposerPubkey: string,
     candidatePubkey: string
 ): { ok: true; proposal: SuccessionProposalInfo; executed: boolean } {
+    assertPlainTablesWritable();
     const ent = db.prepare("SELECT is_treasury, status FROM members WHERE public_key = ?").get(enterprisePubkey) as any;
     if (!ent || !ent.is_treasury) throw new Error('Not an enterprise');
     if (ent.status === 'completed') throw new Error('Completed enterprise cannot have succession');
@@ -4271,6 +5009,7 @@ export function voteLeadSuccession(
     voterPubkey: string,
     choice: 'yes' | 'no' = 'yes'
 ): { ok: true; proposal: SuccessionProposalInfo; executed: boolean } {
+    assertPlainTablesWritable();
     if (choice !== 'yes' && choice !== 'no') throw new Error("Vote must be 'yes' or 'no'");
     const prop = db.prepare("SELECT * FROM enterprise_succession_proposals WHERE id = ?").get(proposalId) as any;
     if (!prop) throw new Error('Succession proposal not found');
@@ -4323,14 +5062,17 @@ export function getSuccessionProposals(enterprisePubkey: string): {
     inactivity: ReturnType<typeof getLeadInactivity>;
     proposals: SuccessionProposalInfo[];
 } {
-    expireSuccessionProposals(enterprisePubkey);
+    // A read that closes what is due first, on a main server. A standby's votes are its main server's, which closes them
+    // (config/node-role.ts assertPlainTablesWritable): it answers them as they are.
+    const standby = getNodeRole() === 'backup';
+    if (!standby) expireSuccessionProposals(enterprisePubkey);
     const inactivity = getLeadInactivity(enterprisePubkey);
 
     // Cancel active proposal if lead returned
     const active = db.prepare(
         "SELECT * FROM enterprise_succession_proposals WHERE enterprise_pubkey = ? AND status = 'active'"
     ).get(enterprisePubkey) as any;
-    if (active && leadReturnedSince(active)) closeSuccession(active, 'lead_returned');
+    if (active && !standby && leadReturnedSince(active)) closeSuccession(active, 'lead_returned');
 
     const rows = db.prepare(`
         SELECT * FROM enterprise_succession_proposals
@@ -4344,6 +5086,7 @@ export function getSuccessionProposals(enterprisePubkey: string): {
 
 /** Scheduler hook: apply keeper changes whose objection window has ended; close expired succession proposals. */
 export function tickEnterpriseKeepers(asOfTime?: number): { applied: number; failed: number; expired: number } {
+    assertPlainTablesWritable();
     const { applied, failed } = applyDueKeeperChanges(undefined, asOfTime);
     const expired = expireSuccessionProposals(undefined, asOfTime);
     return { applied, failed, expired };
@@ -4369,7 +5112,10 @@ export function vouchMember(voucherPubkey: string, targetPubkey: string, level: 
     if (!canVouch(voucherPubkey)) throw new Error('Only appointed vouchers can vouch for members');
     const lvl: VouchLevel = level === 2 || level === 3 ? level : 1;
     const vouchCredit = vouchCreditForLevel(lvl);
-    db.prepare(`UPDATE members SET elder_vouched_by = ?, vouch_credit = ? WHERE public_key = ?`).run(voucherPubkey, vouchCredit, targetPubkey);
+    // profile_updated_at too: the member directory names who vouched, and a phone's delta read carries only the rows whose
+    // profile_updated_at moved (engine getMemberDirectoryRows). Without it the vouch reached phones at their hourly full read.
+    db.prepare(`UPDATE members SET elder_vouched_by = ?, vouch_credit = ?, profile_updated_at = ? WHERE public_key = ?`)
+        .run(voucherPubkey, vouchCredit, new Date().toISOString(), targetPubkey);
     broadcast({ type: 'profile_updated', publicKey: targetPubkey });
     return { ok: true };
 }
@@ -4393,7 +5139,9 @@ export function unvouchMember(actorPubkey: string, targetPubkey: string): { ok: 
     if (!isAdmin && getBalance(targetPubkey).balance < 0) {
         throw new Error('Cannot withdraw: this member is still carrying a negative balance. They must return to 0 first.');
     }
-    db.prepare(`UPDATE members SET elder_vouched_by = NULL, vouch_credit = 0 WHERE public_key = ?`).run(targetPubkey);
+    // profile_updated_at too, for the directory's delta (vouchMember).
+    db.prepare(`UPDATE members SET elder_vouched_by = NULL, vouch_credit = 0, profile_updated_at = ? WHERE public_key = ?`)
+        .run(new Date().toISOString(), targetPubkey);
     broadcast({ type: 'profile_updated', publicKey: targetPubkey });
     return { ok: true };
 }
@@ -4407,6 +5155,7 @@ export function createPost(
         createdBy?: string;
         pollOptions?: Array<{ id: string; text: string }>;
         durationDays?: number;
+        pollOpenVote?: unknown;
         audienceScope?: AudienceScope;
         targetGroupId?: string;
         targetPubkey?: string;
@@ -4415,8 +5164,17 @@ export function createPost(
         eventEndAt?: unknown;
         eventPlaceName?: unknown;
         eventPrivateNote?: unknown;
+        /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
+        beforeWrite?: () => void;
     }
 ): MarketplacePost | null {
+    // The same rules an edit is held to (engine/post-fields.ts), before anything else: a price that is not a finite
+    // number of Beans never reaches a listing, whichever route made it.
+    const postFields: PostFieldsIn = { title, description, category, credits, priceType, lat, lng };
+    assertPostFields(postFields, 'create');
+    title = postFields.title as string;
+    description = postFields.description as string;
+    category = postFields.category as string;
     credits = beansOffPrice(credits);
     const post = createPostEngine(broadcast, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, id, cashAlsoNeeded, options);
     // An event or a poll posted to a group shows up in the group's chat as a card line (decision 12). The
@@ -4437,6 +5195,22 @@ export function getPosts(filter?: PostFilter): MarketplacePost[] {
     return getPostsEngine(db, filter);
 }
 
+/**
+ * The photo route's rule for a listing taken off (`active` not 1, routes/marketplace.ts): its photos still go to a
+ * signed request from its author, a moderator (nodeRoleOf), or anyone the listing's read by id still lets in (a
+ * cancelled event's hosts and the people Going). The lists that hand out a listing's photo URL (a member's trades, their
+ * chats) apply the same rule, so they hand a URL only to a reader the route would serve.
+ */
+export function offListingPhotoShownTo(viewer: string | undefined): engine.OffListingPhotoShown {
+    return (postId, authorPubkey) => !!viewer
+        && (viewer === authorPubkey || !!nodeRoleOf(viewer) || getPosts({ id: postId, viewerPubkey: viewer }).length > 0);
+}
+
+/** One page of the listings in heal order, for a phone whose photo URLs changed shape (engine getPostsForPhotoHeal). */
+export function getPostsForPhotoHeal(filter: PostFilter, heal: PhotoHealRead): MarketplacePost[] {
+    return getPostsForPhotoHealEngine(db, filter, heal);
+}
+
 export function removePost(id: string, authorPublicKey: string): boolean {
     // The push dispatcher is handed in rather than imported by the engine module (it imports this one), so
     // cancelling an event can notify everyone going (docs/events-on-the-map.md §2.2, slice 5).
@@ -4444,6 +5218,11 @@ export function removePost(id: string, authorPublicKey: string): boolean {
 }
 
 export function updatePost(id: string, authorPublicKey: string, updates: Partial<MarketplacePost> & { pollOptions?: Array<{ id: string; text: string }> }, actorPubkey?: string): MarketplacePost | null {
+    // Every field the edit names, held to the create path's rules (engine/post-fields.ts) before anything is written: a
+    // price of "abc" stored as text poisoned every buyer's balance with NaN (review F1, measured). The listing's own text,
+    // sent back unchanged, is not held to a length limit it was stored before (#1493).
+    const storedText = db.prepare('SELECT title, description, category FROM posts WHERE id = ?').get(id) as PostTextStored | undefined;
+    assertPostFields(updates as PostFieldsIn, 'edit', storedText);
     if (updates.credits !== undefined) updates = { ...updates, credits: beansOffPrice(updates.credits) };
     return updatePostEngine(broadcast, id, authorPublicKey, updates, dispatchPushNotification, actorPubkey);
 }
@@ -4460,10 +5239,23 @@ function beansOffPrice(credits: unknown): number {
 }
 
 /**
+ * Who hears that a deferred wage was paid: the keeper it paid, and the enterprise's keepers who may act for it
+ * (canOperateTreasury), the readers of its claims on its page (routes/treasury.ts `deferredClaims`). It names a person
+ * and what they were paid, so it never goes to the whole feed (balances and trades are private, 2026-09-28).
+ */
+function deferredWageRecipients(enterprisePubkey: string, keeperPubkey: string): string[] {
+    const out = new Set<string>([keeperPubkey]);
+    const keepers = db.prepare('SELECT member_pubkey FROM treasury_operators WHERE treasury_pubkey = ?').all(enterprisePubkey) as { member_pubkey: string }[];
+    for (const k of keepers) if (canOperateTreasury(k.member_pubkey, enterprisePubkey)) out.add(k.member_pubkey);
+    return [...out];
+}
+
+/**
  * Process pending deferred wage claims for an enterprise (docs/the-commons.md §2.4 Rule 6).
  * Automatically pays claims the moment the enterprise can legitimately pay (positive balance AND sufficient earned surplus).
  */
 export function processDeferredWageClaims(enterprisePubkey: string): number {
+    assertPlainTablesWritable();
     const ent = db.prepare('SELECT paused, status FROM members WHERE public_key = ?').get(enterprisePubkey) as any;
     if (ent?.paused === 1 || ent?.status === 'completed') {
         return 0; // While paused: no wage payments out
@@ -4542,9 +5334,10 @@ export function processDeferredWageClaims(enterprisePubkey: string): number {
                         enterprise: enterprisePubkey,
                         keeper: claim.keeper_pubkey,
                         amount: claim.amount,
-                    });
+                    }, deferredWageRecipients(enterprisePubkey, claim.keeper_pubkey));
                 } catch { }
-                // deferred_wage_paid goes to the member feed only.
+                // deferred_wage_paid goes to its keeper and the enterprise's keepers only; every other socket hears the
+                // listing leave the board, if it did.
                 if (listingDone) ringListingDoorbell('post_removed');
             }
         }
@@ -4599,6 +5392,101 @@ export function sweepEnterpriseCeiling(enterprisePubkey: string): number {
     }
     return 0;
 }
+
+/**
+ * Working off a debt (community modes slice 5, engine/names-debts.ts; design §4.2 (b), the Rule 7 sweep pattern): a member
+ * an admin confirmed with a repayment flag sends every Bean above 0 they hold to the Commons, until what they repay reaches
+ * the debt; then the record is settled and the flag clears. Only what is above 0 moves, never more than is left to repay,
+ * and never anything already spent. Runs after a payment to them commits: transfer()'s after-commit hook (direct
+ * payments, escrow releases and refunds, a dispute ruling's, stranded pledges returned) and payFromCommons'. A hardship
+ * grant Decision (decisions-engine.ts grant_hardship) is not swept: the community chose to give those Beans for hardship,
+ * and taking them straight back would undo its own Decision. They count toward the debt only once spent and earned back.
+ * Returns what moved.
+ */
+export function sweepRepayment(memberPubkey: string): number {
+    const debt = repaymentOf(memberPubkey);
+    if (!debt) return 0;
+    const { balance } = getBalance(memberPubkey);
+    // Down to the cent, never up: rounding up would take a part of a cent below 0.
+    const amount = Math.floor(Math.max(0, Math.min(balance, debt.amount - debt.repaid)) * 100 + 1e-9) / 100;
+    if (!(amount > 0)) return 0;
+    try {
+        conservingTransaction(() => {
+            const txn = moveToCommons(memberPubkey, amount, 'Working off a debt to the Commons', { allowMemberDebit: true });
+            if (!txn) throw new Error('the Commons refused the repayment');
+            // The same `repaid` a payment made for the debt adds to (engine/names-debts.ts countDebtPayment): never past the amount.
+            const counted = db.prepare(`UPDATE names_debts SET repaid = ROUND(repaid + ?, 2) WHERE id = ? AND status = 'open' AND ROUND(repaid + ?, 2) <= amount`)
+                .run(amount, debt.id, amount);
+            if (counted.changes !== 1) throw new Error('the debt is no longer open, or less is left on it');
+            db.prepare(`UPDATE names_debts SET status = 'settled', settled_how = 'work_off', settled_by = 'node', settled_at = ?, settle_ref = ?
+                        WHERE id = ? AND status = 'open' AND repaid >= amount`).run(new Date().toISOString(), txn.id, debt.id);
+        });
+    } catch (err) {
+        console.error(`[NamesDebts] Failed to sweep ${amount} Beans of a repayment:`, err);
+        return 0;
+    }
+    // To the member alone: who is working off a debt, and how much, is nobody else's business (debts are admins-only).
+    try { broadcast({ type: 'debt_repaid', publicKey: memberPubkey, amount }, [memberPubkey]); } catch { }
+    return amount;
+}
+
+/**
+ * Paying back a debt (design §4.2 (a)): a member sends Beans they hold to the Commons. Only what is above 0: a payment to
+ * the Commons never takes anyone into debt, so it skips no floor rule. With `debtId`, it pays that debt off by its amount
+ * in the same transaction (engine/names-debts.ts countDebtPayment), and the payment that clears it settles it.
+ *
+ * Safe to retry (engine/money-requests.ts): with a `requestId`, a repeat of the same payment gets the first answer back
+ * and pays nothing; the same id for a different payment is refused (409). Without one (an older app), paid each time.
+ * The checks run before the payment's conservingTransaction (a refusal is no ledger rebuild); the id is written inside it.
+ */
+export function payToCommons(memberPubkey: string, amount: unknown, debtId?: unknown, requestId?: unknown): PaidToCommons {
+    const request = moneyRequestOf(memberPubkey, PAY_COMMONS_ROUTE, requestId, { amount, debtId });
+    if (request) {
+        const first = priorAnswer<PaidToCommons>(request);
+        if (first) return first;
+    }
+    const m = getMember(memberPubkey);
+    if (!m || m.status !== 'active' || m.isTreasury || isVisitorKey(memberPubkey) || isSyntheticAccount(memberPubkey)) {
+        throw Object.assign(new Error('Only an active member pays the Commons.'), { status: 403 });
+    }
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || amount <= 0 || Math.abs(amount * 100 - Math.round(amount * 100)) > 1e-6) {
+        throw Object.assign(new Error('The amount is a number of Beans above 0, to the cent.'), { status: 400 });
+    }
+    // Within float noise of a cent (0.1 + 0.2): what is paid, stored and linked is that cent, never the noise.
+    const beans = Math.round(amount * 100) / 100;
+    const debt = debtId === undefined || debtId === null ? null : assertPayableDebt(debtId, beans);
+    // The same test as ledger.moveToCommons's guard inside the transaction, on the raw balance (decay leaves fractions of a
+    // cent; getBalance's is rounded): a refusal is here, in plain words, never a rollback and a ledger rebuild.
+    const raw = ledger.getAccount(memberPubkey).balance;
+    if (raw - beans < 0) {
+        const held = Math.max(0, Math.floor(raw * 100) / 100);
+        throw Object.assign(new Error(`You hold ${held} Beans: you can pay the Commons only what you hold.`), { status: 409 });
+    }
+    const answer = conservingTransaction(() => {
+        const t = moveToCommons(memberPubkey, beans, PAID_TO_COMMONS_MEMO, { allowMemberDebit: true, authSigner: memberPubkey });
+        if (!t) throw Object.assign(new Error('The Commons refused the payment.'), { status: 409 });
+        // Made for a debt: it pays that much off at once, and settles the debt when nothing is left.
+        const leftAfter = debt ? countDebtPayment(debt.id, t.id, memberPubkey, beans) : undefined;
+        const paid: PaidToCommons = { transactionId: t.id, amount: t.amount, ...(debt ? { left: debt.left, leftAfter, settled: leftAfter === 0 } : {}) };
+        if (request) recordAnswer(request, paid);
+        return paid;
+    });
+    try { broadcast({ type: 'profile_updated', publicKey: memberPubkey }); } catch { }
+    return answer;
+}
+
+/**
+ * POST /api/commons/pay's answer: the payment's reference and the Beans paid; for a debt, what was left on it before the
+ * payment, what is left after it, and whether it settled the debt.
+ */
+export interface PaidToCommons {
+    transactionId: string;
+    amount: number;
+    left?: number;
+    leftAfter?: number;
+    settled?: boolean;
+}
+const PAY_COMMONS_ROUTE = 'POST /api/commons/pay';
 
 export { recordDeferredWageClaim } from './engine/escrow.js';
 
@@ -5195,6 +6083,8 @@ export function closePoll(postId: string, authorPublicKey: string): MarketplaceP
     return closePollEngine(broadcast, postId, authorPublicKey);
 }
 
+export { closeExpiredPolls };
+
 export function votePoll(
     postId: string,
     voterPublicKey: string,
@@ -5263,6 +6153,8 @@ export function completePostTransaction(transactionId: string, confirmerPublicKe
     assertLedgerWritable();
     const res = completePostTransactionEngine(getEscrowCb(), transactionId, confirmerPublicKey, finalHours, opts);
     if (res) clearEnterpriseFloorCache();
+    // A seller working off a debt: the release is a transfer(), whose after-commit hook sweeps the sale's Beans above 0 to
+    // the Commons (sweepRepayment), as it does for a release or refund by an admin's dispute ruling.
     return res;
 }
 
@@ -5350,19 +6242,33 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
     const isStalled = daysInEscrow >= 7;
 
     const photos = (db.prepare('SELECT order_num, updated_at FROM post_photos WHERE post_id = ? ORDER BY order_num ASC').all(r.post_id) as any[])
-        .map(p => `/api/marketplace/posts/${r.post_id}/photos/${p.order_num}?v=${p.updated_at ? new Date(p.updated_at).getTime() : 0}`);
+        .map(p => engine.postPhotoUrl(r.post_id, p.order_num, p.updated_at, r.post_audience_scope));
 
-    // Chat context between buyer and seller
+    // Chat context between buyer and seller: their one-to-one chat only, the one the trade's system messages go to
+    // (injectSystemMessage), never a group or event chat the two of them happen to share.
     const convRow = db.prepare(`
         SELECT c.id FROM conversations c
         JOIN conversation_participants cp1 ON c.id = cp1.conversation_id AND cp1.public_key = ?
         JOIN conversation_participants cp2 ON c.id = cp2.conversation_id AND cp2.public_key = ?
+        WHERE c.type = 'dm' AND c.post_id IS NULL
+          AND (SELECT COUNT(*) FROM conversation_participants cp WHERE cp.conversation_id = c.id) = 2
         LIMIT 1
     `).get(r.buyer_pubkey, r.seller_pubkey) as any;
 
     let chat: { conversationId: string | null; messages: Message[] } | undefined = undefined;
     if (convRow?.id) {
-        const msgs = getConversationMessages(convRow.id, 50, 0);
+        // The two members' own messages as they are; of the node's plaintext notices in that chat (escrow placed,
+        // released, cancelled, a ruling: amounts and both keys), only this trade's, by the transactionId each notice
+        // carries. A repeatable listing the pair traded before shares this post id, so the post id is not enough; a
+        // notice without a transactionId is left out.
+        const msgs = getConversationMessages(convRow.id, 50, 0).filter(m => {
+            if (m.type !== 'system' && m.authorPubkey !== 'SYSTEM') return true;
+            try {
+                return JSON.parse(m.metadata || '{}')?.transactionId === r.id;
+            } catch {
+                return false;
+            }
+        });
         chat = {
             conversationId: convRow.id,
             messages: msgs
@@ -5414,12 +6320,13 @@ function mapDisputeRow(r: any): EscrowDisputeContext {
             buyer: {
                 pubkey: r.buyer_pubkey,
                 callsign: r.buyer_callsign || 'Anonymous',
-                avatarUrl: r.buyer_avatar_url || null
+                // Each party's photo as its URL, never the photo (#1478): a page of disputes reads none.
+                avatarUrl: avatarUrlOf(r.buyer_pubkey, r.buyer_avatar_ref)
             },
             seller: {
                 pubkey: r.seller_pubkey,
                 callsign: r.seller_callsign || 'Anonymous',
-                avatarUrl: r.seller_avatar_url || null
+                avatarUrl: avatarUrlOf(r.seller_pubkey, r.seller_avatar_ref)
             }
         },
         chat,
@@ -5437,10 +6344,11 @@ export function getEscrowDisputes(minDays = 7, limit = 50, offset = 0, status: '
                p.price_type AS post_price_type,
                p.credits AS post_credits,
                p.author_pubkey AS post_author_pubkey,
+               p.audience_scope AS post_audience_scope,
                buyer.callsign AS buyer_callsign,
-               buyer.avatar_url AS buyer_avatar_url,
+               buyer.avatar_ref AS buyer_avatar_ref,
                seller.callsign AS seller_callsign,
-               seller.avatar_url AS seller_avatar_url
+               seller.avatar_ref AS seller_avatar_ref
         FROM marketplace_transactions mt
         LEFT JOIN posts p ON mt.post_id = p.id
         LEFT JOIN members buyer ON mt.buyer_pubkey = buyer.public_key
@@ -5473,6 +6381,8 @@ export function countEscrowDisputes(minDays = 7): { pending: number; resolved: n
     return { pending: row.pending, resolved: row.resolved, all: row.all_count };
 }
 
+/** One trade on the Escrow Disputes list, by id: exactly the trades the list can show (one not finished yet, or one an
+ *  admin settled), so a finished or cancelled trade nobody disputed stays out of an admin's view (null → 404). */
 export function getEscrowDispute(transactionId: string): EscrowDisputeContext | null {
     const row = db.prepare(`
         SELECT mt.*,
@@ -5483,15 +6393,16 @@ export function getEscrowDispute(transactionId: string): EscrowDisputeContext | 
                p.price_type AS post_price_type,
                p.credits AS post_credits,
                p.author_pubkey AS post_author_pubkey,
+               p.audience_scope AS post_audience_scope,
                buyer.callsign AS buyer_callsign,
-               buyer.avatar_url AS buyer_avatar_url,
+               buyer.avatar_ref AS buyer_avatar_ref,
                seller.callsign AS seller_callsign,
-               seller.avatar_url AS seller_avatar_url
+               seller.avatar_ref AS seller_avatar_ref
         FROM marketplace_transactions mt
         LEFT JOIN posts p ON mt.post_id = p.id
         LEFT JOIN members buyer ON mt.buyer_pubkey = buyer.public_key
         LEFT JOIN members seller ON mt.seller_pubkey = seller.public_key
-        WHERE mt.id = ?
+        WHERE mt.id = ? AND (mt.status = 'pending' OR mt.dispute_resolution IS NOT NULL)
     `).get(transactionId) as any;
 
     if (!row) return null;
@@ -5511,27 +6422,74 @@ export function getMarketplaceTransaction(transactionId: string): MarketplaceTra
 }
 
 export function getMarketplaceTransactions(publicKey: string, filter?: { status?: string }, limit = 50, offset = 0): MarketplaceTransaction[] {
-    return getMarketplaceTransactionsEngine(db, publicKey, filter, limit, offset);
+    return getMarketplaceTransactionsEngine(db, publicKey, filter, limit, offset, offListingPhotoShownTo(publicKey));
 }
 
 // ===================== COMMUNITY INFO =====================
 
-export function getCommunityInfo(publicKey?: string): { memberCount: number; postCount: number; transactionCount: number; commonsBalance: number; currency: { type: string, value: string }; profile: NodeProfile; features: NodeFeatures } {
-    const memberCount = (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'").get() as any).c;
-    const postCount = getActivePostCount();
-    let txCount = 0;
-    if (publicKey) {
-        txCount = (db.prepare("SELECT COUNT(*) as c FROM transactions WHERE from_pubkey = ? OR to_pubkey = ?").get(publicKey, publicKey) as any).c;
-    } else {
-        txCount = (db.prepare("SELECT COUNT(*) as c FROM transactions").get() as any).c;
-    }
+type CommunityInfo = { memberCount: number; postCount: number; transactionCount: number; commonsBalance: number; currency: { type: string, value: string }; profile: NodeProfile; features: NodeFeatures & { door: Door } };
+
+interface CommunityCounts { memberCount: number; postCount: number; transactionCount: number }
+
+function countCommunity(): CommunityCounts {
+    return {
+        memberCount: (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'").get() as any).c,
+        postCount: getActivePostCount(),
+        transactionCount: (db.prepare("SELECT COUNT(*) as c FROM transactions").get() as any).c,
+    };
+}
+
+/**
+ * How long the node-wide counts a public read or a /ws greeting carries may be reused. Three full-table counts ran on
+ * every GET /api/community/info (throttle-exempt as a peer protocol read) and every socket's connect, on the one event
+ * loop (DoS review F4); now at most once in this long, or sooner once a member or a listing changes (the ETag version
+ * counters, engine/versions.ts). A card's count a few seconds behind a trade is nothing anyone can see.
+ */
+export const COMMUNITY_COUNTS_TTL_MS = 30_000;
+let countsCache: (CommunityCounts & { at: number; members: number; posts: number }) | null = null;
+
+/** The node-wide counts, from COMMUNITY_COUNTS_TTL_MS's cache. Never for a decision: getCommunityInfo counts afresh. */
+export function communityCountsCached(now = Date.now()): CommunityCounts {
+    const members = membersVersionNow();
+    const posts = postsVersionNow();
+    if (countsCache && now >= countsCache.at && now - countsCache.at < COMMUNITY_COUNTS_TTL_MS
+        && countsCache.members === members && countsCache.posts === posts) return countsCache;
+    countsCache = { ...countCommunity(), at: now, members, posts };
+    return countsCache;
+}
+
+/** Tests only: forget the cached counts and public health. */
+export function resetCommunityReadCaches(): void {
+    countsCache = null;
+    publicHealthCache = null;
+}
+
+function communityInfoWith(counts: CommunityCounts, publicKey?: string): CommunityInfo {
+    const txCount = publicKey
+        ? (db.prepare("SELECT COUNT(*) as c FROM transactions WHERE from_pubkey = ? OR to_pubkey = ?").get(publicKey, publicKey) as any).c
+        : counts.transactionCount;
     const config = getLocalConfig();
+    const { memberCount, postCount } = counts;
     // profile + features are additive: the apps read them to know what this node does; older apps ignore them.
     return {
         memberCount, postCount, transactionCount: txCount, commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100,
         currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' },
-        profile: getNodeProfile(), features: getNodeFeatures(),
+        // `door` (config/door.ts) last, so older apps ignore it: who may invite here.
+        profile: getNodeProfile(), features: { ...getNodeFeatures(), door: getDoor() },
     };
+}
+
+/** The community's counts, profile and features, counted afresh (the seed-invite route decides by memberCount). */
+export function getCommunityInfo(publicKey?: string): CommunityInfo {
+    return communityInfoWith(countCommunity(), publicKey);
+}
+
+/**
+ * The same for the public read (GET /api/community/info): the node-wide counts from communityCountsCached; the verified
+ * signer's own transaction count, the one per-caller figure, is counted for them (an index lookup, not a scan).
+ */
+export function getPublicCommunityInfo(publicKey?: string): CommunityInfo {
+    return communityInfoWith(communityCountsCached(), publicKey);
 }
 
 /**
@@ -5549,24 +6507,26 @@ function getMessagingCb() {
     return {
         broadcast,
         dispatchPushNotification,
+        rehearsePushNotification: (t: string[], a: string, ti: string, b: string, d: Record<string, any>, c: PushCategory, k: PushNoticeKind) =>
+            dispatchPushNotification(t, a, ti, b, d, c, k, true),
         registerVisitor
     };
 }
 
-export function createConversation(type: 'dm', participants: string[], createdBy: string, name?: string): Conversation | null {
-    return createConversationEngine(getMessagingCb(), type, participants, createdBy, name);
+export function createConversation(type: 'dm', participants: string[], createdBy: string, name?: string, beforeWrite?: () => void, opts: { asNode?: boolean } = {}): Conversation | null {
+    return createConversationEngine(getMessagingCb(), type, participants, createdBy, name, beforeWrite, opts);
 }
 
-export function sendMessage(conversationId: string, authorPubkey: string, ciphertext: string, nonce: string, type: 'text' | 'image' = 'text', attachment?: { data: string; nonce: string; mime?: string }, metadata?: string, clientId?: string): Message | null {
-    return sendMessageEngine(getMessagingCb(), conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, clientId);
+export function sendMessage(conversationId: string, authorPubkey: string, ciphertext: string, nonce: string, type: 'text' | 'image' = 'text', attachment?: { data: string; nonce: string; mime?: string }, metadata?: string, clientId?: string, beforeStore?: (stored: { ciphertext: string; metadata?: string }) => void): Message | null {
+    return sendMessageEngine(getMessagingCb(), conversationId, authorPubkey, ciphertext, nonce, type, attachment, metadata, clientId, { beforeStore });
 }
 
 export function toggleMessageReaction(messageId: string, authorPubkey: string, emoji: string): any {
     return toggleMessageReactionEngine(getMessagingCb(), messageId, authorPubkey, emoji);
 }
 
-export function editMessage(messageId: string, authorPubkey: string, ciphertext: string, nonce: string): Message {
-    return editMessageEngine(getMessagingCb(), messageId, authorPubkey, ciphertext, nonce);
+export function editMessage(messageId: string, authorPubkey: string, ciphertext: string, nonce: string, beforeStore?: () => void, metadata?: unknown): Message {
+    return editMessageEngine(getMessagingCb(), messageId, authorPubkey, ciphertext, nonce, beforeStore, metadata);
 }
 
 export function deleteOwnMessage(messageId: string, authorPubkey: string): Message {
@@ -5580,7 +6540,7 @@ export function injectSystemMessage(postId: string, type: SystemMessageTypeVal |
 }
 
 export function getConversationsByMember(pubkey: string): Conversation[] {
-    return getConversationsByMemberEngine(db, pubkey);
+    return getConversationsByMemberEngine(db, pubkey, offListingPhotoShownTo(pubkey));
 }
 
 export function getConversationMessages(conversationId: string, limit = 50, offset = 0): Message[] {
@@ -5705,32 +6665,72 @@ export function exportSyncState(nodeId: string, since?: string | null): Promise<
     return exportSyncStateWrapper(getSyncCb(), nodeId, since, COMMONS_BALANCE);
 }
 
+/**
+ * Before a whole copy (routes/backup.ts): the plain tables' rows past their age rule go, with no tombstone
+ * (engine/plain-tables.ts pruneAgedOut), so the copy names none a standby's own age rule would take. On a main server
+ * only: a standby's are its main server's. Returns how many rows went.
+ */
+export function pruneAgedOutRows(): number {
+    if (standbyWritesNothing()) return 0;
+    const pruned = pruneAgedOut();
+    if (pruned.activity_feed) bumpActivityVersion();
+    return Object.values(pruned).reduce((n, k) => n + k, 0);
+}
+
 export function signSyncPayload(payload: SyncPayload): Promise<SyncPayload> {
     return signSyncPayloadEngine(getSyncCb(), payload);
 }
 
+/** This server's signature over a payload's text, as signSyncPayload makes it (engine/sync.ts signSyncBody). */
+export function signSyncBody(body: string): Promise<{ signature: string; publicKey: string } | null> {
+    return signSyncBodyEngine(getSyncCb(), body);
+}
+
 /**
- * `full`: the payload is a whole copy of the main server (the puller's snapshot), not a delta. Only a whole copy shows
- * which recovery copies and which keepers' pledges the main server no longer holds. `seed` and `heldToSum`: what the puller decided about the
- * copy's conservation guard (engine/sync.ts ImportOptions); left out, the copy is held to the ledger here.
+ * `full`: the payload is a whole copy of the main server, not a delta. Only a whole copy shows which recovery copies,
+ * which keepers' pledges and which rows of the plain tables the main server no longer holds. `seed`: what the puller
+ * decided about the copy's conservation guard (engine/sync.ts ImportOptions); left out, the copy is held to the ledger
+ * here. `received`: a whole payload, or every page of one copy served in pages, in order (engine/sync.ts importRemoteState).
  */
-export function importRemoteState(remote: SyncPayload, opts: { full?: boolean } & ImportOptions = {}): Promise<ImportResult> {
+export function importRemoteState(received: SyncPayload | readonly SyncPayload[], opts: { full?: boolean } & Omit<ImportOptions, 'part' | 'whole'> = {}): Promise<ImportResult> {
+    const remote: SyncPayload = Array.isArray(received) ? mergeCopyPages(received) : received as SyncPayload;
     // An import writes the ledger from outside the money guards, so "this ledger has never moved" is looked at again.
-    return importRemoteStateEngine(getSyncCb(), remote, { seed: opts.seed, heldToSum: opts.heldToSum, whole: opts.full === true })
+    return importRemoteStateEngine(getSyncCb(), received, { seed: opts.seed, whole: opts.full === true })
         .then((result) => {
             // A standby clears its database of recovery copies deleted before the seal once its main server has sealed,
             // and at a whole copy removes the copies that server deleted before it; after a rollback past the seal (a new
             // seal epoch from its main server, or copies sent in the client's form after it cleared), it clears again
-            // (services/recovery-seal-key.ts). Never throws.
+            // (services/recovery-seal-key.ts). Never throws. Copies this import left out (more than one import takes) were
+            // neither imported nor compared, and change nothing here.
+            const shares = Array.isArray(remote.recoveryShares) && !result.tablesLeftOut.includes('recovery_shares') ? remote.recoveryShares : null;
             clearCopiesDroppedBeforeSeal({
                 standby: getNodeRole() === 'backup',
-                wholeCopy: opts.full && Array.isArray(remote.recoveryShares) ? remote.recoveryShares : null,
-                imported: Array.isArray(remote.recoveryShares) ? remote.recoveryShares : null,
+                wholeCopy: opts.full ? shares : null,
+                imported: shares,
                 mainEpoch: remote.sealEpoch,
             });
             return result;
         })
         .finally(forgetLedgerHistory);
+}
+
+/**
+ * One page of a whole copy served in pages, into this process's database: a staging database the stager builds the copy
+ * in (services/stager.ts), never a standby's live one. As a seed: the conservation guard runs once over the finished copy
+ * against the live ledger. The recovery seal's clean-up after an import is not run here: the staging holds nothing but the
+ * copy, and the standby runs it once the copy is swapped in (services/backup-puller.ts).
+ */
+export function importCopyPart(page: SyncPayload, part: CopyPart): Promise<ImportResult> {
+    return importRemoteStateEngine(getSyncCb(), page, { seed: true, part }).finally(forgetLedgerHistory);
+}
+
+/**
+ * A page of a copy served in pages, checked as the importer checks a payload: its signature, and a signer this standby
+ * trusts as its mirror (engine/sync.ts verifySyncPayload). Returns the signer's PeerId; throws otherwise.
+ */
+export function verifyCopyPage(page: SyncPayload): Promise<string> {
+    if (!isCopyPage(page)) return Promise.reject(new Error('[Sync] Not a page of a copy'));
+    return verifySyncPayload(getSyncCb(), page);
 }
 // ===================== RATINGS =====================
 
@@ -5780,6 +6780,23 @@ export function findPendingReport(reporterPubkey: string, targetPubkey: string, 
     };
 }
 
+/**
+ * A pending report given the reason its member picked when they reported the same thing again (POST /api/reports: a
+ * report changed to "Child safety"). Its updated_at moves, so a standby copies the new reason. Null once it is not
+ * pending.
+ */
+export function updatePendingReportReason(reportId: string, reason: string): AbuseReport | null {
+    const res = db.prepare(`UPDATE abuse_reports SET reason = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
+                             WHERE id = ? AND (status = 'pending' OR status IS NULL)`).run(reason.slice(0, 500), reportId);
+    if (res.changes === 0) return null;
+    const row = db.prepare(`SELECT id, reporter_pubkey, target_pubkey, target_post_id, target_pulse_item_id, reason, created_at FROM abuse_reports WHERE id = ?`).get(reportId) as any;
+    return {
+        id: row.id, reporterPubkey: row.reporter_pubkey, targetPubkey: row.target_pubkey,
+        targetPostId: row.target_post_id ?? undefined, targetPulseItemId: row.target_pulse_item_id ?? undefined,
+        reason: row.reason, createdAt: row.created_at, status: 'pending',
+    };
+}
+
 /** True once the reporter has filed REPORTS_PER_REPORTER_PER_HOUR reports in the last hour. */
 export function isReportRateLimited(reporterPubkey: string, now: number = Date.now()): boolean {
     const since = new Date(now - 60 * 60 * 1000).toISOString();
@@ -5804,6 +6821,17 @@ export function submitReport(reporterPubkey: string, targetPubkey: string, reaso
 }
 
 /**
+ * The author of a post here, for reporting it: a report on a post is about its author, whoever the reporter names
+ * (engine/burst-cleanup.ts opens the author's group from it). Null when no post here has this id: the phone app files an
+ * enterprise's report with the enterprise's key in targetPostId.
+ */
+export function getReportablePostAuthor(postId: unknown): string | null {
+    if (typeof postId !== 'string' || !postId) return null;
+    const row = db.prepare('SELECT author_pubkey FROM posts WHERE id = ?').get(postId) as { author_pubkey: string | null } | undefined;
+    return row?.author_pubkey || null;
+}
+
+/**
  * The owner of a live Pulse item, for reporting it. Null when the item does not exist or is
  * already tombstoned — there is nothing left on the feed to report.
  */
@@ -5812,7 +6840,18 @@ export function getReportablePulseItemOwner(itemId: string): string | null {
     return row?.owner_pubkey ?? null;
 }
 
+/** The databases that have report_is_child_safety() (a test may open more than one in a process). */
+const childSafetyFnOn = new WeakSet<object>();
+
 export function getReports(statusFilter?: string, limit?: number, offset?: number): { reports: AbuseReport[]; total: number; pendingCount: number } {
+    // Open child-safety reports first, read as the alerts read them, in SQL so a page of the queue holds the right ones
+    // (the alert says "look at it first, in the Manager's Reports queue": the follow-up to #1895). Once handled, one takes
+    // its date's place, so "All" never keeps a dismissed one (a false positive among them) above open ordinary reports
+    // (director, 14 Oct, on the review of #1912). It stays marked (childSafety) wherever it is listed.
+    if (!childSafetyFnOn.has(db)) {
+        db.function('report_is_child_safety', { deterministic: true }, (reason: unknown) => (reportKind(reason) === 'child safety' ? 1 : 0));
+        childSafetyFnOn.add(db);
+    }
     let whereClause = '';
     const params: any[] = [];
 
@@ -5837,17 +6876,20 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
                p.title as post_title, substr(p.description, 1, 500) as post_description,
                p.id as post_row_id, p.active as post_active, p.status as post_status,
                p.hidden_by_reports_at as post_hidden_at,
-               mp.callsign as post_author_callsign,
+               mp.callsign as post_author_callsign, p.author_pubkey as post_author_pubkey,
                pi.title as pulse_title, pi.platform as pulse_platform, pi.url as pulse_url,
-               pi.deleted_at as pulse_deleted_at
+               pi.deleted_at as pulse_deleted_at, pi.owner_pubkey as pulse_owner_pubkey, mpi.callsign as pulse_owner_callsign
         FROM abuse_reports ar
         LEFT JOIN members mr ON ar.reporter_pubkey = mr.public_key
         LEFT JOIN members mt ON ar.target_pubkey = mt.public_key
-        LEFT JOIN posts p ON ar.target_post_id = p.id
+        -- A Pulse report is about its item, whatever post id it carries (reportSubjectOf): no post is joined to it.
+        LEFT JOIN posts p ON ar.target_post_id = p.id AND ar.target_pulse_item_id IS NULL
         LEFT JOIN members mp ON p.author_pubkey = mp.public_key
         LEFT JOIN pulse_items pi ON ar.target_pulse_item_id = pi.id
+        LEFT JOIN members mpi ON pi.owner_pubkey = mpi.public_key
         ${whereClause}
-        ORDER BY ar.created_at DESC
+        ORDER BY CASE WHEN (ar.status = 'pending' OR ar.status IS NULL) AND report_is_child_safety(ar.reason) = 1 THEN 1 ELSE 0 END DESC,
+                 ar.created_at DESC
     `;
 
     const queryParams = [...params];
@@ -5862,18 +6904,30 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
 
     const rows = db.prepare(querySql).all(...queryParams) as any[];
     const reports = rows.map(r => ({ 
-        id: r.id, reporterPubkey: r.reporter_pubkey, targetPubkey: r.target_pubkey, 
-        targetPostId: r.target_post_id, reason: r.reason, createdAt: r.created_at,
+        // Who the report is about (reportSubjectOf, what actionReport acts on): on a Pulse item its owner, read from the
+        // item, whatever post id the row carries; on a post its author, read from the post, never the key the reporter
+        // wrote beside it. So every screen that names or freezes the target names the right member.
+        id: r.id, reporterPubkey: r.reporter_pubkey,
+        targetPubkey: r.target_pulse_item_id ? (r.pulse_owner_pubkey || r.target_pubkey)
+            : r.post_row_id ? (r.post_author_pubkey || '') : r.target_pubkey,
+        targetPostId: r.target_pulse_item_id ? undefined : r.target_post_id, reason: r.reason, createdAt: r.created_at,
+        childSafety: reportKind(r.reason) === 'child safety',
         status: r.status || 'pending',
         outcome: (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open') as AbuseReport['outcome'],
         reporterCallsign: r.reporter_callsign || (r.reporter_pubkey ? `@${r.reporter_pubkey.substring(0, 8)}` : 'Unknown Member'),
-        targetCallsign: r.target_callsign || (r.target_pubkey ? `@${r.target_pubkey.substring(0, 8)}` : 'Unknown Member'),
+        targetCallsign: r.target_pulse_item_id && r.pulse_owner_pubkey
+            ? (r.pulse_owner_callsign || `@${r.pulse_owner_pubkey.substring(0, 8)}`)
+            : r.post_row_id
+            ? (r.post_author_callsign || (r.post_author_pubkey ? `@${r.post_author_pubkey.substring(0, 8)}` : 'Unknown Member'))
+            : (r.target_callsign || (r.target_pubkey ? `@${r.target_pubkey.substring(0, 8)}` : 'Unknown Member')),
         postTitle: r.post_title || null,
         title: r.post_title || null,
         // The reported post, for a moderation list (fields added; the ones above are unchanged for old callers).
         // Only a real post: the phone app files an enterprise report with the enterprise's key in targetPostId.
         postId: r.post_row_id || null,
         postAuthorCallsign: r.post_row_id ? (r.post_author_callsign || null) : null,
+        // Who the report is about when it is about a post: its author, whatever targetPubkey the reporter sent.
+        postAuthorPubkey: r.post_row_id ? (r.post_author_pubkey || null) : null,
         // What the post says (its first 500 characters), so whoever triages the report can judge it from the report.
         postDescription: r.post_row_id ? (r.post_description ?? null) : null,
         // A post the admins or its author already took down.
@@ -5904,14 +6958,15 @@ export function getReportCount(): number {
  * Returns one row per member with post counts, message counts, trade volume, and escrow cancellation counts.
  * Single-pass SQL — no per-member queries needed on the frontend.
  */
-export function getMemberStats(): Record<string, { posts: number; messages: number; deals: number; volume: number; cancelled: number }> {
+/**
+ * Each member's posts up and messages sent, for the admins' member stats. No trade figures: an admin sees those only
+ * as the community's totals (getTradeTotals; queue item 29, Marty 4 Oct: "totals only in member stats").
+ */
+export function getMemberStats(): Record<string, { posts: number; messages: number }> {
     const rows = db.prepare(`
         SELECT m.public_key,
             COALESCE(p.post_count, 0) as post_count,
-            COALESCE(msg.msg_count, 0) as msg_count,
-            COALESCE(d.deal_count, 0) as deal_count,
-            COALESCE(d.volume, 0) as volume,
-            COALESCE(d.cancelled_count, 0) as cancelled_count
+            COALESCE(msg.msg_count, 0) as msg_count
         FROM members m
         LEFT JOIN (
             SELECT author_pubkey, COUNT(*) as post_count 
@@ -5923,35 +6978,26 @@ export function getMemberStats(): Record<string, { posts: number; messages: numb
             FROM messages WHERE author_pubkey != 'SYSTEM' 
             GROUP BY author_pubkey
         ) msg ON m.public_key = msg.author_pubkey
-        LEFT JOIN (
-            SELECT pubkey,
-                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as deal_count,
-                SUM(CASE WHEN status = 'completed' THEN credits ELSE 0 END) as volume,
-                SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_count
-            FROM (
-                SELECT buyer_pubkey as pubkey, status, credits FROM marketplace_transactions
-                UNION ALL
-                SELECT seller_pubkey as pubkey, status, credits FROM marketplace_transactions
-            ) combined
-            GROUP BY pubkey
-        ) d ON m.public_key = d.pubkey
     `).all() as any[];
 
-    const stats: Record<string, { posts: number; messages: number; deals: number; volume: number; cancelled: number }> = {};
-    for (const r of rows) {
-        stats[r.public_key] = {
-            posts: r.post_count,
-            messages: r.msg_count,
-            deals: r.deal_count,
-            volume: Math.round(r.volume * 100) / 100,
-            cancelled: r.cancelled_count
-        };
-    }
+    const stats: Record<string, { posts: number; messages: number }> = {};
+    for (const r of rows) stats[r.public_key] = { posts: r.post_count, messages: r.msg_count };
     return stats;
 }
 
+/** The community's trades in total, each trade once: how many finished, the Beans they came to, how many cancelled. */
+export function getTradeTotals(): { deals: number; volume: number; cancelled: number } {
+    const r = db.prepare(`SELECT
+            COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS deals,
+            COALESCE(SUM(CASE WHEN status = 'completed' THEN credits ELSE 0 END), 0) AS volume,
+            COALESCE(SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END), 0) AS cancelled
+        FROM marketplace_transactions`).get() as { deals: number; volume: number; cancelled: number };
+    return { deals: r.deals, volume: Math.round(r.volume * 100) / 100, cancelled: r.cancelled };
+}
+
 export function dismissReport(reportId: string): boolean {
-    const report = db.prepare("SELECT reporter_pubkey, target_post_id, status FROM abuse_reports WHERE id = ?").get(reportId) as any;
+    // A Pulse report is about its item, whatever post id it carries (reportSubjectOf): no post is rechecked or named.
+    const report = db.prepare("SELECT reporter_pubkey, CASE WHEN target_pulse_item_id IS NULL THEN target_post_id END AS target_post_id, status FROM abuse_reports WHERE id = ?").get(reportId) as any;
     // updated_at moves with status: the sync export selects on it, and without the bump replicas keep
     // showing the report as pending.
     const res = db.prepare("UPDATE abuse_reports SET status = 'reviewed', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
@@ -5980,12 +7026,57 @@ export function liftModerationMute(pubkey: string): boolean {
     return liftMuteEngine(moderationNoticeCb, pubkey);
 }
 
+/** A moderator hides the posts of a burst's accounts in one action (engine/burst-cleanup.ts), already checked. */
+export function hideBurst(anchor: string, keys: string[], byRole: BurstActorRole): BurstActionSummary {
+    return hideBurstPosts(moderationNoticeCb, anchor, keys, byRole);
+}
+
+/** A moderator undoes a burst hide (engine/burst-cleanup.ts). */
+export function undoBurst(actionId: string): UndoOutcome {
+    return undoBurstHide(moderationNoticeCb, actionId);
+}
+
+/**
+ * Who a report is about, as every moderator's action on it must read it. A report on a Pulse item is about the item's
+ * owner, read from the item, whatever post id the row carries: the route sets no post id on one since #1444, but a row
+ * filed before, or copied in, may carry any. A report on a post is about the post's author,
+ * read from the post here, whatever key the reporter wrote beside it: POST /api/reports writes the author since #1431
+ * and refuses a post id that isn't here, but a row filed before, or copied in from another server, may name anyone,
+ * and a post's id is its author's choice, so a post can arrive later under an id a report named first. Otherwise (a
+ * member, a Pulse item, whose owner the route sets, or an enterprise, whose key the phone sends in both fields) the key
+ * the report names. Null when it names nobody.
+ */
+function reportSubjectOf(report: { target_pubkey?: string | null; target_post_id?: string | null; target_pulse_item_id?: string | null }): string | null {
+    if (report.target_pulse_item_id) {
+        const item = db.prepare('SELECT owner_pubkey FROM pulse_items WHERE id = ?').get(report.target_pulse_item_id) as { owner_pubkey: string | null } | undefined;
+        return item?.owner_pubkey || report.target_pubkey || null;
+    }
+    const postAuthor = report.target_post_id
+        ? (db.prepare('SELECT author_pubkey FROM posts WHERE id = ?').get(report.target_post_id) as { author_pubkey: string | null } | undefined)
+        : undefined;
+    if (postAuthor) return postAuthor.author_pubkey || null;
+    return report.target_pubkey || null;
+}
+
+/**
+ * Whether actioning this report with suspendUser takes an owner's or admin's role away: actionReport deletes the
+ * subject's node_roles row, and only an owner may take away an owner or admin role (engine/node-roles.ts), so actionReport
+ * refuses it to anyone else. The route asks the phone's step-up on it (routes/admin.ts stepUpIfOwnerOnly).
+ */
+export function reportSuspensionTakesPrivilegedRole(reportId: string): boolean {
+    const report = db.prepare('SELECT target_pubkey, target_post_id, target_pulse_item_id FROM abuse_reports WHERE id = ?').get(reportId) as
+        { target_pubkey: string | null; target_post_id: string | null; target_pulse_item_id: string | null } | undefined;
+    if (!report) return false;
+    const subject = reportSubjectOf(report);
+    return !!subject && !isClosedAccountKey(subject) && !!heldPrivilegedRole(subject);
+}
+
 export function actionReport(
     reportId: string,
     deletePost: boolean = false,
     suspendUser: boolean = false,
     removePulseItem: boolean = false,
-    opts?: { reasonCategory?: string | null; onRefundShortfall?: (s: EscrowRefundShortfall) => void },
+    opts?: { reasonCategory?: string | null; onRefundShortfall?: (s: EscrowRefundShortfall) => void; actor?: string | null },
 ): boolean {
     // Notices go out after the commit, never from inside it: a rollback must not leave a member told of a removal.
     let takedown: { post: NonNullable<ReturnType<typeof removePostByAdmin>>; reporters: string[] } | null = null;
@@ -6000,11 +7091,22 @@ export function actionReport(
     const ok = db.transaction(() => {
         const report = db.prepare("SELECT * FROM abuse_reports WHERE id = ?").get(reportId) as any;
         if (!report) return false;
+        // Suspending takes the subject's node role away (below), and only an owner may take away an owner's or admin's
+        // role (node-roles; adminEmergencySuspend refuses an owner target the same way). Refused, 403, before any write,
+        // so the report stays as it was; actioning it without suspendUser is untouched. `actor` is the authenticated
+        // admin actor (routes/admin.ts resolveAdminActor), a pubkey or 'owner:password'; none given counts as no owner.
+        const subjectToSuspend = suspendUser ? reportSubjectOf(report) : null;
+        if (subjectToSuspend && !isClosedAccountKey(subjectToSuspend) && heldPrivilegedRole(subjectToSuspend) && !isOwnerLevelActor(opts?.actor)) {
+            const err: any = new Error('Only an owner can suspend an owner or admin');
+            err.status = 403;
+            throw err;
+        }
         const wasOpen = report.status === 'pending' || report.status == null;
         
         db.prepare("UPDATE abuse_reports SET status = 'actioned', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?").run(reportId);
         
-        if (deletePost && report.target_post_id) {
+        // Only a post report takes a post down: a Pulse report is about its item, whatever post id it carries.
+        if (deletePost && report.target_post_id && !report.target_pulse_item_id) {
             const removed = removePostByAdmin(report.target_post_id, s => shortfalls.push(s), true);
             if (removed) {
                 const reporters = closeOpenReportsOnPost(report.target_post_id);
@@ -6019,19 +7121,31 @@ export function actionReport(
             scrubPulseItems({ id: report.target_pulse_item_id });
         }
 
-        // A closed account (removed, or deleted by its owner) has nothing to suspend: 'suspended' would give its key back
-        // everything a suspended member may still sign, a way back with no vote. Its report is still actioned.
-        if (suspendUser && report.target_pubkey && !isClosedAccountKey(report.target_pubkey)) {
+        // The member the report is about: a post's author, read from the post, never the key the reporter wrote
+        // (reportSubjectOf). A closed account (removed, or deleted by its owner) has nothing to suspend: 'suspended'
+        // would give its key back everything a suspended member may still sign, a way back with no vote. Its report is
+        // still actioned.
+        const subject = reportSubjectOf(report);
+        if (suspendUser && subject && !isClosedAccountKey(subject)) {
             // #172 CR: Update updated_at timestamp so delta-sync watermarks pick up the status change
-            db.prepare("UPDATE members SET status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(report.target_pubkey);
-            try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(report.target_pubkey); } catch { }
+            db.prepare("UPDATE members SET status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE public_key = ?").run(subject);
+            // A re-key code waiting for them (or an expired one still holding their key, which a new code inherits from)
+            // writes the same 'suspended', and a cancel puts back the status it recorded (member-wizards.ts
+            // cancelRekeyCode). From now on that status is this report's 'suspended', which no cancel may undo.
+            db.prepare("UPDATE rekey_requests SET prior_status = 'suspended', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE old_pubkey = ? AND status IN ('pending', 'expired')").run(subject);
+            try { dropNodeRoleRow(subject, { actor: opts?.actor ?? undefined, how: 'suspended on a report' }); } catch { }
             noteTakeoverInputsChanged('member suspended by a report');
             // #172 CR: Pause all active posts of the suspended member so other members cannot initiate deals
-            db.prepare("UPDATE posts SET active = 0, status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE author_pubkey = ? AND active = 1").run(report.target_pubkey);
+            db.prepare("UPDATE posts SET active = 0, status = 'paused', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE author_pubkey = ? AND active = 1").run(subject);
             bumpMembersVersion();
             bumpPostsVersion();
-            suspended = report.target_pubkey;
+            suspended = subject;
         }
+        // Whether this report suspended its member, read by a cancel of a code with no prior status (cancelRekeyCode).
+        // Recorded on the first action; a later one (a takedown after the fact sends no suspendUser) only ever raises
+        // it, and leaves a report actioned before the node kept it (NULL, not known) as it is.
+        const record = suspended ? 1 : (report.suspended_member ?? (wasOpen ? 0 : null));
+        db.prepare('UPDATE abuse_reports SET suspended_member = ? WHERE id = ?').run(record, reportId);
         return true;
     })();
     const suspendedKey = suspended as string | null;
@@ -6055,6 +7169,19 @@ export function actionReport(
  * post: each author hears once, with the count, that this was routine tidying, not a takedown.
  */
 export function adminBulkDeletePosts(postIds: string[], opts?: { onRefundShortfall?: (s: EscrowRefundShortfall) => void }): number {
+    // While the Commons pot isn't a number, a listing holding a deal can't be removed (its refund moves Beans). Checked for
+    // every listing BEFORE any is removed, so a mixed batch is refused whole in the pause words, naming the held ones,
+    // rather than taking some down silently and then failing (#1465 follow-up, A).
+    if (!Number.isFinite(COMMONS_BALANCE)) {
+        const held = postIds.filter(id => db.prepare("SELECT 1 FROM marketplace_transactions WHERE post_id = ? AND status = 'pending' LIMIT 1").get(id));
+        if (held.length > 0) {
+            const names = held.map(id => {
+                const t = (db.prepare('SELECT title FROM posts WHERE id = ?').get(id) as { title?: string } | undefined)?.title;
+                return t ? `"${t}"` : id;
+            });
+            throw new CommonsPotUnknownError(`${held.length === 1 ? 'This listing holds a deal' : 'These listings hold deals'} that can't be refunded yet: ${names.join(', ')}. None of the listings you chose were removed; take those out of the list and try again.`);
+        }
+    }
     const removed: NonNullable<ReturnType<typeof removePostByAdmin>>[] = [];
     const reportersByPost = new Map<string, string[]>();
     for (const postId of postIds) {
@@ -6067,30 +7194,18 @@ export function adminBulkDeletePosts(postIds: string[], opts?: { onRefundShortfa
     return removed.length;
 }
 
-export function getPostCount(filter?: {
-    type?: string;
-    category?: string;
-    status?: string;
-    query?: string;
-    audienceScope?: AudienceScope | string;
-    viewerPubkey?: string;
-    targetGroupId?: string;
-}): number {
-    return getPostCountEngine(db, filter);
-}
-
 // ===================== COMMUNITY HEALTH =====================
 
 export interface HealthFlag { type: 'wash_trading' | 'isolated_branch' | 'inactive_member' | 'invite_spam' | 'sybil_funnel' | 'sybil_ring' | 'aggregate_spike' | 'cohort_velocity' | 'delinquency' | 'watchdog_recovery' | 'watchdog_down' | 'unhandled_rejections'; severity: 'warning' | 'alert' | 'critical'; description: string; members: string[]; }
 export interface WatchdogStatus { present: boolean; lastSeenAt: string | null; status: string | null; recoveries: number; lastRecoveryAt: string | null; healthy: boolean; }
-export interface CommunityHealth { nodeName: string; version: string; minAppVersion: string; appVersions: AppStoreVersions; currency: { type: string; value: string }; tree: any; activity: any; flags: HealthFlag[]; reportCount: number; watchdog: WatchdogStatus; }
+export interface CommunityHealth { nodeName: string; version: string; minAppVersion: string; minAppVersionFrom: string | null; appFloors: Record<AppPlatform, PlatformFloor>; appVersions: AppStoreVersions; currency: { type: string; value: string }; tree: any; activity: any; flags: HealthFlag[]; reportCount: number; watchdog: WatchdogStatus; }
 
 // Reads the host watchdog's status file (dropped into the data dir by
 // ops/watchdog). Absent file = no watchdog on this host (not an error). A file
 // whose heartbeat is older than WATCHDOG_STALE_MS means a watchdog was running
 // and has since died — worth surfacing so the fleet knows a node lost its guard.
 const WATCHDOG_STALE_MS = 5 * 60 * 1000;
-function readWatchdogStatus(): WatchdogStatus {
+export function readWatchdogStatus(): WatchdogStatus {
     const empty: WatchdogStatus = { present: false, lastSeenAt: null, status: null, recoveries: 0, lastRecoveryAt: null, healthy: false };
     try {
         const dataDir = process.env.BEANPOOL_DATA_DIR || join(process.cwd(), 'data');
@@ -6111,10 +7226,13 @@ function readWatchdogStatus(): WatchdogStatus {
     } catch { return empty; }
 }
 
-export function getCommunityHealth(): CommunityHealth {
-    const now = Date.now();
-    const t = getThresholds();
-    
+/** The health figures that scan tables: the member and activity counts both health reads carry. */
+interface HealthCounts {
+    totalMembers: number; activeMemberCount: number; inactiveMemberCount: number;
+    totalTransactions: number; totalPosts: number; last7Days: number; last30Days: number;
+}
+
+function countHealth(t: ReturnType<typeof getThresholds>): HealthCounts {
     // Active vs Inactive member counts (excluding genesis admin account)
     let activeMemberCount = 0;
     let inactiveMemberCount = 0;
@@ -6147,7 +7265,75 @@ export function getCommunityHealth(): CommunityHealth {
 
     // ⚡ O(1) SQL count instead of materialising every member row to read .length
     const totalMembers = (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'").get() as any).c;
-    
+    return {
+        totalMembers, activeMemberCount, inactiveMemberCount,
+        totalTransactions: (db.prepare(`SELECT COUNT(*) as c FROM transactions`).get() as any).c,
+        totalPosts: (db.prepare(`SELECT COUNT(*) as c FROM posts WHERE status IN ('active', 'pending')`).get() as any).c,
+        last7Days: (db.prepare(`SELECT COUNT(*) as c FROM transactions WHERE timestamp > datetime('now', '-7 days')`).get() as any).c,
+        last30Days: (db.prepare(`SELECT COUNT(*) as c FROM transactions WHERE timestamp > datetime('now', '-30 days')`).get() as any).c,
+    };
+}
+
+/** The fields both health reads share, from its counts and what is read live (config, versions, the Commons balance). */
+function healthBody(counts: HealthCounts, reportCount: number, watchdog: WatchdogStatus): Omit<CommunityHealth, 'flags'> {
+    const config = getLocalConfig();
+    return {
+        // The name alone (directoryName): getDirectoryInfo also counts the members, a scan this read threw away, and every
+        // phone asks it every 30 s (members' photos are inline, so the count read them all: the global load rehearsal).
+        nodeName: directoryName(),
+        version: getVersion(),
+        // The app reads both of these. `minAppVersion` is this node's floor — below it
+        // the app says so and will not let you dismiss it. `appVersions` is what the
+        // stores are publishing, looked up here so 1.1 MB of Play Store HTML is not
+        // downloaded onto a phone on a metered off-grid connection to learn one number.
+        // An app that names its platform gets that platform's floor here instead (routes/community.ts); one that
+        // doesn't (every build before the full-screen update) gets the lower of the two, never one above its own.
+        minAppVersion: getUnnamedAppFloor(),
+        // From the build that has the full-screen block (apps/native/utils/force-update.ts): each phone platform's floor
+        // as enforced (only once that store has the build), and whether it stops an app yet (the grace date,
+        // `minAppVersionFrom`, on this node's clock). Builds before it read `minAppVersion` above, as a banner.
+        minAppVersionFrom: getMinAppVersionFrom(),
+        appFloors: getAppFloors(),
+        appVersions: getAppStoreVersions(),
+        currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' },
+        tree: { totalMembers: counts.totalMembers, maxDepth: 0, widestBranch: { callsign: 'db-optimized', children: 0 }, avgBranchSize: 0 },
+        activity: {
+            totalTransactions: counts.totalTransactions,
+            totalPosts: counts.totalPosts,
+            last7Days: counts.last7Days,
+            last30Days: counts.last30Days,
+            activeMemberCount: counts.activeMemberCount,
+            inactiveMemberCount: counts.inactiveMemberCount,
+            commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100
+        },
+        reportCount,
+        watchdog
+    };
+}
+
+/**
+ * How long GET /api/community/health may reuse its counts, the pending reports and the watchdog's file. The route is
+ * public and throttle-exempt (a peer protocol read), every phone asks it every 30 s, and it ran getCommunityHealth
+ * whole: eight table scans and the fraud analysis (wash trading, rings, funnels), whose flags it then threw away (DoS
+ * review F4). Its floor and store versions, name and currency are read live, so a changed minimum app version reaches
+ * the next phone that asks.
+ */
+export const PUBLIC_HEALTH_TTL_MS = 30_000;
+let publicHealthCache: { at: number; counts: HealthCounts; reportCount: number; watchdog: WatchdogStatus } | null = null;
+
+/** What GET /api/community/health answers: the health without its flags, which are admin-only, and never computed. */
+export function getPublicCommunityHealth(now = Date.now()): Omit<CommunityHealth, 'flags'> {
+    if (!publicHealthCache || now < publicHealthCache.at || now - publicHealthCache.at >= PUBLIC_HEALTH_TTL_MS) {
+        publicHealthCache = { at: now, counts: countHealth(getThresholds()), reportCount: getReportCount(), watchdog: readWatchdogStatus() };
+    }
+    return healthBody(publicHealthCache.counts, publicHealthCache.reportCount, publicHealthCache.watchdog);
+}
+
+export function getCommunityHealth(): CommunityHealth {
+    const now = Date.now();
+    const t = getThresholds();
+    const counts = countHealth(t);
+
     // ========== HEALTH FLAG DETECTION ==========
     const flags: HealthFlag[] = [];
     
@@ -6276,38 +7462,35 @@ export function getCommunityHealth(): CommunityHealth {
             if (seen.has(row.farmer_pubkey)) continue;
             seen.add(row.farmer_pubkey);
 
-            // Isolation check: do the puppets trade with ANYONE else?
+            // ⚡ Bolt: O(1) batch query to count isolated puppets instead of running 2N queries per invitee loop
             const puppetPubkeys = db.prepare(`
                 SELECT public_key FROM members WHERE invited_by = ?
-            `).all(row.farmer_pubkey) as any[];
-            
-            let isolatedPuppets = 0;
-            for (const p of puppetPubkeys) {
-                const marketPartners = db.prepare(`
-                    SELECT COUNT(DISTINCT partner) as cnt FROM (
-                        SELECT seller_pubkey as partner FROM marketplace_transactions
-                        WHERE buyer_pubkey = ? AND seller_pubkey != ? AND status = 'completed'
-                        UNION
-                        SELECT buyer_pubkey as partner FROM marketplace_transactions
-                        WHERE seller_pubkey = ? AND buyer_pubkey != ? AND status = 'completed'
-                    )
-                `).get(p.public_key, row.farmer_pubkey, p.public_key, row.farmer_pubkey) as any;
+            `).all(row.farmer_pubkey) as { public_key: string }[];
 
-                const directPartners = db.prepare(`
-                    SELECT COUNT(DISTINCT partner) as cnt FROM (
-                        SELECT to_pubkey as partner FROM transactions
-                        WHERE from_pubkey = ? AND to_pubkey != ?
+            let isolatedPuppets = 0;
+            if (puppetPubkeys.length > 0) {
+                const puppetKeysJson = JSON.stringify(puppetPubkeys.map(p => p.public_key));
+                const nonIsolatedCount = (db.prepare(`
+                    SELECT COUNT(DISTINCT puppet) as cnt FROM (
+                        SELECT buyer_pubkey as puppet FROM marketplace_transactions
+                        WHERE buyer_pubkey IN (SELECT value FROM json_each(?)) AND seller_pubkey != ? AND status = 'completed'
+                        UNION
+                        SELECT seller_pubkey as puppet FROM marketplace_transactions
+                        WHERE seller_pubkey IN (SELECT value FROM json_each(?)) AND buyer_pubkey != ? AND status = 'completed'
+                        UNION
+                        SELECT from_pubkey as puppet FROM transactions
+                        WHERE from_pubkey IN (SELECT value FROM json_each(?)) AND to_pubkey != ?
                           AND to_pubkey NOT LIKE 'escrow_%' AND to_pubkey NOT LIKE 'project_%'
                           AND to_pubkey != 'commons' AND to_pubkey != 'SYSTEM'
                         UNION
-                        SELECT from_pubkey as partner FROM transactions
-                        WHERE to_pubkey = ? AND from_pubkey != ?
+                        SELECT to_pubkey as puppet FROM transactions
+                        WHERE to_pubkey IN (SELECT value FROM json_each(?)) AND from_pubkey != ?
                           AND from_pubkey NOT LIKE 'escrow_%' AND from_pubkey NOT LIKE 'project_%'
                           AND from_pubkey != 'commons' AND from_pubkey != 'SYSTEM'
                     )
-                `).get(p.public_key, row.farmer_pubkey, p.public_key, row.farmer_pubkey) as any;
+                `).get(puppetKeysJson, row.farmer_pubkey, puppetKeysJson, row.farmer_pubkey, puppetKeysJson, row.farmer_pubkey, puppetKeysJson, row.farmer_pubkey) as any)?.cnt || 0;
 
-                if ((marketPartners?.cnt || 0) + (directPartners?.cnt || 0) === 0) isolatedPuppets++;
+                isolatedPuppets = puppetPubkeys.length - nonIsolatedCount;
             }
 
             flags.push({
@@ -6434,33 +7617,8 @@ export function getCommunityHealth(): CommunityHealth {
         }
     } catch (e) { console.error('Health flag check (unhandled rejections) failed:', e); }
 
-    const config = getLocalConfig();
-    const reportCount = getReportCount();
-    
-    return {
-        nodeName: getDirectoryInfo()?.name || 'Local Discovery',
-        version: getVersion(),
-        // The app reads both of these. `minAppVersion` is this node's floor — below it
-        // the app says so and will not let you dismiss it. `appVersions` is what the
-        // stores are publishing, looked up here so 1.1 MB of Play Store HTML is not
-        // downloaded onto a phone on a metered off-grid connection to learn one number.
-        minAppVersion: getMinAppVersion(),
-        appVersions: getAppStoreVersions(),
-        currency: { type: config.currencyType || 'image', value: config.currencyValue || 'bean' },
-        tree: { totalMembers, maxDepth: 0, widestBranch: { callsign: 'db-optimized', children: 0 }, avgBranchSize: 0 },
-        activity: {
-            totalTransactions: (db.prepare(`SELECT COUNT(*) as c FROM transactions`).get() as any).c,
-            totalPosts: (db.prepare(`SELECT COUNT(*) as c FROM posts WHERE status IN ('active', 'pending')`).get() as any).c,
-            last7Days: (db.prepare(`SELECT COUNT(*) as c FROM transactions WHERE timestamp > datetime('now', '-7 days')`).get() as any).c,
-            last30Days: (db.prepare(`SELECT COUNT(*) as c FROM transactions WHERE timestamp > datetime('now', '-30 days')`).get() as any).c,
-            activeMemberCount,
-            inactiveMemberCount,
-            commonsBalance: Math.round(COMMONS_BALANCE * 100) / 100
-        },
-        flags,
-        reportCount,
-        watchdog
-    };
+    const { reportCount, watchdog: watchdogStatus, ...rest } = healthBody(counts, getReportCount(), watchdog);
+    return { ...rest, flags, reportCount, watchdog: watchdogStatus };
 }
 
 // ===================== ADMIN CONTROLS =====================
@@ -6496,14 +7654,15 @@ export function isAdminPubkey(publicKey: string): boolean {
  *
  * The row write and the announcement are therefore separate, and the prune announces after it commits.
  */
-export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled' | 'pruned') {
+export function setUserStatusRow(publicKey: string, status: 'active' | 'disabled' | 'pruned', by?: RoleChangeBy) {
     // An account its owner deleted stays closed, whoever asks (isDeletedByOwner). Each path that could ask answers first in
     // its own words (a reinstate vote, an admin halting a removal); this is the last line, and throws inside the caller's
     // transaction so nothing it wrote alongside stays either.
     if (status !== 'pruned' && isDeletedByOwner(publicKey)) throw new Error(OWNER_DELETED_REFUSAL);
     db.prepare("UPDATE members SET status=? WHERE public_key=?").run(status, publicKey);
+    // A role it takes away is told to the owners (engine/node-roles.ts dropNodeRoleRow), as by whom the caller says.
     if (status !== 'active') {
-        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
+        try { dropNodeRoleRow(publicKey, by ?? { how: status === 'pruned' ? 'removed from the community' : 'suspended' }); } catch { }
     }
     // Either way the owner set may have changed: an owner disabled or pruned, or one made active again.
     noteTakeoverInputsChanged(`member ${status === 'active' ? 'reactivated' : status}`);
@@ -6546,7 +7705,9 @@ export function adminSetCreditFrozen(publicKey: string, frozen: boolean) {
 export function adminSetTier(publicKey: string, tier: TierName): { ok: true } {
     if (!getMember(publicKey)) throw new Error('Member not found');
     const granted = grantedCreditForTier(tier);
-    db.prepare("UPDATE members SET earned_credit=? WHERE public_key=?").run(granted, publicKey);
+    // profile_updated_at too: the member directory carries the badge (earnedCredit), and a phone's delta read carries only
+    // the rows whose profile_updated_at moved (engine getMemberDirectoryRows).
+    db.prepare("UPDATE members SET earned_credit=?, profile_updated_at=? WHERE public_key=?").run(granted, new Date().toISOString(), publicKey);
     broadcast({ type: 'profile_updated', publicKey });
     return { ok: true };
 }
@@ -6685,9 +7846,10 @@ export function createTreasury(
         // Grandfather legacy floor: preserved if line > 0, otherwise derived from keepers' pledges.
         const signerVal = opts.locationAuthSigner || opts.leadKeeperPubkey || null;
         const now = new Date().toISOString();
-        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, avatar_url, status, is_treasury, earned_credit, earned_surplus, working_capital_ceiling, legacy_credit_floor, purpose, goal_amount, deadline_at, lifecycle, paused, lat, lng, location_auth_signer, auth_signer, location_updated_at)
-                    VALUES (?, ?, ?, ?, 'active', 1, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(pubKeyHex, trimmed, now, avatar, line, ceiling, line > 0 ? line : null, purpose, goalAmount, deadlineAt, lifecycle, paused, latVal, lngVal, latVal != null ? signerVal : null, latVal != null ? signerVal : null, latVal != null ? now : null);
+        db.prepare(`INSERT INTO members (public_key, callsign, joined_at, status, is_treasury, earned_credit, earned_surplus, working_capital_ceiling, legacy_credit_floor, purpose, goal_amount, deadline_at, lifecycle, paused, lat, lng, location_auth_signer, auth_signer, location_updated_at)
+                    VALUES (?, ?, ?, 'active', 1, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(pubKeyHex, trimmed, now, line, ceiling, line > 0 ? line : null, purpose, goalAmount, deadlineAt, lifecycle, paused, latVal, lngVal, latVal != null ? signerVal : null, latVal != null ? signerVal : null, latVal != null ? now : null);
+        setMemberPhoto(db, pubKeyHex, avatar);
         db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
         if (opts.leadKeeperPubkey) {
             const bound = db.prepare(`INSERT OR IGNORE INTO treasury_operators (treasury_pubkey, member_pubkey, role, granted_at, granted_by)
@@ -6803,13 +7965,23 @@ export function heldPrivilegedRole(publicKey: string): 'owner' | 'admin' | null 
 }
 
 /**
+ * Whether pruning this member by this actor is a change only an owner may make (assertMayPrune's condition, whoever is
+ * acting): they hold or have held aside an owner or admin role, and it is neither their own leaving nor a community
+ * Decision. The admin routes ask the phone's step-up on exactly this (routes/admin.ts stepUpIfOwnerOnly).
+ */
+export function pruneNeedsOwner(publicKey: string, actor: string): boolean {
+    return !!heldPrivilegedRole(publicKey) && actor !== publicKey && actor !== COMMUNITY_DECISION_ACTOR;
+}
+
+/**
  * node_roles: only an owner may grant (so only an owner may take away) an owner or admin role, and pruning
  * takes it away for good. A plain admin gets a 403. Leaving yourself and a community Decision are allowed.
  */
 export function assertMayPrune(publicKey: string, actor: string): void {
     const role = heldPrivilegedRole(publicKey);
     if (!role || actor === publicKey || actor === COMMUNITY_DECISION_ACTOR || isOwnerLevelActor(actor)) return;
-    const err: any = new Error(`Only an owner can remove ${role === 'owner' ? 'an owner' : 'an admin'}. Propose a Decision to remove them instead`);
+    // Not "propose a Decision instead": no community vote removes an owner or an admin (decisions-engine NODE_OPERATOR_EFFECTS).
+    const err: any = new Error(`Only an owner can remove ${role === 'owner' ? 'an owner' : 'an admin'}`);
     err.status = 403;
     throw err;
 }
@@ -6875,7 +8047,10 @@ export function adminPruneUser(publicKey: string, actor: string) {
         // `setUserStatusRow`, not `adminSetUserStatus` — the latter broadcasts, and a broadcast cannot be
         // rolled back. The posts UPDATE below can still fail, so announcing from in here would tell every
         // client the member was pruned while the database reverted.
-        setUserStatusRow(publicKey, 'pruned');
+        setUserStatusRow(publicKey, 'pruned', { actor, how: 'removed from the community' });
+        // Removed within a day of joining through the open door: their network asks the most door work for 7 days from
+        // the join (engine/door-signal.ts). Local, and nothing happens for anyone else.
+        noteRemovedNewcomer(publicKey);
         // A person's coarse area (G4) goes too: a pruned account can't sign the request that clears it.
         db.prepare('UPDATE members SET area_lat = NULL, area_lng = NULL, area_updated_at = NULL WHERE public_key = ? AND area_lat IS NOT NULL').run(publicKey);
         // Every post that could come back (PRUNE_CLOSES_POSTS_IN): a paused one too, or its author could put it back up
@@ -6889,18 +8064,29 @@ export function adminPruneUser(publicKey: string, actor: string) {
         const prunedAt = new Date().toISOString();
         scrubChannelRows({ ownerPubkey: publicKey }, prunedAt);
         scrubPulseItems({ ownerPubkey: publicKey }, prunedAt);
-        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
-        db.prepare("DELETE FROM suspended_node_roles WHERE member_pubkey = ?").run(publicKey);
-        try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
+        // The node role went with setUserStatusRow above, told once; the one a suspension held aside goes here.
+        deletePlainRows('suspended_node_roles', 'member_pubkey = ?', publicKey);
+        // Their groups' chats are locked to a roster they are no longer in: the next line waits for a rotation (§2.3).
+        markGroupEpochsStaleFor(publicKey);
+        // Their phones, with a tombstone each, so a standby drops them too (a plain table, design G4).
+        deletePlainRows('push_tokens', 'public_key = ?', publicKey);
         // A pruned account can't sign the request that removes a place watch (G5), and must hear nothing from one.
         dropPlaceWatches(publicKey);
         // What they wrote when they asked to join (G6) goes with them; the record of the knock stays.
         scrubKnocksOf(publicKey);
-        // The moderation notices kept for them: nobody can read them now (engine/kept-notices.ts).
+        // The moderation notices kept for them, and their pushes' details: nobody can read them now (engine/kept-notices.ts,
+        // engine/push-notices.ts).
         dropKeptNoticesOf(publicKey);
+        dropPushNoticesOf(publicKey);
         // Their block list: nobody can read it or change it now (engine/member-blocks.ts). The lists that block them are
         // their owners' and stay.
         dropBlocksOf(publicKey);
+        // The lines and conversations kept for them alone (engine/withheld-lines.ts): nobody can read them now.
+        dropWithheldOf(publicKey);
+        // And the notes on Beans they sent to someone who had blocked them (engine/withheld-notes.ts). Their rows stay.
+        dropWithheldNotesOf(publicKey);
+        // Their confirmation against the names list is revoked, and they no longer count as holding its key (engine/names-list.ts).
+        dropNamesListHoldOf(publicKey, 'removed', balance);
     });
     // Both announcements happen only once the transaction has committed.
     broadcast({ type: 'profile_updated', publicKey });
@@ -6930,11 +8116,17 @@ export function adminPruneUser(publicKey: string, actor: string) {
  * 2. Settles positive or negative balance with COMMONS_POOL (a removal already settled it: then nothing moves).
  * 3. Anonymizes the profile (callsign -> 'Deleted Member', removes avatar, bio, archetype, contact, coarse area) and marks
  *    it deleted by its owner.
- * 4. Closes its open and paused polls, and cancels every other post that could come back (active, pending, paused).
+ * 4. Closes its open and paused polls, and cancels every other post that could come back (active, pending, paused). Every
+ *    post but a poll, whatever its status, then loses its title, description, photos and place (engine/post-scrub.ts).
+ *    Every line it wrote in a chat becomes a tombstone, and the photos it sent go (engine/message-tombstone.ts).
  * 5. Purges push tokens, recovery copies, friend links, preferences, and recovery state.
  * 6. Writes tombstones for delta-sync replication.
  * 7. Leaves each enterprise they keep as a keeper who steps down does (keeperLeaves): a lead's place goes to the
  *    longest-serving active keeper, or the enterprise pauses with nobody left. Closes the keeper changes naming them.
+ * 8. Takes their name and key out of this server's log (system_logs): each reads "a deleted member" (logger.ts).
+ * Once it has committed, empties the WAL, which still holds what the transaction replaced (db/wal-truncate.ts), and
+ * deletes the objects of the photos it removed. Their profile picture was a value in their row, never a stored object,
+ * so it went with the row. Snapshots and backups made before keep all of it until they go (services/snapshot-scheduler.ts).
  */
 export function purgeMemberSelf(publicKey: string): { ok: boolean; message: string } {
     // Any row the key has here: a member's, a closed one, or a visitor's. A key with no row has no account to delete.
@@ -7007,11 +8199,12 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         const now = new Date().toISOString();
 
         // 4. Anonymize member record and reset privileges
+        // The photo first: its writer stamps the row, and the UPDATE below sets the stamp this deletion is.
+        setMemberPhoto(db, publicKey, null);
         db.prepare(`
             UPDATE members 
             SET status = 'pruned',
                 callsign = 'Deleted Member',
-                avatar_url = NULL,
                 bio = NULL,
                 contact_value = NULL,
                 contact_visibility = NULL,
@@ -7029,6 +8222,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
                 updated_at = ?
             WHERE public_key = ?
         `).run(now, now, now, publicKey);
+        // The activity feed's own copies of their name (its join line, a ruling's other party): every other line reads it
+        // from the row above.
+        renameMemberInActivity(publicKey, 'Deleted Member');
 
         // 5. Close open polls immediately, retaining votes; cancel every other post that could come back (as adminPruneUser)
         db.prepare(`
@@ -7039,23 +8235,38 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
             WHERE author_pubkey = ? AND type = 'poll' AND status IN ${POLLS_A_PRUNE_CLOSES}
         `).run(now, publicKey);
         db.prepare(`
-            UPDATE posts 
-            SET status = 'cancelled', 
-                active = 0, 
-                updated_at = ? 
+            UPDATE posts
+            SET status = 'cancelled',
+                active = 0,
+                updated_at = ?
             WHERE author_pubkey = ? AND status IN ${PRUNE_CLOSES_POSTS_IN}
         `).run(now, publicKey);
+        // Then every post they wrote but a poll, whatever its status, loses its words, photos and place (report C14,
+        // engine/post-scrub.ts). Not in a try, as deleteAllShares below: a post left behind would keep what they wrote.
+        scrubPostsOf(publicKey, now);
+        // And every line they wrote, in a group's, an enterprise's or an event's chat and their half of each DM, reads
+        // "This message was deleted", with the photos they sent gone (data-at-rest report F1, engine/message-tombstone.ts).
+        // Not in a try either, for the same reason.
+        blankMessagesOf(publicKey);
 
-        // 6. Purge private device tokens, communication links, and recovery metadata
-        try { db.prepare("DELETE FROM push_tokens WHERE public_key = ?").run(publicKey); } catch { }
+        // 6. Purge private device tokens, communication links, and recovery metadata. The plain tables' rows (design G4)
+        // with a tombstone each, so a standby drops them too.
+        deletePlainRows('push_tokens', 'public_key = ?', publicKey);
         dropPlaceWatches(publicKey);
         scrubKnocksOf(publicKey);
         dropKeptNoticesOf(publicKey);
+        dropPushNoticesOf(publicKey);
         // Their block list goes with the profile, under one tombstone for the list, so a standby deletes it too (engine/member-blocks.ts).
         dropBlocksOf(publicKey);
+        // And what they sent to someone who had blocked them, kept for them alone (engine/withheld-lines.ts). Never copied.
+        dropWithheldOf(publicKey);
+        // And the notes on Beans they sent to such a person (engine/withheld-notes.ts). Never copied either.
+        dropWithheldNotesOf(publicKey);
         try { db.prepare("DELETE FROM member_preferences WHERE public_key = ?").run(publicKey); } catch { }
-        try { db.prepare("DELETE FROM chat_mutes WHERE member_pubkey = ?").run(publicKey); } catch { }
-        try { db.prepare("DELETE FROM thread_read_cursors WHERE member_pubkey = ?").run(publicKey); } catch { }
+        deletePlainRows('chat_mutes', 'member_pubkey = ?', publicKey);
+        deletePlainRows('thread_read_cursors', 'member_pubkey = ?', publicKey);
+        // Their groups' chats are locked to a roster they have left: the next line waits for a member to rotate (§2.3).
+        markGroupEpochsStaleFor(publicKey);
         // Channels are tombstoned rather than deleted, and their links are cleared with them: the
         // row has to survive so the removal replicates to the backup, but a member who has just
         // erased their profile should not leave their Instagram handle behind on a mirror.
@@ -7067,7 +8278,9 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // behind here would still bring the deleted account back, so a failure fails the deletion instead.
         deleteAllShares(publicKey);
         try {
-            db.prepare("DELETE FROM recovery_releases WHERE collection_id IN (SELECT id FROM recovery_collections WHERE owner_pubkey = ?)").run(publicKey);
+            // By the owner each row names, which a server that took over has too (its sessions stay each server's own), and
+            // by their sessions here, for a row made before rows named their owner.
+            deletePlainRows('recovery_releases', 'owner_pubkey = ? OR collection_id IN (SELECT id FROM recovery_collections WHERE owner_pubkey = ?)', publicKey, publicKey);
             db.prepare("DELETE FROM recovery_collections WHERE owner_pubkey = ?").run(publicKey);
         } catch { }
         // A member who deletes their own account frees the sign-in account they joined with through the open door,
@@ -7076,7 +8289,11 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // would be a way out of the sanction with the same sign-in; never on adminPruneUser, so a member the
         // community removed cannot walk straight back in (engine/open-join.ts); and so not when that member deletes
         // the account afterwards either, nor for a visitor's row, which joined through no door.
-        if (!closed && member.status !== 'suspended' && member.status !== 'disabled' && !isVisitorKey(publicKey)) releaseOpenJoin(publicKey);
+        if (!closed && member.status !== 'suspended' && member.status !== 'disabled' && !isVisitorKey(publicKey)) {
+            releaseOpenJoin(publicKey);
+            // With their connection label goes every record of a burst action that names them (engine/burst-cleanup.ts).
+            forgetBurstActionsOf(publicKey);
+        }
         try {
             const existingFriends = db.prepare("SELECT owner_pubkey, friend_pubkey FROM friends WHERE owner_pubkey = ? OR friend_pubkey = ?").all(publicKey, publicKey) as { owner_pubkey: string; friend_pubkey: string }[];
             for (const f of existingFriends) {
@@ -7104,7 +8321,7 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         try {
             if (db.prepare("DELETE FROM treasury_operators WHERE treasury_pubkey = ?").run(publicKey).changes > 0) engine.keepersChanged(db, publicKey);
         } catch { }
-        try { db.prepare("DELETE FROM node_roles WHERE member_pubkey = ?").run(publicKey); } catch { }
+        try { dropNodeRoleRow(publicKey, { actor: publicKey, how: 'by deleting their own account' }); } catch { }
         // The same line `adminPruneUser` carries, and for the same reason. A SUSPENDED member's node
         // role is not in node_roles at all — the suspension parked it in `suspended_node_roles`, to be
         // given back if the community does not keep the suspension — and the request-signing middleware
@@ -7113,9 +8330,26 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
         // anonymized and can never be reinstated: `nodeHasOwner()` would report an owner forever on a
         // node that genuinely has none, and the admin-key bootstrap it guards would be blocked for good
         // (#1006 review). Removing the member outright removes what was being held for them.
-        db.prepare("DELETE FROM suspended_node_roles WHERE member_pubkey = ?").run(publicKey);
+        deletePlainRows('suspended_node_roles', 'member_pubkey = ?', publicKey);
+        // Their confirmation against the names list is revoked, and they no longer count as holding its key (engine/names-list.ts).
+        // The entry an admin keeps is the community's record, not theirs: an admin deletes it.
+        dropNamesListHoldOf(publicKey, 'account_deleted', balance);
+        // 8. Last, so a line logged above is caught too: their name and key out of this server's log, as "a deleted member"
+        // (data-at-rest report F5, logger.ts scrubMemberFromLogs). With the keys a re-key replaced, which a re-key's
+        // line names. Not in a try, as deleteAllShares above: a line left behind would keep their name.
+        const formerKeys = (db.prepare(`
+            WITH RECURSIVE replaced(k) AS (
+                SELECT public_key FROM invalidated_keys WHERE rekeyed_to = ? COLLATE NOCASE
+                UNION SELECT i.public_key FROM invalidated_keys i JOIN replaced r ON i.rekeyed_to = r.k COLLATE NOCASE
+            ) SELECT k FROM replaced`).all(publicKey) as { k: string }[]).map((r) => r.k);
+        // Their name and keys out of the push notices kept for the people they wrote to, too (engine/push-notices.ts).
+        neutralisePushNoticesNaming(member.callsign, [publicKey, ...formerKeys], publicKey);
+        scrubMemberFromLogs(member.callsign, [publicKey, ...formerKeys]);
     });
     noteTakeoverInputsChanged('member purged their account');
+    // Their picture's bytes as the avatar route last decoded them, held in memory: never served again (the route checks
+    // the row), but nor kept until the cache happens to drop them (data-at-rest report F6).
+    getAvatarService().delete(publicKey);
 
     broadcast({ type: 'profile_updated', publicKey });
     broadcast({ type: 'user_pruned', publicKey });
@@ -7127,13 +8361,14 @@ export function purgeMemberSelf(publicKey: string): { ok: boolean; message: stri
     }
     // Their listings, cancelled above, leave the board (and an enterprise they led alone, paused, rings its own).
     ringListingDoorbell('post_removed');
+    // What the transaction replaced is zeroed in state.db, but state.db-wal still holds it as it was (report F2).
+    truncateWalAfterDelete('a member deleted their account');
 
     return { ok: true, message: 'Account successfully purged from node.' };
 }
 
-export function adminPruneBranch(rootPublicKey: string, actor: string) {
-    // Walk the whole invite subtree first and check every member, so a branch holding an owner or admin the
-    // actor may not remove is refused before anyone in it is pruned (each prune commits on its own).
+/** The member and everyone in their invite subtree: what adminPruneBranch prunes. */
+export function inviteBranchOf(rootPublicKey: string): string[] {
     const branch: string[] = [];
     const seen = new Set<string>();
     function walk(pubkey: string) {
@@ -7144,6 +8379,13 @@ export function adminPruneBranch(rootPublicKey: string, actor: string) {
         children.forEach(c => walk(c.public_key));
     }
     walk(rootPublicKey);
+    return branch;
+}
+
+export function adminPruneBranch(rootPublicKey: string, actor: string) {
+    // Walk the whole invite subtree first and check every member, so a branch holding an owner or admin the
+    // actor may not remove is refused before anyone in it is pruned (each prune commits on its own).
+    const branch = inviteBranchOf(rootPublicKey);
     for (const pubkey of branch) assertMayPrune(pubkey, actor);
     // The node must keep an active owner. Checked for the branch as a whole, not member by member: two
     // co-owners in one branch are each not the sole owner until the first is pruned.
@@ -7167,7 +8409,8 @@ export function adminBroadcastAnnouncement(title: string, body: string, severity
     try {
         const activeMembers = db.prepare("SELECT public_key FROM members WHERE status != 'disabled' AND status != 'pruned' AND is_visitor = 0").all() as { public_key: string }[];
         const targetPubkeys = activeMembers.map(m => m.public_key);
-        dispatchPushNotification(targetPubkeys, 'SYSTEM', title, body, { type: 'system_announcement' }, 'marketplace');
+        // The push says only "Your community has a notice for you" (D3): the operator's words are the notice's details.
+        dispatchPushNotification(targetPubkeys, 'SYSTEM', title, body, { type: 'system_announcement' }, 'marketplace', 'community.notice');
     } catch (e: any) {
         console.error('[Push Announcement] Failed to send push notification broadcast:', e.message);
     }
@@ -7177,8 +8420,16 @@ export function adminSendMessage(targetPubkey: string, body: string, senderPubke
     let adminPubkey = senderPubkey || getFirstNodeAdminPubkey() || getAdminPubkey();
     if (!adminPubkey) throw new Error('No genesis admin configured');
     if (adminPubkey.toLowerCase() === 'system') adminPubkey = 'system';
-    const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey);
-    if (conv) sendMessage(conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1');
+    // The node's own words, so a block never withholds the conversation (engine/messaging.ts) nor the line.
+    const conv = createConversation('dm', [adminPubkey, targetPubkey], adminPubkey, undefined, undefined, { asNode: true });
+    // The operator typed this on the node's admin page, so the node has the words already: it is the node's own
+    // line, stored readable, not a member's DM (which must arrive encrypted — engine/messaging.ts). Marked so (core
+    // dm-crypto DM_FROM_ADMINS_KEY): both apps show it as the community admins' message, which the server can read, and
+    // never as a private one; a readable line in a DM without the mark is shown as nobody's words.
+    if (conv) {
+        sendMessageEngine(getMessagingCb(), conv.id, adminPubkey, Buffer.from(body, 'utf-8').toString('base64'), 'plaintext-v1',
+            'text', undefined, JSON.stringify({ [DM_FROM_ADMINS_KEY]: true }), undefined, { nodeAuthored: true });
+    }
 }
 
 export function migrateAdminConversations() {} // Deprecated, state is clean now.
@@ -7209,7 +8460,6 @@ export function getNodeConfig(): NodeConfig {
         const pub = config.publishToDirectory !== false;
         config.publishLocation = pub;
         config.publishMembers = pub;
-        config.publishContacts = pub;
         config.publishHealth = pub;
         delete config.publishToDirectory;
         delete config.password;
@@ -7219,7 +8469,8 @@ export function getNodeConfig(): NodeConfig {
         serviceRadius: config.serviceRadius,
         publishLocation: config.publishLocation !== false,
         publishMembers: config.publishMembers !== false,
-        publishContacts: config.publishContacts !== false,
+        publishContactEmail: config.publishContactEmail === true,
+        publishContactPhone: config.publishContactPhone === true,
         publishHealth: config.publishHealth !== false,
         directoryPushIntervalHours: typeof config.directoryPushIntervalHours === 'number' ? config.directoryPushIntervalHours : 12,
         lastDirectoryPush: config.lastDirectoryPush,
@@ -7235,10 +8486,20 @@ export function getNodeConfig(): NodeConfig {
     return finalConfig;
 }
 
+let publicAddressWrites = 0;
+/**
+ * How many times the stored public address has been written since this server started, by any writer (Settings' claim and
+ * Take offline, the address agent, a take-over). A registrar call that began at one count stores its answer only while the
+ * count is the same (services/tunnel-connector.ts persistAddressIfUnchanged): a late answer never overwrites an address
+ * set after the call began.
+ */
+export const publicAddressGeneration = (): number => publicAddressWrites;
+
 export function updateNodeConfig(update: Partial<NodeConfig>): NodeConfig {
     const current = getNodeConfig();
     const next = { ...current, ...update };
     db.prepare(`INSERT INTO node_config (key, value) VALUES ('node_config', ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(JSON.stringify(next));
+    if ('publicAddress' in update) publicAddressWrites++;
     // The public address (with its tunnel token) is in the take-over envelope.
     if ('publicAddress' in update) noteTakeoverInputsChanged('public address changed');
     if ('ownerAddresses' in update) noteTakeoverInputsChanged('confirmed app addresses changed');
@@ -7266,13 +8527,49 @@ export function lostRegistrarHosts(config: NodeConfig = getNodeConfig()): Set<st
     return out;
 }
 
+/** Where resolvePublicNodeUrl looks for this community's address, per caller (PUBLIC_URL_RULES). */
+export interface PublicUrlRules {
+    /**
+     * `any`: a plain-string `publicAddress`, else its `hostname`, else its `name` (`<name>.beanpool.org` when it has no
+     * dot, as for a claim the registrar hasn't answered with a hostname yet). `hostname`: its `hostname` only.
+     */
+    publicAddress: 'any' | 'hostname';
+    /** When `publicAddress` gives none: CF_RECORD_NAME, a bare name as `<name>.beanpool.org` (`in-zone`) or as set (`as-set`); or none (`never`). */
+    cfRecordName: 'in-zone' | 'as-set' | 'never';
+    /** `skip`: never a name marked lost (lostRegistrarHosts); the next source is tried. `keep`: lost or not. */
+    lostNames: 'skip' | 'keep';
+}
+
 /**
- * This community's public address: the registrar's `publicAddress.hostname`, else `<name>.beanpool.org`, else
- * CF_RECORD_NAME. Never a lost name (lostRegistrarHosts): the directory's `publicUrl` and this community's own names
- * (engine/own-addresses.ts item 1) must not send anyone to a name another community holds.
+ * Each caller's rules. They differ as the callers did before they shared this one resolver (#1112's note): the
+ * differences are kept, and written here rather than in copies (test-public-url-callers.ts pins every caller's output).
  */
-export function resolvePublicNodeUrl(config: NodeConfig = getNodeConfig()): string | null {
-    const lost = lostRegistrarHosts(config);
+export const PUBLIC_URL_RULES = {
+    /** The directory's `publicUrl` (getDirectoryInfo) and this community's own names (engine/own-addresses.ts item 1). */
+    community: { publicAddress: 'any', cfRecordName: 'in-zone', lostNames: 'skip' },
+    /** Where this server asks for its own identity-epoch statement (services/identity-epoch.ts ownPublicEpochUrl). */
+    identityEpoch: { publicAddress: 'hostname', cfRecordName: 'as-set', lostNames: 'skip' },
+    /**
+     * Where a standby, before it takes over, asks whether another server took over with the same keys (services/identity-
+     * epoch.ts newerTakeoverAnswering): the community's address from the keys only, never this standby's own CF_RECORD_NAME.
+     */
+    takeoverCheck: { publicAddress: 'hostname', cfRecordName: 'never', lostNames: 'skip' },
+    /** The `buyerHomeNode` a cross-community purchase or commission sends (routes/federation-*.ts); the peer works it out when null. */
+    buyerHomeNode: { publicAddress: 'hostname', cfRecordName: 'never', lostNames: 'keep' },
+} as const satisfies Record<string, PublicUrlRules>;
+
+/**
+ * This community's public address, `https://<host>`, or null: by default (`community`) the registrar's
+ * `publicAddress.hostname`, else `<name>.beanpool.org`, else CF_RECORD_NAME, never a lost name: the directory's `publicUrl`
+ * and this community's own names must not send anyone to a name another community holds. A scheme and trailing slashes
+ * are taken off; a host that is nothing else is none. With no `config` it reads node_config, and one it can't read is
+ * none (a purchase or the epoch check never fails over it).
+ */
+export function resolvePublicNodeUrl(rules: PublicUrlRules = PUBLIC_URL_RULES.community, config?: NodeConfig | null): string | null {
+    if (config === undefined) {
+        try { config = getNodeConfig(); } catch { config = null; }
+    }
+    const lost = config && rules.lostNames === 'skip' ? lostRegistrarHosts(config) : new Set<string>();
     const usable = (host: string | null): string | null => {
         if (!host) return null;
         const clean = host.replace(/^https?:\/\//, '').replace(/\/+$/, '');
@@ -7281,36 +8578,45 @@ export function resolvePublicNodeUrl(config: NodeConfig = getNodeConfig()): stri
         return h && lost.has(h) ? null : clean;
     };
     let host: string | null = null;
-    const pa: any = config.publicAddress;
+    const pa: any = config?.publicAddress;
     if (pa) {
-        if (typeof pa === 'string' && pa.trim()) {
+        if (rules.publicAddress === 'any' && typeof pa === 'string' && pa.trim()) {
             host = usable(pa.trim());
         } else if (typeof pa === 'object') {
             if (typeof pa.hostname === 'string' && pa.hostname.trim()) {
                 host = usable(pa.hostname.trim());
-            } else if (typeof pa.name === 'string' && pa.name.trim()) {
+            } else if (rules.publicAddress === 'any' && typeof pa.name === 'string' && pa.name.trim()) {
                 const n = pa.name.trim();
                 host = usable(n.includes('.') ? n : `${n}.beanpool.org`);
             }
         }
     }
-    if (!host && process.env.CF_RECORD_NAME && process.env.CF_RECORD_NAME.trim()) {
-        const cf = process.env.CF_RECORD_NAME.trim();
-        host = usable(cf.includes('.') ? cf : `${cf}.beanpool.org`);
+    const cf = (process.env.CF_RECORD_NAME ?? '').trim();
+    if (!host && cf && rules.cfRecordName !== 'never') {
+        host = usable(rules.cfRecordName === 'in-zone' && !cf.includes('.') ? `${cf}.beanpool.org` : cf);
     }
     return host ? `https://${host}` : null;
 }
 
+/** The community's name as the directory is told it, and the health reads give it: no count and no node config read. */
+export function directoryName(): string {
+    const localConfig = getLocalConfig();
+    return localConfig.communityName || localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node';
+}
+
+/**
+ * What the directory is told about this community. Whether it is told at all is the push interval (0 = never) and the
+ * profile's publishToDirectory (services/directory-publisher.ts), never these switches: while the node pushes, the
+ * directory gets the community's name and web address, so people on the global node can find it and ask to join, with
+ * every switch off. The switches leave out only what each covers, sent as null so the directory drops what it had.
+ */
 export function getDirectoryInfo(): any {
     const config = getNodeConfig();
-    if (!config.publishLocation && !config.publishMembers && !config.publishContacts && !config.publishHealth) {
-        return null;
-    }
-    
     const localConfig = getLocalConfig();
     const info: any = {
-        name: localConfig.callsign || process.env.BEANPOOL_NODE_NAME || process.env.CF_RECORD_NAME || 'BeanPool Node',
-        publicUrl: resolvePublicNodeUrl(config),
+        name: directoryName(),
+        publicUrl: resolvePublicNodeUrl(PUBLIC_URL_RULES.community, config),
+        communityName: localConfig.communityName || null,
     };
 
     if (config.publishLocation) {
@@ -7320,21 +8626,17 @@ export function getDirectoryInfo(): any {
     }
 
     if (config.publishMembers) {
-        info.memberCount = (db.prepare("SELECT COUNT(*) as c FROM members WHERE status != 'pruned'").get() as any).c;
+        // The same count (members not pruned) from communityCountsCached: GET /api/directory/info is public and ran the
+        // scan on every hit. Counted afresh once a member changes (the members version), else at most
+        // COMMUNITY_COUNTS_TTL_MS old.
+        info.memberCount = communityCountsCached().memberCount;
     } else {
         info.memberCount = null;
     }
 
-    if (config.publishContacts) {
-        if (localConfig.communityName) info.name = localConfig.communityName;
-        info.communityName = localConfig.communityName || null;
-        if (localConfig.contactEmail) info.contactEmail = localConfig.contactEmail;
-        if (localConfig.contactPhone) info.contactPhone = localConfig.contactPhone;
-    } else {
-        info.communityName = null;
-        info.contactEmail = null;
-        info.contactPhone = null;
-    }
+    // Each only when the owner turned it on; otherwise null, so the directory drops one it was sent before.
+    info.contactEmail = config.publishContactEmail && localConfig.contactEmail ? localConfig.contactEmail : null;
+    info.contactPhone = config.publishContactPhone && localConfig.contactPhone ? localConfig.contactPhone : null;
 
     if (config.publishHealth) {
         const realVersion = getVersion();
@@ -7353,6 +8655,11 @@ export function getDirectoryInfo(): any {
 // ===================== AUDIT EXPORT =====================
 export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: string } {
     return exportLedgerAuditEngine();
+}
+
+/** One member's own ledger export (engine/audit.ts exportLedgerFor): the Community Pool, their balance, their trades. */
+export function exportLedgerFor(publicKey: string): { balancesCsv: string; transactionsCsv: string } {
+    return exportLedgerForEngine(publicKey);
 }
 
 // ===================== COMMUNITY COMMONS =====================
@@ -7525,10 +8832,12 @@ export function getAllProjects(): CommunityProject[] {
             WHERE m.is_treasury = 1 AND m.lifecycle = 'bounded' AND m.status NOT IN ('pruned', 'deleted')
               AND m.public_key NOT IN (SELECT id FROM projects)
         `).all() as any[];
+        // The proposer's name only: getMember read their photo too, once a project (#1478).
+        const callsignOfKey = db.prepare('SELECT callsign FROM members WHERE public_key = ?');
 
         for (const e of enterprises) {
             const lead = e.lead_keeper || e.any_keeper || e.public_key;
-            const leadMember = getMember(lead);
+            const leadMember = callsignOfKey.get(lead) as { callsign: string } | undefined;
             const existing = blobProjects.find(p => p.id === e.public_key);
             if (existing) {
                 // Keep live values from members table so blob doesn't shadow SQL
@@ -7608,12 +8917,18 @@ export function persistDecayAndCommons(): void {
  * run stores a baseline in node_config and later runs alert on drift. Also flags
  * escrow wallets holding funds for settled transactions (always a bug).
  */
-export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
+export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; badBalances: number; ok: boolean } {
     return runLedgerAuditEngine();
 }
 
-export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } {
+/** Null where Beans are off: the audit does not run there (engine/audit.ts). */
+export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } | null {
     return runWashSybilMetricsEngine();
+}
+
+/** runWashSybilMetricsAudit a slice at a time, as the node's timers run it (engine/audit.ts). */
+export function runWashSybilMetricsAuditSliced(opts: { sliceMs?: number; onYield?: () => void } = {}): Promise<{ totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } | null> {
+    return runWashSybilMetricsAuditInSlices(opts);
 }
 
 export type { ReplicaConsistency };
@@ -7646,7 +8961,7 @@ export function getReplicaConsistency(payload: SyncPayload): ReplicaConsistency 
  * (boot path) can decide whether to proceed. Run once after a take-over, at the
  * next boot (services/takeover.ts, promotionAuditPending).
  */
-export function promotionSanityCheck(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
+export function promotionSanityCheck(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; badBalances: number; ok: boolean } {
     return promotionSanityCheckEngine();
 }
 
@@ -7654,9 +8969,10 @@ export function promotionSanityCheck(): { sumBalances: number; baseline: number;
 // The snapshot-pull endpoint hands out the entire ledger (incl. DMs + recovery
 // data), so on the PRIMARY we record who pulls it — to attribute legitimate
 // backup traffic AND to surface rejected attempts (a leaked-credential / probing
-// signal) on the admin dashboard.
+// signal) on the admin dashboard. Each entry's address is kept 7 days, then
+// null ("address no longer kept"): services/address-retention.ts.
 
-export interface ReplicationAccessEvent { at: number; ip: string; auth: 'token' | 'admin-pw' | 'rejected'; reason?: string; }
+export interface ReplicationAccessEvent { at: number; ip: string | null; auth: 'token' | 'admin-pw' | 'rejected'; reason?: string; }
 export interface ReplicationAccessLog {
     totalPulls: number;
     lastPullAt: number | null;
@@ -7676,9 +8992,9 @@ const EMPTY_ACCESS_LOG: ReplicationAccessLog = {
 export function getReplicationAccessLog(): ReplicationAccessLog {
     try {
         const row = db.prepare(`SELECT value FROM node_config WHERE key='replication_access'`).get() as any;
-        if (row?.value) return { ...EMPTY_ACCESS_LOG, ...JSON.parse(row.value) };
+        if (row?.value) return withoutOldAddresses('replication_access', { ...EMPTY_ACCESS_LOG, ...JSON.parse(row.value) });
     } catch { /* fall through to empty */ }
-    return { ...EMPTY_ACCESS_LOG };
+    return { ...EMPTY_ACCESS_LOG, recent: [] };
 }
 
 export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
@@ -7695,99 +9011,10 @@ export function recordReplicationAccess(ev: ReplicationAccessEvent): void {
             log.lastPullAuth = ev.auth;
         }
         log.recent = [ev, ...(log.recent || [])].slice(0, 20);
+        withoutOldAddresses('replication_access', log);
         db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('replication_access', ?)`).run(JSON.stringify(log));
     } catch (e) {
         console.warn('[Replication] Failed to record access event:', e);
-    }
-}
-
-/**
- * Force-resync support (backup side): wipe the locally-replicated tables so the
- * next full snapshot import rebuilds an exact 1:1 copy with no orphan rows. The
- * upsert+tombstone importer never deletes "rows not in the snapshot", so a row the
- * primary hard-deleted without a tombstone would otherwise linger forever. Only
- * the tables exportSyncState dumps are cleared — node-local tables (push_tokens,
- * invite_codes, message_attachments, sync_cursors, node_config, …) are untouched.
- *
- * ## One exception, and it is the whole reason the primary says anything
- *
- * `keepPhotoRows` names `post_id|order_num` rows the incoming payload deliberately does NOT carry: photos the
- * PRIMARY could not read out of its own image store (`SyncPayload.photosOmitted`). Clearing those would
- * destroy the only readable copy left — the replica's — and nothing would ever send them again, because the
- * omitted rows' `updated_at` never changed on the primary. The row survives, so its `storage_key` is still
- * referenced and the daily orphan sweep leaves the object alone too.
- *
- * Rows named here are kept AS THEY ARE. Any of them the payload turns out to carry after all is upserted by
- * the import that follows, exactly as it would have been. The list has no length limit.
- *
- * THROWS if it cannot spare them, leaving every table as it found them: a committed half-clear would strand
- * the replica without the rows this argument exists to protect, so the caller must fail the resync instead.
- */
-export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts: { invalidatedKeys?: boolean; standing?: boolean } = {}): void {
-    const tables = [
-        'members', 'posts', 'projects', 'ratings', 'accounts',
-        'transactions', 'marketplace_transactions', 'friends', 'conversations',
-        'conversation_participants', 'messages', 'abuse_reports', 'creator_channels',
-        'pulse_items', 'recovery_shares', 'settlements', 'poll_votes', 'event_rsvps', 'groups', 'group_members',
-        'open_joins', 'place_watches', 'directory_cache', 'join_requests', 'moderation_notices', 'member_blocks', 'tombstones',
-        // Only when the incoming copy carries the main server's replaced keys (`opts.invalidatedKeys`): from a main
-        // server that predates them, the keys this node holds are the only ones it has (engine/key-move.ts).
-        ...(opts.invalidatedKeys ? ['invalidated_keys'] : []),
-        // Only when the incoming copy carries the members' preferences, keepers and pledges (`opts.standing`, engine/sync.ts
-        // importRemoteState): from a main server that predates them, this node's are the only ones it has.
-        ...(opts.standing ? ['member_preferences', 'treasury_operators', 'enterprise_pledges'] : []),
-    ];
-    // `post_photos` is cleared separately so the named rows can be spared by primary key. A row key that is
-    // not `post_id|order_num` names no row, and is ignored rather than turned into SQL.
-    const keep: { postId: string; orderNum: number }[] = [];
-    for (const rowKey of keepPhotoRows) {
-        const key = String(rowKey);
-        const cut = key.lastIndexOf('|');
-        if (cut <= 0) continue;
-        const postId = key.slice(0, cut);
-        const orderNum = Number(key.slice(cut + 1));
-        if (!postId || !Number.isInteger(orderNum)) continue;
-        keep.push({ postId, orderNum });
-    }
-    let kept = 0;
-    db.transaction(() => {
-        for (const t of tables) {
-            try { db.prepare(`DELETE FROM ${t}`).run(); }
-            catch (e) { console.warn(`[Resync] could not clear ${t}:`, e); }
-        }
-        if (keep.length === 0) {
-            db.prepare(`DELETE FROM post_photos`).run();
-            return;
-        }
-        // The spared keys travel as ONE bound JSON array, matched through `json_each`, so the statement is
-        // the same size whether a single row is spared or fifty thousand. An `OR`-ed predicate per pair is
-        // the obvious spelling and a trap: SQLite parses it left-deep and throws "Expression tree is too
-        // large (maximum depth 1000)" from about 999 pairs on — and the case this argument exists for, a
-        // primary whose images directory is lost or unmounted, omits EVERY evacuated photo, which on a live
-        // node is thousands of rows. Values stay bound, never interpolated, exactly as before.
-        //
-        // Nothing here is caught. A clear that half-happened is the one outcome worse than a resync that
-        // failed: swallowing this let the transaction commit with `post_photos` not cleared at all, which
-        // left the orphan rows a resync exists to remove and reported "KEEPING 0" while doing it. Throwing
-        // rolls the whole clear back, so the replica keeps the data it had and the caller retries.
-        const keepJson = JSON.stringify(keep.map(k => `${k.postId}|${k.orderNum}`));
-        kept = (db.prepare(
-            `SELECT COUNT(*) AS n FROM post_photos WHERE (post_id || '|' || order_num) IN (SELECT value FROM json_each(?))`,
-        ).get(keepJson) as any)?.n || 0;
-        db.prepare(
-            `DELETE FROM post_photos WHERE (post_id || '|' || order_num) NOT IN (SELECT value FROM json_each(?))`,
-        ).run(keepJson);
-    })();
-    // The directory's listed communities are kept in memory for the reads; the table is empty now.
-    forgetListedCommunities();
-    if (keep.length > 0) {
-        console.log(
-            `🧹 [Resync] Cleared replicated tables, KEEPING ${kept} of the ${keep.length} photo row(s) the primary `
-            + 'could not read out of its own store — this replica holds the only readable copy of those, and the '
-            + 'incoming payload does not carry them.',
-        );
-    } else {
-        console.log('🧹 [Resync] Cleared replicated tables — awaiting fresh snapshot import.');
     }
 }
 
@@ -7806,27 +9033,60 @@ export function clearReplicatedTables(keepPhotoRows: Iterable<string> = [], opts
  * before the account left and it arrived after the statement. A registration never replaces the row's stamp with an
  * earlier one, or with none (an older app on the phone), so one delivered late can't bring the row back within reach of
  * a statement made after a later one.
+ *
+ * A key with no row here (no member's, no visitor's) is anyone's to make, so what it stores is capped
+ * (STRANGER_PUSH_RULES, #1295 review 4126286269): a new token of one, from `address` (the request's, as the limiters key
+ * it, client-ip.ts), is refused past the address's day ('rate_limited') or the node's ('busy'), and its tokens not
+ * registered again for a month are pruned as the next one registers. Its rows never go into a standby's copy either
+ * (engine/replication-manifest.ts MEMBERS_OWN). Every key, a member's too, keeps at most so many tokens and adds at most
+ * so many a day (KEY_PUSH_RULES, review 4126900225): past its day a new token is refused ('key_rate_limited'), and past
+ * its live tokens the stalest goes. Registering an existing (key, token) again is never refused: it adds no row.
+ * `address` null (this server's own code) counts toward the node's day only.
+ *
+ * The token is stored locked (services/push-token-seal.ts): the row is keyed by its id, and holds it only in a box this
+ * server's key opens. Without the key ('failed') nothing is stored.
  */
 export function registerPushToken(
-    publicKey: string, token: string, platform: string = 'ios', registeredAt: number | null = null,
+    publicKey: string, token: string, platform: string = 'ios', registeredAt: number | null = null, address: string | null = null,
 ): PushRegistration {
+    // A standby's tokens are its main server's (a plain table, design G4): the phone registers there.
+    assertPlainTablesWritable();
     try {
+        const { tokenId, tokenBox } = lockPushToken(publicKey, token);
         return db.transaction((): PushRegistration => {
             if (registeredAt !== null) {
-                const left = db.prepare(`SELECT 1 FROM push_token_leaves WHERE public_key = ? AND token = ? AND left_at >= ?
-                    AND applied_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`).get(publicKey, token, registeredAt, PUSH_LEAVE_REMEMBERED);
+                // A leave applied under a key since replaced (a carried one) names the token by the id it had then.
+                const leftStmt = db.prepare(`SELECT 1 FROM push_token_leaves WHERE public_key = ? AND token_id = ? AND left_at >= ?
+                    AND applied_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`);
+                const left = [tokenId, ...retiredPushTokenIds(token)].some((id) => leftStmt.get(publicKey, id, registeredAt, PUSH_LEAVE_REMEMBERED));
                 if (left) {
                     console.log(`[Push] A registration for ${publicKey.slice(0, 8)} from before its leave statement arrived late; not registered`);
                     return 'left';
                 }
             }
-            db.prepare(`INSERT INTO push_tokens (public_key, token, platform, registered_at) VALUES (?, ?, ?, ?)
-                ON CONFLICT (public_key, token) DO UPDATE SET
+            const held = !!db.prepare('SELECT 1 FROM push_tokens WHERE public_key = ? AND token_id = ?').get(publicKey, tokenId);
+            if (!held) {
+                if (newTokensToday(publicKey) >= KEY_PUSH_RULES.newTokensPerDay) {
+                    console.log(`[Push] A new token for ${publicKey.slice(0, 8)} is over its key's day; not registered`);
+                    return 'key_rate_limited';
+                }
+                if (!hasMembersRow(publicKey)) {
+                    const refused = admitStrangersToken(address);
+                    if (refused) {
+                        console.log(`[Push] A new token for ${publicKey.slice(0, 8)}, a key with no row here, is over the ${refused === 'busy' ? "node's" : "address's"} day; not registered`);
+                        return refused;
+                    }
+                }
+            }
+            // The same phone again keeps its box: it opens to this token, and a new one would only be churn.
+            db.prepare(`INSERT INTO push_tokens (public_key, token_id, token_box, platform, registered_at) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT (public_key, token_id) DO UPDATE SET
                     platform = excluded.platform, created_at = excluded.created_at,
                     registered_at = COALESCE(excluded.registered_at, push_tokens.registered_at)
                 WHERE excluded.registered_at IS NULL OR push_tokens.registered_at IS NULL
-                    OR excluded.registered_at >= push_tokens.registered_at`).run(publicKey, token, platform, registeredAt);
-            console.log(`[Push] Registered token for ${publicKey.slice(0, 8)}: ${token.slice(0, 20)}...`);
+                    OR excluded.registered_at >= push_tokens.registered_at`).run(publicKey, tokenId, tokenBox, platform, registeredAt);
+            if (!held) dropStalestTokens(publicKey, tokenId);
+            console.log(`[Push] Registered a phone for ${publicKey.slice(0, 8)}`);
             return 'registered';
         })();
     } catch (e) {
@@ -7835,16 +9095,130 @@ export function registerPushToken(
     }
 }
 
-export type PushRegistration = 'registered' | 'left' | 'failed';
+export type PushRegistration = 'registered' | 'left' | 'key_rate_limited' | 'rate_limited' | 'busy' | 'failed';
+
+function hasMembersRow(publicKey: string): boolean {
+    return !!db.prepare('SELECT 1 FROM members WHERE public_key = ?').get(publicKey);
+}
+
+/**
+ * What one key may keep and add of its push rows, a member's included (#1295 review 4126900225; design
+ * scratch/global-node/DESIGN-replica-flood-bounds-opus.md §6.1). A member's rows go into every standby's copy
+ * (engine/replication-manifest.ts MEMBERS_OWN), and the leave route is charged to an address, not a key, so without these
+ * one member's key could fill every copy. An app registers the same token at every start, which is no new one; a
+ * reinstall makes one new token; an account leaving a phone presents one statement for it. No real account comes near
+ * them. Refused, a registration or a leave answers 429, and the app keeps it and tries again later
+ * (apps/native utils/push-registrations.ts, utils/push-leave.ts).
+ */
+export const KEY_PUSH_RULES = {
+    /**
+     * Tokens a key holds at once. A new one past this drops the key's stalest (registered again longest ago), with a
+     * tombstone (it travelled); a phone still in use registers again at its next start. An account on four phones, with a
+     * reinstall or two, is far inside it.
+     */
+    liveTokens: 10,
+    /**
+     * New tokens a key may register in any 24 hours, then 'key_rate_limited'. Counted as its tokens registered in the last
+     * day (a registration of a held token refreshes `created_at`, so those count too, though they are never refused) and
+     * its tokens removed in the last day (their tombstones): so what one key's churn writes to every copy is bounded as
+     * well, to about 30 tombstones a day.
+     */
+    newTokensPerDay: 20,
+    /**
+     * Leave statements a key may have applied in any 24 hours, then 'key_rate_limited': a new (key, token), counted from
+     * push_token_leaves.applied_at (the day-old ones are pruned anyway). The same one presented again is not new, and is
+     * never refused.
+     */
+    leavesPerDay: 20,
+} as const;
+
+/** A key's tokens registered in the last day and its tokens removed in the last day (KEY_PUSH_RULES.newTokensPerDay). */
+function newTokensToday(publicKey: string): number {
+    const dayAgo = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')`;
+    // A tombstone of push_tokens is keyed `<key>|<token_id>` (db.ts deletePlainRows): this key's are a range of the primary key.
+    return (db.prepare(`SELECT
+            (SELECT COUNT(*) FROM push_tokens WHERE public_key = ? AND created_at > ${dayAgo})
+          + (SELECT COUNT(*) FROM tombstones WHERE table_name = 'push_tokens' AND row_key >= ? AND row_key < ? AND deleted_at > ${dayAgo}) AS n`)
+        .get(publicKey, `${publicKey}|`, `${publicKey}}`) as { n: number }).n;
+}
+
+/** Past KEY_PUSH_RULES.liveTokens, the key's stalest tokens go, never `kept` (the id of the one just registered), each with a tombstone. */
+function dropStalestTokens(publicKey: string, kept: string): void {
+    const stale = db.prepare(`SELECT token_id FROM push_tokens WHERE public_key = ? AND token_id != ?
+        ORDER BY updated_at DESC, created_at DESC, token_id DESC LIMIT -1 OFFSET ?`).pluck().all(publicKey, kept, KEY_PUSH_RULES.liveTokens - 1) as string[];
+    for (const t of stale) deletePlainRows('push_tokens', 'public_key = ? AND token_id = ?', publicKey, t);
+    if (stale.length > 0) console.log(`[Push] ${publicKey.slice(0, 8)} holds more than ${KEY_PUSH_RULES.liveTokens} tokens: its ${stale.length} stalest removed`);
+}
+
+/**
+ * What a key with no row here (neither a member's nor a visitor's) may store of push tokens (registerPushToken). Such a
+ * key registers before its account here exists (a knock waiting for its answer, a join under way). Nothing is sent to
+ * it until it has a row, and then none of this applies. Refused, the app tries again within a minute, then less often,
+ * and lands once its row is made (apps/native utils/push-registrations.ts).
+ */
+export const STRANGER_PUSH_RULES = {
+    /**
+     * New tokens from one address in any 24 hours: a household, or a hall of newcomers setting up behind one address,
+     * is well inside it; one address flooding stores at most 300 rows (about 200 KB) before the oldest are pruned.
+     * Counted over writes_by_address (db/writes-by-address.ts), which is deleted once a day old.
+     */
+    perAddressPerDay: 10,
+    /**
+     * New tokens on this node in any 24 hours, from every address together, with one answer, 'busy', as the knocks' node
+     * ceiling (engine/knocks.ts): an address costs nothing (an IPv6 /48 is 65,536 /64s), and so 30 days of these hold at
+     * most about 20 MB. Far above the knocks' 30 a day, since joiners who register before their row is made count too.
+     */
+    perNodePerDay: 1000,
+    /**
+     * A token not registered again this many days is pruned (the app registers again at each start). As long as a knock
+     * stays open (KNOCK_RULES.openDays), so an applicant whose phone registered as they knocked is reached as soon as
+     * the answer makes their row.
+     */
+    keptDays: 30,
+} as const;
+
+/**
+ * A new token of a key with no row here, or why not (STRANGER_PUSH_RULES): null when it may be stored, with its address
+ * recorded; the month-old tokens of such keys go first. Only a new row counts: the same key and token again adds none.
+ * Inside registerPushToken's transaction, on a main server.
+ */
+function admitStrangersToken(address: string | null): 'rate_limited' | 'busy' | null {
+    // No tombstones: a key with no row's tokens never travel (engine/replication-manifest.ts MEMBERS_OWN).
+    deletePlainRows('push_tokens', `created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)
+        AND public_key NOT IN (SELECT m.public_key FROM members m)`, `-${STRANGER_PUSH_RULES.keptDays} days`);
+    return admitByAddress('push_token', address === null ? null : writeAddressHash(address), STRANGER_PUSH_RULES);
+}
+
+/**
+ * What a key with no row here may have applied of leave statements (applyPushLeave; #1295 review 4126901144). Such a
+ * key's leave only refuses a late registration of its own token, and never travels (engine/replication-manifest.ts
+ * MEMBERS_OWN), but the route is open to anyone with a key, charged only to an address, and each is kept a day: without
+ * these, one /64 could add about 270 MB a day. A phone presents one statement when an account leaves it; a key with no
+ * row here is an account that never joined. Refused, the phone keeps the statement and presents it again later.
+ */
+export const STRANGER_LEAVE_RULES = {
+    /** New leaves of keys with no row from one address in any 24 hours: a household's phones, many times over. */
+    perAddressPerDay: 20,
+    /** New leaves of keys with no row on this node in any 24 hours, from every address together ('busy'): about 3 MB. */
+    perNodePerDay: 2000,
+} as const;
 
 /** How long a leave statement applied here refuses a registration the phone sent before it (SQLite date modifier). */
 const PUSH_LEAVE_REMEMBERED = '-1 day';
 
 /**
- * Clears the leaves applied more than a day ago, on every leave applied. Keys with no row here can add leaves too, so
- * this reads idx_push_token_leaves_applied_at (schema.sql), never a scan of the table (#1258 review 4116631125).
+ * Clears the leaves applied longer ago than `?` (PUSH_LEAVE_REMEMBERED), on every leave applied, but for the key `?` and
+ * token id `?` being applied: that row's upsert moves its stamp instead. Keys with no row here can add leaves too, so this
+ * reads idx_push_token_leaves_applied_at (schema.sql), never a scan of the table (#1258 review 4116631125).
+ *
+ * No tombstones. A leave applied more than a day ago refuses nothing, and a standby deletes it by the same age rule
+ * (engine/replication-manifest.ts `agedOut`) after each copy it imports. A tombstone would share its millisecond with the
+ * same key and token's new row when that leave is applied again, and a standby that applies it after the row would lose
+ * the new leave (#1295 review 4126285975). It would also let any key fill every copy with tombstones for 30 days
+ * (review 4126286269).
  */
-export const PUSH_LEAVE_PRUNE_SQL = `DELETE FROM push_token_leaves WHERE applied_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`;
+export const PUSH_LEAVE_PRUNE_SQL = `DELETE FROM push_token_leaves
+    WHERE applied_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?) AND NOT (public_key = ? AND token_id = ?)`;
 
 /**
  * A leave statement from `publicKey`, already verified (routes/community.ts `/api/push-tokens/leave/:publicKey`): that
@@ -7852,27 +9226,52 @@ export const PUSH_LEAVE_PRUNE_SQL = `DELETE FROM push_token_leaves WHERE applied
  * statements). A row stamped later is a registration made after the leave, on purpose (the same account back on the
  * same phone), and stays. No other key's row and no other token's is touched. For a day, a registration of the same key
  * and token stamped no later than `leftAt` is refused ({@link registerPushToken}). Returns how many rows went (0 or 1).
+ *
+ * A new (key, token) is refused past the key's day ('key_rate_limited', KEY_PUSH_RULES.leavesPerDay), and, for a key
+ * with no row here, past its address's day or the node's ('rate_limited', 'busy'; STRANGER_LEAVE_RULES), from `address`
+ * (the request's, as the limiters key it; null, this server's own code, counts toward the node's day only). Refused, it
+ * changes nothing. The same (key, token) again is never refused.
+ *
+ * The token is named here by its id only (services/push-token-seal.ts); throws without this server's key.
  */
-export function applyPushLeave(publicKey: string, token: string, leftAt: number): number {
-    return db.transaction((): number => {
-        db.prepare(PUSH_LEAVE_PRUNE_SQL).run(PUSH_LEAVE_REMEMBERED);
-        const removed = db.prepare(`DELETE FROM push_tokens WHERE public_key = ? AND token = ? AND (registered_at IS NULL OR registered_at <= ?)`)
-            .run(publicKey, token, leftAt).changes;
-        db.prepare(`INSERT INTO push_token_leaves (public_key, token, left_at) VALUES (?, ?, ?)
-            ON CONFLICT (public_key, token) DO UPDATE SET
-                left_at = MAX(push_token_leaves.left_at, excluded.left_at), applied_at = excluded.applied_at`).run(publicKey, token, leftAt);
+export function applyPushLeave(publicKey: string, token: string, leftAt: number, address: string | null = null): PushLeave {
+    assertPlainTablesWritable();
+    const tokenId = pushTokenId(token);
+    return db.transaction((): PushLeave => {
+        db.prepare(PUSH_LEAVE_PRUNE_SQL).run(PUSH_LEAVE_REMEMBERED, publicKey, tokenId);
+        if (!db.prepare('SELECT 1 FROM push_token_leaves WHERE public_key = ? AND token_id = ?').get(publicKey, tokenId)) {
+            const today = (db.prepare(`SELECT COUNT(*) AS n FROM push_token_leaves WHERE public_key = ?
+                AND applied_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`).get(publicKey, PUSH_LEAVE_REMEMBERED) as { n: number }).n;
+            const refused = today >= KEY_PUSH_RULES.leavesPerDay ? 'key_rate_limited'
+                : hasMembersRow(publicKey) ? null
+                    : admitByAddress('push_leave', address === null ? null : writeAddressHash(address), STRANGER_LEAVE_RULES);
+            if (refused) {
+                console.log(`[Push] A leave statement for ${publicKey.slice(0, 8)} is over the ${refused === 'busy' ? "node's" : refused === 'rate_limited' ? "address's" : "key's"} day; not applied`);
+                return refused;
+            }
+        }
+        // The phone's row goes with a tombstone, so a standby's copy drops it too (plain tables, design G4).
+        const removed = deletePlainRows('push_tokens', 'public_key = ? AND token_id = ? AND (registered_at IS NULL OR registered_at <= ?)',
+            publicKey, tokenId, leftAt);
+        db.prepare(`INSERT INTO push_token_leaves (public_key, token_id, left_at) VALUES (?, ?, ?)
+            ON CONFLICT (public_key, token_id) DO UPDATE SET
+                left_at = MAX(push_token_leaves.left_at, excluded.left_at), applied_at = excluded.applied_at`).run(publicKey, tokenId, leftAt);
         console.log(`[Push] Leave statement for ${publicKey.slice(0, 8)}: ${removed} registration(s) removed`);
         return removed;
     })();
 }
 
+/** How many registrations a leave removed, or why it was refused (applyPushLeave). */
+export type PushLeave = number | 'key_rate_limited' | 'rate_limited' | 'busy';
+
 export function removePushToken(publicKey: string, token?: string): boolean {
+    assertPlainTablesWritable();
     try {
         if (token) {
-            db.prepare(`DELETE FROM push_tokens WHERE public_key = ? AND token = ?`).run(publicKey, token);
+            deletePlainRows('push_tokens', 'public_key = ? AND token_id = ?', publicKey, pushTokenId(token));
         } else {
             // Remove all tokens for this user (logout from all devices)
-            db.prepare(`DELETE FROM push_tokens WHERE public_key = ?`).run(publicKey);
+            deletePlainRows('push_tokens', 'public_key = ?', publicKey);
         }
         console.log(`[Push] Removed token(s) for ${publicKey.slice(0, 8)}`);
         return true;
@@ -7882,8 +9281,20 @@ export function removePushToken(publicKey: string, token?: string): boolean {
     }
 }
 
-export function getPushTokens(publicKey: string): { token: string; platform: string }[] {
-    return (db.prepare(`SELECT token, platform FROM push_tokens WHERE public_key = ?`).all(publicKey) as any[]);
+/**
+ * A member's phones, each token opened for sending to it now (services/push-token-seal.ts): what the caller holds in
+ * memory, never stores. A row this server's key doesn't open is left out (its boot removes such rows). `open`: a send to
+ * many members passes one opener, so the key file is read once.
+ */
+export function getPushTokens(publicKey: string, open: PushTokenOpener = pushTokenOpener()): { tokenId: string; token: string; platform: string }[] {
+    const rows = db.prepare(`SELECT token_id, token_box, platform FROM push_tokens WHERE public_key = ?`).all(publicKey) as
+        { token_id: string; token_box: string; platform: string }[];
+    const phones: { tokenId: string; token: string; platform: string }[] = [];
+    for (const r of rows) {
+        const token = open(publicKey, r.token_id, r.token_box);
+        if (token !== null) phones.push({ tokenId: r.token_id, token, platform: r.platform });
+    }
+    return phones;
 }
 
 // ===================== MEMBER PREFERENCES =====================
@@ -7894,12 +9305,19 @@ export function getMemberPreference(publicKey: string, prefKey: string): string 
 }
 
 /**
- * The preferences a member sets (setMemberPreferences), and the only ones they set: which pushes reach their phone, one per
- * dispatchPushNotification category (`notify_<category>`), and their event reminders, as the apps send them. Holiday mode is
- * not one of them; setHolidayMode alone switches it, after its open-trades check. A visitor's row sets these too
- * (visitor-allowlist.ts).
+ * The push settings a member sets (setMemberPreferences): which pushes reach their phone, one per dispatchPushNotification
+ * category (`notify_<category>`), and their event reminders, as the apps send them. Holiday mode is not one of them;
+ * setHolidayMode alone switches it, after its open-trades check. A visitor's row sets these too (visitor-allowlist.ts). The
+ * only other preferences a member sets are their Home's (HOME_PREFERENCE_KEYS, engine/home-preferences.ts), a member's alone.
  */
 export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'eventReminderOffsets'];
+
+/**
+ * "Show me as a connection in common" (docs/trust-profile-and-trade-safety.md §2), on unless the member turns it off: off,
+ * getTrustProfileForViewer never names them to anyone, nor counts them. Set with the push settings (setMemberPreferences,
+ * true or false) by a member, never a visitor; served to the member alone.
+ */
+export const SHOW_AS_CONNECTION_PREF = 'show_as_connection_in_common';
 
 /** A body of preferences that names push settings and nothing else: an object, not a list, whose every key is in PUSH_PREFERENCE_KEYS. */
 export function namesOnlyPushSettings(preferences: unknown): preferences is Record<string, unknown> {
@@ -7909,8 +9327,10 @@ export function namesOnlyPushSettings(preferences: unknown): preferences is Reco
 
 export const HOLIDAY_NOT_A_PREFERENCE_MESSAGE =
     "Holiday mode isn't saved with your preferences. Switch it with Holiday mode in Settings, which first checks you have no trades in progress.";
+export const SHOW_AS_CONNECTION_MEMBERS_ONLY_MESSAGE = 'Only a member of this community shows as a connection in common.';
+/** A body naming a key that is neither a push setting nor a Home key. */
 export const NOT_A_PUSH_SETTING_MESSAGE =
-    `Only your notification settings are saved here: ${PUSH_PREFERENCE_KEYS.join(', ')}, each sent by name.`;
+    `Only your notification settings, your Home and whether you show as a connection in common are saved here: ${[...PUSH_PREFERENCE_KEYS, ...HOME_PREFERENCE_KEYS, SHOW_AS_CONNECTION_PREF].join(', ')}, each sent by name.`;
 export const PUSH_TOGGLE_MESSAGE = 'A notification setting is on or off: send true or false.';
 
 /**
@@ -7922,10 +9342,13 @@ export const PUSH_TOGGLE_MESSAGE = 'A notification setting is on or off: send tr
  * toggles are booleans-as-strings because that is all they have ever needed, while a reminder choice is a
  * list of minutes (docs/events-on-the-map.md §2.2). Serving it here rather than as a raw `pref_value` means
  * the client never has to know it is stored as JSON, and never has to guess the `[1440]` default.
+ *
+ * `reader`, the verified signer: when it is the member, their Home's keys too (engine/home-preferences.ts), each one they
+ * have saved. Nobody else is ever served them, whatever ENFORCE_READ_AUTH says: a layout says what someone cares about.
  */
-export function getMemberPreferences(publicKey: string): Record<string, string | number[]> {
+export function getMemberPreferences(publicKey: string, reader?: string): Record<string, string | number[] | string[] | HomeLayout | TourRecord> {
     const rows = db.prepare(`SELECT pref_key, pref_value FROM member_preferences WHERE public_key = ?`).all(publicKey) as any[];
-    const prefs: Record<string, string | number[]> = {
+    const prefs: Record<string, string | number[] | string[] | HomeLayout | TourRecord> = {
         notify_chat: 'true',
         notify_marketplace: 'true',
         notify_escrow: 'true',
@@ -7936,45 +9359,63 @@ export function getMemberPreferences(publicKey: string): Record<string, string |
         if (r.pref_key === 'holiday_mode' || PUSH_PREFERENCE_KEYS.includes(r.pref_key)) prefs[r.pref_key] = r.pref_value;
     }
     prefs.eventReminderOffsets = getMemberDefaultReminderOffsets(publicKey);
+    if (reader === publicKey) {
+        Object.assign(prefs, ownHomePreferences(publicKey));
+        prefs[SHOW_AS_CONNECTION_PREF] = rows.find(r => r.pref_key === SHOW_AS_CONNECTION_PREF)?.pref_value === 'false' ? 'false' : 'true';
+    }
     return prefs;
 }
 
 /**
- * THROWS on a body it refuses: a key that isn't one of PUSH_PREFERENCE_KEYS (holiday mode among them, which only
- * setHolidayMode switches, after its open-trades check), a notification toggle that isn't true or false, or a rejected
- * `eventReminderOffsets`. Still returns false for a storage failure — the route turns the throw into a 400 and the false
- * into its existing `{ success: false }`. A refused body writes nothing: silently storing four valid toggles and dropping
- * a fifth, invalid value is how a member ends up believing they set a reminder they will never get.
+ * THROWS on a body it refuses: a key that is neither one of PUSH_PREFERENCE_KEYS nor one of HOME_PREFERENCE_KEYS
+ * (holiday mode among them, which only setHolidayMode switches, after its open-trades check), a notification toggle that
+ * isn't true or false, a rejected `eventReminderOffsets`, a Home key engine/home-preferences.ts refuses, or a Home key
+ * from a key that isn't a member here. Still returns false for a storage failure — the route turns the throw into a 400
+ * and the false into its existing `{ success: false }`. A refused body writes nothing: silently storing four valid
+ * toggles and dropping a fifth, invalid value is how a member ends up believing they set a reminder they will never get.
+ * A Home layout older than the one kept is not a refusal: the rest of the body is written and the newer layout stays.
  */
 export function setMemberPreferences(publicKey: string, preferences: unknown): boolean {
     // Validated BEFORE the transaction opens: anything refused here refuses the whole write.
     if (!!preferences && typeof preferences === 'object' && Object.prototype.hasOwnProperty.call(preferences, 'holiday_mode')) {
         throw new Error(HOLIDAY_NOT_A_PREFERENCE_MESSAGE);
     }
-    if (!namesOnlyPushSettings(preferences)) throw new Error(NOT_A_PUSH_SETTING_MESSAGE);
-    for (const [key, value] of Object.entries(preferences)) {
-        if (key !== 'eventReminderOffsets' && typeof value !== 'boolean') throw new Error(PUSH_TOGGLE_MESSAGE);
+    const isHomeKey = (key: string) => HOME_PREFERENCE_KEYS.includes(key);
+    if (!preferences || typeof preferences !== 'object' || Array.isArray(preferences)
+        || !Object.keys(preferences).every(key => PUSH_PREFERENCE_KEYS.includes(key) || isHomeKey(key) || key === SHOW_AS_CONNECTION_PREF)) {
+        throw new Error(NOT_A_PUSH_SETTING_MESSAGE);
     }
-    const hasOffsets = Object.prototype.hasOwnProperty.call(preferences, 'eventReminderOffsets');
-    const offsets = hasOffsets ? parseReminderOffsets(preferences.eventReminderOffsets) : undefined;
+    const body = preferences as Record<string, unknown>;
+    for (const [key, value] of Object.entries(body)) {
+        if (key !== 'eventReminderOffsets' && !isHomeKey(key) && typeof value !== 'boolean') throw new Error(PUSH_TOGGLE_MESSAGE);
+    }
+    const hasOffsets = Object.prototype.hasOwnProperty.call(body, 'eventReminderOffsets');
+    const offsets = hasOffsets ? parseReminderOffsets(body.eventReminderOffsets) : undefined;
     if (hasOffsets && offsets === null) {
         // There is no "my default" above a default. `[]` is how a member turns reminders off.
         throw new Error(BAD_OFFSETS_MESSAGE);
     }
+    // A Home is a member's: a key with no row here, or a visitor's row, keeps none (the visitor gate refuses it first).
+    const namesHome = Object.keys(body).some(isHomeKey);
+    if (namesHome && !getActingMember(publicKey)) throw new Error(HOME_MEMBERS_ONLY_MESSAGE);
+    if (Object.prototype.hasOwnProperty.call(body, SHOW_AS_CONNECTION_PREF) && !getActingMember(publicKey)) throw new Error(SHOW_AS_CONNECTION_MEMBERS_ONLY_MESSAGE);
+    const homeWrites = namesHome ? homePreferenceWrites(publicKey, body) : [];
     try {
         const stmt = db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)`);
         const tx = db.transaction(() => {
-            for (const [key, value] of Object.entries(preferences)) {
-                if (key === 'eventReminderOffsets') continue;
+            for (const [key, value] of Object.entries(body)) {
+                if (key === 'eventReminderOffsets' || isHomeKey(key)) continue;
                 stmt.run(publicKey, key, String(value));
             }
+            for (const [key, value] of homeWrites) stmt.run(publicKey, key, value);
             // A preference is on no column of the member's row, so the row is stamped here, as setHolidayMode does: delta
             // sync carries a member's preferences with their row, to a standby (engine sync.ts exportSyncState).
             db.prepare(`UPDATE members SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE public_key = ?`).run(publicKey);
             if (offsets != null) setMemberDefaultReminderOffsets(publicKey, offsets);
         });
         tx();
-        console.log(`[Prefs] Updated preferences for ${publicKey.slice(0, 8)}:`, preferences);
+        // Keys only: a Home layout and interests say what someone cares about, and stay out of the log.
+        console.log(`[Prefs] Updated preferences for ${publicKey.slice(0, 8)}: ${Object.keys(body).join(', ')}`);
         return true;
     } catch (e) {
         console.error('[Prefs] Failed to set preferences:', e);
@@ -8041,11 +9482,35 @@ export function setHolidayMode(publicKey: string, enabled: boolean): { ok: true;
 
 // ===================== GENERIC PUSH DISPATCHER =====================
 
+/** A push's category: the member's preference that gates it (`notify_<category>`), and its Android channel. */
+export type PushCategory = 'chat' | 'marketplace' | 'escrow' | 'recovery';
+
+/**
+ * Notices to a node's owners about the server itself (services/alerts.ts, services/standby-health.ts): sent whatever the
+ * owner's category toggles say. They ride the marketplace category only for its Android channel; turning off
+ * "Marketplace Activity" is about requests and approvals, not the server (#1738 review).
+ */
+const OWNER_SERVER_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoticeKind>(['owner.alert', 'owner.standby']);
+
+/** The kinds of push that carry a member's own line, which nobody who has blocked them gets (dispatchPushNotification). */
+const BLOCKED_AUTHORS_LINE_KINDS: ReadonlySet<PushNoticeKind> = new Set<PushNoticeKind>(['chat.group', 'chat.mention']);
+
 /**
  * Generic push notification dispatcher with category-based preference gating,
- * app icon badge counts, iOS threadId grouping, and Android channelId routing.
+ * app icon badge counts, and Android channelId routing.
  * Fire-and-forget pattern. Returns how many notifications it handed to the push service
  * (one per registered phone of each recipient who has this category on).
+ *
+ * The only way a push leaves this server: every sender comes here, and nothing else calls the push service. On a
+ * standby, nothing is sent and it answers 0 (design G4): the tokens it holds are its main server's, copied so a server
+ * that takes over reaches every phone at once, and every push a member is owed is the main server's to send. A standby
+ * that sent its own would double it, or send one about something only the standby did.
+ *
+ * A push says nothing private (scratch/global-node/DESIGN-push-relay-fable.md §4.1, §4.3; @beanpool/core push-notice.ts):
+ * it goes out with `kind`'s fixed words and a signed notice as its `data` (the kind, a random id new for each recipient,
+ * the time, the community, the signature), and nothing else. `title`, `body` and `data` are what the sender wrote (who,
+ * which listing, how many beans, where a tap lands): they stay on this server as the notice's details, which only the
+ * recipient reads (engine/push-notices.ts, GET /api/notices/push/:id), and none of them reaches Expo, Apple or Google.
  */
 export function dispatchPushNotification(
     targetPubkeys: string[],
@@ -8053,10 +9518,24 @@ export function dispatchPushNotification(
     title: string,
     body: string,
     data: Record<string, any>,
-    categoryId: 'chat' | 'marketplace' | 'escrow' | 'recovery'
+    categoryId: PushCategory,
+    kind: PushNoticeKind,
+    /**
+     * Do every step of the work but the last two: the notices are not kept and nothing goes to Expo. A line that is
+     * withheld from its recipient (engine/withheld-lines.ts) takes the load a stored line's push does, so the sender's next
+     * request can't tell the two apart (#1403 re-review).
+     */
+    rehearsal = false,
 ): number {
-    // Filter out the actor and SYSTEM from targets
-    const recipients = targetPubkeys.filter(pk => pk !== actorPubkey && pk !== 'SYSTEM');
+    if (getNodeRole() === 'backup') return 0;
+    // Filter out the actor and SYSTEM from targets. A push that carries the blocked member's own line never reaches
+    // someone who has blocked them (engine/member-blocks.ts): a line or an @mention in a group's chat, which is shared and
+    // shows them the line, comes with no push. Only those kinds: a direct line from them is withheld before any push
+    // (engine/messaging.ts sendMessage), so `chat.message` here is someone else's or the node's own (the admin page's
+    // message, under the operator's key), and a vote to replace a convenor (`group.lead`), a trade's, a recovery's and
+    // every other notice still go, whoever caused them (#1403 review).
+    const blockers = BLOCKED_AUTHORS_LINE_KINDS.has(kind) ? blockersOf(actorPubkey) : null;
+    const recipients = targetPubkeys.filter(pk => pk !== actorPubkey && pk !== 'SYSTEM' && !blockers?.has(pk));
     if (recipients.length === 0) return 0;
 
     const prefKey = `notify_${categoryId}`;
@@ -8077,36 +9556,48 @@ export function dispatchPushNotification(
         recovery: 'default',
     };
 
+    const words = pushNoticeWords(kind);
+    const sentAt = Math.floor(Date.now() / 1000);
     const allMessages: any[] = [];
+    // Whose phone each message is for, by position: Expo answers with a ticket per message, in the order sent. The token
+    // is here only for the ticket's check, in memory, while this send lasts.
+    const phones: { publicKey: string; tokenId: string; token: string }[] = [];
+    const notices: PushNoticeRow[] = [];
+    // The key read once for the whole send (an announcement reaches every member's phones).
+    const open = pushTokenOpener();
 
     for (const pk of recipients) {
         // Check user's notification preference for this category
-        const pref = getMemberPreference(pk, prefKey);
+        const pref = OWNER_SERVER_KINDS.has(kind) ? null : getMemberPreference(pk, prefKey);
         if (pref === 'false') {
             console.log(`[Push] Skipped ${pk.slice(0, 8)} — ${prefKey} disabled`);
             continue;
         }
 
-        const tokens = getPushTokens(pk);
+        const tokens = getPushTokens(pk, open);
         if (tokens.length === 0) continue;
 
         // The badge sets the app icon: the unread lines in the chats the member's list shows, and no others.
         const unreadCounts = getListedUnreadCounts(pk);
         const totalUnread = Object.values(unreadCounts).reduce((sum, count) => sum + count, 0);
 
-        for (const { token, platform } of tokens) {
+        // One notice per recipient, the same on each of their phones.
+        const notice = newPushNotice(kind, pk, sentAt);
+        notices.push({ id: notice.id, recipient: pk, kind, title, body, data, sentAt });
+
+        for (const { tokenId, token, platform } of tokens) {
             const msg: any = {
                 to: token,
                 sound: soundMap[categoryId] || 'default',
-                title,
-                body,
-                data,
+                title: words.title,
+                body: words.body,
+                data: notice.data,
                 badge: totalUnread,
                 categoryId,
             };
 
-            // iOS: threadId for notification grouping on lock screen
-            if (platform === 'ios' && data.conversationId) {
+            // iOS: a chat's notice wakes the app, as it did when a conversation id in the data decided it
+            if (platform === 'ios' && PUSH_NOTICE_KINDS[kind].tab === 'chats') {
                 msg._contentAvailable = true;
             }
 
@@ -8116,30 +9607,94 @@ export function dispatchPushNotification(
             }
 
             allMessages.push(msg);
+            phones.push({ publicKey: pk, tokenId, token });
         }
     }
 
     if (allMessages.length === 0) return 0;
+    if (rehearsal) return 0;
+    keepPushNotices(notices);
 
     // Batch send to Expo (max 100 per request)
-    const batches: typeof allMessages[] = [];
     for (let i = 0; i < allMessages.length; i += 100) {
-        batches.push(allMessages.slice(i, i + 100));
-    }
-
-    for (const batch of batches) {
+        const batch = allMessages.slice(i, i + 100);
+        const batchPhones = phones.slice(i, i + 100);
+        // With EXPO_ACCESS_TOKEN set, `Authorization: Bearer` it too (config/expo-access-token.ts); unset, as it always was.
         fetch('https://exp.host/--/api/v2/push/send', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: expoPushHeaders(),
             body: JSON.stringify(batch),
-        }).then(res => {
+        }).then(async res => {
             if (!res.ok) console.warn(`[Push] Expo API returned ${res.status}`);
             else console.log(`[Push] Sent ${batch.length} notification(s) for category=${categoryId}`);
+            await readExpoAnswer(res, batchPhones);
         }).catch(err => {
-            console.warn('[Push] Failed to send push notification:', err.message);
+            console.warn('[Push] Failed to send push notification:', sanitizeMessage(String(err?.message ?? err)));
         });
     }
     return allMessages.length;
+}
+
+/**
+ * What Expo said about a batch beyond its HTTP status (design §4.4): a ticket per message, in the order sent. A phone Expo
+ * says is gone (`DeviceNotRegistered`: the app was removed, or its token no longer works) has that one registration here
+ * removed, with its tombstone so a standby drops it too. Any other refusal (`UNAUTHORIZED` for a missing or refused access
+ * token, a rate limit, credentials) is logged once per code and counted for diagnostics (pushServiceRefusals). Never
+ * logs a push token. Never throws.
+ */
+async function readExpoAnswer(res: Response, phones: readonly { publicKey: string; tokenId: string; token: string }[]): Promise<void> {
+    let answer: any;
+    try {
+        answer = await res.json();
+    } catch {
+        return;
+    }
+    if (Array.isArray(answer?.errors)) {
+        for (const e of answer.errors) notePushRefusal(typeof e?.code === 'string' ? e.code : `HTTP ${res.status}`);
+    }
+    const tickets: any[] = Array.isArray(answer?.data) ? answer.data : [];
+    let gone = 0;
+    for (let i = 0; i < Math.min(tickets.length, phones.length); i++) {
+        const ticket = tickets[i];
+        if (ticket?.status !== 'error') continue;
+        const code = typeof ticket?.details?.error === 'string' ? ticket.details.error : 'unknown';
+        if (code !== 'DeviceNotRegistered') {
+            notePushRefusal(code);
+            continue;
+        }
+        const phone = phones[i];
+        // A ticket naming another token than the one sent in its place is not about this registration.
+        const named = ticket?.details?.expoPushToken;
+        if (typeof named === 'string' && named !== phone.token) continue;
+        try {
+            gone += deletePlainRows('push_tokens', 'public_key = ? AND token_id = ?', phone.publicKey, phone.tokenId);
+        } catch (e: any) {
+            console.warn('[Push] Could not remove a phone Expo says is gone:', sanitizeMessage(String(e?.message ?? e)));
+        }
+    }
+    if (gone > 0) console.log(`[Push] Expo says ${gone} phone(s) no longer take notifications: their registrations were removed.`);
+}
+
+const pushRefusals = new Map<string, { count: number; firstAt: string; lastAt: string }>();
+
+function notePushRefusal(code: string): void {
+    const at = new Date().toISOString();
+    const seen = pushRefusals.get(code);
+    if (seen) {
+        seen.count++;
+        seen.lastAt = at;
+        return;
+    }
+    pushRefusals.set(code, { count: 1, firstAt: at, lastAt: at });
+    const why = code === 'UNAUTHORIZED'
+        ? 'Expo wants an access token for these notifications, and this server sends none it accepts (EXPO_ACCESS_TOKEN).'
+        : 'some notifications were not delivered.';
+    console.warn(`[Push] Expo refused notifications (${code}): ${why} Said once; diagnostics count each one.`);
+}
+
+/** What Expo refused since this server started, by Expo's code: for diagnostics. Never a token. */
+export function pushServiceRefusals(): Record<string, { count: number; firstAt: string; lastAt: string }> {
+    return Object.fromEntries([...pushRefusals].map(([code, r]) => [code, { ...r }]));
 }
 
 /**
@@ -8212,7 +9767,8 @@ export function sendPushNotification(postId: string, type: SystemMessageType, me
         notification.title,
         notification.body,
         notification.data,
-        'escrow'
+        'escrow',
+        type === SystemMessageType.REVIEW_LEFT ? 'review.new' : 'trade.update'
     );
 }
 
@@ -8241,15 +9797,21 @@ function storableGroupPicture(avatarUrl: string | undefined): string | undefined
 }
 
 export function createGroup(params: CreateGroupParams): Group {
-    const res = createGroupEngine(db, { ...params, avatarUrl: storableGroupPicture(params.avatarUrl) });
+    // The creator holds the chat's keys from its first epoch (engine/group-keys.ts fromEpochOf), written with the row.
+    const res = db.transaction(() => {
+        const made = createGroupEngine(db, { ...params, avatarUrl: storableGroupPicture(params.avatarUrl) });
+        setMembershipFromEpoch(made.id, params.createdBy, 1);
+        return made;
+    })();
     // Every group owns its chat from the start, with its convenor in it (decision 3).
     ensureGroupThread(res.id);
     bumpGroupsVersion();
+    // As a list sends it (#1493): a description stored before its limit goes to every socket as its preview, never whole.
     if (res.joinPolicy === 'open') {
-        broadcast({ type: 'group_created', group: res });
+        broadcast({ type: 'group_created', group: groupAsListed(res) });
     } else {
         const recipients = getGroupActiveMemberRecipients(res.id, [params.createdBy]);
-        broadcast({ type: 'group_created', group: res }, recipients);
+        broadcast({ type: 'group_created', group: groupAsListed(res) }, recipients);
     }
     return res;
 }
@@ -8272,6 +9834,11 @@ export function getGroupMember(groupId: string, memberPubkey: string): GroupMemb
 
 export function isGroupConvenor(groupId: string, memberPubkey: string): boolean {
     return isGroupConvenorEngine(db, groupId, memberPubkey);
+}
+
+/** A convenor whose account is not suspended: their convenor powers are not resting (engine isActingGroupConvenor). */
+export function isActingGroupConvenor(groupId: string, memberPubkey: string): boolean {
+    return isActingGroupConvenorEngine(db, groupId, memberPubkey);
 }
 
 export function isGroupMember(groupId: string, memberPubkey: string): boolean {
@@ -8314,7 +9881,7 @@ export function handOverGroupLead(groupId: string, leadPubkey: string, targetPub
     const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
     broadcast({ type: 'group_member_updated', groupId, member: res }, recipients);
     const group = getGroupEngine(db, groupId);
-    if (group) broadcast({ type: 'group_updated', group }, recipients);
+    if (group) broadcast({ type: 'group_updated', group: groupAsListed(group) }, recipients);
     return res;
 }
 
@@ -8340,9 +9907,129 @@ function afterGroupMembershipChange(groupId: string, targetPubkey: string, wasAc
     } catch (e) { console.warn('[Groups] Could not update the group chat after a membership change:', e); }
 }
 
-export function joinGroup(groupId: string, memberPubkey: string): GroupMember {
+/** Why a closed group takes nobody new and no new line (DESIGN-group-decisions §2.3, close_group). */
+export const GROUP_CLOSED = 'This group was closed by a vote of its members. It takes nobody new and no new messages.';
+
+/** When the group's members closed it by a vote (decisions-engine closeGroupByVote), or null. */
+export function groupClosedAt(groupId: string): string | null {
+    return (db.prepare('SELECT closed_at FROM group_closures WHERE group_id = ?').get(groupId) as { closed_at: string } | undefined)?.closed_at ?? null;
+}
+
+/** When each of these groups was closed, for those that were, in one read (the group list, #1784 review N4). */
+export function groupClosedAtMany(groupIds: string[]): Map<string, string> {
+    if (groupIds.length === 0) return new Map();
+    const rows = db.prepare('SELECT group_id, closed_at FROM group_closures WHERE group_id IN (SELECT value FROM json_each(?))')
+        .all(JSON.stringify(groupIds)) as Array<{ group_id: string; closed_at: string }>;
+    return new Map(rows.map(r => [r.group_id, r.closed_at]));
+}
+
+function assertGroupNotClosed(groupId: string): void {
+    if (groupClosedAt(groupId)) throw new Error(GROUP_CLOSED);
+}
+
+/**
+ * Leaving a group mid-vote (§2.6): the leaver chose to have no say, so they leave the roll of its open votes and their vote
+ * is dropped. A removal by a convenor or the lead writes nothing here: a removal must not be a way to swing a vote.
+ */
+function dropFromOpenGroupRolls(groupId: string, memberPubkey: string): void {
+    db.prepare(`
+        UPDATE decision_electors SET status = 'left', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        WHERE member_pubkey = ? AND status = 'on' AND decision_id IN (
+            SELECT id FROM decisions WHERE scope_kind = 'group' AND scope_id = ? AND status = 'open'
+        )
+    `).run(memberPubkey, groupId);
+}
+
+/**
+ * The row changes a chat group's passed vote makes (decisions-engine.ts, DESIGN-group-decisions §2.3), inside its
+ * transaction. No convenor acts, so no convenor's power is asked for: the vote is the authority, and the preflight has
+ * already checked the subject is where the vote left them. Nothing here touches money, trust or a node role.
+ * A membership row's stamp moves strictly past its last one, as every other membership writer's does
+ * (groupMembershipWriteAt): a clock step or a promoted standby behind the main must not let a standby skip it (#1777 R2).
+ */
+export function setGroupRoleByVote(groupId: string, subject: string, role: 'convenor' | 'member'): void {
+    reconcileGroupLeadEngine(db, groupId);
+    const now = groupMembershipWriteAt(db, groupId, subject);
+    db.prepare(
+        "UPDATE group_members SET role = ?, role_since = CASE WHEN role = ? THEN role_since ELSE ? END, updated_at = ? WHERE group_id = ? AND member_pubkey = ? AND status = 'active'"
+    ).run(role, role, now, now, groupId, subject);
+}
+
+export function replaceGroupLeadByVote(groupId: string, subject: string): void {
+    const now = groupMembershipWriteAt(db, groupId, subject);
+    db.prepare("UPDATE group_members SET role = 'convenor', role_since = CASE WHEN role = 'convenor' THEN role_since ELSE ? END, updated_at = ? WHERE group_id = ? AND member_pubkey = ? AND status = 'active'")
+        .run(now, now, groupId, subject);
+    // A groups row is stamped by the clock, as every groups writer stamps it.
+    db.prepare('UPDATE groups SET lead_pubkey = ?, updated_at = ? WHERE id = ?').run(subject, new Date().toISOString(), groupId);
+}
+
+/** The removal a convenor's removal writes (the 'removed' row, so it sticks); the chat's key goes stale, as with no epoch. */
+export function removeGroupMemberByVote(groupId: string, subject: string): void {
+    const before = groupKeyRoster(groupId).join(',');
+    const now = groupMembershipWriteAt(db, groupId, subject);
+    db.prepare("UPDATE group_members SET status = 'removed', role = 'member', role_since = ?, updated_at = ? WHERE group_id = ? AND member_pubkey = ?")
+        .run(now, now, groupId, subject);
+    reconcileGroupLeadEngine(db, groupId);
+    if (groupKeyRoster(groupId).join(',') !== before) markGroupEpochStale(groupId);
+}
+
+export function setGroupJoinPolicyByVote(groupId: string, policy: JoinPolicy): void {
+    db.prepare('UPDATE groups SET join_policy = ?, updated_at = ? WHERE id = ?').run(policy, new Date().toISOString(), groupId);
+}
+
+/**
+ * close_group (§2.3): the row stays and is marked closed, so "Your groups" and its history stay honest; its posts are
+ * cancelled as a delete cancels one (engine/posts.ts cancelClosedGroupPosts), but they keep their group, so nobody
+ * outside it ever sees them. What it returns goes to afterGroupVote, which announces the posts after the commit.
+ */
+export function closeGroupByVote(groupId: string, decisionId: string): ReturnType<typeof cancelClosedGroupPosts> {
+    const now = new Date().toISOString();
+    db.prepare('INSERT OR IGNORE INTO group_closures (group_id, decision_id, closed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
+        .run(groupId, decisionId, now, now, now);
+    const cancelled = cancelClosedGroupPosts(groupId);
+    db.prepare('UPDATE groups SET updated_at = ? WHERE id = ?').run(now, groupId);
+    return cancelled;
+}
+
+/** After a group's vote was carried out (after its commit): the chat follows, the group hears, a line says what changed. */
+export function afterGroupVote(groupId: string, change: { kind: 'role' | 'lead' | 'removed' | 'policy' | 'closed'; target?: string | null; text: string; cancelledPosts?: ReturnType<typeof cancelClosedGroupPosts> }): void {
+    const target = change.target || null;
+    if (change.cancelledPosts) {
+        try { announceClosedGroupPosts(broadcast, change.cancelledPosts, dispatchPushNotification); }
+        catch (e) { console.warn('[Groups] Could not announce a closed group\'s posts:', e); }
+    }
+    try {
+        if (target) syncGroupThreadMembership(groupId, target);
+        const type = change.kind === 'role' ? GroupSystemType.ROLE_CHANGED
+            : change.kind === 'lead' ? GroupSystemType.LEAD_HANDED_OVER
+            : change.kind === 'removed' ? GroupSystemType.MEMBER_REMOVED
+            : change.kind === 'closed' ? GroupSystemType.CLOSED : null;
+        if (type) {
+            postGroupSystemLine(getMessagingCb(), groupId, type, change.text, { targetPubkey: target, byVote: true },
+                change.kind === 'removed' && target ? [target] : []);
+        }
+    } catch (e) { console.warn('[Groups] Could not write the line for a group vote:', e); }
+    bumpGroupsVersion();
+    const recipients = getGroupActiveMemberRecipients(groupId, target ? [target] : []);
+    if (target && change.kind === 'removed') broadcast({ type: 'group_member_removed', groupId, memberPubkey: target }, recipients);
+    else if (target) {
+        const member = getGroupMemberEngine(db, groupId, target);
+        if (member) broadcast({ type: 'group_member_updated', groupId, member }, recipients);
+    }
+    const group = getGroupEngine(db, groupId);
+    if (group) broadcast({ type: 'group_updated', group: groupAsListed(group) }, recipients);
+}
+
+/**
+ * Joining, and accepting an invitation, take the joiner's own epoch in the same transaction (group chat encryption design
+ * §2.3, engine/group-keys.ts withMembershipEpoch): reason 'join' or 'invite', made by the joiner, wrapped to every active
+ * member after the change. Without one (an old app) the join applies and the current epoch goes stale.
+ */
+export function joinGroup(groupId: string, memberPubkey: string, epoch?: unknown): GroupMember {
+    assertGroupNotClosed(groupId);
     const wasActive = isGroupMemberEngine(db, groupId, memberPubkey);
-    const res = joinGroupEngine(db, groupId, memberPubkey);
+    const res = withMembershipEpoch(groupId, memberPubkey, epoch, () => joinGroupEngine(db, groupId, memberPubkey),
+        { allowed: ['join', 'invite'], subject: memberPubkey });
     afterGroupMembershipChange(groupId, memberPubkey, wasActive);
     bumpGroupsVersion();
     const recipients = getGroupActiveMemberRecipients(groupId, [memberPubkey]);
@@ -8350,9 +10037,34 @@ export function joinGroup(groupId: string, memberPubkey: string): GroupMember {
     return res;
 }
 
+/** Why a convenor can't remove or demote the person an open vote may make the group's lead (#1777 review N4). */
+export const GROUP_LEAD_CANDIDATE_HELD = 'The group is voting on making them its lead convenor, so they stay as they are until that vote closes.';
+
+/**
+ * A removal must not be a way to swing a vote (DESIGN-group-decisions §2.6): while a vote to make someone the lead is
+ * open (or passed and not yet carried out), no convenor may remove them or lower their role; the vote would only go
+ * void. Leaving is still their own business, and a vote of the group may still remove them. The 30-day silence vote's
+ * candidate is held the same way (#1777 R3, the director's call on decision (a)).
+ *
+ * Asked only of a convenor who can act now (not suspended): anyone else is refused by the engine's own authority check, and
+ * answering them first would tell an outsider who a lead vote's candidate is (#1777 R1).
+ */
+function assertNotOpenLeadCandidate(groupId: string, actorPubkey: string, subject: string): void {
+    if (actorPubkey === subject || !isActingGroupConvenorEngine(db, groupId, actorPubkey)) return;
+    const held = db.prepare(`
+        SELECT 1 FROM decisions WHERE scope_kind = 'group' AND scope_id = ? AND effect = 'replace_lead_convenor' AND subject = ?
+          AND status IN ('open', 'passed', 'execution_pending_grace', 'passed_queued_for_funds')
+        UNION ALL
+        SELECT 1 FROM group_convenor_proposals WHERE group_id = ? AND candidate_pubkey = ? AND status = 'active'
+    `).get(groupId, subject, groupId, subject);
+    if (held) throw new Error(GROUP_LEAD_CANDIDATE_HELD);
+}
+
 export function setMemberRole(groupId: string, convenorPubkey: string, targetPubkey: string, newRole: GroupRole): GroupMember {
     assertGroupActorIsMember(convenorPubkey);
     const before = getGroupMemberEngine(db, groupId, targetPubkey);
+    const rank = { observer: 0, member: 1, convenor: 2 } as Record<string, number>;
+    if (before?.status === 'active' && (rank[newRole] ?? 0) < (rank[before.role] ?? 0)) assertNotOpenLeadCandidate(groupId, convenorPubkey, targetPubkey);
     const res = setMemberRoleEngine(db, groupId, convenorPubkey, targetPubkey, newRole);
     try {
         syncGroupThreadMembership(groupId, targetPubkey);
@@ -8370,12 +10082,18 @@ export function setMemberRole(groupId: string, convenorPubkey: string, targetPub
     return res;
 }
 
-export function removeGroupMember(groupId: string, actorPubkey: string, targetPubkey: string): boolean {
+export function removeGroupMember(groupId: string, actorPubkey: string, targetPubkey: string, epoch?: unknown): boolean {
     // Leaving is anyone's own business; removing someone else is a convenor's.
     if (actorPubkey !== targetPubkey) assertGroupActorIsMember(actorPubkey);
+    assertNotOpenLeadCandidate(groupId, actorPubkey, targetPubkey);
     const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
-    const res = removeGroupMemberEngine(db, groupId, actorPubkey, targetPubkey);
+    // A removal is the rotation (§2.4): the convenor's epoch, wrapped to everyone but the removed member, in the same
+    // transaction. Leaving carries none (the leaver would know the key): the current epoch goes stale instead.
+    const res = withMembershipEpoch(groupId, actorPubkey, epoch, () => removeGroupMemberEngine(db, groupId, actorPubkey, targetPubkey),
+        { allowed: ['remove'], subject: targetPubkey });
     if (res) {
+        // Leaving drops their vote on the group's open votes; a removal by a convenor keeps it (§2.6).
+        if (actorPubkey === targetPubkey) dropFromOpenGroupRolls(groupId, targetPubkey);
         try {
             // Out of the chat at once (and out of its live updates and pushes).
             syncGroupThreadMembership(groupId, targetPubkey);
@@ -8401,10 +10119,10 @@ export function updateGroupPolicy(groupId: string, convenorPubkey: string, joinP
     const res = updateGroupPolicyEngine(db, groupId, convenorPubkey, joinPolicy);
     bumpGroupsVersion();
     if (res.joinPolicy === 'open') {
-        broadcast({ type: 'group_updated', group: res });
+        broadcast({ type: 'group_updated', group: groupAsListed(res) });
     } else {
         const recipients = getGroupActiveMemberRecipients(groupId);
-        broadcast({ type: 'group_updated', group: res }, recipients);
+        broadcast({ type: 'group_updated', group: groupAsListed(res) }, recipients);
     }
     return res;
 }
@@ -8417,18 +10135,21 @@ export function updateGroup(groupId: string, convenorPubkey: string, updates: Up
     db.prepare("UPDATE conversations SET name = ? WHERE id = ? AND type = 'group_thread'").run(res.name, groupId);
     bumpGroupsVersion();
     if (res.joinPolicy === 'open') {
-        broadcast({ type: 'group_updated', group: res });
+        broadcast({ type: 'group_updated', group: groupAsListed(res) });
     } else {
         const recipients = getGroupActiveMemberRecipients(groupId);
-        broadcast({ type: 'group_updated', group: res }, recipients);
+        broadcast({ type: 'group_updated', group: groupAsListed(res) }, recipients);
     }
     return res;
 }
 
-export function approveGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string): GroupMember {
+export function approveGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string, epoch?: unknown): GroupMember {
     assertGroupActorIsMember(convenorPubkey);
+    assertGroupNotClosed(groupId);
     const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
-    const res = approveGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey);
+    // The approving convenor makes the new member's first epoch (§2.3), in the same transaction.
+    const res = withMembershipEpoch(groupId, convenorPubkey, epoch, () => approveGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey),
+        { allowed: ['approve'], subject: targetPubkey });
     afterGroupMembershipChange(groupId, targetPubkey, wasActive, { approvedBy: convenorPubkey });
     bumpGroupsVersion();
     const recipients = getGroupActiveMemberRecipients(groupId, [targetPubkey]);
@@ -8436,10 +10157,14 @@ export function approveGroupMember(groupId: string, convenorPubkey: string, targ
     return res;
 }
 
-export function inviteGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string, role: GroupRole = 'member'): GroupMember {
+export function inviteGroupMember(groupId: string, convenorPubkey: string, targetPubkey: string, role: GroupRole = 'member', epoch?: unknown): GroupMember {
     assertGroupActorIsMember(convenorPubkey);
+    assertGroupNotClosed(groupId);
     const wasActive = isGroupMemberEngine(db, groupId, targetPubkey);
-    const res = inviteGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey, role);
+    // An invitation lets nobody in, so it takes no epoch; inviting someone who had asked admits them, and then the
+    // convenor's epoch is an approval's.
+    const res = withMembershipEpoch(groupId, convenorPubkey, epoch, () => inviteGroupMemberEngine(db, groupId, convenorPubkey, targetPubkey, role),
+        { allowed: ['approve'], subject: targetPubkey });
     // Inviting someone who had asked to join admits them at once.
     afterGroupMembershipChange(groupId, targetPubkey, wasActive, { approvedBy: convenorPubkey });
     bumpGroupsVersion();
@@ -8455,8 +10180,9 @@ export function getGroupThread(groupId: string, viewerPubkey: string | undefined
     return getGroupThreadEngine(groupId, viewerPubkey, limit, offset);
 }
 
-export function postGroupThreadMessage(groupId: string, authorPubkey: string, text: string, clientId?: string, replyToId?: string): EventThreadMessage {
-    return postGroupThreadMessageEngine(getMessagingCb(), groupId, authorPubkey, text, clientId, replyToId);
+export function postGroupThreadMessage(groupId: string, authorPubkey: string, line: GroupLineIn, clientId?: string): EventThreadMessage {
+    assertGroupNotClosed(groupId);
+    return postGroupThreadMessageEngine(getMessagingCb(), groupId, authorPubkey, line, clientId);
 }
 
 export function removeGroupThreadMessage(groupId: string, messageId: string, actorPubkey: string): EventThreadMessage {
@@ -8465,6 +10191,8 @@ export function removeGroupThreadMessage(groupId: string, messageId: string, act
 }
 
 export function proposeGroupConvenor(groupId: string, proposerPubkey: string, candidatePubkey: string) {
+    // A group its members closed takes nothing new, a silence vote for its lead included (#1784 review N3).
+    assertGroupNotClosed(groupId);
     const res = proposeGroupConvenorEngine(getMessagingCb(), groupId, proposerPubkey, candidatePubkey);
     bumpGroupsVersion();
     return res;
@@ -8483,6 +10211,7 @@ export function getGroupSuccession(groupId: string, viewerPubkey?: string) {
     const s = res.silence;
     return {
         ...res,
+        canPropose: res.canPropose && !groupClosedAt(groupId),
         silence: {
             ...s,
             lastActiveAt: s.convenorPubkey ? lastActiveForViewer(s.lastActiveAt, s.convenorPubkey, viewerPubkey) : null,
@@ -8503,6 +10232,7 @@ export function listYourChats(pubkey: string) {
 
 export function deleteGroupPost(groupId: string, convenorPubkey: string, postId: string): boolean {
     assertGroupActorIsMember(convenorPubkey);
+    assertPostWagesWritable(postId);
     const res = deleteGroupPostEngine(db, groupId, convenorPubkey, postId);
     if (res) {
         bumpPostsVersion();

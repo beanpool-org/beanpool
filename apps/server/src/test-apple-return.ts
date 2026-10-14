@@ -9,8 +9,8 @@ import { db } from './db/db.js';
 import { startHttpsServer } from './https-server.js';
 import { appleReturnFragment, APPLE_RETURN_PATH } from './routes/apple-return.js';
 
-const PORT = 8565;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -44,7 +44,8 @@ async function main() {
     // 2. HTTP Integration tests
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // Test POST when openJoin is false (default for local profile)
     const resOff = await fetch(`${BASE}${APPLE_RETURN_PATH}`, {

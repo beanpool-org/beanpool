@@ -22,6 +22,7 @@ vi.mock('expo-crypto', () => ({
 }));
 const store = new Map<string, string>();
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(async (k: string) => store.get(k) ?? null),
     setItemAsync: vi.fn(async (k: string, v: string) => { store.set(k, v); }),
     deleteItemAsync: vi.fn(async (k: string) => { store.delete(k); }),

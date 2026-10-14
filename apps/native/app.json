@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Bean Pool",
+    "name": "BeanPool",
     "slug": "beanpool-pillar",
-    "version": "1.2.56",
+    "version": "1.2.60",
     "orientation": "default",
     "icon": "./assets/images/app-icon.png",
     "scheme": "beanpool",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "org.beanpool.pillar",
-      "buildNumber": "220",
+      "buildNumber": "224",
       "associatedDomains": [
         "applinks:beanpool.org",
         "applinks:*.beanpool.org",
@@ -40,13 +40,17 @@
         "NSLocationWhenInUseUsageDescription": "BeanPool relies exclusively on your device's GPS to plot your independent identity on the community map, enabling you to physically discover neighboring Marketplace needs and offers.",
         "NSCameraUsageDescription": "BeanPool uses your camera to scan device pairing QR codes and community invites.",
         "NSFaceIDUsageDescription": "BeanPool asks for Face ID before sensitive steps, such as opening your community's admin settings or showing your recovery phrase.",
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSAllowsLocalNetworking": true
+        },
         "ITSAppUsesNonExemptEncryption": false
       },
       "appleTeamId": "485XM2R33S"
     },
     "android": {
       "softwareKeyboardLayoutMode": "resize",
-      "versionCode": 278,
+      "versionCode": 282,
       "package": "org.beanpool.pillar",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
@@ -62,6 +66,10 @@
         "android.permission.CAMERA",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.DETECT_SCREEN_CAPTURE"
       ],
       "intentFilters": [
         {

@@ -4,8 +4,13 @@
 // registrar can bind a <name>.beanpool.org lease to THIS node and re-verify it via /api/attest.
 // The signed-request scheme mirrors the Worker's verifier (apps/registrar/src/sign.js):
 //   headers x-bp-pubkey (raw Ed25519 pubkey hex) / x-bp-timestamp / x-bp-signature, plus x-bp-proto for any
-//   protocol but DEFAULT_PROTO
-//   message = `${PROTOCOLS[proto].request}\n${METHOD}\n${pathname}\n${timestamp}\n${bodyText}`
+//   protocol but DEFAULT_PROTO, and x-bp-nonce (32 hex, fresh for every request) for a protocol with `nonce`
+//   message = `${PROTOCOLS[proto].request}\n${METHOD}\n${pathname}\n${timestamp}\n${bodyText}`            (v1)
+//             `${PROTOCOLS[proto].request}\n${METHOD}\n${pathname}\n${timestamp}\n${nonce}\n${bodyText}`  (v2)
+//   v2's nonce is taken once by the Worker, so a captured request can't be replayed while its timestamp still verifies.
+//   A request with a query (/status?name=) also carries x-bp-signature-query: the same message with `${pathname}${search}`
+//   in place of the pathname. A Worker that predates it verifies x-bp-signature alone and ignores it; a newer one reads
+//   the query only when it verifies, so a replayed /status can't pick which of the key's names it is answered about.
 //
 // ## Domain separation — why the first line is a constant
 //
@@ -39,9 +44,14 @@
  */
 export const PROTOCOLS = {
     v1: { request: 'beanpool-registrar-request/v1', attest: 'beanpool-node-attest/v1' },
+    v2: { request: 'beanpool-registrar-request/v2', attest: 'beanpool-node-attest/v2', nonce: true },
 } as const;
 export type Proto = keyof typeof PROTOCOLS;
-/** What this node signs with. Moves only in a release after a Worker accepting it is live (step 2 above). */
+/**
+ * What this node signs with. Moves only in a release after a Worker accepting it is live (step 2 above). v2 (the
+ * one-use nonce, 2026-10-01) is at step 1: the live Worker may be one that predates even `accepted_proto` in its 401,
+ * and a node sending v2 to it could not fall back, so this stays v1 until the deploy workflow has put a v2 Worker live.
+ */
 export const SEND_PROTO: Proto = 'v1';
 /**
  * The protocol of a request without x-bp-proto, or an attestation without `proto`. v1 predates both, so the node
@@ -55,8 +65,10 @@ export const REQUEST_DOMAIN = PROTOCOLS.v1.request;
 /** Leading line of a v1 node attestation. Must match apps/registrar/src/sign.js (attestOne verifies it). */
 export const ATTEST_DOMAIN = PROTOCOLS.v1.attest;
 
+import { randomBytes } from 'node:crypto';
 import { getPrivateKey } from '../p2p.js';
 import { publicKeyToProtobuf } from '@libp2p/crypto/keys';
+import { cleanLabel, REGISTRAR_COMMUNITY_NAME_MAX, REGISTRAR_CONTACT_MAX } from '../config/clean-label.js';
 
 const getRegistrarUrl = () => (process.env.REGISTRAR_URL || 'https://beanpool.org').replace(/\/$/, '');
 
@@ -79,12 +91,17 @@ async function signHex(message: string): Promise<string> {
     return Buffer.from(sig).toString('hex');
 }
 
-function tags(proto: Proto) {
+function tags(proto: Proto): { request: string; attest: string; nonce?: boolean } {
     if (!Object.hasOwn(PROTOCOLS, proto)) throw new Error(`Unknown registrar signing protocol: ${proto}`);
     return PROTOCOLS[proto];
 }
-export const requestMessage = (proto: Proto, method: string, path: string, ts: number | string, bodyText: string) =>
-    `${tags(proto).request}\n${method}\n${path}\n${ts}\n${bodyText}`;
+/** Does `proto` sign a one-use nonce (x-bp-nonce)? */
+export const usesNonce = (proto: Proto): boolean => tags(proto).nonce === true;
+export function requestMessage(proto: Proto, method: string, path: string, ts: number | string, bodyText: string, nonce?: string): string {
+    if (!usesNonce(proto)) return `${tags(proto).request}\n${method}\n${path}\n${ts}\n${bodyText}`;
+    if (!nonce) throw new Error(`a ${proto} request signs a nonce`);
+    return `${tags(proto).request}\n${method}\n${path}\n${ts}\n${nonce}\n${bodyText}`;
+}
 export const attestMessage = (proto: Proto, nonce: string, ts: number | string) =>
     `${tags(proto).attest}\n${nonce}\n${ts}`;
 
@@ -101,14 +118,18 @@ export async function buildAttestation(nonce: string, proto: Proto = SEND_PROTO)
 }
 
 // The signature headers of a request signed under `proto`: the node's one request-signing path.
-export async function signRequest(method: string, path: string, bodyText: string, proto: Proto = SEND_PROTO): Promise<Record<string, string>> {
+// `search`: the request's query (`?name=…`), signed in x-bp-signature-query under the same timestamp and nonce.
+export async function signRequest(method: string, path: string, bodyText: string, proto: Proto = SEND_PROTO, search = ''): Promise<Record<string, string>> {
     const ts = Math.floor(Date.now() / 1000);
+    const nonce = usesNonce(proto) ? randomBytes(16).toString('hex') : undefined;
     const headers: Record<string, string> = {
         'x-bp-pubkey': nodePubkeyHex(),
         'x-bp-timestamp': String(ts),
-        'x-bp-signature': await signHex(requestMessage(proto, method, path, ts, bodyText)),
+        'x-bp-signature': await signHex(requestMessage(proto, method, path, ts, bodyText, nonce)),
     };
+    if (search) headers['x-bp-signature-query'] = await signHex(requestMessage(proto, method, `${path}${search}`, ts, bodyText, nonce));
     if (proto !== DEFAULT_PROTO) headers['x-bp-proto'] = proto;
+    if (nonce) headers['x-bp-nonce'] = nonce;
     return headers;
 }
 
@@ -123,8 +144,11 @@ export function retryProto<P extends string>(sent: string, accepted: unknown, sp
     return both.sort((a, b) => protoVersion(b) - protoVersion(a))[0] ?? null;
 }
 
-async function sendSigned(method: 'GET' | 'POST', path: string, bodyText: string, proto: Proto): Promise<{ ok: boolean; status: number; data: any }> {
-    const headers = await signRequest(method, path, bodyText, proto);
+// `path` may carry a query; x-bp-signature covers the path without it, as every registrar verifies it, and
+// x-bp-signature-query the path with it (apps/registrar sign.js).
+async function sendSigned(method: 'GET' | 'POST', path: string, bodyText: string, proto: Proto): Promise<{ ok: boolean; status: number; data: any; json: boolean }> {
+    const q = path.indexOf('?');
+    const headers = await signRequest(method, q < 0 ? path : path.slice(0, q), bodyText, proto, q < 0 ? '' : path.slice(q));
     if (bodyText) headers['content-type'] = 'application/json';
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 5000);
@@ -132,8 +156,10 @@ async function sendSigned(method: 'GET' | 'POST', path: string, bodyText: string
         const baseUrl = getRegistrarUrl();
         const res = await fetch(`${baseUrl}${path}`, { method, headers, body: bodyText || undefined, signal: controller.signal });
         clearTimeout(timer);
-        const data = await res.json().catch(() => ({} as any));
-        return { ok: res.ok, status: res.status, data };
+        // `json`: the body was a JSON object, sent as JSON. Anything else (an HTML page) reads as {}.
+        const parsed = /\bjson\b/i.test(res.headers.get('content-type') || '') ? await res.json().catch(() => undefined) : undefined;
+        const json = !!parsed && typeof parsed === 'object' && !Array.isArray(parsed);
+        return { ok: res.ok, status: res.status, data: json ? parsed : {}, json };
     } catch (err: any) {
         clearTimeout(timer);
         if (err.name === 'AbortError') throw new Error('Registrar request timed out after 5s');
@@ -143,7 +169,7 @@ async function sendSigned(method: 'GET' | 'POST', path: string, bodyText: string
 
 // A signed request, retried once under a protocol both sides speak after a 401 that lists them. Its answer as it came,
 // whatever its status; throws only when nothing answered (a timeout, a network error).
-async function signedAnswer(method: 'GET' | 'POST', path: string, body?: any): Promise<{ ok: boolean; status: number; data: any }> {
+async function signedAnswer(method: 'GET' | 'POST', path: string, body?: any): Promise<{ ok: boolean; status: number; data: any; json: boolean }> {
     const bodyText = body ? JSON.stringify(body) : '';
     let res = await sendSigned(method, path, bodyText, SEND_PROTO);
     const retry = res.status === 401 ? retryProto(SEND_PROTO, res.data?.accepted_proto, Object.keys(PROTOCOLS) as Proto[]) : null;
@@ -158,16 +184,53 @@ async function signedAnswer(method: 'GET' | 'POST', path: string, body?: any): P
 async function signedFetch(method: 'GET' | 'POST', path: string, body?: any): Promise<any> {
     const res = await signedAnswer(method, path, body);
     const data = res.data;
-    if (!res.ok) throw new Error(data.detail ? `${data.error}: ${data.detail}` : (data.error || `Registrar returned ${res.status}`));
+    if (!res.ok) {
+        const why = data.detail ? `${data.error}: ${data.detail}` : (data.error || `Registrar returned ${res.status}`);
+        // `ref`: where the address service logged what went wrong (it no longer sends Cloudflare's answer to a node).
+        // `status`: something answered with it; no status, nothing answered. `registrar`: the answer is the registrar's own
+        // JSON (an `error` string), so a 4xx is its word (a name taken or not allowed). A page from something in front of it
+        // (a proxy's 400, a firewall's 403) is not, though it carries the same status.
+        const registrar = res.json && typeof data.error === 'string';
+        throw Object.assign(new Error(typeof data.ref === 'string' ? `${why} (ref ${data.ref})` : why), { status: res.status, registrar });
+    }
     return data;
 }
 
+// The labels go out as the registrar accepts them (config/clean-label.ts): a character it can't see never keeps a name dark.
 export const claimAddress = (name: string, mode: 'tunnel' | 'direct', origin?: string, contact?: string, communityName?: string) =>
-    signedFetch('POST', '/api/registrar/claim', { name, mode, origin, contact, community_name: communityName });
+    signedFetch('POST', '/api/registrar/claim', {
+        name, mode, origin, contact: cleanLabel(contact, REGISTRAR_CONTACT_MAX), community_name: cleanLabel(communityName, REGISTRAR_COMMUNITY_NAME_MAX),
+    });
 export const updateAddressMetadata = (communityName?: string, contact?: string) =>
-    signedFetch('POST', '/api/registrar/update', { community_name: communityName, contact });
-export const addressStatus = () => signedFetch('GET', '/api/registrar/status');
-export const releaseAddress = () => signedFetch('POST', '/api/registrar/offline', {});
+    signedFetch('POST', '/api/registrar/update', {
+        community_name: cleanLabel(communityName, REGISTRAR_COMMUNITY_NAME_MAX), contact: cleanLabel(contact, REGISTRAR_CONTACT_MAX),
+    });
+/**
+ * What the registrar holds for this key. `name`: the name this server stores, asked about by name. A registrar that reads
+ * it answers about that name while this key holds it; an older one answers about the key's first name (live, then
+ * pending, then paused), whatever was asked, so a caller never stores an answer that names another name.
+ */
+export const addressStatus = (name?: string | null) =>
+    signedFetch('GET', `/api/registrar/status${name ? `?name=${encodeURIComponent(name)}` : ''}`);
+/**
+ * Release `name` (Take offline). Named whenever a name is stored: with no name the registrar releases the key's first name,
+ * which with two names held can be the other one, leaving this one live with nothing running it.
+ */
+export const releaseAddress = (name?: string | null) => signedFetch('POST', '/api/registrar/offline', name ? { name } : {});
+/**
+ * Bring this server's own held name back (a pause its heal lifts): never a claim, so it can't take back a release or
+ * claim a name. The registrar routes it again only once this server proves its key: on a fresh tunnel only this signed
+ * request gets the token of, or through an attestation at the name signed by this key. Answers `paused` when it couldn't.
+ */
+export const healAddress = (name: string, origin?: string) =>
+    signedFetch('POST', '/api/registrar/heal', { name, ...(origin ? { origin } : {}) });
+/**
+ * Move this server's tunnel name onto a fresh tunnel: a new token, and the old tunnel deleted, so a copy of its token
+ * (a standby given away, a token seen on a screen) stops working. A copied data folder or backup is not cut off: it holds
+ * the node key, which /status gives the new token. `origin` re-points the tunnel at the same time.
+ */
+export const rotateAddress = (name: string, origin?: string) =>
+    signedFetch('POST', '/api/registrar/rotate', { name, ...(origin ? { origin } : {}) });
 
 /**
  * Who holds `name` (a bare label: `bname`, not `bname.beanpool.org`)? The registrar's answer (design

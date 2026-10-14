@@ -534,6 +534,80 @@ describe('PWA WebSocket Pong Watchdog', () => {
         expect(activityListener).toHaveBeenCalledTimes(1);
     });
 
+    // ── A full node: the "no room" close ───────────────────────────────────────────────────────────────────
+
+    /** What a full node does (apps/server/src/https-server.ts refuseSocketForRoom): the socket opens, then closes at once
+     *  with 4429 and the seconds to wait. */
+    function refuseForRoom(socket: any, reason = 'retry=300'): void {
+        socket.readyState = 3;
+        socket.onclose?.({ code: 4429, reason });
+    }
+
+    async function waitInSeconds(previous: any, limitMs: number): Promise<number> {
+        let waited = 0;
+        while (wsInstance === previous && waited < limitMs) {
+            await vi.advanceTimersByTimeAsync(1000);
+            waited += 1000;
+        }
+        return waited;
+    }
+
+    it('a node with no room is tried again only after the 5 minutes it asked, then 10, then 20: never within 30 s', async () => {
+        let socket = await openSocket();
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        const gaps: number[] = [];
+        for (let i = 0; i < 3; i++) {
+            refuseForRoom(socket);
+            gaps.push(await waitInSeconds(socket, 3_600_000));
+            socket = wsInstance;
+            socket.readyState = 1;
+            socket.onopen(); // that try's socket opens, to be refused again
+        }
+        expect(gaps).toEqual([300_000, 600_000, 1_200_000]);
+    });
+
+    it('tabs refused together come back spread over half the wait again', async () => {
+        const socket = await openSocket();
+        vi.spyOn(Math, 'random').mockReturnValue(0.999);
+        refuseForRoom(socket);
+        const waited = await waitInSeconds(socket, 3_600_000);
+        expect(waited).toBeGreaterThan(449_000);
+        expect(waited).toBeLessThanOrEqual(450_000);
+    });
+
+    it('while refused the page still reads over HTTP: each try syncs as its socket opens', async () => {
+        const activityListener = vi.fn();
+        onSyncActivity(activityListener);
+        const socket = await openSocket();
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        refuseForRoom(socket);
+        await waitInSeconds(socket, 3_600_000);
+        activityListener.mockClear();
+        wsInstance.readyState = 1;
+        wsInstance.onopen();
+        await vi.advanceTimersByTimeAsync(3200);
+        expect(activityListener).toHaveBeenCalledTimes(1);
+    });
+
+    it('any other close after a refusal is an ordinary drop again: back within the 0–5 s window', async () => {
+        const socket = await openSocket();
+        vi.spyOn(Math, 'random').mockReturnValue(0.999);
+        refuseForRoom(socket);
+        await waitInSeconds(socket, 3_600_000);
+        const admitted = wsInstance;
+        admitted.readyState = 1;
+        admitted.onopen();
+        admitted.close(); // 1006: the node let it stay, and it dropped later
+        expect(await waitInSeconds(admitted, 60_000)).toBeLessThanOrEqual(6000);
+    });
+
+    it('a node asking for less than 30 s is waited on for 30 s at least', async () => {
+        const socket = await openSocket();
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        refuseForRoom(socket, 'retry=1');
+        expect(await waitInSeconds(socket, 3_600_000)).toBe(30_000);
+    });
+
     it('a visitor who joins while the key-less socket is still being opened ends up on a signed one, never the key-less one', async () => {
         // The lobby's socket (G9b) is part way open: its identity read, which found no key, has not come back yet.
         let visitorRead!: (ident: null) => void;
@@ -556,7 +630,7 @@ describe('PWA WebSocket Pong Watchdog', () => {
         visitorRead(null);
         await vi.advanceTimersByTimeAsync(10);
 
-        expect(opened.map(s => s.url)).toEqual(['ws://localhost:9000/ws?callsign=Rowan']);
+        expect(opened.map(s => s.url)).toEqual(['ws://localhost:9000/ws?callsign=Rowan&nr=1']);
     });
 
     it('reopening for a member who has just joined starts afresh: at once, and syncing at once', async () => {
@@ -738,7 +812,7 @@ describe('PWA WebSocket Pong Watchdog', () => {
         await waitForNewSocket(lobby, 1_000);
         const signed = wsInstance;
         expect(signed).not.toBe(lobby);
-        expect(signed.url).toBe('ws://localhost:9000/ws?callsign=Me');
+        expect(signed.url).toBe('ws://localhost:9000/ws?callsign=Me&nr=1');
         signed.readyState = 1;
         signed.onopen();
         await vi.advanceTimersByTimeAsync(150);
@@ -749,5 +823,28 @@ describe('PWA WebSocket Pong Watchdog', () => {
         expect(read).toHaveBeenCalledTimes(2);
         await vi.advanceTimersByTimeAsync(60_000);
         expect(read).toHaveBeenCalledTimes(2);
+    });
+
+    it('a socket the node let in clears the run: refused, admitted 20 min, away 1 h, refused again waits 300 s, not 600', async () => {
+        let socket = await openSocket();
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+        refuseForRoom(socket);
+        expect(await waitInSeconds(socket, 3_600_000)).toBe(300_000);
+        socket = wsInstance;
+        socket.readyState = 1;
+        socket.onopen();
+        socket.onmessage({ data: JSON.stringify({ type: 'pong' }) }); // let in: it answers
+        for (let i = 0; i < 40; i++) { // 20 minutes, the heartbeat answered each time
+            await vi.advanceTimersByTimeAsync(30_000);
+            socket.onmessage({ data: JSON.stringify({ type: 'pong' }) });
+        }
+        // The tab is reopened for a member (reconnectToAnchor unlinks the old socket before it closes).
+        reconnectToAnchor();
+        await vi.advanceTimersByTimeAsync(10);
+        socket = wsInstance;
+        socket.readyState = 1;
+        socket.onopen();
+        refuseForRoom(socket);
+        expect(await waitInSeconds(socket, 3_600_000)).toBe(300_000);
     });
 });

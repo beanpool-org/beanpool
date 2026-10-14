@@ -38,16 +38,17 @@ import WebSocket from 'ws';
 import { initTls } from './services/tls.js';
 import {
     initStateEngine, seedGenesisMember, grantNodeRole, createPost, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
-    adminPruneUser, runMarketplaceHygiene, clearReplicatedTables,
+    adminPruneUser, runMarketplaceHygiene,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { emptyCopiedTables } from './engine/copied-tables.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
-import { getReplicaConsistency } from '@beanpool/engine';
+import { getReplicaConsistency, setMemberPhoto } from '@beanpool/engine';
 import * as mod from './engine/moderation-notices.js';
 
 let run = 0, passed = 0;
@@ -75,8 +76,9 @@ let owner: Id;
 /** A member who joined `daysAgo` days ago, with a profile photo (posting needs one). */
 function member(name: string, daysAgo: number): Id {
     const id = newId(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
-                VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`).run(id.pk, name, ago(daysAgo * DAY), owner.pk);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(daysAgo * DAY), owner.pk);
+    setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     return id;
 }
@@ -178,6 +180,8 @@ async function main(): Promise<void> {
     modSession = keySession(mo);
     const ava = member('Ava', 40);
     const R = [1, 2, 3].map(i => member(`Rep${i}`, 20 + i));
+    // Established means off probation too (a reporter on it counts for nothing, design 2.3): 3 posts that stayed up each.
+    for (const r of R) for (let i = 0; i < 3; i++) oldPost(r, `${r.name} kept ${i}`);
     const bea = member('Bea', 30);
     const nobody = newId('Nemo'); // a key that is no member here
     process.env.NODE_PROFILE = 'global';
@@ -467,13 +471,13 @@ async function main(): Promise<void> {
         assert(m.invalid === 3 && m.kept === 1 && m.written === 0, `the merge counts what it left out, and a row it already has is kept (${JSON.stringify(m)})`);
     } else assert(false, 'the merge counts what it left out (no merge on this tree)');
 
-    // The replica audit counts the table, and a force-resync clears it.
+    // The replica audit counts the table, and a whole copy starts without it (engine/copied-tables.ts).
     const audit = attempt(() => getReplicaConsistency(db, { moderationNotices: exported }, 0));
     const auditRow = audit?.tables.find(t => t.name === 'moderation_notices');
     assert(!!auditRow && auditRow.primary === exported.length, `the replica audit counts moderation_notices (${JSON.stringify(auditRow)})`);
-    attempt(() => clearReplicatedTables());
+    attempt(() => emptyCopiedTables(db));
     const cleared = attempt(() => (db.prepare('SELECT COUNT(*) AS n FROM moderation_notices').get() as any).n);
-    assert(cleared === 0, `a force-resync clears the table before the full copy comes in (${cleared})`);
+    assert(cleared === 0, `a whole copy starts without the table, built from nothing in a staging database (${cleared})`);
     await p2p.stop();
 
     avaSock.ws.close(); beaSock.ws.close();

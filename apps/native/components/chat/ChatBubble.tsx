@@ -17,6 +17,8 @@ import type { ChatStyles } from './styles';
 export interface ChatQuote {
     author: string;
     text: string;
+    /** The quoted line's own mark (utils/chat-actions.ts dmQuoteFor), shown with it. */
+    note?: string | null;
     onPress?: () => void;
 }
 
@@ -69,6 +71,10 @@ export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPre
             {!!authorLabel && !removed && (
                 <Text style={styles.messageAuthor} numberOfLines={1}>{authorLabel}</Text>
             )}
+            {/* Its own line, free to wrap: the name's one line may be cut, the mark never is. */}
+            {!!authorLabel && !removed && !!item.authorHint && (
+                <Text style={styles.messageAuthorHint}>{item.authorHint}</Text>
+            )}
 
             {!!quote && !removed && (
                 <Pressable
@@ -79,6 +85,9 @@ export function ChatBubble({ item, isMe, styles, kind, authorLabel, quote, onPre
                 >
                     <Text style={[styles.quoteAuthor, isMe ? styles.quoteAuthorMe : styles.quoteAuthorOther]}>{quote.author}</Text>
                     <Text style={[styles.quoteText, isMe ? styles.quoteTextMe : styles.quoteTextOther]} numberOfLines={1}>{quote.text}</Text>
+                    {quote.note ? (
+                        <Text style={[styles.quoteText, isMe ? styles.quoteTextMe : styles.quoteTextOther, { fontStyle: 'italic', fontSize: 11 }]}>⚠️ {quote.note}</Text>
+                    ) : null}
                 </Pressable>
             )}
 

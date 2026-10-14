@@ -3,9 +3,11 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { NodeProfile } from '../../lib/profiles';
 import type { DiagnosticsResponse } from '../../lib/node-client';
-import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
+import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken, fetchDiagnostics, fetchNodePrivatePreview } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
 import { createAddressLookup, type AddressLookup, type AddressResult } from '@beanpool/core';
+import { nodeCredential } from '../../lib/profiles';
+import { passwordField } from '../../lib/node-client';
 
 export interface NodeIdentityPanelProps {
     activeNode: NodeProfile;
@@ -23,6 +25,17 @@ export function NodeIdentityPanel({
     const [communityName, setCommunityName] = useState(typeof diag?.communityName === 'string' ? diag.communityName : '');
     const [contactEmail, setContactEmail] = useState('');
     const [contactPhone, setContactPhone] = useState('');
+    // The contacts come from the admin route: the public community-info says each only when it is published. Until they
+    // load, or if they can't, the two boxes are closed and Save leaves both out, so it never erases what the node holds.
+    const [contacts, setContacts] = useState<'loading' | 'loaded' | 'failed'>('loading');
+    // The server's PRIVATE_PREVIEW setting, read-only here (it is set in the server's settings). null: not read.
+    const [privatePreview, setPrivatePreview] = useState<boolean | null>(null);
+    useEffect(() => {
+        let mounted = true;
+        setPrivatePreview(null);
+        fetchNodePrivatePreview(activeNode.url).then((on) => { if (mounted) setPrivatePreview(on); }, () => {});
+        return () => { mounted = false; };
+    }, [activeNode.url]);
 
     // Coordinates & Service radius
     const [lat, setLat] = useState<number | null>(() => (diag as any)?.location?.lat ?? null);
@@ -41,7 +54,9 @@ export function NodeIdentityPanel({
     // Directory publishing flags
     const [publishLocation, setPublishLocation] = useState(true);
     const [publishMembers, setPublishMembers] = useState(true);
-    const [publishContacts, setPublishContacts] = useState(true);
+    // Off unless the node says the owner turned each on: a contact is published only by an owner's choice.
+    const [publishContactEmail, setPublishContactEmail] = useState(false);
+    const [publishContactPhone, setPublishContactPhone] = useState(false);
     const [publishHealth, setPublishHealth] = useState(true);
     const [directoryPushIntervalHours, setDirectoryPushIntervalHours] = useState(12);
     const [lastDirectoryPush, setLastDirectoryPush] = useState<number | string | null>(null);
@@ -49,6 +64,8 @@ export function NodeIdentityPanel({
     // "Ask to join" (G6): null until the node says it takes requests to join at all (a node from before G6 doesn't).
     const [acceptKnocks, setAcceptKnocks] = useState<boolean | null>(null);
     const [openKnocks, setOpenKnocks] = useState<number | null>(null);
+    // Who answers a request to join follows who may invite (`door`, set under People & Safety → Invites & QR).
+    const [onlyAdminsAnswer, setOnlyAdminsAnswer] = useState(false);
 
     // Actions & status
     const [saving, setSaving] = useState(false);
@@ -86,12 +103,6 @@ export function NodeIdentityPanel({
                     if (data.communityName !== undefined) {
                         setCommunityName(typeof data.communityName === 'string' ? data.communityName : String(data.communityName ?? ''));
                     }
-                    if (data.contactEmail !== undefined) {
-                        setContactEmail(typeof data.contactEmail === 'string' ? data.contactEmail : String(data.contactEmail ?? ''));
-                    }
-                    if (data.contactPhone !== undefined) {
-                        setContactPhone(typeof data.contactPhone === 'string' ? data.contactPhone : String(data.contactPhone ?? ''));
-                    }
                     if (data.callsign !== undefined) {
                         setCallsign(typeof data.callsign === 'string' ? data.callsign : String(data.callsign ?? ''));
                     }
@@ -116,7 +127,8 @@ export function NodeIdentityPanel({
                     }
                     if (cfg.publishLocation !== undefined) setPublishLocation(Boolean(cfg.publishLocation));
                     if (cfg.publishMembers !== undefined) setPublishMembers(Boolean(cfg.publishMembers));
-                    if (cfg.publishContacts !== undefined) setPublishContacts(Boolean(cfg.publishContacts));
+                    setPublishContactEmail(cfg.publishContactEmail === true);
+                    setPublishContactPhone(cfg.publishContactPhone === true);
                     if (cfg.publishHealth !== undefined) setPublishHealth(Boolean(cfg.publishHealth));
                     if (cfg.directoryPushIntervalHours !== undefined) {
                         const parsedHours = Number(cfg.directoryPushIntervalHours);
@@ -125,12 +137,13 @@ export function NodeIdentityPanel({
                     if (cfg.lastDirectoryPush) {
                         setLastDirectoryPush(cfg.lastDirectoryPush);
                     }
+                    setOnlyAdminsAnswer(cfg.door === 'admins');
                     if (typeof cfg.acceptKnocks === 'boolean') {
                         setAcceptKnocks(cfg.acceptKnocks);
                         // How many are waiting is the operator's only, so it is its own admin read.
                         const knocksUrl = resolveNodeApiUrl(activeNode.url, '/api/local/admin/knocks');
                         const knocksRes = await fetch(knocksUrl, {
-                            headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                            headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                         }).catch(() => null);
                         if (knocksRes && knocksRes.ok && mounted) {
                             const knocks = await knocksRes.json().catch(() => ({}));
@@ -143,7 +156,29 @@ export function NodeIdentityPanel({
             }
         };
 
+        // The contacts, from the admin route (owner or admin), beside the reads above: a slow answer holds up nothing else.
+        // Each is text, or null for none stored; anything else, or no answer, is not the node's contacts.
+        const loadContacts = async () => {
+            try {
+                const admin = await fetchDiagnostics(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
+                const text = (v: unknown) => (typeof v === 'string' ? v : v === null ? '' : undefined);
+                const email = text(admin.contactEmail);
+                const phone = text(admin.contactPhone);
+                if (!mounted) return;
+                if (email === undefined || phone === undefined) {
+                    setContacts('failed');
+                    return;
+                }
+                setContactEmail(email);
+                setContactPhone(phone);
+                setContacts('loaded');
+            } catch {
+                if (mounted) setContacts('failed');
+            }
+        };
+
         loadData();
+        loadContacts();
 
         return () => {
             mounted = false;
@@ -315,8 +350,8 @@ export function NodeIdentityPanel({
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/directory/push');
             const res = await fetch(url, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
-                body: JSON.stringify({ password: activeNode.adminPassword }),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
             });
             const data = await res.json().catch(() => ({}));
             if (res.ok && data.success) {
@@ -344,11 +379,11 @@ export function NodeIdentityPanel({
         try {
             // 1. Save identity info (/api/local/update-identity)
             const identityPayload: Record<string, unknown> = {
-                password: activeNode.adminPassword,
+                ...passwordField(nodeCredential(activeNode)),
                 callsign: callsign.trim(),
                 communityName: communityName.trim(),
-                contactEmail: contactEmail.trim(),
-                contactPhone: contactPhone.trim(),
+                // Only contacts the admin route loaded: boxes that never loaded would erase the node's.
+                ...(contacts === 'loaded' ? { contactEmail: contactEmail.trim(), contactPhone: contactPhone.trim() } : {}),
             };
             if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
                 identityPayload.lat = lat;
@@ -358,7 +393,7 @@ export function NodeIdentityPanel({
             const identityUrl = resolveNodeApiUrl(activeNode.url, '/api/local/update-identity');
             const identityRes = await fetch(identityUrl, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify(identityPayload),
             });
 
@@ -366,12 +401,13 @@ export function NodeIdentityPanel({
             const configUrl = resolveNodeApiUrl(activeNode.url, '/api/local/admin/node/config');
             const configRes = await fetch(configUrl, {
                 method: 'POST',
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                 body: JSON.stringify({
-                    password: activeNode.adminPassword,
+                    ...passwordField(nodeCredential(activeNode)),
                     publishLocation,
                     publishMembers,
-                    publishContacts,
+                    publishContactEmail,
+                    publishContactPhone,
                     publishHealth,
                     directoryPushIntervalHours,
                     serviceRadius: (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng))
@@ -422,6 +458,14 @@ export function NodeIdentityPanel({
                 <p className="text-xs text-nature-400 m-0 mt-0.5">
                     Update the public identity, geographic location, service boundary, and global directory publishing for this node
                 </p>
+                {privatePreview !== null && (
+                    <p data-testid="private-preview-line" className="text-xs text-nature-200 m-0 mt-2 leading-relaxed break-words">
+                        <strong className="text-white">Private preview: {privatePreview ? 'on' : 'off'}.</strong>
+                        {privatePreview
+                            ? ' Only members, and people the owner or an admin invites, can get in. Set in the server\'s settings.'
+                            : ' Set in the server\'s settings.'}
+                    </p>
+                )}
             </div>
 
             {saveStatus && (
@@ -619,7 +663,9 @@ export function NodeIdentityPanel({
                             beanpool.org ↗
                         </a>{' '}
                         on a schedule. No inbound API access is required — your node only makes outbound requests.{' '}
-                        <strong className="text-white">Your node&apos;s URL is NEVER published.</strong> This ensures your private network remains secure from the outside internet.
+                        <strong className="text-white">The directory is public.</strong> It always lists your community&apos;s name and web address, so
+                        people on the global community can find you and ask to join. The rest is up to you below; your contact email and phone
+                        are not published unless you turn them on.
                     </p>
 
                     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-nature-950 p-4 rounded-2xl border border-nature-800">
@@ -670,7 +716,7 @@ export function NodeIdentityPanel({
                                 <span>📍 Share Location &amp; Radius</span>
                             </label>
                             <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
-                                Helps other BeanPoolers avoid creating duplicate nodes in your area, and allows the global community to see our network grow. Your URL is not shared.
+                                Helps other BeanPoolers avoid creating duplicate nodes in your area, and allows the global community to see our network grow.
                             </p>
                         </div>
 
@@ -693,16 +739,32 @@ export function NodeIdentityPanel({
                         <div>
                             <label className="flex items-start gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
                                 <input
-                                    id="publish-contacts"
+                                    id="publish-contact-email"
                                     type="checkbox"
-                                    checked={publishContacts}
-                                    onChange={(e) => setPublishContacts(e.target.checked)}
+                                    checked={publishContactEmail}
+                                    onChange={(e) => setPublishContactEmail(e.target.checked)}
                                     className="rounded border-nature-700 bg-nature-950 text-terra-500 mt-0.5 accent-terra-500"
                                 />
-                                <span>📧 Share Community Contacts</span>
+                                <span>📧 Share Email in Directory</span>
                             </label>
                             <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
-                                Makes your Community Name, Email, and Phone visible on the directory so potential new users from outside the trust network can contact the admin to request an invite.
+                                Off unless you turn it on. Puts the Contact Email below in the public directory and on the map at beanpool.org, where anyone can read it, so people outside the community can ask you for an invite.
+                            </p>
+                        </div>
+
+                        <div>
+                            <label className="flex items-start gap-2.5 text-xs font-bold text-white cursor-pointer select-none">
+                                <input
+                                    id="publish-contact-phone"
+                                    type="checkbox"
+                                    checked={publishContactPhone}
+                                    onChange={(e) => setPublishContactPhone(e.target.checked)}
+                                    className="rounded border-nature-700 bg-nature-950 text-terra-500 mt-0.5 accent-terra-500"
+                                />
+                                <span>📞 Share Phone in Directory</span>
+                            </label>
+                            <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
+                                Off unless you turn it on. Puts the Contact Phone below in the public directory and on the map at beanpool.org, where anyone can read it.
                             </p>
                         </div>
 
@@ -735,7 +797,9 @@ export function NodeIdentityPanel({
                                     <span>🚪 Take Requests to Join</span>
                                 </label>
                                 <p className="text-[11px] text-nature-400 ml-6 mt-0.5 leading-normal">
-                                    People who find your community on the global node can ask to join, with a short message. Any member can answer by inviting them. Turned off, nobody can ask, and members don&apos;t see requests.
+                                    People who find your community on the global node can ask to join, with a short message. {onlyAdminsAnswer
+                                        ? 'Only owners and admins can answer, since only they invite here (People & Safety → Invites & QR → Who may invite).'
+                                        : 'Any member can answer by inviting them.'} Turned off, nobody can ask, and members don&apos;t see requests.
                                 </p>
                                 {openKnocks !== null && (
                                     <p id="open-knocks" className="text-[11px] text-nature-300 ml-6 mt-1 leading-normal">
@@ -752,8 +816,13 @@ export function NodeIdentityPanel({
                     <div>
                         <h4 className="text-sm font-bold text-white m-0">Community Contacts</h4>
                         <p className="text-xs text-nature-400 mt-0.5 m-0">
-                            Public details displayed on your landing page. Helps new members find your community.
+                            The name is public. The email and phone stay private unless you turn each on under Directory Publishing; then anyone can read it.
                         </p>
+                        {contacts === 'failed' && (
+                            <p id="contacts-not-loaded" role="status" className="text-[11px] text-amber-300 mt-1 m-0 leading-normal">
+                                Couldn&apos;t load the contact email and phone from the node, so Save leaves them as they are. Reload to change them.
+                            </p>
+                        )}
                     </div>
 
                     <div>
@@ -781,8 +850,9 @@ export function NodeIdentityPanel({
                             maxLength={100}
                             value={contactEmail}
                             onChange={(e) => setContactEmail(e.target.value)}
+                            disabled={contacts !== 'loaded'}
                             placeholder="e.g. admin@mycommunity.org"
-                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
+                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500 disabled:opacity-50"
                         />
                     </div>
 
@@ -796,8 +866,9 @@ export function NodeIdentityPanel({
                             maxLength={30}
                             value={contactPhone}
                             onChange={(e) => setContactPhone(e.target.value)}
+                            disabled={contacts !== 'loaded'}
                             placeholder="e.g. +61 400 123 456"
-                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500"
+                            className="w-full bg-nature-950 border border-nature-700 rounded-xl px-3.5 py-2 text-sm text-white focus:outline-none focus:border-terra-500 disabled:opacity-50"
                         />
                     </div>
                 </div>

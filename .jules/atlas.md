@@ -140,3 +140,78 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap:** [What was untested]\n**Learning:** [A
 **Gap:** `IS_FLEET_MODE` mode detection in `apps/manager/src/lib/mode.ts` was untested.
 **Learning:** Testing `IS_FLEET_MODE` required resetting Vitest modules (`vi.resetModules()`), stubbing environment variables (`vi.stubEnv`), and dynamically re-importing `mode.ts` to verify global build definition (`__FLEET_MODE__`) and `import.meta.env.VITE_FLEET_MODE` logic.
 **Action:** Continue identifying any remaining untested helper utilities or React components in `apps/manager/`.
+
+## 2026-09-18 - [manager tests] useSectionSubTab and sections helper unit tests
+**Gap:** `useSectionSubTab`, `isSettingsSection`, and edge cases in `defaultSubTab` & `subTabLabel` in `apps/manager/src/lib/sections.ts` lacked unit test coverage.
+**Learning:** `useSectionSubTab` hook requires `<string>` generic type argument in `renderHook` when testing subtab transitions across different sections to satisfy TypeScript type safety.
+**Action:** Check remaining utility files and components in `apps/manager/` for edge-case unit test coverage.
+
+## 2026-09-19 - [manager tests] SectionErrorBoundary stack trace toggle unit tests
+**Gap:** Stack trace details toggle (`Show Details` / `Hide Details` buttons and `<pre>` block rendering) in `apps/manager/src/components/common/SectionErrorBoundary.tsx` lacked unit test coverage.
+**Learning:** Testing `SectionErrorBoundary` stack trace toggle required rendering a component that throws an `Error` instance, asserting that the error message is displayed while the stack trace is hidden initially, clicking "Show Details" to verify that the button label changes to "Hide Details" and `<pre>` stack details appear, and clicking again to confirm that the stack details hide.
+**Action:** Identify remaining untested UI component edge cases or interactive state paths across `apps/manager/src/components/`.
+
+## 2026-10-01 - [manager tests] SuggestChangePanel component unit tests
+**Gap:** Interactive user actions and edge cases in `SuggestChangePanel` (`apps/manager/src/components/modules/SuggestChangePanel.tsx`) lacked component test coverage.
+**Learning:** Testing `SuggestChangePanel` required asserting empty validation errors, checking character limit disabling logic using `FEEDBACK_TEXT_MAX`, verifying in-flight submit spinners, testing form cancelation and success view closure, and verifying payload props like `community`.
+**Action:** Continue expanding test coverage for untested manager UI components and utilities.
+
+## 2026-10-02 - [manager tests] ColdStartWizard onCancel and print card unit tests
+**Gap:** `onCancel` callback ("Skip to Dashboard") and `window.print` trigger ("Print Founding Cards") in `ColdStartWizard` (`apps/manager/src/components/modules/ColdStartWizard.tsx`) were untested.
+**Learning:** Testing `ColdStartWizard` `onCancel` and print actions required spying on `window.print` and verifying step 5 card generation flow prior to calling print.
+**Action:** Identify remaining edge cases in module components for complete test coverage.
+
+## 2026-10-03 - [manager tests] node-claim unit tests
+**Gap:** `fetchClaimState` and `buildClaimQr` in `apps/manager/src/lib/node-claim.ts` were untested directly.
+**Learning:** Testing `fetchClaimState` requires mocking `globalThis.fetch` for various HTTP states (network errors, non-object JSON bodies, timeout via fake timers, and external AbortController signals) to verify `ClaimState` outputs.
+**Action:** Identify any remaining untested utility functions or UI components in `apps/manager/`.
+
+## 2026-10-04 - [manager tests] TotpSetupGate component unit tests
+**Gap:** `TotpSetupGate` component in `apps/manager/src/components/auth/TotpSetupGate.tsx` was untested.
+**Learning:** Testing `TotpSetupGate` requires matching `resolveNodeApiUrl(nodeUrl, ...)` endpoint path targets (`/proxy/https/.../api/local/admin/2fa/setup` and `/verify`) when mocking `globalThis.fetch` calls.
+**Action:** Identify any remaining untested auth/login components in `apps/manager/src/components/auth/`.
+
+## 2026-10-05 - [manager tests] UnclaimedCard component unit tests
+**Gap:** `UnclaimedCard` component in `apps/manager/src/components/auth/UnclaimedCard.tsx` lacked a dedicated unit test suite.
+**Learning:** Testing `UnclaimedCard` directly required mocking `generateOfflineQrUrl` from `../../lib/qr` to assert QR rendering vs redirect notice display based on matching page origin against primary and listed addresses.
+**Action:** Identify remaining untested common or auth UI components in `apps/manager/src/components/`.
+
+## 2026-10-06 - [manager tests] OwnerPhoneBanner component unit tests
+**Gap:** `OwnerPhoneBanner` component in `apps/manager/src/components/auth/OwnerPhoneBanner.tsx` was untested.
+**Learning:** Testing `OwnerPhoneBanner` required dispatching `OWNER_PHONE_EVENT` custom events on `window` inside `act()` to trigger banner display, asserting node settings link formatting, testing dismissal button click, and checking prop change reset logic.
+**Action:** Identify remaining untested auth or layout UI components in `apps/manager/src/components/`.
+
+## 2026-10-07 - [manager tests] useClaimState hook unit tests
+**Gap:** `useClaimState` custom hook in `apps/manager/src/components/auth/useClaimState.ts` was untested directly.
+**Learning:** Testing `useClaimState` with `renderHook` required mocking `fetchClaimState` and `fetchCommunityInfo` from `../../lib/node-claim` to verify initial fetch, merging community addresses for unclaimed nodes, interval polling, tab visibility change events, and AbortController cleanup.
+**Action:** Continue identifying remaining untested auth hooks or components in `apps/manager/src/components/auth/`.
+
+## 2026-10-08 - [manager tests] ThreatReviewModal report dismissal and metric parsing unit tests
+**Gap:** `onDismissReport` execution/error handling and insularity/cohort telemetry metric parsing in `ThreatReviewModal` (`apps/manager/src/components/modules/ThreatReviewModal.tsx`) were untested.
+**Learning:** Testing `ThreatReviewModal` report dismissal requires mocking `onDismissReport` promises and using Vitest fake timers (`vi.useFakeTimers()`) to verify async timer delays, error state banner rendering (`role="alert"`), and subsequent `onDismiss` callbacks.
+**Action:** Continue expanding edge case coverage for module components in `apps/manager/src/components/modules/`.
+
+## 2026-10-09 - [manager tests] AnalyticsModule warning threshold and empty history unit tests
+**Gap:** Warning threshold detection (e.g. 70% CPU), loading refresh state, and single-point history rendering in `AnalyticsModule` (`apps/manager/src/components/modules/AnalyticsModule.tsx`) were untested.
+**Learning:** Testing `AnalyticsModule` edge cases required asserting warning badges when thresholds are approached without critical breach, checking disabled state during fleet diagnostics refresh, and verifying fallback rendering for single-point telemetry history.
+**Action:** Continue expanding test coverage for untested UI component states in `apps/manager/src/components/modules/`.
+
+## 2026-10-10 - [manager tests] signOutEverywhere, shutdown, disk health and decision actions unit tests
+**Gap:** `signOutEverywhere`, `emergencySuspendMember`, `haltDecision`, `liftMemberSuspension`, `acknowledgeShutdownStatus`, `fetchDiskHealth`, `fetchStorageCleanPreview`, `cleanStorageAndCompressLogs`, and `fetchAlertsSummary` in `apps/manager/src/lib/node-client.ts` lacked direct unit tests.
+**Learning:** Testing `signOutEverywhere` required handling the discriminated union type `SignOutEverywhereResult` where `ok: false` is accompanied by a `message` property.
+**Action:** Continue identifying any remaining untested helper utilities in `apps/manager/src/lib/`.
+
+## 2026-10-11 - [manager tests] token-guard unit tests
+**Gap:** `tokenCannotReach`, `guardTokenFetch`, and `installTokenFetchGuard` in `apps/manager/src/lib/token-guard.ts` lacked a standalone test file in `.test.ts` (existing tests were in `.test.tsx`).
+**Learning:** Adding `token-guard.test.ts` verified path blocking, event dispatch (`OWNER_PHONE_EVENT`), Request input extraction, 401 refusal formatting (`TOKEN_REPLACE_ADVICE`), and fetch guard wrapping without requiring React component rendering.
+**Action:** Continue expanding test coverage for untested utilities or components in `apps/manager/`.
+
+## 2026-10-12 - [manager tests] reportSubject, formatResolverName, and isManagerApi unit tests
+**Gap:** `formatResolverName`, `reportSubject`, and `isManagerApi` utility functions in `apps/manager/src/lib/node-client.ts` lacked direct unit test coverage.
+**Learning:** Testing `formatResolverName` confirmed that empty string or null returns `COMMUNITY_ADMIN` ('a community admin'), while whitespace-only string returns `''` after `trim()`. `reportSubject` verifies post author extraction, pulse item target fallback, and snake_case pubkey aliasing.
+**Action:** Continue identifying utility functions with missing direct assertions across `apps/manager/src/lib/`.
+
+## 2026-10-13 - [manager tests] confirmPhoneDigits and wrongDigitsMessage unit tests
+**Gap:** `confirmPhoneDigits` and `wrongDigitsMessage` in `apps/manager/src/lib/phone-signin.ts` lacked unit test coverage in `apps/manager/src/lib/phone-signin.test.ts`.
+**Learning:** Testing `confirmPhoneDigits` required mocking `globalThis.fetch` to cover network exception retry responses (`kind: 'retry'`), HTTP 500/429 status code handling, `status: 'wrong'` response mapping with `triesLeft`, and successful pairing confirmation delegation to `pollAnswer`.
+**Action:** Continue expanding unit test coverage for untested helper functions across `apps/manager/src/lib/`.

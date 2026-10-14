@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { reportAbuse } from '../lib/api';
+import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT } from '../lib/reportReasons';
 
 interface Props {
     isOpen: boolean;
@@ -13,13 +14,6 @@ interface Props {
     onReported?: () => void;
 }
 
-const REPORT_REASONS = [
-    'Spam or scam',
-    'Offensive content',
-    'Misleading post',
-    'Other',
-];
-
 export function ReportModal({
     isOpen,
     onClose,
@@ -30,7 +24,9 @@ export function ReportModal({
     targetPulseItemId,
     onReported,
 }: Props) {
-    const [selectedReason, setSelectedReason] = useState(REPORT_REASONS[0]);
+    // Nothing is picked until the member chooses: a pre-picked "Spam or scam" let a hurried tap send the wrong reason
+    // (review of #1912). Submit stays off until then, as on the phone's report screens.
+    const [selectedReason, setSelectedReason] = useState('');
     const [details, setDetails] = useState('');
     const [submitting, setSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -39,7 +35,7 @@ export function ReportModal({
     // Reset draft state and errors cleanly whenever modal opens, and establish focus
     useEffect(() => {
         if (isOpen) {
-            setSelectedReason(REPORT_REASONS[0]);
+            setSelectedReason('');
             setDetails('');
             setSubmitting(false);
             setError(null);
@@ -79,6 +75,7 @@ export function ReportModal({
             onReported?.();
             onClose();
         } catch (e: any) {
+            // The choice and the words stay, so the member can send again without retyping.
             setError(e?.message || 'Failed to submit report. Please try again.');
         } finally {
             setSubmitting(false);
@@ -95,7 +92,7 @@ export function ReportModal({
             <div
                 ref={modalCardRef}
                 tabIndex={-1}
-                className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-xl flex flex-col gap-4 outline-none"
+                className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl w-full max-w-md max-h-full overflow-y-auto scroll-pb-24 p-5 sm:p-6 shadow-xl flex flex-col gap-4 outline-none"
             >
                 <div className="flex items-center justify-between border-b border-nature-100 dark:border-nature-800 pb-3">
                     <h3 id="report-modal-title" className="text-base font-bold text-nature-950 dark:text-white flex items-center gap-2">
@@ -134,7 +131,7 @@ export function ReportModal({
                                     className={`min-h-[44px] px-3.5 py-2 rounded-full text-xs font-bold cursor-pointer transition-all border flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
                                         isSelected
                                             ? 'bg-red-600 text-white border-red-600 shadow-sm'
-                                            : 'bg-nature-50 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-200 dark:border-nature-700 hover:bg-nature-100 dark:hover:bg-nature-700'
+                                            : 'bg-nature-50 dark:bg-nature-800 text-nature-700 dark:text-nature-300 border-nature-200 dark:border-nature-700 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                     }`}
                                 >
                                     {isSelected ? '✓ ' : ''}{reason}
@@ -142,6 +139,9 @@ export function ReportModal({
                             );
                         })}
                     </div>
+                    <p className="mt-2 text-xs text-nature-600 dark:text-nature-300">
+                        <span className="font-bold">{CHILD_SAFETY_REASON}:</span> {CHILD_SAFETY_HINT}
+                    </p>
                 </div>
 
                 <div>
@@ -159,12 +159,16 @@ export function ReportModal({
                     />
                 </div>
 
-                <div className="flex gap-2 pt-2">
+                {/*
+                  * Cancel and Submit stay at the card's foot while it scrolls (the review of #1895, finding 6: at 320 px
+                  * with 130% text the card ended at the hint, with no sign that Submit was below it).
+                  */}
+                <div data-testid="report-actions" className="sticky -bottom-5 sm:-bottom-6 -mx-5 sm:-mx-6 -mb-5 sm:-mb-6 px-5 sm:px-6 pb-5 sm:pb-6 pt-3 flex gap-2 bg-white dark:bg-nature-900 border-t border-nature-100 dark:border-nature-800 rounded-b-2xl">
                     <button
                         type="button"
                         onClick={onClose}
                         disabled={submitting}
-                        className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-400"
+                        className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 border-none cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nature-400"
                     >
                         Cancel
                     </button>
@@ -172,7 +176,11 @@ export function ReportModal({
                         type="button"
                         onClick={handleSubmit}
                         disabled={submitting || !selectedReason}
-                        className="flex-1 min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs bg-red-600 text-white hover:bg-red-500 disabled:opacity-60 border-none cursor-pointer shadow-sm transition-all flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                        className={`flex-1 min-h-[44px] py-2.5 px-4 rounded-xl font-bold text-xs border-none transition-all flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 ${
+                            selectedReason
+                                ? 'bg-red-600 text-white hover:bg-red-500 disabled:opacity-60 cursor-pointer shadow-sm'
+                                : 'bg-bg-hover text-text-muted cursor-not-allowed'
+                        }`}
                     >
                         {submitting ? 'Sending…' : 'Submit Report'}
                     </button>

@@ -1,21 +1,33 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Modal, Image, ScrollView, ActivityIndicator, Alert, Dimensions } from 'react-native';
+import React, { useState, useRef, useMemo } from 'react';
+import { View, Text, StyleSheet, Pressable, Modal, Image, ScrollView, ActivityIndicator, Alert, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { processProfileImage } from '../utils/image-processing';
 import { BUNDLED_AVATARS } from '../utils/bundled-avatars';
-import { colors, palette } from '../constants/colors';
-
-const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+import { colors as lightColors, palette, type AppColors } from '../constants/colors';
+import { bottomSheetLayout } from '../utils/bottom-sheet-layout';
 
 interface AvatarPickerSheetProps {
     visible: boolean;
     onClose: () => void;
     onSelectImage: (uri: string) => void;
+    /** The dark theme's colours. Settings, welcome and profile setup pass them in dark; light passes none. */
+    colors?: AppColors;
 }
 
-export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPickerSheetProps) {
+export function AvatarPickerSheet({ visible, onClose, onSelectImage, colors }: AvatarPickerSheetProps) {
+    const styles = useMemo(() => (colors ? makeStyles(tonesFor(colors)) : LIGHT_STYLES), [colors]);
     const [loading, setLoading] = useState(false);
     const [selectedAvatarId, setSelectedAvatarId] = useState<string | null>(null);
+    // The body scrolls and "Use Selected Avatar" sits in a footer outside it, above the system bars: at 320 dp and 130%
+    // text the button was at the screen's edge, its label cut (rehearsal 5 Oct, d1).
+    const { height: windowHeight } = useWindowDimensions();
+    const insets = useSafeAreaInsets();
+    const layout = bottomSheetLayout(windowHeight, insets);
+    // The footer appears with the first pick and takes its height from the body: at 320 dp and 130% text the body then
+    // ended mid-row, the avatars cut at the footer's line (rehearsal 5 Oct b, item 4). The row is the body's last part, so
+    // when the body's height changes with an avatar picked, it scrolls to its end and the whole row shows above the footer.
+    const bodyScrollRef = useRef<ScrollView>(null);
 
     // Scroll affordance for the horizontal avatar strip: without an on-screen cue it isn't
     // obvious there are more avatars off the right edge. We show a chevron on whichever side
@@ -102,7 +114,7 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPic
             onRequestClose={onClose}
         >
             <Pressable style={styles.backdrop} accessibilityRole="button" accessibilityLabel="Close" onPress={onClose}>
-                <Pressable style={styles.sheet} accessibilityRole="button" onPress={(e) => e.stopPropagation()}>
+                <Pressable style={[styles.sheet, { maxHeight: layout.maxHeight }]} accessibilityRole="button" onPress={(e) => e.stopPropagation()}>
                     {/* Header */}
                     <View style={styles.header}>
                         <Text style={styles.title}>Profile Photo</Text>
@@ -111,8 +123,13 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPic
                         </Pressable>
                     </View>
 
-                    {/* Content */}
-                    <View style={styles.content}>
+                    {/* Content: scrolls when taller than the sheet, so the footer below always shows */}
+                    <ScrollView
+                        ref={bodyScrollRef}
+                        style={styles.body}
+                        contentContainerStyle={styles.content}
+                        onLayout={() => { if (selectedAvatarId && !loading) bodyScrollRef.current?.scrollToEnd({ animated: true }); }}
+                    >
                         {loading ? (
                             <View style={styles.loadingContainer}>
                                 <ActivityIndicator size="large" color={palette.blue600} />
@@ -195,32 +212,71 @@ export function AvatarPickerSheet({ visible, onClose, onSelectImage }: AvatarPic
                                     )}
                                 </View>
 
-                                {selectedAvatarId && (
-                                    <Pressable style={styles.confirmButton} accessibilityRole="button" onPress={handleSelectBundled}>
-                                        <Text style={styles.confirmButtonText}>Use Selected Avatar</Text>
-                                    </Pressable>
-                                )}
                             </>
                         )}
-                    </View>
+                    </ScrollView>
+
+                    {/* Footer: outside the scroll, clear of the gesture bar or navigation buttons */}
+                    {!loading && selectedAvatarId ? (
+                        <View style={[styles.footer, { paddingBottom: layout.footerPaddingBottom }]}>
+                            <Pressable style={styles.confirmButton} accessibilityRole="button" onPress={handleSelectBundled}>
+                                <Text style={styles.confirmButtonText}>Use Selected Avatar</Text>
+                            </Pressable>
+                        </View>
+                    ) : (
+                        <View style={{ height: layout.footerPaddingBottom }} />
+                    )}
                 </Pressable>
             </Pressable>
         </Modal>
     );
 }
 
-const styles = StyleSheet.create({
+/** The sheet's own light look (slate), or the theme's tokens when a theme passes its colours. */
+function tonesFor(colors?: AppColors) {
+    return colors ? {
+        sheet: colors.surface.card,
+        line: colors.border.default,
+        title: colors.text.heading,
+        closeBg: colors.surface.subtle,
+        closeText: colors.text.secondary,
+        sourceBg: colors.surface.subtle,
+        sourceBorder: colors.border.strong,
+        sourceLabel: colors.text.body,
+        section: colors.text.secondary,
+        chevronBg: colors.surface.subtle,
+        chevronText: colors.text.body,
+        itemBg: colors.surface.subtle,
+        selectedBg: colors.accent.tint,
+        loading: colors.text.secondary,
+    } : {
+        sheet: lightColors.surface.card,
+        line: palette.slate100,
+        title: palette.slate900,
+        closeBg: palette.slate100,
+        closeText: palette.slate500,
+        sourceBg: palette.slate50,
+        sourceBorder: palette.slate200,
+        sourceLabel: palette.slate700,
+        section: palette.slate600,
+        chevronBg: 'rgba(255,255,255,0.92)',
+        chevronText: palette.slate700,
+        itemBg: palette.slate50,
+        selectedBg: palette.blue50,
+        loading: palette.slate500,
+    };
+}
+
+const makeStyles = (t: ReturnType<typeof tonesFor>) => StyleSheet.create({
     backdrop: {
         flex: 1,
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'flex-end',
     },
     sheet: {
-        backgroundColor: colors.surface.card,
+        backgroundColor: t.sheet,
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
-        maxHeight: SCREEN_HEIGHT * 0.8,
-        paddingBottom: 40,
     },
     header: {
         flexDirection: 'row',
@@ -228,28 +284,39 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: 20,
         borderBottomWidth: 1,
-        borderBottomColor: palette.slate100,
+        borderBottomColor: t.line,
     },
     title: {
         fontSize: 18,
         fontWeight: '700',
-        color: palette.slate900,
+        color: t.title,
     },
     closeButton: {
         width: 32,
         height: 32,
         borderRadius: 16,
-        backgroundColor: palette.slate100,
+        backgroundColor: t.closeBg,
         alignItems: 'center',
         justifyContent: 'center',
     },
     closeText: {
         fontSize: 16,
         fontWeight: '700',
-        color: palette.slate500,
+        color: t.closeText,
+    },
+    // Shrinks to fit the sheet's cap and scrolls; never grows past its content.
+    body: {
+        flexGrow: 0,
+        flexShrink: 1,
     },
     content: {
         padding: 20,
+    },
+    footer: {
+        paddingHorizontal: 20,
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: t.line,
     },
     sourceButtonsRow: {
         flexDirection: 'row',
@@ -258,9 +325,9 @@ const styles = StyleSheet.create({
     },
     sourceButton: {
         flex: 1,
-        backgroundColor: palette.slate50,
+        backgroundColor: t.sourceBg,
         borderWidth: 2,
-        borderColor: palette.slate200,
+        borderColor: t.sourceBorder,
         borderRadius: 16,
         padding: 20,
         alignItems: 'center',
@@ -272,12 +339,12 @@ const styles = StyleSheet.create({
     sourceLabel: {
         fontSize: 16,
         fontWeight: '600',
-        color: palette.slate700,
+        color: t.sourceLabel,
     },
     sectionTitle: {
         fontSize: 16,
         fontWeight: '600',
-        color: palette.slate600,
+        color: t.section,
         marginBottom: 16,
     },
     avatarScrollWrap: {
@@ -310,7 +377,7 @@ const styles = StyleSheet.create({
         width: 34,
         height: 34,
         borderRadius: 17,
-        backgroundColor: 'rgba(255,255,255,0.92)',
+        backgroundColor: t.chevronBg,
         justifyContent: 'center',
         alignItems: 'center',
         // subtle lift so the cue reads as a control floating over the strip
@@ -323,7 +390,7 @@ const styles = StyleSheet.create({
     avatarChevronText: {
         fontSize: 24,
         fontWeight: '800',
-        color: palette.slate700,
+        color: t.chevronText,
         textAlign: 'center',
         includeFontPadding: false,
     },
@@ -335,11 +402,11 @@ const styles = StyleSheet.create({
         borderColor: 'transparent',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: palette.slate50,
+        backgroundColor: t.itemBg,
     },
     avatarItemSelected: {
         borderColor: palette.blue500,
-        backgroundColor: palette.blue50,
+        backgroundColor: t.selectedBg,
         transform: [{ scale: 1.1 }],
     },
     avatarImage: {
@@ -355,14 +422,13 @@ const styles = StyleSheet.create({
         overflow: 'hidden',
     },
     confirmButton: {
-        marginTop: 24,
         backgroundColor: palette.blue500,
         borderRadius: 12,
         padding: 16,
         alignItems: 'center',
     },
     confirmButtonText: {
-        color: colors.text.inverse,
+        color: lightColors.text.inverse,
         fontSize: 16,
         fontWeight: '700',
     },
@@ -372,7 +438,9 @@ const styles = StyleSheet.create({
     },
     loadingText: {
         marginTop: 16,
-        color: palette.slate500,
+        color: t.loading,
         fontWeight: '600',
     },
 });
+
+const LIGHT_STYLES = makeStyles(tonesFor());

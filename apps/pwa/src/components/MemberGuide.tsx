@@ -24,10 +24,12 @@ interface Props {
     onSuggest?: () => void;
     /** Defaults to FEEDBACK_LIVE; tests pass it to check both states. */
     feedbackLive?: boolean;
+    /** Open at this page (by slug), with the front page behind it (Home's Tips card, Read more). */
+    initialPage?: string;
 }
 
 const card = 'bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm overflow-hidden divide-y divide-nature-100 dark:divide-nature-800';
-const rowBtn = 'w-full min-h-[56px] px-4 py-3 flex items-center gap-3 text-left bg-transparent border-none cursor-pointer hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-nature-900 dark:text-white no-underline';
+const rowBtn = 'w-full min-h-[56px] px-4 py-3 flex items-center gap-3 text-left bg-transparent border-none cursor-pointer hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors text-nature-900 dark:text-white no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-inset';
 const label = 'text-xs font-bold uppercase tracking-wider text-nature-500 dark:text-nature-400 mb-2 mt-6 px-1';
 
 function Rich({ text }: { text: string }) {
@@ -40,9 +42,9 @@ function Row({ title, sub, onClick, icon }: { title: string; sub?: string; onCli
             {icon && <span className="text-xl shrink-0" aria-hidden="true">{icon}</span>}
             <span className="flex-1 min-w-0">
                 <span className="block text-[15px] font-bold break-words">{title}</span>
-                {sub && <span className="block text-xs font-normal text-nature-500 dark:text-nature-400 mt-0.5 break-words">{sub}</span>}
+                {sub && <span className="block text-xs font-normal text-nature-500 dark:text-nature-300 mt-0.5 break-words">{sub}</span>}
             </span>
-            <span className="text-nature-400 shrink-0" aria-hidden="true">›</span>
+            <span className="text-nature-400 dark:text-nature-300 shrink-0" aria-hidden="true">›</span>
         </button>
     );
 }
@@ -61,9 +63,9 @@ function useCommunityStatus(): 'checking' | 'online' | 'offline' {
     return status;
 }
 
-export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE }: Props) {
+export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE, initialPage }: Props) {
     const { guide, source } = useGuide();
-    const [stack, setStack] = useState<View[]>([{ kind: 'home' }]);
+    const [stack, setStack] = useState<View[]>(() => (initialPage ? [{ kind: 'home' }, { kind: 'page', slug: initialPage }] : [{ kind: 'home' }]));
     const [query, setQuery] = useState('');
     const topRef = useRef<HTMLDivElement>(null);
     const view = stack[stack.length - 1];
@@ -81,7 +83,7 @@ export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE }:
 
     const header = (
         <div className="flex items-center mb-4">
-            <button type="button" onClick={back} className="min-h-[48px] min-w-[48px] px-2 text-nature-600 dark:text-nature-400 font-semibold text-sm cursor-pointer border-none bg-transparent hover:text-nature-900 dark:hover:text-white">
+            <button type="button" onClick={back} className="min-h-[48px] min-w-[48px] px-2 text-nature-600 dark:text-nature-400 font-semibold text-sm cursor-pointer border-none bg-transparent hover:text-nature-900 dark:hover:text-white rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                 ← Back
             </button>
             <h2 className="flex-1 text-center text-xl font-bold text-nature-950 dark:text-white tracking-tight m-0">BeanPool</h2>
@@ -111,7 +113,7 @@ export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE }:
         const whatsNew = findGuidePage(guide, GUIDE_SLUGS.whatsNew);
         body = (
             <>
-                <label className="flex items-center gap-2 min-h-[48px] px-3 rounded-2xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900">
+                <label className="flex items-center gap-2 min-h-[48px] px-3 rounded-2xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 focus-within:ring-2 focus-within:ring-emerald-500">
                     <span aria-hidden="true">🔍</span>
                     <input
                         type="search"
@@ -176,15 +178,15 @@ export function MemberGuide({ onBack, onSuggest, feedbackLive = FEEDBACK_LIVE }:
                                         <span className="text-xl shrink-0" aria-hidden="true">🌐</span>
                                         <span className="flex-1 min-w-0">
                                             <span className="block text-[15px] font-bold">beanpool.org</span>
-                                            <span className="block text-xs font-normal text-nature-500 dark:text-nature-400 mt-0.5">The public website, to share with friends</span>
+                                            <span className="block text-xs font-normal text-nature-500 dark:text-nature-300 mt-0.5">The public website, to share with friends</span>
                                         </span>
-                                        <span className="text-nature-400 shrink-0" aria-hidden="true">↗</span>
+                                        <span className="text-nature-400 dark:text-nature-300 shrink-0" aria-hidden="true">↗</span>
                                     </a>
                                 );
                             })}
                         </div>
 
-                        <p className="text-center text-xs text-nature-400 dark:text-nature-500 mt-6">
+                        <p className="text-center text-xs text-nature-400 dark:text-nature-400 mt-6">
                             Guide version {guide.version}{source === 'bundled' ? ' · built into the app' : ' · updated from beanpool.org'}
                             <br />Works without a connection.
                         </p>
@@ -215,14 +217,14 @@ function GuidePageView({ slug, openPage, openSection }: { slug: string; openPage
     return (
         <article className="text-nature-800 dark:text-nature-200 text-base leading-relaxed">
             {section && (
-                <button type="button" onClick={() => openSection(section.id)} className="min-h-[48px] p-0 bg-transparent border-none cursor-pointer text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                <button type="button" onClick={() => openSection(section.id)} className="min-h-[48px] p-0 bg-transparent border-none cursor-pointer text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                     {section.title}
                 </button>
             )}
             <h1 className="text-2xl font-extrabold text-nature-950 dark:text-white m-0">{page.title}</h1>
             <p className="text-nature-600 dark:text-nature-300 mt-2">{page.summary}</p>
             {video && (
-                <a href={video.url} target="_blank" rel="noopener noreferrer" className="mt-3 flex items-center gap-2 min-h-[48px] px-4 py-2 rounded-2xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 font-semibold text-nature-900 dark:text-white no-underline">
+                <a href={video.url} target="_blank" rel="noopener noreferrer" className="mt-3 flex items-center gap-2 min-h-[48px] px-4 py-2 rounded-2xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-900 font-semibold text-nature-900 dark:text-white no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                     <span aria-hidden="true">▶️</span>
                     <span className="flex-1 min-w-0 break-words">Watch: {video.title}</span>
                 </a>

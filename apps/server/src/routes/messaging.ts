@@ -11,22 +11,29 @@ import {
     markConversationRead, getListedUnreadCounts,
     getMember,
 } from '../state-engine.js';
-import { MessagingError, CHAT_GROUP_REMOVED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
-import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, chatHiddenFrom, EVENT_CHAT_GONE } from '../engine/event-thread.js';
-import { GROUP_THREAD_TYPE, groupChatRefusal, syncGroupThreadMembership } from '../engine/group-thread.js';
-import { isKeeperOfEnterprise, markKeeperThreadRead } from '../engine/enterprise-thread.js';
+import { MessagingError, CHAT_GROUP_REMOVED_ERROR, DM_NAME_REFUSED_ERROR, isGroupChatMessage, assertMayOpenConversation, isVisitorsDirectLine } from '../engine/messaging.js';
+import { canReadEventThread, loadEventForThread, isEventThreadExpired, eventHiddenFrom, eventChatUnknownTo, chatHiddenFrom, EVENT_CHAT_GONE } from '../engine/event-thread.js';
+import { GROUP_THREAD_TYPE, groupChatRefusal, groupLineForReader, syncGroupThreadMembership } from '../engine/group-thread.js';
+import { fromEpochOf } from '../engine/group-keys.js';
+import { isKeeperOfEnterprise, markKeeperThreadRead, isEnterpriseThreadGone } from '../engine/enterprise-thread.js';
 import { setChatMute, clearChatMute, getChatMutesFor, isChatMuteDuration } from '../engine/chat-mutes.js';
+import { accountsDeletedAmong } from '../engine/message-tombstone.js';
+import { withDmFormerKeys } from '../engine/key-succession.js';
 import { getLocalConfig } from '../config/local-config.js';
 import { getConnectorByPublicUrl } from '../connector-manager.js';
 import { federatedRelayMessage } from '../federation-protocol.js';
 import { getP2PNode } from '../p2p.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
+import { assertDmLineFits, assertMayReachNewPeople } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { assertMayMessage } from '../engine/probation.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { membersOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
 import { isNameableAccount, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
+import {
+    withheldConversationOwnedBy, withheldConversationById, withheldConversationView, withheldLine, pageWithOwnWithheld, listWithOwnWithheld, markWithheldConversationRead,
+} from '../engine/withheld-lines.js';
 
 /** May this member mute this chat? For an event chat and a DM, the same rules as reading it. An enterprise's
  *  thread is readable by any member (it is public), but only its keepers get it in "Your groups", so only they may
@@ -76,7 +83,7 @@ const MAX_PARTICIPANT_KEY_LENGTH = 128;
 function respondToMessagingError(ctx: any, e: unknown, what: string): void {
     if (e instanceof MessagingError) {
         ctx.status = e.status;
-        ctx.body = e.code ? { error: e.message, code: e.code } : { error: e.message };
+        ctx.body = e.code ? { error: e.message, code: e.code, ...(e.extra ?? {}) } : { error: e.message };
         return;
     }
     console.error(`[Messaging] ${what} failed unexpectedly:`, (e as any)?.message || e);
@@ -144,6 +151,13 @@ router.post('/api/messages/conversation', async (ctx) => {
         ctx.body = { error: 'Creator must be a participant of the conversation' };
         return;
     }
+    // A name on a DM was the phone's "decline with a message": the member's words, stored as the conversation's
+    // name where the node could read them. They go as an encrypted message now (engine/messaging.ts).
+    if (name !== undefined && name !== null && name !== '') {
+        ctx.status = 400;
+        ctx.body = { error: DM_NAME_REFUSED_ERROR };
+        return;
+    }
     try {
         // G3, global profile: a muted member starts no conversations (403); a new account starts them with at most
         // 10 new people a day (429). Starting one is a line in the other person's inbox, even before a message.
@@ -151,7 +165,12 @@ router.post('/api/messages/conversation', async (ctx) => {
         for (const other of uniqueParticipants) if (other !== createdBy) assertMayMessage(createdBy, other);
         // A visitor's row opens no new conversation, and so makes no row for anyone (assertMayOpenConversation).
         assertMayOpenConversation(createdBy, uniqueParticipants);
-        const conv = createConversation('dm', uniqueParticipants, createdBy, name);
+        // Every profile: a DM opened with someone who has no row here makes one for them, so at most 20 such people a
+        // day (W-main, engine/writer-bounds.ts), after probation's stricter 10 new people where it is on. Checked by the
+        // engine once the opener is known to be an active member, and before it writes anything: a limit never answers
+        // for someone who may not open the conversation at all.
+        const conv = createConversation('dm', uniqueParticipants, createdBy, name,
+            () => assertMayReachNewPeople(createdBy, uniqueParticipants));
         if (!conv) {
             ctx.status = 400;
             ctx.body = { error: 'Failed to create conversation — check all participants are registered' };
@@ -188,14 +207,23 @@ router.post('/api/messages/send', async (ctx) => {
         }
         clientId = id.toLowerCase();
     }
-    // A group chat line is a row in a room that pushes to every member, so it is throttled exactly as the group
-    // chat route throttles it — per signed member, in the chat bucket (PR #924 review, item 4) — and an
-    // invite-only group is 404 to an outsider here as there (item 5). Store apps up to 1.2.37 send group chat
-    // lines through this route.
+    // Every line through here is throttled per signed member, in the chat bucket: a DM line (W-main: it was limited
+    // only by the gateway's 120 a minute, and each is a row a standby copies) and a group chat line, which is a row in
+    // a room that pushes to every member, exactly as the group chat route throttles it (PR #924 review, item 4). An
+    // invite-only group is 404 to an outsider here as there (item 5). Store apps up to 1.2.37 send group chat lines
+    // through this route.
+    if (!chatRateLimit(ctx, ctx.state.actor)) return;
     const target = getConversation(conversationId);
     if (target?.type === GROUP_THREAD_TYPE) {
-        if (!chatRateLimit(ctx, ctx.state.actor)) return;
         if (refuseGroupChat(ctx, conversationId, authorPubkey, SEND_NOT_FOUND)) return;
+    }
+    // An event's chat whose event isn't there for this caller (a group's event they can't see, or one hidden by reports)
+    // is an id nobody has. The engine goes by the participants mirror, which keeps the seat of someone Going who has
+    // since been removed from the group, and told them "Post to an event chat through the event" instead.
+    if (target?.type === 'event_thread' && eventChatUnknownTo(conversationId, authorPubkey)) {
+        ctx.status = SEND_NOT_FOUND.status;
+        ctx.body = { error: SEND_NOT_FOUND.error };
+        return;
     }
     let msg;
     try {
@@ -207,7 +235,12 @@ router.post('/api/messages/send', async (ctx) => {
         if (target?.type === 'dm' && target.participants.includes(authorPubkey)) {
             for (const other of target.participants) if (other !== authorPubkey) assertMayMessage(authorPubkey, other);
         }
-        msg = sendMessage(conversationId, authorPubkey, ciphertext, nonce, type === 'image' ? 'image' : 'text', attachment, metadata, clientId);
+        // A line's words at most 64 KB as stored (W-main); a photo goes as an attachment and is not counted. Checked by
+        // the engine after every refusal of who may write in this conversation and just before the line is stored, so
+        // a limit never answers for someone who may not write here (an enterprise or event chat's 403, an outsider's
+        // 404). A group chat line is held to its own bound, GROUP_LINE_MAX_BYTES of sealed bytes (engine/group-thread.ts).
+        msg = sendMessage(conversationId, authorPubkey, ciphertext, nonce, type === 'image' ? 'image' : 'text', attachment, metadata, clientId,
+            (stored) => assertDmLineFits(stored.ciphertext, stored.metadata));
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
         respondToMessagingError(ctx, e, 'send the message');
@@ -225,7 +258,8 @@ router.post('/api/messages/send', async (ctx) => {
         // (sendMessage may remap a legacy/consolidated conversationId to the active
         // DM). Looking up the raw request `conversationId` here would miss the
         // participants of a consolidated thread and silently skip cross-node relay.
-        const conv = getConversation(msg.conversationId);
+        // A line kept for its sender alone (engine/withheld-lines.ts) goes nowhere.
+        const conv = withheldLine(msg.id) ? undefined : getConversation(msg.conversationId);
         if (conv && conv.type === 'dm') {
             const otherPubkey = conv.participants.find(p => p !== authorPubkey);
             if (otherPubkey) {
@@ -244,6 +278,8 @@ router.post('/api/messages/send', async (ctx) => {
 
                             // Fire-and-forget over secure Libp2p mesh
                             federatedRelayMessage(p2pNode, targetConnector.peerId, {
+                                // The line's id, carried verbatim: the line is sealed to it (relayedMessageId).
+                                id: msg.id,
                                 senderPublicKey: authorPubkey,
                                 senderCallsign: localMember?.callsign,
                                 senderNodeUrl: localUrl,
@@ -266,7 +302,7 @@ router.post('/api/messages/send', async (ctx) => {
 });
 
 router.post('/api/messages/edit', async (ctx) => {
-    const { messageId, ciphertext, nonce } = (ctx as any).requestBody || {};
+    const { messageId, ciphertext, nonce, metadata } = (ctx as any).requestBody || {};
     // The author is the verified request signer (ctx.state.actor) — not a client-supplied
     // field — so nobody can edit someone else's message.
     const actor = ctx.state.actor as string | undefined;
@@ -292,7 +328,10 @@ router.post('/api/messages/edit', async (ctx) => {
     try {
         // An edit is new words in someone else's chat: a muted member (G3) can't make one.
         assertNotMuted(actor);
-        const msg = editMessage(messageId, actor, ciphertext, nonce);
+        // The same 64 KB as a new line (W-main), or an edit could grow a short line past it. Checked by the engine once
+        // this caller may edit this message at all (never a thread's or an event chat's line, only their own, within the
+        // 15 minutes), so the limit never answers in place of those refusals.
+        const msg = editMessage(messageId, actor, ciphertext, nonce, () => assertDmLineFits(ciphertext), metadata);
         ctx.body = { success: true, message: msg };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
@@ -335,22 +374,43 @@ router.post('/api/messages/delete', async (ctx) => {
 router.get('/api/messages/conversations/:publicKey', async (ctx) => {
     const { publicKey } = ctx.params;
     // A2-3: this returns the subject's entire conversation graph + unread
-    // counts + read cursors. Under read-auth, only the subject may read their
-    // own — the verified signer must equal the :publicKey path param (which is
-    // otherwise an unchecked IDOR: any member could read anyone's social graph).
-    if (ENFORCE_READ_AUTH && ctx.state.actor !== publicKey) {
+    // counts + read cursors. Only the subject may read their own — the verified
+    // signer must equal the :publicKey path param (which is otherwise an
+    // unchecked IDOR: any member could read anyone's social graph) — whatever
+    // ENFORCE_READ_AUTH says, as /api/community/me is: with read auth opted out
+    // anyone, unsigned too, read who a member talks with and every chat's id.
+    if (!ctx.state.actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    if (ctx.state.actor !== publicKey) {
         ctx.status = 403;
         ctx.body = { error: 'You may only read your own conversations' };
         return;
     }
-    // An event hidden by reports (G3) is not there for anyone but its author, and its chat is named after it. The
-    // unread counts leave out the same chats, as the badge every push carries does (getListedUnreadCounts).
-    const convs = getConversationsByMember(publicKey).filter(c => !chatHiddenFrom(c, publicKey));
+    // An event hidden by reports (G3) is not there for anyone but its author, nor a group's event for someone no longer in
+    // the group, and its chat is named after it (chatHiddenFrom). The unread counts leave out the same chats, as the
+    // badge every push carries does (getListedUnreadCounts).
+    // The member's own withheld conversations and lines (engine/withheld-lines.ts) are in their own list, read signed
+    // by them, ordered as if nothing had been withheld; nobody else's list ever names one.
+    const viewer: string = publicKey; // the verified signer, held above
+    const convs = listWithOwnWithheld(viewer, getConversationsByMember(publicKey).filter(c => !chatHiddenFrom(c, publicKey)));
     const unreadCounts = getListedUnreadCounts(publicKey);
     const mutes = getChatMutesFor(publicKey);
-    const conversations = convs.map(c => ({ ...c, unreadCount: unreadCounts[c.id] || 0, mute: mutes.get(c.id) ?? null }));
+    // A DM's re-keyed people's signed former keys, to someone in it (engine/key-succession.ts withDmFormerKeys).
+    const conversations = withDmFormerKeys(convs.map(c => ({ ...c, unreadCount: unreadCounts[c.id] || 0, mute: mutes.get(c.id) ?? null })), viewer);
+    // The people in these chats who deleted their accounts, every line of whose is now blanked: the phone blanks the older
+    // lines of theirs it holds, which its sync (the newest 50 of each chat) never brings again (accountsDeletedAmong).
+    // Only people already listed above as in the caller's chats.
+    const others = new Set<string>();
+    for (const c of convs) for (const p of c.participants) if (p !== publicKey) others.add(p);
     // Over the listed chats only, as listYourChats does: a badge for a chat that isn't there can't be cleared.
-    ctx.body = { conversations, totalUnread: conversations.reduce((n, c) => n + c.unreadCount, 0) };
+    ctx.body = {
+        conversations,
+        totalUnread: conversations.reduce((n, c) => n + c.unreadCount, 0),
+        deletedAccounts: accountsDeletedAmong(others),
+    };
 });
 
 router.post('/api/messages/mark-read', async (ctx) => {
@@ -368,6 +428,18 @@ router.post('/api/messages/mark-read', async (ctx) => {
     }
     const conv = getConversation(conversationId);
     if (!conv) {
+        // A conversation kept for its opener alone (engine/withheld-lines.ts) is read as any other: their read marker moves.
+        if (withheldConversationOwnedBy(conversationId, actor)) {
+            markWithheldConversationRead(conversationId, actor);
+            ctx.body = { success: true };
+            return;
+        }
+        // Someone else's: refused as a non-participant of a real conversation is (#1403 re-review).
+        if (withheldConversationById(conversationId)) {
+            ctx.status = 403;
+            ctx.body = { error: 'You are not a participant in this conversation' };
+            return;
+        }
         ctx.status = 404;
         ctx.body = { error: 'Conversation not found' };
         return;
@@ -384,8 +456,19 @@ router.post('/api/messages/mark-read', async (ctx) => {
             ctx.body = { error: 'Only the keepers of this enterprise have a read marker on its thread' };
             return;
         }
-        markKeeperThreadRead(conversationId, actor);
+        // On a standby, 409 `standby`: the read marks are the main server's (a plain table, design G4).
+        try {
+            markKeeperThreadRead(conversationId, actor);
+        } catch (e) {
+            if (respondProfileRefusal(ctx, e)) return;
+            throw e;
+        }
         ctx.body = { success: true };
+        return;
+    } else if (conv.type === 'event_thread' && eventChatUnknownTo(conversationId, actor)) {
+        // A group's event the caller can't see (or one hidden by reports): an id nobody has, not "not a participant".
+        ctx.status = CONVERSATION_NOT_FOUND.status;
+        ctx.body = { error: CONVERSATION_NOT_FOUND.error };
         return;
     } else if (!conv.participants.includes(actor)) {
         ctx.status = 403;
@@ -420,11 +503,30 @@ router.post('/api/messages/mute', async (ctx) => {
     }
     const conv = getConversation(conversationId);
     if (!conv) {
+        // A conversation kept for its opener alone (engine/withheld-lines.ts) is muted as any other, the mute kept under
+        // its id: the id it keeps when it becomes the real one.
+        if (withheldConversationOwnedBy(conversationId, actor)) {
+            ctx.body = duration === 'off'
+                ? (clearChatMute(conversationId, actor), { success: true, mute: null })
+                : { success: true, mute: setChatMute(conversationId, actor, duration) };
+            return;
+        }
+        // Someone else's: refused as a non-participant of a real conversation is (#1403 re-review).
+        if (withheldConversationById(conversationId)) {
+            ctx.status = 403;
+            ctx.body = { error: 'You are not in this conversation' };
+            return;
+        }
         ctx.status = 404;
         ctx.body = { error: 'Conversation not found' };
         return;
     }
     if (conv.type === GROUP_THREAD_TYPE && refuseGroupChat(ctx, conversationId, actor, CONVERSATION_NOT_FOUND)) return;
+    if (conv.type === 'event_thread' && eventChatUnknownTo(conversationId, actor)) {
+        ctx.status = CONVERSATION_NOT_FOUND.status;
+        ctx.body = { error: CONVERSATION_NOT_FOUND.error };
+        return;
+    }
     if (conv.type !== GROUP_THREAD_TYPE && !canOpenChat(conv, actor)) {
         ctx.status = 403;
         ctx.body = { error: 'You are not in this conversation' };
@@ -441,7 +543,29 @@ router.post('/api/messages/mute', async (ctx) => {
 router.get('/api/messages/:conversationId', async (ctx) => {
     const { conversationId } = ctx.params;
     const conv = getConversation(conversationId);
+    const viewer = ctx.state.actor as string | undefined;
     if (!conv) {
+        // A conversation kept for its opener alone (engine/withheld-lines.ts): theirs, read signed by them, as any DM.
+        const kept = withheldConversationOwnedBy(conversationId, viewer);
+        if (kept) {
+            ctx.body = {
+                conversation: withDmFormerKeys([withheldConversationView(kept)], viewer)[0],
+                messages: pageWithOwnWithheld(conversationId, viewer, clampLimit(ctx.query.limit), clampOffset(ctx.query.offset), () => []),
+            };
+            return;
+        }
+        // Someone else's: answered as a real DM answers someone who isn't in it (#1403 re-review): refused under read
+        // auth, and with it off served as any DM is, with none of its lines (the sender's own are theirs alone).
+        const other = withheldConversationById(conversationId);
+        if (other) {
+            if (ENFORCE_READ_AUTH) {
+                ctx.status = 403;
+                ctx.body = { error: 'You are not a participant in this conversation' };
+                return;
+            }
+            ctx.body = { conversation: withheldConversationView(other), messages: [] };
+            return;
+        }
         ctx.status = 404;
         ctx.body = { error: 'Conversation not found' };
         return;
@@ -451,6 +575,19 @@ router.get('/api/messages/:conversationId', async (ctx) => {
     // pending request, an open invitation and an outsider are all refused; node admins get no exception.
     if (conv.type === GROUP_THREAD_TYPE) {
         if (refuseGroupChat(ctx, conversationId, ctx.state.actor as string | undefined, CONVERSATION_NOT_FOUND)) return;
+    }
+    // An event's chat whose event isn't there for this caller (a group's event they can't see, or one hidden by
+    // reports) is an id nobody has, before the participant check below could say "not a participant".
+    else if (conv.type === 'event_thread' && eventChatUnknownTo(conversationId, ctx.state.actor as string | undefined)) {
+        ctx.status = CONVERSATION_NOT_FOUND.status;
+        ctx.body = { error: CONVERSATION_NOT_FOUND.error };
+        return;
+    }
+    // An enterprise's discussion reads like its own route's: gone with a pruned or deleted enterprise, for everyone.
+    else if (conv.type === 'enterprise_thread' && isEnterpriseThreadGone(conversationId)) {
+        ctx.status = CONVERSATION_NOT_FOUND.status;
+        ctx.body = { error: CONVERSATION_NOT_FOUND.error };
+        return;
     }
     // A2-2: only a participant may read a conversation's messages + metadata.
     // Under read-auth the signer is a verified member (ctx.state.actor); require
@@ -498,9 +635,20 @@ router.get('/api/messages/:conversationId', async (ctx) => {
     }
     const limit = clampLimit(ctx.query.limit);
     const offset = clampOffset(ctx.query.offset);
+    // A group's chat leaves out the lines sealed under an epoch from before the reader's membership (group chat encryption
+    // design §3), as GET /api/groups/:id/chat does. Filtered after the page is read, so offsets stay the same rows.
+    const fromEpoch = conv.type === GROUP_THREAD_TYPE ? fromEpochOf(conversationId, viewer) : null;
+    const page = (l: number, o: number) => conv.type === GROUP_THREAD_TYPE
+        ? getConversationMessages(conversationId, l, o).filter((m: any) => groupLineForReader(m.metadata, fromEpoch))
+        : getConversationMessages(conversationId, l, o);
     ctx.body = {
-        conversation: conv,
-        messages: getConversationMessages(conversationId, limit, offset),
+        // As the list serves it: a DM's re-keyed people's former keys, to someone in it (withDmFormerKeys).
+        conversation: withDmFormerKeys([conv], viewer)[0],
+        // A DM's lines with the signed reader's own withheld ones among them (engine/withheld-lines.ts): what they sent,
+        // as they sent it. Only the reader's own, so the other person's read is the lines and nothing else.
+        messages: conv.type === 'dm' && viewer && conv.participants.includes(viewer)
+            ? pageWithOwnWithheld(conversationId, viewer, limit, offset, page)
+            : page(limit, offset),
     };
 });
 

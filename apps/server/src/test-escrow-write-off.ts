@@ -445,14 +445,22 @@ async function main() {
         const h1 = seedEscrow(-5, buyer1, 'cancelled', seller);
         const h2 = seedEscrow(-10, buyer2, 'cancelled', seller);
         const writeOffPath = (id: string) => `/api/local/admin/stranded-escrows/${encodeURIComponent(id)}/write-off`;
-        const asPassword = { 'x-admin-password': PW };
+        // Step 7c: with the node's 2FA off the password alone opens no admin route (checked below); from then on 2FA is on
+        // and the password goes with a fresh code.
+        let tfa: { headers: () => Record<string, string> } | null = null;
+        const asPassword = (): Record<string, string> => (tfa ? tfa.headers() : { 'x-admin-password': PW });
 
         // The list.
         const listNone = await call('GET', '/api/local/admin/stranded-escrows', {});
         assert(listNone.status === 401, `list with no credentials: 401 (${listNone.status})`);
         const listWrong = await call('GET', '/api/local/admin/stranded-escrows', { 'x-admin-password': 'not-the-password' });
         assert(listWrong.status === 401, `list with the wrong password: 401 (${listWrong.status})`);
-        const listed = await call('GET', '/api/local/admin/stranded-escrows', asPassword);
+        const listAlone = await call('GET', '/api/local/admin/stranded-escrows', asPassword());
+        assert(listAlone.status === 403 && listAlone.body.code === 'password_needs_2fa' && !listAlone.body.escrows,
+            `list with the password alone, 2FA off: 403 password_needs_2fa (${listAlone.status})`);
+        const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+        tfa = turnOn2faForTests(PW);
+        const listed = await call('GET', '/api/local/admin/stranded-escrows', asPassword());
         assert(listed.status === 200 && listed.body.success === true, `list with the password: 200 (${listed.status})`);
         const listedIds = (listed.body.escrows ?? []).map((e: any) => e.escrowId).sort();
         assert(JSON.stringify(listedIds) === JSON.stringify([h1.escrowId, h2.escrowId].sort()) && listed.body.eligibleCount === 2
@@ -477,13 +485,13 @@ async function main() {
         assert(ledgerState() === before, 'none of them touched the ledger');
 
         // The deficit refusal over HTTP carries both figures; "true" as a string is not a confirmation.
-        const unconfirmed = await call('POST', writeOffPath(h1.escrowId), asPassword, { reason: REASON });
+        const unconfirmed = await call('POST', writeOffPath(h1.escrowId), asPassword(), { reason: REASON });
         assert(unconfirmed.status === 409 && unconfirmed.body.code === 'deficit_unconfirmed'
             && unconfirmed.body.commonsBalance === -11.68 && unconfirmed.body.commonsAfter === -16.68,
             `unconfirmed deficit: 409 with the Commons now and after (${unconfirmed.status} ${unconfirmed.body.commonsBalance} → ${unconfirmed.body.commonsAfter})`);
-        const stringly = await call('POST', writeOffPath(h1.escrowId), asPassword, { reason: REASON, confirmDeficit: 'true' });
+        const stringly = await call('POST', writeOffPath(h1.escrowId), asPassword(), { reason: REASON, confirmDeficit: 'true' });
         assert(stringly.status === 409 && stringly.body.code === 'deficit_unconfirmed', `confirmDeficit: "true" is not a confirmation (${stringly.status})`);
-        const noReason = await call('POST', writeOffPath(h1.escrowId), asPassword, { confirmDeficit: true });
+        const noReason = await call('POST', writeOffPath(h1.escrowId), asPassword(), { confirmDeficit: true });
         assert(noReason.status === 400 && noReason.body.code === 'reason_required', `no reason: 400 (${noReason.status})`);
         assert(ledgerState() === before, 'still untouched');
 
@@ -495,12 +503,12 @@ async function main() {
         assert(commonsRows(h1.escrowId)[0]?.auth_signer === olive.pubKeyHex, 'recorded against the owner, not the actor in the body');
 
         // The password works too, and is recorded as the password.
-        const byPassword = await call('POST', writeOffPath(h2.escrowId), asPassword, { reason: REASON, confirmDeficit: true, actor: olive.pubKeyHex });
+        const byPassword = await call('POST', writeOffPath(h2.escrowId), asPassword(), { reason: REASON, confirmDeficit: true, actor: olive.pubKeyHex });
         assert(byPassword.status === 200 && byPassword.body.amount === 10 && byPassword.body.commonsAfter === -26.68,
             `the password writes off -10 (${byPassword.status} ${JSON.stringify(byPassword.body).slice(0, 120)})`);
         assert(commonsRows(h2.escrowId)[0]?.auth_signer === 'owner:password', 'recorded as the password, whatever the body says');
 
-        const twice = await call('POST', writeOffPath(h2.escrowId), asPassword, { reason: REASON, confirmDeficit: true });
+        const twice = await call('POST', writeOffPath(h2.escrowId), asPassword(), { reason: REASON, confirmDeficit: true });
         assert(twice.status === 409 && twice.body.code === 'already_written_off', `a second write-off over HTTP: 409 (${twice.status})`);
 
         const logged = db.prepare(`SELECT * FROM system_logs WHERE category = 'ADMIN' AND message LIKE 'Wrote off stranded%' ORDER BY id`).all() as any[];

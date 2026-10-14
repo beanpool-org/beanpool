@@ -6,14 +6,18 @@
 
 import { useState, useEffect, useMemo, useRef, type KeyboardEvent } from 'react';
 import {
-    getFriends, addFriendApi, removeFriendApi,
+    getFriends, addFriendApi, removeFriendApi, getAddedYou,
     getMembers,
-    type FriendEntry, type Member,
+    type FriendEntry, type Member, type MemberCard, type AddedYou,
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 import { resolveAvatarUrl } from '../lib/avatar';
 import { InvitePage } from './InvitePage';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
+import {
+    useMembersOnDemand, useMemberSearch, membersNear, MEMBERS_SEARCH_LIMIT, MEMBERS_SEARCH_MIN_CHARS,
+} from '../lib/members-on-demand';
+import { readMyArea } from '../lib/member-area';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -68,7 +72,7 @@ function Avatar({ callsign, avatarUrl, size = 40 }: { callsign: string; avatarUr
 
     return (
         <div 
-            className="rounded-full flex items-center justify-center font-bold text-lg border bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-700"
+            className="rounded-full flex items-center justify-center font-bold text-lg border bg-oat-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300 border-nature-200 dark:border-nature-700"
             style={sizeStyle}
         >
             {initial}
@@ -102,9 +106,39 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
         tabRefs.current[next]?.focus();
     };
 
-    useEffect(() => { loadFriends(); }, []);
-    useEffect(() => { if (view === 'community') loadMembers(); }, [view]);
+    // On a community where people are asked for, not read whole (lib/members-on-demand, the worldwide one): the 50
+    // nearest the member's area and a search the node answers. Elsewhere, and while the node hasn't said, as before.
+    const onDemand = useMembersOnDemand();
+    const [near, setNear] = useState<MemberCard[]>([]);
+    // 'none': the member has set no area; 'failed': it couldn't be read, or the nearest couldn't be.
+    const [nearState, setNearState] = useState<'loading' | 'done' | 'none' | 'failed'>('loading');
+    const [nearTry, setNearTry] = useState(0);
+
+    useEffect(() => { loadFriends(); loadAddedYou(); }, []);
+    useEffect(() => { if (view === 'community' && onDemand === false) loadMembers(); }, [view, onDemand]);
     useEffect(() => { if (initialView) setView(initialView); }, [initialView]);
+
+    useEffect(() => {
+        if (view !== 'community' || onDemand !== true) return;
+        let cancelled = false;
+        setNearState('loading');
+        (async () => {
+            const area = await readMyArea();
+            if (cancelled) return;
+            if (area === undefined) { setNearState('failed'); return; }
+            if (area === null) { setNear([]); setNearState('none'); return; }
+            try {
+                const people = await membersNear(area);
+                if (!cancelled) { setNear(people); setNearState('done'); }
+            } catch {
+                if (!cancelled) setNearState('failed');
+            }
+        })();
+        return () => { cancelled = true; };
+    }, [view, onDemand, nearTry]);
+
+    // The search goes to the node once the typing pauses, from 2 characters.
+    const { found, state: searchState } = useMemberSearch(searchQuery, onDemand === true);
 
     useEffect(() => {
         return onBlocklistUpdated(() => {
@@ -121,6 +155,19 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
         } catch { /* offline */ }
     }
 
+    // "Added you · Add back": who added you lately and hasn't been added back. Nothing when nobody has, or the node can't say.
+    const [addedYou, setAddedYou] = useState<AddedYou[]>([]);
+    const [addedYouMore, setAddedYouMore] = useState(0);
+    // An add the node refused (100 a day, or someone you blocked), in its words: said, never dropped.
+    const [addRefusal, setAddRefusal] = useState<string | null>(null);
+    async function loadAddedYou() {
+        try {
+            const data = await getAddedYou();
+            setAddedYou(Array.isArray(data?.addedYou) ? data.addedYou : []);
+            setAddedYouMore(Number(data?.more) || 0);
+        } catch { /* an older node, or offline: nothing to show */ }
+    }
+
     async function loadMembers() {
         setLoading(true);
         try {
@@ -131,10 +178,14 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
     }
 
     async function handleAddFriend(pubkey: string) {
+        setAddRefusal(null);
         try {
             await addFriendApi(identity.publicKey, pubkey);
+            setAddedYou(a => a.filter(x => x.publicKey !== pubkey));
             await loadFriends();
-        } catch { /* error */ }
+        } catch (e) {
+            setAddRefusal(e instanceof Error && e.message ? e.message : 'Your community did not add them.');
+        }
     }
 
     async function handleRemoveFriend(pubkey: string) {
@@ -167,6 +218,50 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
         }
         return map;
     }, [members]);
+
+    // The people the node gave, without this member and anyone they've blocked.
+    const shown = (people: MemberCard[]) => people.filter(m => m.publicKey !== identity.publicKey && !blockedSet.has(m.publicKey));
+    const visibleNear = useMemo(() => shown(near), [near, identity.publicKey, blockedSet]);
+    const visibleFound = useMemo(() => (found ? shown(found) : null), [found, identity.publicKey, blockedSet]);
+
+    /** One person on the by-area view: face and name open the profile; every control at least 44 px. */
+    const personRow = (m: MemberCard, distance: boolean) => (
+        <div key={m.publicKey} data-testid="people-row" className="p-2 px-3 flex items-center justify-between gap-2 min-w-0">
+            <button
+                type="button"
+                aria-label={`View ${m.callsign}'s profile`}
+                className="flex items-center gap-3 min-w-0 min-h-[44px] bg-transparent border-none p-0 cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-lg"
+                onClick={() => onOpenProfile && onOpenProfile(m.publicKey)}
+            >
+                <Avatar callsign={m.callsign} avatarUrl={m.avatarUrl} size={36} />
+                <span className="min-w-0">
+                    <span className="block font-bold text-[14px] text-nature-900 dark:text-white break-words">{m.callsign}</span>
+                    <span className="block text-[11px] text-nature-500 dark:text-nature-400 font-medium mt-0.5">
+                        {distance && typeof m.distanceKm === 'number'
+                            ? (m.distanceKm < 1 ? 'Under 1 km away' : `About ${m.distanceKm} km away`)
+                            : `Joined ${relativeDate(m.joinedAt)}`}
+                    </span>
+                </span>
+            </button>
+            {friendPubkeys.has(m.publicKey) ? (
+                <span className="shrink-0 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/40 px-2.5 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800">
+                    ✓ Friend
+                </span>
+            ) : (
+                <button
+                    type="button"
+                    onClick={() => handleAddFriend(m.publicKey)}
+                    aria-label={`Add ${m.callsign} as friend`}
+                    className="shrink-0 min-h-[44px] min-w-[44px] bg-emerald-600 border-none text-white rounded-lg px-3 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                >
+                    + Add
+                </button>
+            )}
+        </div>
+    );
+    const listBox = 'bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm divide-y divide-nature-100 dark:divide-nature-800 overflow-hidden';
+    const lineText = 'm-0 px-1 text-sm text-nature-600 dark:text-nature-300';
+    const linkButton = 'min-h-[44px] px-2 font-bold underline text-nature-800 dark:text-nature-100 bg-transparent border-none cursor-pointer';
 
     // Filtered community members (excluding blocked users)
     const filteredMembers = useMemo(() => {
@@ -205,12 +300,47 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                 ))}
             </div>
 
+            {addRefusal && (
+                <p role="alert" data-testid="add-refusal" className="mb-3 p-3 rounded-xl border border-border-primary bg-bg-card text-text-primary text-[13px] font-medium">
+                    {addRefusal}
+                </p>
+            )}
             {/* Each tab's panel always exists so aria-controls points at something; only the selected one is shown
                 and has content, so Community and Invites still load only when opened. */}
             {/* ===== FRIENDS ===== */}
             <div role="tabpanel" id={panelId('friends')} aria-labelledby={tabId('friends')} hidden={view !== 'friends'} tabIndex={0} className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl">
             {view === 'friends' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    {addedYou.filter(a => !blockedSet.has(a.publicKey)).length > 0 && (
+                        <ul data-testid="added-you" aria-label="People who added you" className="mb-4 list-none p-0 m-0 bg-bg-card rounded-2xl border border-border-primary shadow-sm divide-y divide-border-primary overflow-hidden">
+                            {addedYou.filter(a => !blockedSet.has(a.publicKey)).map(a => (
+                                <li key={a.publicKey} className="p-2 px-3 flex items-center justify-between gap-2 min-w-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => onOpenProfile?.(a.publicKey)}
+                                        aria-label={`${a.callsign} added you. Open their profile`}
+                                        className="flex items-center gap-3 min-w-0 min-h-[44px] bg-transparent border-none p-0 cursor-pointer text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-lg"
+                                    >
+                                        <Avatar callsign={a.callsign} avatarUrl={a.avatarUrl} size={32} />
+                                        <span className="min-w-0 text-[14px] text-text-primary break-words">
+                                            <strong className="font-bold">{a.callsign}</strong> added you
+                                        </span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleAddFriend(a.publicKey)}
+                                        aria-label={`Add ${a.callsign} back`}
+                                        className="shrink-0 min-h-[44px] min-w-[44px] px-3 rounded-lg border border-accent bg-transparent text-text-primary text-xs font-bold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                    >
+                                        Add back
+                                    </button>
+                                </li>
+                            ))}
+                            {addedYouMore > 0 && (
+                                <li className="p-2 px-3 text-[12px] text-text-muted">and {addedYouMore} more</li>
+                            )}
+                        </ul>
+                    )}
                     {visibleFriends.length === 0 ? (
                         <div className="text-center p-10 text-nature-500 dark:text-nature-400 bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm mt-4">
                             <p className="text-4xl mb-3">👫</p>
@@ -244,7 +374,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                             >
                                                 {f.callsign}
                                             </button>
-                                            <div className="text-[11px] text-nature-400 dark:text-nature-500 font-medium mt-0.5">
+                                            <div className="text-[11px] text-nature-400 dark:text-nature-300 font-medium mt-0.5">
                                                 Added {relativeDate(f.addedAt)}
                                             </div>
                                         </div>
@@ -254,7 +384,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                             <button
                                                 type="button"
                                                 onClick={() => handleMessage(f.publicKey)}
-                                                className="bg-emerald-600 border-none text-white rounded-lg px-2.5 py-1 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                                className="bg-emerald-600 dark:bg-emerald-700 border-none text-white rounded-lg px-2.5 py-1 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                                 title={`Message ${f.callsign}`}
                                                 aria-label={`Message ${f.callsign}`}
                                             >
@@ -265,7 +395,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                             type="button"
                                             onClick={() => handleRemoveFriend(f.publicKey)}
                                             aria-label={`Remove ${f.callsign} from friends`}
-                                            className="bg-transparent border-none text-red-500 text-xs font-semibold cursor-pointer px-2.5 py-1 rounded-lg hover:bg-red-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                                            className="bg-transparent border-none text-red-500 dark:text-red-300 text-xs font-semibold cursor-pointer px-2.5 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                                         >
                                             Remove
                                         </button>
@@ -281,7 +411,64 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
 
             {/* ===== COMMUNITY ===== */}
             <div role="tabpanel" id={panelId('community')} aria-labelledby={tabId('community')} hidden={view !== 'community'} tabIndex={0} className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl">
-            {view === 'community' && (
+            {view === 'community' && onDemand === true && (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-300" data-testid="people-on-demand">
+                    <p className="text-[13px] font-medium text-nature-600 dark:text-nature-300 mb-4 bg-oat-50 dark:bg-nature-900 p-3 rounded-xl border border-nature-200 dark:border-nature-800 shadow-sm">
+                        Find someone by name, or see who's near you. Tap <strong className="text-emerald-700 dark:text-emerald-300 font-bold">+ Add</strong> to add someone as a friend.
+                    </p>
+
+                    {/* Search: the node answers, from 2 characters */}
+                    <div className="mb-4">
+                        <label htmlFor="people-search" className="sr-only">Search members by name</label>
+                        <input
+                            id="people-search"
+                            type="search"
+                            placeholder="🔍 Search by name..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="w-full min-h-[44px] p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm placeholder:text-nature-500 dark:placeholder:text-nature-400"
+                        />
+                        <div className="text-xs text-nature-600 dark:text-nature-300 mt-1.5 font-medium" aria-live="polite" data-testid="people-search-status">
+                            {searchQuery.trim() && searchQuery.trim().length < MEMBERS_SEARCH_MIN_CHARS
+                                ? `Type at least ${MEMBERS_SEARCH_MIN_CHARS} letters of a name.`
+                                : searchState === 'searching' ? 'Searching…'
+                                : searchState === 'failed' ? "Couldn't search just now. Check your connection and try again."
+                                : visibleFound ? (visibleFound.length === 0
+                                    ? 'Nobody here has a name starting with that.'
+                                    : `${visibleFound.length} member${visibleFound.length !== 1 ? 's' : ''} found${(found?.length ?? 0) >= MEMBERS_SEARCH_LIMIT ? ` (the first ${MEMBERS_SEARCH_LIMIT}: type more of the name to narrow it)` : ''}`)
+                                : null}
+                        </div>
+                    </div>
+                    {visibleFound && visibleFound.length > 0 && (
+                        <div className={`${listBox} mb-5`} data-testid="people-found">
+                            {visibleFound.map(m => personRow(m, false))}
+                        </div>
+                    )}
+
+                    {/* Near you: the 50 nearest the member's area, never everyone */}
+                    <h3 className="text-[13px] font-bold text-nature-800 dark:text-oat-50 mb-2 px-1">Near you</h3>
+                    {nearState === 'loading' ? (
+                        <p className={`${lineText} p-4 text-center animate-pulse`}>Finding who's near you…</p>
+                    ) : nearState === 'none' ? (
+                        <p className={lineText} data-testid="people-no-area">Set your area to see who's near you (Settings → Your area). Search works without it.</p>
+                    ) : nearState === 'failed' ? (
+                        <p className={`${lineText} flex flex-wrap items-center gap-x-2`} data-testid="people-near-failed">
+                            <span>Couldn't check who's near you just now.</span>
+                            <button type="button" onClick={() => setNearTry(n => n + 1)} className={linkButton}>Try again</button>
+                        </p>
+                    ) : visibleNear.length === 0 ? (
+                        <p className={lineText}>Nobody else is here yet. Search by name, or invite someone.</p>
+                    ) : (
+                        <>
+                            <p className={`${lineText} mb-2`}>The {visibleNear.length} closest member{visibleNear.length !== 1 ? 's' : ''} to your area.</p>
+                            <div className={listBox} data-testid="people-near">
+                                {visibleNear.map(m => personRow(m, true))}
+                            </div>
+                        </>
+                    )}
+                </div>
+            )}
+            {view === 'community' && onDemand !== true && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <p className="text-[13px] font-medium text-nature-500 dark:text-nature-400 mb-4 bg-oat-50 dark:bg-nature-900 p-3 rounded-xl border border-nature-200 dark:border-nature-800 shadow-sm">
                         All members on this node. Tap <strong className="text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-50 dark:bg-emerald-900/40 px-1.5 py-0.5 rounded shadow-sm border border-emerald-100 dark:border-emerald-800">+ Add</strong> to add someone as a friend.
@@ -294,7 +481,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                             placeholder="🔍 Search members..."
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            className="w-full p-3 rounded-xl border border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all placeholder:text-nature-400"
+                            className="w-full p-3 rounded-xl border border-nature-200 dark:border-nature-500 bg-white dark:bg-nature-900 text-nature-900 dark:text-white text-[14px] font-medium focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm transition-all placeholder:text-nature-400"
                         />
                         {searchQuery && (
                             <div className="text-xs text-nature-400 mt-1.5 font-medium">
@@ -303,7 +490,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                         )}
                     </div>
 
-                    {loading ? (
+                    {loading || onDemand === null ? (
                         <p className="text-center text-nature-500 p-8 font-medium animate-pulse">Loading community...</p>
                     ) : (
                         <div className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 shadow-sm divide-y divide-nature-100 dark:divide-nature-800 overflow-hidden">
@@ -326,7 +513,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                                 >
                                                     {m.callsign}
                                                 </button>
-                                                <div className="text-[11px] text-nature-400 dark:text-nature-500 font-medium mt-0.5">
+                                                <div className="text-[11px] text-nature-400 dark:text-nature-300 font-medium mt-0.5">
                                                     Joined {relativeDate(m.joinedAt)}
                                                 </div>
                                             </div>
@@ -340,7 +527,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                                 type="button"
                                                 onClick={() => handleAddFriend(m.publicKey)}
                                                 aria-label={`Add ${m.callsign} as friend`}
-                                                className="bg-emerald-600 border-none text-white rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                                className="bg-emerald-600 dark:bg-emerald-700 border-none text-white rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                             >
                                                 + Add
                                             </button>
@@ -358,7 +545,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
             <div role="tabpanel" id={panelId('invites')} aria-labelledby={tabId('invites')} hidden={view !== 'invites'} tabIndex={0} className="focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl">
             {view === 'invites' && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-300 bg-white dark:bg-nature-900 rounded-2xl shadow-soft border border-nature-200 dark:border-nature-800 overflow-hidden">
-                    <InvitePage identity={identity} />
+                    <InvitePage identity={identity} onNavigate={onNavigate} />
                 </div>
             )}
             </div>

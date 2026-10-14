@@ -19,7 +19,9 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 import {
     commonsSections, commonsSectionFor, commonsHeading, findGroupsInTalk, FIND_GROUPS_HREF,
+    groupKindChips, commonsGroupRows, commonsGroupsEmpty, type GroupKind,
 } from '../commons-sections';
+import type { GroupItem } from '../db';
 import { decisionsOn, readNodeProfile, type NodeFeatures } from '../node-profile';
 
 /** What the global node reports (test-node-profile's BUILT_TODAY.global), read as the phone reads it. */
@@ -58,32 +60,94 @@ describe('the node says whether it has formal Decisions', () => {
 });
 
 describe('the Commons screen shows the sections a node has', () => {
-    it('everywhere as before: Decide, Enterprises, Groups, under the same title and words', () => {
+    it('everywhere as before but one list (pick 7): Decide and Groups, under the same title and words', () => {
         for (const [, f] of AS_BEFORE) {
-            expect(commonsSections(f)).toEqual(['decide', 'enterprises', 'groups']);
-            expect(commonsHeading(commonsSections(f))).toEqual({
+            expect(commonsSections(f)).toEqual(['decide', 'groups']);
+            expect(commonsHeading(f)).toEqual({
                 title: 'Commons',
-                description: 'Community decisions, pooled circulation, and shared enterprises. Propose binding actions and vote on what matters.',
+                description: 'Community decisions, the Commons, and your groups: projects, enterprises and more. Propose binding actions and vote on what matters.',
             });
             expect(commonsSectionFor(undefined, f)).toBe('decide');
-            for (const s of ['decide', 'enterprises', 'groups']) expect(commonsSectionFor(s, f)).toBe(s);
+            for (const s of ['decide', 'groups']) expect(commonsSectionFor(s, f)).toBe(s);
         }
+    });
+
+    it('a link to the old Enterprises section opens Groups, which holds them now', () => {
+        for (const [, f] of AS_BEFORE) expect(commonsSectionFor('enterprises', f)).toBe('groups');
+        expect(commonsSectionFor('enterprises', { ...LOCAL, decisions: false })).toBe('groups');
+        expect(commonsSectionFor('enterprises', GLOBAL)).toBe('groups');
     });
 
     it('on the worldwide community: the groups list, and nothing else', () => {
         expect(commonsSections(GLOBAL)).toEqual(['groups']);
-        expect(commonsHeading(['groups'])).toEqual({ title: 'Groups', description: 'Find a group to join, or start your own with +.' });
+        expect(commonsHeading(GLOBAL)).toEqual({ title: 'Groups', description: 'Find a group to join, or start your own with +.' });
         for (const wanted of ['decide', 'enterprises', 'groups', '', undefined, null, 'junk']) {
             expect(commonsSectionFor(wanted, GLOBAL)).toBe('groups');
         }
     });
 
-    it('one switch at a time: no Decide where Decisions are off, no Enterprises where enterprises are', () => {
-        expect(commonsSections({ ...LOCAL, decisions: false })).toEqual(['enterprises', 'groups']);
-        expect(commonsSectionFor('decide', { ...LOCAL, decisions: false })).toBe('enterprises');
-        expect(commonsHeading(['enterprises', 'groups']).description).not.toMatch(/decision|vote/i);
+    it("on the worldwide community that shows its switched-off features: the Commons heading over Example Valley, the real groups under it (review of #1852, finding 5)", () => {
+        const showcase = { ...GLOBAL, showcase: true };
+        expect(commonsSections(showcase)).toEqual(['groups']);
+        expect(commonsHeading(showcase).title).toBe('Commons');
+        expect(commonsHeading(showcase).description).toMatch(/from an example/);
+        expect(commonsHeading(showcase).description).toMatch(/groups to join here/);
+        // A node that hides them (showcase off) is the groups list it was.
+        expect(commonsHeading({ ...GLOBAL, showcase: false }).title).toBe('Groups');
+    });
+
+    it('one switch at a time: no Decide where Decisions are off, no projects or enterprises where enterprises are', () => {
+        expect(commonsSections({ ...LOCAL, decisions: false })).toEqual(['groups']);
+        expect(commonsSectionFor('decide', { ...LOCAL, decisions: false })).toBe('groups');
+        expect(commonsHeading({ ...LOCAL, decisions: false }).description).not.toMatch(/decision|vote/i);
+        expect(commonsHeading({ ...LOCAL, decisions: false }).description).toMatch(/Projects, enterprises/);
         expect(commonsSections({ ...GLOBAL, decisions: true })).toEqual(['decide', 'groups']);
-        expect(commonsHeading(['decide', 'groups']).title).toBe('Commons');
+        expect(commonsHeading({ ...GLOBAL, decisions: true }).title).toBe('Commons');
+        expect(commonsHeading({ ...GLOBAL, decisions: true }).description).not.toMatch(/enterprise/i);
+    });
+});
+
+describe('Groups is one list, with a kind chip each (pick 7)', () => {
+    const group = (id: string, over: Partial<GroupItem> = {}) => ({ id, name: id, category: 'social', viewerStatus: null, ...over }) as unknown as GroupItem;
+    const ent = (publicKey: string, over: { lifecycle?: string; goalAmount?: number | null } = {}) => ({ publicKey, ...over });
+    const CHAT = [group('garden'), group('mine'), group('waiting', { viewerStatus: 'pending_approval' } as Partial<GroupItem>)];
+    const ENTS = [ent('roof', { lifecycle: 'bounded', goalAmount: 500 }), ent('eggs', { lifecycle: 'ongoing' }), ent('kept', { lifecycle: 'ongoing' }), ent('shade', { goalAmount: 200 })];
+    const YOURS = [{ kind: 'group', id: 'mine' }, { kind: 'enterprise', id: 'kept' }];
+    const keys = (kind: GroupKind, f: NodeFeatures | null | undefined = LOCAL) => commonsGroupRows(kind, CHAT, ENTS, YOURS, f).map(r => r.key);
+
+    it('the chips: All, Projects, Enterprises, Chat groups; none where the node lists no projects or enterprises', () => {
+        for (const [, f] of AS_BEFORE) {
+            expect(groupKindChips(f).map(c => c.label)).toEqual(['All', '🌱 Projects', '🏛️ Enterprises', '👥 Chat groups']);
+        }
+        expect(groupKindChips(GLOBAL)).toEqual([]);
+        expect(groupKindChips({ ...LOCAL, enterprises: false })).toEqual([]);
+    });
+
+    it('All: chat groups you could join, then projects and enterprises you do not keep', () => {
+        expect(keys('all')).toEqual(['group:garden', 'enterprise:roof', 'enterprise:eggs', 'enterprise:shade']);
+    });
+
+    it('each chip lists its kind only: a goal in Beans or a bounded lifecycle is a project', () => {
+        expect(keys('projects')).toEqual(['enterprise:roof', 'enterprise:shade']);
+        expect(keys('enterprises')).toEqual(['enterprise:eggs']);
+        expect(keys('chat')).toEqual(['group:garden']);
+    });
+
+    it('where the node has no projects or enterprises: chat groups only, whatever the chip', () => {
+        for (const kind of ['all', 'projects', 'enterprises', 'chat'] as const) {
+            expect(keys(kind, GLOBAL)).toEqual(['group:garden']);
+            expect(keys(kind, { ...LOCAL, enterprises: false })).toEqual(['group:garden']);
+        }
+    });
+
+    it('the empty list offers the right start: a project or enterprise on those chips, otherwise a group', () => {
+        expect(commonsGroupsEmpty('projects', LOCAL)).toMatchObject({ title: 'No projects to back yet', action: 'project' });
+        expect(commonsGroupsEmpty('enterprises', LOCAL)).toMatchObject({ title: 'No enterprises to join yet', action: 'project' });
+        expect(commonsGroupsEmpty('chat', LOCAL)).toMatchObject({ title: 'No other groups to join', action: 'group' });
+        expect(commonsGroupsEmpty('all', LOCAL)).toMatchObject({ action: 'group' });
+        for (const kind of ['all', 'projects', 'enterprises', 'chat'] as const) {
+            expect(commonsGroupsEmpty(kind, GLOBAL)).toEqual({ title: 'No other groups to join', desc: 'Start one: a social circle, a working group, a guild.', action: 'group' });
+        }
     });
 });
 
@@ -131,9 +195,9 @@ describe('the screens go through the helpers (source check)', () => {
 
     it('Commons: the section drawn is commonsSectionFor, and Decide, its pill and the propose form only where shown', () => {
         const src = read('app/(tabs)/projects.tsx');
-        expect(src).toContain('const sections = commonsSections(nodeProfile?.features);');
+        expect(src).toContain('const sections = commonsSections(reader.effective);');
         expect(src).toContain("const showsDecide = sections.includes('decide');");
-        expect(src).toContain('const activeSection = commonsSectionFor(pickedSection, nodeProfile?.features);');
+        expect(src).toContain('const activeSection = commonsSectionFor(pickedSection, reader.effective);');
         expect(src).not.toMatch(/const \[activeSection,/);
         expect(src.split('<DecideSection').length - 1).toBe(1);
         expect(src.slice(src.lastIndexOf('\n', src.indexOf('<DecideSection')) - 60, src.indexOf('<DecideSection'))).toContain("{activeSection === 'decide' ? (");
@@ -141,21 +205,30 @@ describe('the screens go through the helpers (source check)', () => {
         const modal = block(src, '{showsDecide && (', src.indexOf('{createGroup.modal}') - 800);
         expect(modal).toContain('<ProposeDecisionModal');
         expect(src.split('<ProposeDecisionModal').length - 1).toBe(1);
-        expect(block(src, "{sections.includes('enterprises') && (")).toContain('accessibilityLabel="Enterprises Section"');
+        // No Enterprises pill: Groups holds them (pick 7), with the kind chips from groupKindChips and the rows from
+        // commonsGroupRows.
+        expect(src).not.toContain('Enterprises Section');
         expect(block(src, '{sections.length > 1 && (')).toContain('accessibilityLabel="Groups Section"');
+        expect(src).toContain('const kindChips = groupKindChips(reader.effective);');
+        expect(src).toContain('return commonsGroupRows(groupKind, groups, sorted, yourGroups, reader.effective);');
+        expect(src).toContain("data={activeSection === 'decide' ? [] : groupRows}");
+        expect(src).toContain('const heading = commonsHeading(reader.effective);');
         expect(src).toContain('<PageTitle title={heading.title}');
     });
 
-    it("the header's vote icon asks for Decisions only where the node has them", () => {
+    it("the header's vote icon asks for votes only where the node has Decisions, and draws them by Home's rule (PR #1483 review 4166559525, opus-1767 N3)", () => {
         const src = read('components/NeedsYouIcons.tsx');
-        expect(src).toContain('settle(votesHere().then(votes => (votes ? getDecisions(\'open\') : null))),');
-        expect(src.split('getDecisions(').length - 1).toBe(1);
-        expect(src).toContain('return decisionsOn(profile?.features);');
+        // Home's own vote line, asked as Home asks it (lands=enterprise), so a keepers' vote shows and opens the enterprise.
+        expect(src).toContain("decisionsOn(features) ? settle(signedGet(homePath(['needs'])).then(r => (r.ok ? r.json() : null))) : null,");
+        expect(src).toContain('...mergeNeeds(votes, null, now, features)');
+        expect(src).not.toContain('getDecisions(');
+        // Home's rule for a vote's landing, the one its own lines follow (mergeNeeds): Decisions on, and Beans on.
+        expect(read('utils/home-cards.ts')).toContain("export const decideOnNode = (features: HomeAnswer['features']): boolean => features.decisions !== false && features.beans !== false;");
     });
 
     it("the header's 🛡️ words are told whether the node has Decisions, so an emergency suspension isn't called a vote where there is none", () => {
         const src = read('components/NeedsYouIcons.tsx');
-        expect(src).toContain('admin: admin?.admin ? { ...admin.admin, decisions: votesOn } : null,');
+        expect(src).toContain('admin: admin?.admin ? { ...admin.admin, decisions: decisionsOn(features) } : null,');
         expect(read('utils/needs-you.ts')).toContain('label: adminLabel(adminItems, { decisions: i.admin?.decisions }),');
     });
 });

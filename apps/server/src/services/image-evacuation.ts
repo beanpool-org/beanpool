@@ -37,6 +37,8 @@
  */
 
 import { db } from '../db/db.js';
+import { closeOpenCopies } from '../engine/open-copies.js';
+import { closeWashSnapshotHandle } from '@beanpool/engine';
 import {
     ImageStoreUnavailableError, getImageStore, postPhotoKey, attachmentKey, sha256Hex, type ImageStore,
 } from '../storage/image-store.js';
@@ -151,8 +153,9 @@ function evacuatePhotoBatch(store: ImageStore, limit: number): EvacuationCounts 
            SET photo_data = NULL, storage_key = ?, sha256 = ?, bytes = ?, mime = ?
          WHERE post_id = ? AND order_num = ? AND storage_key IS NULL
     `);
+    // Only when the photo's move moved it (an update that changes nothing makes the touch trigger stamp afresh).
     const restoreWatermark = db.prepare(`
-        UPDATE post_photos SET updated_at = ? WHERE post_id = ? AND order_num = ?
+        UPDATE post_photos SET updated_at = ? WHERE post_id = ? AND order_num = ? AND updated_at IS NOT ?
     `);
 
     /**
@@ -166,12 +169,12 @@ function evacuatePhotoBatch(store: ImageStore, limit: number): EvacuationCounts 
      * already has — for a change that alters not one byte anybody can see.
      *
      * So the value is put back in the same transaction. The restoring UPDATE does NOT re-fire the trigger:
-     * it sets `updated_at` to something other than what the row now holds, so `NEW.updated_at IS
-     * OLD.updated_at` is false. Both statements commit together, so no reader ever sees the bumped value.
+     * only when the move moved it does it run (an update that changes nothing makes the touch trigger stamp
+     * afresh). Both statements commit together, so no reader ever sees the bumped value.
      */
     const moveRow = db.transaction((postId: string, orderNum: number, key: string, sha: string, size: number, mime: string, watermark: string | null) => {
         const res = update.run(key, sha, size, mime, postId, orderNum);
-        if (res.changes > 0) restoreWatermark.run(watermark, postId, orderNum);
+        if (res.changes > 0) restoreWatermark.run(watermark, postId, orderNum, watermark);
         return res.changes;
     });
 
@@ -300,9 +303,10 @@ export function evacuationPassDidWork(counts: EvacuationCounts): boolean {
 
 /**
  * Reclaim the space the nulled columns freed. Once per node: `VACUUM` rewrites the whole file, which is
- * worth doing after 84% of it has been emptied out and not worth doing again on every boot.
+ * worth doing after 84% of it has been emptied out and not worth doing again on every boot. Exported for
+ * test-sync-copy-pages.ts.
  */
-function reclaimSpaceOnce(): void {
+export function reclaimSpaceOnce(): void {
     try {
         const already = db.prepare('SELECT 1 FROM node_config WHERE key = ?').get(VACUUM_MARKER);
         if (already) return;
@@ -316,6 +320,12 @@ function reclaimSpaceOnce(): void {
         before = pageCount * pageSize;
     } catch { /* the size is a nicety, not the point */ }
     try {
+        // A copy being served to a standby holds a read on this database (engine/open-copies.ts): each checkpoint would
+        // wait on it for the whole busy timeout, with the event loop held, and the VACUUM's rewrite would stay in the WAL.
+        // It is closed first, in the same step, as the recovery seal closes it, and the standby asks for a new copy.
+        const closed = closeOpenCopies('the image evacuation reclaims space (one VACUUM)');
+        closeWashSnapshotHandle(db); // the wash analysis's refresh snapshot is a reader too
+        if (closed > 0) console.log(`🖼️  [ImageEvacuation] Closed ${closed} cop${closed === 1 ? 'y' : 'ies'} being served to a standby first; it asks for a new one.`);
         db.pragma('wal_checkpoint(TRUNCATE)');
         // VACUUM cannot run inside a transaction, and nothing here opens one.
         db.exec('VACUUM');

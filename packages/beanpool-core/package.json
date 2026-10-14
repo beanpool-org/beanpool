@@ -1,6 +1,6 @@
 {
   "name": "@beanpool/core",
-  "version": "1.2.26",
+  "version": "1.2.28",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -9,6 +9,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./brand-colours": {
+      "types": "./dist/brand-colours.d.ts",
+      "import": "./dist/brand-colours.js",
+      "default": "./dist/brand-colours.js"
     },
     "./ed25519-key": {
       "types": "./dist/ed25519-key.d.ts",
@@ -29,6 +34,26 @@
       "types": "./dist/sso-share-vectors.d.ts",
       "import": "./dist/sso-share-vectors.js",
       "default": "./dist/sso-share-vectors.js"
+    },
+    "./dm-line-vectors": {
+      "types": "./dist/dm-line-vectors.d.ts",
+      "import": "./dist/dm-line-vectors.js",
+      "default": "./dist/dm-line-vectors.js"
+    },
+    "./door-work": {
+      "types": "./dist/door-work.d.ts",
+      "import": "./dist/door-work.js",
+      "default": "./dist/door-work.js"
+    },
+    "./door-work-vectors": {
+      "types": "./dist/door-work-vectors.d.ts",
+      "import": "./dist/door-work-vectors.js",
+      "default": "./dist/door-work-vectors.js"
+    },
+    "./group-line-vectors": {
+      "types": "./dist/group-line-vectors.d.ts",
+      "import": "./dist/group-line-vectors.js",
+      "default": "./dist/group-line-vectors.js"
     }
   },
   "scripts": {

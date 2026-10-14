@@ -198,8 +198,9 @@ let timer: ReturnType<typeof setInterval> | null = null;
 
 /**
  * A member's phone registered its push token here: they are told now what they are owed (engine/place-watches.ts),
- * rather than at the next run. After a take-over this is how most watchers hear: the new main server has no phone's
- * token until the app starts again. Only where a run would tell them: a main server with the switch on.
+ * rather than at the next run. After a take-over, this is how a watcher hears whose phone the old main server didn't
+ * have; the new main server's first run reaches the rest (members' phones are copied, design G4). Only where a run would
+ * tell them: a main server with the switch on.
  */
 export function tellOwedWatcher(pubkey: string): boolean {
     if (getNodeRole() !== 'primary' || !getProfileSwitches().directoryMirror) return false;
@@ -210,7 +211,8 @@ export function tellOwedWatcher(pubkey: string): boolean {
  * At boot: once shortly after start (FIRST_RUN_DELAY_MS), then hourly. Every node sets the timer and each run reads the
  * role and the switch, so a local node's or a standby's hourly tick does nothing and never contacts the registry, and
  * an operator's override takes effect at the next tick. A take-over restarts the server (services/takeover.ts), so a
- * promoted standby's first run comes 10 s after it boots as the main server, before any phone has registered with it.
+ * promoted standby's first run comes 10 s after it boots as the main server, with the members' phones its main server
+ * had (design G4) and before any phone has registered with it.
  */
 export function initDirectoryMirror(): void {
     if (timer) clearInterval(timer);

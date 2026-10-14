@@ -46,12 +46,14 @@ vi.mock('./lib/sync', () => ({
 }));
 
 vi.mock('./lib/api', () => ({
+    // The page's own server unless Settings points it elsewhere: App reads it for the web app's update banner.
+    getNodeApiUrl: vi.fn(() => ''),
     registerMember: vi.fn(async () => ({ ok: true })),
     checkMembership: vi.fn(async () => ({ isMember: true })),
     getConversations: vi.fn(async () => ({ conversations: [], totalUnread: 0 })),
     getMyMarketplaceTransactions: vi.fn(async () => []),
     getCommunityHealth: vi.fn(async () => ({ online: true, version: '1.2.26' })),
-    getMyActiveRecoveryCollections: vi.fn(async () => []),
+    getMyActiveRecoveryCollections: vi.fn(async () => ({ count: 0, collections: [] })),
     getCommunityMe: vi.fn(async () => ({ publicKey: 'a1'.repeat(32), mute: { muted: false, until: null } })),
     getUnseenNotices: vi.fn(async () => []),
     markNoticesSeen: vi.fn(),

@@ -3,6 +3,8 @@ import type { NodeProfile } from '../../lib/profiles';
 import { resolveNodeApiUrl, buildAdminHeaders, getTfaSessionToken } from '../../lib/node-client';
 import { useTimeout } from '../../lib/use-timeout';
 import { ModalBackdrop } from '../common/ModalBackdrop';
+import { nodeCredential } from '../../lib/profiles';
+import { passwordField } from '../../lib/node-client';
 
 export interface ProbeLogEntry {
     timestamp: string;
@@ -18,23 +20,70 @@ export interface PublicAddressStatus {
     hostname?: string;
     mode?: 'tunnel' | 'direct' | string;
     tunnelToken?: string;
+    /** The server has a tunnel token but shows it only to an owner (the admin password counts as one). */
+    tunnelTokenOwnerOnly?: boolean;
     pubkey?: string;
     cached?: boolean;
     error?: string;
     communityName?: string;
     contact?: string;
     warning?: string;
+    /** With `paused` (and the address service's other states): why. */
+    reason?: string | null;
     /**
      * With `none`: the name this server keeps although the address service has no record of it (apps/server
      * engine/registrar-names.ts). Members' apps that use it are still accepted.
      */
     kept?: { hostname?: string; mode?: string | null };
+    /** The tunnel inside the server (apps/server services/tunnel-connector.ts): its real state, and why when it isn't up. */
+    tunnel?: TunnelStatus;
+    /** docker-compose.yml still mounts Docker's control socket into the server, which never uses it. */
+    dockerSocket?: boolean;
+}
+
+export interface TunnelStatus {
+    state: 'off' | 'starting' | 'connected' | 'retrying' | 'missing' | string;
+    since?: string;
+    connections?: number;
+    reason?: string | null;
+    version?: string | null;
+}
+
+/**
+ * Why the address service paused the name, for the operator. Every pause but the BeanPool project's own is lifted by this
+ * server by itself (apps/server services/tunnel-connector.ts healPausedAddress).
+ */
+export function pauseReason(reason: string | null | undefined): string {
+    switch (reason) {
+        case 'impostor': return 'another BeanPool server answered at this address, with a key that is not this server’s';
+        case 'content-swap': return 'for about an hour, something that is not a BeanPool server answered at this address';
+        case 'unverified': return 'it was taken back and is waiting for this server to confirm its key';
+        case 'incident-2026-09-24': return 'a fault at the address service on 24 September 2026';
+        case 'admin': return 'the BeanPool project paused it';
+        default: return reason ? `the address service says: ${reason}` : 'the address service gave no reason';
+    }
+}
+
+/** "connected (4)", "retrying: <reason> since 10:02", "not running". */
+export function describeTunnel(t: TunnelStatus | undefined): string | null {
+    if (!t || typeof t.state !== 'string') return null;
+    const since = t.since && !Number.isNaN(Date.parse(t.since))
+        ? ` since ${new Date(t.since).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+        : '';
+    if (t.state === 'connected') return `connected (${t.connections ?? 0})`;
+    if (t.state === 'starting') return `starting${since}`;
+    if (t.state === 'off') return 'not running';
+    if (t.state === 'missing') return `can't run: ${t.reason || 'cloudflared is missing from this server'}`;
+    return `${t.state}${t.reason ? `: ${t.reason}` : ''}${since}`;
 }
 
 export interface PublicAddressPanelProps {
     activeNode: NodeProfile;
     onRefreshDiag?: () => void;
 }
+
+/** A name this community's key holds besides its address (GET /api/local/admin/public-address/extra-names). */
+interface ExtraName { name: string; hostname?: string; releasable?: boolean; fromInstall?: boolean }
 
 export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressPanelProps) {
     const [statusData, setStatusData] = useState<PublicAddressStatus | null>(null);
@@ -52,7 +101,11 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
     // Action status & states
     const [submittingClaim, setSubmittingClaim] = useState(false);
     const [restarting, setRestarting] = useState(false);
+    const [rotating, setRotating] = useState(false);
     const [takingOffline, setTakingOffline] = useState(false);
+    // Names this community's key holds besides its address (the install's late claim): shown to an owner, released by name.
+    const [extraNames, setExtraNames] = useState<ExtraName[]>([]);
+    const [releasingName, setReleasingName] = useState<string | null>(null);
     const [actionMessage, setActionMessage] = useState<{ text: string; type: 'info' | 'success' | 'warning' | 'error' } | null>(null);
 
     // Confirmation dialog state for destructive actions
@@ -60,8 +113,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
         isOpen: boolean;
         title: string;
         message: string;
-        actionType: 'restart' | 'offline';
+        actionType: 'restart' | 'offline' | 'rotate' | 'release-name';
         confirmButtonText: string;
+        /** release-name: the name to release. */
+        name?: string;
     }>({
         isOpen: false,
         title: '',
@@ -84,7 +139,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/logs');
             const res = await fetch(url, {
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
             });
             if (res.ok) {
                 const data = await res.json().catch(() => ({}));
@@ -97,7 +152,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
         } catch {
             // Ignore fetch errors during log polling
         }
-    }, [activeNode.url, activeNode.adminPassword, activeNode.id]);
+    }, [activeNode.url, nodeCredential(activeNode), activeNode.id]);
 
     // Start background log monitor
     const startLogMonitor = useCallback(() => {
@@ -131,7 +186,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/status');
             const res = await fetch(url, {
-                headers: buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
             });
             const data: PublicAddressStatus = await res.json().catch(() => ({ status: 'error', error: 'Invalid JSON response' }));
             if (res.ok) {
@@ -154,7 +209,48 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
             setLoading(false);
             fetchLogs();
         }
-    }, [activeNode.url, activeNode.adminPassword, activeNode.id, fetchLogs]);
+    }, [activeNode.url, nodeCredential(activeNode), activeNode.id, fetchLogs]);
+
+    // Owner-only: an admin gets 403, and nothing is shown.
+    const loadExtraNames = useCallback(async () => {
+        try {
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/extra-names');
+            const res = await fetch(url, {
+                headers: buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+            });
+            const data = res.ok ? await res.json().catch(() => ({})) : {};
+            setExtraNames(Array.isArray(data?.names) ? data.names.filter((n: ExtraName) => typeof n?.name === 'string') : []);
+        } catch {
+            setExtraNames([]);
+        }
+    }, [activeNode.url, nodeCredential(activeNode), activeNode.id]);
+
+    const releaseExtraName = async (name: string) => {
+        setReleasingName(name);
+        try {
+            const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/release-name');
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ name, ...passwordField(nodeCredential(activeNode)) }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (res.ok) setActionMessage({ text: `✓ ${name}.beanpool.org released. This community's address is unchanged.`, type: 'success' });
+            else setActionMessage({ text: typeof data.error === 'string' ? data.error : `${name}.beanpool.org was not released`, type: 'error' });
+        } catch (e: unknown) {
+            setActionMessage({ text: e instanceof Error ? e.message : `${name}.beanpool.org was not released`, type: 'error' });
+        } finally {
+            setReleasingName(null);
+            await loadExtraNames();
+        }
+    };
+
+    useEffect(() => {
+        loadExtraNames();
+    }, [loadExtraNames]);
 
     useEffect(() => {
         loadStatus();
@@ -225,11 +321,11 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
             const res = await fetch(url, {
                 method: 'POST',
                 headers: {
-                    ...buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                    ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    password: activeNode.adminPassword,
+                    ...passwordField(nodeCredential(activeNode)),
                     name: trimmedName,
                     mode: claimMode,
                     communityName: communityName.trim() || undefined,
@@ -275,10 +371,20 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
     const requestRestartConfirmation = () => {
         setConfirmModal({
             isOpen: true,
-            title: 'Restart Tunnel Sidecar',
-            message: 'Are you sure you want to force-restart the Cloudflare tunnel sidecar process? Existing web connections may temporarily drop during container restart.',
+            title: 'Restart the tunnel',
+            message: 'Restart the Cloudflare tunnel inside this server? Visitors’ connections drop for a few seconds while it reconnects.',
             actionType: 'restart',
-            confirmButtonText: 'Restart Sidecar',
+            confirmButtonText: 'Restart now',
+        });
+    };
+
+    const requestRotateConfirmation = () => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'Give the tunnel a new key',
+            message: 'Replace the tunnel’s key? Do this if only the tunnel’s key may have reached someone else (it was shown on this screen, or a standby you gave away): the old key stops working at once. This does NOT protect you from a copy of this server’s data folder or a backup: that copy holds the server’s own key and gets the new tunnel key by itself. This server switches to the new key by itself; visitors’ connections drop for a few seconds.',
+            actionType: 'rotate',
+            confirmButtonText: 'New key now',
         });
     };
 
@@ -292,28 +398,48 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
         });
     };
 
+    // A name the key holds besides the address: released only once confirmed, like the card's other address actions.
+    const requestReleaseNameConfirmation = (n: ExtraName) => {
+        const host = n.hostname || `${n.name}.beanpool.org`;
+        const current = statusData?.hostname || (statusData?.name ? `${statusData.name}.beanpool.org` : '');
+        setConfirmModal({
+            isOpen: true,
+            title: 'Release a name this community does not use',
+            message: `Release ${host}? ${current ? `Your community's address stays ${current}.` : "Your community's address is not changed."} Another community can claim ${host} once the address service's hold ends.`,
+            actionType: 'release-name',
+            confirmButtonText: 'Release it',
+            name: n.name,
+        });
+    };
+
     // Execute confirmed destructive action
     const handleConfirmAction = async () => {
         const action = confirmModal.actionType;
+        const releaseName = confirmModal.name;
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+
+        if (action === 'release-name') {
+            if (releaseName) await releaseExtraName(releaseName);
+            return;
+        }
 
         if (action === 'restart') {
             setRestarting(true);
-            setActionMessage({ text: '⚡ Force-restarting tunnel sidecar container...', type: 'info' });
+            setActionMessage({ text: '⚡ Restarting the tunnel inside this server...', type: 'info' });
             startLogMonitor();
             try {
-                const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/restart-sidecar');
+                const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/restart-tunnel');
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {
-                        ...buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                        ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ password: activeNode.adminPassword }),
+                    body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
                 });
                 const data = await res.json().catch(() => ({}));
                 if (res.ok) {
-                    setActionMessage({ text: '⚡ Tunnel sidecar restarted cleanly!', type: 'success' });
+                    setActionMessage({ text: '⚡ Tunnel restarted. It reconnects to Cloudflare in a few seconds.', type: 'success' });
                     await loadStatus();
                 } else {
                     setActionMessage({ text: typeof data.error === 'string' ? data.error : 'Restart failed', type: 'error' });
@@ -322,6 +448,34 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                 setActionMessage({ text: e instanceof Error ? e.message : 'Restart failed', type: 'error' });
             } finally {
                 setRestarting(false);
+                stopLogMonitor();
+            }
+        } else if (action === 'rotate') {
+            setRotating(true);
+            setActionMessage({ text: '🔑 Asking for a new tunnel key...', type: 'info' });
+            startLogMonitor();
+            try {
+                const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/public-address/rotate');
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok) {
+                    setActionMessage({ text: '🔑 New tunnel key: the old one no longer works, and the tunnel runs on the new one.', type: 'success' });
+                    setRevealToken(false);
+                    await loadStatus();
+                } else {
+                    setActionMessage({ text: typeof data.error === 'string' ? data.error : 'No new key: the address service did not give one', type: 'error' });
+                }
+            } catch (e: unknown) {
+                setActionMessage({ text: e instanceof Error ? e.message : 'No new key: the request failed', type: 'error' });
+            } finally {
+                setRotating(false);
                 stopLogMonitor();
             }
         } else if (action === 'offline') {
@@ -333,10 +487,10 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                 const res = await fetch(url, {
                     method: 'POST',
                     headers: {
-                        ...buildAdminHeaders(activeNode.adminPassword, getTfaSessionToken(activeNode.id)),
+                        ...buildAdminHeaders(nodeCredential(activeNode), getTfaSessionToken(activeNode.id)),
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ password: activeNode.adminPassword }),
+                    body: JSON.stringify({ ...passwordField(nodeCredential(activeNode)) }),
                 });
                 const data = await res.json().catch(() => ({}));
                 if (res.ok) {
@@ -382,12 +536,17 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
     const rawStatus = typeof statusData?.status === 'string' ? statusData.status : '';
     const isLive = rawStatus === 'live';
     const isPending = rawStatus === 'pending';
+    const isPaused = rawStatus === 'paused';
+    const pausedReason = typeof statusData?.reason === 'string' ? statusData.reason : null;
     const isNone = rawStatus === 'none' || !statusData;
     const isError = rawStatus === 'error';
     const hostname = typeof statusData?.hostname === 'string' ? statusData.hostname : '';
     const mode = typeof statusData?.mode === 'string' ? statusData.mode : 'tunnel';
     const tunnelToken = typeof statusData?.tunnelToken === 'string' ? statusData.tunnelToken : '';
+    const tunnelTokenOwnerOnly = !tunnelToken && statusData?.tunnelTokenOwnerOnly === true;
     const keptHostname = isNone && typeof statusData?.kept?.hostname === 'string' ? statusData.kept.hostname : '';
+    const tunnelLine = mode === 'tunnel' ? describeTunnel(statusData?.tunnel) : null;
+    const tunnelOk = statusData?.tunnel?.state === 'connected';
     const lastLog = logs.length > 0 ? logs[logs.length - 1] : null;
     const currentStep = typeof lastLog?.step === 'string' ? lastLog.step : 'Ready';
 
@@ -443,11 +602,45 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                     </div>
                 )}
 
+                {extraNames.map((n) => (
+                    <div
+                        key={n.name}
+                        data-testid="extra-name"
+                        className="p-3 rounded-xl border bg-nature-950 border-nature-800 text-xs text-nature-300 flex flex-wrap items-center gap-2"
+                    >
+                        <span className="min-w-0 grow basis-[12rem] break-words">
+                            This community also holds <code className="font-mono text-white break-all">{n.hostname || `${n.name}.beanpool.org`}</code>
+                            {n.fromInstall ? ' from the install' : ''}; it is not used.{n.releasable ? ' Release it?' : ''}
+                        </span>
+                        {n.releasable && (
+                            <button
+                                type="button"
+                                onClick={() => requestReleaseNameConfirmation(n)}
+                                disabled={releasingName !== null}
+                                className="shrink-0 px-3 py-1.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-semibold text-white disabled:opacity-50"
+                            >
+                                {releasingName === n.name ? 'Releasing…' : 'Release'}
+                            </button>
+                        )}
+                    </div>
+                ))}
+
                 {/* Current Status Display Card */}
                 <div className="p-4 rounded-xl bg-nature-950 border border-nature-800/80 space-y-3">
                     <div className="text-xs font-semibold text-nature-400 uppercase tracking-wider">
                         Current Registrar Status
                     </div>
+
+                    {statusData?.dockerSocket && (
+                        <div
+                            role="alert"
+                            data-testid="docker-socket-warning"
+                            className="p-3 rounded-xl border bg-red-950/70 border-red-800 text-red-200 text-xs font-semibold"
+                        >
+                            docker-compose.yml still mounts Docker&apos;s control socket (/var/run/docker.sock) into this server, which doesn&apos;t use it.
+                            Remove that line (or git pull the new docker-compose.yml) and start the server again: anything that can use the socket controls the whole machine.
+                        </div>
+                    )}
 
                     {loading && !statusData ? (
                         <div className="text-xs text-nature-400 flex items-center gap-2">
@@ -486,6 +679,21 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                 </div>
                             )}
 
+                            {tunnelLine && (
+                                <div
+                                    data-testid="public-address-tunnel"
+                                    className={`text-xs break-words ${tunnelOk ? 'text-emerald-400' : 'text-amber-400'}`}
+                                >
+                                    Tunnel: {tunnelLine}
+                                </div>
+                            )}
+
+                            {tunnelTokenOwnerOnly && (
+                                <div data-testid="public-address-token-owner-only" className="text-xs text-nature-400 break-words">
+                                    Only an owner can see the tunnel token.
+                                </div>
+                            )}
+
                             {/* Tunnel Token display (when live via tunnel) */}
                             {tunnelToken && (
                                 <div className="p-3 rounded-xl bg-nature-900 border border-nature-800 space-y-1.5">
@@ -494,7 +702,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                             Tunnel Token
                                         </label>
                                         <span className="text-[10px] text-nature-400">
-                                            Keep secret; used by the Cloudflare sidecar connector
+                                            Keep secret; the tunnel inside this server runs on it
                                         </span>
                                     </div>
                                     <div className="flex flex-col sm:flex-row gap-2">
@@ -542,6 +750,22 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                 Your registration request was signed and submitted. Once reviewed, Cloudflare DNS and edge tunnels will provision automatically.
                             </p>
                         </div>
+                    ) : isPaused ? (
+                        <div className="space-y-1.5 text-xs" data-testid="public-address-paused">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 font-bold">
+                                    <span>⏸️</span>
+                                    <span>Paused</span>
+                                </span>
+                                <span className="font-mono text-white break-all">{hostname || `${statusData?.name || 'your-node'}.beanpool.org`}</span>
+                            </div>
+                            <p className="m-0 text-nature-300">Why: {pauseReason(pausedReason)}.</p>
+                            <p className="m-0 text-nature-400">
+                                {pausedReason === 'admin'
+                                    ? 'Members can’t reach the community at this address until the BeanPool project lifts the pause. The name stays this community’s.'
+                                    : 'The name stays this community’s, and nobody else can claim it. This server asks for it back by itself every few minutes and gets it back as soon as it shows its own key. Nothing to do here.'}
+                            </p>
+                        </div>
                     ) : isNone && keptHostname ? (
                         <div className="space-y-1 text-xs" data-testid="public-address-kept">
                             <p className="m-0 text-amber-400 font-bold">
@@ -570,8 +794,20 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                             className="px-3.5 py-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 text-xs font-bold border border-blue-500/30 transition-all disabled:opacity-50 min-h-[44px] flex items-center gap-1.5"
                         >
                             <span>⚡</span>
-                            <span>{restarting ? 'Restarting…' : 'Reset Tunnel'}</span>
+                            <span>{restarting ? 'Restarting…' : 'Restart tunnel'}</span>
                         </button>
+
+                        {isLive && mode === 'tunnel' && (
+                            <button
+                                type="button"
+                                onClick={requestRotateConfirmation}
+                                disabled={rotating}
+                                className="px-3.5 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 text-xs font-bold border border-amber-500/30 transition-all disabled:opacity-50 min-h-[44px] flex items-center gap-1.5"
+                            >
+                                <span>🔑</span>
+                                <span>{rotating ? 'Getting a new key…' : 'New tunnel key'}</span>
+                            </button>
+                        )}
 
                         {(isLive || isPending) && (
                             <button
@@ -617,7 +853,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                 >
                     {logs.length === 0 ? (
                         <div className="text-nature-400 italic text-[11px]">
-                            No propagation logs recorded yet. Initiating an address claim or tunnel reset will stream live steps here.
+                            No propagation logs recorded yet. Claiming an address or restarting the tunnel will stream live steps here.
                         </div>
                     ) : (
                         logs.map((entry, idx) => {
@@ -744,7 +980,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                             <div className="text-[10px] text-nature-400 mt-1 leading-normal">
                                 {claimMode === 'tunnel' ? (
                                     <span>
-                                        Outbound Cloudflare sidecar. Works behind NAT/firewalls, dynamic IP friendly, DDoS shielded, no exposed origin IP.
+                                        The server dials out to Cloudflare itself. Works behind NAT/firewalls, dynamic IP friendly, DDoS shielded, no exposed origin IP.
                                     </span>
                                 ) : (
                                     <span>
@@ -804,7 +1040,9 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                 className={`px-4 py-2 rounded-xl text-xs font-bold text-white transition-all min-h-[44px] ${
                                     confirmModal.actionType === 'offline'
                                         ? 'bg-red-600 hover:bg-red-500'
-                                        : 'bg-blue-600 hover:bg-blue-500'
+                                        : confirmModal.actionType === 'release-name'
+                                            ? 'bg-terra-600 hover:bg-terra-500'
+                                            : 'bg-blue-600 hover:bg-blue-500'
                                 }`}
                             >
                                 {confirmModal.confirmButtonText}

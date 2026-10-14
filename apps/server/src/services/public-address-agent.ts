@@ -4,22 +4,36 @@
 //   PUBLIC_ADDRESS_AUTO=1            enable (or just set PUBLIC_ADDRESS_NAME)
 //   PUBLIC_ADDRESS_NAME=cairns       desired label (defaults to a slug of the community name)
 //   PUBLIC_ADDRESS_MODE=tunnel|direct  (default tunnel)
-//   PUBLIC_ADDRESS_ORIGIN=...         what Cloudflare/cloudflared points at (default https://localhost:8443)
 //   REGISTRAR_URL=https://beanpool.org
 //
-// On boot (primary only) it claims the name via the signed registrar client, persists the result to
-// node_config, and writes the tunnel token to <data>/tunnel-token for the cloudflared sidecar to pick up.
-// Re-runs every 5 min so a 'pending' (gated) name flips to live once you approve it. See docs/node-dns-registrar.md.
+// Every 5 min on a main server it asks the registrar about this server's name and saves a live answer; the tunnel inside
+// this server (services/tunnel-connector.ts) runs whatever token that holds. That refresh runs on any main server holding a
+// tunnel address (live, or waiting for approval), however it was claimed, and never claims a name. Only with the env above does it also claim: the
+// name it is given, when the registrar has none live for this key. A 'pending' (gated) name flips to live once approved.
+// A name the registrar's sweep paused (another node's key, or something that is no BeanPool node, answered at it) is asked
+// back with a heal, never a claim, however it was claimed (services/tunnel-connector.ts healPausedAddress).
+// See docs/node-dns-registrar.md.
+//
+// The tunnel's destination is always this server's own loopback (LOOPBACK_ORIGIN): the tunnel runs inside the server.
+//
+// A name asked for at install (`beanpool claim --name`, address-request.ts) counts as PUBLIC_ADDRESS_NAME (the env wins
+// when both are set). The node takes the command's file within ~2 s and asks for the name at once; while the request
+// stands and no address is held it asks again after 10 s, 30 s and 2 min (the command waits 3), then on the 5-min tick. Taken only while this server holds no address:
+// changing a name it holds stays in Settings, owner-only. The request ends once this server holds any address, however it
+// got it (Settings, this agent, a take-over), and when Settings takes the address offline: it never claims later.
 
-import fs from 'node:fs';
-import path from 'node:path';
-import { getNodeRole, updateNodeConfig, getNodeConfig } from '../state-engine.js';
-import { getLocalConfig } from '../config/local-config.js';
+import { getNodeRole, getNodeConfig, publicAddressGeneration } from '../state-engine.js';
+import { getLocalConfig, updateLocalConfig } from '../config/local-config.js';
+import { noteTurnedAway } from '../config/turned-away-names.js';
+import { dataDir } from '../recover-command.js';
+import { isAddressLabel, takeAddressRequestFile } from '../address-request.js';
 import { claimAddress, addressStatus } from './registrar-client.js';
+import { cleanLabel, REGISTRAR_COMMUNITY_NAME_MAX, REGISTRAR_CONTACT_MAX } from '../config/clean-label.js';
 import { recordRegistrarAnswer } from '../engine/registrar-names.js';
+import { persistAddressIfUnchanged, answersAboutAnotherName, healPausedAddress, noteUnansweredClaim, LOOPBACK_ORIGIN, withKeptTunnelToken } from './tunnel-connector.js';
 
-const DATA_DIR = process.env.BEANPOOL_DATA_DIR || path.join(process.cwd(), 'data');
-const TOKEN_FILE = path.join(DATA_DIR, 'tunnel-token'); // the cloudflared sidecar reads this
+// Where it always lived; the take-over suites import it from here.
+export { withKeptTunnelToken };
 
 const slug = (s: string | null): string => {
     const cleaned = (s || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 32);
@@ -27,165 +41,203 @@ const slug = (s: string | null): string => {
     return cleaned.length < 3 ? `${cleaned}-node` : cleaned;   // NAME_RE requires ≥3 chars
 };
 
-const desiredName = (): string =>
-    (process.env.PUBLIC_ADDRESS_NAME || '').toLowerCase().trim() || slug(getLocalConfig().communityName);
-
-const isEnabled = (): boolean => process.env.PUBLIC_ADDRESS_AUTO === '1' || !!process.env.PUBLIC_ADDRESS_NAME;
-
-import http from 'node:http';
-
-export async function restartSidecar(): Promise<void> {
-    if (!fs.existsSync('/var/run/docker.sock')) return;
-    try {
-        const containersJson = await new Promise<string>((resolve) => {
-            const req = http.request({
-                socketPath: '/var/run/docker.sock',
-                path: '/containers/json?all=true',
-                method: 'GET',
-            }, (res) => {
-                let data = '';
-                res.on('data', chunk => data += chunk);
-                res.on('end', () => resolve(data));
-            });
-            req.on('error', () => resolve('[]'));
-            req.setTimeout(5000, () => { req.destroy(); resolve('[]'); });
-            req.end();
-        });
-
-        let target: string = process.env.CLOUDFLARED_CONTAINER_NAME || '';
-        if (!target) {
-            try {
-                const list = JSON.parse(containersJson);
-                if (Array.isArray(list)) {
-                    for (const c of list) {
-                        const names = (c.Names || []).map((n: string) => String(n));
-                        const image = String(c.Image || '');
-                        if (names.some((n: string) => n.includes('cloudflared')) || image.includes('cloudflared')) {
-                            target = c.Id || names[0]?.replace(/^\//, '') || '';
-                            if (target) break;
-                        }
-                    }
-                }
-            } catch { /* parse err */ }
-        }
-
-        if (!target) {
-            console.warn('[PublicAddr] ⚠️ Sidecar restart skipped: no cloudflared container found.');
-            return;
-        }
-
-        const result = await new Promise<{ ok: boolean; status: number; body: string }>((resolve) => {
-            const req = http.request({
-                socketPath: '/var/run/docker.sock',
-                path: `/containers/${target}/restart?t=0`,
-                method: 'POST',
-            }, (res) => {
-                let body = '';
-                res.on('data', chunk => body += chunk);
-                res.on('end', () => resolve({ ok: res.statusCode === 204 || res.statusCode === 200 || res.statusCode === 304, status: res.statusCode || 0, body }));
-            });
-            req.on('error', (e) => resolve({ ok: false, status: 0, body: e.message }));
-            req.setTimeout(15000, () => { req.destroy(); resolve({ ok: false, status: 0, body: 'timeout' }); });
-            req.end();
-        });
-
-        if (result.ok) {
-            console.log(`[PublicAddr] ✅ restarted sidecar (HTTP ${result.status})`);
-        } else {
-            console.warn(`[PublicAddr] ❌ sidecar restart failed: HTTP ${result.status} — ${result.body}`);
-        }
-    } catch (e: any) {
-        console.warn('[PublicAddr] restartSidecar error:', e.message);
-    }
-}
-
-export async function writeToken(token?: string): Promise<void> {
-    if (!token) return;
-    try {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-        const trimmed = token.trim();
-        // Skip restart if token hasn't changed (reconcile runs every 5 min)
-        let existing = '';
-        try { existing = fs.readFileSync(TOKEN_FILE, 'utf-8').trim(); } catch {}
-        if (existing === trimmed) return;
-        fs.writeFileSync(TOKEN_FILE, trimmed, { mode: 0o644 });
-        try { fs.chmodSync(TOKEN_FILE, 0o644); } catch {}
-        console.log('[PublicAddr] Token changed — restarting sidecar in 5s...');
-        // Brief pause for Cloudflare edge to register the new tunnel secret
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        await restartSidecar();
-    } catch (e: any) {
-        console.warn('[PublicAddr] could not write tunnel token:', e.message);
-    }
-}
-
-export async function removeToken(): Promise<void> {
-    try {
-        fs.mkdirSync(DATA_DIR, { recursive: true });
-        if (fs.existsSync(TOKEN_FILE)) {
-            fs.unlinkSync(TOKEN_FILE);
-        }
-    } catch (e: any) {
-        console.warn('[PublicAddr] could not remove tunnel token:', e.message);
-    }
-}
-
-/**
- * Save the registrar's answer. The registrar leaves `tunnelToken` out of its status when its own call to Cloudflare
- * fails (apps/registrar/src/index.js), so saving the answer as it came would drop a token that still works, and
- * the take-over keys would be re-locked without it until the next good answer (967 follow-up #2). So a missing
- * token keeps the one already saved for the same name.
- */
-export function withKeptTunnelToken(next: any, prev: any): any {
-    if (!next || typeof next !== 'object' || (typeof next.tunnelToken === 'string' && next.tunnelToken)) return next;
-    const kept = prev && typeof prev === 'object' && typeof prev.tunnelToken === 'string' && prev.tunnelToken ? prev.tunnelToken : null;
-    const sameName = !next.name || !prev?.name || next.name === prev.name;
-    return kept && sameName ? { ...next, tunnelToken: kept } : next;
-}
-
-/**
- * Store an answer as the node's address. The record of names (engine/registrar-names.ts) is written first, so a name
- * stored until now is kept as a former one when the answer names another. `claim`: the node's own claim answered.
- */
-const persist = (pa: any, use: 'stored' | 'claim' = 'stored') => {
-    recordRegistrarAnswer(pa, use);
-    updateNodeConfig({ publicAddress: withKeptTunnelToken(pa, (getNodeConfig() as any).publicAddress) } as any);
+/** The name `beanpool claim` asked for, while it stands (not refused by the registrar). */
+const requestedName = (): string | null => {
+    const r = getLocalConfig().addressRequest;
+    return r && !r.refused && isAddressLabel(r.name) ? r.name : null;
 };
 
-async function reconcile(): Promise<void> {
+const desiredName = (): string =>
+    (process.env.PUBLIC_ADDRESS_NAME || '').toLowerCase().trim() || requestedName() || slug(getLocalConfig().communityName);
+
+const envEnabled = (): boolean => process.env.PUBLIC_ADDRESS_AUTO === '1' || !!process.env.PUBLIC_ADDRESS_NAME;
+const isEnabled = (): boolean => envEnabled() || !!requestedName();
+
+/**
+ * The name this agent claims (its env's, or `beanpool claim`'s request while it stands), or null when it claims none. With
+ * nothing stored, an answer about it is stored even if this server turned it away before (tunnel-connector.ts
+ * answersAboutAnotherName).
+ */
+export const nameAskedFor = (): string | null => (isEnabled() ? desiredName() || null : null);
+
+/**
+ * A tunnel address saved here, live or waiting for approval: Settings' claim, this agent's, or a take-over's. A live one's
+ * token can change (the registrar re-made the tunnel); a pending one goes live when the BeanPool project approves it.
+ */
+const holdsTunnelAddress = (): boolean => {
+    const pa = (getNodeConfig() as any).publicAddress;
+    return !!pa && (pa.status === 'live' || pa.status === 'pending') && pa.mode !== 'direct';
+};
+
+/** Any address saved here, live or waiting, tunnel or direct. */
+const holdsAddress = (): boolean => {
+    const pa = (getNodeConfig() as any).publicAddress;
+    return !!pa && (pa.status === 'live' || pa.status === 'pending');
+};
+
+/**
+ * The registrar's word that a name can't be had (apps/registrar handleClaim): invalid 400, blocked or reserved 403, taken
+ * 409, in its own JSON (registrar-client marks it `registrar`). Any other answer (a 401 from a clock out of step, 408,
+ * 429, a 400 or 403 page from a proxy or firewall in front of the registrar) is asked again.
+ */
+const REFUSED = new Set([400, 403, 409]);
+
+/** The registrar holds the requested name for this key now (live or waiting): the request is done. */
+const requestDone = (name: string): void => {
+    const r = getLocalConfig().addressRequest;
+    if (r && r.name === name) updateLocalConfig({ addressRequest: null });
+};
+
+/**
+ * Ends a request from `beanpool claim`: this server holds an address (or its owner released one) however it got it. Left
+ * standing, it would claim the install's name after a later release, against the owner's latest choice. `why` ends the
+ * log line: what ended it.
+ */
+export function dropAddressRequest(why: string): void {
+    const r = getLocalConfig().addressRequest;
+    if (!r) return;
+    updateLocalConfig({ addressRequest: null });
+    noteTurnedAway(r.name, 'install-request-ended');
+    if (!r.refused) console.log(`[PublicAddr] beanpool claim's request for "${r.name}" ends: ${why}`);
+}
+
+/** One tick of the agent (every 5 min on a main server; a suite runs one at once). Never throws for a registrar failure. */
+export async function reconcile(): Promise<void> {
+    if (getNodeRole() !== 'primary') return;
+    const claims = isEnabled();
+    if (!claims && !holdsTunnelAddress()) return;
+
+    // Every answer below is stored only if nothing wrote the address while the registrar was asked (Settings' claim or
+    // Take offline, a take-over): a late answer never moves the community off a name set after this tick began.
+    const since = publicAddressGeneration();
+    let st: any;
+    const held = (getNodeConfig() as any).publicAddress;
+    try { st = await addressStatus(held?.name); } catch (e: any) { console.warn('[PublicAddr] status check failed:', e.message); return; }
+
+    // With nothing stored, the key's live or waiting name that this server turned away (one the owner took offline, the
+    // install's late claim) is never stored: the answer counts as none, and the name asked for is claimed below.
+    const turnedAway = (st.status === 'live' || st.status === 'pending') && !held?.name && answersAboutAnotherName(st, null, nameAskedFor());
+    if (!turnedAway && (st.status === 'live' || st.status === 'pending')) {
+        if (st.status === 'pending') console.log(`[PublicAddr] ⏳ "${st.name || desiredName()}" awaiting approval`);
+        // Not stored: another write came meanwhile (it stands; the next tick asks again), or the answer names another
+        // name than the one stored (an older registrar answers about the key's first name): never moved onto it.
+        const stored = persistAddressIfUnchanged(st, 'stored', since, nameAskedFor());
+        if (!stored) return;
+        await stored;
+        if (st.name) requestDone(st.name);
+        return;
+    }
+
+    // A pause of this server's own name that its heal lifts (the sweep's): asked back at once, by proving its key.
+    if (!turnedAway && await healPausedAddress(st, since)) return;
+    // Any other answer (none, paused, released, revoked, blocked) is written on the name it concerns; none is forgotten.
+    if (!turnedAway) recordRegistrarAnswer(st, 'status');
+    // The refresh never claims: only a server told to by its env claims a name.
+    if (!claims) return;
+
     const name = desiredName();
     if (!name) { console.warn('[PublicAddr] enabled but no name — set PUBLIC_ADDRESS_NAME or a community name.'); return; }
     const mode: 'tunnel' | 'direct' = process.env.PUBLIC_ADDRESS_MODE === 'direct' ? 'direct' : 'tunnel';
-    const origin = process.env.PUBLIC_ADDRESS_ORIGIN || `https://localhost:${process.env.PORT_HTTPS || 8443}`;
-
-    let st: any;
-    try { st = await addressStatus(); } catch (e: any) { console.warn('[PublicAddr] status check failed:', e.message); return; }
-
-    if (st.status === 'live') { persist(st); writeToken(st.tunnelToken); return; }
-    if (st.status === 'pending') { console.log(`[PublicAddr] ⏳ "${st.name || name}" awaiting approval`); persist(st); return; }
-
-    // Any other answer (none, paused, released, revoked, blocked) is written on the name it concerns; none is forgotten.
-    recordRegistrarAnswer(st, 'status');
-
-    // status 'none' → claim it
-    const contact = process.env.PUBLIC_ADDRESS_CONTACT || undefined;
-    const communityName = process.env.PUBLIC_ADDRESS_COMMUNITY_NAME || getLocalConfig().communityName || undefined;
+    // The env's contact, or the one `beanpool claim --contact` gave with the name being claimed.
+    const req = getLocalConfig().addressRequest;
+    const contact = cleanLabel(process.env.PUBLIC_ADDRESS_CONTACT, REGISTRAR_CONTACT_MAX)
+        || (req && req.name === name ? cleanLabel(req.contact, REGISTRAR_CONTACT_MAX) : undefined);
+    const communityName = cleanLabel(process.env.PUBLIC_ADDRESS_COMMUNITY_NAME, REGISTRAR_COMMUNITY_NAME_MAX)
+        || cleanLabel(getLocalConfig().communityName, REGISTRAR_COMMUNITY_NAME_MAX);
 
     try {
-        const res = await claimAddress(name, mode, origin, contact, communityName);
-        persist({ name, mode, communityName, contact, ...res }, 'claim');
-        if (res.status === 'live') { writeToken(res.tunnelToken); console.log(`[PublicAddr] 🟢 live at ${res.hostname}`); }
+        const res = await claimAddress(name, mode, LOOPBACK_ORIGIN, contact, communityName);
+        const stored = persistAddressIfUnchanged({ name, mode, communityName, contact, ...res, ...(mode === 'tunnel' ? { origin: LOOPBACK_ORIGIN } : {}) }, 'claim', since);
+        if (!stored) { lateClaim(name, res); return; }
+        await stored;
+        if (res.status === 'live' || res.status === 'pending') requestDone(name);
+        if (res.status === 'live') console.log(`[PublicAddr] 🟢 live at ${res.hostname}`);
         else console.log(`[PublicAddr] ⏳ "${name}" claimed — awaiting approval`);
-    } catch (e: any) { console.warn('[PublicAddr] claim failed:', e.message); }
+    } catch (e: any) {
+        console.warn('[PublicAddr] claim failed:', e.message);
+        await noteUnansweredClaim(name, e);
+        // The registrar refused the requested name (taken, not allowed): kept with its reason, never asked for again. A
+        // registrar that did not answer, or answered anything else, leaves the request standing for the next check.
+        const r = getLocalConfig().addressRequest;
+        const status = Number(e?.status);
+        if (!envEnabled() && r && r.name === name && REFUSED.has(status) && e?.registrar === true) {
+            updateLocalConfig({ addressRequest: { ...r, refused: String(e?.message || `refused (${status})`).slice(0, 300) } });
+        }
+    }
+}
+
+/**
+ * This agent's claim answered after the address was written another way (the owner's Settings claim or Take offline, a
+ * take-over): the newer write stands, and the name the claim got is kept by this key, unused. No registrar answer moves
+ * the community onto it: /status is asked about the stored name, and an answer about another name is never stored
+ * (tunnel-connector.ts answersAboutAnotherName). It is not released: a registrar that does not read a release's name
+ * (older than #1116, or another one) releases this key's first name, which can be the owner's pick, and a release only
+ * holds the name for this key for the cool-off anyway. The owner can claim it in Settings, or let it go. Said once, here.
+ */
+function lateClaim(name: string, res: any): void {
+    const now = (getNodeConfig() as any).publicAddress;
+    if (res?.status !== 'live' && res?.status !== 'pending') return;
+    if (now?.name === name) return;
+    noteTurnedAway(name, 'late-claim');   // Settings shows it, and offers to release it by name
+    console.warn(`[PublicAddr] "${name}" was claimed for this server's key, but the address was set ${now?.name ? `to "${now.name}"` : 'offline'} `
+        + 'while the claim was answered: that stands. This server\'s key holds the claimed name too, unused and never moved onto; Settings shows it, to release or claim.');
+}
+
+let checking = false;
+/** After a check that left the request standing: the next one in 10 s, 30 s, 2 min; after that only the 5-min tick. */
+const REQUEST_BACKOFF_MS = [10_000, 30_000, 120_000];
+let requestTries = 0;
+let nextRequestCheck = 0;
+
+/**
+ * Every 2 s on a main server: take a file `beanpool claim` left, and while a request stands and no address is held, ask
+ * the registrar at once, then backing off (REQUEST_BACKOFF_MS): a registrar that is down is not asked every 10 s by
+ * every node until it is back. A file is dropped while an address is held (Settings changes a held name, owner-only).
+ */
+export async function checkAddressRequest(now = Date.now()): Promise<void> {
+    if (checking || getNodeRole() !== 'primary') return;
+    checking = true;
+    try {
+        const req = takeAddressRequestFile(dataDir());
+        let fresh = false;
+        if (req) {
+            if (holdsAddress()) {
+                console.warn(`[PublicAddr] beanpool claim asked for "${req.name}", but this server already holds an address; change it in Settings.`);
+            } else {
+                // A request for another name replaces a standing one: the replaced name is turned away, so its claim's late
+                // answer (the registrar answers the newest live row first) never moves the community onto it.
+                const replaced = getLocalConfig().addressRequest;
+                if (replaced && replaced.name !== req.name) noteTurnedAway(replaced.name, 'request-replaced');
+                updateLocalConfig({ addressRequest: { name: req.name, mode: 'tunnel', contact: req.contact ?? null, requestedAt: req.at, refused: null } });
+                console.log(`[PublicAddr] 📡 beanpool claim asked for "${req.name}"`);
+                fresh = true;
+                requestTries = 0;
+            }
+        }
+        if (holdsAddress()) {
+            const held = (getNodeConfig() as any).publicAddress;
+            dropAddressRequest(`this server holds "${held?.name || held?.hostname}" now (the registrar's answer to this server, or a take-over)`);
+            return;
+        }
+        if (!requestedName()) return;
+        if (!fresh && now < nextRequestCheck) return;
+        await reconcile();
+        if (requestedName() && !holdsAddress()) {
+            nextRequestCheck = requestTries < REQUEST_BACKOFF_MS.length ? now + REQUEST_BACKOFF_MS[requestTries] : Infinity;
+            requestTries++;
+        }
+    } finally {
+        checking = false;
+    }
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
 
 export function initPublicAddress(): void {
-    if (!isEnabled()) return;
     if (getNodeRole() !== 'primary') { console.log('[PublicAddr] 🔒 skipping — backup replica.'); return; }
-    console.log(`[PublicAddr] 📡 auto public-address enabled (name: ${desiredName() || '—'}, mode: ${process.env.PUBLIC_ADDRESS_MODE || 'tunnel'})`);
+    if (isEnabled()) console.log(`[PublicAddr] 📡 auto public-address enabled (name: ${desiredName() || '—'}, mode: ${process.env.PUBLIC_ADDRESS_MODE || 'tunnel'})`);
     setTimeout(() => reconcile().catch(() => {}), 20_000);      // after identity/p2p ready
+    setInterval(() => checkAddressRequest().catch(() => {}), 2_000).unref();
     if (timer) clearInterval(timer);
-    timer = setInterval(() => reconcile().catch(() => {}), 5 * 60_000); // pick up approvals + keep token fresh
+    timer = setInterval(() => reconcile().catch(() => {}), 5 * 60_000); // pick up approvals + keep the token fresh
 }

@@ -9,8 +9,13 @@ appId: org.beanpool.pillar
 # default element timeout — wait for the bar rather than racing it.
 - extendedWaitUntil:
     visible:
-      id: "tab-market"
+      id: "tab-home"
     timeout: 90000
+
+# The app opens on Home (slice H2).
+- assertVisible:
+    id: "page-title-home"
+    text: "Home"
 
 - tapOn:
     id: "tab-market"
@@ -28,12 +33,6 @@ appId: org.beanpool.pillar
 - assertVisible:
     id: "page-title-talk"
     text: "Talk"
-
-- tapOn:
-    id: "tab-pulse"
-- assertVisible:
-    id: "page-title-pulse"
-    text: "Pulse"
 
 - tapOn:
     id: "tab-commons"

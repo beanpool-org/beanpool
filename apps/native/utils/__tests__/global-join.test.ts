@@ -15,7 +15,6 @@ import { randomBytes } from 'node:crypto';
 vi.mock('react-native', () => ({
     Platform: { OS: 'android' },
     DeviceEventEmitter: { addListener: vi.fn(() => ({ remove: vi.fn() })), emit: vi.fn() },
-    AppState: { addEventListener: vi.fn(() => ({ remove: vi.fn() })) },
 }));
 vi.mock('expo-linking', () => ({
     addEventListener: vi.fn(() => ({ remove: vi.fn() })),
@@ -44,6 +43,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(async (key: string) => mem.secure.get(key) ?? null),
     setItemAsync: vi.fn(async (key: string, value: string) => { mem.secure.set(key, value); }),
     deleteItemAsync: vi.fn(async (key: string) => { mem.secure.delete(key); }),
@@ -58,22 +58,29 @@ function fakeJwt(claims: Record<string, unknown>): string {
 // The providers' own sheets, counted: a second sign-in is exactly what "one sign-in, two jobs" must not ask for.
 vi.mock('../sso-signin', async (importOriginal) => {
     const real = await importOriginal<typeof import('../sso-signin')>();
+    const sheets = {
+        google: vi.fn(async (nonce: string) => ({ idToken: fakeJwt({ sub: 'google-sub-42', nonce }), nonce, email: 'joiner@example.com' })),
+        apple: vi.fn(async (nonce: string) => ({ idToken: fakeJwt({ sub: 'apple-sub-7', nonce }), nonce })),
+        facebook: vi.fn(async (nonce: string) => ({ idToken: fakeJwt({ sub: 'fb-sub-9', nonce }), nonce })),
+    };
     return {
         ...real,
-        signInWithGoogle: vi.fn(async (nonce: string) => ({ idToken: fakeJwt({ sub: 'google-sub-42', nonce }), nonce, email: 'joiner@example.com' })),
-        signInWithApple: vi.fn(async (nonce: string) => ({ idToken: fakeJwt({ sub: 'apple-sub-7', nonce }), nonce })),
-        signInWithFacebook: vi.fn(async (nonce: string) => ({ idToken: fakeJwt({ sub: 'fb-sub-9', nonce }), nonce })),
+        signInWithGoogle: sheets.google,
+        signInWithApple: sheets.apple,
+        signInWithFacebook: sheets.facebook,
+        // The door's one call (global-join.ts), reaching each provider's counted sheet as the real one does.
+        signInWithProvider: vi.fn(async (provider: 'google' | 'apple' | 'facebook', nonce: string) => ({ provider, ...await sheets[provider](nonce) })),
     };
 });
 
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { isSingleBlobSso, openSeedFromSso, toEd25519Seed } from '@beanpool/core';
+import { isSingleBlobSso, openSeedFromSso, toEd25519Seed, vaultTicketNonce } from '@beanpool/core';
 import { signInWithGoogle, signInWithApple, signInWithFacebook } from '../sso-signin';
 import { draftIdentity, loadIdentity, importIdentity, type BeanPoolIdentity } from '../identity';
 import { hexToBytes } from '../crypto';
 import { protectionFrom } from '../protection-state';
-import { enrolmentFromJoin } from '../keeper-enrolment';
+import { installNetwork, noVault, useVault, VAULT } from './fake-vault';
 import { getPendingOnboarding, setPendingOnboarding, resumePlan } from '../onboarding-state';
 import {
     readDoorAnswer,
@@ -99,8 +106,6 @@ import {
 const NODE = 'https://global.beanpool.org';
 const NONCE = '/api/join/sso-nonce';
 const JOIN = '/api/join';
-const GH_START = '/api/join/github/start';
-const GH_POLL = '/api/join/github/poll';
 
 type Answer = { status: number; body?: unknown; headers?: Record<string, string> };
 interface Seen { url: string; path: string; body: any; headers: Record<string, string> }
@@ -131,7 +136,7 @@ function installDoor(routes: Partial<Record<string, Answer | (() => Answer) | 'o
     return seen;
 }
 
-const NONCE_OK: Answer = { status: 200, body: { nonce: 'door-nonce-1', expiresInSeconds: 600, providers: ['apple', 'google', 'facebook', 'github'], githubFlow: 'node', clientIds: {} } };
+const NONCE_OK: Answer = { status: 200, body: { nonce: 'door-nonce-1', expiresInSeconds: 600, providers: ['apple', 'google', 'facebook'], clientIds: {} } };
 
 function joinedAnswer(extra: Record<string, unknown> = {}): Answer {
     return {
@@ -197,6 +202,13 @@ describe('each answer from the door, and where it takes the member', () => {
         expect(screen(429, {}, null).a).toMatchObject({ kind: 'rate_limited', retryAfterSeconds: null });
     });
 
+    it('403 account_closed: its own answer, closed with no Try again, in plain words', () => {
+        const closed = screen(403, { code: 'account_closed', error: "This key's account in this community was closed, so the community no longer accepts it." });
+        expect(closed).toMatchObject({ kind: 'account_closed', next: 'closed' });
+        expect(doorMessage(closed.a as any)).toBe("This account's place in the global community was closed, so it can't join again.");
+        expect(doorMessage(closed.a as any)).not.toMatch(/taking new members|invite/);
+    });
+
     it('403 (and the 404 a shut door answers): closed, and invites are the way in', () => {
         const forbidden = screen(403, { error: 'Forbidden' });
         expect(forbidden).toMatchObject({ kind: 'door_closed', next: 'closed' });
@@ -231,7 +243,13 @@ describe('each answer from the door, and where it takes the member', () => {
     });
 });
 
-describe('one sign-in, two jobs: the join carries the recovery copy, and nothing asks for a second sign-in', () => {
+// Before V4 the join itself carried the copy (`recovery: { shares }`) and global stored it. The key vault design moves
+// every copy to BeanPool's key vault: the door's one sign-in is bound to a vault deposit ticket, the join carries the
+// ticket for the door to check, and the copy goes to the vault with the same sign-in (design §5.4). No join carries a
+// copy any more. With the vault down, the door uses its own nonce and joins without one. A build WITHOUT a vault (every
+// build until the vault is live: the release gate, PR #1336 fix round) does exactly what it did before V4: the door's own
+// nonce, and the copy rides in the join (global-join.no-vault.test.ts is main's suite for it, unchanged).
+describe('one sign-in, two jobs: the join and the copy, and nothing asks for a second sign-in', () => {
     it('signs in once at the door, with the door\'s own nonce, signed by the joining key', async () => {
         const seen = installDoor({ [NONCE]: NONCE_OK, [JOIN]: joinedAnswer() });
         const result = await signInAtDoor('google', NODE, joiner);
@@ -245,78 +263,111 @@ describe('one sign-in, two jobs: the join carries the recovery copy, and nothing
         expect(seen.some(s => s.path.startsWith('/api/recovery/'))).toBe(false);
     });
 
-    it('sends the join with the token, the nonce and the seed sealed to that sign-in, and reads back a covered account', async () => {
+    it('with no vault in the build, the join carries the token, the door\'s nonce and the copy, as before the vault, and reads back a covered account', async () => {
         const seen = installDoor({ [NONCE]: NONCE_OK, [JOIN]: joinedAnswer() });
         const result = await signInAtDoor('google', NODE, joiner);
         if (result.kind !== 'signed_in') throw new Error('expected a sign-in');
-        const identity = { ...joiner, callsign: 'Sam' };
-        const a = await submitJoin(NODE, identity, 'Sam', result.signin);
+        expect(result.signin.vaultTicket).toBeUndefined();
+        const a = await submitJoin(NODE, { ...joiner, callsign: 'Sam' }, 'Sam', result.signin);
 
-        expect(a.kind).toBe('joined');
         const join = seen.find(s => s.path === JOIN)!;
         expect(join.headers['X-Public-Key']).toBe(joiner.publicKey);
+        expect(Object.keys(join.body).sort()).toEqual(['callsign', 'idToken', 'nonce', 'provider', 'recovery']);
         expect(join.body).toMatchObject({ callsign: 'Sam', provider: 'google', nonce: 'door-nonce-1' });
-        expect(typeof join.body.idToken).toBe('string');
-        expect(join.body.recovery.shares).toHaveLength(1);
-        const share = join.body.recovery.shares[0];
-        expect(share).toMatchObject({ holderType: 'sso', holderRef: 'google', shareIndex: 1 });
-        expect(isSingleBlobSso(share.kdfParams)).toBe(true);
-
-        // Sealed to THIS sign-in's subject, and it gives back this phone's key and its 12 words.
+        const [share] = join.body.recovery.shares;
         const opened = await openSeedFromSso(share, 'google', 'google-sub-42');
         expect(Buffer.from(opened.seed).toString('hex')).toBe(Buffer.from(toEd25519Seed(hexToBytes(joiner.privateKey))).toString('hex'));
-        expect(opened.words).toEqual(joiner.mnemonic);
-        await expect(openSeedFromSso(share, 'google', 'someone-else')).rejects.toThrow();
-
-        // Safety Backup shows the sign-in as protecting the account: no second prompt, no second deposit.
-        if (a.kind !== 'joined') throw new Error('expected joined');
-        expect(a.enrolment).toMatchObject({ enrolledSso: ['google'], wordsSealed: true, generation: 1 });
-        expect(protectionFrom(a.enrolment).state).toBe('covered');
-        expect(signInWithGoogle).toHaveBeenCalledTimes(1);
-        expect(signInWithApple).not.toHaveBeenCalled();
-        expect(signInWithFacebook).not.toHaveBeenCalled();
+        expect(a).toMatchObject({ kind: 'joined', enrolment: { enrolledSso: ['google'], wordsSealed: true, generation: 1 } });
         expect(seen.map(s => s.path)).toEqual([NONCE, JOIN]);
     });
 
-    it('when the node could not store the copy, the join still stands and Safety Backup offers the ordinary connect', async () => {
-        installDoor({ [NONCE]: NONCE_OK, [JOIN]: joinedAnswer({ recovery: { enrolled: false, error: 'The recovery keeper could not be stored.' } }) });
-        const result = await signInAtDoor('google', NODE, joiner);
-        if (result.kind !== 'signed_in') throw new Error('expected a sign-in');
-        const a = await submitJoin(NODE, { ...joiner, callsign: 'Sam' }, 'Sam', result.signin);
-        expect(a).toMatchObject({ kind: 'joined', enrolment: null });
-        expect(protectionFrom(null).state).toBe('words-only');
-    });
-
-    it('GitHub: the door runs it, the join carries the node\'s session (never a token), sealed to the id GitHub gave the node', async () => {
-        const seen = installDoor({
-            [NONCE]: NONCE_OK,
-            [GH_START]: { status: 200, body: { sessionId: 'door-gh-1', userCode: 'ABCD-1234', verificationUri: 'https://github.com/login/device', expiresInSeconds: 900, intervalSeconds: 0.01 } },
-            [GH_POLL]: { status: 200, body: { status: 'ok', sub: '5550001' } },
-            [JOIN]: joinedAnswer({ provider: 'github', recovery: { enrolled: true, generation: 1, enrolledSso: ['github'], threshold: 1 } }),
-        });
-        const prompts: string[] = [];
-        const result = await signInAtDoor('github', NODE, joiner, { onGithubPrompt: p => prompts.push(p.userCode) });
-        if (result.kind !== 'signed_in') throw new Error('expected a sign-in');
-        expect(prompts).toEqual(['ABCD-1234']);
-        const a = await submitJoin(NODE, { ...joiner, callsign: 'Sam' }, 'Sam', result.signin);
-        expect(a.kind).toBe('joined');
-
-        const join = seen.find(s => s.path === JOIN)!;
-        expect(join.body.proof).toEqual({ sessionId: 'door-gh-1' });
-        expect(join.body.idToken).toBeUndefined();
-        const opened = await openSeedFromSso(join.body.recovery.shares[0], 'github', '5550001');
-        expect(opened.words).toEqual(joiner.mnemonic);
-        // Both GitHub calls are the door's pair, signed by the joining key.
-        for (const p of [GH_START, GH_POLL]) {
-            expect(seen.find(s => s.path === p)!.headers['X-Public-Key']).toBe(joiner.publicKey);
+    it('with the vault down, the door\'s nonce, joined, and no copy anywhere: Safety Backup offers the ordinary connect', async () => {
+        useVault();
+        try {
+            const net = installNetwork();
+            net.vault.unreachable = true;
+            const result = await signInAtDoor('google', NODE, joiner);
+            if (result.kind !== 'signed_in') throw new Error('expected a sign-in');
+            expect(signInWithGoogle).toHaveBeenCalledWith('door-nonce-1');
+            const a = await submitJoin(NODE, { ...joiner, callsign: 'Sam' }, 'Sam', result.signin);
+            expect(a).toMatchObject({ kind: 'joined', enrolment: null });
+            const join = net.sent.find(s => s.origin === NODE && s.path === JOIN)!;
+            expect(Object.keys(join.body).sort()).toEqual(['callsign', 'idToken', 'nonce', 'provider']);
+            expect(protectionFrom(null).state).toBe('words-only');
+        } finally {
+            noVault();
         }
     });
 
-    it('enrolmentFromJoin reads only an answer that says the copy is stored', () => {
-        expect(enrolmentFromJoin({ enrolled: true, enrolledSso: ['apple'] }, 'apple', false)).toMatchObject({ enrolledSso: ['apple'], isSingleBlob: true, wordsSealed: false });
-        expect(enrolmentFromJoin({ enrolled: false }, 'apple', true)).toBeNull();
-        expect(enrolmentFromJoin(undefined, 'apple', true)).toBeNull();
-        expect(enrolmentFromJoin('yes', 'apple', true)).toBeNull();
+    it('with the key vault: the join carries its ticket, the copy goes there with the same sign-in, and it opens to this key and its words', async () => {
+        useVault();
+        try {
+            const net = installNetwork();
+            const result = await signInAtDoor('google', NODE, joiner);
+            if (result.kind !== 'signed_in') throw new Error('expected a sign-in');
+            const identity = { ...joiner, callsign: 'Sam' };
+            const a = await submitJoin(NODE, identity, 'Sam', result.signin);
+
+            expect(a.kind).toBe('joined');
+            const join = net.sent.find(s => s.origin === NODE && s.path === JOIN)!;
+            expect(Object.keys(join.body).sort()).toEqual(['callsign', 'idToken', 'nonce', 'provider', 'vaultTicket']);
+            expect(join.body.nonce).toBe(vaultTicketNonce(join.body.vaultTicket));
+            const deposit = net.sent.find(s => s.origin === VAULT && s.path === '/v1/copies')!;
+            expect(deposit.body).toMatchObject({ ticket: join.body.vaultTicket, idToken: join.body.idToken, provider: 'google' });
+            expect(deposit.headers['X-Public-Key']).toBe(joiner.publicKey);
+
+            // Sealed to THIS sign-in's subject, and it gives back this phone's key and its 12 words.
+            const [copy] = net.vault.copiesOf(joiner.publicKey);
+            const opened = await openSeedFromSso(copy.clientCopy, 'google', 'google-sub-42');
+            expect(isSingleBlobSso(copy.clientCopy.kdfParams)).toBe(true);
+            expect(Buffer.from(opened.seed).toString('hex')).toBe(Buffer.from(toEd25519Seed(hexToBytes(joiner.privateKey))).toString('hex'));
+            expect(opened.words).toEqual(joiner.mnemonic);
+            await expect(openSeedFromSso(copy.clientCopy, 'google', 'someone-else')).rejects.toThrow();
+
+            // Safety Backup shows the sign-in as protecting the account: no second prompt, no second deposit.
+            if (a.kind !== 'joined') throw new Error('expected joined');
+            expect(a.enrolment).toMatchObject({ enrolledSso: ['google'], wordsSealed: true });
+            expect(protectionFrom(a.enrolment).state).toBe('covered');
+            expect(signInWithGoogle).toHaveBeenCalledTimes(1);
+            expect(signInWithApple).not.toHaveBeenCalled();
+            expect(signInWithFacebook).not.toHaveBeenCalled();
+            expect(net.sent.filter(s => s.path === '/v1/copies')).toHaveLength(1);
+        } finally {
+            noVault();
+        }
+    });
+
+    it('when the vault could not keep the copy, the join still stands and Safety Backup offers the ordinary connect', async () => {
+        useVault();
+        try {
+            const net = installNetwork();
+            const result = await signInAtDoor('google', NODE, joiner);
+            if (result.kind !== 'signed_in') throw new Error('expected a sign-in');
+            net.vault.locked = true;
+            const a = await submitJoin(NODE, { ...joiner, callsign: 'Sam' }, 'Sam', result.signin);
+            expect(a).toMatchObject({ kind: 'joined', enrolment: null });
+            expect(protectionFrom(null).state).toBe('words-only');
+        } finally {
+            noVault();
+        }
+    });
+
+    it("Apple, with no vault in the build: the join carries Apple's token, the door's nonce, and the copy sealed to Apple's sub", async () => {
+        const seen = installDoor({ [NONCE]: NONCE_OK, [JOIN]: joinedAnswer({ provider: 'apple' }) });
+        const result = await signInAtDoor('apple', NODE, joiner);
+        if (result.kind !== 'signed_in') throw new Error('expected a sign-in');
+        expect(signInWithApple).toHaveBeenCalledWith('door-nonce-1');
+        const a = await submitJoin(NODE, { ...joiner, callsign: 'Sam' }, 'Sam', result.signin);
+        expect(a).toMatchObject({ kind: 'joined' });
+
+        const join = seen.find(s => s.path === JOIN)!;
+        // A build without a vault: the copy rides in the join, sealed to Apple's sub (as before the vault).
+        expect(Object.keys(join.body).sort()).toEqual(['callsign', 'idToken', 'nonce', 'provider', 'recovery']);
+        expect(join.body).toMatchObject({ provider: 'apple', nonce: 'door-nonce-1' });
+        await expect(openSeedFromSso(join.body.recovery.shares[0], 'apple', 'apple-sub-7')).resolves.toBeTruthy();
+        // The door's nonce and the join, both signed by the joining key, and nothing else asked of the node.
+        expect(seen.map(s => s.path)).toEqual([NONCE, JOIN]);
+        for (const s of seen) expect(s.headers['X-Public-Key']).toBe(joiner.publicKey);
     });
 });
 
@@ -805,7 +856,8 @@ describe('the name step at the door: never a spinner for good, and it can always
         stalledDoor();
         const leave = new AbortController();
         const pending = checkNameAtDoor(NODE, 'Sam', doorKey(), { signal: leave.signal });
-        await Promise.resolve();
+        // Out once it is sent: signed by the joining key (S4), it leaves a few ticks after the call.
+        await vi.waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
         leave.abort();
         expect(await pending).toEqual({ kind: 'cancelled' });
         const init = vi.mocked(globalThis.fetch).mock.calls[0][1] as RequestInit;
@@ -815,13 +867,12 @@ describe('the name step at the door: never a spinner for good, and it can always
     });
 
     it('while the check is out, every way off the name step stays open; only the join itself holds the screen', () => {
-        expect(doorWaysOut('name', true, false)).toEqual({ back: true, otherSignIn: true });
-        expect(doorWaysOut('name', false, false)).toEqual({ back: true, otherSignIn: true });
-        expect(doorWaysOut('joining', true, false)).toEqual({ back: false, otherSignIn: false });
-        // Unchanged elsewhere: the sign-in's own wait (bounded since 3e513312), and GitHub's code, which has its Cancel.
-        expect(doorWaysOut('signIn', true, false).back).toBe(false);
-        expect(doorWaysOut('signIn', true, true).back).toBe(true);
-        expect(doorWaysOut('signIn', false, false).back).toBe(true);
+        expect(doorWaysOut('name', true)).toEqual({ back: true, otherSignIn: true });
+        expect(doorWaysOut('name', false)).toEqual({ back: true, otherSignIn: true });
+        expect(doorWaysOut('joining', true)).toEqual({ back: false, otherSignIn: false });
+        // Unchanged elsewhere: the sign-in's own wait (bounded since 3e513312).
+        expect(doorWaysOut('signIn', true).back).toBe(false);
+        expect(doorWaysOut('signIn', false).back).toBe(true);
     });
 
     it('a taken name: the free suggestions, no longer than the join keeps', async () => {

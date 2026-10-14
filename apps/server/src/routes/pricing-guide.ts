@@ -20,6 +20,38 @@ import {
     seedPricingGuideIfEmpty,
 } from '../db/pricing-guide-db.js';
 import { runPricingAggregationCycle } from '../pricing-aggregator.js';
+import { clientLimiterKey } from '../client-ip.js';
+import { writeAddressHash } from '../engine/open-join.js';
+import { postPhotoUrl } from '@beanpool/engine';
+import { db } from '../db/db.js';
+import { passesReadGate } from '../state-engine.js';
+import { photoKeysRequired } from '../engine/photo-keys.js';
+
+/** A thumbnail that is one of this node's listing photos, as the aggregator writes one (pricing-aggregator.ts). */
+const LISTING_PHOTO = /^(?:[a-z][a-z0-9+.-]*:\/\/[^/\s]*)?\/api\/marketplace\/posts\/([^/?#\s]+)\/photos\/(\d+)(?:\?\S*)?$/i;
+
+/**
+ * An item as this reader may have it. The aggregator takes a matching listing's photo as an item's thumbnail, and this
+ * list is public, while a listing's photo is only for those who may read the listing (engine/photo-keys.ts). So it stays
+ * only for a listing on the board for everyone who reads the board (not a group's or one person's, not hidden by
+ * reports, not taken off: `active` not 1, whose photo the photo route serves to its author and the moderators only),
+ * and only for a reader who may read the board here: anyone where the listings are a public read, a member of
+ * a local community (with its key). Anyone else gets the item without it.
+ */
+function withReadersThumbnail<T extends { thumbnailUrl?: string }>(item: T, readerMayReadListings: boolean): T {
+    const m = typeof item.thumbnailUrl === 'string' ? item.thumbnailUrl.trim().match(LISTING_PHOTO) : null;
+    if (!m) return item;
+    const postId = m[1];
+    const orderNum = Number(m[2]);
+    const row = db.prepare(`
+        SELECT pp.updated_at, p.audience_scope, p.hidden_by_reports_at, COALESCE(p.active, 0) = 1 AS live
+        FROM post_photos pp JOIN posts p ON p.id = pp.post_id
+        WHERE pp.post_id = ? AND pp.order_num = ?
+    `).get(postId, orderNum) as { updated_at: string | null; audience_scope: string | null; hidden_by_reports_at: string | null; live: number } | undefined;
+    const onBoard = !!row && (row.audience_scope === null || row.audience_scope === 'public') && !row.hidden_by_reports_at && !!row.live;
+    if (!onBoard || !readerMayReadListings) return { ...item, thumbnailUrl: undefined };
+    return { ...item, thumbnailUrl: postPhotoUrl(postId, orderNum, row!.updated_at, row!.audience_scope) };
+}
 
 export function createPricingGuideRoutes(deps: RouteDeps): Router {
     const router = new Router();
@@ -31,12 +63,17 @@ export function createPricingGuideRoutes(deps: RouteDeps): Router {
     router.get('/api/pricing-guide', async (ctx) => {
         if (!deps.rateLimit(ctx)) return;
 
-        const category = ctx.query.category as string | undefined;
-        const search = ctx.query.q as string | undefined;
+        // `?q=a&q=b` arrives as an array: one string or none, never a value .trim() throws on.
+        const category = typeof ctx.query.category === 'string' ? ctx.query.category : undefined;
+        const search = typeof ctx.query.q === 'string' ? ctx.query.q : undefined;
 
-        const items = getPricingGuideItems(category, search);
+        // A listing photo as a thumbnail only for a reader who may read that listing (withReadersThumbnail).
+        const readerMayReadListings = !photoKeysRequired() || passesReadGate(ctx.state?.actor as string | undefined);
+        const items = getPricingGuideItems(category, search).map(item => withReadersThumbnail(item, readerMayReadListings));
         const config = getPricingConfig();
 
+        // Keyed photo URLs for a member: never kept by a shared cache for another reader.
+        if (photoKeysRequired()) ctx.set('Cache-Control', 'private, no-store');
         ctx.body = {
             items,
             config,
@@ -69,8 +106,19 @@ export function createPricingGuideRoutes(deps: RouteDeps): Router {
             return;
         }
 
-        const reportId = submitPricingReport(itemId, reportType, comment, reporterPubkey);
-        ctx.body = { success: true, reportId };
+        // A day's reports are capped: a member's by their key, the rest by address and for the node
+        // (db/pricing-guide-db.ts PRICE_REPORT_RULES, #1295 review 4126894855).
+        const report = submitPricingReport(itemId, reportType, comment, reporterPubkey, () => writeAddressHash(clientLimiterKey(ctx)));
+        if ('refused' in report) {
+            ctx.status = 429;
+            ctx.body = report.refused === 'busy'
+                ? { error: 'This community is taking no more price reports from people who are not signed in today. Please try again tomorrow.', code: 'busy' }
+                : report.refused === 'member_rate_limited'
+                    ? { error: 'You have sent a lot of price reports today. Please try again tomorrow.', code: 'rate_limited' }
+                    : { error: 'Too many price reports from this network today. Please try again tomorrow, or sign in first.', code: 'rate_limited' };
+            return;
+        }
+        ctx.body = { success: true, reportId: report.id };
     });
 
     /**

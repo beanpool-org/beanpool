@@ -38,8 +38,11 @@ import { createMessagingRoutes } from './routes/messaging.js';
 import { authRateLimit } from './auth-rate-limit.js';
 import { resetChatRateLimit, CHAT_LINES_PER_MINUTE } from './chat-rate-limit.js';
 import { db } from './db/db.js';
+import { lockedGroupLine } from './group-test-payload.js';
+import { removalInGraceFromBefore } from './decisions-from-before-test-fixture.js';
 import { setCommonsBalance } from '@beanpool/core';
 import type { RouteDeps } from './routes/types.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let testsRun = 0;
 let testsPassed = 0;
@@ -112,9 +115,10 @@ async function callRouter(
 function makeMember(callsign: string): string {
     const pk = crypto.randomBytes(32).toString('hex');
     db.prepare(`
-        INSERT INTO members (public_key, callsign, joined_at, status, earned_credit, avatar_url, updated_at)
-        VALUES (?, ?, ?, 'active', 100, 'data:image/png;base64,iVBORw0KGgo=', strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+        INSERT INTO members (public_key, callsign, joined_at, status, earned_credit, updated_at)
+        VALUES (?, ?, ?, 'active', 100, strftime('%Y-%m-%dT%H:%M:%fZ','now'))
     `).run(pk, callsign, new Date(Date.now() - 60 * 86400_000).toISOString());
+    setMemberPhoto(db, pk, 'data:image/png;base64,iVBORw0KGgo=');
     db.prepare('INSERT INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0) ON CONFLICT(public_key) DO NOTHING').run(pk);
     return pk;
 }
@@ -151,11 +155,18 @@ async function run() {
 
     // ── 1. Accelerating the removal of an owner or admin ─────────────────────────────────
     console.log('\n--- 1. Accelerate needs owner level for an owner/admin subject ---');
+    // Since 2026-10-01 no Decision removes an owner or admin (docs/the-commons.md §3.8): refused when proposed. A removal
+    // that passed before then can still be in its grace window on a node that ran that code
+    // (decisions-from-before-test-fixture.ts), and accelerating it still needs owner level.
+    const refusalOf = (fn: () => unknown): string => { try { fn(); return ''; } catch (e: any) { return e?.message || String(e); } };
     const doomedAdmin = makeMember('DoomedAdmin');
     grantNodeRole(doomedAdmin, 'admin', owner);
-    const removeAdmin = createDecision({ authorPubkey: owner, title: 'Remove DoomedAdmin', description: 'Accelerate test', touches: 'member', effect: 'remove_member', subject: doomedAdmin });
-    const exec1 = decisionsEngine.executeDecision(removeAdmin.id);
-    assert(exec1.status === 'execution_pending_grace' && statusOf(doomedAdmin) === 'disabled', `the removal enters its grace window (got ${exec1.status})`);
+    const adminRefusal = refusalOf(() => createDecision({ authorPubkey: owner, title: 'Remove DoomedAdmin', description: 'Accelerate test', touches: 'member', effect: 'remove_member', subject: doomedAdmin }));
+    assert(/can't remove or suspend an owner or admin/.test(adminRefusal) && statusOf(doomedAdmin) === 'active',
+        `a Decision to remove an admin is refused when proposed (got "${adminRefusal}")`);
+    const removeAdmin = { id: removalInGraceFromBefore(owner, doomedAdmin, 'Remove DoomedAdmin') };
+    assert(getDecision(removeAdmin.id)!.status === 'execution_pending_grace' && statusOf(doomedAdmin) === 'disabled',
+        `one that passed before then is in its grace window (got ${getDecision(removeAdmin.id)!.status})`);
     const accelPlain = await callRouter(admin, 'POST', `/api/local/admin/decisions/${removeAdmin.id}/accelerate`, { actor: plainAdmin });
     assert(accelPlain.status === 403 && /only an owner/i.test(accelPlain.body?.error || '') && /Ask an owner/.test(accelPlain.body?.error || ''),
         `a plain admin cannot cut short the grace window on removing an admin (got ${accelPlain.status} ${JSON.stringify(accelPlain.body)})`);
@@ -167,8 +178,10 @@ async function run() {
 
     const doomedOwner = makeMember('DoomedOwner');
     grantNodeRole(doomedOwner, 'owner', owner);
-    const removeOwner = createDecision({ authorPubkey: owner, title: 'Remove DoomedOwner', description: 'Accelerate test', touches: 'member', effect: 'remove_member', subject: doomedOwner });
-    decisionsEngine.executeDecision(removeOwner.id);
+    const ownerRefusal = refusalOf(() => createDecision({ authorPubkey: owner, title: 'Remove DoomedOwner', description: 'Accelerate test', touches: 'member', effect: 'remove_member', subject: doomedOwner }));
+    assert(/can't remove or suspend an owner or admin/.test(ownerRefusal) && statusOf(doomedOwner) === 'active',
+        'a Decision to remove a co-owner is refused when proposed too');
+    const removeOwner = { id: removalInGraceFromBefore(owner, doomedOwner, 'Remove DoomedOwner') };
     const accelPlainOwner = await callRouter(admin, 'POST', `/api/local/admin/decisions/${removeOwner.id}/accelerate`, { actor: plainAdmin });
     assert(accelPlainOwner.status === 403 && statusOf(doomedOwner) === 'disabled', 'nor on removing an owner');
     const accelPassword = await callRouter(admin, 'POST', `/api/local/admin/decisions/${removeOwner.id}/accelerate`);
@@ -188,9 +201,13 @@ async function run() {
     const suspended = await callRouter(admin, 'POST', `/api/local/admin/users/${overlap}/suspend`, { actor: owner, body: { reason: 'Emergency suspension, then a removal vote' } });
     assert(suspended.status === 200, `an owner emergency-suspends an admin (got ${suspended.status} ${JSON.stringify(suspended.body)})`);
     const keep = suspended.body.decision;
-    const removeOverlap = createDecision({ authorPubkey: owner, title: 'Remove OverlapAdmin', description: 'Overlap test', touches: 'member', effect: 'remove_member', subject: overlap });
-    const exec3 = decisionsEngine.executeDecision(removeOverlap.id);
-    assert(exec3.status === 'execution_pending_grace', `the removal passes while the keep vote is open (got ${exec3.status})`);
+    // An admin whose role an emergency suspension holds aside is still an admin (§3.8): no removal vote opens on them.
+    // One that passed before 2026-10-01 while the keep vote was open is the case this section is about.
+    const overlapRefusal = refusalOf(() => createDecision({ authorPubkey: owner, title: 'Remove OverlapAdmin', description: 'Overlap test', touches: 'member', effect: 'remove_member', subject: overlap }));
+    assert(/can't remove or suspend an owner or admin/.test(overlapRefusal), 'a Decision to remove a suspended admin is refused when proposed');
+    const removeOverlap = { id: removalInGraceFromBefore(owner, overlap, 'Remove OverlapAdmin') };
+    assert(getDecision(removeOverlap.id)!.status === 'execution_pending_grace',
+        `one that passed while the keep vote was open is in its grace window (got ${getDecision(removeOverlap.id)!.status})`);
     assert(heldRows(overlap).length === 1 && heldRows(overlap)[0].decision_id === keep.id, 'the role is held by the keep vote alone');
     closeForTick(keep.id);
     tickDecisions();
@@ -274,7 +291,7 @@ async function run() {
     let sentOk = 0;
     for (let i = 0; i < 10; i++) {
         for (const pk of [alice, bob]) {
-            const r = await callRouter(groups, 'POST', `/api/groups/${hall.id}/chat/message`, { actor: pk, ip: NAT_IP, body: { text: `line ${i}` } });
+            const r = await callRouter(groups, 'POST', `/api/groups/${hall.id}/chat/message`, { actor: pk, ip: NAT_IP, body: lockedGroupLine(db, hall.id) });
             if (r.status === 201) sentOk++;
         }
     }
@@ -283,17 +300,18 @@ async function run() {
     assert(lookup.status === 200, `a recovery lookup from that IP is not locked out (got ${lookup.status} ${JSON.stringify(lookup.body)})`);
     const viaSend = await callRouter(messaging, 'POST', '/api/messages/send', {
         actor: bob, ip: NAT_IP,
-        body: { conversationId: hall.id, authorPubkey: bob, ciphertext: Buffer.from('old app line').toString('base64'), nonce: 'plaintext-v1' },
+        // The sealed form of a group line (the readable one an old app sent is refused, and is the keeper-read-cursor suite's check).
+        body: { conversationId: hall.id, authorPubkey: bob, ...lockedGroupLine(db, hall.id) },
     });
     assert(viaSend.status === 200 && viaSend.body?.success === true, `a group line through the old send route uses the same chat bucket (got ${viaSend.status})`);
     let aliceLast = 0;
     for (let i = 10; i < CHAT_LINES_PER_MINUTE; i++) {
-        aliceLast = (await callRouter(groups, 'POST', `/api/groups/${hall.id}/chat/message`, { actor: alice, ip: NAT_IP, body: { text: `more ${i}` } })).status;
+        aliceLast = (await callRouter(groups, 'POST', `/api/groups/${hall.id}/chat/message`, { actor: alice, ip: NAT_IP, body: lockedGroupLine(db, hall.id) })).status;
     }
     assert(aliceLast === 201, `Alice can send ${CHAT_LINES_PER_MINUTE} lines in a minute`);
-    const aliceOver = await callRouter(groups, 'POST', `/api/groups/${hall.id}/chat/message`, { actor: alice, ip: NAT_IP, body: { text: 'one too many' } });
+    const aliceOver = await callRouter(groups, 'POST', `/api/groups/${hall.id}/chat/message`, { actor: alice, ip: NAT_IP, body: lockedGroupLine(db, hall.id) });
     assert(aliceOver.status === 429, `line ${CHAT_LINES_PER_MINUTE + 1} from Alice is refused`);
-    const bobStill = await callRouter(groups, 'POST', `/api/groups/${hall.id}/chat/message`, { actor: bob, ip: NAT_IP, body: { text: 'still here' } });
+    const bobStill = await callRouter(groups, 'POST', `/api/groups/${hall.id}/chat/message`, { actor: bob, ip: NAT_IP, body: lockedGroupLine(db, hall.id) });
     assert(bobStill.status === 201, 'while Bob, on the same IP, keeps his own budget');
     const lookupAfter = await callRouter(community, 'GET', '/api/recovery/lookup/bob', { ip: NAT_IP });
     assert(lookupAfter.status === 200, 'and recovery lookup from that IP still works');

@@ -34,6 +34,14 @@
  *      into one and the blocks they hold are stamped after it; the one-time move skips a key with no row here and counts
  *      it, never refusing the rest; a block made again after Unblock All, in the same millisecond or after the clock
  *      stepped back, is stamped after it, and a later Unblock All never stamps earlier than the one before
+ *  10. who blocked a key, as a listing's push keeps it between pushes (blockersOfKept, #1831), is held to the table
+ *      before every check above, so each writer they run leaves no kept list stale; every SQL write naming member_blocks
+ *      in packages/ and apps/server is one this suite runs, none is in a file with a database of its own, nothing drops
+ *      or alters the table; each shape of write moves the block lists' version, a rolled-back one too, and a read does not;
+ *      what the version can't see (#1867): an unblock read inside a transaction that rolls back leaves the block held
+ *      after it; a block and an unblock written by another connection hold from the next read; data_version recorded
+ *      before the table read catches a commit landing right after the SELECT; a counting trigger dropped, or all of
+ *      them with a run-time temp_store, is made again and the kept lists read afresh
  *
  * Run: ENABLE_PEER_CONNECTORS=true BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-member-blocks.ts
  */
@@ -46,14 +54,19 @@ const PW = 'MemberBlocksPass123!';
 process.env.ADMIN_PASSWORD = PW;
 
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
+import Database from 'better-sqlite3';
 import { initTls } from './services/tls.js';
 import {
-    initStateEngine, seedGenesisMember, adminPruneUser, exportSyncState, signSyncPayload, importRemoteState, setNodeRole, clearReplicatedTables,
+    initStateEngine, seedGenesisMember, adminPruneUser, exportSyncState, signSyncPayload, importRemoteState, setNodeRole,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { initAdminPassword } from './config/local-config.js';
 import { db } from './db/db.js';
+import { emptyCopiedTables } from './engine/copied-tables.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { issueRekeyCode, completeRekey } from './engine/member-wizards.js';
 import { startP2P } from './p2p.js';
@@ -61,7 +74,10 @@ import { addConnector } from './connector-manager.js';
 import { getReplicaConsistency } from '@beanpool/engine';
 
 let run = 0, passed = 0;
+// Before each check, who blocked each key as a listing's push keeps it is held to the table (#1831, keptAgree in main).
+let keptAgree: ((before: string) => void) | null = null;
 function assert(cond: boolean, msg: string): void {
+    keptAgree?.(msg);
     run++;
     if (cond) { passed++; console.log(`✓ ${msg}`); } else console.error(`✗ ${msg}`);
 }
@@ -184,6 +200,30 @@ async function main(): Promise<void> {
     const vera = member('Vera', { visitor: true });
     const nobody = newId('Nemo'); // a key that is no member here
     const feedCount = () => (db.prepare('SELECT COUNT(*) AS n FROM activity_feed').get() as { n: number }).n;
+
+    // Who blocked a key, kept from one push to the next (blockersOfKept, #1831): before every check from here on, each
+    // key's kept list is held to the table, then read again, so it is kept. Every writer below runs between two checks:
+    // a block, an unblock, Unblock All over HTTP; a self-deletion; a removal; a re-key; a standby's copy and its
+    // tombstones; a whole copy's start; the fold of an owner's tombstones. One that left the block lists' version behind
+    // leaves a kept list stale, and the next check after it fails, whatever it wrote.
+    const keptRun = { checks: 0, afterWrites: 0, stale: 0, examples: [] as string[] };
+    const keptKeys = new Set<string>();
+    let lastTable = '';
+    keptAgree = (before: string) => {
+        if (!blocks?.blockersOfKept || db.inTransaction) return;
+        keptRun.checks++;
+        const table = (db.prepare(`SELECT COUNT(*) || ':' || IFNULL(group_concat(owner_pubkey || blocked_pubkey || updated_at, ','), '') AS t
+                                   FROM (SELECT * FROM member_blocks ORDER BY owner_pubkey, blocked_pubkey)`).get() as { t: string }).t;
+        if (table !== lastTable) keptRun.afterWrites++;
+        lastTable = table;
+        for (const r of db.prepare('SELECT public_key AS k FROM members UNION SELECT blocked_pubkey FROM member_blocks UNION SELECT owner_pubkey FROM member_blocks').all() as { k: string }[]) keptKeys.add(r.k);
+        for (const k of keptKeys) {
+            const kept: ReadonlySet<string> = blocks.blockersOfKept(k), fresh: Set<string> = blocks.blockersOf(k);
+            if (kept.size === fresh.size && [...fresh].every(o => kept.has(o))) continue;
+            keptRun.stale++;
+            if (keptRun.examples.length < 4) keptRun.examples.push(`${k.slice(0, 12)}…: kept ${kept.size}, the table ${fresh.size}, before "${before.slice(0, 70)}"`);
+        }
+    };
 
     const annTab1 = await socket(ann);
     const annTab2 = await socket(ann);
@@ -498,7 +538,7 @@ async function main(): Promise<void> {
     const tieTomb2 = tombOf(eve.pk, bo.pk);
     assert(!rowOf(eve.pk, bo.pk) && !!tieTomb2 && !!tieRow && tieTomb2 >= tieRow.updated_at, `and unblocking it again then is stamped no earlier than it (${tieTomb2} ≥ ${tieRow?.updated_at})`);
 
-    // The replica audit counts the table, and a force-resync clears it.
+    // The replica audit counts the table, and a whole copy starts without it (engine/copied-tables.ts).
     const audit = attempt(() => getReplicaConsistency(db, { memberBlocks: exported } as any, 0));
     const auditRow = audit?.tables.find((t: any) => t.name === 'member_blocks');
     assert(!!auditRow && auditRow.primary === exported.length, `the replica audit counts member_blocks (${JSON.stringify(auditRow)})`);
@@ -507,13 +547,13 @@ async function main(): Promise<void> {
     const olderAudit = attempt(() => getReplicaConsistency(db, {} as any, 0));
     assert(held > 0 && !!olderAudit && !olderAudit.tables.some((t: any) => t.name === 'member_blocks'),
         `a copy without block lists, from a main server that predates them, is not counted against the ${held} this standby holds (${JSON.stringify(olderAudit?.tables.find((t: any) => t.name === 'member_blocks') ?? null)})`);
-    attempt(() => clearReplicatedTables());
+    attempt(() => emptyCopiedTables(db));
     const cleared = attempt(() => (db.prepare('SELECT COUNT(*) AS n FROM member_blocks').get() as any).n);
-    assert(cleared === 0, `a force-resync clears the table before the whole copy comes in (${cleared})`);
+    assert(cleared === 0, `a whole copy starts without the table, built from nothing in a staging database (${cleared})`);
 
     // ── 9. no member can flood the node ─────────────────────────────────────────────────────────
     // The deciding review of #1239 (4114300128): 500 keys that needn't be anyone's, then Unblock All, wrote 500 tombstones
-    // every two requests, each kept 30 days, and a whole copy carried them all. The force-resync above emptied the tables.
+    // every two requests, each kept 30 days, and a whole copy carried them all. The empty copy above emptied the tables.
     console.log('\n── 9. no member can flood the node ──');
     const CEILING = blocks?.MEMBER_BLOCK_TOMBSTONES_MAX ?? 500;
     const fay = member('Fay');
@@ -616,6 +656,153 @@ async function main(): Promise<void> {
     assert(emptyClear.status === 200 && emptyClear.body?.removed === 0 && tombsOf(fay.pk) === emptyBefore[0] && listTombOf(fay.pk) === emptyBefore[1],
         'Unblock All of an empty list writes nothing');
     await p2p.stop();
+
+    keptAgree = null;
+    for (const e of keptRun.examples) console.error(`   ${e}`);
+    assert(keptRun.checks > 0 && keptRun.afterWrites >= 20 && keptRun.stale === 0,
+        `who blocked each of ${keptKeys.size} keys, kept between pushes, matched the table before each of ${keptRun.checks} checks, ${keptRun.afterWrites} of them after a write to member_blocks (${keptRun.stale} stale)`);
+
+    // ── 10. who writes member_blocks (#1831) ────────────────────────────────────────────────────
+    console.log('\n── 10. every SQL write to member_blocks moves the block lists\' version ──');
+    // The version is counted by SQLite on this node's connection (member-blocks.ts watchBlockWrites), so a writer moves
+    // it by writing through that connection, whoever it is, a table named at run time included (emptyCopiedTables). Every
+    // SQL write naming member_blocks in packages/ and apps/server is one of these, each run above between two checks of
+    // the kept lists; a new one fails here until it is added to the list and run above. None is in a file that opens a
+    // database of its own (which no trigger of this connection sees), and nothing drops or alters the table (which would
+    // take the triggers with it).
+    const WRITERS: Record<string, number> = {
+        // addBlocks, foldTombstones, deleteBlockRows, deleteOwnerRows, moveBlocks, mergeReplicatedBlocks: sections 1, 6-9
+        'apps/server/src/engine/member-blocks.ts': 6,
+        // a standby applying its main server's tombstones (applyTombstoneLocally): section 8's import
+        'apps/server/src/engine/sync.ts': 2,
+    };
+    const WRITE = /\b(?:INSERT\s+(?:OR\s+\w+\s+)?INTO|REPLACE\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+["'`[]?(?:main\.)?member_blocks\b/gi;
+    const SCHEMA_CHANGE = /\b(?:DROP\s+TABLE(?:\s+IF\s+EXISTS)?|ALTER\s+TABLE)\s+["'`[]?(?:main\.)?member_blocks\b/gi;
+    const writeShapes = ['INSERT INTO member_blocks (a) VALUES (1)', 'INSERT OR IGNORE INTO member_blocks', 'insert or replace into "member_blocks"',
+        'REPLACE INTO member_blocks', 'UPDATE member_blocks SET', 'UPDATE OR IGNORE member_blocks SET', 'DELETE FROM member_blocks WHERE', 'DELETE FROM\n   main.member_blocks'];
+    const notWrites = ['SELECT owner_pubkey FROM member_blocks', 'CREATE INDEX idx_member_blocks_blocked ON member_blocks(blocked_pubkey)', 'DELETE FROM member_blocks_old'];
+    assert(writeShapes.every(x => { WRITE.lastIndex = 0; return WRITE.test(x); }) && notWrites.every(x => { WRITE.lastIndex = 0; return !WRITE.test(x); }),
+        `the scan's pattern catches all ${writeShapes.length} shapes of write and none of ${notWrites.length} reads`);
+    const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+    const found: Record<string, number> = {};
+    const where: string[] = [];
+    const schemaChanges: string[] = [];
+    const ownDatabase: string[] = [];
+    const walk = (dir: string) => {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+                if (!['node_modules', 'dist', '__tests__', 'build', '.turbo'].includes(entry.name)) walk(full);
+                continue;
+            }
+            if (!/\.(ts|mts|js|mjs|sql)$/.test(entry.name) || entry.name.endsWith('.d.ts') || /^test-|\.test\.|\.spec\./.test(entry.name)) continue;
+            const text = fs.readFileSync(full, 'utf8');
+            const rel = path.relative(root, full);
+            const lineOf = (i: number) => text.slice(0, i).split('\n').length;
+            for (const m of text.matchAll(WRITE)) { found[rel] = (found[rel] ?? 0) + 1; where.push(`${rel}:${lineOf(m.index!)}`); }
+            for (const m of text.matchAll(SCHEMA_CHANGE)) schemaChanges.push(`${rel}:${lineOf(m.index!)}`);
+            if (found[rel] && /new\s+Database\s*\(/.test(text)) ownDatabase.push(rel);
+        }
+    };
+    walk(path.join(root, 'packages'));
+    walk(path.join(root, 'apps/server/src'));
+    const unlisted = Object.keys(found).filter(f => found[f] !== WRITERS[f]);
+    const gone = Object.keys(WRITERS).filter(f => !found[f]);
+    assert(unlisted.length === 0 && gone.length === 0,
+        `every SQL write to member_blocks is one this suite runs: ${where.join(', ')} (not as listed: ${unlisted.map(f => `${f} ${found[f]}, listed ${WRITERS[f] ?? 0}`).join('; ') || 'none'}; listed, not found: ${gone.join(', ') || 'none'})`);
+    assert(ownDatabase.length === 0, `no file that writes member_blocks opens a database of its own (${ownDatabase.join(', ') || 'none'})`);
+    assert(schemaChanges.length === 0, `nothing drops or alters member_blocks (${schemaChanges.join(', ') || 'none'})`);
+    // Each shape of write, on this connection, moves the version, a rolled-back one too; a read does not.
+    if (blocks?.blockListsVersion) {
+        const k1 = newKey(), k2 = newKey();
+        const movesVersion = (sql: string, ...args: unknown[]) => { const v = blocks.blockListsVersion(); db.prepare(sql).run(...args); return blocks.blockListsVersion() > v; };
+        blocks.blockersOfKept(k1);
+        const at = new Date().toISOString();
+        const each = {
+            insert: movesVersion('INSERT INTO member_blocks (owner_pubkey, blocked_pubkey, created_at, updated_at) VALUES (?, ?, ?, ?)', k1, k2, at, at),
+            upsert: movesVersion('INSERT INTO member_blocks (owner_pubkey, blocked_pubkey, created_at, updated_at) VALUES (?, ?, ?, ?) ON CONFLICT(owner_pubkey, blocked_pubkey) DO UPDATE SET updated_at = excluded.updated_at', k1, k2, at, at + 'x'),
+            update: movesVersion('UPDATE member_blocks SET updated_at = ? WHERE owner_pubkey = ?', at, k1),
+            delete: movesVersion('DELETE FROM member_blocks WHERE owner_pubkey = ?', k1),
+            'insert again, then a bare delete of every row': movesVersion('INSERT INTO member_blocks (owner_pubkey, blocked_pubkey, created_at, updated_at) VALUES (?, ?, ?, ?)', k1, k2, at, at) && movesVersion('DELETE FROM member_blocks'),
+        };
+        const beforeRead = blocks.blockListsVersion();
+        db.prepare('SELECT COUNT(*) AS n FROM member_blocks WHERE owner_pubkey = ?').get(k1);
+        const readMoved = blocks.blockListsVersion() !== beforeRead;
+        let rolledBack = false;
+        const v0 = blocks.blockListsVersion();
+        try { db.transaction(() => { db.prepare('INSERT INTO member_blocks (owner_pubkey, blocked_pubkey, created_at, updated_at) VALUES (?, ?, ?, ?)').run(k2, k1, at, at); throw new Error('roll back'); })(); } catch { rolledBack = true; }
+        assert(Object.values(each).every(Boolean) && rolledBack && blocks.blockListsVersion() > v0 && !readMoved && blocks.blockersOfKept(k1).size === 0,
+            `an insert, an upsert, an update, a delete, a bare delete of every row and a rolled-back insert each move the version; a read does not (${JSON.stringify({ ...each, rolledBack: blocks.blockListsVersion() > v0, readMoved })})`);
+    } else assert(false, 'each shape of write moves the block lists\' version (no version on this tree)');
+
+    // What the version can't see (#1867). An unblock inside a transaction that rolls back: read there, it is gone, and
+    // after the rollback the block holds again (nothing kept from inside). A write by another connection to state.db (an
+    // ops tool in its own process), which no trigger of this connection counts. A counting trigger dropped, or all three
+    // with a run-time temp_store, and a write while they are gone.
+    if (blocks?.blockersOfKept) {
+        const o = newKey(), o2 = newKey(), a = newKey(), at = new Date().toISOString();
+        const holds = (who: string): boolean => blocks.blockersOfKept(a).has(who);
+        const counting = () => (db.prepare("SELECT COUNT(*) AS n FROM temp.sqlite_master WHERE type = 'trigger' AND name LIKE 'member_blocks_%_counted'").get() as { n: number }).n;
+        const insertRow = 'INSERT INTO member_blocks (owner_pubkey, blocked_pubkey, created_at, updated_at) VALUES (?, ?, ?, ?)';
+        blocks.addBlocks(o, [a]);
+        const keptFirst = holds(o);
+        let insideLacks = false;
+        try { db.transaction(() => { blocks.removeBlock(o, a); insideLacks = !holds(o); throw new Error('roll back'); })(); } catch { /* rolled back */ }
+        assert(keptFirst && insideLacks && holds(o),
+            `an unblock read inside a transaction that rolls back is gone there, and the block holds after the rollback (inside: ${insideLacks ? 'gone' : 'held'}, after: ${holds(o) ? 'held' : 'gone'})`);
+        const other = new Database(db.name);
+        other.prepare(insertRow).run(o2, a, at, at);
+        const otherBlock = holds(o2);
+        other.prepare('DELETE FROM member_blocks WHERE owner_pubkey = ?').run(o2);
+        const otherUnblock = !holds(o2);
+        assert(otherBlock && otherUnblock,
+            `a block and an unblock written by another connection each hold from the next read (block: ${otherBlock ? 'held' : 'missed'}, unblock: ${otherUnblock ? 'held' : 'missed'})`);
+
+        // A commit landing between the table read and whatever the kept read records (NB-1): simulated by committing
+        // from a second connection right after the blockers' SELECT returns. data_version recorded BEFORE the table read
+        // empties the kept lists at the next read, so both a block and an unblock hold from the next read.
+        const realPrepare = db.prepare.bind(db);
+        let inject: (() => void) | null = null;
+        (db as any).prepare = (sql: string) => {
+            const st: any = realPrepare(sql);
+            if (sql.startsWith('SELECT owner_pubkey FROM member_blocks WHERE blocked_pubkey')) {
+                const all = st.all.bind(st);
+                st.all = (...args: unknown[]) => { const r = all(...args); if (inject) { const f = inject; inject = null; f(); } return r; };
+            }
+            return st;
+        };
+        try {
+            const a3 = newKey(), o3 = newKey();
+            const holds3 = (who: string): boolean => blocks.blockersOfKept(a3).has(who);
+            const bumpOwn = () => { const x = newKey(), y = newKey(); db.prepare(insertRow).run(x, y, at, at); db.prepare('DELETE FROM member_blocks WHERE owner_pubkey = ?').run(x); };
+            holds3(o3);
+            bumpOwn();
+            inject = () => other.prepare(insertRow).run(o3, a3, at, at);
+            const rFirst = holds3(o3);
+            const rNext = holds3(o3);
+            bumpOwn();
+            holds3(o3);
+            bumpOwn();
+            inject = () => other.prepare('DELETE FROM member_blocks WHERE owner_pubkey = ? AND blocked_pubkey = ?').run(o3, a3);
+            const uFirst = holds3(o3);
+            const uNext = holds3(o3);
+            assert(!rFirst && rNext && uFirst && !uNext,
+                `data_version recorded before the table read catches another connection's commit right after the SELECT (block: ${rNext ? 'held' : 'missed'}, unblock: ${!uNext ? 'held' : 'missed'})`);
+        } finally {
+            (db as any).prepare = realPrepare;
+        }
+        other.close();
+        db.exec('DROP TRIGGER temp.member_blocks_insert_counted');
+        db.prepare(insertRow).run(o2, a, at, at);
+        const afterDrop = holds(o2), remade = counting();
+        db.pragma('temp_store = MEMORY');
+        const allGone = counting();
+        db.prepare('DELETE FROM member_blocks WHERE owner_pubkey = ?').run(o2);
+        const afterReset = !holds(o2), remadeAll = counting();
+        db.pragma('temp_store = DEFAULT');
+        assert(afterDrop && remade === 3 && allGone === 0 && afterReset && remadeAll === 3 && holds(o) && counting() === 3,
+            `a counting trigger dropped, or all of them with a run-time temp_store, is made again and the write made meanwhile holds from the next read (${JSON.stringify({ afterDrop, remade, allGone, afterReset, remadeAll })})`);
+    } else assert(false, 'what the block lists\' version can\'t see (no kept lists on this tree)');
 
     for (const s of [annTab1, annTab2, boSock, cySock, anonSock]) s.ws.close();
     console.log(`\n${passed}/${run} checks passed.`);

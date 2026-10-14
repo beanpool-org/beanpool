@@ -18,6 +18,24 @@ const RED = '#bb4b32', WARM = '#c07d2a', WARM_BG = '#e9a23e', BEAN = '#2f9e44', 
 // Kept local to avoid dragging Node/libp2p runtime imports into the client packages.
 const OFFER_BANDS = [0, 200, 500, 1000, 1500, 2000];
 
+/**
+ * The offer ladder's numbers. `knownGrant` (a confirmed member in a known community, slice 4) is unlocked whole by one live
+ * offer; the rest of the limit keeps the bands. Mirrors @beanpool/core usableAllowance.
+ */
+export function offerLadder(floor: number, knownGrant = 0): { usableAt: (n: number) => number; offersForFull: number; rungs: number[] } {
+    const limit = Math.abs(floor);
+    const known = Math.max(0, Math.min(limit, knownGrant));
+    const other = limit - known;
+    const usableAt = (n: number) => {
+        const i = Math.max(0, Math.min(OFFER_BANDS.length - 1, Math.floor(n)));
+        return Math.min(limit, (i >= 1 ? known : 0) + Math.min(other, OFFER_BANDS[i]));
+    };
+    let offersForFull = OFFER_BANDS.length - 1;
+    for (let n = 0; n < OFFER_BANDS.length; n++) if (usableAt(n) >= limit) { offersForFull = n; break; }
+    const rungs = [...new Set(OFFER_BANDS.map((_, n) => usableAt(n)))].filter(b => b > 0 && b < limit);
+    return { usableAt, offersForFull, rungs };
+}
+
 // Marginal monthly circulation rate at a positive balance (mirrors the demurrage brackets).
 function marginalRate(b: number): number {
     if (b <= 200) return 0;
@@ -55,12 +73,13 @@ function toPct(v: number, floor: number): number {
 
 const fmt = (n: number) => `${n >= 0 ? '+' : ''}${Number.isInteger(n) ? n : n.toFixed(1)}`;
 
-export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloor, liveOffers = 0 }: {
+export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloor, liveOffers = 0, knownGrant = 0 }: {
     balance: number;
     floor: number;
     colors: any;
     feeFreeMax?: number;
     usableFloor?: number;   // v3: how deep offers currently unlock (≥ floor, ≤ 0). Omit → no ladder.
+    knownGrant?: number;    // the known floor's part of the limit: one live offer unlocks all of it
     liveOffers?: number;    // v3: current live-offer count (for the ladder caption)
 }) {
     const [tagW, setTagW] = useState(0);
@@ -78,11 +97,11 @@ export function CreditBar({ balance, floor, colors, feeFreeMax = 200, usableFloo
     const hasLocked = showLadder && uFloor > floor;
     const usablePct = toPct(uFloor, floor);
     const floorPct = toPct(floor, floor);
-    const rungs = showLadder ? OFFER_BANDS.filter(b => b > 0 && b < Math.abs(floor)).map(b => ({ b, pct: toPct(-b, floor) })) : [];
-    const nextBand = OFFER_BANDS.find(b => b > Math.abs(uFloor));
-    const nextUnlock = hasLocked && nextBand ? Math.min(nextBand, Math.abs(floor)) : undefined;
-    const fullIdx = OFFER_BANDS.findIndex(b => b >= Math.abs(floor));
-    const offersForFull = fullIdx === -1 ? OFFER_BANDS.length - 1 : fullIdx;
+    const ladder = offerLadder(floor, knownGrant);
+    const rungs = showLadder ? ladder.rungs.map(b => ({ b, pct: toPct(-b, floor) })) : [];
+    const nextDepth = ladder.usableAt(liveOffers + 1);
+    const nextUnlock = hasLocked && nextDepth > Math.abs(uFloor) ? nextDepth : undefined;
+    const offersForFull = ladder.offersForFull;
 
     // Fee ladder — the monthly circulation-fee brackets that live ABOVE the fee-free ceiling.
     // It "opens up" as the balance climbs past the halfway mark: revealT ramps 0→1 between

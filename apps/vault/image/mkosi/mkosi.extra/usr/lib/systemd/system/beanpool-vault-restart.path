@@ -1,0 +1,15 @@
+# Two custodians signed a restart for the staged image, and the API left it here (by a rename). The API only carries
+# it: root's step checks it from the pinned custodian keys, removes it, and restarts the vault only if every check
+# passes (beanpool-vault-restart.service). Nothing restarts the vault on a schedule (D3, Marty 2026-10-06).
+[Unit]
+Description=BeanPool key vault: a custodians' restart request
+
+[Path]
+PathExists=/var/lib/beanpool-vault/restart/request.json
+Unit=beanpool-vault-restart.service
+# No trigger limit (systemd 250 and later fail a path unit triggered 200 times in 2 s): with the service's start limit
+# off too, a flood of request files never stops this unit watching (beanpool-vault-restart.service says why).
+TriggerLimitIntervalSec=0
+
+[Install]
+WantedBy=multi-user.target

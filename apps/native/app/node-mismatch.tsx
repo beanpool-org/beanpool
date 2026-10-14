@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { View, Text, TextInput, Pressable, StyleSheet, SafeAreaView, ScrollView, ActivityIndicator, Alert } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { StatusBar } from 'expo-status-bar';
-import { useRouter } from 'expo-router';
+import { useRouter, ErrorBoundary } from 'expo-router';
+
+export { ErrorBoundary };
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIdentity } from './IdentityContext';
 import { useNodeStatus } from './NodeStatusContext';
@@ -11,12 +13,20 @@ import { getSavedNodes, type SavedNode } from '../utils/nodes';
 import { SavedNodePicker } from '../components/SavedNodePicker';
 import { hasMnemonic } from '../utils/identity';
 import { readWordsBehindLock } from '../utils/words-behind-lock';
+import { usePutAwayAfterLeave } from '../utils/words-put-away';
 import { authenticateUser } from '../utils/LocalAuth';
 import { deleteAccountFromThisPhone } from '../utils/account-leaves-phone';
+import {
+    NO_OTHER_COMMUNITY_LINE, SIGN_OUT_FROM_SETTINGS_LINE, deletePlanFailedLine, otherCommunitiesKeeping, stillKeptLine,
+    type KeptCommunity,
+} from '../utils/delete-here';
 import { requestSync } from '../services/pillar-sync';
+import { communitySwitched } from '../utils/community-switch';
 import { NoWordsNotice } from '../components/NoWordsNotice';
+import { NoScreenCapture, NoScreenLockNote } from '../components/WordsOnScreen';
 import { noWordsBeforeWipe } from '../utils/no-words-copy';
-import { colors, palette } from '../constants/colors';
+import { palette, type AppColors } from '../constants/colors';
+import { useOnboardingColors } from './ThemeContext';
 
 /**
  * Shown when the active node is reachable but definitively does NOT recognise this
@@ -26,6 +36,8 @@ import { colors, palette } from '../constants/colors';
  * NodeStatus recognition === 'stranger'.
  */
 export default function NodeMismatchScreen() {
+    const { colors, dark } = useOnboardingColors();
+    const styles = useMemo(() => makeStyles(colors, dark), [colors, dark]);
     const router = useRouter();
     const { identity, setIdentity } = useIdentity();
     const { nodeUrl, recheck } = useNodeStatus();
@@ -34,7 +46,8 @@ export default function NodeMismatchScreen() {
     // The delete asks each community to stop the push alerts first, which can take a few seconds (UNREGISTER_TIMEOUT_MS):
     // nothing else on the screen may start meanwhile.
     const [deleting, setDeleting] = useState(false);
-    const busy = loading || deleting;
+    const [checking, setChecking] = useState(false);
+    const busy = loading || deleting || checking;
     const [error, setError] = useState<string | null>(null);
 
     // nodeUrl can resolve after first render; prefill once it's known.
@@ -49,7 +62,14 @@ export default function NodeMismatchScreen() {
     // the member was ever shown it and wrote it down — so show it instead of claiming it.
     const [words, setWords] = useState<string[] | null>(null);
     const [showWipe, setShowWipe] = useState(false);
+    // The words drawn before the delete go with its panel, as its Cancel takes them, when the member comes back to the app
+    // after 15 seconds or more away, App Lock on or off: the next tap asks the phone's lock again.
+    const putWipeWordsAway = useCallback(() => { setShowWipe(false); setWords(null); }, []);
+    usePutAwayAfterLeave(words !== null, putWipeWordsAway);
     const lockBusyRef = useRef(false);
+    // The delete takes the key off this phone only when no saved community keeps it (delete-here.ts): asked at each
+    // tap, before the lock (`checking`). One that does is where the member is sent instead, and nothing is removed.
+    const [keptBy, setKeptBy] = useState<KeptCommunity[] | null>(null);
 
     const [otherNodes, setOtherNodes] = useState<SavedNode[]>([]);
     useEffect(() => {
@@ -78,6 +98,8 @@ export default function NodeMismatchScreen() {
             await closeDB();
             await AsyncStorage.setItem('beanpool_anchor_url', url);
             await initDB();
+            // The update screen asks the community now in use (utils/community-switch.ts).
+            communitySwitched();
 
             const result = await recheck();
             const { isGuestNode } = await import('../utils/nodes');
@@ -101,6 +123,24 @@ export default function NodeMismatchScreen() {
         if (lockBusyRef.current) return;
         lockBusyRef.current = true;
         try {
+            // Another saved community that says the key is a member, or can't be asked, still needs it: the screen
+            // offers to switch there instead, and takes nothing off the phone.
+            setError(null);
+            setChecking(true);
+            let keeping: KeptCommunity[];
+            try {
+                keeping = identity?.publicKey ? await otherCommunitiesKeeping(nodeUrl, identity.publicKey) : [];
+            } catch (e) {
+                setError(deletePlanFailedLine(e instanceof Error ? e.message : String(e)));
+                return;
+            } finally {
+                setChecking(false);
+            }
+            if (keeping.length > 0) {
+                setKeptBy(keeping);
+                return;
+            }
+            setKeptBy(null);
             // The phone's lock first, with the words or without, as Settings' Sign Out asks it before the same removal: a
             // check that does not pass opens nothing and reads nothing. An account with no words is the one that can't
             // come back, so it asks too (PR #1205 review 4112404471). With words, this is also the check before they show.
@@ -125,8 +165,8 @@ export default function NodeMismatchScreen() {
             hasWords
                 ? "Only do this if you have written your 12 words down. They are the only way back in, " +
                   "apart from a sign-in account linked on a community that holds a recovery piece for you.\n\n" +
-                  "This erases the key for every community, not just this one."
-                : `${noWordsBeforeWipe()}\n\nThis erases the key for every community, not just this one.\n\n` +
+                  `${NO_OTHER_COMMUNITY_LINE}`
+                : `${noWordsBeforeWipe()}\n\n${NO_OTHER_COMMUNITY_LINE}\n\n` +
                   "Switching communities is almost certainly what you want instead.",
             [
                 { text: 'Cancel', style: 'cancel' },
@@ -152,7 +192,7 @@ export default function NodeMismatchScreen() {
 
     return (
         <SafeAreaView style={styles.container}>
-            <StatusBar style="dark" />
+            <StatusBar style={dark ? 'light' : 'dark'} />
             <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
                 <ScrollView contentContainerStyle={styles.scroll}>
                     <View style={styles.card}>
@@ -199,10 +239,31 @@ export default function NodeMismatchScreen() {
                             {loading ? <ActivityIndicator color={colors.text.inverse} /> : <Text style={styles.primaryBtnText}>Reconnect</Text>}
                         </Pressable>
 
+                        {keptBy && keptBy.length > 0 && !showWipe && (
+                            <View style={styles.keptBox} accessibilityLiveRegion="polite">
+                                <Text style={styles.keptText}>🔑 {stillKeptLine(keptBy)}</Text>
+                                <SavedNodePicker
+                                    nodes={keptBy.map((c) => ({ url: c.url, alias: c.name }))}
+                                    onPick={switchToNode}
+                                    disabled={busy}
+                                    label={keptBy.length === 1 ? 'Your community' : 'Your communities'}
+                                    actionLabel="Switch to"
+                                    hint={SIGN_OUT_FROM_SETTINGS_LINE}
+                                />
+                                <Pressable style={styles.secondaryBtn} onPress={() => setKeptBy(null)} disabled={busy} accessibilityRole="button">
+                                    <Text style={styles.cancelWipeText}>Close</Text>
+                                </Pressable>
+                            </View>
+                        )}
+
                         {!showWipe ? (
-                            <Pressable style={styles.secondaryBtn} onPress={handleStartWipe} disabled={busy} accessibilityRole="button">
-                                <Text style={styles.secondaryBtnText}>Delete this account from this phone</Text>
-                            </Pressable>
+                            !keptBy?.length && (
+                                <Pressable style={styles.secondaryBtn} onPress={handleStartWipe} disabled={busy} accessibilityRole="button">
+                                    {checking
+                                        ? <ActivityIndicator color={colors.text.secondary} />
+                                        : <Text style={styles.secondaryBtnText}>Delete this account from this phone</Text>}
+                                </Pressable>
+                            )
                         ) : (
                             <View style={styles.wipeWrap}>
                                 {words ? (
@@ -213,10 +274,13 @@ export default function NodeMismatchScreen() {
                                             sign-in on a community that holds a recovery piece for you.
                                         </Text>
                                         <View style={styles.wordsBox}>
+                                            <NoScreenCapture>
                                             {words.map((w, i) => (
                                                 <Text key={`${w}-${i}`} style={styles.word}>{i + 1}. {w}</Text>
                                             ))}
+                                            </NoScreenCapture>
                                         </View>
+                                        <NoScreenLockNote style={[styles.wipeBody, { marginTop: 8 }]} />
                                     </>
                                 ) : (
                                     <>
@@ -244,32 +308,39 @@ export default function NodeMismatchScreen() {
     );
 }
 
-const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.surface.page },
-    wipeWrap: { marginTop: 4 },
-    wipeTitle: { color: colors.text.heading, fontSize: 15, fontWeight: '700', marginBottom: 6 },
-    wipeBody: { color: colors.text.secondary, fontSize: 13, lineHeight: 19, marginBottom: 10 },
-    wordsBox: {
-        flexDirection: 'row', flexWrap: 'wrap', gap: 6,
-        backgroundColor: colors.surface.app, borderRadius: 12, padding: 12,
-        borderWidth: 1, borderColor: colors.border.default, marginBottom: 12,
-    },
-    word: { color: colors.text.heading, fontSize: 13, fontWeight: '600', width: '45%' },
-    cancelWipeText: { color: colors.text.secondary, fontSize: 14, textAlign: 'center', fontWeight: '600' },
-    scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-    card: { backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default },
-    emoji: { fontSize: 40, marginBottom: 8 },
-    title: { fontSize: 22, fontWeight: 'bold', color: colors.text.heading, marginBottom: 10 },
-    body: { fontSize: 15, color: palette.gray600, lineHeight: 22, marginBottom: 20 },
-    currentBox: { backgroundColor: colors.surface.subtle, borderRadius: 12, padding: 12, marginBottom: 20 },
-    currentLabel: { fontSize: 12, color: colors.text.secondary, marginBottom: 2 },
-    currentUrl: { fontSize: 15, color: colors.text.heading, fontWeight: '600' },
-    inputLabel: { fontSize: 14, color: palette.gray700, fontWeight: '600', marginBottom: 6 },
-    input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 8 },
-    hint: { fontSize: 13, color: colors.text.secondary, lineHeight: 18, marginBottom: 16 },
-    error: { color: palette.red600, fontSize: 14, marginBottom: 16, lineHeight: 20 },
-    primaryBtn: { backgroundColor: palette.blue600, borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 12 },
-    primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: '600' },
-    secondaryBtn: { padding: 14, alignItems: 'center' },
-    secondaryBtnText: { color: colors.text.secondary, fontSize: 15, fontWeight: '500' },
-});
+function makeStyles(colors: AppColors, dark: boolean) {
+    return StyleSheet.create({
+        container: { flex: 1, backgroundColor: colors.surface.page },
+        wipeWrap: { marginTop: 4 },
+        keptBox: {
+            marginTop: 4, padding: 12, borderRadius: 12, borderWidth: 1,
+            backgroundColor: colors.feedback.info.bg, borderColor: colors.feedback.info.border,
+        },
+        keptText: { color: colors.text.body, fontSize: 14, lineHeight: 20, marginBottom: 12 },
+        wipeTitle: { color: colors.text.heading, fontSize: 15, fontWeight: '700', marginBottom: 6 },
+        wipeBody: { color: colors.text.secondary, fontSize: 13, lineHeight: 19, marginBottom: 10 },
+        wordsBox: {
+            flexDirection: 'row', flexWrap: 'wrap', gap: 6,
+            backgroundColor: colors.surface.app, borderRadius: 12, padding: 12,
+            borderWidth: 1, borderColor: colors.border.default, marginBottom: 12,
+        },
+        word: { color: colors.text.heading, fontSize: 13, fontWeight: '600', width: '45%' },
+        cancelWipeText: { color: colors.text.secondary, fontSize: 14, textAlign: 'center', fontWeight: '600' },
+        scroll: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+        card: { backgroundColor: colors.surface.card, padding: 24, borderRadius: 16, borderWidth: 1, borderColor: colors.border.default },
+        emoji: { fontSize: 40, marginBottom: 8 },
+        title: { fontSize: 22, fontWeight: 'bold', color: colors.text.heading, marginBottom: 10 },
+        body: { fontSize: 15, color: dark ? colors.text.secondary : palette.gray600, lineHeight: 22, marginBottom: 20 },
+        currentBox: { backgroundColor: colors.surface.subtle, borderRadius: 12, padding: 12, marginBottom: 20 },
+        currentLabel: { fontSize: 12, color: colors.text.secondary, marginBottom: 2 },
+        currentUrl: { fontSize: 15, color: colors.text.heading, fontWeight: '600' },
+        inputLabel: { fontSize: 14, color: dark ? colors.text.body : palette.gray700, fontWeight: '600', marginBottom: 6 },
+        input: { backgroundColor: colors.surface.card, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 12, padding: 14, color: colors.text.heading, fontSize: 16, marginBottom: 8 },
+        hint: { fontSize: 13, color: colors.text.secondary, lineHeight: 18, marginBottom: 16 },
+        error: { color: colors.feedback.danger.fg, fontSize: 14, marginBottom: 16, lineHeight: 20 },
+        primaryBtn: { backgroundColor: palette.blue600, borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 12 },
+        primaryBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: '600' },
+        secondaryBtn: { padding: 14, alignItems: 'center' },
+        secondaryBtnText: { color: colors.text.secondary, fontSize: 15, fontWeight: '500' },
+    });
+}

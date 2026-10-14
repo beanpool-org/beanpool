@@ -20,6 +20,7 @@ import Database from 'better-sqlite3';
 import {
     initShutdownRecovery,
     markCleanShutdown,
+    startFollowedUncleanStop,
     getShutdownStatus,
     acknowledgeShutdownRecovery,
     getShutdownSentinelPath,
@@ -64,6 +65,7 @@ async function runTests() {
     console.log('\n--- 2. Boot After Clean Shutdown ---');
     const status2 = initShutdownRecovery({ db, dataDir: testDir });
     assert(status2.uncleanShutdown === false, 'Boot after clean stop has uncleanShutdown = false');
+    assert(startFollowedUncleanStop() === false, 'A start after a clean stop is not counted as after an unclean one (alerts crash loop)');
 
     // 3. Simulate sudden power loss at 04:12 (unclean shutdown with intact DB)
     console.log('\n--- 3. Sudden Power Loss at 04:12 (Intact Database) ---');
@@ -79,6 +81,7 @@ async function runTests() {
     // Boot node after simulated power loss
     const status3 = initShutdownRecovery({ db, dataDir: testDir });
     assert(status3.uncleanShutdown === true, 'Unclean shutdown detected');
+    assert(startFollowedUncleanStop() === true, 'This start followed the unclean stop (alerts crash loop)');
     assert(status3.recovered === true, 'Node marked recovered');
     assert(status3.ok === true, 'Database verified ok');
     assert(status3.powerLossAt === '04:12', `Power loss recorded at 04:12 (got: ${status3.powerLossAt})`);

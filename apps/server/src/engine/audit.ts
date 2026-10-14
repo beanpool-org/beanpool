@@ -7,11 +7,15 @@
 
 import { db } from '../db/db.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
+import { getProfileSwitches } from '../config/node-profile.js';
 import { COMMONS_BALANCE } from '@beanpool/core';
 import { ledger } from './ledger.js';
 import {
     runConservationCheck,
+    BROKEN_BALANCE_SQL,
     computeWashSybilMetrics,
+    computeWashSybilMetricsInSlices,
+    type WashSybilMetrics,
     getReplicaConsistency as engineGetReplicaConsistency,
     summariseLedger,
     type LedgerSummary,
@@ -19,6 +23,8 @@ import {
     type AuditSyncPayload
 } from '@beanpool/engine';
 import { mainLedgerAtLastCopy, type MainLedgerRecord } from './sync.js';
+import { PLAIN_TABLES } from './replication-manifest.js';
+import { noteAsReadBy, WITHHELD_NOTE_COLUMN, WITHHELD_NOTE_JOIN } from './withheld-notes.js';
 
 export type { ReplicaConsistency, AuditSyncPayload };
 
@@ -43,10 +49,61 @@ export type { ReplicaConsistency, AuditSyncPayload };
  *
  * Throws on a standby (config/node-role.ts), as persistDecayEvents does: every caller is a move a standby refuses first,
  * or the flush below, which returns before it, so reaching either there is a path that missed the rule.
+ *
+ * Throws, too, when the pot in memory is not a finite number, and writes nothing (decide N1 on #1379, 2026-10-02). The
+ * column is NOT NULL, but this write is an INSERT OR REPLACE, and SQLite's REPLACE puts the column DEFAULT (0) in place
+ * of the NULL that better-sqlite3 binds for NaN: the pot would be stored as 0 with no error. Every primitive that moves
+ * the pot already refuses a non-finite amount, so this is the last line, not the first. Inside a conservingTransaction
+ * the throw rolls the move back; the timer and the audit log it.
  */
 export function persistCommonsBalance(): void {
     assertLedgerWritable();
+    assertCommonsPotFinite();
     db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES ('COMMONS_POOL', ?, 0)").run(COMMONS_BALANCE);
+}
+
+/**
+ * What a member, a moderator or an admin reads when a step that would move Beans meets a Commons pot that is not a finite
+ * number (#1465 review, NB-2). While the pot is unknown NO Beans move at all, because every move's conservingTransaction
+ * flushes the pot first and that flush refuses it: deals, refunds, removals, account deletions, sends, grants. The
+ * internal words ("The Commons pot in memory is not a finite number (NaN)…") reached members as the route's error; they
+ * go to the log instead, at most once a minute, for the operator.
+ */
+export const COMMONS_POT_PAUSED = 'Payments are paused on this community while its admins fix a problem with its accounts. Nothing has moved.';
+
+/** Thrown with COMMONS_POT_PAUSED as its message; `code` lets a route answer 503 rather than 500. */
+export class CommonsPotUnknownError extends Error {
+    readonly code = 'COMMONS_POT_UNKNOWN';
+    /** `detail` is appended to the pause words, to say which of a batch is held. */
+    constructor(detail?: string) {
+        super(detail ? `${COMMONS_POT_PAUSED} ${detail}` : COMMONS_POT_PAUSED);
+        this.name = 'CommonsPotUnknownError';
+    }
+}
+
+/**
+ * For a route's own catch: answers a CommonsPotUnknownError with 503 in its plain words and returns true, or returns
+ * false for anything else. A route that catches everything itself never reaches the server's middleware for it, and its
+ * general words ("please try again") sent people into retries that can't work until the row is mended (#1465 re-review).
+ */
+export function answerPotPaused(ctx: { status: number; body: unknown }, e: unknown): boolean {
+    if (!(e instanceof CommonsPotUnknownError)) return false;
+    ctx.status = 503;
+    ctx.body = { error: e.message, code: e.code };
+    return true;
+}
+
+let potRefusalLoggedAt = 0;
+
+function assertCommonsPotFinite(): void {
+    if (!Number.isFinite(COMMONS_BALANCE)) {
+        if (Date.now() - potRefusalLoggedAt >= 60_000) {
+            potRefusalLoggedAt = Date.now();
+            console.error(`🛑 [Ledger] The Commons pot in memory is not a finite number (${String(COMMONS_BALANCE)}), so it was not written, `
+                + 'and no Beans move until its COMMONS_POOL row is mended (operator manual, "A balance that isn\'t a number").');
+        }
+        throw new CommonsPotUnknownError();
+    }
 }
 
 /**
@@ -100,6 +157,9 @@ export function persistDecayEvents(): void {
  */
 export function persistDecayAndCommons(): void {
     if (getNodeRole() === 'backup') return;
+    // Before the decay queue is drained: a refusal inside the transaction would roll its rows back after they had left
+    // the queue, and they would never be written.
+    assertCommonsPotFinite();
     db.transaction(() => {
         persistDecayEvents();
         persistCommonsBalance();
@@ -109,21 +169,119 @@ export function persistDecayAndCommons(): void {
 /**
  * Server wrapper for the ledger conservation audit.
  * Persists decay events and commons balance first, then executes the conservation check.
+ *
+ * A Commons pot in memory that is not a finite number (its `COMMONS_POOL` row ±9e999, restored at boot, or NaN, the
+ * unknown pot a row holding text or NULL gives at boot: state-engine.ts initStateEngine, #1445 confirmation NB-1) can't be
+ * written (persistCommonsBalance refuses it), and the flush used to throw here before anything was counted: a
+ * take-over's audit then never recorded and the take-over stalled at `restarting`, and the operator's audit answered
+ * 500 (#1445 re-review, BLOCKING 1). Now the flush is skipped, nothing is written, and the pot is counted as a balance
+ * that is not a number (its row already is, by BROKEN_BALANCE_SQL, when the row itself is broken). Never throws for it.
  */
-export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
+export function runLedgerAudit(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; badBalances: number; ok: boolean } {
+    if (!Number.isFinite(COMMONS_BALANCE)) {
+        console.error(`⚠️ [LedgerAudit] The Commons pot in memory is not a finite number (${String(COMMONS_BALANCE)}): nothing was written, `
+            + 'and the pot is counted as a balance that is not a number.');
+        const r = runConservationCheck(db);
+        return { ...r, badBalances: r.badBalances + (commonsRowIsBroken() ? 0 : 1), ok: false };
+    }
     // ONE commit for the pair — the audit runs at boot and on a timer, and a flush that tore here would
     // destroy exactly what the audit exists to detect.
     persistDecayAndCommons();
     return runConservationCheck(db);
 }
 
+function commonsRowIsBroken(): boolean {
+    return !!db.prepare(`SELECT 1 FROM accounts WHERE public_key = 'COMMONS_POOL' AND (${BROKEN_BALANCE_SQL})`).get();
+}
+
+/** One account whose balance is not a finite number, as an operator needs it to mend the row. */
+export interface BrokenBalance {
+    /** The `accounts.public_key`: a member's key, an enterprise's, `COMMONS_POOL`, `escrow_<deal id>`, … */
+    account: string;
+    /** The member's or enterprise's name, when the account is one. */
+    callsign: string | null;
+    /** What it holds, in words: "Infinity", "-Infinity", "NULL", "text 'abc'", or "in memory: NaN" for the pot. */
+    holds: string;
+}
+
+/**
+ * The accounts whose balance is not a finite number, at most `limit` of them (#1445 re-review, NON-BLOCKING 3): the
+ * conservation check gives only a count, and on a node whose `accounts.balance` is already NOT NULL nothing else names
+ * them. The Commons pot is listed too when the row is fine but the pot in memory isn't.
+ */
+export function listBrokenBalances(limit = 50): { total: number; accounts: BrokenBalance[] } {
+    const rows = db.prepare(`
+        SELECT a.public_key AS account, m.callsign AS callsign, a.balance AS balance, typeof(a.balance) AS t
+        FROM accounts a LEFT JOIN members m ON m.public_key = a.public_key
+        WHERE ${BROKEN_BALANCE_SQL.replace(/\bbalance\b/g, 'a.balance')}
+        ORDER BY a.public_key`).all() as { account: string; callsign: string | null; balance: unknown; t: string }[];
+    const accounts: BrokenBalance[] = rows.map((r) => ({
+        account: r.account,
+        callsign: r.callsign ?? (r.account === 'COMMONS_POOL' ? 'the Commons pot' : null),
+        holds: r.t === 'null' ? 'NULL' : r.t === 'text' ? `text ${JSON.stringify(String(r.balance)).replace(/^"|"$/g, "'")}` : String(r.balance),
+    }));
+    if (!Number.isFinite(COMMONS_BALANCE) && !rows.some((r) => r.account === 'COMMONS_POOL')) {
+        accounts.unshift({ account: 'COMMONS_POOL', callsign: 'the Commons pot', holds: `in memory: ${String(COMMONS_BALANCE)}` });
+    }
+    return { total: accounts.length, accounts: accounts.slice(0, limit) };
+}
+
+/** What an operator does about them, in the words the audit, the rebaseline and the operator manual use. */
+export const BROKEN_BALANCE_REPAIR = 'Stop the server, set each one\'s balance in state.db to what its transactions say, start it again, '
+    + 'then set a new baseline for any difference left.';
+
+/** Whether the last call found Beans off and said so: the line is said once, not every day. */
+let saidBeansOff = false;
+
 /**
  * Computes and persists wash trading/Sybil metrics to the system_metrics table.
+ *
+ * Where Beans are off (the global profile, or `nodeProfile.beans=false` on a ledger that has never moved) it does
+ * nothing and returns null: every number it computes (negative balances, members near their credit floor, dormant
+ * credit-drawn accounts, cohorts at deep floors) is about Beans, and the walk goes over every active member through
+ * getMemberTrustProfile: 825 ms at 6,403 members on an M4 (the global load rehearsal, 2026-10-02), with the whole node
+ * answering nothing meanwhile, 2.5 minutes after every boot, before the timers ran it in slices
+ * (runWashSybilMetricsAuditInSlices). No system_metrics row is written, so the
+ * health flags that read them (getCommunityHealth: aggregate spike, cohort velocity, delinquency) raise none. The
+ * switch is read at every call, so an operator's override takes effect at the next run, with no restart.
  */
-export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } {
-    console.log('📊 [MetricsAudit] Running Wash Trading & Sybil metrics audit...');
-    const metrics = computeWashSybilMetrics(db);
+export function runWashSybilMetricsAudit(): WashSybilMetrics | null {
+    if (!metricsAuditRuns()) return null;
+    return saveWashSybilMetrics(computeWashSybilMetrics(db));
+}
 
+/** The run in progress, if any: a second start while one runs joins it rather than walking the members twice at once. */
+let slicedRun: Promise<WashSybilMetrics | null> | null = null;
+
+/**
+ * runWashSybilMetricsAudit as the node's timers run it (state-engine.ts): the same numbers, worked out a slice at a time
+ * with the event loop given a turn between slices (engine audit.ts computeWashSybilMetricsInSlices), so the node keeps
+ * answering while it runs. `onYield` is for a test, which counts the turns.
+ */
+export function runWashSybilMetricsAuditInSlices(opts: { sliceMs?: number; onYield?: () => void } = {}): Promise<WashSybilMetrics | null> {
+    if (slicedRun) return slicedRun;
+    if (!metricsAuditRuns()) return Promise.resolve(null);
+    slicedRun = computeWashSybilMetricsInSlices(db, opts)
+        .then(saveWashSybilMetrics)
+        .finally(() => { slicedRun = null; });
+    return slicedRun;
+}
+
+/** Whether the audit runs now: not where Beans are off (runWashSybilMetricsAudit's doc), which it says once. */
+function metricsAuditRuns(): boolean {
+    if (!getProfileSwitches().beans) {
+        if (!saidBeansOff) {
+            console.log('📊 [MetricsAudit] Beans are off: the daily Wash Trading & Sybil metrics audit does not run here, as every number it computes is about Beans.');
+            saidBeansOff = true;
+        }
+        return false;
+    }
+    saidBeansOff = false;
+    console.log('📊 [MetricsAudit] Running Wash Trading & Sybil metrics audit...');
+    return true;
+}
+
+function saveWashSybilMetrics(metrics: WashSybilMetrics): WashSybilMetrics {
     try {
         db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('total_negative_balance', metrics.totalNegative);
         db.prepare("INSERT INTO system_metrics (metric_key, metric_value) VALUES (?, ?)").run('accounts_near_floor', metrics.accountsNearFloor);
@@ -133,21 +291,25 @@ export function runWashSybilMetricsAudit(): { totalNegative: number; accountsNea
     } catch (e) {
         console.error('[MetricsAudit] Failed to persist system metrics:', e);
     }
-
     return metrics;
 }
 
 /**
- * Compare local replica state against the primary's sync payload.
+ * Compare local replica state against the primary's sync payload: a plain table's rows only as far as they travel (the
+ * manifest's RowRule, engine/replication-manifest.ts).
  */
 export function getReplicaConsistency(payload: AuditSyncPayload): ReplicaConsistency {
-    return engineGetReplicaConsistency(db, payload, COMMONS_BALANCE);
+    return engineGetReplicaConsistency(db, payload, COMMONS_BALANCE, PLAIN_ROWS);
 }
+
+/** Each plain table's condition on the rows that travel, by table. */
+const PLAIN_ROWS: Readonly<Record<string, string>> = Object.fromEntries(
+    PLAIN_TABLES.flatMap((t) => (t.where ? [[t.table, t.where] as [string, string]] : [])));
 
 /**
  * Failover promotion sanity check run before taking live writes.
  */
-export function promotionSanityCheck(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
+export function promotionSanityCheck(): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; badBalances: number; ok: boolean } {
     console.log('\n════════════════════════════════════════════════════════');
     console.log('🔁 FAILOVER PROMOTION — running ledger conservation sanity check');
     console.log('════════════════════════════════════════════════════════');
@@ -156,7 +318,7 @@ export function promotionSanityCheck(): { sumBalances: number; baseline: number;
         console.log('✅ PROMOTION OK — replicated ledger is conservation-consistent. Safe to take live writes.');
     } else {
         console.error('🛑 PROMOTION WARNING — ledger conservation check FAILED on the replica:');
-        console.error(`   sum(balances)=${result.sumBalances.toFixed(4)} drift=${result.drift.toFixed(4)} stranded escrows=${result.strandedEscrows}`);
+        console.error(`   sum(balances)=${result.sumBalances.toFixed(4)} drift=${result.drift.toFixed(4)} stranded escrows=${result.strandedEscrows} balances that are not a finite number=${result.badBalances}`);
         console.error('   Investigate before this node accepts transactions — the last snapshot may be incomplete/corrupt.');
     }
     return result;
@@ -227,5 +389,37 @@ export function exportLedgerAudit(): { balancesCsv: string; transactionsCsv: str
          transactionsCsv += `${tx.timestamp},${tx.id},${tx.from_pubkey},${tx.to_pubkey},${tx.amount},${memoSafe}\n`;
     }
     
+    return { balancesCsv, transactionsCsv };
+}
+
+/**
+ * The ledger export a member downloads from the app (GET /api/ledger/export): the same two files as the node's audit
+ * above, holding only what is theirs. Balances and trades are private (Marty, 2026-09-28): a member sees their own
+ * balance and history and nobody else's, so the files carry the Community Pool (a community total, public), their own
+ * balance, the Beans they hold in their own pending trades, and every transaction they are a party to. The full audit
+ * above stays with the operator, who holds the database.
+ */
+export function exportLedgerFor(publicKey: string): { balancesCsv: string; transactionsCsv: string } {
+    const member = db.prepare("SELECT callsign FROM members WHERE public_key = ?").get(publicKey) as { callsign: string } | undefined;
+    const account = db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(publicKey) as { balance: number } | undefined;
+
+    let balancesCsv = 'Account,Callsign,Balance_Type,Balance\n';
+    balancesCsv += `commons,Community Pool,System,${Math.round(COMMONS_BALANCE * 100) / 100}\n`;
+    balancesCsv += `${publicKey},${(member?.callsign || '').replace(/,/g, '')},Member,${Math.round((account?.balance ?? 0) * 100) / 100}\n`;
+    const pendingTxs = db.prepare("SELECT id, credits FROM marketplace_transactions WHERE status='pending' AND buyer_pubkey = ?").all(publicKey) as { id: string; credits: number }[];
+    for (const tx of pendingTxs) {
+        balancesCsv += `escrow_${tx.id},Escrow (Payer: ${(member?.callsign || 'you').replace(/,/g, '')}),Pending_Trade,${tx.credits}\n`;
+    }
+
+    let transactionsCsv = 'Timestamp,Transaction_ID,From_Account,To_Account,Amount,Memo\n';
+    // Each note as this member reads it: their own withheld note as they wrote it, BLOCKED_BEANS_NOTE in place of one kept
+    // from them (engine/withheld-notes.ts).
+    const txHistory = db.prepare(`SELECT t.*, ${WITHHELD_NOTE_COLUMN} FROM transactions t ${WITHHELD_NOTE_JOIN}
+                                  WHERE t.from_pubkey = ? OR t.to_pubkey = ? ORDER BY t.timestamp ASC`).all(publicKey, publicKey) as any[];
+    for (const tx of txHistory) {
+        const memoSafe = noteAsReadBy(tx, publicKey).replace(/,/g, ';').replace(/\n/g, ' ').replace(/\r/g, '');
+        transactionsCsv += `${tx.timestamp},${tx.id},${tx.from_pubkey},${tx.to_pubkey},${tx.amount},${memoSafe}\n`;
+    }
+
     return { balancesCsv, transactionsCsv };
 }

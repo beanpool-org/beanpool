@@ -116,7 +116,7 @@ describe('a detached bp_node_url is signed for that URL\'s host, not the page\'s
     it('signedFetchWithKey (a join\'s or a restore\'s own key, here in a phone\'s raw-seed form) signs for it too', async () => {
         const seed = Uint8Array.from({ length: 32 }, (_, i) => 200 - i);
         const pub = bytesToHex(ed25519.getPublicKey(seed));
-        await signedFetchWithKey('POST', '/api/join/sso-nonce', { provider: 'github' }, bytesToHex(seed), pub);
+        await signedFetchWithKey('POST', '/api/join/sso-nonce', { provider: 'google' }, bytesToHex(seed), pub);
 
         const { url, headers, body } = sent();
         expect(url).toBe('https://Node.B.example:8443/api/join/sso-nonce');

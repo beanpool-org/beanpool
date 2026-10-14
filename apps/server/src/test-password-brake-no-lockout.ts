@@ -13,7 +13,8 @@
  *     with no failure on record is always checked;
  *   - fresh /64s inside one /48 do not each count as clean;
  *   - key sign-in and break-glass codes are unaffected;
- *   - /ws/logs?auth= follows the same rules;
+ *   - /ws/logs?auth= is no door at all (Fable's web review, L5): the password in its query is never checked, so it
+ *     opens nothing and costs the brake nothing;
  *   - the guesses an attacker gets per hour (the maths in docs/admin-surface.md §2.6), by simulation.
  *
  * The HTTP parts drive the real servers on the tunnel-origin port: the test client connects from loopback (a trusted
@@ -33,6 +34,7 @@ import { startHttpServer } from './http-server.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { updateGatewayConfig, updateLocalConfig, hashPassword, DEFAULT_GATEWAY_CONFIG } from './config/local-config.js';
+import { turnOn2faForTests } from './admin-auth-test-harness.js';
 import { setTrustConfigForTests } from './client-ip.js';
 import { generateBreakGlassCode, hashBreakGlassCode } from './admin-key-auth.js';
 import { resetAdminAuthTarpit } from './admin-auth.js';
@@ -258,7 +260,11 @@ async function part3Http() {
         assert(/another network/.test(aRight.json?.error || ''), `and is told another network, or a key, still works ("${aRight.json?.error}")`);
         const b = await verify(PW, '198.51.100.7');
         assert(b.status === 200, `the right password from B gets in (got ${b.status}; #937 answered 429)`);
-        const bAdmin = await req('/api/local/admin/diagnostics', { headers: { 'x-admin-password': PW, ...viaTunnel('198.51.100.8') } });
+        // Step 7c: with 2FA off the password alone opens no admin route, so the admin-route check from B sends it with 2FA
+        // on and a code; 2FA goes off again after (the sign-in route above and below takes the password alone).
+        const twoFa = turnOn2faForTests(PW);
+        const bAdmin = await req('/api/local/admin/diagnostics', { headers: { ...twoFa.headers(), ...viaTunnel('198.51.100.8') } });
+        updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] } as any);
         assert(bAdmin.status === 200, `and so does password auth on admin routes (checkAdminAuth) from another address (got ${bAdmin.status})`);
     }
 
@@ -269,9 +275,17 @@ async function part3Http() {
         const n401 = all.filter(r => r.status === 401).length, n429 = all.filter(r => r.status === 429).length;
         assert(n401 === SOURCE_FREE_FAILURES + 1 && n429 === 30 - n401,
             `30 wrong passwords at once from one address: only ${SOURCE_FREE_FAILURES + 1} are checked (401: ${n401}, 429: ${n429})`);
+        // Step 7c: with 2FA off the right password alone is refused on admin routes (it was admitted). A burst of them is
+        // refused for that reason only, never braked: none waits, and the address still gets in with the password and a
+        // code afterwards. (A code opens one request, so a burst of password requests is no longer a dashboard's.)
         const burst = await Promise.all(Array.from({ length: 20 }, () =>
             req('/api/local/admin/diagnostics', { headers: { 'x-admin-password': PW, ...viaTunnel('203.0.113.68') } })));
-        assert(burst.every(r => r.status === 200), `20 right passwords at once from one address (a dashboard's burst) are all admitted (${[...new Set(burst.map(r => r.status))].join(',')})`);
+        assert(burst.every(r => r.status === 403 && r.json?.code === 'password_needs_2fa' && !r.json?.passwordBackoff),
+            `20 right passwords at once from one address (a dashboard's burst): with 2FA off each is refused as password_needs_2fa, none braked (${[...new Set(burst.map(r => `${r.status} ${r.json?.code}`))].join(',')})`);
+        const twoFa = turnOn2faForTests(PW);
+        const after = await req('/api/local/admin/diagnostics', { headers: { ...twoFa.headers(), ...viaTunnel('203.0.113.68') } });
+        updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [] } as any);
+        assert(after.status === 200, `…and that address is admitted after the burst, with the password and a code (got ${after.status})`);
     }
 
     console.log('\n— HTTP: a flood from many sources is capped node-wide —');
@@ -304,32 +318,43 @@ async function part3Http() {
             method: 'POST', headers: viaTunnel(A), body: { challengeId: chal.json?.challengeId, memberPubkey: owner.pub, signature: owner.sign(chal.json?.challenge || '') },
         });
         const exchanged = await req('/api/local/admin/auth/exchange', { method: 'POST', headers: viaTunnel(A), body: { token: solved.json?.handshakeToken } });
-        const session = await req('/api/local/admin/diagnostics', { headers: { 'x-admin-session': exchanged.json?.sessionId || '', ...viaTunnel(A) } });
+        // The exchange answers the session in its httpOnly cookie only, never in the body (Fable's web review, L3).
+        const exchangedId = (exchanged.headers.get('set-cookie') || '').match(/admin_session=([0-9a-f]+)/)?.[1] || '';
+        const session = await req('/api/local/admin/diagnostics', { headers: { 'x-admin-session': exchangedId, ...viaTunnel(A) } });
         assert(chal.status === 200 && solved.status === 200 && exchanged.status === 200 && session.status === 200,
             `key sign-in from the braked address works: challenge ${chal.status}, signed ${solved.status}, session ${exchanged.status}, admin route ${session.status}`);
 
+        // A break-glass code only enrols a key (docs/admin-surface.md §2.2). Until 2026-10-01 this checked it on
+        // /diagnostics, where it opened an owner's session; there it is now a wrong password, braked as one.
         const code = generateBreakGlassCode();
         setNodeRoleBreakGlassHash(owner.pub, hashBreakGlassCode(code));
-        const bg = await req('/api/local/admin/diagnostics', { headers: { 'x-break-glass-code': code, ...viaTunnel(A) } });
-        assert(bg.status === 200, `a break-glass code from the braked address is still checked (got ${bg.status})`);
-        const bgWrong = await req('/api/local/admin/diagnostics', { headers: { 'x-break-glass-code': 'not-the-code', ...viaTunnel(A) } });
+        const helper = keyPair();
+        db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, 'BrakeHelper', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(helper.pub);
+        db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(helper.pub);
+        const bgElsewhere = await req('/api/local/admin/diagnostics', { headers: { 'x-break-glass-code': code, ...viaTunnel(A) } });
+        assert(bgElsewhere.status === 429, `the code from the braked address on any other route gets the brake's 429, as a wrong password does (got ${bgElsewhere.status})`);
+        const bg = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { 'x-break-glass-code': code, ...viaTunnel(A) }, body: { memberPubkey: helper.pub, role: 'admin' } });
+        assert(bg.status === 200, `a break-glass code from the braked address is still checked on the enrol route (got ${bg.status})`);
+        const bgWrong = await req('/api/local/admin/auth/enrol', { method: 'POST', headers: { 'x-break-glass-code': 'not-the-code', ...viaTunnel(A) }, body: { memberPubkey: helper.pub, role: 'admin' } });
         assert(bgWrong.status === 429, `a wrong code from it gets the brake's 429, not a password check (got ${bgWrong.status})`);
     }
 
-    console.log('\n— /ws/logs?auth= follows the same rules —');
+    // Until 2026-10-01 ?auth=<password> opened the socket with 2FA off, under this brake; that door is gone. These
+    // asserted it was braked (429) and that the right password opened it (101).
+    console.log('\n— /ws/logs?auth= is no door: never checked, never braked —');
     resetPasswordBrake();
     {
         const W = '203.0.113.80';
         const logs = (pw: string, ip: string) => upgradeStatus(`${WS_BASE}/ws/logs?auth=${encodeURIComponent(pw)}`, viaTunnel(ip));
         const s: number[] = [];
         for (let i = 0; i <= SOURCE_FREE_FAILURES; i++) s.push(await logs('ws-wrong-' + i, W));
-        assert(s.every(x => x === 401), `${SOURCE_FREE_FAILURES + 1} wrong ?auth= from W are checked and refused (${s.join(',')})`);
+        assert(s.every(x => x === 401), `${SOURCE_FREE_FAILURES + 1} wrong ?auth= from W are refused (${s.join(',')})`);
         const wRight = await logs(PW, W);
-        assert(wRight === 429, `then W is braked, even with the right password (got ${wRight})`);
+        assert(wRight === 401, `the right password in the query is refused too: the socket takes a ticket only (got ${wRight})`);
         const x = await logs(PW, '198.51.100.81');
-        assert(x === 101, `the right ?auth= from another address opens (got ${x})`);
+        assert(x === 401, `from any address (got ${x})`);
         const viaHttp = await verify(PW, W);
-        assert(viaHttp.status === 429, `W's brake is the same one HTTP uses (got ${viaHttp.status})`);
+        assert(viaHttp.status === 200, `and none of them was a password check: W's brake is untouched, its right password works over HTTP (got ${viaHttp.status})`);
     }
     resetPasswordBrake();
     resetAdminAuthTarpit();

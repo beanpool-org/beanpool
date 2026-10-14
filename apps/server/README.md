@@ -342,7 +342,9 @@ git tag -a v1.0.38 -m "Short description of what's new"
 git push --tags
 ```
 
-**What happens automatically:**
+**What happens next:** the push starts a run, but the build, the `:latest` push and the Release wait for Marty's approval. Open the run page on GitHub and choose **Review deployments**; until then the run shows as pending, not stuck.
+
+**Once approved:**
 
 1. **GitHub Actions** detects the `v*` tag push
 2. **Builds** the Docker image with `APP_VERSION=1.0.38` baked in as a build arg
@@ -525,6 +527,12 @@ bash deploy.sh 4         # Review only
 bash deploy.sh 5         # Test only
 bash deploy.sh 6         # Test Mirror only
 ```
+
+One deploy at a time per server folder: a second one refuses and changes nothing. A deploy cut off part-way is safe to run
+again (it puts the data/ it had parked back before the node starts). A FATAL before the node is stopped changes nothing; one after
+it leaves the node stopped, with data/ back in place or parked in the home folder, and what it printed says which. deploy.sh
+replaces everything in the server folder except data/ and .env, so keep any copy of data/ outside it (in the home folder).
+Operator manual: Updates, health checks and disk space → Updating with deploy.sh.
 
 ### SSH Access
 ```bash

@@ -31,11 +31,13 @@ process.env.NODE_PROFILE = 'global';
 process.env.ADMIN_PASSWORD = 'Decisions-Off-Admin-61!';
 
 import crypto from 'node:crypto';
+import { setMemberPhoto } from '@beanpool/engine';
 
-const PORT = 8766;
-const BASE = `https://localhost:${PORT}`;
-const ADMIN_PW = process.env.ADMIN_PASSWORD;
-const ADMIN = { 'x-admin-password': ADMIN_PW };
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
+// Step 7c: with the node's 2FA off the admin password alone opens no admin route. The admin calls go under the owner
+// Olga's key session, opened once she holds the role (below).
+let ADMIN: Record<string, string> = {};
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const DAY = 24 * 60 * 60 * 1000;
 const VOTES_OFF = /Community votes are switched off on this node/;
@@ -82,7 +84,8 @@ async function main() {
     const { initTls } = await import('./services/tls.js');
     const { startHttpsServer } = await import('./https-server.js');
     await initTls();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
     const de = await import('./decisions-engine.js');
     const { grantNodeRole } = await import('./engine/node-roles.js');
 
@@ -100,9 +103,10 @@ async function main() {
     const member = (callsign: string): Id => {
         const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
         const pk = (publicKey.export({ type: 'spki', format: 'der' }) as Buffer).subarray(-32).toString('hex');
-        db.prepare(`INSERT INTO members (public_key, callsign, avatar_url, status, joined_at, updated_at, invited_by, invite_code, earned_credit, last_active_at)
-                    VALUES (?, ?, ?, 'active', ?, ?, 'seed', 'seed', 1, ?)`)
-            .run(pk, callsign, AVATAR, joined, joined, new Date().toISOString());
+        db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, updated_at, invited_by, invite_code, earned_credit, last_active_at)
+                    VALUES (?, ?, 'active', ?, ?, 'seed', 'seed', 1, ?)`)
+            .run(pk, callsign, joined, joined, new Date().toISOString());
+        setMemberPhoto(db, pk, AVATAR);
         db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(pk);
         return { pk, privateKey, callsign };
     };
@@ -111,6 +115,8 @@ async function main() {
     const jack = member('Jack'), kate = member('Kate'), lena = member('Lena');
     grantNodeRole(olga.pk, 'owner', 'owner:password');
     grantNodeRole(erin.pk, 'admin', 'owner:password');
+    const { ownerSessionHeaders } = await import('./admin-auth-test-harness.js');
+    ADMIN = ownerSessionHeaders(olga.pk);
     const voters = [alice, bob, carol, dave];
 
     // A Decision already on this node, as if opened before the switch went off.
@@ -133,7 +139,9 @@ async function main() {
         `info says global, with formal Decisions off (${info.status} ${JSON.stringify(info.body?.features)})`);
 
     const effects = [...Object.keys(de.TOUCHES_FOR_EFFECT), 'set_rule'];
-    assert(effects.length === 14 && effects.includes('keep_suspension') && effects.includes('remove_lead_keeper'),
+    // 22 effects (the three an enterprise's keepers' vote carries out included: pay_out, remove_keeper, replace_lead; and the
+    // five a chat group's vote carries out: set_group_role … close_group) + one unknown.
+    assert(effects.length === 23 && effects.includes('close_group') && effects.includes('pay_out') && effects.includes('keep_suspension') && effects.includes('remove_lead_keeper') && effects.includes('forgive_debt'),
         `every effect there is, the system's own and an unknown one (${effects.join(', ')})`);
     for (const effect of effects) {
         for (const who of [carol, olga]) {

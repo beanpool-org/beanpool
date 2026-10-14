@@ -72,7 +72,10 @@ describe('OwnerUnlockCard', () => {
         expect(posted).toHaveLength(1);
         expect(sessions.redeem(session.keys.sessionId, posted[0]).signer).toBe(me.publicKey);
 
-        // 48px targets throughout.
-        for (const b of screen.getAllByRole('button')) expect(b.className).toMatch(/min-h-\[48px\]/);
+        // 48px targets and focus rings throughout.
+        for (const b of screen.getAllByRole('button')) {
+            expect(b.className).toMatch(/min-h-\[48px\]/);
+            expect(b.className).toMatch(/focus-visible:ring-2/);
+        }
     });
 });

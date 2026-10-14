@@ -22,7 +22,7 @@ function day(iso: string | undefined): string {
     return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-const BTN = 'flex-grow basis-[140px] min-h-[48px] px-4 py-3 rounded-xl font-bold text-[15px] disabled:opacity-50';
+const BTN = 'flex-grow basis-[140px] min-h-[48px] px-4 py-3 rounded-xl font-bold text-[15px] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1';
 
 export function OwnerUnlockCard({ identity, communityName }: {
     identity: { publicKey: string; privateKey: string } | null;
@@ -151,7 +151,7 @@ export function OwnerUnlockCard({ identity, communityName }: {
                         autoCapitalize="none"
                         spellCheck={false}
                         placeholder="beanpool://unlock-keys?…"
-                        className="w-full min-h-[96px] p-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-950 text-nature-900 dark:text-white text-sm break-all"
+                        className="w-full min-h-[96px] p-3 rounded-xl border border-nature-300 dark:border-nature-700 bg-white dark:bg-nature-950 text-nature-900 dark:text-white text-sm break-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                     />
                     {error && <p role="alert" className="text-sm text-red-700 dark:text-red-300 break-words">{error}</p>}
                     <div className="flex flex-wrap gap-2">

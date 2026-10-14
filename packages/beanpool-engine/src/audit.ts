@@ -8,7 +8,7 @@
 
 import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
-import { getMemberTrustProfile } from './trust.js';
+import { getMemberTrustProfile, washTradingAnalysisStepsOnSnapshot, drainSteps, runStepsInSlices } from './trust.js';
 
 type Db = Database.Database;
 
@@ -33,6 +33,7 @@ export interface AuditSyncPayload {
     invalidatedKeys?: any[];
     treasuryOperators?: unknown[];
     enterprisePledges?: unknown[];
+    plainTables?: Record<string, unknown[]>;
     commonsBalance?: number;
     generatedAt?: string;
 }
@@ -57,6 +58,12 @@ export interface ReplicaConsistency {
      * which its import left out (`<member key>.<column>`, the first few in `examples`). Any makes the copy not exact.
      */
     valuesLeftOut?: { count: number; examples: string[] } | null;
+    /**
+     * Set by the same check: the rows and values of the copy's plain tables (apps/server engine/plain-tables.ts) this
+     * standby's tables refuse, which its import left out (`<table>:<key>` or `<table>:<key>.<column>`), and the tables
+     * they are in. Any makes the copy not exact, and asks for no force-resync.
+     */
+    plainTablesLeftOut?: { count: number; tables: string[]; examples: string[] } | null;
     ok: boolean;
 }
 
@@ -125,19 +132,34 @@ export function summariseLedger(rows: Iterable<{ publicKey: string; balance: unk
 }
 
 /**
+ * The accounts rows whose balance is not a finite number: NULL (better-sqlite3 binds NaN as NULL), text, or ±Infinity
+ * (SQLite stores 9e999 as Inf). SUM skips NULLs and a text row, so none of them moves the total the check below
+ * compares — a balance of 0 wiped to NULL reads as no drift at all. Shared by the conservation check and the boot
+ * migration that makes the column NOT NULL (apps/server db.ts).
+ */
+export const BROKEN_BALANCE_SQL = `balance IS NULL OR typeof(balance) NOT IN ('integer', 'real') OR balance > 1e308 OR balance < -1e308`;
+
+/**
  * Runs the database-level ledger conservation check.
  * Checks system-wide sum of balances against the established baseline, and
  * flags stranded escrows (escrow accounts with balance > 0.01 for settled transactions).
+ *
+ * A balance that is not a finite number (BROKEN_BALANCE_SQL) is a failure on its own (review F1, 2026-10-01): a NaN
+ * written as NULL was invisible here, because SUM skips it and NaN compares false against any tolerance. `badBalances`
+ * counts them; the baseline is never established from a ledger holding one.
  */
-export function runConservationCheck(db: Db): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; ok: boolean } {
+export function runConservationCheck(db: Db): { sumBalances: number; baseline: number; drift: number; strandedEscrows: number; badBalances: number; ok: boolean } {
     const sumBalances = (db.prepare(`SELECT COALESCE(SUM(balance), 0) as s FROM accounts`).get() as any).s as number;
+    const badBalances = (db.prepare(`SELECT COUNT(*) AS c FROM accounts WHERE ${BROKEN_BALANCE_SQL}`).get() as any).c as number;
 
     const baselineRow = db.prepare(`SELECT value FROM node_config WHERE key='ledger_audit_baseline'`).get() as any;
     let baseline = baselineRow ? Number(baselineRow.value) : NaN;
     if (!Number.isFinite(baseline)) {
         baseline = sumBalances;
-        db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('ledger_audit_baseline', ?)`).run(String(sumBalances));
-        console.log(`📐 [LedgerAudit] Baseline established: sum(balances) = ${sumBalances.toFixed(4)}`);
+        if (badBalances === 0 && Number.isFinite(sumBalances)) {
+            db.prepare(`INSERT OR REPLACE INTO node_config (key, value) VALUES ('ledger_audit_baseline', ?)`).run(String(sumBalances));
+            console.log(`📐 [LedgerAudit] Baseline established: sum(balances) = ${sumBalances.toFixed(4)}`);
+        }
     }
     const drift = sumBalances - baseline;
 
@@ -147,33 +169,97 @@ export function runConservationCheck(db: Db): { sumBalances: number; baseline: n
           AND SUBSTR(public_key, 8) NOT IN (SELECT id FROM marketplace_transactions WHERE status IN ('pending', 'requested'))
     `).get() as any).c as number;
 
-    const ok = Math.abs(drift) < 0.01 && strandedEscrows === 0;
+    // `Math.abs(drift) < 0.01` is false for a NaN drift, so a non-finite sum fails too.
+    const ok = badBalances === 0 && Number.isFinite(sumBalances) && Math.abs(drift) < 0.01 && strandedEscrows === 0;
     if (!ok) {
-        console.warn(`⚠️ [LedgerAudit] FAILED — sum=${sumBalances.toFixed(4)}, drift=${drift.toFixed(4)} from baseline, stranded escrows=${strandedEscrows}`);
+        console.warn(`⚠️ [LedgerAudit] FAILED — sum=${sumBalances.toFixed(4)}, drift=${drift.toFixed(4)} from baseline, stranded escrows=${strandedEscrows}, balances that are not a finite number=${badBalances}`);
     } else {
         console.log(`✅ [LedgerAudit] OK — sum(balances)=${sumBalances.toFixed(4)}, drift=${drift.toFixed(4)}`);
     }
-    return { sumBalances, baseline, drift, strandedEscrows, ok };
+    return { sumBalances, baseline, drift, strandedEscrows, badBalances, ok };
 }
+
+export interface WashSybilMetrics { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number }
 
 /**
  * Computes metrics for wash trading, Sybil rings, and delinquency.
  * This is a pure computation function that returns the metrics dictionary
  * without persisting it to the DB (persistence is handled by the server runtime).
+ *
+ * In one go: the event loop waits for all of it. The node's timers use computeWashSybilMetricsInSlices, which gives the
+ * same numbers from the same steps.
  */
-export function computeWashSybilMetrics(db: Db): { totalNegative: number; accountsNearFloor: number; delinquentCount: number; cohortAnomalies: number } {
+export function computeWashSybilMetrics(db: Db): WashSybilMetrics {
+    return drainSteps(washSybilMetricsSteps(db));
+}
+
+/**
+ * computeWashSybilMetrics, giving the event loop a turn (setImmediate) whenever a slice of steps has held it for
+ * `sliceMs` (default 20): one step is one member's floor, one cohort member, or one cluster of the wash-trading analysis,
+ * most well under a millisecond (trust.ts runStepsInSlices). A slice can't split a step, and one is long: the
+ * analysis's pair totals and the last 30 days' trades (trust.ts washTradingAnalysisSteps) are read a page a step (#1908),
+ * but the cohort query took 45-60 ms at 101,400 trades (#1793's review). So a slice holds the loop up
+ * to that long, however small `sliceMs` is. In one go it held a node for 20 s at 20,000 members and 226 s at 100,000
+ * (the global load test, 2026-10-11), answering nothing meanwhile. `onYield` is called at each turn given (a test counts them). Rows written between slices are read as they stand
+ * when their step comes, but the wash analysis's, which its steps all read from one snapshot (trust.ts
+ * washTradingAnalysisStepsOnSnapshot): a trade can't be read twice or not at all. The numbers are the one-go numbers on
+ * a database nothing writes to meanwhile.
+ */
+export async function computeWashSybilMetricsInSlices(
+    db: Db, opts: { sliceMs?: number; onYield?: () => void } = {},
+): Promise<WashSybilMetrics> {
+    return runStepsInSlices(washSybilMetricsSteps(db), opts);
+}
+
+/**
+ * The metrics, one step at a time (a yield after each step; computeWashSybilMetrics says what a step is).
+ *
+ * The wash-trading analysis every floor reads is taken ONCE, at the start, and every member's floor read with it. Each
+ * floor used to read the one kept for 10 s (trust.ts getWashTradingEnforcement), so a walk over every member made a new
+ * analysis, itself a pass over every member's trades, every 10 s of the walk: the walk's time grows with the members, and
+ * so does each analysis, which made the whole walk grow with their square (10x the time for 5x the members). And each
+ * active member's floor is worked out once, not again for the cohort count.
+ */
+function* washSybilMetricsSteps(db: Db): Generator<void, WashSybilMetrics> {
     // 1. Total negative balance
     const totalNegativeRow = db.prepare(`SELECT ABS(SUM(balance)) as s FROM accounts WHERE balance < 0`).get() as any;
     const totalNegative = totalNegativeRow ? (totalNegativeRow.s || 0) : 0;
+    yield;
 
     // 2. Count of accounts near floor & Delinquent accounts
     let accountsNearFloor = 0;
     let delinquentCount = 0;
 
+    const wash = yield* washTradingAnalysisStepsOnSnapshot(db);
+    const floors = new Map<string, number>();
+    const floorOf = (key: string): number => {
+        let floor = floors.get(key);
+        if (floor === undefined) {
+            floor = getMemberTrustProfile(db, key, 0, wash).floor;
+            floors.set(key, floor);
+        }
+        return floor;
+    };
+
     try {
-        const activeMembers = db.prepare("SELECT public_key FROM members WHERE status = 'active'").all() as { public_key: string }[];
-        for (const member of activeMembers) {
-            const { floor } = getMemberTrustProfile(db, member.public_key);
+        // The active members a page of rows at a time, in rowid order, so no one query holds the loop for long: all
+        // 100,000 in one query took up to 377 ms on a cold database (the global load test, 2026-10-11). The counts don't
+        // depend on the order.
+        const page = db.prepare('SELECT rowid AS r, public_key, status FROM members WHERE rowid > ? ORDER BY rowid LIMIT 2000');
+        const activeMembers = function* (): Generator<{ public_key: string }> {
+            let after = Number.MIN_SAFE_INTEGER;
+            const seen = new Set<string>();
+            for (;;) {
+                const rows = page.all(after) as { r: number; public_key: string; status: string }[];
+                if (rows.length === 0) return;
+                // A member rewritten between slices (a new rowid) is still counted once.
+                for (const row of rows) if (row.status === 'active' && !seen.has(row.public_key)) { seen.add(row.public_key); yield row; }
+                after = rows[rows.length - 1].r;
+            }
+        };
+        for (const member of activeMembers()) {
+            yield;
+            const floor = floorOf(member.public_key);
             if (floor < 0) {
                 const balRow = db.prepare("SELECT balance FROM accounts WHERE public_key = ?").get(member.public_key) as any;
                 const bal = balRow ? balRow.balance : 0;
@@ -217,7 +303,8 @@ export function computeWashSybilMetrics(db: Db): { totalNegative: number; accoun
 
             let fastGrowingCount = 0;
             for (const key of keys) {
-                const { floor } = getMemberTrustProfile(db, key);
+                yield;
+                const floor = floorOf(key);
                 if (floor <= -600) {
                     const memberRow = db.prepare("SELECT joined_at FROM members WHERE public_key = ?").get(key) as any;
                     if (memberRow?.joined_at) {
@@ -267,12 +354,17 @@ function preferenceCount(members: readonly unknown[]): number {
 /**
  * Replica-fidelity check (backup side).
  * Compares the primary's sync payload statistics against local DB rows.
+ * `plainRows`: a plain table's condition on the rows that travel, by table (apps/server engine/replication-manifest.ts
+ * RowRule, from the server's own code): the main server sent only those, so only those are counted here.
  */
-export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCommonsBalance: number): ReplicaConsistency {
+export function getReplicaConsistency(
+    db: Db, payload: AuditSyncPayload, localCommonsBalance: number, plainRows: Readonly<Record<string, string>> = {},
+): ReplicaConsistency {
     // Guarded: a replica whose schema predates a table must report a mismatch on that one row,
     // not throw and abandon the whole consistency report.
     const count = (t: string) => {
-        try { return Number((db.prepare(`SELECT COUNT(*) AS c FROM ${t}`).get() as any).c) || 0; }
+        const where = Object.hasOwn(plainRows, t) ? ` WHERE (${plainRows[t]})` : '';
+        try { return Number((db.prepare(`SELECT COUNT(*) AS c FROM ${t}${where}`).get() as any).c) || 0; }
         catch { return 0; }
     };
     const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -322,6 +414,12 @@ export function getReplicaConsistency(db: Db, payload: AuditSyncPayload, localCo
         // Each member's preferences, which travel with their row (design G2b): holiday, notification opt-outs. Only when the
         // copy carries them.
         ...(membersCarryPreferences(payload.members) ? [['member_preferences', preferenceCount(payload.members ?? [])] as [string, number]] : []),
+        // The plain tables (in-flight money and governance, sync.ts exportPlainTables), each one the copy carries: a row
+        // the import refused or couldn't write shows here, and so does one it left behind. Only by a name that is a plain
+        // identifier; a table this database doesn't have counts 0.
+        ...Object.entries(payload.plainTables ?? {})
+            .filter(([t, rows]) => Array.isArray(rows) && /^[A-Za-z_][A-Za-z0-9_]*$/.test(t))
+            .map(([t, rows]) => [t, rows.length] as [string, number]),
     ];
     const tables = tableDefs.map(([name, primary]) => {
         const backup = count(name);

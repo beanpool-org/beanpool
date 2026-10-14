@@ -201,7 +201,9 @@ async function contract(name: string, store: ImageStore): Promise<void> {
     // Deletes.
     assert(store.delete(key2) === true && store.get(key2) === null, `${name}: delete of a present key is true, and it is gone`);
     assert(store.delete(key2) === false, `${name}: delete of an absent key is false`);
-    const removed = deleteStoredObjects([key, 'posts/none/0-00000000.jpg', att], store);
+    // A database in which no row names any of them (whether one does is test-image-store's and test-photo-key-collision's).
+    const namesNothing = { prepare: () => ({ all: () => [] }) };
+    const removed = deleteStoredObjects(namesNothing, [key, 'posts/none/0-00000000.jpg', att], store);
     assert(removed === 2 && store.get(key) === null && store.get(att) === null,
         `${name}: deleteStoredObjects counts what it actually removed`);
 }

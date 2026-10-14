@@ -3,7 +3,8 @@ import { Platform, useColorScheme } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SystemUI from 'expo-system-ui';
 import * as NavigationBar from 'expo-navigation-bar';
-import { lightColors, darkColors, earthColors, slateColors } from '../constants/colors';
+import { lightColors, darkColors } from '../constants/colors';
+import { onboardingColors } from '../utils/onboarding-colors';
 import {
     type ResolvedTheme,
     type ThemePreference,
@@ -14,29 +15,22 @@ import {
 
 export type ThemeMode = ResolvedTheme;
 export type { ThemePreference };
-export type LightPaletteMode = 'classic' | 'earth' | 'slate';
-
-export const lightPaletteColors: Record<LightPaletteMode, typeof lightColors> = {
-    classic: lightColors,
-    earth: earthColors as unknown as typeof lightColors,
-    slate: slateColors as unknown as typeof lightColors,
-};
 
 export interface ThemeContextType {
     /** The theme being drawn — the preference resolved against the phone's setting. */
     theme: ThemeMode;
     /** What the member chose in Settings: follow the phone, or always light/dark. */
     themePreference: ThemePreference;
-    lightPalette: LightPaletteMode;
     /** Whether the doodle background is drawn. Off = the flat colour, per device. */
     patternEnabled: boolean;
     colors: typeof lightColors;
     setThemePreference: (preference: ThemePreference) => void;
-    setLightPalette: (palette: LightPaletteMode) => void;
     setPatternEnabled: (enabled: boolean) => void;
 }
 
 const PATTERN_KEY = 'beanpool_background_pattern';
+/** Where the retired Classic / Earth / Slate choice was kept. Removed on start; there is one light set now. */
+const RETIRED_LIGHT_PALETTE_KEY = 'beanpool_light_palette';
 
 /** The flat colour the doodle tiles are drawn on — sampled from the art itself. */
 const PATTERN_GROUND = { light: '#f1f1e4', dark: '#141a1a' } as const;
@@ -51,8 +45,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // initialProp there), so a 'system' default made a dark-phone user's map dark even after the
     // stored 'light' arrived. See utils/theme-preference.ts.
     const [themePreference, setThemePreferenceState] = useState<ThemePreference>('light');
-    const [lightPalette, setLightPaletteState] = useState<LightPaletteMode>('classic');
-    // On by default; 'plain' is the opt-out, stored per device like the palette choice.
+    // On by default; 'plain' is the opt-out, stored per device like the theme choice.
     const [patternEnabled, setPatternEnabledState] = useState(true);
     const theme = resolveTheme(themePreference, systemScheme);
 
@@ -60,11 +53,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         loadThemePreference(AsyncStorage)
             .then(setThemePreferenceState)
             .catch(() => { /* keep 'light' */ });
-        AsyncStorage.getItem('beanpool_light_palette').then((palettePref) => {
-            if (palettePref === 'classic' || palettePref === 'earth' || palettePref === 'slate') {
-                setLightPaletteState(palettePref);
-            }
-        });
+        AsyncStorage.removeItem(RETIRED_LIGHT_PALETTE_KEY).catch(() => { /* nothing reads it */ });
         AsyncStorage.getItem(PATTERN_KEY)
             .then((pref) => { if (pref === 'plain') setPatternEnabledState(false); })
             .catch(() => { /* keep the pattern on */ });
@@ -80,15 +69,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         await AsyncStorage.setItem(PATTERN_KEY, enabled ? 'pattern' : 'plain');
     };
 
-    const setLightPalette = async (palette: LightPaletteMode) => {
-        setLightPaletteState(palette);
-        await AsyncStorage.setItem('beanpool_light_palette', palette);
-    };
-
     const resolvedColors = useMemo(() => {
         const base = theme === 'dark'
             ? (darkColors as unknown as typeof lightColors)
-            : lightPaletteColors[lightPalette];
+            : lightColors;
         // The pattern is drawn once per screen, underneath that screen's content. Page
         // containers therefore go transparent so it shows through; surface.app stays solid for
         // the inputs, chips and sunken rows that share the token and must not become see-through.
@@ -98,7 +82,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         // wallpaper rather than a second, paler one laid on top.
         const ground = theme === 'dark' ? PATTERN_GROUND.dark : PATTERN_GROUND.light;
         return { ...base, surface: { ...base.surface, page: 'transparent', chrome: ground } };
-    }, [theme, lightPalette, patternEnabled]);
+    }, [theme, patternEnabled]);
 
     // System bars and the root window follow the drawn theme, not the phone's: with an override
     // the two can differ. The status bar icons are set per screen with <StatusBar>; here the
@@ -114,13 +98,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const value = useMemo(() => ({
         theme,
         themePreference,
-        lightPalette,
         patternEnabled,
         colors: resolvedColors,
         setThemePreference,
-        setLightPalette,
         setPatternEnabled,
-    }), [theme, themePreference, lightPalette, patternEnabled, resolvedColors]);
+    }), [theme, themePreference, patternEnabled, resolvedColors]);
 
     return (
         <ThemeContext.Provider value={value}>
@@ -137,10 +119,16 @@ export function useTheme() {
     return context;
 }
 
+/** Light or dark tokens for the onboarding screens; see utils/onboarding-colors.ts. */
+export function useOnboardingColors() {
+    const { theme } = useTheme();
+    return useMemo(() => onboardingColors(theme), [theme]);
+}
+
 export function useStyles<T extends Record<string, any>>(
     factory: (theme: ThemeContextType) => T
 ): T {
     const themeContext = useTheme();
-    // Cache the created styles and only regenerate when the theme or light palette changes
+    // Cache the created styles and only regenerate when the theme changes
     return useMemo(() => factory(themeContext), [themeContext]);
 }

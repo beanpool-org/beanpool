@@ -9,13 +9,13 @@ These are under **Bulletin & News**.
 
 ## Announcements
 
-An announcement goes to every member at once: to anyone with the app open, and as a notification to every phone. It is not kept anywhere, so someone who has notifications off will not see it later. Keep it short and use it rarely.
+An announcement goes to every member at once: to anyone with the app open, and as a notification to every phone. The notification itself says only "Your community has a notice for you.": your words never pass through the phone companies' servers or show on a lock screen. It is not kept anywhere members can find it later, so someone who has notifications off will not see it. An announcement can be at most 4,000 characters, and a headline at most 200: the form shows a count, and a longer one is refused rather than cut. Keep it short and use it rarely.
 
 ![The Announcements screen in Settings](images/bulletin-announcements.webp)
 
 ## The Pulse
 
-The Pulse shows what members share from their own channels (videos, feeds and so on), plus the Learn videos. Anyone can see the Pulse feed, even without joining, so it is part of your community's public face.
+The Pulse shows what members share from their own channels (videos, feeds and so on), plus the Learn videos. Only members can see the Pulse feed. Someone who has not joined is told it is for members.
 
 - Members add their own channels, and can hide or delete their own items.
 - The server checks each channel every **5 minutes** and keeps the newest **20** items from each.

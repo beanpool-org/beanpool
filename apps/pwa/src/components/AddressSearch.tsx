@@ -8,13 +8,24 @@
  * "My location" never depend on it: a failed search says so in one line and the pin picker carries on.
  */
 import { useEffect, useRef, useState } from 'react';
-import { createAddressLookup, type AddressLookup, type AddressLookupState, type AddressResult } from '@beanpool/core';
+import { createAddressLookup, type AddressLookup, type AddressLookupState, type AddressResult, type AddressSearchWords } from '@beanpool/core';
+
+/** The event form's words: it has a map to tap and a pin to drop. A match is read by its own text. */
+const EVENT_WORDS: AddressSearchWords = {
+    label: 'Find an address',
+    placeholder: 'Street and town, or a place',
+    unavailable: "Address search isn't working right now. Tap the map or use My location.",
+    noMatches: 'No matches. Try a street and town, or drop a pin.',
+    source: 'Addresses from OpenStreetMap. What you type here is sent to them.',
+};
 
 interface AddressSearchProps {
     onPick: (result: AddressResult) => void;
+    /** A form with no map says it in its own words (the area step: @beanpool/core AREA_TOWN_SEARCH_WORDS). */
+    words?: AddressSearchWords;
 }
 
-export function AddressSearch({ onPick }: AddressSearchProps) {
+export function AddressSearch({ onPick, words = EVENT_WORDS }: AddressSearchProps) {
     const [query, setQuery] = useState('');
     const [state, setState] = useState<AddressLookupState>({ status: 'idle', query: '', results: [] });
     const [open, setOpen] = useState(false);
@@ -48,7 +59,7 @@ export function AddressSearch({ onPick }: AddressSearchProps) {
     return (
         <div className="mb-3" data-testid="event-address-search">
             <label htmlFor="event-address" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">
-                Find an address
+                {words.label}
             </label>
             <div className="relative">
                 <input
@@ -61,7 +72,7 @@ export function AddressSearch({ onPick }: AddressSearchProps) {
                     aria-activedescendant={showList && selectedIndex >= 0 ? `event-address-result-${selectedIndex}` : undefined}
                     enterKeyHint="search"
                     autoComplete="off"
-                    placeholder="Street and town, or a place"
+                    placeholder={words.placeholder}
                     value={query}
                     onChange={(e) => {
                         setQuery(e.target.value);
@@ -94,12 +105,12 @@ export function AddressSearch({ onPick }: AddressSearchProps) {
                 {state.status === 'searching' && <span className="sr-only">Searching…</span>}
                 {state.status === 'error' && (
                     <span className="block mt-1 text-xs font-semibold text-red-600 dark:text-red-400">
-                        Address search isn&apos;t working right now. Tap the map or use My location.
+                        {words.unavailable}
                     </span>
                 )}
                 {state.status === 'done' && open && results.length === 0 && (
                     <span className="block mt-1 text-xs text-nature-600 dark:text-nature-300">
-                        No matches. Try a street and town, or drop a pin.
+                        {words.noMatches}
                     </span>
                 )}
             </p>
@@ -116,18 +127,19 @@ export function AddressSearch({ onPick }: AddressSearchProps) {
                             id={`event-address-result-${idx}`}
                             role="option"
                             aria-selected={selectedIndex === idx}
+                            aria-label={words.pickLabel?.(item.displayName)}
                             onMouseDown={(e) => e.preventDefault()}
                             onClick={() => pick(item)}
                             className={`min-h-[48px] px-3 py-2 cursor-pointer text-sm ${selectedIndex === idx ? 'bg-violet-50 dark:bg-violet-950/40' : 'hover:bg-nature-50 dark:hover:bg-nature-700'}`}
                         >
                             <div className="font-semibold text-nature-900 dark:text-white break-words">{item.shortName || item.displayName}</div>
-                            <div className="text-xs text-nature-500 dark:text-nature-400 line-clamp-2 break-words">{item.displayName}</div>
+                            <div className="text-xs text-nature-500 dark:text-nature-300 line-clamp-2 break-words">{item.displayName}</div>
                         </li>
                     ))}
                 </ul>
             )}
             <p className="m-0 mt-1 text-[11px] text-nature-500 dark:text-nature-400">
-                Addresses from OpenStreetMap. What you type here is sent to them.
+                {words.source}
             </p>
         </div>
     );

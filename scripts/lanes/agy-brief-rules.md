@@ -9,6 +9,10 @@
 - If node_modules is missing, run `pnpm install --frozen-lockfile` at the repo root, then build @beanpool/core and
   @beanpool/engine — their dist is shared and goes stale across branches. `pnpm exec tsc --noEmit` in apps/server
   catches type errors; tsx strips types and will NOT.
+- LONG COMMANDS (measured 2026-09-21): any command over ~10 s becomes a background task by itself; that is fine. Poll it
+  with `manage_task` (Action: status) until Status: DONE, then read its output. NEVER end your turn while a task is
+  RUNNING, and never say you are "waiting for" something: poll instead. The CLI kills every background task ~5 s after
+  you stop replying, and four runs in a row ended with nothing because of it.
 - Order: read → edit → commit → push → run the 2-3 suites you touched → push → scripts/test-all.sh LAST. Never run
   the full suite as a "baseline" before editing: one stage did, the baseline consumed its whole budget, and it
   committed nothing.
@@ -19,6 +23,10 @@
   that block, comments included, or the whole script fails with an error pointing at EOF.
 - Never merge, never deploy, never force-push, never touch another branch or PR. Never touch the live nodes.
 - Protected — never edit: apps/native/app/(tabs)/map.tsx, UnifiedMapPin, GlobalHeader*, logo assets, deploy.sh.
+- The members' guide and the operator manual: edit only their pages (packages/beanpool-guide/content, operators).
+  Never add or bump a "version" and never commit packages/beanpool-guide/generated or apps/website/guide: the
+  director publishes those after merge. Run `pnpm --filter @beanpool/guide generate` and its tests; a test that
+  pins a page's words reads the pages, not the bundled JSON (packages/beanpool-guide/README.md).
 - Ledger conservation is absolute: SUM(balances) + COMMONS_POOL = 0. Anything that mutates the ledger goes through
   conservingTransaction.
 - Migrations must be additive and idempotent and leave existing rows working; say in the PR body exactly what

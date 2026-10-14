@@ -250,6 +250,46 @@ async function main() {
         assert(secretsIn(text).has('friends'), 'and the fresh list shows lateFriend the Friends-only contact');
     }
 
+    console.log('\n── the ETag moves only when being added shows the viewer something ──');
+    {
+        // Who added you is theirs to know: the list shows it for nobody but a Friends-only owner with a contact, whose
+        // adding shows you that contact. Every other adder used to move the ETag over an identical body, and since
+        // every input to the hash is known to the viewer, recomputing it for each member in turn named the adder.
+        // Every member here is made before the first read: a new member row moves the members version for everyone.
+        const etagHidden = 'etag-hidden-owner@example.org';
+        const etagFriends = 'etag-friends-owner@example.org';
+        const viewer = member('etagViewer');
+        const hiddenAdder = member('etagHidden', { value: etagHidden, visibility: 'hidden' });
+        const noContactAdder = member('etagNoContact');
+        const friendsAdder = member('etagFriends', { value: etagFriends, visibility: 'friends' });
+        const first = await get('/api/community/members', viewer);
+        assert(first.status === 200 && !!first.etag && !first.text.includes(etagFriends) && !first.text.includes(etagHidden),
+            `the viewer takes the list and its ETag (got ${first.status} ${first.etag})`);
+        const revalidate = async (etag: string | null) => {
+            const res = await fetch(`${BASE}/api/community/members`, {
+                headers: { ...signedHeaders('GET', '/api/community/members', '', viewer), 'If-None-Match': etag || '' },
+            });
+            return { status: res.status, text: await res.text(), etag: res.headers.get('etag') };
+        };
+        const addH = await post('/api/friends/add', { friendPubkey: viewer.pubKeyHex }, hiddenAdder);
+        assert(addH.status === 200, `a Hidden owner with a contact adds the viewer (got ${addH.status})`);
+        const afterH = await revalidate(first.etag);
+        assert(afterH.status === 304, `…and the viewer's ETag still answers 304: nothing they see changed (got ${afterH.status}, ${afterH.etag} vs ${first.etag})`);
+        const addN = await post('/api/friends/add', { friendPubkey: viewer.pubKeyHex }, noContactAdder);
+        assert(addN.status === 200, `an owner with no contact adds the viewer (got ${addN.status})`);
+        const afterN = await revalidate(first.etag);
+        assert(afterN.status === 304, `…and the viewer's ETag still answers 304 (got ${afterN.status}, ${afterN.etag} vs ${first.etag})`);
+        const addF = await post('/api/friends/add', { friendPubkey: viewer.pubKeyHex }, friendsAdder);
+        assert(addF.status === 200, `a Friends-only owner with a contact adds the viewer (got ${addF.status})`);
+        const afterF = await revalidate(first.etag);
+        assert(afterF.status === 200 && afterF.text.includes(etagFriends) && !afterF.text.includes(etagHidden),
+            `…and the old ETag no longer answers 304: the fresh list shows the viewer that owner's contact, and not the Hidden one (got ${afterF.status})`);
+        const removeH = await post('/api/friends/remove', { friendPubkey: viewer.pubKeyHex }, hiddenAdder);
+        assert(removeH.status === 200, `the Hidden owner removes the viewer (got ${removeH.status})`);
+        const afterRemove = await revalidate(afterF.etag);
+        assert(afterRemove.status === 304, `…and the viewer's ETag from after the Friends-only add still answers 304 (got ${afterRemove.status}, ${afterRemove.etag} vs ${afterF.etag})`);
+    }
+
     console.log('\n── the profile page, the rule the list now shares ──');
     for (const [k, o] of Object.entries(owners)) {
         const path = `/api/profile/${o.pubKeyHex}`;
@@ -271,9 +311,12 @@ async function main() {
             `a re-key-pending key is refused the ${k} owner's profile page with 403 and no contact (got ${asRekeyPending.status})`);
     }
 
-    console.log('\n── the unsigned invite-redeem routes, named with an existing member\'s key ──');
+    console.log('\n── the invite-redeem routes, named with an existing member\'s key ──');
     {
-        // Any recent invite code will do: the "already a member" answer comes before the code is checked as used.
+        // Any recent invite code will do: the "already a member" answer comes before the code is checked as used. Until
+        // 2026-10-01 these routes answered an unsigned redeem naming a member's key with that member's card; a redeem must
+        // now be signed by the key it names (Fable's review, LOW 4), so unsigned is refused with no card at all, and the
+        // card goes only to the member's own signed redeem (a phone re-entering).
         db.prepare(`INSERT INTO invite_codes (code, created_by, created_at) VALUES ('INV-PROBE-0001', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(stranger.pubKeyHex);
         const payload = JSON.stringify({ i: stranger.pubKeyHex, t: Date.now() });
         const sig = crypto.sign(null, Buffer.from(payload), stranger.privateKey).toString('base64');
@@ -284,10 +327,16 @@ async function main() {
                 ['/api/invite/redeem', { code: 'INV-PROBE-0001', publicKey: o.pubKeyHex, callsign: 'probe' }],
                 ['/api/invite/redeem-offline', { ticketB64, publicKey: o.pubKeyHex, callsign: 'probe' }],
             ] as const) {
-                const r = await post(route, body);
-                assert(r.status === 200 && r.body?.alreadyMember === true, `unsigned ${route} for the ${k} owner's key answers alreadyMember (got ${r.status})`);
+                const u = await post(route, body);
+                assert(u.status === 401 && u.body?.code === 'redeem_unsigned' && u.body?.member === undefined,
+                    `unsigned ${route} for the ${k} owner's key is refused with no card (got ${u.status})`);
+                assert(secretsIn(u.text).size === 0 && !anyInviteCode(u.text), `…and carries no contact and no invite code (saw ${fmt(secretsIn(u.text))})`);
+                const r = await post(route, body, o);
+                assert(r.status === 200 && r.body?.alreadyMember === true, `${route} signed by the ${k} owner's own key answers alreadyMember (got ${r.status})`);
                 assert(secretsIn(r.text).size === 0, `…and carries no contact (saw ${fmt(secretsIn(r.text))})`);
                 assert(!anyInviteCode(r.text), '…and no invite code');
+                // An existing member's card goes only to a redeem signed by that member's own key (2026-10-01;
+                // routes/community.ts redeemedCard): the unsigned `u` above got none, and this signed one gets the public card.
                 assert(Object.keys(r.body?.member || {}).sort().join(',') === CARD,
                     `…and only the public card (keys: ${Object.keys(r.body?.member || {}).sort().join(', ')})`);
             }
@@ -300,7 +349,7 @@ async function main() {
         await sleep(200);
         db.prepare(`INSERT INTO invite_codes (code, created_by, created_at) VALUES ('INV-JOIN-0001', ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(stranger.pubKeyHex);
         const joiner = keypair();
-        const joined = await post('/api/invite/redeem', { code: 'INV-JOIN-0001', publicKey: joiner.pubKeyHex, callsign: 'newcomer' });
+        const joined = await post('/api/invite/redeem', { code: 'INV-JOIN-0001', publicKey: joiner.pubKeyHex, callsign: 'newcomer' }, joiner);
         assert(joined.status === 200 && joined.body?.success === true && !joined.body?.alreadyMember, `a newcomer joins with a fresh code (got ${joined.status})`);
         assert(!joined.text.includes('INV-JOIN-0001'), 'the join response does not echo the invite code back in the member');
         await sleep(400);
@@ -314,7 +363,13 @@ async function main() {
 
     console.log('\n── the admin dashboard\'s member list ──');
     {
-        const r = await post('/api/local/admin/data', { password: ADMIN_PW });
+        // Step 7c: with the node's 2FA off the password alone reads nothing; with 2FA on it goes with a fresh code.
+        const alone = await post('/api/local/admin/data', { password: ADMIN_PW });
+        assert(alone.status === 403 && alone.body?.code === 'password_needs_2fa' && secretsIn(alone.text).size === 0,
+            `2FA off: the password alone → 403 password_needs_2fa, no member rows (got ${alone.status} ${alone.body?.code})`);
+        const { turnOn2faForTests } = await import('./admin-auth-test-harness.js');
+        const tfa = turnOn2faForTests(ADMIN_PW);
+        const r = await post('/api/local/admin/data', { password: ADMIN_PW, totpCode: tfa.code() });
         assert(r.status === 200, `the admin reads /api/local/admin/data (got ${r.status})`);
         // The password proves no member, and Community, Trade Partners and Friends all need a member viewer.
         const seen = secretsIn(r.text);

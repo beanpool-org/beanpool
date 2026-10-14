@@ -16,12 +16,12 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 }));
 import * as path from 'node:path';
 import {
-    marketShowsBeans, marketExtras, marketSearchDistanceParams, nearestFirst, marketFeedSections, sortsByDistance,
+    marketShowsBeans, marketExtras, marketSearchDistanceParams, nearestFirst, marketFeedSections, sortsByDistance, POLLS_HEADING,
     NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, NEAREST_FIRST_HEADING,
     postFormCredits, postFormPriceType, postFormPriceMissing, postFormPriceInvalid, postFormSubmitLabel, type PostFormState,
 } from '../market-global';
 import { readNodeProfile, nodeProfileIsFresh, NODE_PROFILE_FRESH_MS, type NodeProfile } from '../node-profile';
-import { START_COMMUNITY_COPY, communityDetailsText, canCopyDetails } from '../start-community';
+import { START_COMMUNITY_COPY, RUN_A_NODE_URL, communityDetailsText, canCopyDetails, runANodeUrl, runANodeLabel } from '../start-community';
 import { KNOCK_MESSAGES } from '../knock';
 import { WANTS_TO_JOIN_HELP } from '../knock-inbox';
 
@@ -151,6 +151,21 @@ describe('nearest first', () => {
         expect(sections[1].posts.map(p => p.id)).toEqual(['byron', 'brisbane', 'melbourne', 'noplace', 'zero']);
     });
 
+    it('polls have no place: on the nearest-first feed they get their own heading after events, in feed order, not sunk below every listing', () => {
+        const withPolls = [
+            ...posts,
+            { id: 'poll-new', type: 'poll', lat: null, lng: null, created_at: '2026-09-26T09:00:00Z' },
+            { id: 'poll-old', type: 'poll', lat: null, lng: null, created_at: '2026-09-20T09:00:00Z' },
+        ];
+        const sections = marketFeedSections(withPolls, GLOBAL, here, Date.parse('2026-09-26T12:00:00Z'));
+        expect(sections.map(s => s.title)).toEqual(['Upcoming events', POLLS_HEADING, NEAREST_FIRST_HEADING]);
+        expect(sections[1].posts.map(p => p.id)).toEqual(['poll-new', 'poll-old']);
+        expect(sections[2].posts.map(p => p.id)).toEqual(['byron', 'brisbane', 'melbourne', 'noplace', 'zero']);
+        // polls only (a feed filtered to Polls): no empty "Nearest first" heading
+        const onlyPolls = marketFeedSections(withPolls.filter(p => p.type === 'poll'), GLOBAL, here);
+        expect(onlyPolls.map(s => s.title)).toEqual([POLLS_HEADING]);
+    });
+
     it('a local community, or no location yet: the day headings, as before', () => {
         const now = Date.parse('2026-09-26T12:00:00Z');
         const byDay = ['Upcoming events', 'Today', 'Yesterday', 'This Week'];
@@ -188,13 +203,41 @@ describe('start a community', () => {
         expect(canCopyDetails({ name: 'V', place: '', contact: '' })).toBe(false);
         expect(canCopyDetails({ name: 'Va', place: '', contact: '' })).toBe(true);
     });
+
+    // No domain lock-in: "How to run a node" opens the community's own page when its node names one
+    // (GET /api/community/info's `startCommunityUrl`, apps/server config/start-community.ts), beanpool.org's only without one.
+    it('opens the page the community\'s node names, and says where; beanpool.org\'s only when it names none', () => {
+        const own = readNodeProfile({ ...GLOBAL_INFO_FOR_START, startCommunityUrl: 'https://start.example.org/run' })!;
+        expect(runANodeUrl(own)).toBe('https://start.example.org/run');
+        expect(runANodeLabel(runANodeUrl(own))).toBe('How to run a node, on start.example.org');
+        const none = readNodeProfile(GLOBAL_INFO_FOR_START)!;
+        expect(runANodeUrl(none)).toBe(RUN_A_NODE_URL);
+        expect(RUN_A_NODE_URL).toBe('https://beanpool.org/#run-a-node');
+        expect(runANodeLabel(runANodeUrl(none))).toBe(START_COMMUNITY_COPY.website);
+        expect(runANodeUrl(null)).toBe(RUN_A_NODE_URL);
+        // Only an address an app may open for a stranger, as the server's own rule says: https, a host, no user name.
+        for (const bad of ['http://start.example.org/run', 'javascript:alert(1)', 'https://me:pw@start.example.org/', 'https://a b.org/', '', 42, null]) {
+            expect(runANodeUrl(readNodeProfile({ ...GLOBAL_INFO_FOR_START, startCommunityUrl: bad })), String(bad)).toBe(RUN_A_NODE_URL);
+        }
+        expect(runANodeUrl(readNodeProfile({ ...GLOBAL_INFO_FOR_START, startCommunityUrl: 'https://x.org/' + 'a'.repeat(300) }))).toBe(RUN_A_NODE_URL);
+    });
+
+    it('the screen opens that page, from the community it is on (source check)', () => {
+        const screen = fs.readFileSync(path.resolve(__dirname, '../../app/start-community.tsx'), 'utf-8');
+        expect(screen).toMatch(/const runANode = runANodeUrl\(useNodeProfile\(\)\);/);
+        expect(screen).toMatch(/WebBrowser\.openBrowserAsync\(runANode\)/);
+        expect(screen).toMatch(/\{runANodeLabel\(runANode\)\}/);
+        expect(screen).not.toMatch(/RUN_A_NODE_URL/);
+    });
 });
+
+const GLOBAL_INFO_FOR_START = { profile: 'global', features: { beans: false, showcase: true } };
 
 describe('the screens draw Beans only behind that rule (source check)', () => {
     const read = (rel: string) => fs.readFileSync(path.resolve(__dirname, rel), 'utf-8');
 
     it('the Market: every Beans figure, the "Beans only" chip and the first-offer quest are gated', () => {
-        const src = read('../../app/(tabs)/index.tsx');
+        const src = read('../../app/(tabs)/market.tsx');
         const lines = src.split('\n');
         const currency = lines.flatMap((l, i) => (l.includes('<CurrencyDisplay') ? [i] : []));
         expect(currency.length).toBe(3);
@@ -205,7 +248,18 @@ describe('the screens draw Beans only behind that rule (source check)', () => {
         expect(src).toContain("{rowExtras.includes('beans') && (");
         expect(src).not.toContain("secondRow.extras.includes('beans')");
         expect(src).toContain('{showFirstOfferQuest && showsBeans && !categoryPanel.open && (');
-        expect(src).toContain('{isGlobal && !categoryPanel.open && <FindCommunityCard point={myLocation} />}');
+    });
+
+    it('the Market no longer draws Find your community: it is a Home card since H4 (components/home/FindCommunityBody.tsx)', () => {
+        const src = read('../../app/(tabs)/market.tsx');
+        expect(src).not.toMatch(/FindCommunity/);
+        expect(src).not.toMatch(/fabStepsAside|onCardActionsAt/);
+        expect(fs.existsSync(path.resolve(__dirname, '../../components/FindCommunityCard.tsx'))).toBe(false);
+        // Home draws it, from its own answer (no request of its own), in its `find` card only.
+        const home = read('../../app/(tabs)/index.tsx');
+        expect(home.match(/<FindCommunityBody /g)).toHaveLength(1);
+        expect(home).toMatch(/case 'find': \{[\s\S]*?readGlobalHome\(c\.find\)[\s\S]*?<FindCommunityBody /);
+        expect(read('../../components/home/FindCommunityBody.tsx')).not.toMatch(/fetchGlobalHome/);
     });
 
     it('a post’s page: the price card and the edit form’s price field are gated, and there is no escrow accept', () => {

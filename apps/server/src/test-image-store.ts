@@ -12,6 +12,8 @@
  *      photo and a sync payload byte-identical after evacuation.
  *   6. `photoDataOf` / `photoBytesOf` / `attachmentDataOf` read an evacuated row back as its original.
  *   7. A row pointing at a missing object throws rather than silently reading as "no photo".
+ *   8. A key builder refuses an id it would have to change (never strips one into another's segment), and
+ *      `deleteStoredObjects` keeps an object any row still names, in any case, or when it cannot tell.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-image-store.ts
  */
@@ -19,14 +21,15 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import Database from 'better-sqlite3';
 import {
     DiskImageStore, ImageStoreError, MAX_OBJECT_BYTES,
-    assertSafeKey, attachmentKey, extensionForMime, postPhotoKey, projectPhotoKey, sha256Hex,
+    assertSafeKey, attachmentKey, extensionForMime, isKeySafeId, postPhotoKey, projectPhotoKey, sha256Hex,
 } from './storage/image-store.js';
 import {
     MissingObjectError, attachmentDataOf, encodeDataUrl, parseDataUrl, photoBytesOf, photoDataOf,
     prepareStorableCiphertext, prepareStorablePhoto, storeAttachmentColumns, storePhotoColumns,
-    deleteStoredObjects,
+    deleteStoredObjects, storageKeyStillReferenced,
 } from './storage/image-columns.js';
 
 let run = 0, passed = 0;
@@ -62,6 +65,20 @@ function main(): void {
     assert(projectPhotoKey('proj-1', 2, sha256Hex(PNG), 'image/png').endsWith('.png'), 'a project photo key takes its extension from the mime');
     assert(extensionForMime('image/jpg') === 'jpg' && extensionForMime('application/octet-stream') === 'bin',
         'extensionForMime maps the raster types and falls back to .bin');
+
+    // An id goes into its key as it is, or there is no key: stripped or cut, `post-abc!`, `post-abc ` and a 129th
+    // character would each have been `post-abc`'s directory, and an edit of one deleted the other's photos.
+    for (const [what, id] of [['a "!"', 'post-abc!'], ['a space', 'post-abc '], ['a slash', 'post-abc/'], ['a NUL', 'post-abc\0'],
+        ['an accent', 'post-abcé'], ['a 129th character', 'p'.repeat(129)], ['a leading dot', '.post-abc'], ['nothing', '']] as const) {
+        throws(() => postPhotoKey(id, 0, sha256Hex(JPEG), 'image/jpeg'), `postPhotoKey refuses an id with ${what} rather than stripping it`);
+        assert(!isKeySafeId(id), `isKeySafeId says no to an id with ${what}`);
+    }
+    throws(() => attachmentKey('msg 1'), 'attachmentKey refuses a message id it would have to change');
+    throws(() => projectPhotoKey('proj!', 0, sha256Hex(PNG), 'image/png'), 'and projectPhotoKey a project id');
+    assert(postPhotoKey('p'.repeat(128), 0, sha256Hex(JPEG), 'image/jpeg').startsWith(`posts/${'p'.repeat(128)}/`),
+        'a 128-character id is a key segment as it is');
+    assert(postPhotoKey('Post_1.a', 0, sha256Hex(JPEG), 'image/jpeg').startsWith('posts/Post_1.a/'),
+        'an id of a segment\'s characters is used unchanged, capitals included (a row from before keeps its key)');
 
     const put = store.put(key, JPEG, { mime: 'image/jpeg' });
     assert(put.bytes === JPEG.length, 'put reports the byte length');
@@ -184,10 +201,32 @@ function main(): void {
     throws(() => photoBytesOf(cols, store), 'the serving read throws for a vanished object too');
 
     // deleteStoredObjects never throws, whatever it is handed.
+    const handle = new Database(':memory:');
+    handle.exec(`CREATE TABLE post_photos (post_id TEXT, order_num INTEGER, storage_key TEXT);
+                 CREATE TABLE message_attachments (message_id TEXT, storage_key TEXT);`);
     const before = store.list('').length;
-    const removed = deleteStoredObjects(['posts/../../etc/passwd', 'attachments/msg-42.bin', ''], store);
+    const removed = deleteStoredObjects(handle, ['posts/../../etc/passwd', 'attachments/msg-42.bin', ''], store);
     assert(removed === 1, 'deleteStoredObjects removes what it can and ignores what it cannot');
     assert(store.list('').length === before - 1, 'only the real object went');
+
+    // ── 8. an object a row still names is not this delete's ────────────────────────────────────
+    const shared = store.put(postPhotoKey('post-vera', 0, sha256Hex(JPEG), 'image/jpeg'), JPEG, { mime: 'image/jpeg' }).key;
+    const sharedAtt = store.put(attachmentKey('msg-vera'), PNG, { mime: 'application/octet-stream' }).key;
+    handle.prepare('INSERT INTO post_photos (post_id, order_num, storage_key) VALUES (?, 0, ?)').run('post-vera', shared);
+    handle.prepare('INSERT INTO message_attachments (message_id, storage_key) VALUES (?, ?)').run('msg-vera', sharedAtt);
+    assert(deleteStoredObjects(handle, [shared, sharedAtt], store) === 0 && !!store.get(shared) && !!store.get(sharedAtt),
+        'an object a post_photos or message_attachments row still names is kept');
+    assert(storageKeyStillReferenced(handle, shared.toUpperCase()) && storageKeyStillReferenced(handle, shared.replace('post-vera', 'POST-Vera')),
+        'a key that differs only in case counts as named: on a disk that folds case it is the same file');
+    assert(!storageKeyStillReferenced(handle, 'posts/post-nobody/0-00000000.jpg'), 'a key no row names is not');
+    const unanswerable = new Database(':memory:');
+    assert(deleteStoredObjects(unanswerable, [shared], store) === 0 && !!store.get(shared),
+        'a database that cannot say whether a row names it (no such table) keeps the object');
+    handle.prepare('DELETE FROM post_photos WHERE post_id = ?').run('post-vera');
+    assert(deleteStoredObjects(handle, [shared], store) === 1 && store.get(shared) === null,
+        'once no row names it, it is deleted');
+    handle.close();
+    unanswerable.close();
 
     fs.rmSync(root, { recursive: true, force: true });
     console.log(`\n${passed}/${run} checks passed.`);

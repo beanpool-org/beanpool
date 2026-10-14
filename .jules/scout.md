@@ -28,6 +28,14 @@ Scout's domain is `apps/server/` ONLY. Do NOT touch `apps/native`, `apps/manager
 4. Pick the most impactful untested area (prefer auth flows, economic state mutations, federation endpoints)
 
 ## ✅ Resolved — do NOT re-file
+
+### 2026-10-01 — "test-viewer-helpers" (#1363) — CLOSED, CONTRADICTS #1376.
+One of its 28 checks asserted `memberReadsOnlyHere` lets a stranger read on a local node. #1376 (merged 2026-10-01) made
+local communities' people reads members-only on purpose, so that check fails on main (27/28). Coverage of
+`routes/viewer.ts` is still wanted: file it once against current main, asserting that a stranger, a visitor and a
+suspended member get 403 `members_only` from `memberReadsOnlyHere` on a local node too. Before writing a suite, read the
+helper's CURRENT doc comment and `git log -3` on it: a rule that changed yesterday isn't one to pin.
+
 ### 2026-09-19 — Backup identity-bundle suite LANDED in #904. Do not re-file.
 `test-backup-identity-bundle.ts` covers 401 / 503 / 200-with-password / 200-with-token. **Wanted follow-up (not a
 duplicate):** a WRONG `x-replication-token` with no password must get 401 — a mutant that accepts any token passes the
@@ -74,3 +82,8 @@ Format: `## YYYY-MM-DD - [Title]\n**Gap found:** [What was untested]\n**Learning
 ## 2026-08-20 - [Monorepo Test Isolation & PWA Dependency Boundary]
 **Gotcha:** Do NOT open component test PRs in `apps/pwa` that independently bootstrap `setupTests.ts`, add `@testing-library` packages, modify `pnpm-lock.yaml`, or edit `resolve.alias` in `vite.config.ts`.
 **Reason:** `apps/pwa` has no test harness on `main`. Ad-hoc bootstrapping attempts in multiple PRs churned the lockfile, downgraded React from 19.2.0 to 19.1.0 across the repo, and pointed production bundle aliases at testing-library's nested React. Test suites must only be added after a dedicated, unified test harness PR is approved on `main`.
+
+## 2026-10-01 - [Owner Lock Open Check Coverage]
+**Gap found:** `POST /api/node/owner/lock-open-check` in `apps/server/src/routes/owner-unlock.ts` had no corresponding test file.
+**Learning:** Testing lock open check endpoint requires validating signature auth middleware behavior (401 for unsigned/stale timestamp, 403 for non-owners) and verifying that valid owner requests record report data into `owner_lock_opens` database table.
+**Action:** Created `test-owner-lock-open-check.ts` and registered it in `scripts/server-suites.mjs`.

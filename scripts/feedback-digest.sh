@@ -4,7 +4,7 @@
 #   1. reads the admin token from the macOS keychain (item `beanpool-feedback-admin`) — never from a
 #      file or an argument, never echoed; curl gets it through a 0600 header file in a private temp dir
 #   2. fetches every item with status=new from the feedback Worker (apps/feedback)
-#   3. runs a headless Claude (claude-sonnet-5, NO tools, no MCP) with scripts/feedback-digest-prompt.md:
+#   3. runs a headless Claude (claude-sonnet-5-5, NO tools, no MCP) with scripts/feedback-digest-prompt.md:
 #      drop spam, translate, cluster, count communities
 #   4. writes .claude/queue-board/feedback-digest.md (one screen) for the queue board
 #   5. marks each fetched item spam or triaged via the admin API
@@ -38,7 +38,7 @@ BASE=${FEEDBACK_BASE:-https://beanpool.org/api/feedback}
 PROMPT_FILE=$SCRIPT_DIR/feedback-digest-prompt.md
 OUT_DIR=$REPO_ROOT/.claude/queue-board
 OUT=$OUT_DIR/feedback-digest.md
-MODEL=claude-sonnet-5
+MODEL=claude-sonnet-5-5
 CLAUDE_BIN=${CLAUDE_BIN:-claude}
 LIMIT=500
 

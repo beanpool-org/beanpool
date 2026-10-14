@@ -1,5 +1,4 @@
 {
-  "version": 58,
   "sections": [
     {
       "id": "setup",
@@ -11,7 +10,7 @@
       "id": "people",
       "title": "People and roles",
       "summary": "Owners, admins and moderators, and looking after members and invites.",
-      "pages": ["roles", "members-and-invites"]
+      "pages": ["roles", "members-and-invites", "running-a-known-community"]
     },
     {
       "id": "safety",
@@ -28,8 +27,8 @@
     {
       "id": "server",
       "title": "Running the server",
-      "summary": "Backups, updates and health, your address and peers, and rate limits.",
-      "pages": ["backups-and-replicas", "updates-and-health", "address-and-peers", "rate-limits"]
+      "summary": "Backups, updates and health, the app's floor, your address and peers, rate limits, showing what a local community does, and AI assistants.",
+      "pages": ["backups-and-replicas", "updates-and-health", "app-floor", "address-and-peers", "rate-limits", "private-preview", "showcase", "ai-assistant"]
     },
     {
       "id": "privacy",

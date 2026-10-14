@@ -159,6 +159,22 @@ describe('BulletinSection', () => {
         expect(bodyInput).toHaveValue('');
     });
 
+    it('limits an announcement to what the node accepts and shows a character count', async () => {
+        vi.mocked(globalThis.fetch).mockResolvedValueOnce(
+            new Response(JSON.stringify({ channels: [] }), { status: 200 })
+        );
+        render(<BulletinSection activeNode={mockActiveNode} onRefresh={mockOnRefresh} />);
+
+        const titleInput = screen.getByPlaceholderText('e.g. Village Market Time Change') as HTMLInputElement;
+        const bodyInput = screen.getByPlaceholderText('Write the announcement message details here...') as HTMLTextAreaElement;
+        expect(titleInput.maxLength).toBe(200);
+        expect(bodyInput.maxLength).toBe(4000);
+        expect(screen.getByTestId('announcement-count')).toHaveTextContent('0 / 4,000 characters');
+
+        await userEvent.type(bodyInput, 'Water off at 3pm.');
+        expect(screen.getByTestId('announcement-count')).toHaveTextContent('17 / 4,000 characters');
+    });
+
     it('adds a pulse channel using modal', async () => {
         vi.mocked(globalThis.fetch).mockResolvedValueOnce(
             new Response(JSON.stringify({ channels: [] }), { status: 200 })

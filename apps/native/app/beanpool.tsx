@@ -12,6 +12,10 @@ import {
 } from '../utils/guide';
 import { openBeanPoolWebsite } from '../utils/beanpool-links';
 import { useCommunities, type CommunityStatus } from '../utils/use-communities';
+import { doorOfferedToAccount, isGlobalCommunity, type GlobalStanding } from '../utils/global-join-existing';
+import { useGlobalDoorOpen } from '../utils/use-global-door-open';
+import { useAccountClosedAtGlobal } from '../utils/use-account-closed';
+import { useIdentity } from './IdentityContext';
 import appConfig from '../app.json';
 import { FEEDBACK_LIVE } from '@beanpool/core';
 
@@ -88,6 +92,7 @@ export default function BeanPoolSheet() {
         community: { paddingHorizontal: 4, paddingTop: 4 },
         communityName: { fontSize: 24, fontWeight: '800', color: colors.text.heading, letterSpacing: -0.3 },
         rowCurrent: { backgroundColor: colors.accent.tint },
+        rowSubCurrent: { color: colors.text.body }, // text.secondary is 4.22 on the dark sage tint
         rowPressed: { backgroundColor: colors.surface.subtle },
         guestTag: { fontSize: 12, fontWeight: '600', color: colors.feedback.warning.fg, flexShrink: 0 },
         cta: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'flex-start', minHeight: 48, paddingHorizontal: 16, borderRadius: 24, borderWidth: 1, marginTop: 12 },
@@ -110,6 +115,16 @@ export default function BeanPoolSheet() {
         router.navigate({ pathname: '/(tabs)/people', params: { view: 'invites' } });
     };
     const connect = () => router.navigate({ pathname: '/(tabs)/settings', params: { section: 'advanced' } });
+
+    // The global community's door, for the account on this phone (utils/global-join-existing.ts): offered once the global
+    // community has said its door is open, unless the phone is a member there. Read from its row: none, a guest, a member,
+    // or not known yet (still asking, or no answer), which offers nothing so a member never sees it flash up.
+    const { identity } = useIdentity();
+    const doorOpen = useGlobalDoorOpen(!!identity);
+    const globalRow = communities.rows.find(r => isGlobalCommunity(r.url));
+    const globalStanding: GlobalStanding = !globalRow ? 'none'
+        : globalRow.status === 'guest' ? 'guest' : globalRow.status === 'online' ? 'member' : 'unknown';
+    const offerGlobal = doorOfferedToAccount({ doorOpen, hasAccount: !!identity, standing: globalStanding, accountClosed: useAccountClosedAtGlobal(identity?.publicKey) });
 
     const openGuide = (slug: string) => router.push({ pathname: '/guide/[slug]', params: { slug } });
 
@@ -202,7 +217,7 @@ export default function BeanPoolSheet() {
                                 <View style={[styles.dot, { backgroundColor: dotFor(r.status) }]} />
                                 <View style={styles.rowText}>
                                     <Text style={[styles.rowTitle, isCurrent && { color: colors.accent.primary }]} numberOfLines={1}>{r.name}</Text>
-                                    <Text style={styles.rowSub} numberOfLines={1}>{r.url.replace(/^https?:\/\//, '')}</Text>
+                                    <Text style={[styles.rowSub, isCurrent && styles.rowSubCurrent]} numberOfLines={1}>{r.url.replace(/^https?:\/\//, '')}</Text>
                                 </View>
                                 {isCurrent
                                     ? <MaterialCommunityIcons name="check" size={22} color={colors.accent.primary} style={styles.chevron} />
@@ -210,8 +225,24 @@ export default function BeanPoolSheet() {
                             </Pressable>
                         );
                     })}
+                    {offerGlobal && (
+                        <Pressable
+                            style={({ pressed }) => [styles.row, communities.rows.length > 0 && styles.rowDivider, pressed && styles.rowPressed]}
+                            onPress={() => router.push('/join-global')}
+                            accessibilityRole="button"
+                            accessibilityLabel="Join the global community"
+                            accessibilityHint="Sign in once to join it as the account on this phone"
+                        >
+                            <MaterialCommunityIcons name="earth" size={24} color={colors.brand.primary} />
+                            <View style={styles.rowText}>
+                                <Text style={styles.rowTitle}>Join the global community</Text>
+                                <Text style={styles.rowSub} numberOfLines={2}>Sign in once, as the account on this phone</Text>
+                            </View>
+                            <MaterialCommunityIcons name="chevron-right" size={22} color={colors.text.muted} style={styles.chevron} />
+                        </Pressable>
+                    )}
                     <Pressable
-                        style={({ pressed }) => [styles.row, communities.rows.length > 0 && styles.rowDivider, pressed && styles.rowPressed]}
+                        style={({ pressed }) => [styles.row, (communities.rows.length > 0 || offerGlobal) && styles.rowDivider, pressed && styles.rowPressed]}
                         onPress={connect}
                         accessibilityRole="button"
                         accessibilityLabel="Add a community"

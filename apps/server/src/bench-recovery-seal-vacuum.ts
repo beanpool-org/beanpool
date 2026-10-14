@@ -14,7 +14,8 @@
  *   3. On copies of the booted database: the deletes a node does, timed with secure_delete OFF, FAST and ON (interleaved,
  *      twice each): 2,000
  *      re-deposits (dropOlder + insert), a purge of 200 members' messages and copies, and a standby's force-resync
- *      (every replicated table cleared, as clearReplicatedTables does), with the bytes each writes to the WAL.
+ *      (every replicated table cleared, as its clear did before paged copies; a whole copy is now built in a staging
+ *      database, services/stager.ts), with the bytes each writes to the WAL.
  *
  * With --standby, instead of 2 and 3: boots it as a STANDBY in a second process, which waits (every copy it holds is in
  * the form before the seal), then hands it a whole copy of a main server that holds no copy (one that deleted every copy

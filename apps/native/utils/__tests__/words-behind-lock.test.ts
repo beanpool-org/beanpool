@@ -9,7 +9,9 @@
  *
  * - Every screen that shows or copies an account's words reads them through readWordsBehindLock, whose check IS
  *   Settings' check (LocalAuth.authenticateUser), so it behaves the same everywhere, including on a phone with no
- *   biometric or passcode set up: let through, as Settings lets it through.
+ *   screen lock at all: let through, as Settings lets it through.
+ * - A phone with a screen PIN, pattern or passcode and no fingerprint or face (no sensor, or none enrolled) is asked
+ *   for its PIN. It used to be let through unasked, as if it had no lock.
  * - A failed, cancelled or broken check reads nothing.
  * - The replace screen reads the outgoing account's words only when Show passes the check, never as it opens.
  * - Every other way the account leaves the phone or comes off it asks the same check (the last describe lists them).
@@ -26,6 +28,7 @@ vi.mock('expo-crypto', () => ({
     getRandomBytes: (n: number) => webcrypto.getRandomValues(new Uint8Array(n)),
 }));
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(async () => null),
     setItemAsync: vi.fn(async () => undefined),
     deleteItemAsync: vi.fn(async () => undefined),
@@ -37,6 +40,8 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
 /** What happened, in order: the phone's prompt, and every read of the words. */
 const events: string[] = [];
 vi.mock('expo-local-authentication', () => ({
+    SecurityLevel: { NONE: 0, SECRET: 1, BIOMETRIC_WEAK: 2, BIOMETRIC_STRONG: 3 },
+    getEnrolledLevelAsync: vi.fn(),
     hasHardwareAsync: vi.fn(),
     isEnrolledAsync: vi.fn(),
     authenticateAsync: vi.fn(),
@@ -57,6 +62,10 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { getMnemonic, type BeanPoolIdentity } from '../identity';
 import { authenticateUser } from '../LocalAuth';
 
+// The phone's since-boot clock (modules/boot-clock), as every phone build has it: a door acts only on a pass it can time
+// (LocalAuth.timeDoorPrompt, doors-held-pass.test.ts), so with no clock it would act on none.
+(globalThis as { expo?: unknown }).expo = { modules: { BeanPoolBootClock: { elapsedMs: () => performance.now() } } };
+
 // Test phrase only (a BIP-39 vector), never a real account's.
 const WORDS = 'legal winner thank year wave sausage worth useful legal winner thank yellow'.split(' ');
 const ACCOUNT: BeanPoolIdentity = { publicKey: 'ab'.repeat(32), privateKey: 'cd'.repeat(32), callsign: 'Kim', createdAt: '', mnemonic: WORDS };
@@ -66,15 +75,24 @@ const SETTINGS_REASON = 'Confirm your security to view your recovery phrase.';
 /** Imported at the test, not the top: on a tree without it, only the tests that use it fail. */
 const gate = async () => (await import('../words-behind-lock')).readWordsBehindLock;
 
-type Phone = 'passes' | 'fails' | 'cancelled' | 'prompt throws' | 'no hardware' | 'nothing enrolled' | 'hardware check throws';
+type Phone = 'passes' | 'fails' | 'cancelled' | 'prompt throws' | 'has no screen lock and no sensor'
+    | 'has no screen lock and a sensor with nothing enrolled' | 'cannot say what lock it has';
+/** The lock a prompt asks for: a fingerprint or face, or a screen PIN, pattern or passcode alone. */
+type Lock = 'a fingerprint or face' | 'a PIN and no sensor' | 'a PIN and a sensor with nothing enrolled';
+const PIN_ONLY = ['a PIN and no sensor', 'a PIN and a sensor with nothing enrolled'] as const;
 
 /** The phone's lock, as expo-local-authentication reports it. */
-function phone(kind: Phone) {
-    vi.mocked(LocalAuthentication.hasHardwareAsync).mockImplementation(async () => {
-        if (kind === 'hardware check throws') throw new Error('no module');
-        return kind !== 'no hardware';
+function phone(kind: Phone, lock: Lock = 'a fingerprint or face') {
+    const noLock = kind === 'has no screen lock and no sensor' || kind === 'has no screen lock and a sensor with nothing enrolled';
+    vi.mocked(LocalAuthentication.getEnrolledLevelAsync).mockImplementation(async () => {
+        if (kind === 'cannot say what lock it has') throw new Error('no module');
+        return (noLock ? 0 : lock === 'a fingerprint or face' ? 3 : 1) as never;
     });
-    vi.mocked(LocalAuthentication.isEnrolledAsync).mockResolvedValue(kind !== 'nothing enrolled');
+    vi.mocked(LocalAuthentication.hasHardwareAsync).mockImplementation(async () => {
+        if (kind === 'cannot say what lock it has') throw new Error('no module');
+        return kind !== 'has no screen lock and no sensor' && lock !== 'a PIN and no sensor';
+    });
+    vi.mocked(LocalAuthentication.isEnrolledAsync).mockResolvedValue(!noLock && lock === 'a fingerprint or face');
     vi.mocked(LocalAuthentication.authenticateAsync).mockImplementation(async () => {
         events.push('prompt');
         if (kind === 'prompt throws') throw new Error('prompt failed');
@@ -113,8 +131,8 @@ describe('readWordsBehindLock', () => {
         expect(getMnemonic).not.toHaveBeenCalled();
     });
 
-    it.each(['no hardware', 'nothing enrolled'] as const)(
-        'a phone with %s has nothing to ask with and is let through, as Settings lets it through',
+    it.each(['has no screen lock and no sensor', 'has no screen lock and a sensor with nothing enrolled'] as const)(
+        'a phone that %s has nothing to ask with and is let through, as Settings lets it through',
         async (kind) => {
             phone(kind);
             const read = await gate();
@@ -125,14 +143,44 @@ describe('readWordsBehindLock', () => {
         },
     );
 
-    it.each(['passes', 'fails', 'cancelled', 'prompt throws', 'no hardware', 'nothing enrolled', 'hardware check throws'] as const)(
-        "gives the same answer as Settings' check (LocalAuth.authenticateUser) when the phone %s",
-        async (kind) => {
-            phone(kind);
+    // A screen PIN, pattern or passcode is a lock: no fingerprint or face is not "nothing to ask with".
+    describe.each(PIN_ONLY)('a phone with %s', (lock) => {
+        it('is asked for its PIN, and the words are read once it passes', async () => {
+            phone('passes', lock);
+            const read = await gate();
+
+            expect(await read(ACCOUNT, SETTINGS_REASON)).toEqual(WORDS);
+            expect(events).toEqual(['prompt', 'read']);
+            expect(vi.mocked(LocalAuthentication.authenticateAsync).mock.calls[0][0]).toMatchObject({
+                promptMessage: SETTINGS_REASON,
+                disableDeviceFallback: false,
+            });
+        });
+
+        it.each(['cancelled', 'fails', 'prompt throws'] as const)('a check that is %s reads nothing', async (kind) => {
+            phone(kind, lock);
+            const read = await gate();
+
+            expect(await read(ACCOUNT, SETTINGS_REASON)).toBeNull();
+            expect(events).toEqual(['prompt']);
+            expect(getMnemonic).not.toHaveBeenCalled();
+        });
+    });
+
+    it.each([
+        ...(['passes', 'fails', 'cancelled', 'prompt throws'] as const).flatMap((kind) =>
+            (['a fingerprint or face', ...PIN_ONLY] as const).map((lock) => [kind, lock] as const)),
+        ['has no screen lock and no sensor', undefined],
+        ['has no screen lock and a sensor with nothing enrolled', undefined],
+        ['cannot say what lock it has', undefined],
+    ] as const)(
+        "gives the same answer as Settings' check (LocalAuth.authenticateUser) when the phone %s (%s)",
+        async (kind, lock) => {
+            phone(kind, lock);
             const settingsLetsThrough = await authenticateUser(SETTINGS_REASON);
             vi.clearAllMocks();
             events.length = 0;
-            phone(kind);
+            phone(kind, lock);
             const read = await gate();
 
             const words = await read(ACCOUNT, SETTINGS_REASON);
@@ -266,6 +314,9 @@ describe('every other screen that draws an account\'s words', () => {
             // Confirm & Link Device sends the account (key and words) to a computer: read only after the phone's lock
             // (pair-device-behind-lock.test.ts).
             'pair-device.tsx:getMnemonic(identity)': 1,
+            // A re-key code bound this phone (app/rekey-code.tsx): only when the key is one the ask itself made (`newWords`),
+            // the member's own new words, as Safety Backup after a join. A key the phone already had shows none.
+            'rekey-code.tsx:getMnemonic(done.identity)': 1,
         };
         const found: Record<string, number> = {};
         const walk = (dir: string) => {
@@ -307,12 +358,14 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
     }
 
     it('every door is one of these, and each is pinned to the check before it by the test named beside it', () => {
-        const DOOR = /readWordsBehindLock\(|signOutOfThisPhone\(|deleteAccountFromThisPhone\(|answerReplace\(true\)|signInAtDoor\(|submitJoin\(|encryptPairingPayload\(|connectAndDeposit\(/g;
+        const DOOR = /readWordsBehindLock\(|signOutOfThisPhone\(|deleteAccountHere\(|deleteAccountFromThisPhone\(|leaveFromUpdateBlock\(|answerReplace\(true\)|signInAtDoor\(|submitJoin\(|encryptPairingPayload\(|connectAndDeposit\(|approveVaultHold\(/g;
         const doors: Record<string, number> = {
             // View Recovery Phrase and Account Protection's Show (above; settings-words-put-away.test.ts).
             'app/(tabs)/settings.tsx:readWordsBehindLock(': 2,
-            // Sign Out (Device Only) and Permanent Node Purge: authenticateUser first, as they always have.
-            'app/(tabs)/settings.tsx:signOutOfThisPhone(': 2,
+            // Sign Out (Device Only), and Permanent Node Purge (which wipes the phone at the member's last community,
+            // utils/delete-here.ts): authenticateUser first, as they always have.
+            'app/(tabs)/settings.tsx:signOutOfThisPhone(': 1,
+            'app/(tabs)/settings.tsx:deleteAccountHere(': 1,
             // The replace screen's Show (above); Safety Backup's Show for the phone's own key (join-words-behind-lock.test.ts).
             'app/welcome.tsx:readWordsBehindLock(': 2,
             // Replace Account (account-removal-behind-lock.test.ts).
@@ -320,6 +373,10 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
             // The global door's sign-in with the phone's own key, and the join it signs in for (sign-in-link-behind-lock.test.ts).
             'app/welcome.tsx:signInAtDoor(': 1,
             'app/welcome.tsx:submitJoin(': 1,
+            // The same door from an account the phone already has (join-global.tsx): its sign-in, always the phone's own
+            // key, and the join it signs in for (sign-in-link-behind-lock.test.ts).
+            'app/join-global.tsx:signInAtDoor(': 1,
+            'app/join-global.tsx:submitJoin(': 1,
             // Delete this account from this phone (account-removal-behind-lock.test.ts).
             'app/node-mismatch.tsx:readWordsBehindLock(': 1,
             'app/node-mismatch.tsx:deleteAccountFromThisPhone(': 1,
@@ -327,6 +384,15 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
             'app/pair-device.tsx:encryptPairingPayload(': 1,
             // Protect with / Connect again / Try again (sign-in-link-behind-lock.test.ts).
             'components/SsoEnrolSheet.tsx:connectAndDeposit(': 1,
+            // "Yes, it's me" on a key vault hold: it lets the account through to another device now (below).
+            'components/RecoveryAlertBanner.tsx:approveVaultHold(': 1,
+            // The full-screen "Update required": See my 12 words, and the words before leaving the last community; its
+            // Leave this community, after authenticateUser or after those words (force-update-escape.test.ts).
+            'components/ForceUpdateBlock.tsx:readWordsBehindLock(': 2,
+            'components/ForceUpdateBlock.tsx:leaveFromUpdateBlock(': 1,
+            // A found old phone's "Show my old 12 words, so the new phone can unlock earlier messages" (components/KeyMovedCard.tsx;
+            // DESIGN-group-history-after-rekey-fable.md §3): readWordsBehindLock asks the lock first (its own tests, above).
+            'components/KeyMovedCard.tsx:readWordsBehindLock(': 1,
         };
         const found: Record<string, number> = {};
         for (const { rel, src } of screens()) {
@@ -348,17 +414,26 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
 
     it("Sign Out and Permanent Node Purge ask the check before anything goes, as they always have", () => {
         const s = source('(tabs)/settings.tsx');
-        for (const [start, reason] of [
-            ['async function handleLocalWipe() {', 'Confirm authentication to sign out of this device.'],
-            ['async function handleNodePurge() {', 'Confirm authentication to permanently purge your account from the node.'],
+        for (const [start, reason, removal] of [
+            ['async function handleLocalWipe() {', 'Confirm authentication to sign out of this device.', 'await signOutOfThisPhone(identity, { namesCopiesSaved: true });'],
+            ['async function handleNodePurge() {', 'Confirm authentication to permanently purge your account from the node.', 'await deleteAccountHere(identity, plan);'],
         ] as const) {
             const body = slice(s, start, '\n    }\n');
             const asked = body.indexOf(`const success = await authenticateUser('${reason}');`);
             const refused = body.indexOf('if (!success) return;');
             expect(asked).toBeGreaterThan(-1);
             expect(refused).toBeGreaterThan(asked);
-            expect(body.indexOf('await signOutOfThisPhone(identity);')).toBeGreaterThan(refused);
+            expect(body.indexOf(removal)).toBeGreaterThan(refused);
         }
+    });
+
+    it("\"Yes, it's me\" asks the check before it lets a waiting restore through, and a check that doesn't pass does nothing", () => {
+        const s = code(fs.readFileSync(path.resolve(ROOT, 'components/RecoveryAlertBanner.tsx'), 'utf-8'));
+        expect(s).toContain("import { authenticateUser } from '../utils/LocalAuth';");
+        const body = slice(s, 'const handleApproveHold = useCallback((hold: VaultHold) => {', '}, [identity, fetchHolds]);');
+        const asked = body.indexOf("if (!(await authenticateUser(\"Confirm it's you to let your account through to your other device.\"))) return;");
+        expect(asked).toBeGreaterThan(-1);
+        expect(body.indexOf('await approveVaultHold(identity, hold.holdId);')).toBeGreaterThan(asked);
     });
 
     it("every check is Settings' own (LocalAuth.authenticateUser): no screen asks the phone's lock its own way", () => {

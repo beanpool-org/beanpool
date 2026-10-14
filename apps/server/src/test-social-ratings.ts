@@ -1,13 +1,17 @@
 /**
- * Integration & unit tests for engine/social.ts (addRating, addFriend, removeFriend, setGuardian).
+ * Integration & unit tests for engine/social.ts (addRating, getRatings, addFriend, removeFriend, setGuardian).
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-social-ratings.ts
  */
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-import { initStateEngine, seedGenesisMember, addRating, addFriend, removeFriend } from './state-engine.js';
+import Database from 'better-sqlite3';
+import fs from 'node:fs';
+import path from 'node:path';
+import { initStateEngine, seedGenesisMember, addRating, addFriend, removeFriend, getRatings } from './state-engine.js';
 import { db } from './db/db.js';
 import { createCommunityRoutes } from './routes/community.js';
+import { bootInto, indexes, tmp } from './schema-upgrade-test-harness.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -127,6 +131,54 @@ async function main() {
     };
     await dispatch('POST', '/api/ratings', validCtx);
     assert(validCtx.body?.success === true, 'POST /api/ratings with valid actor succeeds');
+
+    // 4. Every trust floor reads a member's ratings by target_pubkey (trust.ts), and so do getRatings and
+    // getAverageRating (social.ts). Without an index each read scanned the whole table: 0.60 ms of a 0.71 ms floor at
+    // 17,585 ratings (#1793's review, finding 1).
+    const floorRead = 'SELECT AVG(stars) as avg, COUNT(*) as cnt FROM ratings WHERE target_pubkey = ?';
+    const plan = (conn: Database.Database) =>
+        (conn.prepare(`EXPLAIN QUERY PLAN ${floorRead}`).all('x') as { detail: string }[]).map(r => r.detail).join(' | ');
+    assert(indexes(db, 'ratings').includes('idx_ratings_target_pubkey'), 'a fresh database has idx_ratings_target_pubkey');
+    assert(/SEARCH ratings USING (COVERING )?INDEX idx_ratings_target_pubkey/.test(plan(db)) && !/SCAN ratings/.test(plan(db)),
+        `a floor's ratings read searches by index, not a scan (${plan(db)})`);
+
+    // 5. getRatings lists the newest first, and ratings stamped in the same millisecond newest row first. With the
+    // index above the planner sorts after a search by target_pubkey, so an untied ORDER BY created_at DESC gave ties
+    // oldest row first, where walking idx_ratings_created_at backwards had given newest first (#1813's review, finding 1).
+    const dave = 'pubkey_dave_social_4';
+    seedGenesisMember(dave, 'dave');
+    const tie = '2026-10-12T09:00:00.000Z';
+    const insertRating = db.prepare(`INSERT INTO ratings (id, target_pubkey, rater_pubkey, role, stars, created_at) VALUES (?, ?, ?, 'provider', 5, ?)`);
+    insertRating.run('tie-c', dave, alice, tie);
+    insertRating.run('tie-a', dave, bob, tie);
+    insertRating.run('tie-b', dave, charlie, tie);
+    insertRating.run('earlier', dave, bob, '2026-10-12T08:59:59.999Z');
+    const order = getRatings(dave).map(r => r.id).join(',');
+    assert(order === 'tie-b,tie-a,tie-c,earlier', `same-millisecond ratings come newest row first (${order})`);
+
+    // An old node: its database as the last boot left it, without the index, with ratings in it. The next boot builds it.
+    const dir = tmp('ratings-index');
+    try {
+        const first = bootInto(dir);
+        assert(first.ok, `a fresh data dir boots${first.ok ? '' : `: ${first.output.slice(-400)}`}`);
+        const old = new Database(path.join(dir, 'state.db'));
+        old.pragma('foreign_keys = OFF'); // two rating rows; their members needn't exist for a query plan and an average
+        old.exec('DROP INDEX IF EXISTS idx_ratings_target_pubkey');
+        old.prepare(`INSERT INTO ratings (id, target_pubkey, rater_pubkey, role, stars) VALUES ('r1', 'm1', 'm2', 'provider', 4), ('r2', 'm1', 'm3', 'provider', 5)`).run();
+        const before = plan(old);
+        old.close();
+        assert(/SCAN ratings/.test(before), `the old database scans ratings (${before})`);
+        const again = bootInto(dir);
+        assert(again.ok, `the old database boots${again.ok ? '' : `: ${again.output.slice(-400)}`}`);
+        const upgraded = new Database(path.join(dir, 'state.db'), { readonly: true });
+        assert(indexes(upgraded, 'ratings').includes('idx_ratings_target_pubkey'), 'the boot built idx_ratings_target_pubkey on the old database');
+        assert(/SEARCH ratings USING (COVERING )?INDEX idx_ratings_target_pubkey/.test(plan(upgraded)), `the old database now searches by index (${plan(upgraded)})`);
+        const row = upgraded.prepare(floorRead).get('m1') as { avg: number; cnt: number };
+        assert(row.cnt === 2 && row.avg === 4.5, `its ratings are intact (${row.cnt} at ${row.avg})`);
+        upgraded.close();
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

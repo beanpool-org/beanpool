@@ -97,6 +97,10 @@ vi.mock('../lib/api', () => ({
     getTreasury: vi.fn(async () => mockTreasuryDetail),
     getTreasuryDetail: vi.fn(async () => mockTreasuryDetail),
     getTreasuries: vi.fn(async () => []),
+    // The enterprise page's Decisions block (components/EnterpriseDecisions.tsx): no keepers' vote here.
+    getEnterpriseDecisions: vi.fn(async () => null),
+    proposeEnterpriseDecision: vi.fn(async () => ({ success: true })),
+    voteEnterpriseDecision: vi.fn(async () => ({ success: true })),
 }));
 
 describe('PublicProfilePage & TreasuryDetailPage bottom padding regression (#791 / #792)', () => {

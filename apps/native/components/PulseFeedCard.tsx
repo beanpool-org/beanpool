@@ -37,6 +37,7 @@ import {
     categoryMeta,
 } from '@beanpool/core';
 import { type PulseFeedItem, formatRelativeTime, isOfficialSource, canReportPulseItem, resolvePulseThumbnailUrl, PULSE_REPORT_REASONS } from '../utils/pulse';
+import { CHILD_SAFETY_REASON, CHILD_SAFETY_HINT } from '../utils/reportReasons';
 import {
     pulseCardMedia,
     playPulseVideo,
@@ -259,6 +260,9 @@ export function PulseFeedCard({ item, currentPubkey, onMute, onReport, nodeUrl }
                             );
                         })}
                     </View>
+                    <Text style={styles.reportHint}>
+                        <Text style={styles.reportHintLabel}>{CHILD_SAFETY_REASON}:</Text> {CHILD_SAFETY_HINT}
+                    </Text>
                     <View style={styles.reportActions}>
                         <Pressable
                             onPress={closeReport}
@@ -451,7 +455,7 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             width: 15,
             height: 15,
             borderRadius: 7.5,
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             alignItems: 'center',
             justifyContent: 'center',
             marginLeft: 2,
@@ -546,6 +550,14 @@ const makeStyles = ({ colors, theme }: { colors: any; theme: string }) =>
             flexWrap: 'wrap',
             gap: 8,
             marginBottom: 12,
+        },
+        reportHint: {
+            fontSize: 13,
+            color: colors.text.body,
+            marginBottom: 12,
+        },
+        reportHintLabel: {
+            fontWeight: '700',
         },
         reportReasonChip: {
             minHeight: 48,

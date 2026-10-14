@@ -10,6 +10,8 @@ import {
     type MemberNodeRole,
     type NodeRoleRecord,
 } from '../../lib/node-client';
+import { nodeCredential } from '../../lib/profiles';
+import { SignOutEverywhere } from './SignOutEverywhere';
 
 /**
  * Owners & admins — who holds authority over this node (docs/admin-surface.md §1, the-commons.md §9.2).
@@ -33,6 +35,8 @@ interface NodeRolesPanelProps {
     viewer: RolesViewer;
     /** Called after a role changes, so the member directory's badges catch up. */
     onChanged?: () => void;
+    /** A key session only: after "Sign out everywhere" ends this browser's session too, show the sign-in screen. */
+    onSignedOutEverywhere?: () => void;
 }
 
 const ROLE_LABEL: Record<MemberNodeRole, string> = { owner: 'Owner', admin: 'Admin', moderator: 'Moderator' };
@@ -102,10 +106,36 @@ function formatWhen(iso: string): string {
     return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+const BREAK_GLASS_MADE_BY: Record<string, string> = {
+    'key-session': 'a key session in Settings',
+    app: 'their phone',
+    password: 'the admin password',
+    'break-glass': 'a break-glass sign-in',
+    recover: 'beanpool recover on the server',
+};
+
+/**
+ * An owner's break-glass code, for their row (#1531): when it was last made and from which kind of session, so an owner
+ * who signed out everywhere (SignOutEverywhere at the foot of this panel, or the app's row; it retires their code) can tell
+ * whether a code made since was theirs. Null for a role
+ * that is not an owner, or from an older node that does not say.
+ */
+export function breakGlassText(r: Pick<NodeRoleRecord, 'role' | 'has_break_glass' | 'break_glass_made_at' | 'break_glass_made_by'>): string | null {
+    if (r.role !== 'owner' || r.has_break_glass === undefined) return null;
+    if (!r.has_break_glass) return 'No break-glass code';
+    if (!r.break_glass_made_at) return 'Break-glass code made before nodes recorded when';
+    const by = r.break_glass_made_by ? BREAK_GLASS_MADE_BY[r.break_glass_made_by] : undefined;
+    const d = new Date(r.break_glass_made_at);
+    const when = Number.isNaN(d.getTime())
+        ? r.break_glass_made_at
+        : d.toLocaleString(undefined, { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+    return `Break-glass code made ${when}${by ? ` from ${by}` : ''}`;
+}
+
 type Target = { pubkey: string; name: string; currentRole: MemberNodeRole | null };
 type Notice = { kind: 'success' | 'error'; text: string };
 
-export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeRolesPanelProps) {
+export function NodeRolesPanel({ activeNode, members, viewer, onChanged, onSignedOutEverywhere }: NodeRolesPanelProps) {
     const [roles, setRoles] = useState<NodeRoleRecord[] | null>(null);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -135,14 +165,15 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            setRoles(await fetchNodeRoles(activeNode.url, activeNode.adminPassword, tfa));
+            setRoles(await fetchNodeRoles(activeNode.url, nodeCredential(activeNode), tfa));
             setLoadError(null);
-        } catch (e: any) {
-            setLoadError(e?.message || 'Could not load the list');
+        } catch (e: unknown) {
+            const msg = (e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : String(e)) || 'Could not load the list';
+            setLoadError(msg);
         } finally {
             setLoading(false);
         }
-    }, [activeNode.url, activeNode.adminPassword, tfa]);
+    }, [activeNode.url, nodeCredential(activeNode), tfa]);
 
     useEffect(() => { void load(); }, [load]);
 
@@ -214,14 +245,15 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
         setBusy(true);
         setNotice(null);
         try {
-            await grantNodeRoleApi(activeNode.url, target.pubkey, newRole, activeNode.adminPassword, tfa);
+            await grantNodeRoleApi(activeNode.url, target.pubkey, newRole, nodeCredential(activeNode), tfa);
             const who = target.pubkey === myKey ? 'You are' : `${target.name} is`;
             setNotice({ kind: 'success', text: `${who} now ${ROLE_ARTICLE[newRole]}.` });
             resetAdd();
             await load();
             onChanged?.();
-        } catch (e: any) {
-            setNotice({ kind: 'error', text: e?.message || 'The node did not accept that.' });
+        } catch (e: unknown) {
+            const msg = (e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : String(e)) || 'The node did not accept that.';
+            setNotice({ kind: 'error', text: msg });
             setConfirmingAdd(false);
         } finally {
             setBusy(false);
@@ -234,13 +266,14 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
         setBusy(true);
         setNotice(null);
         try {
-            await revokeNodeRoleApi(activeNode.url, removing.member_pubkey, removing.role, activeNode.adminPassword, tfa);
+            await revokeNodeRoleApi(activeNode.url, removing.member_pubkey, removing.role, nodeCredential(activeNode), tfa);
             setNotice({ kind: 'success', text: `${name} is no longer ${ROLE_ARTICLE[removing.role]}.` });
             setRemoving(null);
             await load();
             onChanged?.();
-        } catch (e: any) {
-            setNotice({ kind: 'error', text: e?.message || 'The node did not accept that.' });
+        } catch (e: unknown) {
+            const msg = (e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message: unknown }).message) : String(e)) || 'The node did not accept that.';
+            setNotice({ kind: 'error', text: msg });
             setRemoving(null);
         } finally {
             setBusy(false);
@@ -351,6 +384,11 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
                                             <span className="font-mono" title={r.member_pubkey}>{shortKey(r.member_pubkey)}</span>
                                             {' · '}added by {grantedByText(r.granted_by)} on {formatWhen(r.granted_at)}
                                         </div>
+                                        {breakGlassText(r) && (
+                                            <div className="text-xs text-nature-400 mt-0.5 break-words" data-testid={`break-glass-made-${r.member_pubkey}`}>
+                                                <span aria-hidden="true">🚨 </span>{breakGlassText(r)}
+                                            </div>
+                                        )}
                                     </div>
                                     {canRemoveRow(r.role) && !isRemoving && (
                                         <button
@@ -544,6 +582,9 @@ export function NodeRolesPanel({ activeNode, members, viewer, onChanged }: NodeR
                     )}
                 </div>
             )}
+
+            {/* Your own sign-ins: only a key session has any (the password and a fleet profile are nobody's). */}
+            {viewer.kind === 'key' && onSignedOutEverywhere && <SignOutEverywhere onSignedOut={onSignedOutEverywhere} />}
         </div>
     );
 }

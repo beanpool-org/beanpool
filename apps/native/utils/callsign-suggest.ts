@@ -12,6 +12,7 @@
  * so the user is never blocked; the server has the final say at publish time.
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { BeanPoolIdentity } from './identity';
 
 export type CallsignStatus = 'available' | 'taken' | 'too_short' | 'unknown';
 
@@ -32,12 +33,16 @@ const FUN_WORDS = [
  *
  * `signal` drops the request (and reads as 'unknown'): the global community's door stops a check
  * the member has walked away from, or that ran out of time (global-join.ts `checkNameAtDoor`).
+ *
+ * `signer`: the key joining at the global community's open door signs its own check, so it counts against the door's
+ * limiter (20 a minute per key) rather than the 15 a minute every unsigned check from one network shares, which a hall
+ * on one Wi-Fi used up on names alone (apps/server routes/community.ts, `joiningAtOpenDoor`).
  */
 export async function checkCallsignAvailable(
     callsign: string,
     excludePublicKey?: string,
     anchorUrlOverride?: string,
-    options: { signal?: AbortSignal } = {},
+    options: { signal?: AbortSignal; signer?: BeanPoolIdentity } = {},
 ): Promise<CallsignStatus> {
     const c = callsign.trim();
     if (c.length < 2) return 'too_short';
@@ -47,7 +52,14 @@ export async function checkCallsignAvailable(
         const anchorUrl = anchorUrlOverride || await AsyncStorage.getItem('beanpool_anchor_url');
         if (!anchorUrl) return 'unknown';
         const qs = excludePublicKey ? `?exclude=${encodeURIComponent(excludePublicKey)}` : '';
-        const res = await fetch(`${anchorUrl}/api/members/callsign-available/${encodeURIComponent(c)}${qs}`, { signal: options.signal });
+        const path = `/api/members/callsign-available/${encodeURIComponent(c)}${qs}`;
+        // Loaded when used: signing pulls in the app's crypto, which the wizard's plain checks never need.
+        const signed = options.signer ? (await import('./node-post')).signedGet : null;
+        // Stopped while that loaded: nothing is sent.
+        if (options.signal?.aborted) return 'unknown';
+        const res = signed && options.signer
+            ? await signed(anchorUrl, path, options.signer, options.signal)
+            : await fetch(`${anchorUrl}${path}`, { signal: options.signal });
         if (!res.ok) return 'unknown';
         const data = await res.json();
         if (data?.tooShort) return 'too_short';
@@ -88,7 +100,7 @@ export async function suggestCallsigns(
     count = 3,
     anchorUrlOverride?: string,
     maxLength = 32,
-    options: { signal?: AbortSignal } = {},
+    options: { signal?: AbortSignal; signer?: BeanPoolIdentity } = {},
 ): Promise<string[]> {
     const clean = base.trim().replace(/\s+/g, ' ');
     if (clean.length < 1) return [];

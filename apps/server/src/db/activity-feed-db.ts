@@ -10,6 +10,7 @@
 
 import { db } from './db.js';
 import { bumpActivityVersion } from '../engine/versions.js';
+import { standbyWritesNothing } from '../config/node-role.js';
 
 export type ActivityEventType = 'member_joined' | 'trade_completed' | 'rating_given' | 'post_created' | 'dispute_resolved';
 
@@ -38,7 +39,9 @@ export const ACTIVITY_FEED_MAX_LIMIT = 100;
 let insertActivityStmt: { run: (...args: any[]) => { lastInsertRowid: number | bigint } } | null = null;
 
 /**
- * Records a new community activity event into the feed.
+ * Records a new community activity event into the feed. On a standby it records nothing and answers 0: the feed is its
+ * main server's, copied (a plain table, design G4), and a line of its own would be deleted by the next whole copy, or
+ * outlive a take-over.
  */
 export function recordActivity(
     eventType: ActivityEventType,
@@ -47,6 +50,7 @@ export function recordActivity(
     metadata?: Record<string, any>
 ): number {
     if (!eventType || !actorPubkey) return 0;
+    if (standbyWritesNothing()) return 0;
 
     const metaStr = metadata ? JSON.stringify(metadata) : null;
     if (!insertActivityStmt) {
@@ -62,11 +66,23 @@ export function recordActivity(
 }
 
 /**
- * Retrieves recent community activity events with member callsigns joined.
+ * The rows that are a trade: a completed one, or a dispute's ruling (one row per party). Balances and trades are private
+ * (Marty, 2026-09-28): a trade shows only its two people, so these reach only the member the row names (its actor or
+ * target: the seller and buyer of a completed trade, the party a ruling was about and the admin who ruled). Everyone
+ * else's feed leaves them out, with the Beans and the listing they name. A review names both people of a trade (its
+ * writer and the member rated), so it reaches only those two as well (Marty, 2026-10-14, decision A): the review itself
+ * stays on the rated member's profile, without its writer.
  */
-export function getActivityFeed(limit: number = 50, offset: number = 0): ActivityFeedItem[] {
+export const TRADE_ACTIVITY_TYPES: readonly ActivityEventType[] = ['trade_completed', 'dispute_resolved', 'rating_given'];
+
+/**
+ * Retrieves recent community activity events with member callsigns joined, as `viewerPubkey` (the verified signer) may
+ * see them: every event but the trades of other people (TRADE_ACTIVITY_TYPES).
+ */
+export function getActivityFeed(limit: number = 50, offset: number = 0, viewerPubkey: string | null = null): ActivityFeedItem[] {
     const safeLimit = Math.max(1, Math.min(ACTIVITY_FEED_MAX_LIMIT, limit));
     const safeOffset = Math.max(0, offset);
+    const tradeTypes = TRADE_ACTIVITY_TYPES.map(t => `'${t}'`).join(', ');
 
     const rows = db.prepare(`
         SELECT 
@@ -87,9 +103,11 @@ export function getActivityFeed(limit: number = 50, offset: number = 0): Activit
             SELECT 1 FROM posts hp
              WHERE hp.id = CASE WHEN json_valid(af.metadata) THEN json_extract(af.metadata, '$.postId') END
                AND hp.hidden_by_reports_at IS NOT NULL))
+          -- A trade only to the people in it.
+          AND (af.event_type NOT IN (${tradeTypes}) OR af.actor_pubkey = @viewer OR af.target_pubkey = @viewer)
         ORDER BY af.created_at DESC, af.id DESC
-        LIMIT ? OFFSET ?
-    `).all(safeLimit, safeOffset) as any[];
+        LIMIT @limit OFFSET @offset
+    `).all({ viewer: viewerPubkey ?? '', limit: safeLimit, offset: safeOffset }) as any[];
 
     return rows.map(r => {
         let metaObj: Record<string, any> | undefined = undefined;
@@ -115,18 +133,50 @@ export function getActivityFeed(limit: number = 50, offset: number = 0): Activit
 }
 
 /**
+ * The posts `postIds` renamed `title` in the lines that name them as they were: a new listing's `title`, a deal's and a
+ * ruling's `postTitle` (Delete account, engine/post-scrub.ts). Returns the lines changed.
+ */
+export function retitlePostsInActivity(postIds: string[], title: string): number {
+    if (postIds.length === 0) return 0;
+    const changed = db.prepare(`
+        UPDATE activity_feed SET metadata = json_replace(metadata, '$.title', ?, '$.postTitle', ?)
+         WHERE json_valid(metadata) AND json_extract(metadata, '$.postId') IN (SELECT value FROM json_each(?))`)
+        .run(title, title, JSON.stringify(postIds)).changes;
+    if (changed > 0) bumpActivityVersion();
+    return changed;
+}
+
+/**
+ * The name `publicKey` had, as the lines keep it, replaced by `name`: their own join's `callsign`, and a ruling's
+ * `counterpartyCallsign` on the other party's line (Delete account, state-engine.ts purgeMemberSelf). Every other line
+ * names them by key, and reads the name from their row. Returns the lines changed.
+ */
+export function renameMemberInActivity(publicKey: string, name: string): number {
+    const joined = db.prepare(`
+        UPDATE activity_feed SET metadata = json_replace(metadata, '$.callsign', ?)
+         WHERE event_type = 'member_joined' AND actor_pubkey = ? AND json_valid(metadata)`).run(name, publicKey).changes;
+    const ruled = db.prepare(`
+        UPDATE activity_feed SET metadata = json_replace(metadata, '$.counterpartyCallsign', ?)
+         WHERE json_valid(metadata) AND json_extract(metadata, '$.counterpartyPubkey') = ?`).run(name, publicKey).changes;
+    if (joined + ruled > 0) bumpActivityVersion();
+    return joined + ruled;
+}
+
+/**
  * Prunes activity feed events older than specified retention days.
- * Kept lean (default 30 days) to prevent unbound table growth.
+ * Kept lean (default 30 days) to prevent unbound table growth. With no tombstones: an age rule, which a standby applies
+ * itself after each copy it imports (engine/replication-manifest.ts `agedOut`, engine/plain-tables.ts), so a flood of
+ * lines never comes back a month later as a flood of tombstones in every copy (design
+ * scratch/global-node/DESIGN-replica-flood-bounds-opus.md §6.1). On a standby, nothing (its feed is its main server's).
  */
 export function pruneOldActivity(days: number = 30): number {
-    const res = db.prepare(`
-        DELETE FROM activity_feed 
-        WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || ? || ' days')
-    `).run(Math.max(1, days));
+    if (standbyWritesNothing()) return 0;
+    const pruned = db.prepare(`DELETE FROM activity_feed WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-' || ? || ' days')`)
+        .run(Math.max(1, days)).changes;
 
-    if (res.changes > 0) {
+    if (pruned > 0) {
         bumpActivityVersion();
     }
 
-    return res.changes;
+    return pruned;
 }

@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { NodeProfile } from '../../lib/profiles';
 import { getOwnerWordsChecks, getTfaSessionToken, type OwnerWordsCheck } from '../../lib/node-client';
+import { nodeCredential } from '../../lib/profiles';
 
 /** The owner's device's last silent open check, in words; null when the server does not say (before slice 6). */
 export function lockOpenLine(o: OwnerWordsCheck): { text: string; good: boolean } | null {
@@ -44,13 +45,13 @@ export function OwnerWordsChecksPanel({ activeNode, now = Date.now() }: { active
     const load = useCallback(async () => {
         try {
             const tfa = getTfaSessionToken(activeNode.id);
-            const res = await getOwnerWordsChecks(activeNode.url, activeNode.adminPassword, tfa);
+            const res = await getOwnerWordsChecks(activeNode.url, nodeCredential(activeNode), tfa);
             setOwners(Array.isArray(res.owners) ? res.owners : []);
             setError(null);
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
         }
-    }, [activeNode.id, activeNode.url, activeNode.adminPassword]);
+    }, [activeNode.id, activeNode.url, nodeCredential(activeNode)]);
 
     useEffect(() => { void load(); }, [load]);
 

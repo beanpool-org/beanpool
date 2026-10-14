@@ -32,7 +32,12 @@ vi.mock('../identity', () => ({ loadIdentity: vi.fn(async () => ({ publicKey: 'm
 vi.mock('../nodes', () => ({ getDatabaseFilenameForNode: vi.fn().mockReturnValue('beanpool_test.db'), addSavedNode: vi.fn() }));
 vi.mock('../canonical-profile', () => ({ getCanonicalProfile: vi.fn(), saveCanonicalProfile: vi.fn() }));
 const decryptSpy = vi.fn();
-vi.mock('../e2e-crypto', async (orig) => ({ ...(await orig<any>()), decryptDM: (...a: any[]) => { decryptSpy(...a); throw new Error('no'); } }));
+vi.mock('../e2e-crypto', async (orig) => ({
+    ...(await orig<any>()),
+    openDmLine: (...a: any[]) => { decryptSpy(...a); throw new Error('no'); },
+    checkDmThread: (...a: any[]) => { decryptSpy(...a); throw new Error('no'); },
+    decryptDmFormat2: (...a: any[]) => { decryptSpy(...a); throw new Error('no'); },
+}));
 
 import { getUnreadByConversation } from '../db';
 

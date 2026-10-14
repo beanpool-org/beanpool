@@ -27,6 +27,8 @@ import {
     checkGlobalDoor,
     hiddenTabsFor,
     beansOn,
+    pollsInformal,
+    INFORMAL_POLL_NOTE,
 } from '../node-profile';
 
 const GLOBAL_INFO = {
@@ -86,6 +88,12 @@ describe('readNodeProfile', () => {
     it('keeps only true and false from the features', () => {
         const p = readNodeProfile({ profile: 'global', features: { beans: 'false', openJoin: 1, knocks: false, bogus: true } })!;
         expect(p.features).toEqual({ knocks: false });
+    });
+
+    it('keeps membersOnDemand, which the node reports from #1847 on (DESIGN-global-members-by-area §2.1)', () => {
+        expect(readNodeProfile({ profile: 'global', features: { membersOnDemand: true } })!.features).toEqual({ membersOnDemand: true });
+        expect(readNodeProfile({ profile: 'local', features: { membersOnDemand: 'yes' } })!.features).toEqual({});
+        expect(readNodeProfile({ profile: 'local', features: {} })!.features.membersOnDemand).toBeUndefined();
     });
 
     it('is null for an answer that is not an info answer', () => {
@@ -215,5 +223,31 @@ describe('the tabs a node hides', () => {
             expect(at).toBeGreaterThan(-1);
             expect(src.slice(at, at + 200)).not.toMatch(/hiddenTabs/);
         }
+    });
+});
+
+// On the worldwide community anyone may join with a sign-in, so a poll's count can be tipped by one person with several
+// accounts (FABLE-sec-global-abuse LOW-7): there each poll says it decides nothing.
+describe('polls on the worldwide community are informal', () => {
+    it('are labelled there, and only there', () => {
+        expect(pollsInformal(readNodeProfile(GLOBAL_INFO))).toBe(true);
+        expect(pollsInformal(readNodeProfile(LOCAL_INFO))).toBe(false);
+        expect(pollsInformal(readNodeProfile({ memberCount: 1 }))).toBe(false);
+        expect(pollsInformal(null)).toBe(false);
+        expect(pollsInformal(undefined)).toBe(false);
+        expect(INFORMAL_POLL_NOTE).toBe('An informal poll; it decides nothing');
+    });
+
+    const source = (rel: string) => fs.readFileSync(path.resolve(__dirname, rel), 'utf-8');
+
+    it('the Market tab tells each poll card which community it is on', () => {
+        const src = source('../../app/(tabs)/market.tsx');
+        const card = src.slice(src.indexOf('<PollCard'), src.indexOf('/>', src.indexOf('<PollCard')));
+        expect(card).toMatch(/informal=\{pollsInformal\(nodeProfile\)\}/);
+    });
+
+    it('the card shows the note when it is told to', () => {
+        const src = source('../../components/PollCard.tsx');
+        expect(src).toMatch(/\{informal && \(\s*<Text style=\{styles\.informalNote\} testID="poll-informal-note">\s*💬 \{INFORMAL_POLL_NOTE\}/);
     });
 });

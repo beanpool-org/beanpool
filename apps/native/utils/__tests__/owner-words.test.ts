@@ -7,6 +7,7 @@ vi.mock('expo-crypto', () => ({
 // owner-words.ts reaches identity.ts (the one words check, and the save it offers); nothing here stores an identity.
 vi.mock('react-native', () => ({ Platform: { OS: 'android' } }));
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(async () => null),
     setItemAsync: vi.fn(async () => undefined),
     deleteItemAsync: vi.fn(async () => undefined),

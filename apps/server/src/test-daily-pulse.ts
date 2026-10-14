@@ -17,6 +17,7 @@ import { db } from './db/db.js';
 import { getPulseEntry, getTodaysPulseEntry, getAllPulseEntries } from './daily-pulse-entries.js';
 import { ensurePulseTreasury, rotateDailyPulse, getActivePulsePost, getActiveMemberListingCount, syncPulseMarketplaceGate, getPulseTreasuryPubkey, PULSE_CALLSIGN, DAILY_PULSE_CHANNEL_ID } from './daily-pulse.js';
 import { createMarketplaceRoutes } from './routes/marketplace.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -132,7 +133,8 @@ async function main() {
 
     // 7. Verify Escrow Protection Against Transacting on Pulse Posts
     const peerPubkey = 'peer_test_pubkey_1234567890123456';
-    db.prepare(`INSERT INTO members (public_key, callsign, avatar_url, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'https://example.com/avatar.jpg', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(peerPubkey, 'PeerTrader');
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code) VALUES (?, ?, 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 'genesis', 'genesis')`).run(peerPubkey, 'PeerTrader');
+    setMemberPhoto(db, peerPubkey, 'https://example.com/avatar.jpg');
     db.prepare("INSERT OR REPLACE INTO accounts (public_key, balance) VALUES (?, ?)").run(peerPubkey, 50);
 
     let requestBlocked = false;
@@ -162,14 +164,14 @@ async function main() {
     assert(getActiveMemberListingCount() === 0, 'Active member listing count is 0 (Daily Pulse excluded)');
 
     // 1 member listing created: Daily Pulse remains eligible
-    const memberPost1 = createPost('offer', 'food', 'Fresh Apples', 'Locally grown organic apples', 5, 'local', peerPubkey);
+    const memberPost1 = createPost('offer', 'food', 'Fresh Apples', 'Locally grown organic apples', 5, 'fixed', peerPubkey);
     assert(getActiveMemberListingCount() === 1, 'Active member listing count is 1 after 1 member post');
     const { post: postWith1Listing } = rotateDailyPulse(dateDay2);
     assert(!!postWith1Listing, 'Daily Pulse post is created/retained when 1 member listing exists (< 2)');
     assert(!!getActivePulsePost(), 'getActivePulsePost() returns post when 1 member listing exists');
 
     // 2 member listings created: Daily Pulse is SUPPRESSED (>= 2)
-    const memberPost2 = createPost('offer', 'craft', 'Handmade Bowl', 'Turned oak bowl', 10, 'local', peerPubkey);
+    const memberPost2 = createPost('offer', 'craft', 'Handmade Bowl', 'Turned oak bowl', 10, 'fixed', peerPubkey);
     assert(getActiveMemberListingCount() === 2, 'Active member listing count is 2 after 2nd member post');
     const { post: postWith2Listings, pulseItem: pulseItemWith2 } = rotateDailyPulse(dateDay2);
     assert(postWith2Listings === null, 'Daily Pulse post is suppressed when 2 member listings exist (post is null)');
@@ -183,7 +185,7 @@ async function main() {
     assert(activeMarketplacePulse.length === 0, 'Zero active Daily Pulse posts in marketplace when >= 2 member listings');
 
     // 3 member listings: Still suppressed
-    const memberPost3 = createPost('offer', 'repair', 'Bicycle Tuneup', 'Brake and gear adjustments', 15, 'local', peerPubkey);
+    const memberPost3 = createPost('offer', 'repair', 'Bicycle Tuneup', 'Brake and gear adjustments', 15, 'fixed', peerPubkey);
     assert(getActiveMemberListingCount() === 3, 'Active member listing count is 3');
     assert(getActivePulsePost() === null, 'getActivePulsePost() still null with 3 member listings');
     const { post: postWith3Listings } = rotateDailyPulse(dateDay2);
@@ -204,7 +206,8 @@ async function main() {
     // Remove treasury first to simulate a scenario where a regular member took 'Daily Pulse'
     db.prepare("DELETE FROM members WHERE public_key = ?").run(pulsePubkey);
     const collideePubkey = 'collidee_pubkey_1234567890123456';
-    db.prepare(`INSERT INTO members (public_key, callsign, avatar_url, status, joined_at, is_treasury) VALUES (?, 'Daily Pulse', 'https://example.com/avatar.jpg', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 0)`).run(collideePubkey);
+    db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, is_treasury) VALUES (?, 'Daily Pulse', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'), 0)`).run(collideePubkey);
+    setMemberPhoto(db, collideePubkey, 'https://example.com/avatar.jpg');
 
     const newPulsePubkey = ensurePulseTreasury();
     assert(newPulsePubkey !== collideePubkey, 'Treasury creation does not hijack regular member account');

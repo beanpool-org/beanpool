@@ -10,8 +10,9 @@
  *     - suspended / disabled / completed: the enterprise is still shown, so the thread reads with
  *       readOnly = true and a post is refused with 400 and a "read-only" error. The paused case stays open.
  *  3. GET /api/enterprises/map never pins a suspended, disabled or pruned enterprise.
- *     GET /api/treasuries hides a suspended or disabled enterprise from the public, but still lists it to a
- *     signed keeper of that enterprise (and to a node admin), so a keeper can reach it from the Commons list.
+ *     GET /api/treasuries hides a suspended or disabled enterprise from a member who keeps none of it, but still lists
+ *     it to a signed keeper of that enterprise (and to a node admin), so a keeper can reach it from the Commons list.
+ *     These reads are members' on every node (2026-10-01): an unsigned one is refused.
  *  4. Location routes: a permission refusal is 403, a bad body is 400 — including the Settings-app route
  *     on a wound-up enterprise, which used to answer 400 while the signed route answered 403.
  *  5. finaliseWindUp on an enterprise that never had a location does not stamp a location signer.
@@ -30,10 +31,12 @@ import {
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { hashPassword, saveLocalConfig, getLocalConfig } from './config/local-config.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
-const PORT = 8643;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 const AVATAR = 'data:image/png;base64,iVBORw0KGgo=';
 const ADMIN_PASSWORD = 'correct-horse-battery-staple-1234';
 
@@ -49,7 +52,8 @@ type Id = { pubKeyHex: string; privateKey: crypto.KeyObject };
 function makeIdentity(callsign: string): Id {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const pubKeyHex = publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex');
-    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, avatar_url, joined_at) VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign, AVATAR);
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign, joined_at) VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'))`).run(pubKeyHex, callsign);
+    setMemberPhoto(db, pubKeyHex, AVATAR);
     db.prepare(`INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)`).run(pubKeyHex);
     return { pubKeyHex, privateKey };
 }
@@ -86,7 +90,8 @@ async function main() {
     initStateEngine();
     const { hash, salt } = hashPassword(ADMIN_PASSWORD);
     saveLocalConfig({ ...getLocalConfig(), adminHash: hash, salt });
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const keeper = makeIdentity('KeeperKim');
     const member = makeIdentity('MemberMo');
@@ -141,7 +146,7 @@ async function main() {
         postEnterpriseThreadMessage(ent, member.pubKeyHex, 'before closing');
         setStatus(ent, state);
 
-        const detail = await publicGet(`/api/enterprise/${ent}`);
+        const detail = await signedFetch('GET', `/api/enterprise/${ent}`, member);
         assert(detail.status === 200, `A ${state} enterprise's detail is still shown (got ${detail.status})`);
 
         const get = await signedFetch('GET', `/api/enterprises/${ent}/thread`, member);
@@ -166,7 +171,7 @@ async function main() {
         postEnterpriseThreadMessage(ent, member.pubKeyHex, 'before removal');
         setStatus(ent, state);
 
-        const detail = await publicGet(`/api/enterprise/${ent}`);
+        const detail = await signedFetch('GET', `/api/enterprise/${ent}`, member);
         assert(detail.status === 404, `A ${state} enterprise's detail is hidden (got ${detail.status})`);
         const get = await signedFetch('GET', `/api/enterprises/${ent}/thread`, member);
         assert(get.status === 404, `GET thread of a ${state} enterprise is 404 like its detail (got ${get.status})`);
@@ -194,7 +199,8 @@ async function main() {
         setStatus(byState[state], state);
     }
     for (const mapPath of ['/api/enterprises/map', '/api/map/enterprises', '/api/treasuries/map']) {
-        const map = await publicGet(mapPath);
+        assert((await publicGet(mapPath)).status === 401, `${mapPath} is refused unsigned: members only`);
+        const map = await signedFetch('GET', mapPath, member);
         const keys = new Set((map.body.enterprises as any[]).map(e => e.publicKey));
         assert(keys.has(activePin), `${mapPath} pins an active enterprise`);
         for (const [state, pk] of Object.entries(byState)) {
@@ -204,10 +210,11 @@ async function main() {
 
     const listKeys = (body: any) => new Set((body.treasuries as any[]).map(t => t.publicKey));
     for (const listPath of ['/api/treasuries', '/api/enterprises']) {
-        const anon = listKeys((await publicGet(listPath)).body);
+        assert((await publicGet(listPath)).status === 401, `${listPath} is refused unsigned: members only`);
+        const anon = listKeys((await signedFetch('GET', listPath, member)).body);
         assert(anon.has(activePin), `${listPath} lists an active enterprise`);
         for (const [state, pk] of Object.entries(byState)) {
-            assert(!anon.has(pk), `${listPath} (public) hides a ${state} enterprise`);
+            assert(!anon.has(pk), `${listPath} (a member who keeps none of them) hides a ${state} enterprise`);
         }
         const asStranger = listKeys((await signedFetch('GET', listPath, stranger)).body);
         assert(!asStranger.has(byState.suspended) && !asStranger.has(byState.disabled),
@@ -251,15 +258,18 @@ async function main() {
     setStatus(woundUp, 'completed');
     const signedAdminSet = await signedFetch('POST', `/api/enterprise/${woundUp}/location`, adminId, { lat: -28.5, lng: 153.5 });
     assert(signedAdminSet.status === 403, `Admin SET on a wound-up enterprise via the signed route is 403 (got ${signedAdminSet.status})`);
+    // Step 7c: with the node's 2FA off the admin password alone opens no admin route (its 403 would hide this one's); the
+    // Settings route is called with an owner's automation token.
+    const settingsAdmin = ownerTokenHeaders('admin');
     const settingsAdminSet = await fetch(`${BASE}/api/local/admin/treasury/${woundUp}/location`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD },
+        headers: { 'Content-Type': 'application/json', ...settingsAdmin },
         body: JSON.stringify({ lat: -28.5, lng: 153.5 }),
     });
     assert(settingsAdminSet.status === 403, `Admin SET on a wound-up enterprise via the Settings route is 403 like the signed route (got ${settingsAdminSet.status})`);
     const settingsBadBody = await fetch(`${BASE}/api/local/admin/treasury/${shed}/location`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-password': ADMIN_PASSWORD },
+        headers: { 'Content-Type': 'application/json', ...settingsAdmin },
         body: JSON.stringify({ lat: 'abc', lng: 153.5 }),
     });
     assert(settingsBadBody.status === 400, `Admin Settings route with a bad body is 400 (got ${settingsBadBody.status})`);

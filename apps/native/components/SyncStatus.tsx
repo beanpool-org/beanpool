@@ -103,11 +103,11 @@ const styles = StyleSheet.create({
     onlineBorder: { borderColor: 'rgba(16, 185, 129, 0.3)' },
     offlineBorder: { borderColor: 'rgba(239, 68, 68, 0.3)' },
     dot: { width: 6, height: 6, borderRadius: 3, marginRight: 6 },
-    onlineDot: { backgroundColor: colors.brand.primary },
+    onlineDot: { backgroundColor: colors.brand.fill },
     offlineDot: { backgroundColor: colors.feedback.danger.solid },
     textStack: { flexDirection: 'column', justifyContent: 'center' },
     text: { fontSize: 11, fontWeight: '700', lineHeight: 12 },
     onlineText: { color: colors.brand.primary },
-    offlineText: { color: colors.feedback.danger.solid },
+    offlineText: { color: colors.feedback.danger.fg },
     timeText: { color: colors.text.muted, fontSize: 9, fontWeight: '500', marginTop: 1 }
 });

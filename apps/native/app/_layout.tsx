@@ -5,21 +5,25 @@ import { Stack, useRouter, useSegments, useGlobalSearchParams, ErrorBoundary } f
 export { ErrorBoundary };
 import * as Linking from 'expo-linking';
 import { StatusBar } from 'expo-status-bar';
-import { Alert, LogBox, AppState, AppStateStatus, View, Text, TextInput, Pressable, Platform, StyleSheet, DeviceEventEmitter } from 'react-native';
+import { Alert, LogBox, AppState, AppStateStatus, View, TextInput, Platform, StyleSheet, DeviceEventEmitter, Keyboard, BackHandler } from 'react-native';
 import { MAX_FONT_SCALE } from '../constants/responsive';
 import { registerPillarSync } from '../services/background-task';
-import { requestSync } from '../services/pillar-sync';
+import { forgetSyncCursors, requestSync } from '../services/pillar-sync';
 import { startWebSocketSync, stopWebSocketSync } from '../services/ws-client';
 import { registerForPushNotifications, retryPushRegistrations, setupNotificationResponseHandler } from '../services/push-notifications';
 import { initDB, clearDB, closeDB, redeemInvite, pushProfileToServer } from '../utils/db';
 import { normaliseInviteCode, extractInviteToken, deepLinkNodeOrigin } from '../utils/invite-parser';
+import { parseRekeyLink } from '../utils/rekey-redeem';
 import { shouldBlockCleartextNodeUrl, UnsafeNodeAddressError } from '../utils/node-url';
 import { retryPendingReports } from '../utils/blocklist';
 import { presentLeaveStatements } from '../utils/push-leave';
+import { markNoticeShown } from '../utils/sync-notices';
+import { PushNoticeWarning } from '../components/PushNoticeWarning';
 import { IdentityProvider, useIdentity } from './IdentityContext';
 import { NodeStatusProvider, useNodeStatus } from './NodeStatusContext';
 import { getPendingOnboarding, subscribePendingOnboarding } from '../utils/onboarding-state';
 import { setupRedirect, isAuthReturnLink } from '../utils/auth-return';
+import { memberRedirect } from '../utils/member-landing';
 import { ThemeProvider, useTheme } from './ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
@@ -29,8 +33,21 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import PatternBackground from '../components/PatternBackground';
 import { ThemeProvider as NavThemeProvider, DefaultTheme as NavDefaultTheme, DarkTheme as NavDarkTheme } from '@react-navigation/native';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
-import { authenticateUser, getAppLockEnabled } from '../utils/LocalAuth';
+import { appLockLocks } from '../utils/LocalAuth';
+import { createReturnLock, unlockWithPhoneLock } from '../utils/return-lock';
+import { setAppCovered, setAppLocked, setAppLockLaunchDecided, setAppUnlockAction, useAppLockScreen, whenAppShows } from '../utils/app-lock-screen';
+import { AppLockSurface, installLockCovers } from '../components/AppLock';
+import { closeInAppBrowserForLock } from '../utils/app-lock-browser';
 import { installNodeRequestSigning } from '../utils/node-request-signing';
+import { sweepPrintedPdfs } from '../utils/recovery-kit';
+import { sweepKeptBreakGlassCode } from '../utils/break-glass';
+import { anchorUrl as getAnchorUrl } from '../utils/node-post';
+import { appVersionHeaderValue } from '../utils/force-update';
+import ForceUpdateBlock from '../components/ForceUpdateBlock';
+import { communitySwitched } from '../utils/community-switch';
+import { fetchMembership } from '../utils/membership-probe';
+import { takeHoldsToShow, vaultHoldsAtOpen } from '../utils/vault';
+import { attestOwnRekeys, declineRekey, keySuccessionPromptText, operatorContact, rekeyToAsk, KEY_SUCCESSION_PROMPT_NO, KEY_SUCCESSION_PROMPT_YES } from '../utils/key-succession';
 import { isUnlockLink } from '../utils/takeover-unlock';
 import * as WebBrowser from 'expo-web-browser';
 
@@ -44,7 +61,9 @@ LogBox.ignoreLogs(['ProgressBarAndroid', 'Clipboard', 'PushNotificationIOS', 'ha
 // Forward-compatible read signing (SRV-2/SRV-4): sign GET requests to the anchor
 // node so read-auth can be enforced server-side later without another app-store
 // release. Installed at module load, before any component renders or fetches.
-installNodeRequestSigning();
+// Every request to the anchor also names this build (X-BeanPool-App), so the community
+// can count who runs what before it raises its floor (utils/force-update.ts).
+installNodeRequestSigning({ appVersionHeader: appVersionHeaderValue(appConfig.expo.version, Platform.OS) });
 
 // Cap OS font scaling app-wide so enlarged system fonts (common on low-end
 // devices in our target markets) can't shatter row layouts.
@@ -92,6 +111,10 @@ Object.defineProperty(RN, 'TextInput', {
     }
 });
 
+// App Lock's lock screen inside every pop-up (Modal), each of which is its own window above this layout, and every
+// Alert's buttons waiting for the unlock: components/AppLock.tsx. Same mechanism as Text above.
+installLockCovers(RN);
+
 // The wallpaper is drawn INSIDE every pushed screen, not only behind the navigator.
 //
 // It started out behind the navigator alone, with each screen left transparent so it could
@@ -108,14 +131,30 @@ Object.defineProperty(RN, 'TextInput', {
 // Keep the branch keyed on something FIXED per route. The two arms return different trees, so a
 // route that changed its presentation while mounted (a setOptions call on a later render) would
 // remount and lose its state. Nothing does that today.
+//
+// Every screen draws App Lock's lock screen inside itself too (components/AppLock.tsx): on an
+// iPhone a sheet, and any screen pushed from one, is presented above this layout's own, so the
+// lock screen drawn around the navigator below never covered it.
 function patternScreenLayout({ options, children }: { options: { presentation?: string }; children: ReactNode }): ReactElement {
-    if (options.presentation && options.presentation !== 'card') return children as ReactElement;
+    if (options.presentation && options.presentation !== 'card') return <AppLockSurface>{children}</AppLockSurface>;
     return (
-        <View style={{ flex: 1 }}>
-            <PatternBackground />
-            {children}
-        </View>
+        <AppLockSurface>
+            <View style={{ flex: 1 }}>
+                <PatternBackground />
+                {children}
+            </View>
+        </AppLockSurface>
     );
+}
+
+/** "Not me" on the re-key prompt: nothing is signed, and the admins' contact is offered when the owner publishes one. */
+async function tellAdminsNotMe(nodeUrl: string): Promise<void> {
+    const { email, phone } = await operatorContact(nodeUrl);
+    Alert.alert('Nothing was confirmed', "If you didn't ask for a new key, tell this community's admins: someone else may have moved your account.", [
+        { text: 'Close', style: 'cancel' },
+        ...(email ? [{ text: 'Email the admins', onPress: () => { Linking.openURL(`mailto:${email}`).catch(() => {}); } }] : []),
+        ...(phone ? [{ text: 'Call the admins', onPress: () => { Linking.openURL(`tel:${phone.replace(/[^\d+]/g, '')}`).catch(() => {}); } }] : []),
+    ]);
 }
 
 function RootLayoutNav() {
@@ -126,10 +165,13 @@ function RootLayoutNav() {
     const router = useRouter();
     const [deepLinkUrl, setDeepLinkUrl] = useState<string | null>(null);
     const isComponentMounted = useRef(true);
-    const lastBackgroundTime = useRef<number | null>(null);
+    const returnLock = useRef<ReturnType<typeof createReturnLock> | null>(null);
     const recoveryNavPrompted = useRef(false); // NAT-20: one-shot guard for the recovery confirmation
+    const recoveryPromptWait = useRef<(() => void) | null>(null); // it waits for the app to show (whenAppShows)
 
-    const [isLocked, setIsLocked] = useState(false);
+    // App Lock's lock screen and cover are one value for the whole app (utils/app-lock-screen.ts): every screen and pop-up
+    // draws them inside itself, not only this layout.
+    const lockScreen = useAppLockScreen();
     const [appLockChecked, setAppLockChecked] = useState(false);
 
     // null = not yet loaded; true = a join wizard was interrupted after the
@@ -148,50 +190,71 @@ function RootLayoutNav() {
     }, []);
 
     const triggerUnlock = async () => {
-        const success = await authenticateUser('Unlock BeanPool');
+        const success = await unlockWithPhoneLock('Unlock BeanPool');
         if (success) {
-            setIsLocked(false);
+            setAppLocked(false);
         }
     };
+
+    // Unlock App, on whichever screen or pop-up the member sees the lock screen.
+    useEffect(() => {
+        setAppUnlockAction(() => { triggerUnlock(); });
+        return () => setAppUnlockAction(null);
+    }, []);
+
+    // With no account on the phone there is nothing to lock.
+    useEffect(() => {
+        if (!identity) setAppLocked(false);
+    }, [identity]);
+
+    // While the lock screen shows: the keyboard goes, so nothing typed lands in a field under it, and Android's back button
+    // moves nothing behind it. Registered as it goes up, so it is asked before the navigator's own. An iPhone's in-app
+    // browser (node Settings from Manage) sits above anything the app draws, so it is closed as the lock screen goes up;
+    // never for the cover, so a short switch away keeps it open (utils/app-lock-browser.ts).
+    useEffect(() => {
+        if (lockScreen !== 'lock') return;
+        closeInAppBrowserForLock();
+        Keyboard.dismiss();
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
+        return () => sub.remove();
+    }, [lockScreen]);
+
+    // Once at start: a recovery kit PDF left in expo-print's folder by an app killed mid-share (utils/recovery-kit.ts).
+    useEffect(() => { void sweepPrintedPdfs(); }, []);
+
+    // At start (and for a new identity): the copy of a break-glass code an older app offered to keep on this phone, which
+    // nothing reads back and this app no longer makes (utils/break-glass.ts, #1531).
+    useEffect(() => {
+        const publicKey = identity?.publicKey;
+        if (!publicKey) return;
+        void getAnchorUrl().then((url) => sweepKeptBreakGlassCode(url, publicKey)).catch(() => {});
+    }, [identity?.publicKey]);
 
     // Check on startup
     useEffect(() => {
         async function checkAppLock() {
-            const enabled = await getAppLockEnabled();
+            const enabled = await appLockLocks();
             if (enabled && identity) {
-                setIsLocked(true);
-                const success = await authenticateUser('Unlock BeanPool');
+                setAppLocked(true);
+                const success = await unlockWithPhoneLock('Unlock BeanPool');
                 if (success) {
-                    setIsLocked(false);
+                    setAppLocked(false);
                 }
             }
             setAppLockChecked(true);
+            setAppLockLaunchDecided();
         }
         checkAppLock();
     }, [identity]);
 
-    // Check when returning to foreground
+    // Check when returning to foreground (15 seconds away). Time the phone's own lock prompt was open is not time away, so
+    // a slow prompt is never followed by a second one: utils/return-lock.ts. It covers the app as it leaves, too, so the
+    // app switcher shows nothing of the member's.
     useEffect(() => {
-        const sub = AppState.addEventListener('change', async (next) => {
-            if (next === 'background' || next === 'inactive') {
-                lastBackgroundTime.current = Date.now();
-            } else if (next === 'active' && identity) {
-                const bgTime = lastBackgroundTime.current;
-                lastBackgroundTime.current = null; // reset
-
-                const enabled = await getAppLockEnabled();
-                if (enabled) {
-                    const gracePeriodMs = 15000; // 15 seconds grace period
-                    if (bgTime && (Date.now() - bgTime) < gracePeriodMs) {
-                        return;
-                    }
-                    setIsLocked(true);
-                    const success = await authenticateUser('Unlock BeanPool');
-                    if (success) {
-                        setIsLocked(false);
-                    }
-                }
-            }
+        if (!returnLock.current) returnLock.current = createReturnLock(setAppLocked, setAppCovered);
+        const onChange = returnLock.current;
+        const sub = AppState.addEventListener('change', (next) => {
+            onChange(next, !!identity);
         });
         return () => sub.remove();
     }, [identity]);
@@ -237,6 +300,13 @@ function RootLayoutNav() {
         // "Take over with this phone" (app/unlock-keys.tsx) is routed by expo-router. Not an invite: its server address
         // would otherwise make extractInviteToken read the path's last part ("unlock-keys") as an invite code.
         if (isUnlockLink(currentUrl)) return;
+
+        // A re-key code's link (the dashboard's QR, `https://<node>/?rekey=RK-…`): its own screen, never an invite
+        // (app/rekey-code.tsx; utils/rekey-redeem.ts parseRekeyLink refuses an address that isn't plain host[:port]).
+        if (parseRekeyLink(currentUrl)?.community) {
+            if (isComponentMounted.current) router.push({ pathname: '/rekey-code', params: { link: currentUrl } });
+            return;
+        }
 
         const inviteToken = extractInviteToken(currentUrl);
         // Valid invite tokens must be present, and not be full HTTP URLs or paths
@@ -327,6 +397,8 @@ function RootLayoutNav() {
                                     closeDB()
                                         .then(() => AsyncStorage.setItem('beanpool_anchor_url', targetOrigin))
                                         .then(() => initDB())
+                                        // The update screen's block was the community left's (utils/community-switch.ts).
+                                        .then(() => { communitySwitched(); })
                                         .then(async () => {
                                             if (!isComponentMounted.current) return;
                                             
@@ -415,7 +487,11 @@ function RootLayoutNav() {
                                                     onPress: async () => {
                                                         try {
                                                             await clearDB();
+                                                            // Its cursors go with the copy (a held posts read among them), so the rejoin reads it whole.
+                                                            await forgetSyncCursors();
                                                             await AsyncStorage.removeItem('beanpool_anchor_url');
+                                                            // No community on the phone: the update screen's block comes down.
+                                                            communitySwitched();
                                                             const { removeSavedNode } = await import('../utils/nodes');
                                                             await removeSavedNode(targetOrigin);
                                                             router.replace({ pathname: '/welcome', params: { invite: parsedCode, server: targetOrigin } });
@@ -470,7 +546,8 @@ function RootLayoutNav() {
                     }, 200);
                 };
 
-                fetch(`${targetOrigin}/api/community/membership/${identity.publicKey}`)
+                // Signed by the key (utils/membership-probe.ts): the community answers only its own key.
+                fetchMembership(targetOrigin, identity)
                     .then(res => res.ok ? res.json() : null)
                     .then(data => {
                         if (!isComponentMounted.current) return;
@@ -527,7 +604,11 @@ function RootLayoutNav() {
 
         // Reset the one-shot recovery prompt whenever we're no longer in a
         // 'recovering' state, so a future genuine recovery alert can prompt again.
-        if (recognition !== 'recovering') recoveryNavPrompted.current = false;
+        if (recognition !== 'recovering') {
+            recoveryNavPrompted.current = false;
+            recoveryPromptWait.current?.();
+            recoveryPromptWait.current = null;
+        }
 
         if (recognition === 'recovering') {
             // NAT-20: the node's `isRecovering` claim is UNSIGNED — a malicious node
@@ -536,16 +617,25 @@ function RootLayoutNav() {
             // never reaches here (they go to /welcome above), so this is really an
             // "someone is recovering your account" alert, not a recovery flow. So
             // confirm once instead of force-navigating.
-            if (root !== 'recover-identity' && !recoveryNavPrompted.current) {
-                recoveryNavPrompted.current = true;
-                Alert.alert(
-                    'Account recovery reported',
-                    'The node you are connected to reports a recovery in progress for your account. Open Settings to review your account protection?',
-                    [
-                        { text: 'Not now', style: 'cancel' },
-                        { text: 'Review', onPress: () => { if (isComponentMounted.current) router.replace({ pathname: '/(tabs)/settings', params: { section: 'protection' } }); } },
-                    ],
-                );
+            //
+            // Marked, and shown, only once the app itself shows (utils/app-lock-screen.ts `whenAppShows`): this is asked
+            // at launch and on return, as App Lock's lock screen goes up, and an Alert behind it has a Review that does
+            // nothing and would never come back this run.
+            if (root !== 'recover-identity' && !recoveryNavPrompted.current && !recoveryPromptWait.current) {
+                const cancel = whenAppShows(() => {
+                    recoveryPromptWait.current = null;
+                    if (!isComponentMounted.current) return;
+                    recoveryNavPrompted.current = true;
+                    Alert.alert(
+                        'Account recovery reported',
+                        'The node you are connected to reports a recovery in progress for your account. Open Settings to review your account protection?',
+                        [
+                            { text: 'Not now', style: 'cancel' },
+                            { text: 'Review', onPress: () => { if (isComponentMounted.current) router.replace({ pathname: '/(tabs)/settings', params: { section: 'protection' } }); } },
+                        ],
+                    );
+                });
+                recoveryPromptWait.current = recoveryNavPrompted.current ? null : cancel;
             }
             return;
         }
@@ -587,10 +677,10 @@ function RootLayoutNav() {
             return;
         }
 
-        // Stuck on the welcome screen or root with a valid identity → into the secure area
-        if ((segments as string[]).length === 0 || root === 'welcome') {
-            router.replace('/(tabs)');
-        }
+        // Stuck on the welcome screen or root with a valid identity → into the secure area: the tabs' index, or the one
+        // landing a screen asked for before it set the identity (utils/member-landing.ts).
+        const landing = memberRedirect(segments as string[], identity.publicKey);
+        if (landing) router.replace(landing);
     }, [identity, isLoading, segments, recognition, pendingOnboarding]);
 
     // Register for push notifications when identity is available. One that doesn't land is tried again as the app comes
@@ -610,6 +700,71 @@ function RootLayoutNav() {
     useEffect(() => {
         if (!identity?.publicKey) return;
         requestSync().catch(() => {});
+    }, [identity?.publicKey]);
+
+    // BeanPool's key vault (utils/vault.ts `vaultHoldsAtOpen`): at app open and at each return, in the background, is a
+    // sign-in restore of this account waiting? Nothing waits for the answer, and a slow or unreachable vault shows
+    // nothing. Each waiting restore is brought up once per run; Settings shows it with Stop and "Yes, it's me".
+    useEffect(() => {
+        if (!identity?.publicKey) return;
+        let current = true;
+        const waits = new Set<() => void>();
+        const look = () => {
+            vaultHoldsAtOpen(identity).then((holds) => {
+                if (!current || holds.length === 0) return;
+                // Marked only as the alert goes up, and that only once the app itself shows (utils/app-lock-screen.ts
+                // `whenAppShows`): an answer for a layout that has gone keeps its hold's alert, and one that arrives
+                // while App Lock's lock screen is up waits for the unlock, so its Review button works.
+                waits.add(whenAppShows(() => {
+                    if (!current || takeHoldsToShow(holds).length === 0) return;
+                    // A short title: Android cuts an alert's title at two lines, and at 320 dp and 1.3x text a longer
+                    // one was cut mid-word (measured on the emulator). The body says what happened.
+                    Alert.alert(
+                        'Is this you?',
+                        'Someone used a linked sign-in to get back into your BeanPool account on another device. If it was you, '
+                        + 'you can let it through now. If not, stop it.',
+                        [
+                            { text: 'Not now', style: 'cancel' },
+                            { text: 'Review', onPress: () => router.push('/(tabs)/settings') },
+                        ],
+                    );
+                }));
+            }).catch(() => {});
+        };
+        look();
+        const sub = AppState.addEventListener('change', (next) => {
+            if (next === 'active') look();
+        });
+        return () => {
+            current = false;
+            sub.remove();
+            waits.forEach((cancel) => cancel());
+        };
+    }, [identity?.publicKey]);
+
+    // A re-key to this key nobody has confirmed (an admin-path re-key, or one an older app completed): asked once per run,
+    // with §6's words (line-display design §5, §6; utils/key-succession.ts), only when the node lists exactly one, and never
+    // about a re-key this run just did itself (rekeyToAsk waits for its own confirmation). "Yes, that was me" signs that one
+    // statement, and the member's old group lines show under their name again; "Not me" signs nothing, is remembered so
+    // the prompt doesn't come back, and offers the admins' contact.
+    useEffect(() => {
+        if (!identity?.publicKey) return;
+        let current = true;
+        let cancel: (() => void) | null = null;
+        (async () => {
+            const nodeUrl = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+            if (!nodeUrl || !current) return;
+            const ask = await rekeyToAsk(nodeUrl, identity);
+            if (!current || !ask) return;
+            cancel = whenAppShows(() => {
+                if (!current) return;
+                Alert.alert('Was this you?', keySuccessionPromptText(ask.at), [
+                    { text: KEY_SUCCESSION_PROMPT_NO, style: 'cancel', onPress: () => { declineRekey(nodeUrl, identity, ask).catch(() => {}); void tellAdminsNotMe(nodeUrl); } },
+                    { text: KEY_SUCCESSION_PROMPT_YES, onPress: () => { attestOwnRekeys(nodeUrl, identity, [ask]).catch(() => {}); } },
+                ]);
+            });
+        })().catch(() => {});
+        return () => { current = false; cancel?.(); };
     }, [identity?.publicKey]);
 
     // Set up notification deep-link handler
@@ -638,6 +793,9 @@ function RootLayoutNav() {
                 UNDERNEATH the contentStyle below -- so with that opaque this value no longer
                 decides anything. Left transparent so nothing here can reintroduce a colour of
                 its own behind a screen. */}
+            {/* App Lock's lock screen over the navigator; each screen and pop-up draws its own as well
+                (components/AppLock.tsx). */}
+            <AppLockSurface>
             <NavThemeProvider value={navTheme}>
             <Stack
                 // Opaque, so a screen can no longer be seen through during a push. In practice
@@ -658,6 +816,9 @@ function RootLayoutNav() {
                 <Stack.Screen name="owner-words-check" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="beanpool" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="find-community" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="claim-community" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="rekey-code" options={{ animation: 'slide_from_right' }} />
+                <Stack.Screen name="join-global" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="start-community" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="guide/[slug]" options={{ animation: 'slide_from_right' }} />
                 <Stack.Screen name="guide/section/[id]" options={{ animation: 'slide_from_right' }} />
@@ -671,69 +832,10 @@ function RootLayoutNav() {
                 <Stack.Screen name="pulse" />
             </Stack>
             </NavThemeProvider>
-
-            {isLocked && identity && (
-                <View style={[StyleSheet.absoluteFill, {
-                    backgroundColor: isDark ? '#0a0a0a' : '#FAF9F6',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: 24,
-                    zIndex: 99999
-                }]}>
-                    <StatusBar style={isDark ? 'light' : 'dark'} />
-                    <View style={{
-                        backgroundColor: isDark ? '#141414' : '#FFFFFF',
-                        padding: 32,
-                        borderRadius: 24,
-                        alignItems: 'center',
-                        borderWidth: 1,
-                        borderColor: isDark ? '#2e2e2e' : '#EBEBE6',
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.1,
-                        shadowRadius: 12,
-                        elevation: 5,
-                        width: '100%',
-                        maxWidth: 320
-                    }}>
-                        <Text style={{ fontSize: 48, marginBottom: 16 }}>🔒</Text>
-                        <Text style={{
-                            fontSize: 22,
-                            fontWeight: 'bold',
-                            color: isDark ? '#ffffff' : '#1C1D1A',
-                            marginBottom: 8,
-                            textAlign: 'center'
-                        }}>
-                            BeanPool Secure
-                        </Text>
-                        <Text style={{
-                            fontSize: 14,
-                            color: isDark ? '#a0a0a0' : '#646660',
-                            marginBottom: 32,
-                            textAlign: 'center',
-                            lineHeight: 20
-                        }}>
-                            Unlock with your device security to access your wallet.
-                        </Text>
-                        <Pressable
-                            style={{
-                                backgroundColor: '#10b981',
-                                paddingVertical: 14,
-                                paddingHorizontal: 28,
-                                borderRadius: 12,
-                                width: '100%',
-                                alignItems: 'center'
-                            }}
-                            onPress={triggerUnlock}
-                            accessibilityRole="button"
-                        >
-                            <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: 'bold' }}>
-                                Unlock App
-                            </Text>
-                        </Pressable>
-                    </View>
-                </View>
-            )}
+            {/* A tapped notification the phone can't trust: one calm line (utils/push-notice-check.ts). Inside the
+                lock surface, so App Lock's lock screen and cover are drawn over it too. */}
+            <PushNoticeWarning />
+            </AppLockSurface>
         </View>
     );
 }
@@ -776,6 +878,9 @@ export default function RootLayout() {
                 const title = data.title || 'System Announcement';
                 const body = data.body || '';
                 Alert.alert(title, body, [{ text: 'Acknowledge', style: 'cancel' }]);
+                // A notice the node keeps names its id: shown now, so the background sync never posts it again
+                // (utils/sync-notices.ts).
+                void markNoticeShown(data.noticeId, AsyncStorage);
             }
         });
 
@@ -838,6 +943,12 @@ export default function RootLayout() {
                     <IdentityProvider>
                         <NodeStatusProvider>
                             <RootLayoutNav />
+                            {/* "Update required", over everything and outside the sign-in: only at a safe moment (a
+                                cold start, back after 5 minutes away, a switch of community), never mid-use
+                                (utils/force-update.ts). Inside the identity for the member's 12 words and leaving the
+                                community, which it does itself; inside the node status only to re-check the community
+                                it switches TO. It shows with or without an account. */}
+                            <ForceUpdateBlock />
                         </NodeStatusProvider>
                     </IdentityProvider>
                 </ThemeProvider>

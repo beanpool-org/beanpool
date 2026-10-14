@@ -18,8 +18,8 @@ import { initStateEngine, transfer } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 
-const PORT = 8551;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
     run++;
@@ -54,7 +54,8 @@ async function main() {
         throw new Error('Run with ENFORCE_READ_AUTH=true ENFORCE_WS_AUTH=true');
     await initTls();
     initStateEngine();
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     const ward = makeId('Ward');
     const outsider = makeId('Outsider');

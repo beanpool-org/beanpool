@@ -13,17 +13,23 @@ Owners can do everything in Settings. Only owners can:
 
 - give or take away the owner and admin roles (admins can give and take away the moderator role too);
 - remove or offboard an owner or an admin;
-- suspend an owner;
-- lift a suspension, or give back a role that a suspension took away;
+- re-key an owner or an admin, moving their role to a new phone's key (nobody can make a re-key code for their own account, so another owner does it);
+- suspend an owner, or suspend an owner or an admin through a report;
+- lift a suspension that took away an owner's or an admin's role, which gives that role back;
 - end the waiting time early when an owner or admin is being removed;
 - sign other people out of Settings;
-- switch break-glass mode on or off, and be issued a break-glass code.
+- switch break-glass mode on or off, and be issued a break-glass code;
+- restore a backup, download a backup or a snapshot, delete a snapshot, or change when snapshots are taken and how many are kept;
+- make, replace or remove the replication token, switch token-only on or off, and set which server a standby copies from;
+- claim, rename or take offline the community's public address, and see its tunnel token.
+
+From Settings opened with Manage in the app, each of these changes is asked again 5 minutes after your phone's unlock: see Signing in.
 
 The **admin password** counts as an owner. Anyone who knows it can do all of the above.
 
 ## Admin
 
-Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse, backups and diagnostics. They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, they cannot change anyone who already holds a role, and they cannot act against an owner.
+Admins sign in from the app's Manage button and can do the day-to-day work: members and invites, reports and takedowns, disputes, Decisions, enterprises, the Pulse and diagnostics. Of backups they see the status and the list of snapshots, and can take a snapshot or check one for damage. A backup file holds the whole community, so downloading one, restoring one and the replication token are an owner's (see Backups and replicas). They can **add and remove moderators**, without asking an owner — including a moderator an owner appointed. They cannot give or take away the owner or admin role, they cannot change anyone who already holds a role, and they cannot act against an owner. Nor can they re-key an owner or another admin, or suspend one through a report: both take that person's role away. An admin can still re-key or suspend a member or a moderator. Nobody can make a re-key code for their own account, so another owner re-keys an admin.
 
 ## Moderator
 
@@ -32,13 +38,14 @@ Moderators look after reports, and nothing else. They sign in from the app's **M
 - read every report, filtered by open, handled or dismissed, with what the post says and who reported it;
 - take down the reported post while its report is still open, with a reason the author reads;
 - take a reported Pulse item off the Pulse, again while its report is still open;
-- dismiss a report, or mark it handled.
+- dismiss a report, or mark it handled;
+- on the global community, see which accounts joined from the same internet connection within a day of a reported one, with each one's standing, and hide all their posts in one go, or undo that (see Reports and takedowns).
 
-That is all. A moderator cannot suspend or freeze anyone, see members' details or the member list, touch money, invites, backups, keys or the server's settings, or change anyone's role. They never get the admin password, and signing in as a moderator never gives more than this: the server refuses a moderator everything else, whatever page they try. The manual they see holds only the pages about their work.
+That is all. A moderator cannot suspend, remove or freeze anyone, see members' details or the member list beyond those accounts, touch money, invites, backups, keys or the server's settings, or change anyone's role. They never get the admin password, and signing in as a moderator never gives more than this: the server refuses a moderator everything else, whatever page they try. The manual they see holds only the pages about their work.
 
 A moderator whose role is taken away, or changed, is signed out straight away.
 
-If the server's two-factor sign-in is on (see Access and security), a moderator's key sign-in also asks for the server's 6-digit code, exactly as an admin's does, so they need it from whoever keeps the authenticator. The server has one set of backup codes, not one per person: a backup code a moderator uses is spent, and nobody can use it again. The code on its own opens nothing; it only works alongside a key that holds a role.
+A moderator never needs the server's 6-digit code, and nor does an admin or an owner signing in from the app. Their phone's own lock (fingerprint, face or PIN) is their second factor: the app asks for it every time, and a phone with no screen lock can't manage or moderate at all. When someone is given a role, the app turns App Lock on for them once and says why; they can turn it off again in the app's Settings.
 
 ## Owners & admins
 
@@ -47,6 +54,7 @@ If the server's two-factor sign-in is on (see Access and security), a moderator'
 - Owners, signed in with their key or with the admin password, see the list and can add and remove people.
 - Admins, signed in with their key, see the list and can add and remove **moderators**. Owners and admins are added and removed by an owner.
 - Moderators never see this list: their Settings is Reports only. Ordinary members cannot open Settings at all.
+- At the bottom, anyone signed in with their key finds **Sign out everywhere**: it ends all of their own Settings sign-ins at once. See Access and security.
 
 ![The Owners and Admins screen in Settings](images/people-roles.webp)
 
@@ -65,7 +73,7 @@ Giving a new role replaces the old one.
 
 Press **Remove** on their row. You are asked once more before anything happens. Removing an owner, admin or moderator takes away their access to Settings straight away; removing yourself signs you out.
 
-You can also do both from a member's own page: **People & Safety**, then **Members**, open the person and choose **👑 Grant Owner**, **⚡ Grant Admin**, **🛡️ Grant Moderator**, or **Revoke** to take the role away.
+You can also do both from a member's own page: **People & Safety**, then **Members**, open the person and choose **👑 Grant Owner**, **⚡ Grant Admin**, **🛡️ Grant Moderator**, or **Revoke owner**, **Revoke admin** or **Revoke moderator** (whichever role they hold) to take the role away.
 
 ## When the server says no
 
@@ -74,8 +82,10 @@ The server checks every change. If it refuses, the screen shows its reason word 
 - "Only an owner may grant the admin role" (or "revoke"): you are signed in as an admin. Admins can add and remove moderators, but only an owner can make another admin or owner.
 - "Only an owner may change the role of an existing admin" (or "owner"): you are an admin, and that person already holds a role. Giving someone a role replaces the one they have, so an admin may only appoint someone who holds no role, or who is already a moderator. Ask an owner.
 - "Only an owner may grant the owner role": once a community has an owner, only an owner can add another.
+- "Only an owner can re-key an owner or admin": you are an admin, and that person holds an owner or admin role, or held one before a suspension. A re-key moves their role to the new key, so ask an owner. Nobody can make a re-key code for their own account either: the server says "You can't make a re-key code for your own account". Ask another owner.
+- "Only an owner can suspend an owner or admin": you actioned a report with suspend on someone who holds an owner or admin role. Nothing was changed, the report included. Action it without suspending, or ask an owner.
 - "Cannot remove the last owner": add another owner first, then remove this one.
-- "Only active accounts can hold a node role": the member is suspended. Suspending or removing someone takes their role away. If the community's vote overturns a suspension the role comes back by itself; otherwise add them again once they are active.
+- "Only active accounts can hold a node role": the member is suspended. Suspending or removing someone takes their role away. If the community's vote overturns a suspension, or someone lifts it with **Lift suspension**, the role comes back by itself (only an owner can lift a suspension that held an owner or admin role). Otherwise add them again once they are active.
 - "Member not found": the pasted key is not a member of this community.
 - "Treasury accounts cannot hold a node role": an enterprise's account is not a person.
 
@@ -95,6 +105,10 @@ A server with no owner, which is a brand-new one before its first invite, or one
 - Signed in with the admin password: press **Find myself**, search for your own callsign, choose **Owner** and confirm. After that, **Manage** appears in your app.
 - Signed in with your key (you are an admin, but the server has no owner): press **Make me the owner** and confirm.
 
+## Every owner locked out
+
+If the community has owners but none of them can sign in any more (phones and 12 words lost, no second owner, no break-glass code), whoever runs the server can make a member owner from the server's command line: docker compose exec beanpool-node beanpool recover --key @callsign (their callsign, or their public key in its place). The member must have joined first. It adds an owner and removes nobody, changes no setting, prints the new owner's break-glass code once, and tells every member in a critical notice that an owner was added from the server. See Signing in.
+
 ## The first owner, Admin
 
-The first time you make an invite on an empty server, it creates a member called **Admin** as the first owner (see First-time setup). Nobody holds its key, so it cannot sign in or do anything. If you take its owner role away, the server gives it back at the next restart. It is harmless, and it means the community is never without an owner while you set up.
+The first time you make an invite on an empty server, it creates a member called **Admin** as the first owner (see First-time setup). Nobody holds its key, so it cannot sign in or do anything. If you take its owner role away, the server gives it back at the next restart. It is harmless, and it means the community is never without an owner while you set up. The global community has no such member: invites are off there, and its first owner joins through the open door and is made owner with the admin password.

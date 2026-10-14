@@ -14,6 +14,8 @@ import crypto from 'node:crypto';
 import {
     createGroup,
     getGroup,
+    groupClosedAt,
+    groupClosedAtMany,
     listGroups,
     getGroupMembers,
     getGroupMember,
@@ -28,6 +30,7 @@ import {
     deleteGroupPost,
     getGroupsVersion,
     isGroupConvenor,
+    isActingGroupConvenor,
     getGroupThread,
     postGroupThreadMessage,
     removeGroupThreadMessage,
@@ -37,11 +40,43 @@ import {
     listYourChats,
 } from '../state-engine.js';
 import { groupChatRefusal, visibleGroup, GROUP_NOT_FOUND, type VisibleGroup } from '../engine/group-thread.js';
+import {
+    GroupKeyError, GROUP_CHAT_UPDATE_APP, GROUP_KEYS_PAGE, getFormerGroupWraps, getGroupEpochWraps, getGroupKeys, getMissingGroupWraps, rejectGroupWrap,
+    rotateGroupEpoch, storeGroupTopUp,
+} from '../engine/group-keys.js';
+import { CONVENOR_POWERS_PAUSED } from '@beanpool/engine';
 import { assertNotMuted } from '../engine/auto-moderation.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
+import { assertMayStartGroupToday } from '../engine/writer-bounds.js';
 import { db } from '../db/db.js';
+import { getAvatarService } from '../engine/avatar.js';
+import { avatarKeysRequired, groupPictureKeyMatches } from '../engine/avatar-keys.js';
 import { membersOnlyHere } from './viewer.js';
 import type { RouteDeps } from './types.js';
+import { memberErrorText } from './member-error-text.js';
+import { heavyRead, heavyReadKey, LIGHT_BYTES } from '../heavy-reads.js';
+import { getMembersVersion } from '../engine/versions.js';
+import { sendMembersSnapshot, SNAPSHOT_SEND_WEIGHT, snapshotSendWeight } from '../members-snapshot.js';
+import { noteRosterSent, rosterSlot, rosterSnapshotKey, rosterSnapshotSize, storeRosterSnapshot, usableRosterSnapshot, type RosterSnapshot, type RosterView } from '../roster-snapshots.js';
+import { formerKeysReader } from '../engine/key-succession.js';
+import { accountsDeletedAmong } from '../engine/message-tombstone.js';
+
+/**
+ * Each active row gains `formerKeys`: the keys a re-key replaced with the member's, each with the succession statement
+ * their new key signed, newest first (engine/key-succession.ts; line-display design §5). An app names an old line's
+ * signer by that chain, verified, never by the node's word. A row with none, or a node from before, serves `[]` or nothing.
+ *
+ * A member who deleted their account serves `[]`, as a DM does (key-succession.ts withDmFormerKeys; #1898 review finding
+ * 2): their row stays active, but the deletion took these keys out of the logs and push notices, and their group lines
+ * are blanked, so no app has a line to name by them.
+ */
+function withFormerKeys<T extends { memberPubkey: string; status?: string }>(rows: T[]): (T & { formerKeys?: unknown[] })[] {
+    if (!rows.some((r) => r.status === 'active')) return rows;
+    const formerKeysOf = formerKeysReader();
+    const chains = rows.map((r) => (r.status === 'active' ? formerKeysOf(r.memberPubkey) : null));
+    const deleted = new Set(accountsDeletedAmong(rows.filter((_, i) => chains[i]?.length).map((r) => r.memberPubkey)));
+    return rows.map((r, i) => (chains[i] ? { ...r, formerKeys: deleted.has(r.memberPubkey) ? [] : chains[i] } : r));
+}
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -91,6 +126,14 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         return group;
     }
 
+    /** A refusal from the group keys (engine/group-keys.ts): its status, its code, and for a 409 the epoch and roster. True if it was one. */
+    function respondGroupKeyError(ctx: any, e: unknown): boolean {
+        if (!(e instanceof GroupKeyError)) return false;
+        ctx.status = e.status;
+        ctx.body = { error: e.message, code: e.code, ...e.extra };
+        return true;
+    }
+
     /** Refusals from the group chat and succession engines, as statuses. */
     function groupChatStatus(msg: string): number {
         if (msg === 'This vote has closed' || msg.includes('already open') || msg.includes('already voted')) return 409;
@@ -115,8 +158,9 @@ export function createGroupRoutes(deps: RouteDeps): Router {
 
     // 1. List groups
     router.get('/api/groups', async (ctx) => {
-        const category = ctx.query.category as string | undefined;
-        const q = ctx.query.q as string | undefined;
+        // `?q=a&q=b` arrives as an array: one string or none, never a value .trim() throws on.
+        const category = typeof ctx.query.category === 'string' ? ctx.query.category : undefined;
+        const q = typeof ctx.query.q === 'string' ? ctx.query.q : undefined;
         const member = ctx.query.member as string | undefined;
         const limit = clampLimit(ctx.query.limit);
         const offset = clampOffset(ctx.query.offset);
@@ -139,10 +183,56 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             }
         }
 
-        const groups = listGroups({ category, query: q, memberPubkey: member, limit, offset }, viewerPubkey);
+        const answer = () => {
+            const groups = listGroups({ category, query: q, memberPubkey: member, limit, offset }, viewerPubkey);
+            // A group its members closed by a vote is listed as closed (#1784 review N4), so its row says so before the
+            // sheet's own read lands. Closing bumps the groups version (afterGroupVote), so a list cached before is fresh.
+            const closed = groupClosedAtMany(groups.map(g => g.id));
+            ctx.status = 200;
+            ctx.type = 'application/json';
+            ctx.body = groups.map(g => ({ ...g, closedAt: closed.get(g.id) ?? null }));
+        };
+        // Above the apps' 50 a page, the list waits for room under the heavy-read cap (heavy-reads.ts) or is "busy",
+        // weighed by the last list with the same filters and page: a search that matches nothing is light, the whole
+        // list isn't. The viewer only adds their own invite-only groups, a few rows inside the same limit.
+        if (limit > 50) await heavyRead(ctx, heavyReadKey('groups', { category, q, member, limit, offset }), answer);
+        else answer();
+    });
+
+    // 2a. The group's own picture (#1486), for an <img>, which cannot sign: a public read (https-server.ts
+    // PUBLIC_READ_PATTERNS), served only to a URL carrying the key for this picture as it is now (engine/avatar-keys.ts).
+    // Every group read hands that URL only to someone who may read the group, on every node. Any other request, a group
+    // with no picture and one nobody may see included, is answered alike, so the route tells nobody which is which. The
+    // bytes as a member's photo's are served (routes/avatar.ts): raster only, under the type they are, never cached for long.
+    router.get('/api/groups/:id/picture', async (ctx) => {
+        const groupId = ctx.params.id;
+        if (!groupPictureKeyMatches(groupId, ctx.query.k)) {
+            ctx.status = 404;
+            ctx.body = { error: 'Picture not found' };
+            return;
+        }
+        const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
+        const result = await getAvatarService().getGroupPicture(groupId, { ifNoneMatch });
+        if (result.status === 304) {
+            ctx.status = 304;
+            if (result.etag) ctx.set('ETag', result.etag);
+            ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
+            return;
+        }
+        if (result.status !== 200 || !result.buffer) {
+            ctx.status = result.status;
+            ctx.body = { error: result.error || 'Picture not found' };
+            return;
+        }
         ctx.status = 200;
-        ctx.type = 'application/json';
-        ctx.body = groups;
+        ctx.type = result.contentType!;
+        ctx.set('Content-Type', result.contentType!);
+        ctx.set('X-Content-Type-Options', 'nosniff');
+        ctx.set('Content-Disposition', 'inline');
+        if (result.etag) ctx.set('ETag', result.etag);
+        // Private, unlike a member's photo: a group is its members' read, so no shared cache keeps its picture.
+        ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
+        ctx.body = result.buffer;
     });
 
     // 2. Get group by ID or slug
@@ -156,8 +246,10 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Group not found' };
             return;
         }
+        // Closed by its members' vote: the group stays to read, as "Your groups" shows it (closedAt, readOnly).
+        const closedAt = groupClosedAt(group.id);
         ctx.status = 200;
-        ctx.body = group;
+        ctx.body = { ...group, closedAt, readOnly: !!closedAt };
     });
 
     // 3. Create a group
@@ -177,10 +269,12 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         try {
             // A muted member (G3) starts nothing other members read: a group's name and description are listed.
             assertNotMuted(actor);
+            // 5 groups started a day per member, on every profile (W-main): no route deletes a group.
+            assertMayStartGroupToday(actor);
             const group = createGroup({
                 name: name.trim(),
                 slug: slug?.trim(),
-                description: description?.trim(),
+                description,
                 avatarUrl,
                 category,
                 joinPolicy,
@@ -190,8 +284,9 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.body = group;
         } catch (e: any) {
             if (respondProfileRefusal(ctx, e)) return;
-            ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to create group' };
+            // A suspended member starts no group until it ends (engine createGroup): 403, as /join answers.
+            ctx.status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
+            ctx.body = { error: memberErrorText(e, 'Failed to create group') };
         }
     });
 
@@ -201,13 +296,17 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         if (!actor) return;
         if (!requireVisibleGroup(ctx, actor)) return;
 
+        const body = (ctx as any).requestBody || {};
         try {
-            const member = joinGroup(ctx.params.id, actor);
+            // The joiner's own epoch, applied with the join in one transaction (group chat encryption design §2.3).
+            const member = joinGroup(ctx.params.id, actor, body.epoch);
             ctx.status = 200;
             ctx.body = { success: true, member };
         } catch (e: any) {
-            ctx.status = 400;
-            ctx.body = { error: e.message || 'Failed to join group' };
+            if (respondGroupKeyError(ctx, e)) return;
+            // A suspended member joins nothing until it ends (engine joinGroup): 403, like every refusal of who they are.
+            ctx.status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
+            ctx.body = { error: memberErrorText(e, 'Failed to join group') };
         }
     });
 
@@ -225,19 +324,59 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.body = { error: 'Only members of this group can see who is in it' };
             return;
         }
-        const isConvenor = Boolean(viewerPubkey && isGroupConvenor(ctx.params.id, viewerPubkey));
+        // Who asked to join and who is invited is for a convenor whose powers are not resting: a suspended convenor sees
+        // the roster any member sees, and is told why when they ask for more.
+        const isConvenor = Boolean(viewerPubkey && isActingGroupConvenor(ctx.params.id, viewerPubkey));
         if (status && status !== 'active') {
             if (!isConvenor) {
+                const paused = Boolean(viewerPubkey && isGroupConvenor(ctx.params.id, viewerPubkey));
                 ctx.status = 403;
-                ctx.body = { error: 'Only convenors can view pending or invited members' };
+                ctx.body = { error: paused ? `UNAUTHORIZED: ${CONVENOR_POWERS_PAUSED}` : 'Only convenors can view pending or invited members' };
                 return;
             }
         }
 
         const effectiveStatus = status ? (status === 'all' ? undefined : status) : (isConvenor ? undefined : 'active');
-        const members = getGroupMembers(ctx.params.id, { status: effectiveStatus, role });
-        ctx.status = 200;
-        ctx.body = members;
+        // One shared answer per group, view and filters (roster-snapshots.ts), chosen only now that the checks above have
+        // let this reader in: the view is part of its key, so no view is ever sent another's bytes.
+        const view: RosterView = isConvenor ? 'convenor' : group.relation === 'active' ? 'member' : 'outside';
+        const slot = rosterSlot(group.id, view, effectiveStatus, role);
+        const keyNow = () => rosterSnapshotKey(slot, getGroupsVersion(), getMembersVersion(), avatarKeysRequired());
+        // Faces behind a member-only key (G9a-2) and an invite-only group's members are for its readers alone.
+        ctx.set('Cache-Control', 'private, max-age=0, must-revalidate');
+        const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
+        const holds = (snap: RosterSnapshot) => Boolean(ifNoneMatch && ifNoneMatch.includes(snap.etag.replace(/^W\//, '')));
+        // What a send holds besides the body itself, which the cap counts once however many send it: a small roster's
+        // window is nothing, as its key's last answer was light.
+        const windowOf = (snap: RosterSnapshot) => (snap.body.length < LIGHT_BYTES ? 0 : SNAPSHOT_SEND_WEIGHT);
+        const send = (snap: RosterSnapshot) => {
+            ctx.set('ETag', snap.etag);
+            // A 304 only against the current key's snapshot, so never stale and never another view's.
+            if (holds(snap)) { ctx.status = 304; return; }
+            const before = rosterSnapshotSize(snap);
+            sendMembersSnapshot(ctx, snap, windowOf(snap));
+            noteRosterSent(slot, snap, before);
+        };
+        const ready = usableRosterSnapshot(slot, keyNow());
+        if (ready) {
+            if (holds(ready)) { ctx.set('ETag', ready.etag); ctx.status = 304; return; }
+            // Under the cap too, weighed at what a send holds (a window of the shared bytes, and the bytes themselves while
+            // no other send in flight holds them), and cut off at its deadline. A small one whose bytes are already held is
+            // light, as its key's last answer was: straight through, never waiting behind the big ones.
+            await heavyRead(ctx, 'roster-snapshot', () => send(ready), () => snapshotSendWeight(ctx, ready, windowOf(ready)));
+            return;
+        }
+        // Under the heavy-read cap (heavy-reads.ts), weighed by this group's last roster with the same status and role: a
+        // big group's waits for room or is "busy", a small one's goes straight through. Its convenors alone (any member
+        // may ask) are light, and must never make the whole roster read as light too.
+        await heavyRead(ctx, heavyReadKey('roster', { group: ctx.params.id, status: effectiveStatus, role }), () => {
+            // Built for the versions as they are now (they may have moved while this reader waited under the cap), read in
+            // the same turn as the rows. One that waited finds the snapshot an earlier reader built for that key.
+            const key = keyNow();
+            const snap = usableRosterSnapshot(slot, key)
+                ?? storeRosterSnapshot(slot, key, view, JSON.stringify(withFormerKeys(getGroupMembers(group.id, { status: effectiveStatus, role }))));
+            send(snap);
+        });
     });
 
     // 6. Invite a member or approve pending request (Convenor only)
@@ -259,22 +398,23 @@ export function createGroupRoutes(deps: RouteDeps): Router {
 
         try {
             if (action === 'approve') {
-                const member = approveGroupMember(ctx.params.id, actor, memberPubkey);
+                const member = approveGroupMember(ctx.params.id, actor, memberPubkey, body.epoch);
                 ctx.status = 200;
                 ctx.body = { success: true, member };
             } else {
                 // An invitation reaches someone new, as starting a DM does, so a muted convenor (G3) sends none.
                 // Approving someone who asked to join writes nothing anyone reads, and stays open.
                 assertNotMuted(actor);
-                const member = inviteGroupMember(ctx.params.id, actor, memberPubkey, role || 'member');
+                const member = inviteGroupMember(ctx.params.id, actor, memberPubkey, role || 'member', body.epoch);
                 ctx.status = 200;
                 ctx.body = { success: true, member };
             }
         } catch (e: any) {
+            if (respondGroupKeyError(ctx, e)) return;
             if (respondProfileRefusal(ctx, e)) return;
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
-            ctx.body = { error: e.message || 'Failed to update member' };
+            ctx.body = { error: memberErrorText(e, 'Failed to update member') };
         }
     });
 
@@ -300,7 +440,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
-            ctx.body = { error: e.message || 'Failed to change member role' };
+            ctx.body = { error: memberErrorText(e, 'Failed to change member role') };
         }
     });
 
@@ -310,14 +450,17 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         if (!actor) return;
         if (!requireVisibleGroup(ctx, actor)) return;
 
+        const body = (ctx as any).requestBody || {};
         try {
-            const removed = removeGroupMember(ctx.params.id, actor, ctx.params.pubkey);
+            // A convenor's removal carries the epoch that leaves the removed member out (§2.4); leaving carries none.
+            const removed = removeGroupMember(ctx.params.id, actor, ctx.params.pubkey, body.epoch);
             ctx.status = 200;
             ctx.body = { success: removed };
         } catch (e: any) {
+            if (respondGroupKeyError(ctx, e)) return;
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
-            ctx.body = { error: e.message || 'Failed to remove member' };
+            ctx.body = { error: memberErrorText(e, 'Failed to remove member') };
         }
     });
 
@@ -343,7 +486,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             ctx.body = { success: true, member };
         } catch (e: any) {
             ctx.status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
-            ctx.body = { error: e.message || 'Failed to hand the lead over' };
+            ctx.body = { error: memberErrorText(e, 'Failed to hand the lead over') };
         }
     });
 
@@ -371,7 +514,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             if (respondProfileRefusal(ctx, e)) return;
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
-            ctx.body = { error: e.message || 'Failed to update group' };
+            ctx.body = { error: memberErrorText(e, 'Failed to update group') };
         }
     });
 
@@ -385,7 +528,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         try {
             ctx.body = getGroupThread(ctx.params.id, actor, limit, offset);
         } catch (e: any) {
-            const msg = e?.message || 'Could not open the group chat';
+            const msg = memberErrorText(e, 'Could not open the group chat');
             ctx.status = groupChatStatus(msg);
             ctx.body = { error: msg };
         }
@@ -399,7 +542,12 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         if (!chatRateLimit(ctx, actor)) return;
         if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
         const body = (ctx as any).requestBody || {};
-        const text = typeof body.text === 'string' ? body.text : '';
+        // An app from before group chats were locked sends { text }: told to update, nothing stored (§14.2).
+        if (body.text !== undefined && body.ciphertext === undefined) {
+            ctx.status = 400;
+            ctx.body = { error: GROUP_CHAT_UPDATE_APP, code: 'not_encrypted' };
+            return;
+        }
         let clientId: string | undefined;
         if (body.clientId !== undefined && body.clientId !== null) {
             if (typeof body.clientId !== 'string' || !UUID_V4.test(body.clientId)) {
@@ -409,33 +557,125 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             }
             clientId = body.clientId.toLowerCase();
         }
-        // A reply quotes a message in THIS chat (chat parity, 2026-09-23). Any message id, not only a UUID v4:
-        // the engine checks it is in this conversation and is not a system line, which is the real rule.
-        let replyToId: string | undefined;
-        if (body.replyToId !== undefined && body.replyToId !== null) {
-            if (typeof body.replyToId !== 'string' || !body.replyToId.trim()) {
-                ctx.status = 400;
-                ctx.body = { error: 'replyToId must be a message id' };
-                return;
-            }
-            replyToId = body.replyToId;
-        }
-        if (!text.trim()) {
-            ctx.status = 400;
-            ctx.body = { error: 'Message text cannot be empty' };
-            return;
-        }
+        // A reply quotes a message in THIS chat (chat parity, 2026-09-23), named in the metadata and bound into the sealed
+        // line; the engine checks it is in this conversation and is not a system line.
         try {
             // A muted member (G3) sends nothing anyone else reads.
             assertNotMuted(actor);
-            const message = postGroupThreadMessage(ctx.params.id, actor, text, clientId, replyToId);
+            const message = postGroupThreadMessage(ctx.params.id, actor, { ciphertext: body.ciphertext, nonce: body.nonce, metadata: body.metadata }, clientId);
             ctx.status = 201;
             ctx.body = { success: true, message };
         } catch (e: any) {
+            if (respondGroupKeyError(ctx, e)) return;
             if (respondProfileRefusal(ctx, e)) return;
-            const msg = e?.message || 'Could not post the message';
+            const msg = memberErrorText(e, 'Could not post the message');
             ctx.status = e?.code === 'ID_CONFLICT' ? 409 : groupChatStatus(msg);
             ctx.body = { error: msg };
+        }
+    });
+
+    // 11b. The chat's keys (group chats step 2; group chat encryption design Appendix A, provenance design §5.3). Every
+    // route is a signed member's, the group in the path, refused to anyone who is not an active member exactly as the
+    // chat is (requireGroupMember: an invite-only group answers an outsider 404). Observers hold the key: they read.
+    router.get('/api/groups/:id/keys', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        const after = typeof ctx.query.after === 'string' && /^\d{1,9}$/.test(ctx.query.after) ? Number(ctx.query.after) : undefined;
+        let epochs: number[] | undefined;
+        if (typeof ctx.query.epochs === 'string' && ctx.query.epochs) {
+            const list = ctx.query.epochs.split(',');
+            if (list.length > GROUP_KEYS_PAGE || !list.every((e) => /^\d{1,9}$/.test(e))) {
+                ctx.status = 400;
+                ctx.body = { error: `epochs is a comma-separated list of at most ${GROUP_KEYS_PAGE} epoch numbers` };
+                return;
+            }
+            epochs = list.map(Number);
+        }
+        ctx.set('Cache-Control', 'private, no-store');
+        ctx.body = getGroupKeys(ctx.params.id, actor, { after, epochs });
+    });
+
+    router.get('/api/groups/:id/keys/missing', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        ctx.set('Cache-Control', 'private, no-store');
+        ctx.body = getMissingGroupWraps(ctx.params.id, actor);
+    });
+
+    // A re-keyed member's old key's wraps (DESIGN-group-history-after-rekey-fable.md §3): only that key's seed opens them.
+    router.get('/api/groups/:id/keys/former', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        const after = typeof ctx.query.after === 'string' && /^\d{1,9}$/.test(ctx.query.after) ? Number(ctx.query.after) : undefined;
+        ctx.set('Cache-Control', 'private, no-store');
+        ctx.body = getFormerGroupWraps(ctx.params.id, actor, { after });
+    });
+
+    router.get('/api/groups/:id/keys/:epoch/wraps', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        if (!/^\d{1,9}$/.test(ctx.params.epoch)) {
+            ctx.status = 400;
+            ctx.body = { error: 'An epoch is a whole number' };
+            return;
+        }
+        try {
+            ctx.set('Cache-Control', 'private, no-store');
+            ctx.body = getGroupEpochWraps(ctx.params.id, actor, Number(ctx.params.epoch));
+        } catch (e) {
+            if (!respondGroupKeyError(ctx, e)) throw e;
+        }
+    });
+
+    router.post('/api/groups/:id/keys/epoch', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!chatRateLimit(ctx, actor)) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        const body = (ctx as any).requestBody || {};
+        try {
+            ctx.status = 201;
+            ctx.body = { success: true, ...rotateGroupEpoch(ctx.params.id, actor, body.epoch) };
+        } catch (e) {
+            if (!respondGroupKeyError(ctx, e)) throw e;
+        }
+    });
+
+    router.post('/api/groups/:id/keys/wrap', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!chatRateLimit(ctx, actor)) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        const body = (ctx as any).requestBody || {};
+        try {
+            ctx.status = 201;
+            ctx.body = { success: true, ...storeGroupTopUp(ctx.params.id, actor, body) };
+        } catch (e) {
+            if (!respondGroupKeyError(ctx, e)) throw e;
+        }
+    });
+
+    // A member refuses their own wrap that does not open (DESIGN-group-chat-epochs-over-time-fable.md §1): body
+    // `{ wrapper, ephPub }`. The slot shows in …/keys/missing again; the refused wrapper may not fill it.
+    router.post('/api/groups/:id/keys/:epoch/reject', async (ctx) => {
+        const actor = requireAuth(ctx);
+        if (!actor) return;
+        if (!chatRateLimit(ctx, actor)) return;
+        if (!requireGroupMember(ctx, ctx.params.id, actor)) return;
+        if (!/^\d{1,9}$/.test(ctx.params.epoch)) {
+            ctx.status = 400;
+            ctx.body = { error: 'An epoch is a whole number' };
+            return;
+        }
+        const body = (ctx as any).requestBody || {};
+        try {
+            ctx.body = { success: true, ...rejectGroupWrap(ctx.params.id, actor, Number(ctx.params.epoch), body) };
+        } catch (e) {
+            if (!respondGroupKeyError(ctx, e)) throw e;
         }
     });
 
@@ -453,7 +693,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         try {
             ctx.body = { success: true, message: removeGroupThreadMessage(ctx.params.id, messageId, actor) };
         } catch (e: any) {
-            const msg = e?.message || 'Could not remove the message';
+            const msg = memberErrorText(e, 'Could not remove the message');
             ctx.status = groupChatStatus(msg);
             ctx.body = { error: msg };
         }
@@ -467,7 +707,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         try {
             ctx.body = getGroupSuccession(ctx.params.id, actor);
         } catch (e: any) {
-            const msg = e?.message || 'Could not load the convenor vote';
+            const msg = memberErrorText(e, 'Could not load the convenor vote');
             ctx.status = groupChatStatus(msg);
             ctx.body = { error: msg };
         }
@@ -488,7 +728,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             const res = proposeGroupConvenor(ctx.params.id, actor, candidate);
             ctx.body = { success: true, ...res };
         } catch (e: any) {
-            const msg = e?.message || 'Could not propose a convenor';
+            const msg = memberErrorText(e, 'Could not propose a convenor');
             ctx.status = groupChatStatus(msg);
             ctx.body = { error: msg };
         }
@@ -515,7 +755,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
             const res = voteGroupConvenor(ctx.params.proposalId, actor, choice);
             ctx.body = { success: true, ...res };
         } catch (e: any) {
-            const msg = e?.message || 'Could not record the vote';
+            const msg = memberErrorText(e, 'Could not record the vote');
             ctx.status = groupChatStatus(msg);
             ctx.body = { error: msg };
         }
@@ -534,7 +774,7 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         } catch (e: any) {
             const status = e.message?.includes('UNAUTHORIZED') ? 403 : 400;
             ctx.status = status;
-            ctx.body = { error: e.message || 'Failed to delete group post' };
+            ctx.body = { error: memberErrorText(e, 'Failed to delete group post') };
         }
     });
 

@@ -4,6 +4,10 @@ import { PeopleSafetySection } from './PeopleSafetySection';
 import type { NodeProfile } from '../../lib/profiles';
 import { setKeySessionCsrfToken, setTfaSessionToken } from '../../lib/node-client';
 
+// The AI assistants' suggestions card lists from the node on mount (its own tests: AgentSuggestionsPanel.test.tsx); these
+// tests count the moderation calls alone.
+vi.mock('./AgentSuggestionsPanel', () => ({ AgentSuggestionsPanel: () => null }));
+
 const mockProfile: NodeProfile = {
     id: 'test-node',
     name: 'Test Node',
@@ -308,6 +312,20 @@ describe('PeopleSafetySection Component', () => {
         expect(screen.getByText('Actioned report')).toBeInTheDocument();
     });
 
+    it('marks a child-safety report and keeps the node\'s order, which lists those first (the follow-up to #1895)', async () => {
+        renderModeration([
+            { id: 'rep_child', targetPubkey: mockMembers[0].publicKey, reason: 'Child safety: messages to my daughter', outcome: 'open', status: 'pending', childSafety: true },
+            { id: 'rep_spam', targetPubkey: mockMembers[1].publicKey, reason: 'Spam or scam', outcome: 'open', status: 'pending', childSafety: false },
+        ]);
+        const child = await screen.findByText('Child safety: messages to my daughter');
+        const spam = screen.getByText('Spam or scam');
+        expect(child.compareDocumentPosition(spam) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        const badges = screen.getAllByTestId('child-safety-badge');
+        expect(badges).toHaveLength(1);
+        expect(badges[0]).toHaveTextContent('Child safety');
+        expect(badges[0].compareDocumentPosition(spam) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
     it('displays post title, author callsign, and Removed badge when postRemoved is true', async () => {
         renderModeration([
             {
@@ -443,6 +461,86 @@ describe('PeopleSafetySection Component', () => {
                 expect(modTab).toHaveTextContent('1');
                 expect(screen.getByRole('button', { name: /Inspect & Action/ })).toBeInTheDocument();
                 expect(fetchMock.mock.calls.filter(([u]) => String(u).includes('/reports/'))).toHaveLength(0);
+            } finally {
+                vi.useRealTimers();
+                vi.unstubAllGlobals();
+            }
+        });
+
+        it('a report on a post names and freezes its author, never the member the reporter wrote beside it', async () => {
+            vi.useFakeTimers();
+            vi.stubGlobal('fetch', vi.fn());
+            try {
+                const [named, author] = [mockMembers[0].publicKey as string, mockMembers[1].publicKey as string];
+                // As a node before this fix sends it: the reporter's key in targetPubkey, the post's author beside it.
+                const onPost = {
+                    id: 'rep_on_post', targetPubkey: named, reason: 'Fake watches', outcome: 'open', status: 'pending',
+                    postId: 'post_watches', postTitle: 'Watches', postAuthorPubkey: author, postAuthorCallsign: 'bob',
+                };
+                const onFreezeUser = vi.fn().mockResolvedValue(undefined);
+                render(
+                    <PeopleSafetySection
+                        activeNode={mockProfile}
+                        nodeData={{ reports: [onPost], members: mockMembers }}
+                        nodeDataLoading={false}
+                        onRefresh={vi.fn()}
+                        onFreezeUser={onFreezeUser}
+                        onPruneUser={vi.fn()}
+                        onUpdateTier={vi.fn()}
+                        onToggleVoucher={vi.fn()}
+                        onToggleOperator={vi.fn()}
+                        initialSubTab="moderation"
+                    />
+                );
+                expect(screen.getByText(`Target: ${author.slice(0, 16)}...`)).toBeInTheDocument();
+                expect(screen.queryByText(`Target: ${named.slice(0, 16)}...`)).not.toBeInTheDocument();
+
+                fireEvent.click(screen.getByRole('button', { name: /Inspect & Action/ }));
+                await act(async () => {
+                    fireEvent.click(screen.getByRole('button', { name: /Freeze Accounts/ }));
+                });
+                expect(onFreezeUser).toHaveBeenCalledTimes(1);
+                expect(onFreezeUser).toHaveBeenCalledWith(author, true);
+                expect(onFreezeUser).not.toHaveBeenCalledWith(named, true);
+            } finally {
+                vi.useRealTimers();
+                vi.unstubAllGlobals();
+            }
+        });
+
+        it("a Pulse report names and freezes the item's owner, even with a post a node joined to it", async () => {
+            vi.useFakeTimers();
+            vi.stubGlobal('fetch', vi.fn());
+            try {
+                const [owner, postAuthor] = [mockMembers[1].publicKey as string, mockMembers[0].publicKey as string];
+                // As a node before #1444 lists a Pulse report whose row carries a post id: that post's author beside it.
+                const onItem = {
+                    id: 'rep_on_item', targetPubkey: owner, reason: 'Offensive clip', outcome: 'open', status: 'pending',
+                    targetPulseItemId: 'item_1', pulseItem: { title: 'A clip', platform: 'youtube', url: null, removed: false },
+                    postId: 'post_other', postTitle: 'Someone else', postAuthorPubkey: postAuthor, postAuthorCallsign: 'alice',
+                };
+                const onFreezeUser = vi.fn().mockResolvedValue(undefined);
+                render(
+                    <PeopleSafetySection
+                        activeNode={mockProfile}
+                        nodeData={{ reports: [onItem], members: mockMembers }}
+                        nodeDataLoading={false}
+                        onRefresh={vi.fn()}
+                        onFreezeUser={onFreezeUser}
+                        onPruneUser={vi.fn()}
+                        onUpdateTier={vi.fn()}
+                        onToggleVoucher={vi.fn()}
+                        onToggleOperator={vi.fn()}
+                        initialSubTab="moderation"
+                    />
+                );
+                expect(screen.getByText(`Target: ${owner.slice(0, 16)}...`)).toBeInTheDocument();
+                fireEvent.click(screen.getByRole('button', { name: /Inspect & Action/ }));
+                await act(async () => {
+                    fireEvent.click(screen.getByRole('button', { name: /Freeze Accounts/ }));
+                });
+                expect(onFreezeUser).toHaveBeenCalledTimes(1);
+                expect(onFreezeUser).toHaveBeenCalledWith(owner, true);
             } finally {
                 vi.useRealTimers();
                 vi.unstubAllGlobals();

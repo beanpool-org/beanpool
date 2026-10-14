@@ -6,9 +6,14 @@
  * 2. Search and category filtering
  * 3. Custom item creation, editing, deletion, and price pinning
  * 4. Price feedback reporting and admin moderation queue
+ * 4b. What reports may add in a day (PRICE_REPORT_RULES, #1295 review 4126894855): a member's 20, the rest (anonymous, or
+ *     a key that isn't a member's) 20 an address and 200 the node; the rest pruned after a month with no tombstone; only
+ *     a member's travel to a standby
  * 5. Multiplier configuration and clamped math
  * 6. Marketplace auto-pricing feedback loop with outlier filtering & photo matching
- * 7. Admin reset to defaults
+ * 6b-6c. Only listings on the board price an item: not a group's or a direct one, not one hidden by reports, paused or
+ *     cancelled; a completed one counts
+ * 7. Admin reset to defaults: a tombstone for each member's report, none for the rest
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) pnpm exec tsx src/test-pricing-guide.ts
  */
@@ -29,7 +34,9 @@ import {
     updatePricingReportStatus,
     getPricingConfig,
     updatePricingConfig,
+    PRICE_REPORT_RULES,
 } from './db/pricing-guide-db.js';
+import { travellingRows } from './engine/replication-manifest.js';
 import { runPricingAggregationCycle } from './pricing-aggregator.js';
 import { DEFAULT_PRICING_CATALOG } from '@beanpool/core';
 
@@ -83,8 +90,9 @@ async function main() {
     assert(pinnedCustom?.isPinned === true, 'Pins item price successfully');
 
     // 4. Reporting & Moderation
-    const reportId = submitPricingReport(customItem.id, 'too_low', 'Berries are rare this season', 'pubkey-test-1');
-    assert(!!reportId, 'Submits price feedback report');
+    const submitted = submitPricingReport(customItem.id, 'too_low', 'Berries are rare this season', 'pubkey-test-1');
+    assert('id' in submitted && !!submitted.id, 'Submits price feedback report');
+    const reportId = 'id' in submitted ? submitted.id : '';
 
     const pendingReports = getPricingReports('pending');
     const foundReport = pendingReports.find(r => r.id === reportId);
@@ -94,6 +102,58 @@ async function main() {
     assert(updateStatus, 'Updates report status to accepted');
     const pendingAfter = getPricingReports('pending');
     assert(!pendingAfter.some(r => r.id === reportId), 'Report removed from pending queue');
+
+    // 4b. What reports may add in a day
+    const { memberPerDay, otherPerAddressPerDay, otherPerNodePerDay, otherKeptDays } = PRICE_REPORT_RULES;
+    db.prepare(`INSERT INTO members (public_key, callsign, status, is_visitor) VALUES ('pubkey-member', 'Mia', 'active', 0),
+        ('pubkey-visitor', 'Vic', 'active', 1)`).run();
+    const count = (sql: string, ...args: unknown[]) => (db.prepare(sql).get(...args) as { n: number }).n;
+    const report = (reporter?: string, address?: string) => submitPricingReport(customItem.id, 'too_high', 'Cheaper at the market', reporter, address ? () => address : null);
+    const refusedAs = (r: ReturnType<typeof report>) => ('refused' in r ? r.refused : 'taken');
+    const mia: string[] = [];
+    for (let i = 0; i < memberPerDay; i++) mia.push(refusedAs(report('pubkey-member', 'addr-mia')));
+    assert(mia.every((r) => r === 'taken'), `a member sends ${memberPerDay} reports in a day (${[...new Set(mia)].join(', ')})`);
+    assert(refusedAs(report('pubkey-member', 'addr-mia')) === 'member_rate_limited', `the member's ${memberPerDay + 1}st that day is refused, member_rate_limited`);
+    assert(count(`SELECT COUNT(*) AS n FROM writes_by_address WHERE ip_hash = 'addr-mia'`) === 0, "a member's reports are counted by their key, never by address");
+    const reporterPlan = (db.prepare(`EXPLAIN QUERY PLAN SELECT COUNT(*) AS n FROM pricing_reports WHERE reporter_pubkey = ?
+        AND created_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 day')`).all('pubkey-member') as { detail: string }[]).map((r) => r.detail).join('; ');
+    assert(/USING (COVERING )?INDEX idx_pricing_reports_reporter/.test(reporterPlan), `the member's day is a search on idx_pricing_reports_reporter (${reporterPlan})`);
+    const fromA: string[] = [];
+    for (let i = 0; i < otherPerAddressPerDay; i++) fromA.push(refusedAs(report(i % 3 === 0 ? undefined : i % 3 === 1 ? 'pubkey-visitor' : `stranger-${i}`, 'addr-a')));
+    assert(fromA.every((r) => r === 'taken'), `${otherPerAddressPerDay} reports from one address with no member's key (anonymous, a visitor's, strangers') are taken (${[...new Set(fromA)].join(', ')})`);
+    assert(refusedAs(report(undefined, 'addr-a')) === 'rate_limited' && refusedAs(report('pubkey-visitor', 'addr-a')) === 'rate_limited',
+        "the address's next is refused, rate_limited, anonymous or signed by a key that isn't a member's");
+    assert(refusedAs(report(undefined, 'addr-b')) === 'taken' && refusedAs(report('pubkey-member', 'addr-a')) === 'member_rate_limited',
+        "another address still sends one; the member's are counted as theirs, not the address's");
+    // The node's day: every address together. An address costs nothing (an IPv6 /48 is 65,536 /64s).
+    let filled = count(`SELECT COUNT(*) AS n FROM writes_by_address WHERE kind = 'price_report'`);
+    for (let i = 0; filled < otherPerNodePerDay; i++, filled++) {
+        const r = refusedAs(report(undefined, `addr-far-${i}`));
+        if (r !== 'taken') throw new Error(`the node's day filled early, at ${filled}: ${r}`);
+    }
+    assert(refusedAs(report(undefined, 'addr-new')) === 'busy', `past ${otherPerNodePerDay} reports with no member's key on the node today, from any address, one more is refused, busy`);
+    const newMember = 'pubkey-member-2';
+    db.prepare(`INSERT INTO members (public_key, callsign, status) VALUES (?, 'Nel', 'active')`).run(newMember);
+    assert(refusedAs(report(newMember, 'addr-new')) === 'taken', "and a member's report is still taken");
+    // Which travel: a member's only (engine/replication-manifest.ts MEMBERS_REPORTS), never NULL for an anonymous one.
+    const rule = travellingRows('pricing_reports');
+    const travelling = count(`SELECT COUNT(*) AS n FROM pricing_reports WHERE ${rule}`);
+    const staying = count(`SELECT COUNT(*) AS n FROM pricing_reports WHERE NOT (${rule})`);
+    const all = count('SELECT COUNT(*) AS n FROM pricing_reports');
+    assert(travelling === memberPerDay + 1 && travelling + staying === all,
+        `only members' reports travel to a standby (${travelling} of ${all}); the anonymous, visitors' and strangers' ones stay here (${staying})`);
+    // A month on, the reports with no member's key go as the next such report comes, with no tombstone; a member's stay.
+    db.prepare(`UPDATE pricing_reports SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`).run(`-${otherKeptDays + 1} days`);
+    db.prepare(`DELETE FROM writes_by_address`).run();
+    const tombstonesBefore = count(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'pricing_reports'`);
+    assert(refusedAs(report(undefined, 'addr-c')) === 'taken', 'an anonymous report a month later');
+    assert(count(`SELECT COUNT(*) AS n FROM pricing_reports WHERE NOT (${rule})`) === 1 && count(`SELECT COUNT(*) AS n FROM pricing_reports WHERE ${rule}`) === travelling,
+        `prunes the ${staying} month-old reports with no member's key, and keeps the members' however old`);
+    assert(count(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'pricing_reports'`) === tombstonesBefore, 'with no tombstone: they never travelled');
+    const prunePlan = (db.prepare(`EXPLAIN QUERY PLAN DELETE FROM pricing_reports WHERE created_at < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-30 days') AND NOT (${rule})`)
+        .all() as { detail: string }[]).map((r) => r.detail).join('; ');
+    assert(/SEARCH pricing_reports USING INDEX idx_pricing_reports_created/.test(prunePlan) && !/SCAN pricing_reports/.test(prunePlan),
+        `the prune runs at each such report, so it searches idx_pricing_reports_created, never scans the table (${prunePlan})`);
 
     // 5. Pricing Configuration (Data Source & Seasonality)
     const initialConfig = getPricingConfig();
@@ -130,13 +190,94 @@ async function main() {
     assert(babyItem?.priceBeans === 22, 'Calculates trimmed average price (22 beans)');
     assert(babyItem?.trend === 'up', 'Flags trend as up from baseline 18');
 
+    // 6b. Only listings on the board price an item (#1348's deciding review): the guide is read by people who can't see a
+    // group's own listing or one for one person, so theirs must not reach it even as an average or a count.
+    db.prepare(`INSERT OR IGNORE INTO members (public_key, callsign) VALUES ('author-2', 'Bea')`).run();
+    db.prepare(`INSERT INTO groups (id, name, slug, created_by) VALUES ('group-sitters', 'Sitters', 'sitters', 'author-1')`).run();
+    const insertScoped = db.prepare(`
+        INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, audience_scope, target_group_id, target_pubkey)
+        VALUES (?, 'offer', 'care', ?, ?, ?, 'author-1', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1, ?, ?, ?)
+    `);
+    insertScoped.run('post-group-1', 'Babysitting for the group', 'Group babysitting', 80, 'group', 'group-sitters', null);
+    insertScoped.run('post-direct-1', 'Babysitting for Bea', 'Direct babysitting', 90, 'direct', null, 'author-2');
+    runPricingAggregationCycle();
+    const afterOffBoard = getPricingGuideItem('ls-001');
+    assert(afterOffBoard?.confidenceCount === 3 && afterOffBoard?.priceBeans === 22,
+        `a group listing and a direct listing move neither the price nor the count (${afterOffBoard?.priceBeans} beans from ${afterOffBoard?.confidenceCount})`);
+    insertScoped.run('post-board-5', 'Babysitting on weekends', 'Board babysitting', 30, 'public', null, null);
+    runPricingAggregationCycle();
+    const afterBoard = getPricingGuideItem('ls-001');
+    assert(afterBoard?.confidenceCount === 4 && afterBoard?.priceBeans === 23,
+        `a listing on the board moves both (${afterBoard?.priceBeans} beans from ${afterBoard?.confidenceCount}, expected 23 from 4)`);
+
+    // 6c. A listing the board leaves out prices nothing, in either data source: one hidden by reports (with a photo, which
+    // must not become the item's picture either), one its author paused, and a cancelled one. A completed listing is a
+    // deal someone paid, and counts on purpose.
+    const insertWithStatus = db.prepare(`
+        INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, hidden_by_reports_at)
+        VALUES (?, 'offer', 'care', ?, ?, ?, 'author-1', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), 1, ?, ?)
+    `);
+    insertWithStatus.run('post-hidden-1', 'Babysitting overnight', 'Flagged babysitting', 60, 'active', new Date().toISOString());
+    db.prepare(`INSERT INTO post_photos (post_id, photo_data, order_num) VALUES ('post-hidden-1', 'data:image/jpeg;base64,AA==', 0)`).run();
+    insertWithStatus.run('post-paused-1', 'Babysitting paused', 'Paused babysitting', 70, 'paused', null);
+    insertWithStatus.run('post-cancelled-1', 'Babysitting cancelled', 'Cancelled babysitting', 75, 'cancelled', null);
+    for (const dataSource of ['federation', 'local'] as const) {
+        updatePricingConfig({ dataSource });
+        runPricingAggregationCycle();
+        const afterOff = getPricingGuideItem('ls-001');
+        assert(afterOff?.confidenceCount === 4 && afterOff?.priceBeans === 23,
+            `${dataSource}: a listing hidden by reports, a paused one and a cancelled one move neither the price nor the count (${afterOff?.priceBeans} beans from ${afterOff?.confidenceCount}, expected 23 from 4)`);
+        assert(!afterOff?.thumbnailUrl, `${dataSource}: the hidden listing's photo is not the item's picture (${afterOff?.thumbnailUrl})`);
+    }
+    insertWithStatus.run('post-completed-1', 'Babysitting done', 'Completed babysitting', 26, 'completed', null);
+    for (const dataSource of ['federation', 'local'] as const) {
+        updatePricingConfig({ dataSource });
+        runPricingAggregationCycle();
+        const afterCompleted = getPricingGuideItem('ls-001');
+        assert(afterCompleted?.confidenceCount === 5 && afterCompleted?.priceBeans === 24,
+            `${dataSource}: a completed listing counts as a price paid (${afterCompleted?.priceBeans} beans from ${afterCompleted?.confidenceCount}, expected 24 from 5)`);
+    }
+    updatePricingConfig({ dataSource: 'federation' });
+
     // Clean up custom item & reset catalog
     deletePricingGuideItem(customItem.id);
     assert(getPricingGuideItem(customItem.id) === null, 'Deletes item from catalog');
 
+    // The custom item's delete took its reports: a tombstone for each member's, none for the rest.
+    const reportTombstones = count(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'pricing_reports'`);
+    assert(reportTombstones === tombstonesBefore + travelling, `deleting an item writes a tombstone for each member's report on it and none for the rest (${reportTombstones - tombstonesBefore} of ${travelling + 1})`);
+    report(); // one more anonymous report, on an item the reset keeps
+    db.prepare(`UPDATE pricing_reports SET item_id = 'fp-001'`).run();
     seedPricingGuideIfEmpty(true);
     const resetCount = getPricingGuideItems().length;
     assert(resetCount === DEFAULT_PRICING_CATALOG.length, 'Resets catalog to pristine defaults');
+    assert(count('SELECT COUNT(*) AS n FROM pricing_reports') === 0
+        && count(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'pricing_reports'`) === reportTombstones,
+        "the reset deletes every report, and writes no tombstone for one with no member's key");
+
+    // A key's reports from before it joins stay here once it joins (review 4128175868): kept with no key, so neither the
+    // rule nor its member's day counts them, and the month's prune still takes them.
+    const joiner = 'pubkey-joiner';
+    const report_ = (reporter?: string, address?: string) => submitPricingReport('fp-001', 'too_low', 'Before and after', reporter, address ? () => address : null);
+    const sentBefore = [report_(joiner, 'addr-j'), report_(joiner, 'addr-j'), report_('pubkey-visitor', 'addr-j')].map((r) => ('id' in r ? r.id : r.refused));
+    db.prepare(`INSERT INTO members (public_key, callsign, status) VALUES (?, 'Jo', 'active')`).run(joiner);
+    db.prepare(`UPDATE members SET is_visitor = 0 WHERE public_key = 'pubkey-visitor'`).run();
+    const keptAnonymously = count(`SELECT COUNT(*) AS n FROM pricing_reports WHERE id IN (SELECT value FROM json_each(?)) AND reporter_pubkey IS NULL AND NOT (${rule})`,
+        JSON.stringify(sentBefore));
+    assert(keptAnonymously === 3,
+        `a key's reports sent before it joined (with no row, or a visitor's) are kept with no key, and stay here once it joins (${keptAnonymously} of ${JSON.stringify(sentBefore)})`);
+    const joinerDay: string[] = [];
+    for (let i = 0; i < memberPerDay; i++) joinerDay.push(refusedAs(report_(joiner, 'addr-j')));
+    assert(joinerDay.every((r) => r === 'taken') && refusedAs(report_(joiner, 'addr-j')) === 'member_rate_limited'
+        && count(`SELECT COUNT(*) AS n FROM pricing_reports WHERE ${rule}`) === memberPerDay,
+        `its day as a member counts only what it sent as one: ${memberPerDay} more, then member_rate_limited; only those travel (${[...new Set(joinerDay)].join(', ')})`);
+    db.prepare(`UPDATE pricing_reports SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)`).run(`-${otherKeptDays + 1} days`);
+    const tombstonesJoined = count(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'pricing_reports'`);
+    assert(refusedAs(report_(undefined, 'addr-k')) === 'taken'
+        && count(`SELECT COUNT(*) AS n FROM pricing_reports WHERE id IN (SELECT value FROM json_each(?))`, JSON.stringify(sentBefore)) === 0
+        && count(`SELECT COUNT(*) AS n FROM pricing_reports WHERE ${rule}`) === memberPerDay
+        && count(`SELECT COUNT(*) AS n FROM tombstones WHERE table_name = 'pricing_reports'`) === tombstonesJoined,
+        "a month on, the prune takes the reports it sent before it joined, with no tombstone, and keeps its reports as a member");
 
     console.log(`\n🎉 Community Beans Pricing Guide Test Summary: ${passed}/${run} assertions passed.\n`);
     if (passed !== run) {

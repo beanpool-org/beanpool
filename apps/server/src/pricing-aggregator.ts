@@ -7,6 +7,7 @@
  */
 
 import { db } from './db/db.js';
+import { standbyWritesNothing } from './config/node-role.js';
 import { aggregateObservedPrice, normalizeCategory, type PricingTrend } from '@beanpool/core';
 import { getPricingConfig } from './db/pricing-guide-db.js';
 
@@ -24,26 +25,42 @@ function tokenize(text: string): string[] {
 }
 
 /**
- * Runs one cycle of the auto-pricing feedback loop.
+ * Runs one cycle of the auto-pricing feedback loop. On a standby, none: its guide is its main server's, priced there and
+ * copied (a plain table, design G4).
  */
 export function runPricingAggregationCycle(): {
     updatedCount: number;
     totalEvaluated: number;
 } {
+    if (standbyWritesNothing()) return { updatedCount: 0, totalEvaluated: 0 };
     const config = getPricingConfig();
     const items = db.prepare('SELECT * FROM pricing_guide_items').all() as any[];
     if (!items.length) return { updatedCount: 0, totalEvaluated: 0 };
 
-    // Query active marketplace posts without loading heavy photo blobs into memory
+    // Query active marketplace posts without loading heavy photo blobs into memory. Only listings on the board for
+    // everyone count (#1348's deciding review): the guide is a public read, so a group's own listing, or one for one
+    // person, never prices an item, gives it a count or gives it its photo, even as part of an average. "On the board"
+    // is getPosts' rule for a reader with no key (@beanpool/engine posts.ts, onPublicBoard in photo-url.ts): `public`,
+    // or NULL for a row from before audiences. A listing hidden by reports prices nothing either: the board leaves it out,
+    // so one the community flagged never moves a price or a count, nor gives an item its picture (routes/pricing-guide.ts
+    // shows no other), and the node never stores a URL of one here.
+    //
+    // Statuses: a listing that is up ('active', or 'pending' with a deal under way) counts, and so does a 'completed'
+    // one, on purpose: a finished deal is a price someone actually paid, the best evidence the guide has (#206: "active
+    // and recent" listings). A listing its author paused, or a cancelled one, is off the board and was never traded at
+    // its price, so it moves nothing.
+    const onBoard = `(p.audience_scope IS NULL OR p.audience_scope = 'public') AND p.hidden_by_reports_at IS NULL
+                     AND p.status IN ('active', 'pending', 'completed')`;
+    const hasPhoto = `(SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id LIMIT 1) AS has_photo`;
     const postsQuery = config.dataSource === 'local'
         ? `SELECT p.id, p.title, p.description, p.credits, p.category, p.created_at,
-                  (SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id LIMIT 1) AS has_photo
+                  ${hasPhoto}
            FROM posts p
-           WHERE p.active = 1 AND p.origin_node IS NULL AND p.credits > 0`
+           WHERE p.active = 1 AND p.origin_node IS NULL AND p.credits > 0 AND ${onBoard}`
         : `SELECT p.id, p.title, p.description, p.credits, p.category, p.created_at,
-                  (SELECT 1 FROM post_photos ph WHERE ph.post_id = p.id LIMIT 1) AS has_photo
+                  ${hasPhoto}
            FROM posts p
-           WHERE p.active = 1 AND p.credits > 0`;
+           WHERE p.active = 1 AND p.credits > 0 AND ${onBoard}`;
 
     const posts = db.prepare(postsQuery).all() as any[];
 

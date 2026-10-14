@@ -5,10 +5,8 @@
  * buttons that wrap onto their own line rather than squeeze, and readable text in light and dark.
  * The components pass this through StyleSheet.create inside useStyles, so the theme switch restyles them.
  */
-import { palette, type AppColors } from '../constants/colors';
+import { type AppColors } from '../constants/colors';
 
-/** The app's brand green is 3.8:1 under white text; one step darker is 5.5:1, in both themes. */
-const BUTTON_GREEN = palette.emerald700;
 
 /** Which entries are things you press. Each has minHeight ≥ 48. */
 export const OWNER_WORDS_TOUCH_TARGETS = ['primaryBtn', 'secondaryBtn', 'backButton', 'checkBtn'] as const;
@@ -43,7 +41,7 @@ export function ownerWordsStyleSpec(colors: AppColors) {
         buttonRow: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 10, marginTop: 14 },
         primaryBtn: {
             flexGrow: 1, flexBasis: 120, minHeight: 48, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12,
-            alignItems: 'center' as const, justifyContent: 'center' as const, backgroundColor: BUTTON_GREEN,
+            alignItems: 'center' as const, justifyContent: 'center' as const, backgroundColor: colors.brand.fill,
         },
         primaryBtnText: { fontSize: 15, fontWeight: '700' as const, color: colors.text.inverse, textAlign: 'center' as const },
         secondaryBtn: {
@@ -72,7 +70,7 @@ export function ownerWordsStyleSpec(colors: AppColors) {
         hint: { fontSize: 13, lineHeight: 18, color: colors.text.secondary },
         checkBtn: {
             minHeight: 52, paddingHorizontal: 16, paddingVertical: 14, borderRadius: 14,
-            alignItems: 'center' as const, justifyContent: 'center' as const, backgroundColor: BUTTON_GREEN,
+            alignItems: 'center' as const, justifyContent: 'center' as const, backgroundColor: colors.brand.fill,
         },
         checkBtnDisabled: { opacity: 0.5 },
         checkBtnText: { fontSize: 16, fontWeight: '700' as const, color: colors.text.inverse, textAlign: 'center' as const },

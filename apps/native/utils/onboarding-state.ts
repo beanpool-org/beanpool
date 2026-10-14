@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { BeanPoolIdentity } from './identity';
 import type { KeeperEnrolmentResult } from './keeper-enrolment';
+import { offeredProviders } from './sso-providers';
 
 /**
  * Mid-wizard onboarding state.
@@ -58,6 +59,11 @@ export interface PendingOnboarding {
      * carried), so Safety Backup shows it after a restart too. Provider names and counts, nothing secret.
      */
     joinEnrolment?: KeeperEnrolmentResult | null;
+    /**
+     * Global flow only: the member came in by the 12-words door (two-doors design §2), so Safety Backup says what the
+     * words are for them and offers a sign-in as a second way back, after a restart too. Absent: a sign-in.
+     */
+    joinDoor?: 'words';
     /**
      * Global flow only, at the door: the record this phone had before it (an invite join part-way through,
      * with the key the global join now uses), given back if the door refuses for good (global-join.ts
@@ -182,6 +188,8 @@ export type ResumePlan =
         /** The stored key is one this join made ({@link keyMadeForThisJoin}): Safety Backup shows its words with no lock. */
         newKey: boolean;
         joinEnrolment: KeeperEnrolmentResult | null;
+        /** Global flow: the member came in by the 12-words door (`joinDoor`). */
+        joinDoor: 'words' | null;
     };
 
 /**
@@ -226,8 +234,24 @@ export function resumePlan(
         identity: pending.step === 'create' ? null : stored,
         freshKey: flow === 'global' && typeof pending.freshKey === 'string' && pending.freshKey === stored.publicKey,
         newKey: keyMadeForThisJoin(pending, stored.publicKey),
-        joinEnrolment: flow === 'global' ? pending.joinEnrolment ?? null : null,
+        joinEnrolment: flow === 'global' ? savedJoinEnrolment(pending.joinEnrolment) : null,
+        joinDoor: flow === 'global' && pending.joinDoor === 'words' ? 'words' : null,
     };
+}
+
+/**
+ * The join's enrolment as the record kept it, naming only sign-ins this app offers (utils/sso-providers.ts): the
+ * record is read back from storage, like any input. Its keepers are its sign-ins (keeper-enrolment.ts
+ * `enrolmentFromVault` for a copy the door's sign-in left at the key vault, or `enrolmentFromJoin` for one the join
+ * carried, in a build without a vault), so they are counted again from what is left. Null when none is: Safety Backup
+ * then offers the ordinary connect rather than saying a sign-in protects the member.
+ */
+function savedJoinEnrolment(saved: KeeperEnrolmentResult | null | undefined): KeeperEnrolmentResult | null {
+    if (!saved || !Array.isArray(saved.enrolledSso)) return saved ?? null;
+    const enrolledSso = offeredProviders(saved.enrolledSso);
+    if (enrolledSso.length === saved.enrolledSso.length) return saved;
+    if (enrolledSso.length === 0) return null;
+    return { ...saved, enrolledSso, enrolled: enrolledSso.map(() => 'sso' as const), available: enrolledSso.length };
 }
 
 /** Subscribe to changes made through this module (used by the root gatekeeper). */

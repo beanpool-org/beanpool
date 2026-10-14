@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 /**
@@ -16,6 +17,14 @@ export default defineConfig({
     define: {
         __DEV__: 'false',
     },
+    resolve: {
+        alias: {
+            // The app never imports it. utils/__tests__/vault-real.test.ts runs BeanPool's key vault itself
+            // (apps/vault's harness, from source), whose API imports the sign-in checks: from their source here, so the
+            // test never waits on a build of a package the app doesn't depend on.
+            '@beanpool/signin': fileURLToPath(new URL('../../packages/beanpool-signin/src/index.ts', import.meta.url).href),
+        },
+    },
     test: {
         environment: 'node',
         include: ['utils/__tests__/**/*.test.ts'],
@@ -25,5 +34,10 @@ export default defineConfig({
         // stopwatch. See scripts/test-all.sh. Uncapped locally.
         minWorkers: process.env.CI ? 1 : undefined,
         maxWorkers: process.env.CI ? 2 : undefined,
+        // Set by scripts/test-all.sh, which runs on a machine shared with build lanes. Vitest's 5 s
+        // default timed out 52 tests at load average ~60 that pass in 3.5 s alone. Unset for a
+        // developer running `npx vitest` directly: the default stays.
+        testTimeout: process.env.TEST_ALL_TIMEOUT_MS ? Number(process.env.TEST_ALL_TIMEOUT_MS) : undefined,
+        hookTimeout: process.env.TEST_ALL_TIMEOUT_MS ? Number(process.env.TEST_ALL_TIMEOUT_MS) : undefined,
     },
 });

@@ -9,7 +9,8 @@
  *      3 posts removed by a moderator mute nobody; /api/community/me says so
  *   2. global profile: /api/community/info reports all three true
  *   3. auto-hide: 3 reporters under 7 days old hide nothing; 2 reporters plus one of them twice hide nothing; 3
- *      distinct reporters of 7+ days hide it; a member report never hides anyone's posts. Hidden: absent from the
+ *      distinct, established reporters hide it (the ring rules are test-report-rings'); a member report never hides
+ *      anyone's posts. Hidden: absent from the
  *      listing, search, read by id, the map read (events and pins) and the activity feed for other members and
  *      strangers; its photos 404 unless the author or a moderator signs; a sync read gives others a removal; the
  *      author and moderators still see it, marked; only the author's socket gets the notice (reason "reports"), and an
@@ -25,7 +26,7 @@
  *      photos past 5 → 429, on a new post and on an edit; after 72 hours with 3 kept posts no limits; an old account
  *      with no posts is on probation until it has 3; opening a conversation with an 11th new person → 429 even with
  *      no message, a first line to an 11th → 429, a reply to someone who wrote or opened first and a known contact
- *      → allowed, and the window rolls; /api/community/me reports it all; the knock limit says "in any 24 hours"
+ *      → allowed, and the window rolls; /api/community/me reports it all; the knock limit (3) says "in any 24 hours"
  *   5. auto-mute: 3 moderator removals in 30 days → posting, editing, starting and sending messages refused 403; still
  *      reads and edits the profile; the moderators' muted list names them; a moderator lifts it and both come back,
  *      and one more removal after the lift does not re-mute; removals 31+ days apart never mute; the count reads its
@@ -62,7 +63,9 @@ import {
     payFromCommons, createGroup, dispatchPushNotification,
 } from './state-engine.js';
 import { startHttpsServer } from './https-server.js';
+import { installPhotoKeysAtBoot } from './engine/photo-keys.js';
 import { db, createCrowdfundProject } from './db/db.js';
+import { putPushTokenRow, pushTokenId } from './services/push-token-seal.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { createAdminChallenge, verifyAndSolveChallenge, consumeHandshakeToken } from './admin-key-auth.js';
 import { startP2P } from './p2p.js';
@@ -70,6 +73,10 @@ import { addConnector } from './connector-manager.js';
 import { originOfCachedPost } from './federation-commission.js';
 import { REMOVALS_SINCE_SQL } from './engine/auto-moderation.js';
 import { knockRefusal } from './engine/probation.js';
+import { setMemberArea } from './engine/member-area.js';
+import { lockedDm } from './dm-test-payload.js';
+import { lockedGroupLine } from './group-test-payload.js';
+import { setMemberPhoto } from '@beanpool/engine';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -96,9 +103,17 @@ let owner: Id;
 /** A member who joined `daysAgo` days ago, with a profile photo (posting needs one). */
 function member(name: string, daysAgo: number): Id {
     const id = newId(name);
-    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, avatar_url, status)
-                VALUES (?, ?, ?, ?, 'TEST', 'https://example.com/a.jpg', 'active')`).run(id.pk, name, ago(daysAgo * DAY), owner.pk);
+    db.prepare(`INSERT INTO members (public_key, callsign, joined_at, invited_by, invite_code, status)
+                VALUES (?, ?, ?, ?, 'TEST', 'active')`).run(id.pk, name, ago(daysAgo * DAY), owner.pk);
+    setMemberPhoto(db, id.pk, 'https://example.com/a.jpg');
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
+    return id;
+}
+
+/** A member who is off probation too (3 posts that stayed up): a reporter on probation counts for nothing, design 2.3. */
+function establishedMember(name: string, daysAgo: number): Id {
+    const id = member(name, daysAgo);
+    for (let i = 0; i < 3; i++) oldPost(id, `${name} kept ${i}`);
     return id;
 }
 
@@ -158,7 +173,7 @@ const report = (reporter: Id, postId: string, author: Id) =>
 async function dm(from: Id, to: Id): Promise<{ conv: Res; send: Res | null }> {
     const conv = await call('POST', from, '/api/messages/conversation', { type: 'dm', participants: [from.pk, to.pk], createdBy: from.pk });
     if (conv.status !== 200) return { conv, send: null };
-    const send = await call('POST', from, '/api/messages/send', { conversationId: conv.body.conversation.id, authorPubkey: from.pk, ciphertext: 'c2VjcmV0', nonce: 'bm9uY2U=' });
+    const send = await call('POST', from, '/api/messages/send', { conversationId: conv.body.conversation.id, authorPubkey: from.pk, ...lockedDm() });
     return { conv, send };
 }
 const hiddenAt = (postId: string) => attempt(() => (db.prepare('SELECT hidden_by_reports_at FROM posts WHERE id = ?').get(postId) as any)?.hidden_by_reports_at) ?? null;
@@ -207,8 +222,11 @@ async function main(): Promise<void> {
     modSession = keySession(mo);
     const viewer = member('Vic', 60);
     const stranger = null;
-    // Established reporters (8+ days), and new ones.
-    const R = [1, 2, 3, 4, 5, 6].map(i => member(`Rep${i}`, 8 + i));
+    // Established reporters (two months and more: each at least half as established as any author below, so they count
+    // towards a hide; engine/auto-moderation.ts), and new ones.
+    const R = [1, 2, 3, 4, 5, 6].map(i => member(`Rep${i}`, 60 + i));
+    // Established means off probation too (a reporter on it counts for nothing, design 2.3): 3 posts that stayed up each.
+    for (const r of R) for (let i = 0; i < 3; i++) oldPost(r, `${r.name} kept ${i}`);
     const N = [1, 2, 3].map(i => member(`New${i}`, 1));
 
     // ── 1. local profile ─────────────────────────────────────────────────────────────────────────
@@ -255,6 +273,9 @@ async function main(): Promise<void> {
     // ── 2. global profile ────────────────────────────────────────────────────────────────────────
     console.log('\n── 2. global profile ──');
     process.env.NODE_PROFILE = 'global';
+    // As a node started on the global profile decides at boot: the listings are a public read there, so a board
+    // listing's photos carry no key (engine/photo-keys.ts). This run switched profile without a restart.
+    installPhotoKeysAtBoot();
     f = (await info()).features ?? {};
     assert(f.probation === true && f.autoHideReports === true && f.autoMute === true,
         `global: /api/community/info reports probation, autoHideReports and autoMute true (got ${JSON.stringify({ p: f.probation, h: f.autoHideReports, m: f.autoMute })})`);
@@ -274,6 +295,9 @@ async function main(): Promise<void> {
 
     const avaSock = await socket(ava);
     const vicSock = await socket(viewer);
+    // Listings sync by area here (DESIGN-global-sync-by-area §2.5): a listing's own event reaches the members near it
+    // (test-ws-nearby-push). The viewer's area is near the listings below, so what reaches them is what any neighbour gets.
+    setMemberArea(viewer.pk, { lat: -28.6, lng: 153.5 });
     await sleep(100);
     avaSock.events.length = 0; vicSock.events.length = 0;
     const word = `zebrawidget${crypto.randomBytes(3).toString('hex')}`;
@@ -292,7 +316,7 @@ async function main(): Promise<void> {
     assert((await call('GET', null, photoUrl)).status === 200, 'before: its photo is served to anyone');
     for (const r of R.slice(0, 3)) await report(r, target, ava);
     for (const r of R.slice(0, 3)) await report(r, ev, ava);
-    assert(!!hiddenAt(target) && !!hiddenAt(ev), '3 distinct reporters of 7+ days hide the post, and the event');
+    assert(!!hiddenAt(target) && !!hiddenAt(ev), '3 distinct, established reporters hide the post, and the event');
     const row = db.prepare('SELECT active, status FROM posts WHERE id = ?').get(target) as any;
     assert(row.active === 1 && row.status === 'active', 'hidden is not removed: active and status are untouched');
 
@@ -340,7 +364,7 @@ async function main(): Promise<void> {
 
     // A hidden poll or event is not there for anyone but its author to vote in or RSVP to either: the answer would
     // hand the whole post back. Reporters of their own, so the ones above stay under the hourly report limit.
-    const S = [1, 2, 3].map(i => member(`Sam${i}`, 20));
+    const S = [1, 2, 3].map(i => establishedMember(`Sam${i}`, 60));
     const poll = createPost('poll', 'other', `Hidden poll ${word}`, `Which ${word}?`, 0, 'fixed', ava.pk, undefined, undefined, [], false, undefined, false,
         { pollOptions: [{ id: 'a', text: 'A' }, { id: 'b', text: 'B' }] })!.id;
     for (const r of S) await report(r, poll, ava);
@@ -399,7 +423,7 @@ async function main(): Promise<void> {
     assert(vicBack.status === 200 && vicLineBack.status === 201, `and its chat is open again to the people Going (${vicBack.status}, ${vicLineBack.status})`);
 
     // A hidden event's unread lines leave the unread badge with its chat: totalUnread counts only the chats listed.
-    const T = [1, 2, 3].map(i => member(`Tia${i}`, 20)); // reporters of their own, under the hourly report limit
+    const T = [1, 2, 3].map(i => establishedMember(`Tia${i}`, 60)); // reporters of their own, under the hourly report limit
     const meetup = createPost('event', 'other', 'Hidden meetup', 'Another event to hide', 0, 'fixed', ava.pk, -28.55, 153.5, [], false, undefined, false,
         { eventStartAt: new Date(Date.now() + 2 * DAY).toISOString(), eventEndAt: new Date(Date.now() + 2 * DAY + 2 * HOUR).toISOString(), eventPlaceName: 'Hall' })!.id;
     await call('POST', viewer, `/api/marketplace/posts/${meetup}/rsvp`, { status: 'going' });
@@ -424,10 +448,10 @@ async function main(): Promise<void> {
         return realFetch(url, init);
     };
     const pushToken = (id: Id) => `ExponentPushToken[g3-${id.name}]`;
-    for (const id of [viewer, ava]) db.prepare(`INSERT OR REPLACE INTO push_tokens (public_key, token, platform) VALUES (?, ?, 'android')`).run(id.pk, pushToken(id));
+    for (const id of [viewer, ava]) putPushTokenRow(id.pk, pushToken(id), 'android');
     const badgeOf = (id: Id): number | undefined => {
         pushed.length = 0;
-        dispatchPushNotification([id.pk], 'SYSTEM', 'Badge check', 'Badge check', {}, 'chat');
+        dispatchPushNotification([id.pk], 'SYSTEM', 'Badge check', 'Badge check', {}, 'chat', 'chat.message');
         return pushed.find(m => m.to === pushToken(id))?.badge;
     };
     const avaChats = async () => (await call('GET', ava, `/api/messages/conversations/${ava.pk}`)).body ?? {};
@@ -450,7 +474,7 @@ async function main(): Promise<void> {
     assert(avaBadgeAfter === avaBadgeBefore && avaBadgeAfter === avaListAfter.totalUnread
         && (avaListAfter.conversations ?? []).some((c: any) => c.id === meetup),
         `the host still has the event, so their badge still counts its chat (${avaBadgeBefore} → ${avaBadgeAfter}, totalUnread ${avaListAfter.totalUnread})`);
-    db.prepare('DELETE FROM push_tokens WHERE token IN (?, ?)').run(pushToken(viewer), pushToken(ava));
+    db.prepare('DELETE FROM push_tokens WHERE token_id IN (?, ?)').run(pushTokenId(pushToken(viewer)), pushTokenId(pushToken(ava)));
     (globalThis as any).fetch = realFetch;
 
     // A moderator removal of a hidden post works as always.
@@ -506,7 +530,7 @@ async function main(): Promise<void> {
     // counts towards the 3, so it would stop the hide as a dismissal does, and its reporter would hear nothing. A Pulse
     // removal takes nothing off a post, so it doesn't count as one. Taking the post down stays theirs to do (it only
     // counts against them), and another moderator can close the report.
-    const Q = [1, 2, 3].map(i => member(`Uma${i}`, 20)); // reporters of their own, under the hourly report limit
+    const Q = [1, 2, 3].map(i => establishedMember(`Uma${i}`, 60)); // reporters of their own, under the hourly report limit
     const openOn = (postId: string) => db.prepare(`SELECT id FROM abuse_reports WHERE target_post_id = ? AND (status = 'pending' OR status IS NULL)`).all(postId) as { id: string }[];
     const reportStatus = (reportId: string) => (db.prepare('SELECT status FROM abuse_reports WHERE id = ?').get(reportId) as any)?.status;
     for (const [whose, author] of [['their own post', mo], ['a post by an enterprise they keep', coop]] as const) {
@@ -588,7 +612,7 @@ async function main(): Promise<void> {
     // Opening a conversation reaches someone whether or not a message follows: it is a line in their inbox.
     const dee = member('Dee', 0);
     const open = (from: Id, to: Id) => call('POST', from, '/api/messages/conversation', { type: 'dm', participants: [from.pk, to.pk], createdBy: from.pk });
-    const line = (from: Id, conversationId: string) => call('POST', from, '/api/messages/send', { conversationId, authorPubkey: from.pk, ciphertext: 'aGk=', nonce: 'bm9uY2U=' });
+    const line = (from: Id, conversationId: string) => call('POST', from, '/api/messages/send', { conversationId, authorPubkey: from.pk, ...lockedDm() });
     const convs: string[] = [];
     for (const t of targets.slice(0, 10)) convs.push((await open(dee, t)).body?.conversation?.id);
     assert(convs.every(Boolean), 'a new member opens conversations with 10 new people, writing nothing');
@@ -623,8 +647,8 @@ async function main(): Promise<void> {
     const deeMe = await me(dee);
     assert(deeMe?.probation?.limits?.new_dm_recipients?.used === 10 && deeMe?.probation?.limits?.new_dm_recipients?.limit === 10,
         `/api/community/me: 10 of 10 new people (got ${JSON.stringify(deeMe?.probation?.limits?.new_dm_recipients)})`);
-    const knock = knockRefusal(dee.pk, [ago(HOUR)]);
-    assert(knock?.limit === 'knocks' && /ask 1 community in any 24 hours/.test(knock.message),
+    const knock = knockRefusal(dee.pk, [ago(HOUR), ago(2 * HOUR), ago(3 * HOUR)]);
+    assert(knock?.limit === 'knocks' && /ask 3 communities in any 24 hours/.test(knock.message),
         `the knock limit says "in any 24 hours" like the others: it is a rolling window, not a calendar day (${knock?.message})`);
     db.prepare('UPDATE messages SET timestamp = ? WHERE author_pubkey = ?').run(ago(25 * HOUR), dee.pk);
     db.prepare('UPDATE conversations SET created_at = ? WHERE created_by = ?').run(ago(25 * HOUR), dee.pk);
@@ -652,7 +676,7 @@ async function main(): Promise<void> {
     const mutedDm = await dm(max, targets[0]);
     assert(mutedDm.conv.status === 403 && mutedDm.conv.body?.code === 'moderation_muted', `starting a conversation → 403 (got ${mutedDm.conv.status})`);
     const zedToMax = await dm(zed, max);
-    const mutedSend = await call('POST', max, '/api/messages/send', { conversationId: zedToMax.conv.body.conversation.id, authorPubkey: max.pk, ciphertext: 'aGk=', nonce: 'bm9uY2U=' });
+    const mutedSend = await call('POST', max, '/api/messages/send', { conversationId: zedToMax.conv.body.conversation.id, authorPubkey: max.pk, ...lockedDm() });
     assert(zedToMax.send?.status === 200 && mutedSend.status === 403 && mutedSend.body?.code === 'moderation_muted',
         `sending a DM, even a reply to someone who wrote first → 403 (got ${mutedSend.status})`);
     assert((await call('GET', max, '/api/marketplace/posts')).status === 200, 'a muted member still reads');
@@ -716,7 +740,7 @@ async function main(): Promise<void> {
     const hideOnlyAt = hiddenAt(hideOnly);
     const hideInsertAt = hiddenAt(hideInsert);
     assert(!!hideOnlyAt && !!hideInsertAt, 'setup: two hidden posts');
-    const p2p = await startP2P(4282, 4283);
+    const p2p = await startP2P(0, 0);
     const nodeId = p2p.peerId.toString();
     addConnector(`/ip4/127.0.0.1/tcp/4283/p2p/${nodeId}`, 'mirror', 'self-test-peer');
     const payload: any = await exportSyncState(nodeId);
@@ -762,7 +786,7 @@ async function main(): Promise<void> {
 
     // 7a. Acting on a hidden post.
     console.log('\n── 7a. a deal on a hidden post ──');
-    const U = [1, 2, 3].map(i => member(`Una${i}`, 20)); // reporters of their own, under the hourly report limit
+    const U = [1, 2, 3].map(i => establishedMember(`Una${i}`, 60)); // reporters of their own, under the hourly report limit
     const hide = async (postId: string, author: Id) => { for (const r of U) await report(r, postId, author); };
     const [bob, cat, dan] = ['Bob', 'Cat', 'Dan'].map(name => member(name, 40));
     for (const m of [bob, cat, dan]) {
@@ -873,7 +897,7 @@ async function main(): Promise<void> {
     for (const t of targets.slice(0, 10)) tessOpens.push((await call('POST', tess, '/api/messages/conversation', { type: 'dm', participants: [tess.pk, t.pk], createdBy: tess.pk })).status);
     assert(tessTakes.status === 200 && tradeChat?.created_by === tess.pk && tessOpens.every(s => s === 200),
         `a new member takes an offer into escrow, which opens a chat with the seller in their name, and still opens conversations with 10 new people (${tessTakes.status} ${tessTakes.body?.error ?? ''}; ${tessOpens.join(',')})`);
-    const tessLine = await call('POST', tess, '/api/messages/send', { conversationId: tradeChat?.id, authorPubkey: tess.pk, ciphertext: 'aGk=', nonce: 'bm9uY2U=' });
+    const tessLine = await call('POST', tess, '/api/messages/send', { conversationId: tradeChat?.id, authorPubkey: tess.pk, ...lockedDm() });
     assert(tessLine.status === 429 && tessLine.body?.limit === 'new_dm_recipients',
         `their first line in the trade's chat is an 11th new person: 429, as before (got ${tessLine.status} ${tessLine.body?.error ?? ''})`);
 
@@ -898,7 +922,7 @@ async function main(): Promise<void> {
     const metaBefore = zedLineMeta();
     const tries: [string, Res][] = [
         ['a line in an enterprise\'s thread', await call('POST', max, `/api/enterprise/${hub.pk}/thread/message`, { text: 'Buy now' })],
-        ['a line in the group chat', await call('POST', max, `/api/groups/${openClub.id}/chat/message`, { text: 'Buy now' })],
+        ['a line in the group chat', await call('POST', max, `/api/groups/${openClub.id}/chat/message`, lockedGroupLine(db, openClub.id))], // sealed, so the mute is what refuses it
         ['a line in the event chat', await call('POST', max, `/api/marketplace/posts/${kimEvent}/chat/message`, { text: 'Buy now' })],
         ['a reaction', await call('POST', max, '/api/messages/react', { messageId: zedLine, emoji: 'Buy now at spam.example' })],
         ['starting a group', await call('POST', max, '/api/groups', { name: 'Spam club', description: 'Buy now' })],

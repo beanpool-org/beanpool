@@ -133,7 +133,7 @@ async function main() {
         });
     }
 
-    type Mode = { kind: 'serve'; bytes: Uint8Array } | { kind: 'old' } | { kind: 'none' };
+    type Mode = { kind: 'serve'; bytes: Uint8Array } | { kind: 'old' } | { kind: 'none' } | { kind: 'redirect'; status: number; to: string };
     let mode: Mode = { kind: 'old' };
     const seen: { ifNoneMatch: string | undefined; token: string | undefined; status: number; bodyBytes: number }[] = [];
     const server = http.createServer((req, res) => {
@@ -146,6 +146,7 @@ async function main() {
             res.end(body);
         };
         if (req.url !== sb.TAKEOVER_ENVELOPE_PATH) return send(404, 'Not Found', { 'Content-Type': 'text/plain' });
+        if (mode.kind === 'redirect') return send(mode.status, '', { Location: mode.to });
         if (mode.kind === 'old') return send(404, 'Not Found', { 'Content-Type': 'text/plain' }); // Koa's default 404
         if (mode.kind === 'none') {
             return send(404, JSON.stringify({ error: 'No take-over envelope: this server has no owner and no recovery code, so there is nobody to lock its keys to.', state: 'no-recipients' }), { 'Content-Type': 'application/json' });
@@ -183,6 +184,30 @@ async function main() {
         assert((await pull()) === 'main-has-none', '2. a 404 with a state is a new main server with nothing to send');
         assert(/nobody to lock/.test(sb.getHeldEnvelopesStatus().message) && !/too old/.test(sb.getHeldEnvelopesStatus().message),
             `2. …and says that instead: "${sb.getHeldEnvelopesStatus().message}"`);
+
+        // ── 2b. A redirect to another origin (#1575 review): not followed, so the token goes nowhere else ──
+        console.log('\n— 2b. redirect to another origin —');
+        const elsewhereSeen: { token: boolean }[] = [];
+        const elsewhere = http.createServer((req, res) => {
+            elsewhereSeen.push({ token: 'x-replication-token' in req.headers });
+            res.writeHead(200, { 'Content-Type': 'application/octet-stream' });
+            res.end('not an envelope');
+        });
+        await new Promise<void>((r) => elsewhere.listen(0, '127.0.0.1', () => r()));
+        const elsewhereUrl = `http://127.0.0.1:${(elsewhere.address() as AddressInfo).port}`;
+        try {
+            for (const status of [301, 302, 303, 307, 308]) {
+                mode = { kind: 'redirect', status, to: `${elsewhereUrl}/envelope?k=v` };
+                const r2b = await pull();
+                const msg = sb.getHeldEnvelopesStatus().message;
+                assert(r2b === 'failed' && msg.includes(`answered HTTP ${status}, a redirect to ${elsewhereUrl}/envelope.`) && !msg.includes(TOKEN) && !msg.includes('k=v'),
+                    `2b. a ${status} is not followed, and the status names where it pointed (got ${r2b}: "${msg}")`);
+            }
+            assert(elsewhereSeen.length === 0, `2b. the other origin received nothing, the token least of all (got ${JSON.stringify(elsewhereSeen)})`);
+            assert(heldIds().length === 0, '2b. nothing held');
+        } finally {
+            await new Promise<void>((r) => elsewhere.close(() => r()));
+        }
 
         // ── 3. The first envelope ──
         console.log('\n— 3. first envelope —');

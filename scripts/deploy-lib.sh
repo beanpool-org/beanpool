@@ -38,6 +38,244 @@ disk_preflight() {
   [ "$free_kb" -ge $((need_mb * 1024)) ]
 }
 
+# FLEET SECRETS (sensitive-data report A8, 2026-09-28). deploy.sh used to hand every server four values from the Mac's .env:
+# a Cloudflare token that can rewrite DNS for the whole beanpool.org zone and its zone id (a server uses them only for its own
+# certificate, and no tunnel of ours checks that certificate), the one admin password all our servers shared (read only on a
+# server's first start), and the fleet's tunnel token, written to data/tunnel-token (its tunnel no longer exists). A break-in
+# at any one server could have repointed global.beanpool.org. deploy.sh sends none of them now, and these remove what earlier
+# deploys and hand edits left. scripts/test-deploy-no-fleet-secrets.sh fails the build if deploy.sh sends one again.
+
+# The names, in one place for the functions below and for the test.
+fleet_secret_names() {
+  echo "CF_API_TOKEN CF_ZONE_ID ADMIN_PASSWORD CF_TUNNEL_TOKEN"
+}
+
+# sha256 of stdin, as lowercase hex. sha256sum on the servers and in CI, shasum on a Mac.
+sha256_hex() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi | awk '{print $1}'
+}
+
+# strip_fleet_secrets_env <env file>
+# Deletes the lines of a server's preserved .env that set one of fleet_secret_names, in each form docker compose reads
+# (NAME=, NAME:, export NAME=, a bare NAME, spaces around), and nothing else: every other line, comments included, stays as
+# it was. docker compose reads that file too, so a line left there would still reach the container. Prints the names it
+# removed, never a value. The file keeps its owner and mode: it is rewritten through a copy made with cp -p, then renamed.
+strip_fleet_secrets_env() {
+  local env_file=$1 re removed tmp
+  sudo test -f "$env_file" || return 0
+  re="^[[:space:]]*(export[[:space:]]+)?($(fleet_secret_names | tr ' ' '|'))[[:space:]]*([=:]|$)"
+  # LC_ALL=C on all three: in a UTF-8 locale GNU grep drops a line holding an invalid byte (deleting an unrelated line, or
+  # missing a secret), and a UTF-8 sed stops .* at that byte and would print the tail of a value.
+  removed=$(sudo env LC_ALL=C grep -aE "$re" "$env_file" | LC_ALL=C sed -E 's/^[[:space:]]*(export[[:space:]]+)?([A-Z_]+).*/\2/' | sort -u | tr '\n' ' ')
+  [ -n "$removed" ] || return 0
+  tmp="$env_file.fleet-strip"
+  # grep -v exits 1 when it keeps no line at all, which is a result, not a failure; 2 is a failure.
+  if ! sudo cp -p "$env_file" "$tmp" \
+    || ! sudo sh -c 'LC_ALL=C grep -avE "$1" "$2" > "$3"; [ $? -le 1 ]' _ "$re" "$env_file" "$tmp" \
+    || ! sudo mv -f "$tmp" "$env_file"; then
+    sudo rm -f "$tmp"
+    echo "⚠️  Could not remove ${removed% } from $env_file: the file is as it was. Delete those lines by hand."
+    return 1
+  fi
+  echo "🧹 Removed ${removed% } from $env_file (values not shown): deploy.sh no longer gives servers the fleet's secrets."
+}
+
+# remove_fleet_tunnel_token <token file> <sha256 of the fleet tunnel token, or empty>
+# Deletes data/tunnel-token only when it holds the fleet's copy that earlier deploys wrote there. A server's OWN token, written
+# by public-address-agent.ts for a registrar-managed address, is a different token and is kept. The two are compared by
+# sha256, so the fleet token itself never leaves the Mac. deploy.sh wrote the token with a newline and the agent writes it
+# without one, so whitespace is left out of the hash on both sides.
+remove_fleet_tunnel_token() {
+  local file=$1 fleet_sha=$2 sha
+  sudo test -f "$file" || return 0
+  if [ -z "$fleet_sha" ]; then
+    echo "ℹ️  Kept $file: this Mac's .env has no CF_TUNNEL_TOKEN to tell the fleet's copy from this server's own."
+    return 0
+  fi
+  sha=$(sudo cat "$file" | tr -d '[:space:]' | sha256_hex)
+  if [ "$sha" != "$fleet_sha" ]; then
+    echo "ℹ️  Kept $file: it is this server's own tunnel token, not the fleet's."
+    return 0
+  fi
+  if sudo rm -f "$file"; then
+    echo "🧹 Removed $file: it held the fleet's tunnel token, which deploy.sh no longer sends."
+  else
+    echo "⚠️  Could not remove $file, which holds the fleet's tunnel token. Delete it by hand."
+    return 1
+  fi
+}
+
+# first_password_notice <data dir> <ssh target>
+# Run just before the container starts. A server with no locked admin password (no local-config.json yet, or one that is not
+# locked) is a new install: it makes no admin password and ignores ADMIN_PASSWORD (initAdminPassword in
+# apps/server/src/config/local-config.ts). Its first owner claims it with a one-time claim code, which `beanpool claim` shows
+# (address first, then the code and a QR code). This says how, never the code. A server that has a password, or is having
+# one rotated, says nothing, as initAdminPassword decides it: a hash (locked, or as a take-over or a sealed restore writes
+# one, without isLocked), or joinedAt (when its password was set: rotate-node-env.sh drops the hash and keeps it; Wipe &
+# Reset clears it).
+# A server whose admin password an owner retired (passwordRetired) makes none, locked or not (after Wipe & Reset it is not):
+# it says so instead, before either of the others, as initAdminPassword checks it first. A server locked with no hash behind
+# the lock (an older one, locked with its own password, that took over a community with none: isLocked is per-server) has
+# no password either and makes none: it says so, never "nothing", as only the hash counts as having one.
+first_password_notice() {
+  local data_dir=$1 target=$2
+  if sudo test -f "$data_dir/local-config.json" \
+    && sudo grep -qE '"passwordRetired"[[:space:]]*:[[:space:]]*\{' "$data_dir/local-config.json"; then
+    echo "🔒 This server's admin password is retired: it makes none, and ADMIN_PASSWORD is ignored. Owners sign in with their phone."
+    return 0
+  fi
+  if sudo test -f "$data_dir/local-config.json" \
+    && sudo grep -qE '"adminHash"[[:space:]]*:[[:space:]]*"[^"]' "$data_dir/local-config.json"; then
+    return 0
+  fi
+  if sudo test -f "$data_dir/local-config.json" \
+    && sudo grep -qE '"isLocked"[[:space:]]*:[[:space:]]*true' "$data_dir/local-config.json"; then
+    echo "🔒 This server has no admin password: its community has none, and ADMIN_PASSWORD is ignored. Owners sign in with their phone."
+    return 0
+  fi
+  if sudo test -f "$data_dir/local-config.json" \
+    && sudo grep -qE '"joinedAt"[[:space:]]*:[[:space:]]*[0-9]' "$data_dir/local-config.json"; then
+    return 0
+  fi
+  echo "🔑 This is a new install: it has no admin password, and ignores ADMIN_PASSWORD. Its first owner claims it with a one-time claim code."
+  echo "   Once it is up, run:"
+  echo "     ssh -t $target 'cd $(dirname "$data_dir") && sudo docker compose exec beanpool-node beanpool claim'"
+  echo "   It sets the community's address, then shows the claim code and a QR code: open BeanPool on your phone, then Claim a community."
+}
+
+# COPIES OF A NODE'S DATA. deploy.sh parks data/ at <home>/beanpool-data-backup-<DIR> and .env at
+# <home>/beanpool-env-backup-<DIR> while it replaces the project dir, and moves both back before the node starts. On
+# 2026-09-28 two deploys of test ran at once: the first parked data/; the second took the parked copy for a leftover, set it
+# aside as .stale ("the live data/ is authoritative"), found no data/ to keep, and the node started a new, empty community.
+# The next deploy down that path would have rm -rf'd the .stale copy, the only one left. So a deploy never guesses now: a
+# parked copy with nothing in its place IS the node's and is put back; a parked copy AND something in its place stop the
+# deploy before anything changes; and no copy is ever deleted. Older deploy.sh used the same parked names, so what an older
+# deploy left behind is found too.
+
+# check_data_copies <home> <DIR> <project dir>
+# Run on the server before anything there changes. Says what it found; returns 1 when the deploy must not go on:
+#   - data/ and a parked copy both exist: one of them is the community and deploy.sh will not pick. Both are described.
+#   - neither exists, but a copy was set aside earlier (<parked>.<anything>, such as the .stale an older deploy.sh made):
+#     starting now would make a new, empty community beside it.
+#   - .env and a parked .env both exist.
+# A parked copy with nothing in its place is fine: this deploy puts it back.
+check_data_copies() {
+  local home=$1 dir=$2 project=$3 parked parked_env stamp p rc=0
+  local aside=()
+  parked="$home/beanpool-data-backup-$dir"
+  parked_env="$home/beanpool-env-backup-$dir"
+  stamp=$(date -u +%Y%m%dT%H%M%SZ)
+  if [ -e "$parked" ] || [ -L "$parked" ]; then
+    if [ -e "$project/data" ] || [ -L "$project/data" ]; then
+      echo "🛑 FATAL: this node's data is in two places, and deploy.sh will not choose between them. Nothing was changed."
+      echo "   data/ now:   $project/data"
+      describe_data_copy "$project/data"
+      echo "   parked copy: $parked"
+      describe_data_copy "$parked"
+      echo "   A deploy parks data/ there while it replaces the code and moves it back before the node starts, so finding both"
+      echo "   means an earlier deploy stopped part-way or two ran at once. One of them is your community. It is normally the one"
+      echo "   founded long ago whose state.db and state.db-wal changed last; one founded minutes ago is a new, empty community a"
+      echo "   node made on an empty data/. Set the OTHER one aside under a dated name (never delete it until the node runs well"
+      echo "   on the right one), then deploy again:"
+      echo "     if data/ is your community:      sudo mv $parked $parked.set-aside-$stamp"
+      echo "     if the parked copy is:           sudo mv $project/data $parked.set-aside-$stamp"
+      echo "   (after the second, the next deploy finds the parked copy with nothing in its place and puts it back)."
+      rc=1
+    else
+      echo "♻️  $parked is this node's data, parked by a deploy that did not finish. This deploy puts it back."
+    fi
+  elif ! [ -e "$project/data" ] && ! [ -L "$project/data" ]; then
+    for p in "$parked".*; do
+      if [ -e "$p" ] || [ -L "$p" ]; then aside+=("$p"); fi
+    done
+    if [ ${#aside[@]} -gt 0 ]; then
+      echo "🛑 FATAL: $project/data is missing, and a copy of this node's data was set aside beside it. Nothing was changed."
+      for p in "${aside[@]}"; do
+        echo "   $p"
+        describe_data_copy "$p"
+      done
+      echo "   Starting now would make a new, empty community. If one of these is your community, move it to where a deploy"
+      echo "   puts data/ back from, and deploy again:  sudo mv <that copy> $parked"
+      echo "   If you do want a new, empty community here, make the empty folder first:  sudo mkdir -p $project/data"
+      echo "   Either way the other copies stay where they are."
+      rc=1
+    fi
+  fi
+  if [ -e "$parked_env" ] || [ -L "$parked_env" ]; then
+    if [ -e "$project/.env" ] || [ -L "$project/.env" ]; then
+      echo "🛑 FATAL: this node's .env is in two places, and deploy.sh will not choose between them. Nothing was changed."
+      echo "   .env now:    $project/.env"
+      data_copy_file_line ".env        " "$project/.env"
+      echo "   parked copy: $parked_env"
+      data_copy_file_line ".env        " "$parked_env"
+      if sudo cmp -s "$project/.env" "$parked_env"; then
+        echo "   They are the same."
+      else
+        echo "   They differ; compare them with:  sudo diff $parked_env $project/.env"
+      fi
+      echo "   Set the one that is not this node's aside under a dated name, then deploy again, e.g.:"
+      echo "     sudo mv $parked_env $parked_env.set-aside-$stamp"
+      rc=1
+    else
+      echo "♻️  $parked_env is this node's .env, parked by a deploy that did not finish. This deploy puts it back."
+    fi
+  fi
+  return $rc
+}
+
+# describe_data_copy <dir>
+# What tells two copies of a node's data apart, for someone choosing between them: when state.db and its write-ahead file
+# last changed and how big they are, the community in genesis.json (its id, and when it was founded), and a fingerprint of
+# community.key: the first 16 hex digits of its sha256, which names the key without showing it.
+describe_data_copy() {
+  local dir=$1 id born
+  data_copy_file_line "state.db    " "$dir/state.db"
+  data_copy_file_line "state.db-wal" "$dir/state.db-wal"
+  if sudo test -f "$dir/genesis.json"; then
+    id=$(sudo sed -n 's/.*"communityId"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$dir/genesis.json" | head -n1)
+    born=$(sudo sed -n 's/.*"createdAt"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$dir/genesis.json" | head -n1)
+    echo "      community   : ${id:-?}, founded ${born:-?}"
+  else
+    echo "      community   : no genesis.json"
+  fi
+  if sudo test -f "$dir/community.key"; then
+    echo "      community.key fingerprint: $(sudo cat "$dir/community.key" | sha256_hex | cut -c1-16)"
+  else
+    echo "      community.key: none"
+  fi
+}
+
+# data_copy_file_line <label> <file> — "<label>: modified <when>, <n> bytes", or "none". GNU stat on the servers; BSD stat
+# (a Mac) for the tests.
+data_copy_file_line() {
+  local label=$1 file=$2 when size
+  if ! sudo test -e "$file"; then
+    echo "      $label: none"
+    return 0
+  fi
+  if when=$(sudo stat -c '%y' "$file" 2>/dev/null); then
+    size=$(sudo stat -c '%s' "$file")
+  else
+    when=$(sudo stat -f '%Sm' -t '%Y-%m-%d %H:%M:%S' "$file")
+    size=$(sudo stat -f '%z' "$file")
+  fi
+  echo "      $label: modified ${when%%.*}, $size bytes"
+}
+
+# containers_using <dir>
+# The names of the running containers that have <dir> (or a folder inside it) bind-mounted, one per line. Docker keeps the
+# path a mount was given, and a bind mount follows its folder when that is moved, so a container listed here would go on
+# writing into wherever <dir> is moved to (test, 2026-09-28).
+containers_using() {
+  local dir=$1 id
+  for id in $(sudo docker ps -q 2>/dev/null); do
+    if sudo docker inspect -f '{{range .Mounts}}{{println .Source}}{{end}}' "$id" 2>/dev/null \
+      | awk -v d="$dir" '$0 == d || index($0, d "/") == 1 { found = 1 } END { exit !found }'; then
+      sudo docker inspect -f '{{.Name}}' "$id" 2>/dev/null | sed 's|^/||'
+    fi
+  done
+}
+
 # --- Local side. ---
 
 # http_status <url> — the HTTP status code, or 000 when nothing answered.

@@ -31,10 +31,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { onAccountOnPhone } from './account-on-phone';
 import { buildSignedHeaders } from './crypto';
-import { loadIdentity, type BeanPoolIdentity } from './identity';
+import { loadIdentity, KEY_ITEM_OPTIONS, type BeanPoolIdentity } from './identity';
+import { communityAddress, pinPushKey, pushKeyOf } from './push-pins';
 import {
     PUSH_REGISTERED_AT_STORE_KEY, PUSH_REGISTRATIONS_DUE_STORE_KEY, PUSH_STAMP_STORE_KEY, SAVED_NODES_STORE_KEY,
 } from './storage-keys';
+
+export { communityAddress };
 
 const PUSH_TOKENS_PATH = '/api/push-tokens';
 const ANCHOR_STORE_KEY = 'beanpool_anchor_url';
@@ -60,12 +63,6 @@ interface Storage {
     getItem(key: string): Promise<string | null>;
     setItem(key: string, value: string): Promise<void>;
     removeItem(key: string): Promise<void>;
-}
-
-/** A community's address as the phone sends to it: trimmed, no trailing slash. Null for anything but an http(s) address. */
-export function communityAddress(raw: unknown): string | null {
-    if (typeof raw !== 'string' || !/^https?:\/\/\S+$/i.test(raw.trim())) return null;
-    return raw.trim().replace(/\/+$/, '');
 }
 
 function parseRecord(raw: string | null): string[] {
@@ -122,6 +119,25 @@ export function putBackOnRecord(communities: readonly string[], storage: Pick<St
     return changeRecord(() => addToRecord(communities, storage));
 }
 
+/**
+ * Take `communities` off the record: the account deleted itself there and stays on the phone (delete-here.ts
+ * `leaveThisCommunity`). That node dropped the key's push tokens with the account (server `purgeMemberSelf`), so no
+ * leave is ever sent there. Never throws: a record that can't be changed is logged, and a later leave asks that node
+ * for nothing it still holds.
+ */
+export async function dropFromRecord(communities: readonly string[], storage: Pick<Storage, 'getItem' | 'setItem'> = AsyncStorage): Promise<void> {
+    const dropped = new Set(communities.map(communityAddress).filter((c): c is string => c !== null));
+    try {
+        await changeRecord(async () => {
+            const recorded = parseRecord(await storage.getItem(PUSH_REGISTERED_AT_STORE_KEY));
+            const kept = recorded.filter((c) => !dropped.has(c));
+            if (kept.length !== recorded.length) await storage.setItem(PUSH_REGISTERED_AT_STORE_KEY, JSON.stringify(kept));
+        });
+    } catch (e) {
+        console.warn('[Push] Could not take the community left off the record', e);
+    }
+}
+
 // ── The push stamp ──────────────────────────────────────────────────────────────────────────────────────────────
 
 type StampCopy = Pick<Storage, 'getItem' | 'setItem'>;
@@ -134,7 +150,7 @@ type StampCopy = Pick<Storage, 'getItem' | 'setItem'>;
  */
 const besideTheKey: StampCopy = {
     getItem: (key) => SecureStore.getItemAsync(key),
-    setItem: (key, value) => SecureStore.setItemAsync(key, value),
+    setItem: (key, value) => SecureStore.setItemAsync(key, value, KEY_ITEM_OPTIONS),
 };
 
 let lastStamp = 0;
@@ -368,10 +384,11 @@ export async function registerPushTokenWithCommunity(
     const request = fetch(url, { method: 'POST', headers, body, signal: controller.signal });
     inFlight.set(request, key);
     let answered = false;
+    let answer: { success?: unknown; pushKey?: unknown } | undefined;
     try {
         const res = await request;
         answered = true;
-        const answer: { success?: unknown } | undefined = await res.json().catch(() => undefined);
+        answer = await res.json().catch(() => undefined);
         if (!res.ok || answer?.success !== true) throw new Error(`${community} did not register this phone (${res.status})`);
     } catch (e) {
         await stillDue(key, community, answered || controller.signal.aborted ? 'refused' : 'unanswered', storage);
@@ -381,6 +398,9 @@ export async function registerPushTokenWithCommunity(
         clearTimeout(timer);
     }
     await landed(key, community, storage);
+    // The key this community signs its notices with, from its answer to this signed request (push-pins.ts): pinned
+    // under the phone's pins, or the pin taken off when it names none.
+    await pinPushKey(community, pushKeyOf(answer), storage);
     return true;
 }
 

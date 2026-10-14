@@ -24,8 +24,8 @@ import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { updateLocalConfig } from './config/local-config.js';
 
-const PORT = 8696;
-const BASE = `https://localhost:${PORT}`;
+let PORT = 0; // the port startHttpsServer(0) bound
+let BASE = '';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -68,7 +68,8 @@ async function main() {
     grantNodeRole(owner.pub, 'owner', 'SYSTEM');
     updateLocalConfig({ totpEnabled: false, totpSecret: null, totpBackupCodesHashes: [], breakGlassMode: false } as any);
 
-    await startHttpsServer(PORT);
+    PORT = await startHttpsServer(0);
+    BASE = `https://localhost:${PORT}`;
 
     // The phone asks for a challenge. From here on the attacker knows its id.
     const chal = await call('POST', '/api/local/admin/auth/challenge', {});

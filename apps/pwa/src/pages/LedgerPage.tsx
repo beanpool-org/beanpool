@@ -14,9 +14,13 @@ import {
 import { resolveAvatarUrl } from '../lib/avatar';
 import { CommonsInfoModal } from '../components/CommonsInfoModal';
 import { CreditBar } from '../components/CreditBar';
-import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, tierIndexForCredit, tierIndexForName, type TierName } from '@beanpool/core';
+import { RepaymentCard } from '../components/RepaymentCard';
+import { PER_COUNTERPARTY_VOLUME_CAP, PROTOCOL_CONSTANTS, TIER_LEVELS, memberLevel, BLOCKED_BEANS_NOTE, ledgerLineNote, type TierName } from '@beanpool/core';
 import { withJitter } from '../lib/jitter';
 import { onSyncActivity } from '../lib/sync';
+import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
+import { useMembersOnDemand, useMemberSearch, MEMBERS_SEARCH_MIN_CHARS } from '../lib/members-on-demand';
+import { creditLineCard, knownFrozenPartNote, frozenDebitLine, KNOWN_FROZEN_TITLE, KNOWN_FROZEN_BODY } from '../lib/credit-line-card';
 
 interface Props {
     identity: BeanPoolIdentity;
@@ -32,16 +36,16 @@ interface Props {
 // `min` = the credit backing the floor (vouch + earned + granted); `floor` = the floor on ENTERING
 // the tier (floors slide continuously between them). Only presentation lives here.
 const TIER_LOOK: Record<TierName, { color: string; bg: string; border: string; blurb: string; perks: string[] }> = {
-    Newcomer: { color: '#16a34a', bg: '#f0fdf4', border: '#bbf7d0',
+    Newcomer: { color: 'var(--tier-newcomer)', bg: 'var(--tier-newcomer-bg)', border: 'var(--tier-newcomer-border)',
       blurb: "Welcome. From day one you can browse, trade, receive credits and invite others — your first completed trade (or a community vouch) opens your credit line.",
       perks: ['Browse & trade the marketplace', 'Receive credits', 'Invite others to join', 'Send credits after first trade (needs positive balance)'] },
-    Resident: { color: '#2563eb', bg: '#eff6ff', border: '#bfdbfe',
+    Resident: { color: 'var(--tier-resident)', bg: 'var(--tier-resident-bg)', border: 'var(--tier-resident-border)',
       blurb: "You've traded real value with the community. Your credit line deepens with every trade — the more value you exchange, the deeper it grows.",
       perks: ['Credit floor deepens with the value you trade', 'Invite others to join'] },
-    Steward:  { color: '#7c3aed', bg: '#f5f3ff', border: '#ddd6fe',
+    Steward:  { color: 'var(--tier-steward)', bg: 'var(--tier-steward-bg)', border: 'var(--tier-steward-border)',
       blurb: "A trusted trader with a broad circle of partners. The community recognises you, and your credit line runs deeper still.",
       perks: ['Credit floor continues deepening', 'Trusted-trader recognition'] },
-    Elder:    { color: '#d97706', bg: '#fffbeb', border: '#fde68a',
+    Elder:    { color: 'var(--tier-elder)', bg: 'var(--tier-elder-bg)', border: 'var(--tier-elder-border)',
       blurb: "A pillar of the commons — the deepest possible credit line and the community's highest recognition.",
       perks: ['Credit floor can reach -2000 (the maximum)', 'Recognised as a community Elder'] },
 };
@@ -84,7 +88,20 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
     // Search filter for recipient select dropdown
     const [memberSearch, setMemberSearch] = useState('');
     const [showMemberPicker, setShowMemberPicker] = useState(false);
+    // With members on demand (the worldwide community) this page never reads the directory whole: the Send picker asks
+    // the node by name and keeps the card picked (lib/members-on-demand; review of #1861, N1). Elsewhere the list is
+    // read as before, once the node has said which it is.
+    const membersOnDemand = useMembersOnDemand();
+    const membersOnDemandRef = useRef<boolean | null>(null);
+    membersOnDemandRef.current = membersOnDemand;
+    const pickerSearch = useMemberSearch(memberSearch, membersOnDemand === true && showMemberPicker);
+    const [pickedCard, setPickedCard] = useState<{ publicKey: string; callsign: string } | null>(null);
     const [showCommonsInfo, setShowCommonsInfo] = useState(false);
+    // Beans from someone this member has blocked show BLOCKED_BEANS_NOTE in place of their note (@beanpool/core
+    // ledgerLineNote): one the community kept from them already comes so, and this covers the rest.
+    const [blocklistVersion, setBlocklistVersion] = useState(0);
+    useEffect(() => onBlocklistUpdated(() => setBlocklistVersion(v => v + 1)), []);
+    const blockedSet = useMemo(() => new Set(getBlockedUsers()), [blocklistVersion]);
 
     function renderMemoText(memo: string) {
         const sanitized = memo
@@ -137,7 +154,10 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                 const [bal, txn, mem] = await Promise.all([
                     getBalance(identity.publicKey).catch(() => null),
                     getTransactions(identity.publicKey).catch(() => []),
-                    getMembers().catch(() => []),
+                    // null, not [], when the list couldn't be read (the node busy with heavy lists answers 503):
+                    // the Send picker keeps who it had and the next refresh reads them again.
+                    // Read only once the node has said it reads whole (the effect below reads them when it says so).
+                    membersOnDemandRef.current === false ? getMembers().catch(() => null) : null,
                 ]);
                 // The balance is the point of this screen, so a balance that failed to load is a
                 // failed refresh even when the other two calls succeeded. Requiring ALL THREE to
@@ -150,7 +170,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                 if (!isMountedRef.current) return;
                 setBalanceInfo(bal);
                 setTxns(txn);
-                setMembers(mem.filter(m => m.publicKey !== identity.publicKey));
+                if (mem) setMembers(mem.filter(m => m.publicKey !== identity.publicKey));
                 setError(null);
                 // Stamped on SUCCESS only. In `finally` a FAILED refresh counted as a refresh,
                 // so the cooldown then suppressed the retry — a blip could leave the view stale
@@ -167,6 +187,16 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
         refreshPromiseRef.current = p;
         return p;
     }, [identity.publicKey, viewerIsMember]);
+
+    // The node has just said it reads whole: the list the refresh at open couldn't read yet, read once.
+    useEffect(() => {
+        if (membersOnDemand !== false || !viewerIsMember) return;
+        // Asked inside the promise, so a read that throws before it starts waits for the next refresh too.
+        Promise.resolve()
+            .then(() => getMembers())
+            .then(mem => { if (isMountedRef.current) setMembers(mem.filter(m => m.publicKey !== identity.publicKey)); })
+            .catch(() => { /* the next refresh reads them again */ });
+    }, [membersOnDemand]);
 
     useEffect(() => {
         let interval: ReturnType<typeof setInterval> | null = null;
@@ -249,9 +279,11 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
     const frozen = balanceInfo?.frozen ?? false;           // v3: debt below usable floor → spending paused
     const activated = balanceInfo?.activated;   // has a credit line at all (earned/vouched/granted)
     const earned = balanceInfo?.earnedCredit ?? 0;     // from the saturating value curve
-    // What backs the floor & tier: vouch + earned + granted = CREDIT_BASE_FLOOR − floor, the same
-    // quantity the node's getTier reads. (earned + granted alone left out the vouch.)
-    const totalCredit = Math.max(0, CREDIT_BASE_FLOOR - floor);
+    // The level and the trust figure behind it, from one source (memberLevel, @beanpool/core): the node's tier name and
+    // its tierCredit, the credit that tier is read from (a freeze keeps the line held unfrozen), so the badge above and the
+    // Levels card show one level. CREDIT_BASE_FLOOR − floor only from a node that sends no tierCredit.
+    const level = memberLevel(balanceInfo);
+    const totalCredit = level.credit;
     const ec = totalCredit;                            // "trust" shown to the user
     const notEarned = Math.max(0, totalCredit - earned); // vouch + grants — fixed, not grown by trading
     const qualifiedValue = balanceInfo?.qualifiedValue ?? 0;
@@ -261,9 +293,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
     const ts = balanceInfo?.trustStats;
     const uniquePartners = ts?.uniquePartners ?? 0;
 
-    // Tier: trust the server's authoritative tier name; fall back to the credit threshold.
-    const serverIdx = tierIndexForName(balanceInfo?.tier?.name);
-    const tierIdx = serverIdx >= 0 ? serverIdx : tierIndexForCredit(totalCredit);
+    const tierIdx = level.index;
     const tier = TIERS[tierIdx];
     const nextTier = TIERS[tierIdx + 1] || null;
     const ELDER_MIN = TIERS[TIERS.length - 1].min;
@@ -287,8 +317,19 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
 
     // ⚡ Bolt: O(1) Map lookup for selected member recipient instead of O(M) .find() scans
     const membersMap = useMemo(() => new Map(members.map(m => [m.publicKey, m])), [members]);
-    const selectedMember = membersMap.get(sendTo);
+    const selectedMember = membersMap.get(sendTo) ?? (pickedCard?.publicKey === sendTo ? pickedCard : undefined);
     const filteredMembers = members.filter(m => m.callsign.toLowerCase().includes(memberSearch.toLowerCase()));
+    const pickable: Array<{ publicKey: string; callsign: string }> = membersOnDemand === true
+        ? (pickerSearch.found ?? []).filter(m => m.publicKey !== identity.publicKey)
+        : filteredMembers;
+    // Said only once it is so: never "nobody" for a search that failed or hasn't answered yet.
+    const pickerNote = membersOnDemand === false ? (filteredMembers.length === 0 ? 'No members found' : null)
+        : membersOnDemand === null ? null
+        : memberSearch.trim().length < MEMBERS_SEARCH_MIN_CHARS ? `Type at least ${MEMBERS_SEARCH_MIN_CHARS} letters of a name.`
+        : pickerSearch.state === 'searching' ? 'Searching…'
+        : pickerSearch.state === 'failed' ? "Couldn't search just now. Check your connection and try again."
+        : pickerSearch.found && pickable.length === 0 ? 'Nobody here has a name starting with that.'
+        : null;
 
     return (
         <div className="p-4 md:p-6 max-w-6xl mx-auto min-h-full pb-24">
@@ -300,7 +341,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     </div>
                     <div>
                         <h2 className="text-lg font-bold text-nature-950 dark:text-white leading-tight">{identity.callsign}</h2>
-                        <div className="mt-1 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-400 border border-nature-200 dark:border-nature-700 w-fit">
+                        <div className="mt-1 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-nature-100 dark:bg-nature-800 text-nature-600 dark:text-nature-300 border border-nature-200 dark:border-nature-700 w-fit">
                             <span>{tier.emoji}</span>
                             <span>{tier.name}</span>
                         </div>
@@ -308,7 +349,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                 </div>
 
                 <div className="text-right flex flex-col items-center md:items-end">
-                    <span className={`text-2xl font-black font-mono ${balance >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                    <span className={`text-2xl font-black font-mono ${balance >= 0 ? 'text-emerald-500' : 'text-red-500 dark:text-red-400'}`}>
                         {balance >= 0 ? '+' : ''}{balance.toFixed(1)}B
                     </span>
                     <span className="text-[10px] font-bold text-nature-400 uppercase tracking-wider">Beans</span>
@@ -317,7 +358,20 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
 
             {/* Credit position — zero is the sweet spot. A brand-new member (no trades yet) has no
                 credit line (floor 0); their line opens automatically on their first real trade. */}
-            {activated === false ? (
+            {creditLineCard(balanceInfo ?? {}) === 'frozen' ? (
+                <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 py-4 mb-4 shadow-sm" data-testid="ledger-known-frozen">
+                    <div className="flex items-start gap-3 bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 rounded-xl p-3">
+                        <span className="text-xl leading-none" aria-hidden="true">❄️</span>
+                        <div>
+                            <h2 className="text-sm font-extrabold text-sky-800 dark:text-sky-200">{KNOWN_FROZEN_TITLE}</h2>
+                            <div className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-0.5">{KNOWN_FROZEN_BODY}</div>
+                            {frozenDebitLine(balanceInfo?.balance) && (
+                                <p className="text-xs font-bold text-nature-800 dark:text-nature-100 leading-relaxed mt-1.5" data-testid="ledger-frozen-debit">{frozenDebitLine(balanceInfo?.balance)}</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            ) : activated === false ? (
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 py-4 mb-4 shadow-sm">
                     <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl p-3">
                         <span className="text-xl leading-none">🌱</span>
@@ -332,7 +386,10 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
             ) : (
                 <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl px-5 pt-3 pb-4 mb-4 shadow-sm">
                     {/* The bar itself now carries the offer ladder (locked zone, rungs, unlock caption). */}
-                    <CreditBar balance={balance} floor={floor} usableFloor={usableFloor} liveOffers={liveOffers} />
+                    <CreditBar balance={balance} floor={floor} usableFloor={usableFloor} liveOffers={liveOffers} knownGrant={balanceInfo?.knownGrant ?? 0} />
+                    {knownFrozenPartNote(balanceInfo ?? {}) && (
+                        <p className="text-xs text-nature-600 dark:text-nature-300 leading-relaxed mt-2">{knownFrozenPartNote(balanceInfo ?? {})}</p>
+                    )}
                     {/* Frozen is the one state the ladder can't fully convey — call it out explicitly. */}
                     {frozen && (
                         <div className="mt-2 flex items-start gap-1.5 text-[11px] leading-relaxed text-amber-600 dark:text-amber-400">
@@ -343,13 +400,16 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                 </div>
             )}
 
+            {/* Working off a debt (#1597): what is left, and Pay the Commons (a pay-back code from an admin). */}
+            {viewerIsMember && <RepaymentCard onPaid={refresh} />}
+
             {/* Tab Bar */}
             <div className="flex bg-white dark:bg-nature-900 border-b border-nature-200 dark:border-nature-800 rounded-t-2xl shadow-sm overflow-hidden">
                 <button
                     className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
                         activeTab === 'trust'
-                            ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-extrabold'
-                            : 'border-transparent text-nature-400 dark:text-nature-500 hover:text-nature-600'
+                            ? 'border-indigo-500 text-indigo-600 dark:text-indigo-300 font-extrabold'
+                            : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600 dark:hover:text-nature-200'
                     }`}
                     onClick={() => setActiveTab('trust')}
                 >
@@ -358,8 +418,8 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                 <button
                     className={`flex-1 py-3 text-center border-b-2 font-bold text-sm bg-transparent cursor-pointer transition-all flex items-center justify-center gap-1.5 ${
                         activeTab === 'financials'
-                            ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400 font-extrabold'
-                            : 'border-transparent text-nature-400 dark:text-nature-500 hover:text-nature-600'
+                            ? 'border-indigo-500 text-indigo-600 dark:text-indigo-300 font-extrabold'
+                            : 'border-transparent text-nature-400 dark:text-nature-400 hover:text-nature-600 dark:hover:text-nature-200'
                     }`}
                     onClick={() => setActiveTab('financials')}
                 >
@@ -377,8 +437,8 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                             {/* Circular progress ring around the emoji */}
                             <div className="shrink-0">
                                 <svg width="80" height="80" viewBox="0 0 100 100">
-                                    <circle cx="50" cy="50" r="42" fill="none" stroke="#e2e8f0" strokeWidth="6" />
-                                    <circle cx="50" cy="50" r="42" fill="none" stroke={tier.color} strokeWidth="6"
+                                    <circle cx="50" cy="50" r="42" fill="none" style={{ stroke: 'var(--tier-track)' }} strokeWidth="6" />
+                                    <circle cx="50" cy="50" r="42" fill="none" style={{ stroke: tier.color }} strokeWidth="6"
                                         strokeLinecap="round"
                                         strokeDasharray={`${journeyPct * 263.9} 263.9`}
                                         transform="rotate(-90 50 50)" />
@@ -388,7 +448,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                             <div className="flex-1 min-w-0">
                                 <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: tier.color }}>YOUR TRUST LEVEL</span>
                                 <div className="text-2xl font-black leading-tight mt-0.5" style={{ color: tier.color }}>{tier.name}</div>
-                                <div className="text-xs font-semibold text-nature-500 mt-1">Level {tierIdx + 1} of {TIERS.length} · {ec} trust</div>
+                                <div className="text-xs font-semibold text-nature-500 dark:text-nature-300 mt-1">Level {tierIdx + 1} of {TIERS.length} · {ec} trust</div>
                                 <div className="text-xs font-semibold mt-2 text-nature-700 dark:text-nature-300">
                                     {nextTier
                                         ? <><span className="font-black" style={{ color: tier.color }}>{creditsToNext}</span> more trust to {nextTier.emoji} {nextTier.name}</>
@@ -402,13 +462,13 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-nature-100 dark:border-nature-800" style={{ borderColor: tier.border }}>
                             <button
                                 onClick={() => { if (canSend) { setActiveTab('financials'); setShowSend(true); } }}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold cursor-pointer transition-all ${canSend ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600 hover:bg-emerald-100' : 'bg-nature-100 dark:bg-nature-800 border-nature-200 dark:border-nature-800 text-nature-400 cursor-default'}`}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold cursor-pointer transition-all ${canSend ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-950/40' : 'bg-nature-100 dark:bg-nature-800 border-nature-200 dark:border-nature-800 text-nature-400 dark:text-nature-300 cursor-default'}`}
                                 style={{ font: 'inherit' }}
                             >
                                 <span>{canSend ? '💸' : '🔒'}</span>
                                 <span>{canSend ? 'Send Credits' : earned <= 0 ? 'Send (needs 1st trade)' : 'Send (needs +ve balance)'}</span>
                             </button>
-                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 text-emerald-600">
+                            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-extrabold bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400">
                                 <span>✓</span>
                                 <span>Invite Members</span>
                             </div>
@@ -416,9 +476,11 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     </div>
 
                     {/* ── Medallion shelf ── */}
+                    {/* Levels are merit badges (#1838): one not reached yet keeps its own colours and a dashed edge, something
+                        to grow into. Never a lock, never faded or greyed as if it were out of bounds. */}
                     <div>
                         <span className="text-[10px] font-bold text-nature-400 uppercase tracking-widest block mb-3">ALL LEVELS</span>
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="grid grid-cols-4 gap-2" data-testid="levels-shelf">
                             {TIERS.map((t, i) => {
                                 const reached = tierIdx >= i;
                                 const isSel = selLevel === i;
@@ -431,14 +493,14 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                         onClick={() => setSelectedLevel(i)}
                                         className="flex flex-col items-center py-3 px-1 rounded-xl border-2 transition-all cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-1"
                                         style={{
-                                            background: isSel ? t.bg : '#fff',
-                                            borderColor: isSel ? t.color : '#e5e7eb',
-                                            opacity: reached ? 1 : 0.55,
+                                            background: isSel ? t.bg : 'var(--tier-card)',
+                                            borderColor: isSel ? t.color : 'var(--tier-card-border)',
+                                            borderStyle: reached || isSel ? 'solid' : 'dashed',
                                             fontFamily: 'inherit',
                                         }}
                                     >
                                         <span className="text-3xl leading-none">{t.emoji}</span>
-                                        <span className="text-[11px] font-black mt-2 leading-tight" style={{ color: reached ? t.color : '#9ca3af' }}>{t.name}</span>
+                                        <span className="text-[11px] font-black mt-2 leading-tight" style={{ color: t.color }}>{t.name}</span>
                                         <span className="text-[9px] font-semibold text-nature-400 mt-1 leading-none">
                                             {tierIdx === i ? "You're here" : reached ? 'Reached' : `${t.min} trust`}
                                         </span>
@@ -449,7 +511,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     </div>
 
                     {/* ── Selected-level detail ── */}
-                    <div className="bg-white dark:bg-nature-900 border rounded-2xl p-5 shadow-sm" style={{ borderColor: sel.border }}>
+                    <div className="bg-white dark:bg-nature-900 border rounded-2xl p-5 shadow-sm" style={{ borderColor: sel.border }} data-testid="level-detail">
                         {/* Wraps: at 320px with 1.3x text the level name and badge ran 22px past the card and
                             dragged the whole Ledger page sideways. */}
                         <div className="flex flex-wrap items-center gap-3 mb-4" data-testid="level-detail-heading">
@@ -458,8 +520,8 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                 <div className="text-xl font-black" style={{ color: sel.color }}>{sel.name}</div>
                                 <div className="text-xs text-nature-400 font-semibold">Level {selLevel + 1} of {TIERS.length}</div>
                             </div>
-                            <span className="text-xs font-bold px-3 py-1.5 rounded-xl border whitespace-nowrap" style={{ borderColor: sel.border, backgroundColor: selReached ? sel.bg : '#f9fafb', color: selReached ? sel.color : '#9ca3af' }}>
-                                {selCurrent ? "You're here" : selReached ? 'Reached ✓' : '🔒 Locked'}
+                            <span className="text-xs font-bold px-3 py-1.5 rounded-xl border whitespace-nowrap" style={{ borderColor: sel.border, borderStyle: selReached ? 'solid' : 'dashed', backgroundColor: sel.bg, color: sel.color }}>
+                                {selCurrent ? "You're here" : selReached ? 'Reached ✓' : selLevel === tierIdx + 1 ? 'Next level' : 'Up ahead'}
                             </span>
                         </div>
 
@@ -469,11 +531,11 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         <div className="flex items-start gap-3 bg-nature-50 dark:bg-nature-800 border border-nature-200 dark:border-nature-700 rounded-xl p-3 mb-4">
                             <span className="mt-0.5">⚖️</span>
                             <div className="flex-1">
-                                <div className="text-[13px] text-nature-600 dark:text-nature-400 font-semibold">
+                                <div className="text-[13px] text-nature-600 dark:text-nature-300 font-semibold">
                                     {selCurrent ? 'Your current floor' : selReached ? 'Floor from this tier' : 'Floor starts at'}
                                 </div>
                                 {selCurrent && (
-                                    <div className="text-[10px] text-nature-400 mt-0.5">Grows deeper as you trade more</div>
+                                    <div className="text-[10px] text-nature-400 dark:text-nature-300 mt-0.5">Grows deeper as you trade more</div>
                                 )}
                             </div>
                             <span className="text-xl font-black font-mono" style={{ color: sel.color }}>
@@ -484,7 +546,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         <div className="flex flex-col gap-2">
                             {sel.perks.map(p => (
                                 <div key={p} className="flex items-start gap-2 text-[13px]">
-                                    <span className="mt-0.5 shrink-0" style={{ color: selReached ? '#10b981' : '#d1d5db' }}>{selReached ? '✓' : '○'}</span>
+                                    <span className="mt-0.5 shrink-0" style={{ color: selReached ? '#10b981' : sel.color }}>{selReached ? '✓' : '○'}</span>
                                     <span className="text-nature-700 dark:text-nature-300">{p}</span>
                                 </div>
                             ))}
@@ -500,8 +562,8 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     {nextTier && (
                         <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
                             <h3 className="font-extrabold text-[15px] text-nature-950 dark:text-white mb-2">🚀 Reach {nextTier.emoji} {nextTier.name}</h3>
-                            <p className="text-sm font-black text-indigo-650 dark:text-indigo-400 mb-2">{creditsToNext} trust to go</p>
-                            <p className="text-xs text-nature-500 leading-relaxed mb-4">
+                            <p className="text-sm font-black text-indigo-650 dark:text-indigo-300 mb-2">{creditsToNext} trust to go</p>
+                            <p className="text-xs text-nature-500 dark:text-nature-400 leading-relaxed mb-4">
                                 Trust grows with the real value you trade. Trading with someone NEW counts fastest —
                                 value with any one partner is capped, so a wide circle beats repeat trades with the same person.
                             </p>
@@ -509,7 +571,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                 <div className="p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/40 rounded-xl relative">
                                     <div className="text-2xl font-black text-emerald-600 dark:text-emerald-400">{Number.isFinite(valueToNext) ? `~${valueToNext}` : '—'}</div>
                                     <div className="text-[9px] font-bold text-nature-400 uppercase mt-1">beans of value to trade</div>
-                                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-emerald-500 text-white font-black text-[8px] uppercase tracking-wider">the lever</span>
+                                    <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-emerald-500 dark:bg-emerald-700 text-white font-black text-[8px] uppercase tracking-wider">the lever</span>
                                 </div>
                                 <div className="p-3 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-100 dark:border-indigo-900/40 rounded-xl">
                                     <div className="text-2xl font-black text-indigo-600 dark:text-indigo-400">{partnersToNext || '—'}</div>
@@ -535,7 +597,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                         <div className="text-[9px] font-bold text-nature-400 uppercase sm:tracking-wider mt-1 [overflow-wrap:anywhere]">{a.label}</div>
                                     </div>
                                     <div className="mt-3">
-                                        <div className="w-full h-1 bg-nature-100 dark:bg-nature-850 rounded-full overflow-hidden">
+                                        <div className="w-full h-1 bg-nature-100 dark:bg-nature-900 rounded-full overflow-hidden">
                                             <div className="h-full rounded-full" style={{ width: `${Math.min(100, a.pct * 100)}%`, backgroundColor: a.color }} />
                                         </div>
                                         <span className="text-[8px] font-bold text-nature-400 mt-1 block">{a.foot}</span>
@@ -545,7 +607,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         </div>
                     </div>
 
-                    <span className="text-[10px] font-medium text-nature-400 dark:text-nature-500 text-center italic block">
+                    <span className="text-[10px] font-medium text-nature-400 dark:text-nature-400 text-center italic block">
                         💡 Trust is a saturating curve over the real value you trade — diverse trades climb fastest, and it levels off near the top so no one runs away. Gifts don't build trust.
                     </span>
                 </div>
@@ -566,16 +628,16 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
 
                         <button
                             onClick={() => setShowCommonsInfo(true)}
-                            className="flex-1 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 text-center shadow-sm hover:bg-nature-50 dark:hover:bg-nature-850 hover:border-nature-300 dark:hover:border-nature-700 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                            className="flex-1 bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 text-center shadow-sm hover:bg-nature-50 dark:hover:bg-nature-800 hover:border-nature-300 dark:hover:border-nature-700 transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-amber-500/30"
                         >
-                            <p className="text-nature-500 dark:text-nature-400 text-sm font-semibold mb-2 flex items-center justify-center gap-1">
-                                Commons Pool <span className="text-xs text-nature-400">ⓘ</span>
+                            <p className="text-nature-500 dark:text-nature-300 text-sm font-semibold mb-2 flex items-center justify-center gap-1">
+                                Commons Pool <span className="text-xs text-nature-400 dark:text-nature-300">ⓘ</span>
                             </p>
                             <p className="text-2xl font-black font-mono text-amber-500 flex items-center justify-center gap-1">
                                 {(balanceInfo?.commonsBalance ?? 0).toFixed(1)}
                                 <img src="/assets/bean.png" className="w-[18px] h-[18px]" alt="B" />
                             </p>
-                            <p className="text-nature-500 dark:text-nature-400 text-[10px] mt-1 font-semibold">
+                            <p className="text-nature-500 dark:text-nature-300 text-[10px] mt-1 font-semibold">
                                 🌱 View Solvency & Tax
                             </p>
                         </button>
@@ -584,7 +646,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                     {/* Send credits */}
                     <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-2xl p-5 shadow-sm">
                         {!canSend && (
-                            <div className="bg-nature-50 dark:bg-nature-850/50 border border-nature-200 dark:border-nature-800 rounded-xl p-3 mb-4 text-center">
+                            <div className="bg-nature-50 dark:bg-nature-900/50 border border-nature-200 dark:border-nature-800 rounded-xl p-3 mb-4 text-center">
                                 <p className="text-xs text-nature-500 dark:text-nature-400 font-medium">
                                     {earned <= 0
                                         ? '🔒 Direct sends unlock after your first completed trade on the Marketplace, and require a positive balance.'
@@ -618,22 +680,22 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                     </button>
 
                                     {showMemberPicker && (
-                                        <div className="absolute left-0 right-0 mt-1 bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-850 rounded-xl shadow-xl z-20 max-h-56 overflow-y-auto">
+                                        <div className="absolute left-0 right-0 mt-1 bg-white dark:bg-nature-950 border border-nature-200 dark:border-nature-700 rounded-xl shadow-xl z-20 max-h-56 overflow-y-auto">
                                             <input
                                                 type="text"
                                                 placeholder="Search members..."
                                                 value={memberSearch}
                                                 onChange={(e) => setMemberSearch(e.target.value)}
-                                                className="w-full p-3 border-b border-nature-100 dark:border-nature-850 bg-transparent text-sm focus:outline-none text-nature-900 dark:text-white"
+                                                className="w-full p-3 border-b border-nature-100 dark:border-nature-700 bg-transparent text-sm focus:outline-none text-nature-900 dark:text-white"
                                             />
-                                            {filteredMembers.length === 0 ? (
-                                                <div className="p-4 text-xs text-nature-400 text-center">No members found</div>
+                                            {pickerNote ? (
+                                                <div className="p-4 text-xs text-nature-400 text-center" data-testid="ledger-picker-note">{pickerNote}</div>
                                             ) : (
-                                                filteredMembers.map(m => (
+                                                pickable.map(m => (
                                                     <button
                                                         key={m.publicKey}
-                                                        onClick={() => { setSendTo(m.publicKey); setShowMemberPicker(false); setMemberSearch(''); }}
-                                                        className={`w-full p-3 text-left text-sm hover:bg-nature-50 dark:hover:bg-nature-900 flex justify-between items-center cursor-pointer border-none bg-transparent ${sendTo === m.publicKey ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600' : 'text-nature-900 dark:text-white'}`}
+                                                        onClick={() => { setSendTo(m.publicKey); setPickedCard({ publicKey: m.publicKey, callsign: m.callsign }); setShowMemberPicker(false); setMemberSearch(''); }}
+                                                        className={`w-full p-3 text-left text-sm hover:bg-nature-50 dark:hover:bg-nature-900 flex justify-between items-center cursor-pointer border-none bg-transparent ${sendTo === m.publicKey ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400' : 'text-nature-900 dark:text-white'}`}
                                                     >
                                                         <span className="font-bold">{m.callsign}</span>
                                                         <span className="text-[10px] font-mono opacity-50">{m.publicKey.slice(0, 10)}...</span>
@@ -665,7 +727,7 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                     if (!isNaN(parsedAmount) && parsedAmount > 0) {
                                         // Peer transfers are fee-free — recipient receives the full amount.
                                         return (
-                                            <div className="bg-nature-100 dark:bg-nature-850 rounded-xl p-3 mb-4 text-xs space-y-1.5 border border-nature-200 dark:border-nature-800">
+                                            <div className="bg-nature-100 dark:bg-nature-900 rounded-xl p-3 mb-4 text-xs space-y-1.5 border border-nature-200 dark:border-nature-800">
                                                 <div className="flex justify-between items-center text-nature-750 dark:text-nature-300">
                                                     <span>Recipient receives:</span>
                                                     <span className="font-mono font-bold text-nature-950 dark:text-white">{parsedAmount.toFixed(2)} B</span>
@@ -735,14 +797,15 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         <button
                             onClick={async () => {
                                 try {
-                                    // Signed: the export is a member-only read on the node.
+                                    // Signed: the node answers with this member's own balance and transactions only (balances and
+                                    // trades are private, 2026-09-28), never the whole community's.
                                     const data = await request<{ balancesCsv: string; transactionsCsv: string }>('GET', '/api/ledger/export');
                                     
                                     const balBlob = new Blob([data.balancesCsv], { type: 'text/csv' });
                                     const balUrl = window.URL.createObjectURL(balBlob);
                                     const balA = document.createElement('a');
                                     balA.href = balUrl;
-                                    balA.download = 'beanpool_balances.csv';
+                                    balA.download = 'beanpool_my_balance.csv';
                                     balA.click();
                                     window.URL.revokeObjectURL(balUrl);
                                     
@@ -751,18 +814,18 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                                         const txUrl = window.URL.createObjectURL(txBlob);
                                         const txA = document.createElement('a');
                                         txA.href = txUrl;
-                                        txA.download = 'beanpool_transactions.csv';
+                                        txA.download = 'beanpool_my_transactions.csv';
                                         txA.click();
                                         window.URL.revokeObjectURL(txUrl);
                                     }, 500);
                                 } catch (e) {
                                     console.error('Export failed', e);
-                                    alert('Export failed');
+                                    alert(`Export failed${e instanceof Error && e.message ? `: ${e.message}` : ''}`);
                                 }
                             }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 rounded-lg text-[11px] font-bold hover:bg-nature-200 transition-colors border border-nature-200 dark:border-nature-750 shadow-sm cursor-pointer"
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-nature-100 dark:bg-nature-800 text-nature-700 dark:text-nature-300 rounded-lg text-[11px] font-bold hover:bg-nature-200 dark:hover:bg-nature-700 dark:hover:text-nature-200 transition-colors border border-nature-200 dark:border-nature-700 shadow-sm cursor-pointer"
                         >
-                            ⬇️ Node Audit
+                            ⬇️ Export mine
                         </button>
                     </div>
 
@@ -774,22 +837,27 @@ export function LedgerPage({ identity, onNavigate, isMember }: Props) {
                         <div className="flex flex-col gap-2.5">
                             {txns.map(tx => {
                                 const isSent = tx.from === identity.publicKey;
+                                const note = ledgerLineNote({ incoming: !isSent, counterparty: tx.from, memo: tx.memo }, blockedSet);
                                 return (
                                     <div key={tx.id} className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-4 flex justify-between items-center shadow-sm transition-transform hover:-translate-y-0.5">
                                         <div>
                                             <p className={`text-[14px] font-bold ${isSent ? 'text-nature-900 dark:text-white' : 'text-emerald-700 dark:text-emerald-400'}`}>
                                                 {isSent ? '↑ Sent' : '↓ Received'}
                                             </p>
-                                            {tx.memo && (
+                                            {note === BLOCKED_BEANS_NOTE ? (
+                                                <p className="text-[13px] italic text-nature-500 dark:text-nature-400 mt-1 leading-snug">
+                                                    {BLOCKED_BEANS_NOTE}
+                                                </p>
+                                            ) : note && (
                                                 <p className="text-[13px] text-nature-550 dark:text-nature-400 mt-1 leading-snug">
-                                                    {renderMemoText(tx.memo)}
+                                                    {renderMemoText(note)}
                                                 </p>
                                             )}
                                             <p className="text-[11px] font-bold text-nature-400 mt-1.5 uppercase tracking-wide">
                                                 {new Date(tx.timestamp).toLocaleString()}
                                             </p>
                                         </div>
-                                        <p style={{ whiteSpace: 'nowrap' }} className={`text-lg font-bold font-mono ${isSent ? 'text-red-500' : 'text-emerald-500'} flex items-center`}>
+                                        <p style={{ whiteSpace: 'nowrap' }} className={`text-lg font-bold font-mono ${isSent ? 'text-red-500 dark:text-red-300' : 'text-emerald-500 dark:text-emerald-400'} flex items-center`}>
                                             {isSent ? '−' : '+'}{tx.amount.toFixed(1)}
                                             <img src="/assets/bean.png" className="w-4 h-4 ml-1" alt="B" />
                                         </p>

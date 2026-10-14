@@ -15,12 +15,16 @@ import {
     canOperateTreasury,
     closePoll, votePoll, rsvpEvent,
     getEventThread, postEventThreadMessage, removeEventThreadMessage,
-    nodeRoleOf,
+    nodeRoleOf, getPostsForPhotoHeal, offListingPhotoShownTo,
 } from '../state-engine.js';
 import { assertMayPost, assertMayEditPhotos } from '../engine/probation.js';
+import { assertMayPostToday } from '../engine/writer-bounds.js';
 import { assertNotMuted } from '../engine/auto-moderation.js';
+import { faceUrlsChangedAfter } from '../engine/avatar-keys.js';
+import { photoKeyMatches, photoKeyRequiredFor, photoHealFor, photoUrlsChangedAfter, PHOTO_KEYS_SINCE_ROW, notePhotoHealServed, notePhotoHealAnsweredAgain, restartPhotoHealFor, PHOTO_HEAL_PAGE_ROWS, PHOTO_HEAL_MIN_PAGE_ROWS } from '../engine/photo-keys.js';
 import { db } from '../db/db.js';
 import { getImageStore } from '../storage/image-store.js';
+import { openThumbnailOf } from '../storage/photo-thumbnails.js';
 import {
     MissingObjectError, attachmentDataOfAsync, openPhotoOf, type AttachmentRow, type PostPhotoRow,
 } from '../storage/image-columns.js';
@@ -30,18 +34,25 @@ import { syncPulseMarketplaceGate } from '../daily-pulse.js';
 import { chatRateLimit } from '../chat-rate-limit.js';
 import { createEventFromBody } from './event-post.js';
 import { EVENT_CHAT_HIDDEN } from '../engine/event-thread.js';
+import { postOutOfSight } from '../engine/post-sight.js';
+import { dealQuantityFromBody } from '../engine/post-fields.js';
 import { NOT_A_MEMBER_ERROR, NOT_A_MEMBER_CODE } from '../engine/members.js';
+import { CONVENOR_PAUSED_CODE } from '../engine/posts.js';
 import { respondProfileRefusal } from './profile-feature-gate.js';
 import { parseDistanceQuery } from './distance-query.js';
-import { getProfileSwitches } from '../config/node-profile.js';
+import { getProfileSwitches, nearbyListingsLimits } from '../config/node-profile.js';
+import { nearbySetHash, nearbySetMemory } from '../engine/nearby-set-memory.js';
+import { readMemberArea } from '../engine/member-area.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
-import { guestPost } from '@beanpool/engine';
+import { withheldAttachmentFor } from '../engine/withheld-lines.js';
+import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, authorsBlockedBy, postsResentTo, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
+import { memberErrorText } from './member-error-text.js';
 
 export function createMarketplaceRoutes(deps: RouteDeps): Router {
     const router = new Router();
-    const { clampLimit, clampOffset, enforceReadAuth: ENFORCE_READ_AUTH } = deps;
+    const { clampLimit, clampOffset } = deps;
 
     const isTreasury = (pk: string): boolean =>
         !!(db.prepare('SELECT is_treasury FROM members WHERE public_key=?').get(pk) as any)?.is_treasury;
@@ -81,11 +92,22 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // never by asking the store whether a file happens to be lying around: the delete paths remove the row
     // inside their transaction and the object only after it commits, so between those two moments the file
     // still exists and must not be served. Reading the row first is what makes that window safe.
+    // With its listing as the row says now: its audience, its author, and `off` 1 for a listing taken off (below). A photo
+    // whose listing is gone is no photo, to anyone: nobody may read that listing. With foreign keys off (db.ts), a
+    // listing's row can go without its photos' (a linked community's listings when the link goes, federation-listings.ts).
     const photo = db.prepare(
-        `SELECT photo_data, storage_key, sha256, bytes, mime FROM post_photos WHERE post_id = ? AND order_num = ?`
-    ).get(id, Number(orderNum)) as PostPhotoRow | undefined;
+        `SELECT pp.photo_data, pp.storage_key, pp.sha256, pp.bytes, pp.mime, pp.updated_at, p.audience_scope, p.author_pubkey,
+                COALESCE(p.active, 0) != 1 AS off
+           FROM post_photos pp JOIN posts p ON p.id = pp.post_id
+          WHERE pp.post_id = ? AND pp.order_num = ?`
+    ).get(id, Number(orderNum)) as (PostPhotoRow & { updated_at: string | null; audience_scope: string | null; author_pubkey: string; off: number }) | undefined;
 
-    if (!photo) {
+    // A photo that isn't everyone's goes only to a URL carrying the key the node hands out with its listing
+    // (engine/photo-keys.ts): an <img> cannot sign. Every listing's where the listings are members' (a local community
+    // with reads enforced); where they are a public read, a listing's off the board (a group's, one for one person).
+    // Anything else is answered as no photo, so neither says whether there is one.
+    const keyed = !!photo && photoKeyRequiredFor(photo.audience_scope);
+    if (!photo || (keyed && !photoKeyMatches(id, Number(orderNum), photo.updated_at, ctx.query.k))) {
         ctx.status = 404;
         ctx.body = { error: 'Photo not found' };
         return;
@@ -101,38 +123,74 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
             return;
         }
     }
-
-    // A row that has not been evacuated yet is served from the row, exactly as it always was; an evacuated
-    // one is served from the store. The two produce identical bytes and an identical content type — that is
-    // the whole contract of storage/image-columns.ts, and what lets a photo be evacuated under a client's
-    // immutable cache entry without invalidating it.
-    //
-    // From the store it is STREAMED, through the store's non-blocking read: on an S3 node the bytes come from
-    // the bucket, and neither the node's event loop nor its memory is held for the whole photo on the way.
-    let served: Awaited<ReturnType<typeof openPhotoOf>>;
-    try {
-        served = await openPhotoOf(photo, getImageStore());
-    } catch (e) {
-        // The read is async, so the row can have been deleted while it was in flight — and the delete paths
-        // remove the object right after the row. That is a photo that no longer exists, not an outage. So is
-        // one REPLACED in flight: an edit writes a new row at the same (post, order) with a new key and removes
-        // the old object, so the question is whether the row still names the object this request read.
-        if (e instanceof MissingObjectError) {
-            const still = db.prepare(`SELECT 1 FROM post_photos WHERE post_id = ? AND order_num = ? AND storage_key = ?`)
-                .get(id, Number(orderNum), photo.storage_key);
-            if (!still) {
-                ctx.status = 404;
-                ctx.body = { error: 'Photo not found' };
-                return;
-            }
+    // A listing taken off (`active` 0: cancelled or removed by its author, a keeper, a convenor or a moderator, replaced
+    // by its author's next Pulse listing, closed by a prune, paused by its author's suspension, an event over and
+    // scrubbed) is read by id by nobody, but a cancelled event by its hosts and the people Going while it stays readable
+    // (@beanpool/engine getPosts). Its photos go to whoever may still read it, and its author and the moderators, as a
+    // hidden one's do: only when they sign the request; to anyone else, as to an <img> with a key it was handed before,
+    // it has none. Never stored by a shared cache. A phone that holds the old URL shows the placeholder it shows for
+    // any photo that does not load; the lists that hand out its URL (trades, chats) hand none to anyone else
+    // (offListingPhotoShownTo). Neither app signs a photo load, so in practice a cancelled event's hosts and the
+    // people Going lose its photo too, and a buyer loses the cover of a listing the seller removed after the trade: on
+    // purpose, because a moderator's takedown leaves the same row state and must stop loading for everyone.
+    const off = !!photo.off;
+    if (off) {
+        const viewer = ctx.state.actor as string | undefined;
+        if (!offListingPhotoShownTo(viewer)(id, photo.author_pubkey)) {
+            ctx.status = 404;
+            ctx.body = { error: 'Photo not found' };
+            return;
         }
-        // The row says the bytes are in the store and they are not — a lost or unmounted images directory —
-        // or the bucket did not answer. 404 would tell the member their photo never existed and tell the
-        // operator nothing.
-        console.error(`[Photos] ${id}/${orderNum}:`, e);
-        ctx.status = 503;
-        ctx.body = { error: 'This photo is temporarily unavailable' };
-        return;
+    }
+
+    // The small copy for the lists (`size=thumb`, storage/photo-thumbnails.ts): asked only here, after every gate above,
+    // so it goes to exactly whoever the photo goes to, under the same cache header. A photo with none (one kept in its
+    // row, one it can't read) is answered with the photo itself, as is one whose small copy the store can't give now:
+    // the photo's own path below says what a missing or unreachable photo means. That photo is cached for 5 minutes, not
+    // the year below: a copy the store can't give now (a bucket hiccup) would otherwise leave the 800 px bytes under the
+    // list's URL, on the phone and for a public listing in a shared cache, until the photo changed (review opus-1742 #5).
+    let served: Awaited<ReturnType<typeof openPhotoOf>> = null;
+    let thumbNotServed = false;
+    if (ctx.query.size === 'thumb') {
+        try {
+            served = await openThumbnailOf(getImageStore(), photo.photo_data ? null : photo.storage_key);
+        } catch (e) {
+            console.warn(`[Photos] ${id}/${orderNum}: no small copy, serving the photo:`, e);
+        }
+        thumbNotServed = !served;
+    }
+    if (!served) {
+        // A row that has not been evacuated yet is served from the row, exactly as it always was; an evacuated
+        // one is served from the store. The two produce identical bytes and an identical content type — that is
+        // the whole contract of storage/image-columns.ts, and what lets a photo be evacuated under a client's
+        // immutable cache entry without invalidating it.
+        //
+        // From the store it is STREAMED, through the store's non-blocking read: on an S3 node the bytes come from
+        // the bucket, and neither the node's event loop nor its memory is held for the whole photo on the way.
+        try {
+            served = await openPhotoOf(photo, getImageStore());
+        } catch (e) {
+            // The read is async, so the row can have been deleted while it was in flight — and the delete paths
+            // remove the object right after the row. That is a photo that no longer exists, not an outage. So is
+            // one REPLACED in flight: an edit writes a new row at the same (post, order) with a new key and removes
+            // the old object, so the question is whether the row still names the object this request read.
+            if (e instanceof MissingObjectError) {
+                const still = db.prepare(`SELECT 1 FROM post_photos WHERE post_id = ? AND order_num = ? AND storage_key = ?`)
+                    .get(id, Number(orderNum), photo.storage_key);
+                if (!still) {
+                    ctx.status = 404;
+                    ctx.body = { error: 'Photo not found' };
+                    return;
+                }
+            }
+            // The row says the bytes are in the store and they are not — a lost or unmounted images directory —
+            // or the bucket did not answer. 404 would tell the member their photo never existed and tell the
+            // operator nothing.
+            console.error(`[Photos] ${id}/${orderNum}:`, e);
+            ctx.status = 503;
+            ctx.body = { error: 'This photo is temporarily unavailable' };
+            return;
+        }
     }
     if (!served) {
         ctx.status = 404;
@@ -143,7 +201,14 @@ router.get('/api/marketplace/posts/:id/photos/:orderNum', async (ctx) => {
     // Post photos are immutable per (id, order_num): getPosts versions the URL with the photo's
     // updated_at (?v=…), so an edited photo is served under a NEW url. That lets clients cache
     // the bytes forever — killing the cold-start re-download of every photo — with no staleness.
-    ctx.set('Cache-Control', hidden ? 'private, no-store' : 'public, max-age=31536000, immutable');
+    //
+    // Only a photo anyone may see goes to shared caches as well (Cloudflare in front of a tunnel, a proxy). A keyed one is
+    // members' (engine/photo-keys.ts), and its key is what can be taken back: a new secret, the listing made private, a
+    // member removed. A shared cache's copy would outlive that for the year (review FABLE-sec-images, MEDIUM). `private`
+    // keeps it cached as long in the browser or app that fetched it, which has already been shown those bytes. No Vary:
+    // the bytes a URL is answered with differ by who asks only for a hidden or taken-off listing's, which no cache keeps.
+    const lifetime = thumbNotServed ? 'max-age=300' : 'max-age=31536000, immutable';
+    ctx.set('Cache-Control', hidden || off ? 'private, no-store' : keyed ? `private, ${lifetime}` : `public, ${lifetime}`);
     ctx.type = served.contentType;
     ctx.body = served.body;
     if (served.bytes !== null) ctx.length = served.bytes;
@@ -156,6 +221,28 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
     // The row first, for the same reason as the photo route above.
     const row = db.prepare(`SELECT data, nonce, mime, storage_key FROM message_attachments WHERE message_id = ?`).get(id) as AttachmentRow | undefined;
     if (!row) {
+        // The photo of a line kept for its sender alone (engine/withheld-lines.ts): served by its id as a stored one is, from
+        // the row or the image store as a chat photo is.
+        const own = withheldAttachmentFor(id);
+        if (own) {
+            let ownData: string | null = null;
+            try {
+                ownData = await attachmentDataOfAsync(own, getImageStore());
+            } catch (e) {
+                // Deleted while this read was in flight: an attachment that no longer exists, as below.
+                if (!(e instanceof MissingObjectError) || withheldAttachmentFor(id)?.storage_key === own.storage_key) {
+                    console.error(`[Attachments] ${id}:`, e);
+                    ctx.status = 503;
+                    ctx.body = { error: 'This attachment is temporarily unavailable' };
+                    return;
+                }
+            }
+            if (ownData !== null) {
+                ctx.set('Cache-Control', 'private, no-store');
+                ctx.body = { data: ownData, nonce: own.nonce, mime: own.mime };
+                return;
+            }
+        }
         ctx.status = 404;
         ctx.body = { error: 'Attachment not found' };
         return;
@@ -189,12 +276,57 @@ router.get('/api/messages/:id/attachment', async (ctx) => {
         ctx.body = { error: 'Attachment not found' };
         return;
     }
+    // A message's photo, as ciphertext: no cache keeps it, so a "delete for everyone" leaves no copy on the way.
+    ctx.set('Cache-Control', 'private, no-store');
     ctx.body = { data, nonce: row.nonce, mime: row.mime || 'image/jpeg' };
 });
 
 const KNOWN_POST_TYPES = ['offer', 'need', 'poll', 'event'] as const;
 
+/**
+ * On a sync read paged by key (`paged=1`, then `pageAfter=<key>`), the key the next page starts below, while this one
+ * came back full (engine SyncPage). No header: the read is complete. A read without either parameter gets none and is
+ * answered as it always was, so an older phone's sync is unchanged.
+ */
+const POSTS_NEXT_HEADER = 'X-Posts-Next';
+
+/** The most listings one `ids=` read names (DESIGN-global-sync-by-area §2.3). */
+const IDS_MAX = 100;
+/** A member with no area: their set is the newest this many listings on the node, wherever they are (design §9 Q3). */
+const NEARBY_NEWEST_WITHOUT_AREA = 100;
+
+/** When this node's listing-photo URLs last changed shape (engine/photo-keys.ts), or '' when they never have. */
+function photoKeysSince(): string {
+    try {
+        const row = db.prepare('SELECT value FROM node_config WHERE key = ?').get(PHOTO_KEYS_SINCE_ROW) as { value: string } | undefined;
+        return row?.value ?? '';
+    } catch {
+        return '';
+    }
+}
+
+/** The posts route's parameters read as one value each. Given twice (`q=a&q=b`), one arrives as an array, which made
+ *  getPosts throw or reached SQL as one, and answered 500 to anyone (#1808 review, finding 4): it is a 400. */
+const ONE_VALUE_POSTS_PARAMS = ['id', 'type', 'category', 'author', 'q', 'updatedAfter', 'audienceScope', 'targetGroupId', 'assignedTo'] as const;
+
+/**
+ * A by-area read's query as its ETag describes it: without where the read starts, its page, the hash the phone holds, or
+ * whether it takes a diff (`setDiff`). The tag describes the set, so a 304 means the phone's set is current whatever it
+ * sent beside it.
+ */
+function nearbyTagQuery(querystring: string): string {
+    const q = new URLSearchParams(querystring);
+    for (const k of ['updatedAfter', 'paged', 'pageAfter', 'setHash', 'setDiff']) q.delete(k);
+    return q.toString();
+}
+
 router.get('/api/marketplace/posts', async (ctx) => {
+    const repeated = ONE_VALUE_POSTS_PARAMS.find(p => ctx.query[p] !== undefined && typeof ctx.query[p] !== 'string');
+    if (repeated) {
+        ctx.status = 400;
+        ctx.body = { error: `${repeated} is one value: give it once` };
+        return;
+    }
     // Distance search (G4, design §3.2), on every profile: `lat`, `lng`, `radiusKm`, `sort=distance|recent`. Checked
     // first, so garbage is a 400 and never a 304. Without these parameters nothing below changes.
     const distance = parseDistanceQuery(ctx.query);
@@ -221,11 +353,65 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const audienceScope = ctx.query.audienceScope as string | undefined;
     const targetGroupId = ctx.query.targetGroupId as string | undefined;
     const assignedTo = ctx.query.assignedTo as string | undefined;
+    // A few listings by id at once (`ids=a,b,c`, at most IDS_MAX), each read as `id=` reads one: a phone fetches the
+    // listings of its set it doesn't hold (DESIGN-global-sync-by-area §2.3). Garbage is a 400, never a quiet empty list.
+    let ids: string[] | undefined;
+    if (ctx.query.ids !== undefined) {
+        const raw = typeof ctx.query.ids === 'string' ? ctx.query.ids.split(',').map(x => x.trim()).filter(Boolean) : [];
+        ids = [...new Set(raw)];
+        if (ids.length === 0 || ids.length > IDS_MAX || ids.some(x => x.length > 200) || id) {
+            ctx.status = 400;
+            ctx.body = { error: `ids is 1 to ${IDS_MAX} listing ids, comma separated, without id` };
+            return;
+        }
+    }
+    // A phone's sync paged by key (POSTS_NEXT_HEADER): only a sync read of the listings, not one by id or from a point.
+    const pageAfter = typeof ctx.query.pageAfter === 'string' && ctx.query.pageAfter !== '' ? ctx.query.pageAfter : null;
+    const syncPage: SyncPage | undefined = (ctx.query.paged === '1' || pageAfter !== null) && (sync || !!updatedAfter) && !id && !ids && !point
+        ? { after: pageAfter, next: null } : undefined;
+    // A member's own set (`nearby=1`, DESIGN-global-sync-by-area §2.2-2.3) on a node whose `nearbyListings` is on: the
+    // nearest listings within the node's radius of their stored area, their own and the ones they are tied to, with the
+    // set's ids in every answer. Only for a member's sync read: anyone else's read, and every read on a node with the
+    // switch off, is answered as without it, byte for byte. A whole read must page (paged=1, X-Posts-Next), as a phone
+    // (S3) does: without it, it answers only the first `limit` rows, newest first, and no key to the next page, and the
+    // rest of the set comes only by `ids=`. Its types are `types=` alone: a singular `type=` would keep the rows to it
+    // and not the set, which would name listings no page of the read answers.
+    const nearby = ctx.query.nearby === '1' && switches.nearbyListings && (sync || !!updatedAfter)
+        && !!ctx.state.actor && viewerTier(ctx) === 'member';
+    if (nearby && (id || ids || point || author || q || (category && category !== 'all') || (type && type !== 'all') || ctx.query.audienceScope !== undefined
+        || targetGroupId || assignedTo || offset > 0 || ctx.query.beansOnly === 'true')) {
+        ctx.status = 400;
+        ctx.body = { error: 'nearby=1 reads your own set of listings: it takes types, limit, updatedAfter and the paging parameters only' };
+        return;
+    }
+    if (pageAfter !== null && syncPage && !parsePageKey(pageAfter)) {
+        ctx.status = 400;
+        ctx.body = { error: 'pageAfter is not a page key this node handed out' };
+        return;
+    }
+    // A delta from before this node's listing-photo URLs last changed (keys switched on or off, a new secret:
+    // engine/photo-keys.ts) is answered whole: the phone keeps the URLs it was handed, and a listing that didn't change
+    // since would never be sent again with the URL that now opens its photo. So is each later sync of a key whose heal
+    // didn't fit one answer (photoHealFor). Not a read with a point: no phone's sync has one.
+    // A later page of a paged sync is the rest of the delta only: the heal's page went with its first.
+    // A member's set (`nearby`) is never healed by page: a delta from before the change is answered as the whole set
+    // instead (below), at most a few hundred listings.
+    const heal = nearby || point || ids || syncPage?.after ? null : photoHealFor(updatedAfter, ctx.state.actor as string | undefined);
+    // A whole sync read right after a heal page to the key (a take-over's, after the pull the phone threw away) starts
+    // the key's heal again from the first page: the phone keeps what the pull doesn't carry, and the page the key's row
+    // counts went to the pull it threw away (review of fe4c27ce, finding 1). A later one (a new install, an emptied
+    // cache) doesn't: it holds no old URL (restartPhotoHealFor; review of 1bc39eb0, finding 2). Here, not in photoHealFor: the
+    // phone's read of one listing by id (refreshCachedPost, `?id=…&sync=true`) has no cursor either.
+    if (!nearby && !point && sync && !updatedAfter && !pageAfter && !id && !ids && !author && !q && !category && !audienceScope && !targetGroupId && !assignedTo) {
+        restartPhotoHealFor(ctx.state.actor as string | undefined);
+    }
 
     // #108: beans-only browse, so nobody is ambushed by a cash requirement in paragraph three of a
     // description. Forced on for a peer node's request — cash cannot cross a boundary, so a listing
-    // with a cash outlay is meaningless to a remote member. Remote browsing hits this same public
-    // endpoint, so the peer origin is the only signal available.
+    // with a cash outlay is meaningless to a remote member. Remote browsing hits this same
+    // endpoint, so the peer origin is the only signal available. It reaches this handler only on a
+    // node with the visitors' view on: elsewhere the listings are members-only and the signature gate
+    // refuses a peer's unsigned read first (https-server.ts PUBLIC_ONLY_ON_GUEST_LISTINGS_EXACT).
     //
     // Origin is a HINT, not a credential, and that is the right strength here: reach is a discovery
     // filter, not an access control (docs/federation-economics.md Rule 9). Nothing is protected by
@@ -237,9 +423,10 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const beansOnly = isPeerRequest || ctx.query.beansOnly === 'true';
 
     const viewerPubkey = ctx.state.actor as string | undefined;
-    // Who voted for what in a poll goes to a member of this node only; everyone else gets the counts. This route is a
-    // public read, so an unsigned reader, a signed non-member and a pruned account all reach it. Membership is in the
-    // ETag: joining changes what the board holds without changing any post, so a copy fetched before must not be
+    // Who voted for what in an open-vote poll goes to a member of this node only; everyone else gets the counts. On a
+    // node with the visitors' view this route is a public read, so an unsigned reader, a signed non-member and a pruned
+    // account reach it; elsewhere only a member does, a suspended one included, who reads the counts only. Membership is
+    // in the ETag: joining changes what the board holds without changing any post, so a copy fetched before must not be
     // confirmed with a 304.
     const includeVoters = viewerTier(ctx) === 'member';
     // The listings, not the people (G9a, the global profile's `guestListingsOnly`): anyone who isn't a member gets each
@@ -259,9 +446,62 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // stay the same, and a 304 then would pin the old order. Without one the ETag is what it always was. The visitors'
     // view is a view of its own: a key that becomes a member (same key, same URL) must not have its visitor's copy
     // confirmed, and a member is never answered 304 for one.
-    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}`;
+    // A delta answered whole (heal) is a body of its own, so its ETag is too (`:whole`, or `:heal:` and where its page
+    // starts): a copy of the delta held for the same URL is never confirmed with a 304 in its place.
+    // Events are OPT-IN on this route (docs/events-on-the-map.md §2.6). Every app already in the store pulls
+    // the whole feed with no type filter and renders anything that is not a poll as an offer, so it must never
+    // receive an event: a client that knows events says `types=offer,need,poll,event` or `type=event`. A by-id
+    // fetch is not guarded — only a screen that knows events can hold an event's id.
+    // The list is intersected with the known post types before it reaches SQL: each entry is a bound
+    // variable, so an unchecked list of tens of thousands would exceed SQLite's limit and 500 the route.
+    const types = typeof ctx.query.types === 'string'
+        ? KNOWN_POST_TYPES.filter(t => (ctx.query.types as string).split(',').some(q => q.trim() === t))
+        : undefined;
+    const wantsEvents = type === 'event' || !!types?.includes('event');
+    const excludeEvents = !id && !ids && !wantsEvents;
+    // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't. A post hidden by
+    // reports (G3) reaches its author, and the moderators (includeHidden), and nobody else. The visitors' view is read
+    // for nobody in particular: no own posts, no hidden ones, no group or direct ones.
+    const reader = guestView ? undefined : viewerPubkey;
+    const includeHidden = !!reader && !!nodeRoleOf(reader);
+
+    // A member's set, worked out before the ETag, which describes it: any listing of it changing, coming in or leaving
+    // changes the tag, and nothing outside it does, so a change 300 km away no longer ends this member's 304. A delta
+    // from before this node's listing-photo URLs last changed is answered as the whole set (`whole`), a body of its own.
+    let nearbySet: NearbySet | undefined;
+    let nearbyWhole = false;
+    let nearbyEtag = '';
+    if (nearby && (!types || types.length > 0)) {
+        const area = readMemberArea(viewerPubkey!);
+        const { radiusKm: setKm, max } = nearbyListingsLimits();
+        nearbySet = getNearbySet(db, viewerPubkey!, {
+            area: area ? { lat: area.lat, lng: area.lng } : null, radiusKm: setKm, max, newestWithoutArea: NEARBY_NEWEST_WITHOUT_AREA,
+            types, excludeEvents, includeHidden, measureAtMost: ONE_PASS_MAX_MEASURED,
+        });
+        // Or from before its members' face URLs last changed (engine/avatar-keys.ts), as the member directory answers such a
+        // delta whole: a phone that keeps no card for its listings' authors has each face from the row (DESIGN-global-
+        // members-by-area §2.2, item 6).
+        nearbyWhole = !!updatedAfter && (photoUrlsChangedAfter(updatedAfter) || faceUrlsChangedAfter(updatedAfter));
+        // `tied` too: a deal opened on a listing already near the member moves no row of S, but the phone must now keep it.
+        // The query without where the read starts (`updatedAfter`), its page (`paged`, `pageAfter`) and the hash the phone
+        // holds (`setHash`): the tag describes the set, so every page of one read carries it, and a phone that holds it
+        // sends it with its next delta from whatever cursor (REPORT-geosync-load-B, item 3). The cursor moves after every
+        // read, and the 5-minute drift buffer re-sends what changed minutes ago, so a tag that hashed the URL was never
+        // repeated (12 of 8,556 cycles with nothing changed got a 304; kept URLs 39%). A 304 is only right where the
+        // phone holds the set as the tag describes it, which it does once a read has landed; the phone sends its tag on a
+        // delta only. The identity epoch too: a take-over's server never confirms the old one's copy.
+        const described = [nearbyTagQuery(ctx.querystring || ''), viewerPubkey, area ? `${area.lat},${area.lng}` : '-', nearbySet.ids.join(','),
+            nearbySet.stamp, photoKeysSince(), nearbyWhole ? 'whole' : '', nearbySet.tied.join(','), syncEpochHeaderValue()].join('\n');
+        nearbyEtag = `W/"near-${crypto.createHash('sha256').update(described).digest('hex').slice(0, 24)}"`;
+    }
+
+    // A search leaves out the listings of the authors the reader blocked (engine getPosts), so its tag describes that list
+    // too: a block or an unblock changes the answer and no listing, and a copy held from before must not be confirmed
+    // with a 304 (#1808 review, finding 3). The nearby set's tag holds its ids, so it needs nothing more.
+    const blocksPart = q && reader ? `:blocks-${crypto.createHash('sha256').update(authorsBlockedBy(db, reader).sort().join(',')).digest('hex').slice(0, 16)}` : '';
+    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
-    const etag = `W/"posts-${getPostsVersion()}-${queryHash}"`;
+    const etag = nearbySet ? nearbyEtag : `W/"posts-${getPostsVersion()}-${queryHash}"`;
 
     ctx.set('ETag', etag);
     // A node with two views says which this is; the phone keeps a visitor's view only where it is one
@@ -281,47 +521,124 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // fetchEventDetail), and getPosts notes it for that member's deltas (the engine's noteEventReadOutsideSync). So it is
     // never answered 304: the phone's platform HTTP cache sends the last ETag of that URL by itself, and a 304 would skip
     // the note while the app writes the stored body. It is one row. Every other read keeps its 304.
-    const notesTheRead = !!viewerPubkey && !guestView && !!id && !sync && !updatedAfter;
+    const notesTheRead = !!viewerPubkey && !guestView && (!!id || !!ids) && !sync && !updatedAfter;
+    // A member's set from a cursor is never answered 304 while the delta would send one of its listings again whatever
+    // changed (engine postsResentTo): the phone wrote it back as it isn't (the deal heal, the event page), and the tag,
+    // which describes the node's rows, can't tell (review of #1805, finding 2). Asked only where the tag matches.
+    const resendsOfSet = () => {
+        if (!nearbySet || !updatedAfter || !reader) return false;
+        const inSet = new Set(nearbySet.ids);
+        return postsResentTo(db, reader, updatedAfter).some(postId => inSet.has(postId));
+    };
     const ifNoneMatch = typeof ctx.get === 'function' ? ctx.get('If-None-Match') : ctx.headers?.['if-none-match'];
     if (ifNoneMatch && !notesTheRead) {
         const cleanInm = ifNoneMatch.replace(/^W\//, '');
         const cleanEtag = etag.replace(/^W\//, '');
-        if (cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) {
+        if ((cleanInm === cleanEtag || ifNoneMatch.includes(cleanEtag)) && !resendsOfSet()) {
+            // A heal answer confirmed is a page that went to the key: its row's time moves (engine/photo-keys.ts
+            // restartPhotoHealFor), and nothing else, since the row already records this answer.
+            if (heal) notePhotoHealAnsweredAgain(ctx.state.actor as string | undefined);
+            // A by-area 304: the phone's set is the set. Remembered, so its next changed set is a diff against it
+            // (engine/nearby-set-memory.ts), and the memory warms on every phone's first quiet cycle.
+            if (nearbySet) nearbySetMemory().confirmed(viewerPubkey!, nearbySet);
             ctx.status = 304;
             return;
         }
     }
 
-    // Events are OPT-IN on this route (docs/events-on-the-map.md §2.6). Every app already in the store pulls
-    // the whole feed with no type filter and renders anything that is not a poll as an offer, so it must never
-    // receive an event: a client that knows events says `types=offer,need,poll,event` or `type=event`. A by-id
-    // fetch is not guarded — only a screen that knows events can hold an event's id.
-    // The list is intersected with the known post types before it reaches SQL: each entry is a bound
-    // variable, so an unchecked list of tens of thousands would exceed SQLite's limit and 500 the route.
-    const types = typeof ctx.query.types === 'string'
-        ? KNOWN_POST_TYPES.filter(t => (ctx.query.types as string).split(',').some(q => q.trim() === t))
-        : undefined;
     if (types && types.length === 0) {
-        // Only unknown types asked for: nothing matches. An empty list must not fall through to "no filter".
+        // Only unknown types asked for: nothing matches. An empty list must not fall through to "no filter". A member's
+        // set is then empty, in its own shape.
         ctx.status = 200;
         ctx.type = 'application/json';
-        ctx.body = '[]';
+        ctx.body = nearby ? JSON.stringify({ posts: [], set: [], setHash: nearbySetHash([], []), tied: [] }) : '[]';
         return;
     }
-    const wantsEvents = type === 'event' || !!types?.includes('event');
-    const excludeEvents = !id && !wantsEvents;
+    // A visitor's posts each go through guestPost below, so the read leaves out what guestPost would replace (`guest`):
+    // no author's trust profile, photo or trade count per post.
+    const listing = {
+        id, ids, type, types, excludeEvents, category, query: q, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
+        targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined,
+    };
+    // On a node with members on demand and no by-area listings, a member's plain delta sends again each listing whose
+    // author changed their card since, as a set's delta does: the phone holds no card for most of its listings' authors,
+    // and shows the name and face the row carried (opus-1859-confirm1 NB-2). Every other node's delta is as before.
+    const localAuthorCardsChanged = switches.membersOnDemand && !switches.nearbyListings && !!updatedAfter && !guestView;
+    let posts: MarketplacePost[];
+    if (nearbySet) {
+        // The rows of the set, read as the phone's sync reads them (every state, so a listing taken off goes as its
+        // tombstone), kept to the set: whole, or what changed since the cursor (the author-standing half and the
+        // listings sent again included), paged by key as any sync read.
+        // A delta sends again each listing whose author changed their card since (a new name, a new face): the row carries
+        // them, and a phone on a node with members on demand keeps no card for its listings' authors.
+        posts = getPosts({ ...listing, ids: nearbySet.ids, limit, updatedAfter: nearbyWhole ? undefined : updatedAfter, sync: true, syncPage,
+            authorCardsChanged: !nearbyWhole && !!updatedAfter });
+    } else if (ids) {
+        posts = getPosts({ ...listing, limit: IDS_MAX, updatedAfter, sync });
+    } else if (heal && updatedAfter) {
+        // Answered whole: first the delta, exactly as asked (every row changed since the cursor, the author standing
+        // changes and the listings sent again among them), then the node's other listings in heal order (engine
+        // getPostsForPhotoHeal: those with a photo first, the ones on the board before the finished ones), as a first
+        // sync reads them for this reader. The delta is main's, uncut; the page after it holds PHOTO_HEAL_PAGE_ROWS less
+        // the delta's rows, and at least PHOTO_HEAL_MIN_PAGE_ROWS, so an answer is about as large as main's largest (a
+        // first sync) and a phone on a slow link still gets it inside its 30 s; a node with more listings heals over the
+        // key's next syncs.
+        const delta = getPosts({ ...listing, limit, offset, updatedAfter, sync, syncPage, localAuthorCardsChanged });
+        const pageRows = Math.max(PHOTO_HEAL_MIN_PAGE_ROWS, PHOTO_HEAL_PAGE_ROWS - delta.length);
+        const read = { after: heal.after, limit: Math.min(limit, pageRows), next: null as string | null };
+        const inDelta = new Set(delta.map(p => p.id));
+        const rest = getPostsForPhotoHeal(listing, read).filter(p => !inDelta.has(p.id));
+        posts = [...delta, ...rest];
+        notePhotoHealServed(ctx.state.actor as string | undefined, updatedAfter, heal, read.next ?? null);
+    } else {
+        // A read with a point measures at most ONE_PASS_MAX_MEASURED posts in a single pass (DoS review F5): the radius
+        // is optional and the offset unbounded, so one public GET could otherwise measure and sort every post on the node.
+        // That bounds the whole read only with no radius and no filter; with either, the scan and sort before the bound
+        // still grow with the posts (engine PostFilter.measureAtMost): F5 is still open for those reads.
+        posts = getPosts({
+            ...listing, limit, offset, updatedAfter, sync, syncPage, localAuthorCardsChanged,
+            near: point ? { ...point, radiusKm } : undefined, sortByDistance: byDistance,
+            measureAtMost: point ? ONE_PASS_MAX_MEASURED : undefined,
+        });
+    }
+    // Who took a listing, and the deal it is in, go to that trade's two people only (withoutTradeParty): its author, or
+    // the member who took it, and for an enterprise's side its keepers. Everyone else sees it spoken for or done.
+    // ⚡ Bolt: Pre-compute treasury keys in O(1) set lookup to avoid repeated N+1 SQLite queries per post row during feed response mapping
+    const treasuryKeys = new Set(
+        (db.prepare("SELECT public_key FROM members WHERE is_treasury = 1").all() as { public_key: string }[]).map(r => r.public_key)
+    );
+    const isTreasuryFast = (pk: string): boolean => treasuryKeys.has(pk);
 
-    // viewerPubkey (the signed requester) lets an author see their OWN paused posts; others don't. A post hidden by
-    // reports (G3) reaches its author, and the moderators (includeHidden), and nobody else. The visitors' view is read
-    // for nobody in particular: no own posts, no hidden ones, no group or direct ones.
-    const reader = guestView ? undefined : viewerPubkey;
-    const includeHidden = !!reader && !!nodeRoleOf(reader);
-    const posts = getPosts({
-        id, type, types, excludeEvents, category, query: q, limit, offset, updatedAfter, authorPubkey: author, viewerPubkey: reader, sync, beansOnly, audienceScope, targetGroupId, assignedTo, includeHidden,
-        includeVoters, near: point ? { ...point, radiusKm } : undefined, sortByDistance: byDistance, coarse: guestView || undefined,
-    });
-    const bodyStr = JSON.stringify(guestView ? posts.map(guestPost) : posts);
+    const tradeSide = (p: MarketplacePost): boolean => isTradeParty(p, reader)
+        || (!!reader && isTreasuryFast(p.authorPublicKey) && canOperateTreasury(reader, p.authorPublicKey))
+        || (!!reader && !!p.acceptedBy && isTreasuryFast(p.acceptedBy) && canOperateTreasury(reader, p.acceptedBy));
+    const shown = guestView ? posts.map(guestPost)
+        : posts.map(p => (p.acceptedBy || p.pendingTransactionId) && !tradeSide(p) ? withoutTradeParty(p) : p);
+    // A member's set answers its rows and the set's ids (DESIGN-global-sync-by-area §2.3): the phone drops what it holds
+    // outside them and fetches what it lacks by `ids=`. `tied`, the ids of the set that are theirs or tied to them, which
+    // the phone keeps past its cap whatever it holds of the deal or the chat. Every other read keeps the bare list. The
+    // contract: `tied` stays string[]; a new shape gets a new field name. A phone reads any other shape as no `tied` and
+    // keeps the ties it stored (apps/native utils/posts-nearby.ts nearbyPageOf).
+    // A phone that says `setOnce=1` reconciles after a read's last page only, so it is named the set there alone: each page
+    // with a next key is `{ posts }`. At a busy town the 500 ids are ~11 KB gzipped (UUIDs barely compress), which rode on
+    // each of a first sync's three pages (REPORT-geosync-load-B, item 1). A phone without it gets the set on each page.
+    // A phone that sends the hash of the set it holds (`setHash`) is answered `{ posts, setUnchanged: <that hash> }` where
+    // the set would go while that is still the set (item 2): a field no node before it sends, so a phone never reads an
+    // answer that merely lacks the set (a node's or a proxy's fault) as "unchanged". At a busy town an edit's delta was ~12 KB
+    // of ids; now it is the hash. A phone that sends none, or another, gets the set.
+    // A phone that also says `setDiff=1` is answered `{ posts, setAdd, setDrop, setHash, tied? }` where its set changed,
+    // against a hash this node named or confirmed to this member and still holds (engine/nearby-set-memory.ts): the ids
+    // that came in, nearest first, and the ones that went, `tied` only where it moved. At a busy town a delta whose set
+    // moved named ~500 ids, 11.8-15.5 KB gzipped (REPORT-geosync-load-B); now it names the few that changed. The phone
+    // writes the result only where it hashes to `setHash`. Anything else is the whole set, as before; a phone that never
+    // says `setDiff` is never answered a diff.
+    const setOnce = ctx.query.setOnce === '1';
+    const setPart = nearbySet && !(setOnce && syncPage?.next)
+        ? nearbySetMemory().answer(viewerPubkey!, nearbySet, { setHash: ctx.query.setHash, setDiff: ctx.query.setDiff === '1' })
+        : null;
+    const bodyStr = JSON.stringify(!nearbySet ? shown : { posts: shown, ...setPart });
 
+    if (syncPage?.next) ctx.set(POSTS_NEXT_HEADER, syncPage.next);
     ctx.status = 200;
     ctx.type = 'application/json';
     ctx.body = bodyStr;
@@ -329,7 +646,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
 
 router.post('/api/marketplace/posts', async (ctx) => {
     // The event fields are not read here: an event is built by `createEventFromBody` from the whole body.
-    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo } =
+    const { id, type, category, title, description, credits, priceType, authorPublicKey, lat, lng, photos, repeatable, cashAlsoNeeded, reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo } =
         (ctx as any).requestBody || {};
     if (!type || !title || !authorPublicKey) {
         ctx.status = 400;
@@ -363,13 +680,18 @@ router.post('/api/marketplace/posts', async (ctx) => {
         assertNotMuted(actor);
         // A poll keeps no photos, and more than a post can hold is the engine's 400, not a limit.
         assertMayPost(authorPublicKey, type !== 'poll' && Array.isArray(photos) ? Math.min(photos.length, 5) : 0);
+        // Every profile: 100 new posts a day (W-main, engine/writer-bounds.ts), after probation's stricter 3. The engine
+        // runs it once every refusal of the post itself has passed (an unfinished profile, a group the author is not in),
+        // so a limit never answers for a post that may not be made at all.
+        const underDailyPosts = () => assertMayPostToday(authorPublicKey);
         // Events go through the shared builder, so this route and the enterprise's own cannot drift on
         // what an event is (routes/event-post.ts).
         const post = type === 'event'
-            ? createEventFromBody((ctx as any).requestBody, authorPublicKey)
+            ? createEventFromBody((ctx as any).requestBody, authorPublicKey, undefined, underDailyPosts)
             : createPost(
             type, category || 'other', title, description || '',
             Number(credits) || 0, priceType === 'hourly' ? 'hourly' : 'fixed', authorPublicKey,
+            // With no place, on a node that syncs by area, the engine gives the listing its author's area (Q4).
             lat != null ? Number(lat) : undefined,
             lng != null ? Number(lng) : undefined,
             photos,
@@ -379,7 +701,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
             // #143 step 4. Passed through RAW — `normaliseReach` in the engine is the single place that
             // decides what an unrecognised reach means, and it fail-closes to 'local'. Validating here as
             // well would put two answers in the codebase for "what if this is nonsense".
-            { reach, reachPeers, pollOptions, durationDays, audienceScope, targetGroupId, targetPubkey, assignedTo }
+            { reach, reachPeers, pollOptions, durationDays, pollOpenVote, audienceScope, targetGroupId, targetPubkey, assignedTo, beforeWrite: underDailyPosts }
         );
         if (!post) {
             ctx.status = 400;
@@ -395,7 +717,7 @@ router.post('/api/marketplace/posts', async (ctx) => {
         // A Beans price on a node with Beans off: 403 profile_no_beans, with the plain message (state-engine).
         if (respondProfileRefusal(ctx, e)) return;
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to create post' };
+        ctx.body = { error: memberErrorText(e, 'Failed to create post') };
     }
 });
 
@@ -414,7 +736,7 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
             return;
         }
 
-        const postRow = db.prepare("SELECT author_pubkey, target_group_id, audience_scope FROM posts WHERE id = ?").get(id) as any;
+        const postRow = db.prepare("SELECT author_pubkey, target_group_id, audience_scope, target_pubkey, assigned_to FROM posts WHERE id = ?").get(id) as any;
         if (!postRow) {
             ctx.status = 404;
             ctx.body = { error: 'Post not found' };
@@ -435,6 +757,14 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
             entitled = true;
         }
 
+        // Someone who may not take it down and can't see it either (a group's or a direct post, engine/post-sight.ts)
+        // hears what an id nobody has hears, not that it is someone else's. A keeper of the enterprise that wrote it is
+        // entitled above whether or not they can see it.
+        if (!entitled && postOutOfSight(postRow, actor)) {
+            ctx.status = 404;
+            ctx.body = { error: 'Post not found' };
+            return;
+        }
         if (!entitled) {
             ctx.status = 403;
             ctx.body = { error: isTreasury(postRow.author_pubkey)
@@ -450,8 +780,9 @@ router.post('/api/marketplace/posts/remove', async (ctx) => {
         }
         ctx.body = { success: removed };
     } catch (e: any) {
-        ctx.status = e?.code === NOT_A_MEMBER_CODE ? 403 : 400;
-        ctx.body = { error: e.message || 'Failed to remove post' };
+        // A convenor whose account is suspended (engine/posts.ts removePost) is refused as a non-member is: 403.
+        ctx.status = e?.code === NOT_A_MEMBER_CODE || e?.code === CONVENOR_PAUSED_CODE ? 403 : 400;
+        ctx.body = { error: memberErrorText(e, 'Failed to remove post') };
     }
 });
 
@@ -485,8 +816,9 @@ router.post('/api/marketplace/posts/update', async (ctx) => {
         ctx.body = { success: true, post };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
-        ctx.status = e?.code === NOT_A_MEMBER_CODE ? 403 : 400;
-        ctx.body = { error: e.message || 'Failed to update post' };
+        // A convenor whose account is suspended, editing their group's event (engine/posts.ts updatePost): 403.
+        ctx.status = e?.code === NOT_A_MEMBER_CODE || e?.code === CONVENOR_PAUSED_CODE ? 403 : 400;
+        ctx.body = { error: memberErrorText(e, 'Failed to update post') };
     }
 });
 
@@ -518,7 +850,7 @@ router.post('/api/marketplace/posts/:id/vote', async (ctx) => {
         ctx.body = result;
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to record vote' };
+        ctx.body = { error: memberErrorText(e, 'Failed to record vote') };
     }
 });
 
@@ -548,7 +880,7 @@ router.post('/api/marketplace/polls/vote', async (ctx) => {
         ctx.body = result;
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to record vote' };
+        ctx.body = { error: memberErrorText(e, 'Failed to record vote') };
     }
 });
 
@@ -581,7 +913,7 @@ router.post('/api/marketplace/posts/:id/close', async (ctx) => {
         ctx.body = { success: true, post };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to close poll' };
+        ctx.body = { error: memberErrorText(e, 'Failed to close poll') };
     }
 });
 
@@ -614,7 +946,7 @@ router.post('/api/marketplace/polls/close', async (ctx) => {
         ctx.body = { success: true, post };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to close poll' };
+        ctx.body = { error: memberErrorText(e, 'Failed to close poll') };
     }
 });
 
@@ -646,7 +978,7 @@ router.post('/api/marketplace/posts/:id/rsvp', async (ctx) => {
         ctx.body = rsvpEvent(id, actor, status, body.signature);
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to record RSVP' };
+        ctx.body = { error: memberErrorText(e, 'Failed to record RSVP') };
     }
 });
 
@@ -685,7 +1017,7 @@ router.get('/api/marketplace/posts/:id/chat', async (ctx) => {
     try {
         ctx.body = getEventThread(ctx.params.id, actor, limit, offset);
     } catch (e: any) {
-        const msg = e?.message || 'Could not open the event chat';
+        const msg = memberErrorText(e, 'Could not open the event chat');
         ctx.status = eventChatStatus(msg);
         ctx.body = { error: msg };
     }
@@ -727,7 +1059,7 @@ router.post('/api/marketplace/posts/:id/chat/message', async (ctx) => {
         ctx.body = { success: true, message };
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
-        const msg = e?.message || 'Could not post the message';
+        const msg = memberErrorText(e, 'Could not post the message');
         if (e?.code === 'ID_CONFLICT' || msg.includes('already exists')) {
             ctx.status = 409;
             ctx.body = { error: msg };
@@ -759,7 +1091,7 @@ router.post('/api/marketplace/posts/:id/chat/remove', async (ctx) => {
         const message = removeEventThreadMessage(ctx.params.id, messageId, actor);
         ctx.body = { success: true, message };
     } catch (e: any) {
-        const msg = e?.message || 'Could not remove the message';
+        const msg = memberErrorText(e, 'Could not remove the message');
         ctx.status = eventChatStatus(msg);
         ctx.body = { error: msg };
     }
@@ -777,8 +1109,7 @@ router.post('/api/marketplace/posts/accept', async (ctx) => {
         }
         if (!assertActorEntitled(ctx, buyerPublicKey)) return;
         const actor = ctx.state?.actor as string | undefined;
-        const parsedHours = hours != null ? Number(hours) : undefined;
-        const tx = acceptPost(postId, buyerPublicKey, parsedHours, actor ? { authSigner: actor } : undefined);
+        const tx = acceptPost(postId, buyerPublicKey, dealQuantityFromBody(hours), actor ? { authSigner: actor } : undefined);
         if (tx) {
             syncPulseMarketplaceGate();
         }
@@ -798,8 +1129,7 @@ router.post('/api/marketplace/posts/request', async (ctx) => {
             return;
         }
         if (!assertActorEntitled(ctx, buyerPublicKey)) return;
-        const parsedHours = hours != null ? Number(hours) : undefined;
-        const tx = requestPost(postId, buyerPublicKey, parsedHours);
+        const tx = requestPost(postId, buyerPublicKey, dealQuantityFromBody(hours));
         if (!tx) throw new Error('Cannot request — post not found or unauthorized');
         ctx.body = { success: true, transaction: tx };
     } catch (err: any) {
@@ -882,8 +1212,8 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
     }
     if (!assertActorEntitled(ctx, confirmerPublicKey)) return;
     if (!membersOnlyHere(ctx)) return; // the answer is the trade, with the other party (engine: assertNodeMember)
-    const rawHours = finalHours !== undefined ? finalHours : hours;
-    const parsedFinalHours = rawHours != null && !isNaN(Number(rawHours)) ? Number(rawHours) : undefined;
+    // A quantity the engine can't read is refused there, not dropped here (engine/post-fields.ts dealQuantityFromBody).
+    const parsedFinalHours = dealQuantityFromBody(finalHours !== undefined ? finalHours : hours);
     try {
         const actor = ctx.state?.actor as string;
         const tx = completePostTransaction(transactionId, confirmerPublicKey, parsedFinalHours, { authSigner: actor });
@@ -900,7 +1230,7 @@ router.post('/api/marketplace/transactions/complete', async (ctx) => {
             ? rawCode
             : 400;
         ctx.status = statusCode;
-        ctx.body = { error: e.message || 'Escrow release failed' };
+        ctx.body = { error: memberErrorText(e, 'Escrow release failed') };
     }
 });
 
@@ -947,7 +1277,7 @@ router.post('/api/marketplace/posts/pause', async (ctx) => {
         ctx.body = { success: false, error: 'Post not found, not active, or not owned by author' };
     } catch (e: any) {
         ctx.status = 400;
-        ctx.body = { error: e.message || 'Failed to pause post' };
+        ctx.body = { error: memberErrorText(e, 'Failed to pause post') };
     }
 });
 
@@ -975,7 +1305,7 @@ router.post('/api/marketplace/posts/resume', async (ctx) => {
     } catch (e: any) {
         if (respondProfileRefusal(ctx, e)) return;
         ctx.status = e?.code === NOT_A_MEMBER_CODE ? 403 : 400;
-        ctx.body = { error: e.message || 'Failed to resume post' };
+        ctx.body = { error: memberErrorText(e, 'Failed to resume post') };
     }
 });
 
@@ -987,23 +1317,23 @@ router.get('/api/marketplace/transactions', async (ctx) => {
         ctx.body = { error: 'publicKey query parameter is required' };
         return;
     }
-    if (ENFORCE_READ_AUTH) {
-        const actor = ctx.state?.actor as string | undefined;
-        if (!actor) {
-            ctx.status = 401;
-            ctx.body = { error: 'Authentication required' };
-            return;
-        }
-        const isSelf = actor === publicKey;
-        const isAuthorizedKeeper = Boolean(isTreasury(publicKey) && canOperateTreasury(actor, publicKey));
-        if (!isSelf && !isAuthorizedKeeper) {
-            ctx.status = 403;
-            ctx.body = { error: isTreasury(publicKey)
-                ? 'You are not authorized to view transactions for this enterprise'
-                : 'You may only view your own marketplace transactions'
-            };
-            return;
-        }
+    // A member's trades are theirs, an enterprise's its keepers', whatever ENFORCE_READ_AUTH says, as the ledger's are
+    // (routes/community.ts OWN_LEDGER_ERROR): with read auth opted out anyone, unsigned too, read who traded with whom.
+    const actor = ctx.state?.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'Authentication required' };
+        return;
+    }
+    const isSelf = actor === publicKey;
+    const isAuthorizedKeeper = Boolean(isTreasury(publicKey) && canOperateTreasury(actor, publicKey));
+    if (!isSelf && !isAuthorizedKeeper) {
+        ctx.status = 403;
+        ctx.body = { error: isTreasury(publicKey)
+            ? 'You are not authorized to view transactions for this enterprise'
+            : 'You may only view your own marketplace transactions'
+        };
+        return;
     }
     const limit = clampLimit(ctx.query.limit);
     const offset = clampOffset(ctx.query.offset);

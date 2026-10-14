@@ -8,6 +8,7 @@ import { OffboardMemberWizard } from './OffboardMemberWizard';
 import { ModalBackdrop } from '../common/ModalBackdrop';
 import { useTimeout } from '../../lib/use-timeout';
 import { emergencySuspendMember, liftMemberSuspension } from '../../lib/node-client';
+import { MemberKnownFloorPanel, type KnownFloorException } from './MemberKnownFloorPanel';
 
 /** The node demands a reason of at least this many characters; members see it on the vote. */
 export const MIN_SUSPEND_REASON = 10;
@@ -63,6 +64,8 @@ interface MemberDetailModalProps {
     onOffboardSuccess?: () => void;
     /** Called after an emergency suspension or a lift, so the roster can refresh. */
     onSuspensionChanged?: () => void;
+    /** Called after a change to the member's known floor, so the roster's mark can follow. */
+    onKnownFloorChanged?: (pubkey: string, exception: KnownFloorException | null) => void;
     onClose: () => void;
 }
 
@@ -91,6 +94,7 @@ export function MemberDetailModal({
     onRekeySuccess,
     onOffboardSuccess,
     onSuspensionChanged,
+    onKnownFloorChanged,
     onClose
 }: MemberDetailModalProps) {
     const [copiedPubkey, setCopiedPubkey] = useState(false);
@@ -497,6 +501,16 @@ export function MemberDetailModal({
 
                 {/* Action Controls */}
                 <div className="space-y-3 border-t border-nature-800 pt-4">
+                    {nodeUrl && pubkey && memberStatus === 'active' && (
+                        <MemberKnownFloorPanel
+                            nodeUrl={nodeUrl}
+                            pubkey={pubkey}
+                            displayName={displayName}
+                            adminPassword={adminPassword}
+                            tfaToken={tfaToken}
+                            onChanged={onKnownFloorChanged}
+                        />
+                    )}
                     {canSuspendHere && (
                         <div className="p-3 rounded-2xl bg-nature-900/60 border border-nature-800 space-y-2 text-xs" data-testid="suspend-panel">
                             {suspendDone && <p className="m-0 text-emerald-300 font-semibold">{suspendDone}</p>}

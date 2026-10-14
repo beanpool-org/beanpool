@@ -120,6 +120,53 @@ describe('StandbyReplicationPanel Component (Bucket 2 Item 3)', () => {
         });
     });
 
+    it('reads the fields the node sends, and says what the standby waits on', async () => {
+        const lastSuccessAt = Date.parse('2026-10-02T08:00:00.000Z');
+        const until = Date.parse('2026-10-02T11:30:00.000Z');
+        const waitingOn = "This standby's first copy came from the main server, every page, but not all its listing photos could be fetched "
+            + '(listing photo p1|0: primary returned HTTP 503). 3 in a row have failed so: each waits about twice as long as the one before, '
+            + 'at most a day, so no first copy is asked for until then. The 31 photos fetched so far are kept, so the next asks only for the rest. '
+            + 'Force Full Resync, in Settings, asks for one at once.';
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockImplementation(async (url: string) => ({
+                ok: true,
+                json: async () => (url.includes('/api/local/admin/backup-status')
+                    ? { role: 'backup', lastSuccessAt, consecutiveFailures: 3, copyWait: { until, waitingOn } }
+                    : {}),
+            })),
+        );
+
+        render(<StandbyReplicationPanel activeNode={mockNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Standby Replica')).toBeInTheDocument();
+        });
+        expect(screen.getByText(new Date(lastSuccessAt).toLocaleString())).toBeInTheDocument();
+        expect(screen.getByText('⚠️ Diverged (3 fails)')).toBeInTheDocument();
+        const box = document.getElementById('standby-copy-wait')!;
+        expect(box).toBeInTheDocument();
+        expect(within(box).getByText(`⏳ Waiting until ${new Date(until).toLocaleString()}`)).toBeInTheDocument();
+        expect(within(box).getByText(waitingOn)).toBeInTheDocument();
+    });
+
+    it('shows no wait when the node says none', async () => {
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockResolvedValue({
+                ok: true,
+                json: async () => ({ role: 'backup', lastSuccessAt: Date.now(), consecutiveFailures: 0, copyWait: null }),
+            }),
+        );
+
+        render(<StandbyReplicationPanel activeNode={mockNode} />);
+
+        await waitFor(() => {
+            expect(screen.getByText('🟢 Healthy')).toBeInTheDocument();
+        });
+        expect(document.getElementById('standby-copy-wait')).toBeNull();
+    });
+
     it('renders safely with an empty payload', async () => {
         vi.stubGlobal(
             'fetch',

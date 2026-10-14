@@ -34,6 +34,16 @@ Shield's domain is `apps/native/` ONLY. Do NOT touch `apps/server` (that's Senti
 
 ## ✅ Resolved — do NOT re-file
 
+### 2026-10-01 — "store vault push token in secure storage" (#1367) — CLOSED, BREAKS SIGN-OUT'S TOKEN WITHDRAWAL.
+`vaultPushTokenStoreKey()` is `beanpool_vault_push_token:<hex>`. expo-secure-store throws "Invalid key provided to
+SecureStore" for any key outside `/^[\w.-]+$/`, which rules out the colon. On a real phone the record is never written,
+a changed token never reaches the vault, and Sign Out / Replace can no longer take this phone's token out of the vault
+(PR #1336 finding 8). CI passed only because the test mock accepts any key; with the real rule the push-token tests fail.
+The value is this phone's Expo push token, which every community and the vault already hold, and its own copy
+(`bp_push_token`) is already in SecureStore. Before moving anything to SecureStore: check the key against
+`/^[\w.-]+$/`, read the old AsyncStorage copy as a fallback for phones updated from an earlier build, and say which
+secret it protects.
+
 ### 2026-09-22 — "use SecureStore for the mid-wizard onboarding state" (#1019) — CLOSED, WOULD STRAND NEW MEMBERS.
 Nothing in that record is secret: the invite code is spent at Step 1, callsign and node URL are public profile data,
 and the keypair is already in SecureStore. The avatar is a base64 data URI of roughly 90 KB (apps/native/utils/

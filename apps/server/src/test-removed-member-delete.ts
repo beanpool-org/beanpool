@@ -52,7 +52,10 @@ import { openJoinTaken } from './engine/open-join.js';
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { initAdminPassword } from './config/local-config.js';
+import { ownerTokenHeaders } from './admin-auth-test-harness.js';
 import { db } from './db/db.js';
+import { setMemberPhoto } from '@beanpool/engine';
+import { lockedDm } from './dm-test-payload.js';
 
 let run = 0, passed = 0;
 function assert(cond: boolean, msg: string): void {
@@ -78,9 +81,10 @@ function keypair(name: string): Id {
 function makeMember(name: string, beans = 40): Id {
     const id = keypair(name);
     db.prepare(
-        `INSERT INTO members (public_key, callsign, joined_at, avatar_url, bio, contact_value, contact_visibility, archetype, status, updated_at)
-         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, ?, 'community', 'gardener', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
-    ).run(id.pk, name, AVATAR, `${name} grows garlic`, `${name.toLowerCase()}@example.com`);
+        `INSERT INTO members (public_key, callsign, joined_at, bio, contact_value, contact_visibility, archetype, status, updated_at)
+         VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%fZ','now'), ?, ?, 'community', 'gardener', 'active', strftime('%Y-%m-%dT%H:%M:%fZ','now'))`
+    ).run(id.pk, name, `${name} grows garlic`, `${name.toLowerCase()}@example.com`);
+    setMemberPhoto(db, id.pk, AVATAR);
     db.prepare('INSERT OR IGNORE INTO accounts (public_key, balance, last_demurrage_epoch) VALUES (?, 0, 0)').run(id.pk);
     if (beans > 0) transfer('genesis', id.pk, beans, `seed ${name}`, 'direct', true);
     return id;
@@ -89,7 +93,7 @@ function makeMember(name: string, beans = 40): Id {
 function giveFriendsAndCopies(m: Id, friend: Id): void {
     db.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)').run(m.pk, friend.pk);
     db.prepare('INSERT INTO friends (owner_pubkey, friend_pubkey) VALUES (?, ?)').run(friend.pk, m.pk);
-    for (const [i, provider] of [[1, 'google'], [2, 'github']] as const) {
+    for (const [i, provider] of [[1, 'google'], [2, 'apple']] as const) {
         db.prepare(`INSERT INTO recovery_shares (owner_pubkey, holder_type, holder_ref, share_index, encrypted_share, share_iv, share_tag, sso_lookup_hash, sso_lookup_salt)
                     VALUES (?, 'sso', ?, ?, 'c2hhcmU=', 'aXY=', 'dGFn', ?, 'c2FsdA==')`).run(m.pk, provider, i, `hash-${m.name}-${provider}`);
     }
@@ -117,9 +121,11 @@ async function send(req: ReturnType<typeof signed>): Promise<Res> {
     return { status: res.status, body: json };
 }
 const call = (method: 'GET' | 'POST', path: string, id: Id, body?: unknown) => send(signed(method, path, id, body));
+// Step 7c: the password alone opens no admin route with 2FA off; the admin calls carry an owner's automation token.
+let ADMIN: Record<string, string> = {};
 async function asAdmin(method: 'POST', path: string, body: unknown): Promise<Res> {
     resetGatewayRateLimit();
-    const res = await fetch(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', 'x-admin-password': PW }, body: JSON.stringify(body) });
+    const res = await fetch(`${BASE}${path}`, { method, headers: { 'Content-Type': 'application/json', ...ADMIN }, body: JSON.stringify(body) });
     let json: any; try { json = await res.json(); } catch { /* empty */ }
     return { status: res.status, body: json };
 }
@@ -134,7 +140,8 @@ const isClosed = (r: Res) => r.status === 403 && r.body?.code === 'account_close
 
 /** What Delete account erases, as the row holds it. */
 const profileOf = (pk: string) => db.prepare(
-    'SELECT callsign, avatar_url, bio, contact_value, contact_visibility, archetype, status FROM members WHERE public_key = ?').get(pk) as Record<string, unknown> | undefined;
+    `SELECT m.callsign, mp.photo AS avatar_url, m.bio, m.contact_value, m.contact_visibility, m.archetype, m.status FROM members m
+     LEFT JOIN member_photos mp ON mp.public_key = m.public_key WHERE m.public_key = ?`).get(pk) as Record<string, unknown> | undefined;
 const erased = (pk: string): boolean => {
     const p = profileOf(pk);
     return !!p && p.status === 'pruned' && p.callsign === 'Deleted Member' && p.avatar_url === null && p.bio === null
@@ -197,6 +204,7 @@ async function main(): Promise<void> {
     initAdminPassword();
     await initTls();
     initStateEngine();
+    ADMIN = ownerTokenHeaders('admin');
     const port = await startHttpsServer(0);
     BASE = `https://localhost:${port}`;
 
@@ -321,7 +329,8 @@ async function main(): Promise<void> {
     {
         const vic = keypair('VicRD');
         const dm = createConversation('dm', [alice.pk, vic.pk], alice.pk)!;
-        sendMessage(dm.id, alice.pk, 'aGkgVmlj', 'bjE=');
+        const hi = lockedDm();   // a DM line is sent encrypted
+        sendMessage(dm.id, alice.pk, hi.ciphertext, hi.nonce);
         transfer('genesis', vic.pk, 30, 'welcome gift', 'direct', true);
         const row = profileOf(vic.pk);
         assert(!!row && String(row.callsign).startsWith('Visitor-') && getBalance(vic.pk).balance === 30,
@@ -335,7 +344,7 @@ async function main(): Promise<void> {
         assert(getBalance(vic.pk).balance === 0 && Math.abs(getCommonsBalance() - (commonsBeforeV + 30)) < 1e-6
             && auditAfterV.ok && auditAfterV.drift === auditBeforeV.drift,
             `its 30 Beans go to the Commons, as a member's self-delete sends theirs, and the ledger audit is unchanged (Commons ${commonsBeforeV} → ${getCommonsBalance()})`);
-        const reply = await call('POST', '/api/messages/send', vic, { conversationId: dm.id, authorPubkey: vic.pk, ciphertext: 'aGk=', nonce: 'bjI=' });
+        const reply = await call('POST', '/api/messages/send', vic, { conversationId: dm.id, authorPubkey: vic.pk, ...lockedDm() });
         const join = await call('POST', '/api/join', vic, { callsign: 'Vic joins', provider: 'google', idToken: 'x' });
         assert(isClosed(reply) && isClosed(join), `its key is refused everything after, the open door included (reply ${show(reply)}; door ${show(join)})`);
         const proposal = await proposeReinstate(vic.pk);

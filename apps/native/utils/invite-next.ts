@@ -14,6 +14,7 @@
  * - Anything else is a spent invite, and the member is told so. Never a join the node didn't confirm.
  */
 import type { BeanPoolIdentity } from './identity';
+import { fetchMembership, type ProbeKey } from './membership-probe';
 import { keyMadeForThisJoin, type PendingOnboarding } from './onboarding-state';
 
 /** The node's membership probe gets as long as the app's other asks of it (NodeStatusContext's recheck). */
@@ -26,16 +27,16 @@ export const MEMBERSHIP_PROBE_TIMEOUT_MS = 8_000;
  */
 export const NEXT_REQUEST_TIMEOUT_MS = 30_000;
 
-/** Whether the node says this key is one of its members (its membership probe). No answer in time, or an unclear one, is no. */
-export async function nodeSaysMember(nodeUrl: string, publicKey: string, timeoutMs = MEMBERSHIP_PROBE_TIMEOUT_MS): Promise<boolean> {
+/**
+ * Whether the node says this key is one of its members (its membership probe), asked signed by the key itself: the node
+ * answers only its own key (membership-probe.ts). No answer in time, or an unclear one, is no.
+ */
+export async function nodeSaysMember(nodeUrl: string, key: ProbeKey, timeoutMs = MEMBERSHIP_PROBE_TIMEOUT_MS): Promise<boolean> {
     const stop = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const ask = (async () => {
         try {
-            const res = await fetch(`${nodeUrl}/api/community/membership/${publicKey}`, {
-                headers: { Accept: 'application/json' },
-                signal: stop.signal,
-            });
+            const res = await fetchMembership(nodeUrl, key, stop.signal);
             if (!res.ok) return false;
             const data = await res.json();
             return data?.isMember === true;
@@ -68,7 +69,7 @@ export type SpentInvite =
  * node is asked only about a stored key: with none, Next hasn't made one yet, so nothing on this phone spent the invite.
  */
 export async function afterSpentInvite(nodeUrl: string, stored: BeanPoolIdentity | null, record: PendingOnboarding | null): Promise<SpentInvite> {
-    if (!stored || !(await nodeSaysMember(nodeUrl, stored.publicKey))) return 'spent';
+    if (!stored || !(await nodeSaysMember(nodeUrl, stored))) return 'spent';
     return keyMadeForThisJoin(record, stored.publicKey) ? 'carryOn' : 'enterApp';
 }
 
@@ -80,10 +81,10 @@ export async function afterSpentInvite(nodeUrl: string, stored: BeanPoolIdentity
  * redeemed` (engine/invites.ts redeemOfflineTicket) says the same of a ticket, and such a node gave it to the ticket's
  * own member too.
  */
-export async function redeemRefusalMeansIn(message: unknown, nodeUrl: string, publicKey: string): Promise<boolean> {
+export async function redeemRefusalMeansIn(message: unknown, nodeUrl: string, key: ProbeKey): Promise<boolean> {
     const text = typeof message === 'string' ? message : '';
     if (text.includes('already a member')) return true;
-    if (text.includes('already been used') || text.includes('already been redeemed')) return nodeSaysMember(nodeUrl, publicKey);
+    if (text.includes('already been used') || text.includes('already been redeemed')) return nodeSaysMember(nodeUrl, key);
     return false;
 }
 

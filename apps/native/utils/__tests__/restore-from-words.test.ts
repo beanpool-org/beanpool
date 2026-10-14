@@ -23,6 +23,7 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     },
 }));
 vi.mock('expo-secure-store', () => ({
+    WHEN_UNLOCKED_THIS_DEVICE_ONLY: 6,
     getItemAsync: vi.fn(async (key: string) => mem.secure.get(key) ?? null),
     setItemAsync: vi.fn(async (key: string, value: string) => { mem.secure.set(key, value); }),
     deleteItemAsync: vi.fn(async (key: string) => { mem.secure.delete(key); }),
@@ -55,7 +56,7 @@ const BELLINGEN = 'https://bellingen.beanpool.org';
 const ANCHOR = 'beanpool_anchor_url';
 const INVITE_RECORD = { step: 'profileSetup' as const, inviteCode: 'INV-ABC', anchorUrl: MULLUM, callsign: 'Kim', redeemed: true };
 /** What stays through any restore: a setting about the phone, not the member. */
-const PHONE_KEPT = { beanpool_light_palette: 'sand' };
+const PHONE_KEPT = { beanpool_theme_mode: 'dark' }; // THEME_PREFERENCE_KEY: light, dark or system
 
 /**
  * The app storage an account leaves on the phone: its guest markers, the communities it asked, its sync cursors, its
@@ -343,6 +344,8 @@ describe('a 12-word Replace takes the old account\'s push alerts and communities
         expect(mem.async.has(SAVED_NODES_STORE_KEY)).toBe(false);
         expect(removeCommunityCaches).toHaveBeenCalled();
         expect([...vi.mocked(removeCommunityCaches).mock.calls[0][0]].sort()).toEqual([BYRON, MULLUM]);
+        // With every other community copy on the phone (confirmation 2 of #1788, finding 5).
+        expect(vi.mocked(removeCommunityCaches).mock.calls[0][1]).toEqual({ everyCopy: true });
     });
 
     it('a community that can\'t be reached neither holds up nor fails the replace', async () => {
@@ -391,6 +394,15 @@ describe('a 12-word Replace takes the old account\'s push alerts and communities
         expect(mem.secure.get(PUSH_TOKEN_STORE_KEY)).toBe(PHONE_TOKEN);
         expect(mem.async.get(SAVED_NODES_STORE_KEY)).toBe(accountStorage(keys.publicKeyHex).beanpool_saved_nodes);
         expect(removeCommunityCaches).not.toHaveBeenCalled();
+    });
+
+    it('asks the node for the name with the restored key, which the phone does not hold yet (a community names a key only to its own signer)', async () => {
+        const keys = await mnemonicToKeypair(WORDS);
+        const nameOnNode = vi.fn(async () => 'Marty');
+
+        await restoreFromWords(WORDS, NODE, { nameOnNode });
+
+        expect(nameOnNode).toHaveBeenCalledWith(keys.publicKeyHex, keys.privateKeyHex);
     });
 
     it('onto an empty phone: nothing is unregistered or removed', async () => {

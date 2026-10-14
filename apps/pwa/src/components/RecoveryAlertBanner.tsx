@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
     getMyActiveRecoveryCollections,
-    cancelRecoveryCollection,
+    stopEveryRecoveryCollection,
 } from '../lib/api';
 import { withJitter } from '../lib/jitter';
 
@@ -24,17 +24,24 @@ export interface RecoveryAlertBannerProps {
  * Account Owner Danger Banner: when an unauthorized device is recovering this member's account
  * (backed by POST /api/recovery/collect/mine and cancelable via POST /api/recovery/collect/cancel).
  *
+ * The node sends how many sessions are live and the newest few, never all: strangers can open any number. Stop It Now
+ * stops every one in a single request (api.ts stopEveryRecoveryCollection) and says "all cancelled" only when the node
+ * says none is left (PR #1456 deciding review).
+ *
  * Polling runs every 30s matching PWA background cadence, and automatically pauses when the browser
  * tab is hidden to avoid hammering the node.
  */
 export function RecoveryAlertBanner({ onStopSuccess, onActionTaken }: RecoveryAlertBannerProps = {}) {
     const [sessions, setSessions] = useState<RecoverySession[]>([]);
+    /** How many are live, by the node's count: more than `sessions`, which holds the newest few. */
+    const [liveCount, setLiveCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [stopping, setStopping] = useState(false);
 
     const checkAlerts = useCallback(async () => {
         try {
-            const mineRes = await getMyActiveRecoveryCollections().catch(() => [] as any[]);
+            const mine = await getMyActiveRecoveryCollections().catch(() => null);
+            const mineRes = mine?.collections;
 
             if (Array.isArray(mineRes)) {
                 // The route returns ONLY open collections — openCollectionsFor filters at
@@ -49,8 +56,10 @@ export function RecoveryAlertBanner({ onStopSuccess, onActionTaken }: RecoveryAl
                         status: 'open',
                     }));
                 setSessions(active);
+                setLiveCount(typeof mine?.count === 'number' ? mine.count : active.length);
             } else {
                 setSessions([]);
+                setLiveCount(0);
             }
         } catch (e: any) {
             console.warn('[RecoveryAlert] Failed checking recovery alerts:', e.message);
@@ -105,17 +114,18 @@ export function RecoveryAlertBanner({ onStopSuccess, onActionTaken }: RecoveryAl
 
         setStopping(true);
         try {
-            for (const session of sessions) {
-                try {
-                    await cancelRecoveryCollection(session.collectionId);
-                } catch (e: any) {
-                    console.warn(`[RecoveryAlert] Failed to cancel ${session.collectionId}:`, e.message);
-                }
+            const left = await stopEveryRecoveryCollection(sessions);
+            if (left === 0) {
+                setSessions([]);
+                setLiveCount(0);
+                onStopSuccess?.();
+                onActionTaken?.();
+                alert('✅ Recovery Stopped: All active recovery sessions have been cancelled.');
+            } else {
+                // Not "all cancelled" when some are not: read again, so the banner shows what is live.
+                void checkAlerts();
+                alert(`Not all stopped: ${left} recovery session${left === 1 ? ' is' : 's are'} still active. Tap Stop It Now again.`);
             }
-            setSessions([]);
-            onStopSuccess?.();
-            onActionTaken?.();
-            alert('✅ Recovery Stopped: All active recovery sessions have been cancelled.');
         } catch {
             alert('Failed to stop recovery. Please try again.');
         } finally {
@@ -146,7 +156,7 @@ export function RecoveryAlertBanner({ onStopSuccess, onActionTaken }: RecoveryAl
                                 A device is trying to restore access to your account. If this is not you, stop it immediately.
                             </p>
                             <div className="text-[11px] text-red-600 dark:text-red-400 mt-1 font-medium">
-                                {sessions.length} active session{sessions.length > 1 ? 's' : ''}
+                                {liveCount} active session{liveCount > 1 ? 's' : ''}
                                 {sessions[0].createdAt ? ` • Started ${new Date(sessions[0].createdAt).toLocaleString()}` : ''}
                             </div>
 

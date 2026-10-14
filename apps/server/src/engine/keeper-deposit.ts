@@ -65,11 +65,9 @@ export interface SsoKeeperDeposit {
     ownerPubkey: string;
     /** The COMPLETE new generation. Exactly one fragment must be the sign-in one. */
     shares: KeeperShareInput[];
-    /** The provider's `id_token` from the client. Refused for GitHub (see verifySignIn). */
+    /** The provider's `id_token` from the client. */
     idToken?: string;
-    /** GitHub only: the device-flow session this node ran for THIS member (engine/github-device.ts). */
-    sessionId?: string;
-    /** The nonce this node issued to THIS member (see issueNonce). Not used for GitHub. */
+    /** The nonce this node issued to THIS member (see issueNonce). */
     nonce: string;
 }
 
@@ -102,7 +100,7 @@ export function maskEmail(email: string | undefined): string | undefined {
 export async function depositSsoKeeperGeneration(
     deposit: SsoKeeperDeposit,
 ): Promise<SsoKeeperResult> {
-    const { provider, ownerPubkey, shares, idToken, sessionId, nonce } = deposit;
+    const { provider, ownerPubkey, shares, idToken, nonce } = deposit;
     // A server that cannot lock the copy (services/recovery-seal-key.ts) refuses before the sign-in is checked, so the
     // member's nonce is not spent on a deposit that could never be stored.
     requireRecoverySealKey();
@@ -114,7 +112,7 @@ export async function depositSsoKeeperGeneration(
     try {
         identity = await verifySignIn(
             provider,
-            { idToken, sessionId },
+            { idToken },
             getConfiguredAudiences(provider),
             nonce,
             ownerPubkey,

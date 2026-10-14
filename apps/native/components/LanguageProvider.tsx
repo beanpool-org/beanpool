@@ -9,8 +9,10 @@
  * Also sets core's device language (`setLanguage`), so a sentence written by a helper outside React (core's `t`, a
  * date from `formatDate`) reads the same language from the next render on.
  *
- * Never blocks: the first render is English (or the stored choice once read), a store that can't be read leaves the
- * phone's language, and a catalog that can't be built leaves English (onboarding-no-hard-gates).
+ * Never blocks: the first frame is drawn in the phone's language (or the community's, or English) until the stored
+ * choice is read, as ThemeProvider draws light until its stored theme loads; a pick made before that read lands wins
+ * over it. A store that can't be read leaves the phone's language, and a catalog that can't be built leaves English
+ * (onboarding-no-hard-gates).
  *
  * Right-to-left: off for now (`I18nManager.allowRTL(false)` at boot, app/_layout.tsx) until the RTL audit, so an
  * Arabic, Urdu or Persian phone sees a straight left-to-right app rather than a half-mirrored one (design §2.5 rule 3).
@@ -18,7 +20,7 @@
  * The 12 recovery words never pass through here: they stay English in every language (design amendment 1).
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { I18nManager, NativeModules, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setLanguage, wordsFor, type Lang, type UiLang, type Words } from '@beanpool/core';
@@ -80,11 +82,14 @@ export function LanguageProvider({ children, deviceTags, initial }: {
     const phoneLanguage = defaultLanguage({ deviceTags: tags, nodeDefault });
     const lang: UiLang = override ?? chooseLanguage({ stored: choice, deviceTags: tags, nodeDefault });
     const words = useMemo(() => wordsIn(lang), [lang]);
+    // A pick made before the stored choice is read wins over that read when it lands (review of #1954, N3): the read is
+    // what this phone chose before, the pick is what the member chose now (and what is now stored).
+    const picked = useRef(false);
 
     useEffect(() => {
         let live = true;
         AsyncStorage.getItem(LANGUAGE_PREFERENCE_KEY)
-            .then((stored) => { if (live) setChoice(storedChoice(stored)); })
+            .then((stored) => { if (live && !picked.current) setChoice(storedChoice(stored)); })
             .catch(() => { /* follow the phone */ });
         AsyncStorage.getItem('beanpool_anchor_url')
             .then((url) => getCachedNodeProfile(url))
@@ -94,6 +99,7 @@ export function LanguageProvider({ children, deviceTags, initial }: {
     }, []);
 
     const choose = useCallback((next: Lang | null) => {
+        picked.current = true;
         setOverride(null);
         setChoice(next);
         const write = next ? AsyncStorage.setItem(LANGUAGE_PREFERENCE_KEY, next) : AsyncStorage.removeItem(LANGUAGE_PREFERENCE_KEY);

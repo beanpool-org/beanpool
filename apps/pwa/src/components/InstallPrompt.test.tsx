@@ -147,6 +147,8 @@ describe('InstallPrompt', () => {
         const region = banner()!;
         expect(screen.getByText('Install BeanPool').style.color).toBe('var(--bp-commit-on)');
         expect(screen.getByRole('button', { name: 'Hide steps' }).style.color).toBe('var(--bp-commit-on)');
+        // At 320 px with 130 % text a squeezed button let 'Hide steps' run out past its fill.
+        expect(screen.getByRole('button', { name: 'Hide steps' }).style.whiteSpace).not.toBe('nowrap');
         expect(screen.getByText(/^(iPhone \/ iPad|Android|Desktop):$/).style.color).toBe('var(--bp-commit-on)');
         const pageInk = Array.from(region.querySelectorAll<HTMLElement>('*')).filter(el => el.style.color.includes('--text-primary'));
         expect(pageInk).toEqual([]);

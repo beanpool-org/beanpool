@@ -297,6 +297,13 @@ CREATE TABLE IF NOT EXISTS posts (
     -- 1 for an online event: no pin (lat/lng NULL). Its join link is shown, like the private note, to the host and Going only.
     event_online INTEGER,
     event_link TEXT,
+    -- A repeating event (DESIGN-event-times §8): its rule, closed JSON (@beanpool/engine event-series.ts); its last local
+    -- date, "YYYY-MM-DD" (NULL = until the host cancels it); and its cancelled dates, a JSON array of local dates. The
+    -- row's times are the NEXT date, which the main server's minute tick moves on (engine/event-series-roll.ts). NULL on
+    -- a one-off.
+    event_repeat TEXT,
+    event_repeat_until TEXT,
+    event_repeat_skips TEXT,
     -- Moderation (global profile G3, engine/auto-moderation.ts). On every node, NULL where unused.
     -- hidden_by_reports_at: enough established members reported it, so it is out of every listing and search for
     -- everyone but its author and the moderators until a moderator looks. Not a removal: active/status are untouched.
@@ -344,14 +351,22 @@ CREATE TABLE IF NOT EXISTS event_rsvps (
     -- delta sync and dies with it when the RSVP is withdrawn.
     reminder_offsets TEXT,
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    -- The date the RSVP is for (DESIGN-event-times §2, §8): the event's start instant when it was written, stamped by the
+    -- node, never sent. One RSVP per member per event; it counts while it is the event's current date
+    -- (posts.event_start_at), so a repeating event's next date starts at nobody going. An edit that moves the date moves
+    -- it with it (engine/posts.ts). NULL on an RSVP from before it, which is for the date the event has.
+    occurrence_at DATETIME,
     PRIMARY KEY (post_id, member_pubkey)
 );
 CREATE INDEX IF NOT EXISTS idx_event_rsvps_member ON event_rsvps(member_pubkey);
+CREATE INDEX IF NOT EXISTS idx_event_rsvps_occurrence ON event_rsvps(occurrence_at);
 CREATE INDEX IF NOT EXISTS idx_event_rsvps_updated_at ON event_rsvps(updated_at);
 
 -- One row per reminder the community has actually sent (docs/events-on-the-map.md §2.2). The primary key IS
 -- the de-duplication: the scheduler claims a due reminder with INSERT OR IGNORE and sends only when the
--- insert won, so a restart mid-sweep, a second tick or a slow Expo call can never double-send.
+-- insert won, so a restart mid-sweep, a second tick or a slow Expo call can never double-send. occurrence_at is the
+-- date's start instant (DESIGN-event-times §8): a repeating event reminds its regulars once per date. Never NULL ('' at
+-- most), because SQLite lets a NULL into a key and counts no two NULLs the same.
 --
 -- Only the main server ever sends (§2.2). Copied to a standby verbatim (a plain table, engine/replication-manifest.ts),
 -- so a server that takes over sends no reminder a second time. The rows are deleted with the rest of an event by the
@@ -360,10 +375,11 @@ CREATE TABLE IF NOT EXISTS event_reminders_sent (
     post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
     member_pubkey TEXT NOT NULL REFERENCES members(public_key) ON DELETE CASCADE,
     offset_min INTEGER NOT NULL,
+    occurrence_at TEXT NOT NULL DEFAULT '',
     sent_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
     -- The replication watermark (engine/replication-manifest.ts, a plain table): db.ts stamps it on every write.
     updated_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    PRIMARY KEY (post_id, member_pubkey, offset_min)
+    PRIMARY KEY (post_id, member_pubkey, offset_min, occurrence_at)
 );
 CREATE INDEX IF NOT EXISTS idx_posts_event_author ON posts(author_pubkey, event_end_at) WHERE type = 'event';
 -- "Coming up" on Home (engine posts.ts PostFilter.upcomingUntil): the events in start order, so the soonest few are read

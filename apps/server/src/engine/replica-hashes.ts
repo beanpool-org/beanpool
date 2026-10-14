@@ -44,7 +44,11 @@ export interface TableHashes {
  * before its main server hashes `posts` over five more columns, so it would read every copy as "posts not exact" and
  * force-resync until the main server is updated; with the version raised, the two compare row counts only until then.
  */
-export const TABLE_HASHES_VERSION = 4;
+/**
+ * 5: posts gains the three repeating-event columns, event_rsvps occurrence_at, and event_reminders_sent is keyed on the
+ * date (REPLICA_FORMAT 11). Raised for the same reason as 4.
+ */
+export const TABLE_HASHES_VERSION = 5;
 
 /**
  * Copied tables left out, and why. Each server prunes its own tombstones on its own daily timer (db/db.ts

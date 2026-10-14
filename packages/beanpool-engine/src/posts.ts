@@ -17,6 +17,7 @@ import { avatarUrlOf, tierForCredit } from '@beanpool/core';
 import { areaBox, boundingBox, roundToArea } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 import { prepared } from './statements.js';
+import { readRepeatRule, readRepeatSkips, upcoming, type EventRepeatRule } from './event-series.js';
 
 type Db = Database.Database;
 
@@ -47,6 +48,18 @@ export interface EventRsvpRecord {
     memberCallsign?: string;
     status: EventRsvpStatus;
     updatedAt: string;
+}
+
+/** How many of a repeating event's dates a by-id read lists (DESIGN-event-times §4, "Next dates"). */
+export const EVENT_NEXT_DATES = 6;
+
+/** One of a repeating event's next dates, as the detail lists them; a cancelled one is marked, so its host can undo it. */
+export interface EventNextDate {
+    /** "YYYY-MM-DD" in the event's zone. */
+    date: string;
+    startLocal: string;
+    startAt: string;
+    cancelled: boolean;
 }
 
 export interface MarketplacePost {
@@ -132,6 +145,20 @@ export interface MarketplacePost {
     eventOnline?: boolean;
     /** Where to join an online event. Host and `going` only, exactly like `eventPrivateNote`. */
     eventLink?: string;
+    /**
+     * A repeating event (DESIGN-event-times §8): its rule, its last date ("YYYY-MM-DD", absent = until cancelled) and its
+     * cancelled dates. The times above are its NEXT date, which the node moves on by itself. Absent on a one-off.
+     */
+    eventRepeat?: EventRepeatRule;
+    eventRepeatUntil?: string;
+    eventRepeatSkips?: string[];
+    /** A repeating event read by its id: its next dates, the current one first. */
+    eventNextDates?: EventNextDate[];
+    /**
+     * The viewer's RSVP when it is for one of the event's earlier dates ("You went on 16 Oct"): it no longer counts, and
+     * `myRsvp` is null for the date the event has now. Until the 30-day prune takes it.
+     */
+    myLastRsvp?: { status: EventRsvpStatus; occurrenceAt: string };
     goingCount?: number;
     interestedCount?: number;
     /** The viewer's own RSVP; null when they have none. */
@@ -535,9 +562,30 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
             eventEndLocal: row.event_end_local || undefined,
             eventTz: row.event_tz || undefined,
             eventOnline: row.event_online === 1,
+            ...seriesFieldsOf(row),
         } : {}),
         ...(row.hidden_by_reports_at ? { hiddenByReportsAt: row.hidden_by_reports_at } : {}),
     };
+}
+
+/** A repeating event's rule, last date and cancelled dates from its row; nothing for a one-off. */
+export function seriesFieldsOf(row: any): Pick<MarketplacePost, 'eventRepeat' | 'eventRepeatUntil' | 'eventRepeatSkips'> {
+    const rule = readRepeatRule(row.event_repeat);
+    if (!rule) return {};
+    const skips = readRepeatSkips(row.event_repeat_skips);
+    return {
+        eventRepeat: rule,
+        ...(row.event_repeat_until ? { eventRepeatUntil: row.event_repeat_until as string } : {}),
+        ...(skips.length > 0 ? { eventRepeatSkips: skips } : {}),
+    };
+}
+
+/**
+ * Whether an RSVP is for the date its event has now (DESIGN-event-times §7.10, §8): stamped with that date, or from before
+ * the stamp. One for an earlier date of a repeating event counts for nothing, until the 30-day prune takes it.
+ */
+export function rsvpIsCurrent(rsvpOccurrenceAt: string | null | undefined, eventStartAt: string | null | undefined): boolean {
+    return rsvpOccurrenceAt == null || rsvpOccurrenceAt === eventStartAt;
 }
 
 /**
@@ -1691,7 +1739,7 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
     if (eventRows.length > 0) {
         try {
             const rsvps = selectInChunks(db, eventRows.map(r => r.id), ph => `
-                SELECT er.post_id, er.member_pubkey, er.status, er.updated_at, m.callsign as member_callsign
+                SELECT er.post_id, er.member_pubkey, er.status, er.updated_at, er.occurrence_at, m.callsign as member_callsign
                 FROM event_rsvps er
                 LEFT JOIN members m ON er.member_pubkey = m.public_key
                 WHERE er.post_id IN (${ph})
@@ -1743,7 +1791,13 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
         }
 
         if (post.type === 'event') {
-            const rsvps = rsvpsByPost.get(post.id) || [];
+            // Only the RSVPs for the date the event has now count (DESIGN-event-times §8): a repeating event's next date
+            // starts at nobody going, and a regular's RSVP for last week is theirs alone to read.
+            const allRsvps = rsvpsByPost.get(post.id) || [];
+            const rsvps = allRsvps.filter(v => rsvpIsCurrent(v.occurrence_at, r.event_start_at));
+            const myStale = viewer && !viewerIsVisitor
+                ? allRsvps.find(v => v.member_pubkey === viewer && !rsvpIsCurrent(v.occurrence_at, r.event_start_at))
+                : undefined;
             // ⚡ Bolt: single-pass RSVP loop to compute going/interested counts and locate viewer's RSVP without extra .find() array scan
             let goingCount = 0;
             let interestedCount = 0;
@@ -1777,6 +1831,13 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             post.goingCount = goingCount;
             post.interestedCount = interestedCount;
             post.myRsvp = (mine?.status as EventRsvpStatus | undefined) ?? null;
+            if (myStale) post.myLastRsvp = { status: myStale.status as EventRsvpStatus, occurrenceAt: myStale.occurrence_at };
+            if (filter?.id && post.eventRepeat && post.eventTz && post.eventStartLocal) {
+                post.eventNextDates = upcoming({
+                    rule: post.eventRepeat, anchorDate: post.eventStartLocal.slice(0, 10), tz: post.eventTz,
+                    skips: post.eventRepeatSkips, until: post.eventRepeatUntil ?? null,
+                }, EVENT_NEXT_DATES, nowIso).map(o => ({ date: o.date, startLocal: o.startLocal, startAt: o.startAt, cancelled: o.skipped }));
+            }
             if ((host || going) && r.event_private_note) post.eventPrivateNote = r.event_private_note;
             // The join link goes by the note's rule, and nowhere else (DESIGN-event-times §9).
             if ((host || going) && r.event_link) post.eventLink = r.event_link;
@@ -1905,6 +1966,8 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     eventStartAt: 'keep', eventEndAt: 'keep', eventState: 'keep', goingCount: 'keep', interestedCount: 'keep',
     // The clock, its zone (the label is read from it) and online: what the time means, not who or where exactly.
     eventStartLocal: 'keep', eventEndLocal: 'keep', eventTz: 'keep', eventOnline: 'keep',
+    // When it repeats, and which dates are off: what the event is, not who goes.
+    eventRepeat: 'keep', eventRepeatUntil: 'keep', eventRepeatSkips: 'keep', eventNextDates: 'keep',
     // Neutral, not absent, so an app written against the member's shape meets no `undefined`: each falls back to its
     // "nobody" (an empty name reads as Anonymous / Unknown in both apps).
     authorPublicKey: () => HIDDEN_AUTHOR,
@@ -1921,7 +1984,7 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // The trade, the keeper behind an enterprise's post, the voters, the reader's own vote and RSVP, the host's lists and
     // note, the peers named, who a direct or group post was for, the typed place (often an address), and moderation.
     acceptedBy: 'drop', acceptedAt: 'drop', pendingTransactionId: 'drop', completedAt: 'drop', createdBy: 'drop',
-    pollVotes: 'drop', userVotedOptionId: 'drop', myRsvp: 'drop', eventRsvps: 'drop', eventPrivateNote: 'drop', eventLink: 'drop',
+    pollVotes: 'drop', userVotedOptionId: 'drop', myRsvp: 'drop', myLastRsvp: 'drop', eventRsvps: 'drop', eventPrivateNote: 'drop', eventLink: 'drop',
     reachPeers: 'drop', targetPubkey: 'drop', assignedTo: 'drop', targetGroupId: 'drop', targetGroupName: 'drop',
     eventPlaceName: 'drop', hiddenByReportsAt: 'drop', removedByModeratorAt: 'drop',
     // A member's own delta only: a visitor's read is for nobody in particular and never has it.
@@ -1956,7 +2019,7 @@ export function guestPost(post: MarketplacePost): MarketplacePost {
 export function publicBroadcastPost(post: MarketplacePost): MarketplacePost {
     const { reachPeers: _peers, userVotedOptionId: _ownVote, ...shared } = post;
     if (shared.type !== 'event') return shared;
-    const { eventPrivateNote: _note, eventLink: _link, eventRsvps: _rsvps, myRsvp: _mine, ...rest } = shared;
+    const { eventPrivateNote: _note, eventLink: _link, eventRsvps: _rsvps, myRsvp: _mine, myLastRsvp: _last, ...rest } = shared;
     return rest;
 }
 

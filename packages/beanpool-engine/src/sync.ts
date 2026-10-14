@@ -8,7 +8,7 @@ import { parseReachPeers } from '@beanpool/core';
 type Db = Database.Database;
 
 import { rowToMember, type Member } from './members.js';
-import type { MarketplacePost } from './posts.js';
+import { seriesFieldsOf, type MarketplacePost } from './posts.js';
 import type { Rating } from './social.js';
 import type { Message } from './messaging.js';
 
@@ -290,6 +290,11 @@ export interface SyncEventRsvp {
      * older than reminders carries no such field — the import COALESCEs rather than erasing what it holds.
      */
     reminderOffsets?: string | null;
+    /**
+     * The date the RSVP is for: its event's start when it was written (DESIGN-event-times §8). Optional, because a main
+     * server from before repeating events sends none; null on an RSVP from before the stamp.
+     */
+    occurrenceAt?: string | null;
     updatedAt: string;
 }
 
@@ -1011,6 +1016,8 @@ function postOfRow(row: any): MarketplacePost {
             eventTz: row.event_tz || undefined,
             ...(row.event_online != null ? { eventOnline: row.event_online === 1 } : {}),
             eventLink: row.event_link || undefined,
+            // A repeating event's rule, last date and cancelled dates (DESIGN-event-times §8).
+            ...seriesFieldsOf(row),
         } : {}),
         // Moderation (G3): a hidden post stays hidden, and a takedown still counts, on a standby and after a take-over.
         hiddenByReportsAt: row.hidden_by_reports_at ?? null,
@@ -1269,6 +1276,7 @@ function eventRsvpOfRow(r: any): SyncEventRsvp {
         // Undefined rather than null on a schema without the column, so the import can tell "this node
         // does not know about reminders" from "this person has no per-event choice".
         reminderOffsets: r.reminder_offsets === undefined ? undefined : (r.reminder_offsets ?? null),
+        occurrenceAt: r.occurrence_at === undefined ? undefined : (r.occurrence_at ?? null),
         updatedAt: r.updated_at,
     };
 }

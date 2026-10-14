@@ -298,3 +298,26 @@ export function latestUntil(firstDate: string): string {
     d.setUTCFullYear(d.getUTCFullYear() + EVENT_REPEAT_UNTIL_MAX_YEARS);
     return dateOfUtc(d.getTime());
 }
+
+/**
+ * A rule as `event_repeat` holds it: one spelling for one rule (the keys in a fixed order), so a standby's copy of the
+ * row is the main server's byte for byte. Null for none, or for anything that is not a rule.
+ */
+export function repeatRuleCell(rule: unknown): string | null {
+    if (!isPlainObject(rule)) return null;
+    const r = readRepeatRule(JSON.stringify(rule));
+    if (!r) return null;
+    const pattern = r.freq === 'weekly'
+        ? { freq: r.freq, interval: r.interval, byDay: r.byDay }
+        : 'byMonthDay' in r
+            ? { freq: r.freq, interval: r.interval, byMonthDay: r.byMonthDay }
+            : { freq: r.freq, interval: r.interval, byDay: r.byDay, pos: r.pos };
+    return JSON.stringify({ ...pattern, time: r.time, minutes: r.minutes });
+}
+
+/** Cancelled dates as `event_repeat_skips` holds them: sorted, once each, real dates; NULL (null) for none. */
+export function repeatSkipsCell(skips: unknown): string | null {
+    if (!Array.isArray(skips)) return null;
+    const clean = [...new Set(skips.filter(isLocalDate))].sort();
+    return clean.length > 0 ? JSON.stringify(clean) : null;
+}

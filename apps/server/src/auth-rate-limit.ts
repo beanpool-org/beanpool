@@ -7,9 +7,13 @@ import { clientLimiterKey } from './client-ip.js';
  * password check together, so a hall's first few people on one Wi-Fi (or a carrier's NAT) spent it and "Already have
  * BeanPool?" and the name check answered 429 to everyone behind the address. Each bucket is its own 15 a minute now.
  *
- * `admin`, the default, is every route that takes the admin password, a 2FA code, a claim proof or an admin session
- * (verify-password, change-password, the 2FA routes, owner unlock, the admin pairing, reset, the connectors...): they
- * still share one bucket, so a guesser gets exactly the 15 a minute per address it got before, across all of them.
+ * `admin`, the default, is the routes that used this limiter before the split and have no bucket of their own:
+ * verify-password, change-password, seed-invite, update-identity, reset, re-enroll, the connectors and the federation
+ * ceiling, the 2FA verify / disable / backup-codes routes, owner unlock, the admin sign-in pairing, and /oauth/token and
+ * /oauth/revoke.
+ * They still share one bucket, so across them a guesser gets the 15 a minute per address they got before. Most admin
+ * routes never called this limiter (on main or here): password guesses on every admin route are bounded by the password
+ * brake inside checkAdminAuth (password-brake.ts), not by this bucket.
  * `names` is the name check and the recovery lookup together: both tell whether a name is here, so a prober gets the 15
  * a minute it got before across the two (the privacy review's F5, test-privacy-defaults.ts). Every other route that
  * guards nothing a guess can win has its own. The open door's own name check is not here at all

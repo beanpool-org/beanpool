@@ -1,9 +1,15 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import {
-    buildEventDraft, buildEventEditPatch, eventCacheColumns, eventEditValues, eventHomeWhen, eventPinCard, eventPlaceLine,
-    eventShareWhen, eventTimeAdjustedText, eventWhen, deviceTimeZone, eventZoneLine, filterZones, formatEventWhenFor,
-    isOnlineEvent, sameZone, zonePickerEntry, EVENT_LINK_HINT, EVENT_ZONE_PROMPT, type EventFormInput,
+    buildEventDraft, buildEventEditPatch, checkEventLink, eventCacheColumns, eventEditValues, eventHomeWhen, eventHostLine,
+    eventLinkWaitWords, eventPinCard, eventPlaceLine, eventShareWhen, eventTimeAdjustedText, eventWhen, deviceTimeZone,
+    eventZoneLine, filterZones, formatEventWhenFor, isOnlineEvent, sameZone, zoneIsNotAPlace, zonePickerEntry,
+    EVENT_TIME_WORDS, type EventFormInput,
 } from '../events';
+import { myEventAsPost, type MyEvent } from '../event-extras';
+import { onlineEventsOn, readNodeProfile } from '../node-profile';
+import { nearbyPrune, type NearbyHeld } from '../posts-nearby';
 
 /**
  * Event times on the phone (DESIGN-event-times-fable.md §3, §4, slice 3). The reader here is in New York, so a Lagos
@@ -78,7 +84,9 @@ describe('event times: share text and Home', () => {
     it('Home’s Coming up line: the place’s zone only when different; online in the reader’s time', () => {
         expect(eventHomeWhen({ startsAt: lagos.eventStartAt, startLocal: lagos.eventStartLocal, tz: lagos.eventTz, online: false })).toBe('Sat 17 Oct, 20:50 Lagos time');
         expect(eventHomeWhen({ startsAt: vibe.eventStartAt, startLocal: vibe.eventStartLocal, tz: vibe.eventTz, online: true })).toBe('Fri 16 Oct, 5:50 your time');
-        expect(eventHomeWhen({ startsAt: '2026-10-18T00:50:00.000Z', startLocal: '2026-10-17T20:50', tz: 'America/New_York', online: false })).toBe('Sat 17 Oct');
+        // The same clock as the reader's: the time with no zone, as §4 shows it (#1946 review, nit 8).
+        expect(eventHomeWhen({ startsAt: '2026-10-18T00:50:00.000Z', startLocal: '2026-10-17T20:50', tz: 'America/New_York', online: false })).toBe('Sat 17 Oct, 20:50');
+        // A node whose Home answer carries no clock: the day only, as before.
         expect(eventHomeWhen({ startsAt: lagos.eventStartAt })).toBe('Sat 17 Oct');
     });
 });
@@ -123,22 +131,22 @@ describe('event times: the form’s zone line and picker (§3)', () => {
     });
     it('in person, somewhere else: "Times are Lagos time (where the pin is)"', () => {
         expect(eventZoneLine({ online: false, tz: 'Africa/Lagos', source: 'pin', deviceTz: 'Australia/Sydney', offsetMinutes: 60 }))
-            .toEqual({ zone: 'Lagos time', why: ' (where the pin is)', moved: false });
+            .toEqual({ before: 'Times are ', zone: 'Lagos time', after: ' (where the pin is)', text: 'Times are Lagos time (where the pin is)' });
         expect(eventZoneLine({ online: false, tz: 'Africa/Accra', source: 'pin', deviceTz: 'Australia/Sydney', offsetMinutes: 0, moved: true }))
-            .toEqual({ zone: 'Accra time', why: ' (where the pin is)', moved: true });
+            .toEqual({ before: 'Times are now ', zone: 'Accra time', after: ' (where the pin is)', text: 'Times are now Accra time (where the pin is)' });
         expect(eventZoneLine({ online: false, tz: 'Australia/Brisbane', source: 'picked', deviceTz: 'Australia/Sydney', offsetMinutes: 600 }))
-            .toEqual({ zone: 'Brisbane time', why: '', moved: false });
+            .toEqual({ before: 'Times are ', zone: 'Brisbane time', after: '', text: 'Times are Brisbane time' });
     });
     it('in person, no zone known yet (no pin, or a node from before zones): nothing', () => {
         expect(eventZoneLine({ online: false, tz: null, source: null, deviceTz: 'Australia/Sydney', offsetMinutes: null })).toBeNull();
     });
     it('online: always shown, because the zone anchors the clock', () => {
         expect(eventZoneLine({ online: true, tz: 'Australia/Sydney', source: 'device', deviceTz: 'Australia/Sydney', offsetMinutes: 660 }))
-            .toEqual({ zone: 'Sydney time', why: ' (your device)', moved: false });
+            .toEqual({ before: 'Times are ', zone: 'Sydney time', after: ' (your device)', text: 'Times are Sydney time (your device)' });
     });
     it('online, and the device cannot name its zone: ask', () => {
-        expect(eventZoneLine({ online: true, tz: null, source: null, deviceTz: null, offsetMinutes: null })).toEqual({ prompt: EVENT_ZONE_PROMPT });
-        expect(EVENT_ZONE_PROMPT).toBe('Pick the time zone these times are in');
+        expect(eventZoneLine({ online: true, tz: null, source: null, deviceTz: null, offsetMinutes: null })).toEqual({ prompt: 'Pick the time zone these times are in' });
+        expect(String(EVENT_TIME_WORDS.zonePrompt)).toBe('Pick the time zone these times are in');
     });
     it('picker entries read "Lagos (UTC+1)"', () => {
         expect(zonePickerEntry({ tz: 'Africa/Lagos', label: 'Lagos time', offsetMinutes: 60 })).toBe('Lagos (UTC+1)');
@@ -222,7 +230,7 @@ describe('event times: the create draft', () => {
         expect(bad('javascript:alert(1)')).toEqual({ ok: false, error: 'The link to join must start with https:// or http://' });
         expect(bad('https://zoom.us@evil.example/j/1')).toEqual({ ok: false, error: 'The link to join must not hold a user name or password' });
         expect(bad(`https://meet.example/${'a'.repeat(500)}`)).toEqual({ ok: false, error: 'Keep the link to join under 500 characters.' });
-        expect(EVENT_LINK_HINT).toBe('Link to join · only people who tap Going see it');
+        expect(String(EVENT_TIME_WORDS.linkHint)).toBe('Link to join · only people who tap Going see it');
     });
     it('the past check uses the zone’s offset when the form knows it', () => {
         // At 19:00Z: 20:50 in Lagos (19:50Z) is still to come; 19:30 in Lagos (18:30Z) has passed, though 19:30 on this
@@ -263,5 +271,126 @@ describe('event times: editing', () => {
         expect(r.ok && r.patch.eventOnline).toBe(true);
         expect(r.ok && r.patch.eventLink).toBe('https://meet.example/x');
         expect(r.ok && r.notifies).toBe(true);
+    });
+});
+
+describe('fix round 1 (#1946 review): the link check is the node\'s, case for case (finding 3)', () => {
+    // The four links where the phone and the node's cleanEventLink disagreed (the review ran the node's source on 28).
+    it('extra slashes after the scheme: the node reads https:///x as host x, so the phone accepts it', () => {
+        expect(checkEventLink('https:///x')).toEqual({ ok: true, link: 'https:///x' });
+    });
+    it('a backslash ends the host, as a URL parser reads it: no user name there, so accepted', () => {
+        expect(checkEventLink('https://evil.example\\@good.example/x')).toEqual({ ok: true, link: 'https://evil.example\\@good.example/x' });
+    });
+    it('a space in the host is no link (the node cannot parse it)', () => {
+        expect(checkEventLink('https://exa mple.com/x')).toEqual({ ok: false, error: 'The link to join must start with https:// or http://' });
+    });
+    it('the length counts each space as %20, as the node stores it', () => {
+        const link = `https://meet.example/${'a '.repeat(10)}${'c'.repeat(491 - 20 - 'https://meet.example/'.length)}`;
+        expect(link.length).toBe(491);
+        expect(checkEventLink(link)).toEqual({ ok: false, error: 'Keep the link to join under 500 characters.' });
+        expect(checkEventLink(link.replace(/ /g, '-')).ok).toBe(true);
+    });
+    it('no host at all is still refused', () => {
+        expect(checkEventLink('https://').ok).toBe(false);
+        expect(checkEventLink('https:///').ok).toBe(false);
+    });
+});
+
+describe('fix round 1: the host line only for a zone that is a place (finding 4)', () => {
+    it('an online event kept as UTC (saved with no zone) says nothing about the host', () => {
+        const utc = { ...vibe, eventTz: 'UTC', eventStartLocal: '2026-10-16T09:50', eventEndLocal: '2026-10-16T11:50' };
+        expect(eventWhen(utc)?.hostLine).toBe('9:50 for the host (UTC time)');
+        expect(eventHostLine(utc)).toBeNull();
+        expect(eventHostLine({ ...utc, eventTz: 'Etc/GMT-1', eventStartLocal: '2026-10-16T10:50' })).toBeNull();
+        expect(eventHostLine(vibe)).toBe('20:50 for the host (Sydney time)');
+        expect(zoneIsNotAPlace('UTC') && zoneIsNotAPlace('Etc/GMT+5') && zoneIsNotAPlace(null)).toBe(true);
+        expect(zoneIsNotAPlace('Africa/Lagos')).toBe(false);
+    });
+});
+
+describe('fix round 1: where the join link would be (finding 7, the web\'s sentence)', () => {
+    it('not Going: how to get it; Going: never "tap Going"', () => {
+        expect(eventLinkWaitWords(null, true)).toBe('The link to join shows here once you tap Going.');
+        expect(eventLinkWaitWords('interested', false)).toBe('The link to join shows here once you tap Going.');
+        expect(eventLinkWaitWords('going', false)).toBe('The link shows when you have signal.');
+        expect(eventLinkWaitWords('going', true)).toBeNull();
+    });
+});
+
+describe('fix round 1: "Your events" reads like the feed (finding 2)', () => {
+    const row = (over: Partial<MyEvent>): MyEvent => ({
+        postId: 'ev-1', title: 'Working bee', startAt: lagos.eventStartAt, endAt: lagos.eventEndAt, placeName: 'Bindarrabi Hall',
+        rsvp: 'going', photo: null, reminderOffsets: null, ...over,
+    });
+    it('the Lagos row reads the place\'s clock, then "your time"', () => {
+        const post = myEventAsPost(row({ startLocal: lagos.eventStartLocal, endLocal: lagos.eventEndLocal, tz: 'Africa/Lagos', online: false }));
+        expect(formatEventWhenFor(post)).toBe('SAT 17 OCT · 20:50–22:50');
+        expect(eventWhen(post)?.note).toBe('Lagos time · 15:50 your time');
+        expect(eventPlaceLine(post, null)).toBe('Bindarrabi Hall');
+    });
+    it('the online row reads "your time" and Online', () => {
+        const post = myEventAsPost(row({
+            startAt: vibe.eventStartAt, endAt: vibe.eventEndAt, placeName: null,
+            startLocal: vibe.eventStartLocal, endLocal: vibe.eventEndLocal, tz: 'Australia/Sydney', online: true,
+        }));
+        expect(formatEventWhenFor(post)).toBe('FRI 16 OCT · 5:50–7:50 your time');
+        expect(eventPlaceLine(post, null)).toBe('Online');
+    });
+    it('a node that sends none of them: four NULLs, and device time as before', () => {
+        const post = myEventAsPost(row({}));
+        expect([post.event_start_local, post.event_end_local, post.event_tz, post.event_online]).toEqual([null, null, null, null]);
+        expect(formatEventWhenFor(post)).toBe('SAT 17 OCT · 15:50–17:50');
+        expect(eventWhen(post)?.note).toBeNull();
+    });
+});
+
+describe('fix round 1: "Online" only where the node carries it (finding 1, BLOCKING)', () => {
+    it('the switch is on only when the node says so outright: absent and false are off', () => {
+        expect(onlineEventsOn(undefined)).toBe(false);
+        expect(onlineEventsOn({})).toBe(false);
+        expect(onlineEventsOn({ onlineEvents: false })).toBe(false);
+        expect(onlineEventsOn({ onlineEvents: true })).toBe(true);
+        // Read off GET /api/community/info like every switch; a non-boolean is dropped.
+        expect(readNodeProfile({ profile: 'global', features: { onlineEvents: true } })?.features.onlineEvents).toBe(true);
+        expect(readNodeProfile({ profile: 'global', features: { onlineEvents: 'yes' } })?.features.onlineEvents).toBeUndefined();
+        expect(readNodeProfile({ profile: 'local', features: {} })?.features.onlineEvents).toBeUndefined();
+    });
+    it('the form draws the Where chips, and lets Online be chosen, only behind it', () => {
+        const src = fs.readFileSync(path.join(__dirname, '../../components/NewEventModal.tsx'), 'utf8');
+        expect(src).toMatch(/const onlineOffered = onlineEventsOn\(nodeProfile\?\.features\) \|\| online \|\| !!prefill\?\.online \|\| !!editOf\?\.values\.online;/);
+        expect(src).toMatch(/if \(next === online \|\| \(next && !onlineOffered\)\) return;/);
+        // Every chooseOnline(true) and the WHERE label sit inside the one {onlineOffered && (...)} block.
+        const block = src.indexOf('{onlineOffered && (');
+        expect(block).toBeGreaterThan(0);
+        const where = src.indexOf("{t('WHERE')}");
+        const onlineChip = src.indexOf('chooseOnline(true)');
+        const end = src.indexOf('                        )}', block);
+        expect(where > block && where < end).toBe(true);
+        expect(onlineChip > block && onlineChip < end).toBe(true);
+        expect(src.indexOf('chooseOnline(true)', onlineChip + 1)).toBe(-1);
+    });
+});
+
+describe('fix round 1: the phone\'s prune keeps online events (#1952 review, Cross-PR)', () => {
+    const sydney = { lat: -33.87, lng: 151.21 };
+    const at = (i: number) => `2026-10-0${i}T00:00:00.000Z`;
+    const near = (id: string, i: number): NearbyHeld => ({ id, lat: -33.87 + i * 0.01, lng: 151.21, at: at(i), kept: false });
+    const online = (id: string, i: number): NearbyHeld => ({ id, lat: null, lng: null, at: at(i), kept: false, online: true });
+    it('a push past the cap drops the far listing in person, not the online event', () => {
+        const melbourne: NearbyHeld = { id: 'far', lat: -37.81, lng: 144.96, at: at(9), kept: false };
+        expect(nearbyPrune([online('on-1', 1), near('n-1', 1), near('n-2', 2), melbourne], sydney, 3)).toEqual(['far']);
+    });
+    it('the node\'s set of 3 holding both online events: nothing dropped', () => {
+        expect(nearbyPrune([online('on-1', 1), online('on-2', 2), near('n-1', 1)], sydney, 3)).toEqual([]);
+    });
+    it('more online events than the cap still keeps the cap, nearest in person going first', () => {
+        expect(nearbyPrune([near('n-1', 1), online('on-1', 1), online('on-2', 2)], sydney, 2)).toEqual(['n-1']);
+    });
+    it('without an area: online first, then the newest', () => {
+        expect(nearbyPrune([near('new', 8), online('on-old', 1), near('old', 2)], null, 2)).toEqual(['old']);
+    });
+    it('an online event taken off still goes before one on the board', () => {
+        expect(nearbyPrune([{ ...online('on-off', 1), off: true }, near('n-1', 1)], sydney, 1)).toEqual(['on-off']);
     });
 });

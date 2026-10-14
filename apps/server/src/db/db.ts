@@ -1381,6 +1381,13 @@ export function initSchema() {
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_private_note TEXT`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_state TEXT CHECK (event_state IS NULL OR event_state IN ('scheduled', 'updated', 'cancelled'))`).run(); } catch { }
     try { db.prepare(`ALTER TABLE posts ADD COLUMN event_conversation_id TEXT`).run(); } catch { }
+    // Event times (DESIGN-event-times §2): the host's clock and its zone beside the instant, and online events. NULL on
+    // every non-event row, and on an event from before them until it is next edited.
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_start_local TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_end_local TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_tz TEXT`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_online INTEGER`).run(); } catch { }
+    try { db.prepare(`ALTER TABLE posts ADD COLUMN event_link TEXT`).run(); } catch { }
     // Moderation on the global profile (G3, engine/auto-moderation.ts). Before the schema.sql exec, which indexes
     // hidden_by_reports_at and (author_pubkey, removed_by_moderator_at), and whose members_touch_updated_at (dropped
     // below, so the exec recreates it) lists moderation_muted_until. NULL on every existing row: nothing hidden,

@@ -12,6 +12,9 @@
 //     both doors, read on the index the old limit used.
 //   - Node-wide: 12-words joins on the whole node in the last 10 minutes, counted in memory (`noteWordsJoin`). A restart
 //     resets it, which only ever lowers the level. The only input that sees someone who uses a new address per account.
+//   - Node-wide, the day: joins through the open door (both doors) on the whole node in the last 24 hours, from
+//     `open_joins`. Past `DOOR_BUSY_NEW_MEMBERS_PER_DAY` (.env, default 300, 0 = off) a 12-words join asks the top
+//     level until the count falls back under it (`doorBusy`, below).
 //   - Removed lately from this network: a member removed within a day of joining keeps their row's address hash for 7
 //     days instead of 1 (`noteRemovedNewcomer`, design §2.4), and a 12-words join from that network starts at the top of
 //     what a network alone reaches. Never a self-deletion. The hash never travels, so a standby or a take-over starts
@@ -31,6 +34,7 @@
 import { DOOR_WORK_MAX_LEVEL, type DoorWorkDoor } from '@beanpool/core';
 import { db } from '../db/db.js';
 import { getNodeProfile, type NodeProfile } from '../config/node-profile.js';
+import { raiseOnce } from '../services/alerts.js';
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;
@@ -152,6 +156,71 @@ export function _resetWordsJoinsForTests(): void {
     wordsJoinsByMinute.clear();
 }
 
+// ── Node-wide: new members in the last day (the privacy review's S4, 2026-10-14) ────────────────────────────────────
+//
+// The ceilings below are per address (2,000 12-words joins a day from each), and the node kept no day's count of its
+// own: a launch-day rush, or one person with many addresses, could fill it and nothing would notice. Past the line, a
+// 12-words join asks the top work level (DOOR_WORK_MAX_LEVEL): the person waits longer for the work, and nobody is
+// refused for it (no hard gate, no false success). The level falls back as soon as the count is under the line again.
+// One log line when it rises and one when it falls, and one alert to the owners when it rises: counts, never a name.
+
+export const DOOR_BUSY_ENV = 'DOOR_BUSY_NEW_MEMBERS_PER_DAY';
+export const DOOR_BUSY_DEFAULT = 300;
+
+/** The line from .env: a whole number, 0 = off. Anything else is logged once and the default kept. */
+export function doorBusyThreshold(env: NodeJS.ProcessEnv = process.env): number {
+    const raw = env[DOOR_BUSY_ENV];
+    if (raw === undefined || raw.trim() === '') return DOOR_BUSY_DEFAULT;
+    const n = parseWhole(raw);
+    if (n !== null) return n;
+    warnOnce(`⚠️  ${DOOR_BUSY_ENV}=${JSON.stringify(raw)} is not a whole number, so the default ${DOOR_BUSY_DEFAULT} is kept.`);
+    return DOOR_BUSY_DEFAULT;
+}
+
+/** The day's count is read at most once a minute: every join request asks for it. */
+const NEW_MEMBERS_FRESH_MS = MINUTE_MS;
+let newMembersCount: { at: number; count: number } | null = null;
+
+/** Joins through the open door, both doors, on this node in the 24 hours before `now`. */
+export function newMembersToday(now = Date.now()): number {
+    if (newMembersCount && now >= newMembersCount.at && now - newMembersCount.at < NEW_MEMBERS_FRESH_MS) return newMembersCount.count;
+    const row = db.prepare('SELECT COUNT(*) AS n FROM open_joins WHERE joined_at >= ?').get(new Date(now - DAY_MS).toISOString()) as { n: number };
+    newMembersCount = { at: now, count: row.n };
+    return row.n;
+}
+
+export interface DoorBusy {
+    busy: boolean;
+    newMembersToday: number;
+    /** 0 = off. */
+    threshold: number;
+}
+
+let busyLevelOn = false;
+
+/** Whether the node is past its day's line now; logs (and alerts) the change, the first request to see it. */
+export function doorBusy(now = Date.now(), env: NodeJS.ProcessEnv = process.env): DoorBusy {
+    const threshold = doorBusyThreshold(env);
+    const count = threshold === 0 ? 0 : newMembersToday(now);
+    const busy = threshold > 0 && count >= threshold;
+    if (busy !== busyLevelOn) {
+        busyLevelOn = busy;
+        if (busy) {
+            const detail = `${count} new members joined in the last 24 hours (the line is ${threshold}), so a 12-words join now asks the top work level, ${DOOR_WORK_MAX_LEVEL}. Nobody is refused; it falls back when the count does.`;
+            console.log(`🚪 Sign-ups are busy: ${detail}`);
+            try { void raiseOnce('door.busy', detail).catch(() => { }); } catch { }
+        } else {
+            console.log(`🚪 Sign-ups are back to usual: ${count} new members in the last 24 hours (the line is ${threshold || 'off'}), so the door's work is as before.`);
+        }
+    }
+    return { busy, newMembersToday: count, threshold };
+}
+
+export function _resetDoorBusyForTests(): void {
+    newMembersCount = null;
+    busyLevelOn = false;
+}
+
 // ── Per address ─────────────────────────────────────────────────────────────────────────────
 
 export interface AddressJoins {
@@ -195,6 +264,8 @@ export interface DoorLevel {
     networkSteps: number;
     nodeSteps: number;
     removedNetwork: boolean;
+    /** Past the node's day line (`doorBusy`): a 12-words join asks the top level. */
+    nodeBusy: boolean;
     joinsThisHour: number;
 }
 
@@ -210,13 +281,15 @@ export function doorLevel(door: DoorWorkDoor, ipHash: string, now = Date.now(), 
     if (door === 'sign-in') {
         // No node steps and no memory of removals: a provider account is the cost there.
         const level = nth < numbers.signInWorkFrom ? null : clamp(networkSteps - numbers.signInDiscount);
-        return { level, networkSteps, nodeSteps: 0, removedNetwork: false, joinsThisHour: joins.hour };
+        return { level, networkSteps, nodeSteps: 0, removedNetwork: false, nodeBusy: false, joinsThisHour: joins.hour };
     }
     const nodeSteps = stepsReached(wordsJoinsLately(now) + 1, numbers.nodeSteps);
     const removedNetwork = removedLatelyFrom(ipHash, now);
+    const nodeBusy = doorBusy(now).busy;
     let level = networkSteps + nodeSteps;
     if (removedNetwork) level = Math.max(level, numbers.removedNetworkLevel);
-    return { level: clamp(level), networkSteps, nodeSteps, removedNetwork, joinsThisHour: joins.hour };
+    if (nodeBusy) level = DOOR_WORK_MAX_LEVEL;
+    return { level: clamp(level), networkSteps, nodeSteps, removedNetwork, nodeBusy, joinsThisHour: joins.hour };
 }
 
 function clamp(level: number): number {

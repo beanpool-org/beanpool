@@ -173,13 +173,35 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     const [holidayMode, setHolidayMode] = useState(false);
     const [holidayLoading, setHolidayLoading] = useState(false);
 
+    // "Show me as a connection in common" (server SHOW_AS_CONNECTION_PREF): on unless turned off, served to you alone.
+    // null until the node says (an older node never does, and then the row isn't shown).
+    const [showAsConnection, setShowAsConnection] = useState<boolean | null>(null);
+    const [showAsConnectionError, setShowAsConnectionError] = useState<string | null>(null);
+
     useEffect(() => {
         let cancelled = false;
         getMemberPreferences(identity.publicKey)
-            .then(prefs => { if (!cancelled) setHolidayMode(prefs.holiday_mode === 'true'); })
+            .then(prefs => {
+                if (cancelled) return;
+                setHolidayMode(prefs.holiday_mode === 'true');
+                if (typeof prefs.show_as_connection_in_common === 'string') setShowAsConnection(prefs.show_as_connection_in_common !== 'false');
+            })
             .catch(() => { });
         return () => { cancelled = true; };
     }, [identity.publicKey]);
+
+    const handleToggleShowAsConnection = async () => {
+        if (showAsConnection === null) return;
+        const next = !showAsConnection;
+        setShowAsConnection(next);
+        setShowAsConnectionError(null);
+        try {
+            await updateNotificationPreferences(identity.publicKey, { show_as_connection_in_common: next });
+        } catch (e: any) {
+            setShowAsConnection(!next);
+            setShowAsConnectionError(e?.message || 'Your community could not save that. Try again.');
+        }
+    };
 
     const handleToggleHoliday = async () => {
         if (holidayLoading) return;
@@ -992,6 +1014,22 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                     <span className="flex items-center gap-3">🚫 Manage Blocked Members</span>
                                     <span className="text-nature-400 dark:text-nature-300">›</span>
                                 </button>
+                                {showAsConnection !== null && (
+                                    <div className="p-4 flex items-center justify-between gap-3" data-testid="show-as-connection">
+                                        <span className="min-w-0">
+                                            <span className="block text-text-primary font-bold text-[15px]">🤝 Show me as a connection in common</span>
+                                            <span className="block text-text-muted text-[12px] mt-0.5">When you and two people are friends both ways, each can see your name on the other's profile</span>
+                                            {showAsConnectionError && <span role="alert" className="block text-text-primary text-[12px] mt-1 font-semibold">{showAsConnectionError}</span>}
+                                        </span>
+                                        <ToggleSwitch
+                                            checked={showAsConnection}
+                                            onChange={handleToggleShowAsConnection}
+                                            label="Show me as a connection in common"
+                                            activeBgClass="bg-accent border-accent"
+                                            inactiveBgClass="bg-bg-hover border-border-primary"
+                                        />
+                                    </div>
+                                )}
                                 <a href="https://beanpool.org/privacy.html" target="_blank" rel="noopener noreferrer" className="p-4 text-nature-900 dark:text-white font-bold text-[15px] flex items-center justify-between hover:bg-nature-50 dark:hover:bg-nature-800 transition-colors no-underline">
                                     <span className="flex items-center gap-3">🛡️ Privacy Policy</span>
                                     <span className="text-nature-400 dark:text-nature-300">›</span>

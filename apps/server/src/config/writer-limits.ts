@@ -79,6 +79,11 @@ export const WRITER_LIMITS = {
     enterpriseWorkPostsPerDay: 1_000,
     /** Groups a member starts in any 24 hours. Heavy real user: a convenor making several interest groups in a day. */
     groupsPerDay: 5,
+    /** People a member adds as a friend in any 24 hours, counting anyone they added and removed again that day (each add
+     *  tells the person they added, on their People tab: engine/friends-added-you.ts). Heavy real user: adding the
+     *  people they met at a launch night or a market day, a few dozen. Before it, one member could add everyone (the
+     *  design scratch/global-node/DESIGN-mutual-connections-fable.md §2 PR-B). */
+    friendAddsPerDay: 100,
     /** Invites a member makes in any 24 hours. Heavy real user: a member bringing a street in for a launch night. */
     invitesPerDay: 20,
     /** A member's invites that nobody has used yet and that still work. Heavy real user: a member bringing a street in

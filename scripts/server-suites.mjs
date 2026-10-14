@@ -189,6 +189,7 @@ export const SUITES = [
     'test-standby-surrogate-memo',
     'test-backup-identity-bundle',
     'test-backup-owner-gate',
+    'test-owner-delete-gates',
     'test-sealed-backups',
     'test-offbox-backups',
     'test-alerts',

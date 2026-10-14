@@ -8,14 +8,14 @@
  *   1. an online event created over HTTP is in the set of a member on the other side of the world, of one with no area,
  *      and of its host; an in-person event at the host's town is in none of the far members' sets;
  *   2. a read that leaves events out (an app that never asked for them) holds no online event;
- *   3. the listing's own rules still hold: an ended online event, a cancelled one, one by an author on holiday, a group's
- *      the reader is not in, and one by an author the reader blocked are out of her set;
+ *   3. the listing's own rules still hold: an ended online event, a cancelled one, a group's the reader is not in, and
+ *      one by an author the reader blocked are out of her set;
  *   4. the set's tag moves when an online event is posted: the held tag gets a 200 with the new event in the set;
  *   5. Home's "Coming up" (global: within 50 km of the reader's point) holds the online event wherever the reader is,
  *      with its clock, zone and `online`, and not the far in-person one.
- *   6. a read within a radius (the web feed and map on the global node) holds none, and `online=1` beside it answers the
- *      online events only, under the listing's rules; with no events asked for it answers none; nearby=1 refuses it.
- *   7. "Your events" (GET /api/events/mine) carries each event's clock, zone and online, and never a join link;
+ *   6. a read within a radius (the web Market on the global node) holds none, and `online=1` beside it answers the
+ *      online events only, under the listing's rules; with no events asked for it adds none; nearby=1 refuses it;
+ *   7. "Your events" (GET /api/events/mine) carries each event's clock, zone and online, and never a join link.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-online-events-nearby)
  */
@@ -199,7 +199,7 @@ async function main(): Promise<void> {
     assert(!onlineRows.some(p => p.id === forGroup || p.id === ended || p.id === cancelled), 'online=1 keeps the listing rules: no group event, ended or cancelled one');
     const noEvents = await signed('GET', '/api/marketplace/posts?types=offer,need&online=1', null, sydney);
     const noEventRows: any[] = Array.isArray(noEvents.body) ? noEvents.body : noEvents.body?.posts ?? [];
-    assert(noEvents.status === 200 && !noEventRows.some(p => p.type === 'event'), 'online=1 without events asked for answers no event');
+    assert(noEvents.status === 200 && !noEventRows.some(p => p.type === 'event'), 'online=1 without events asked for adds no event (events stay opt-in)');
     const mixed = await signed('GET', `/api/marketplace/posts?limit=200&sync=true&types=${TYPES}&nearby=1&online=1`, null, sydney);
     assert(mixed.status === 400, `nearby=1 takes no online= (got ${mixed.status})`);
 

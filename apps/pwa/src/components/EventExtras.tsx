@@ -36,7 +36,6 @@ export function shareableEvent(post: MarketplacePost): ShareableEvent {
         whenText: post.eventStartLocal && post.eventTz ? eventShareWhen(post) : null,
         tz: post.eventTz || null,
         online: post.eventOnline === true,
-        joinLink: post.eventLink || null,
     };
 }
 

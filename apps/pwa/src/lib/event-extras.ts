@@ -146,23 +146,24 @@ export interface ShareableEvent {
     tz?: string | null;
     /** An online event: no place. */
     online?: boolean;
-    /** Where to join, only when the viewer may see it (the host and Going). */
-    joinLink?: string | null;
 }
 
-/** What a calendar entry says under its title: the description, the labelled time, where to join, and the event's page. */
+/**
+ * What a calendar entry says under its title: the description, the labelled time, and the event's page. Never the join
+ * link (review of #1952, finding 9; the phone's rule): it is read per current RSVP, like the note, and a copy in a
+ * calendar outlives "Not going" and a link the host changes; the event's page always leads to the current one.
+ */
 function calendarDetails(event: ShareableEvent, link: string): string {
     return [
         event.description || '',
         event.whenText ? `Starts ${event.whenText}` : '',
-        event.joinLink ? `Join: ${event.joinLink}` : '',
         link,
     ].filter(Boolean).join('\n\n');
 }
 
-/** A calendar entry's place: the place's name, or for an online event where to join (or just "Online"). */
+/** A calendar entry's place: the place's name, or "Online" for an online event. */
 function calendarLocation(event: ShareableEvent): string | null {
-    if (event.online) return event.joinLink || 'Online';
+    if (event.online) return 'Online';
     return event.placeName || null;
 }
 

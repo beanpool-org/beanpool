@@ -319,7 +319,6 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     );
     // A listing pushed over the live feed joins the list only inside the radius the list was read with.
     const fitsNear = useCallback((p: MarketplacePost): boolean => !near
-        || p.eventOnline === true
         || (p.lat != null && p.lng != null && haversineDistance(near.lat, near.lng, p.lat, p.lng) <= near.radiusKm), [near]);
 
     // Layout configuration — default to 'grid' (Card View)

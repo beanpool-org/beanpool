@@ -116,16 +116,20 @@ describe('the calendar entry (§4, director amendment 1.5)', () => {
         expect(url.searchParams.get('details')).toBe(`Starts Sat 17 Oct, 20:50 Lagos time\n\n${link}`);
     });
 
-    it('online: the place is where to join, for someone who may see it, and "Online" otherwise', () => {
-        const online: ShareableEvent = {
-            id: 'ev-2', title: 'Vibe coding', startAt: ONLINE_SYDNEY.eventStartAt!, online: true, tz: 'Australia/Sydney',
-            whenText: eventShareWhen(ONLINE_SYDNEY), joinLink: 'https://meet.example/abc',
-        };
+    it('online: the place is "Online", and the join link never goes into a calendar entry, even for someone Going (finding 9)', async () => {
+        const { shareableEvent } = await import('../components/EventExtras');
+        // As the detail builds it for a Going member, who holds the link.
+        const online = shareableEvent({
+            id: 'ev-2', type: 'event', category: 'community', title: 'Vibe coding', description: '', credits: 0, priceType: 'fixed',
+            authorPublicKey: 'host', authorCallsign: 'Host', createdAt: '', active: true, status: 'active', repeatable: false,
+            ...ONLINE_SYDNEY, eventLink: 'https://meet.example/abc', myRsvp: 'going',
+        } as MarketplacePost);
         const ics = buildIcs(online, link, Date.parse('2026-10-01T00:00:00Z')).replace(/\r\n /g, '');
-        expect(ics).toContain('LOCATION:https://meet.example/abc');
-        expect(ics).toContain('Join: https://meet.example/abc');
-        expect(buildIcs({ ...online, joinLink: null }, link)).toContain('LOCATION:Online');
-        expect(new URL(googleCalendarUrl({ ...online, joinLink: null }, link)).searchParams.get('location')).toBe('Online');
+        expect(ics).toContain('LOCATION:Online');
+        expect(ics).not.toContain('meet.example');
+        const google = new URL(googleCalendarUrl(online, link));
+        expect(google.searchParams.get('location')).toBe('Online');
+        expect(google.toString()).not.toContain('meet.example');
     });
 
     it('an entry with no zone carries no ctz, as before', () => {

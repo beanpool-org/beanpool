@@ -360,7 +360,6 @@ export function cardTitle(id: HomeCardId, answer: Pick<HomeAnswer, 'profile'> & 
 
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString('en')} ${n === 1 ? one : many}`;
 
-/** "Sat 3 Oct", in the member's own time. */
 /**
  * A "Coming up" line's time (DESIGN-event-times §4): the place's clock, "FRI 16 OCT · 20:50", with its zone named only when
  * it is not the reader's own ("FRI 17 OCT · 20:50 · Lagos time"); an online event in the reader's own time, "FRI 16 OCT ·
@@ -379,6 +378,7 @@ export function homeEventWhen(item: Pick<HomeEventItem, 'startsAt' | 'startLocal
     return zone ? `${line} · ${zone}` : line;
 }
 
+/** "Sat 3 Oct", in the member's own time. */
 export function dayLabel(iso: string): string {
     const d = new Date(iso);
     if (!Number.isFinite(d.getTime())) return '';

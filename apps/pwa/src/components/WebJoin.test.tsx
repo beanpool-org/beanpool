@@ -979,6 +979,9 @@ describe("the taken screen's 12 words: one button shows them and hides them agai
 
         const words = screen.getByTestId('join-taken-words');
         for (const w of bea.mnemonic!) expect(words).toHaveTextContent(w);
+        // English in every language, and never rewritten by the browser's page translation (#1947 confirmation N-B).
+        expect(words).toHaveAttribute('translate', 'no');
+        expect(words).toHaveClass('notranslate');
         // The same button, still in the page and still focused, now saying what it will do next.
         expect(screen.getByRole('button', { name: "Hide Bea's 12 words" })).toBe(toggle);
         expect(document.activeElement).toBe(toggle);

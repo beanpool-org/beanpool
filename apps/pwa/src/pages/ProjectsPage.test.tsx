@@ -651,6 +651,26 @@ describe('ProjectsPage where the node has no formal Decisions (the global node)'
         expect(screen.getByText('Commons Pool')).toBeInTheDocument();
     });
 
+    // Rehearsal 14 Oct, S2: on global "+ Propose a Project" opened a Beans form the node answers 404 "Enterprises are
+    // switched off on this node."
+    it('Beans off and no enterprises: no "No enterprises found" and no "+ Propose a Project"', async () => {
+        vi.mocked(getTreasuries).mockResolvedValueOnce({ treasuries: [] } as never);
+        vi.mocked(communityInfoOnce).mockResolvedValueOnce(globalInfo);
+        render(<ProjectsPage identity={backerIdentity} />);
+        await waitFor(() => expect(sectionTabs().some(t => t?.includes('Decide'))).toBe(false));
+        await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+        expect(screen.queryByText('No enterprises found')).toBeNull();
+        expect(screen.queryByRole('button', { name: '+ Propose a Project' })).toBeNull();
+    });
+
+    it('Beans on and no enterprises: the empty state still offers "+ Propose a Project"', async () => {
+        vi.mocked(getTreasuries).mockResolvedValueOnce({ treasuries: [] } as never);
+        vi.mocked(communityInfoOnce).mockResolvedValueOnce({ ...globalInfo, profile: 'local' as never, features: { ...globalInfo.features, beans: true } });
+        render(<ProjectsPage identity={backerIdentity} />);
+        expect(await screen.findByText('No enterprises found')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: '+ Propose a Project' })).toBeInTheDocument();
+    });
+
     it('an unanswered read keeps Decide: the node refuses a vote itself where it has none', async () => {
         vi.mocked(communityInfoOnce).mockRejectedValueOnce(new Error('offline'));
         render(<ProjectsPage identity={backerIdentity} initialSection="decide" />);

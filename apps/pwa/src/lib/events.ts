@@ -20,7 +20,7 @@ function time(d: Date): string {
 }
 
 function day(d: Date): string {
-    return formatDate(d, 'weekday-day-month').toUpperCase();
+    return formatDate(d, 'weekday-day-month', { caps: true });
 }
 
 function sameLocalDay(a: Date, b: Date): boolean {

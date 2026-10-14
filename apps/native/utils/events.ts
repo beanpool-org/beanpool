@@ -170,7 +170,7 @@ export function buildEventCopy(post: any, viewerPubkey?: string | null): EventCo
 }
 
 function dayLabel(d: Date): string {
-    return formatDate(d, 'weekday-day-month').toUpperCase();
+    return formatDate(d, 'weekday-day-month', { caps: true });
 }
 
 function timeLabel(d: Date): string {

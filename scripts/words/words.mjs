@@ -193,7 +193,8 @@ export function loadCoreChecks(root = ROOT) {
             compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
         }).outputText;
         const asUrl = (js) => `data:text/javascript;base64,${Buffer.from(js).toString('base64')}`;
-        const wordsUrl = asUrl(compile('packages/beanpool-core/src/words.ts'));
+        const datesUrl = asUrl(compile('packages/beanpool-core/src/words-dates.ts'));
+        const wordsUrl = asUrl(compile('packages/beanpool-core/src/words.ts').replace(/(['"])\.\/words-dates\.js\1/g, JSON.stringify(datesUrl)));
         const checkJs = compile('packages/beanpool-core/src/words-check.ts').replace(/(['"])\.\/words\.js\1/g, JSON.stringify(wordsUrl));
         return import(asUrl(checkJs));
     })();

@@ -32,12 +32,16 @@ import { encryptPairingPayload, t } from '@beanpool/core';
 import { getMnemonic } from '../utils/identity';
 import { requireDeviceUnlock } from '../utils/node-admin';
 import { shouldBlockCleartextNodeUrl } from '../utils/node-url';
+import { transferTarget, type TransferTarget } from '../utils/pair-device-target';
+import { getSavedNodes } from '../utils/nodes';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface ParsedPairingData {
     sessionId: string;
     desktopPubHex: string;
     nodeUrl: string;
+    /** Where the account may go: only a server this phone already uses (utils/pair-device-target.ts). Set at scan. */
+    target?: TransferTarget;
 }
 
 export default function PairDeviceScreen() {
@@ -331,13 +335,31 @@ export default function PairDeviceScreen() {
         if (parsed) {
             isScanningLocked.current = true;
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            setScannedData(parsed);
+            // The key and the 12 words go only to a server this phone already uses: a QR naming any other could come from
+            // a server that skips the digits. Said at once, and nothing is sent.
+            const anchor = await AsyncStorage.getItem('beanpool_anchor_url').catch(() => null);
+            const saved = (await getSavedNodes().catch(() => [])).map((n) => n.url);
+            const target = transferTarget(parsed.nodeUrl, anchor, saved);
+            setErrorMessage(target.kind === 'ok' ? null : targetRefusal(target));
+            setScannedData({ ...parsed, target });
         }
+    }
+
+    function targetRefusal(target: Exclude<TransferTarget, { kind: 'ok' }>): string {
+        return target.kind === 'foreign'
+            ? t('This code is from a server your phone doesn\'t use ({host}), so nothing was sent. Scan the code on your own community\'s web page instead. To bring your account to a new community, restore it there with your 12 words.', { host: target.scannedHost })
+            : t('Connect to your community first.');
     }
 
     async function handleConfirmLink() {
         if (!scannedData || !identity || isTransferring || lockBusyRef.current) return;
         const scanned = scannedData;
+        const target = scanned.target;
+        // Only to a server this phone already uses (handleBarcodeScanned): anything else asks nothing and sends nothing.
+        if (!target || target.kind !== 'ok') {
+            setErrorMessage(target ? targetRefusal(target) : t('Connect to your community first.'));
+            return;
+        }
 
         // The whole account goes to the other device, key and 12 words: the phone's own unlock first, failing closed as
         // Manage and the Settings QR do (requireDeviceUnlock). A phone with no screen lock sends nothing: the account would
@@ -356,16 +378,8 @@ export default function PairDeviceScreen() {
         setErrorMessage(null);
 
         try {
-            // Determine and sanitize target node URL
-            let targetNode = scanned.nodeUrl;
-            if (!targetNode) {
-                const anchor = await AsyncStorage.getItem('beanpool_anchor_url');
-                targetNode = anchor || '';
-            }
-
-            if (!targetNode) {
-                throw new Error('Unable to determine target node address');
-            }
+            // A server this phone already uses (transferTarget): the QR's, or the phone's own when the QR names none.
+            const targetNode = target.nodeUrl;
 
             if (shouldBlockCleartextNodeUrl(targetNode)) {
                 throw new Error('Insecure pairing relay URL. HTTPS required for public host.');
@@ -572,6 +586,7 @@ export default function PairDeviceScreen() {
                                     </Text>
                                 )}
 
+                                {scannedData?.target?.kind === 'ok' && (
                                 <Pressable
                                     style={[styles.confirmBtn, isTransferring && { opacity: 0.7 }]}
                                     onPress={handleConfirmLink}
@@ -586,6 +601,7 @@ export default function PairDeviceScreen() {
                                         <Text style={styles.confirmBtnText}>Confirm & Link Device</Text>
                                     )}
                                 </Pressable>
+                                )}
 
                                 <Pressable
                                     style={styles.cancelBtn}

@@ -330,7 +330,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                         type="button"
                                         onClick={() => handleAddFriend(a.publicKey)}
                                         aria-label={`Add ${a.callsign} back`}
-                                        className="shrink-0 min-h-[44px] min-w-[44px] px-3 rounded-lg border border-accent bg-transparent text-accent text-xs font-bold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                        className="shrink-0 min-h-[44px] min-w-[44px] px-3 rounded-lg border border-accent bg-transparent text-text-primary text-xs font-bold cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                                     >
                                         Add back
                                     </button>

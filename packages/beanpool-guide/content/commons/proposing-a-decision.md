@@ -20,8 +20,10 @@ related: decisions, rules, polls, enterprises
 - **Title:** one line, like "Grant 200 beans to the Tool Library".
 - **Description & Case:** explain why, in at least 10 characters. Say it plainly. People vote on what they read here.
 - From the list below that, choose exactly what should happen. For example, for a member: Remove Member, Suspend Member or Freeze Credit. For the Commons: Give Beans to a project or enterprise, Hardship Grant, or Pay off a project's or enterprise's debt.
-- Fill in who it is for, and how many beans if there are any.
+- Fill in who it is for, and how many beans if there are any. For a grant to a project or enterprise you type in its key, a long code: neither app has a list to pick it from. On the phone the same goes for paying off a debt or replacing a lead.
 - Tap **Submit Community Decision**.
+
+In the web app the buttons read **+ Propose Decision** (or **+ Propose** at the top of Commons, while **Decide** is open) and **Submit Decision**, and the box is **Description & Rationale**.
 
 Voting opens at once and runs for 7 days.
 
@@ -42,5 +44,5 @@ This keeps the queue free. If a grant passes when the Commons is short, it waits
 - **Limit Reached:** you already have an open Decision. Wait for it to close.
 - **A community vote can't remove or suspend an owner or admin of this community's server:** the person you chose runs the server. An owner can take their role away first.
 - **This grant is bigger than the Commons could pay:** ask for no more than the amount it names, or wait for more beans to come in.
-- **A grant needs an amount in Beans above 0:** fill in how many beans.
+- **Invalid Amount** (in the web app, "Please enter a valid positive grant amount in Beans"): fill in how many beans.
 - **Error:** check your description is at least 10 characters long.

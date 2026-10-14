@@ -61,7 +61,7 @@ import { hasVault, VAULT_MESSAGES, VaultError } from '../../utils/vault';
 import { VaultMoveCard } from '../../components/VaultMoveCard';
 import { SSO_PROVIDER_NAMES, type SsoProvider } from '../../utils/sso-providers';
 import { signedPost, anchorUrl as getAnchorUrl } from '../../utils/node-post';
-import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, type QuizResult } from '@beanpool/core';
+import { parseArchetype, FEEDBACK_LIVE, beanPoolSettingsEntries, CONTACT_VALUE_LIMIT, t, type QuizResult } from '@beanpool/core';
 import { openBeanPoolWebsite } from '../../utils/beanpool-links';
 import { PricingGuideModal } from '../../components/PricingGuideModal';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -1536,7 +1536,7 @@ export default function SettingsScreen() {
                     // The account here is deleted and the key is still on the phone: the member chooses, and the
                     // phone is wiped only by their answer (utils/delete-here.ts finishLastDelete).
                     Alert.alert(
-                        "Vault Copy Not Removed",
+                        t("Vault Copy Not Removed"),
                         vaultCopyStaysLine(plan.hereName, outcome),
                         [
                             { text: "Try Again", onPress: () => { void finishPurgeAtLast('try-again'); } },

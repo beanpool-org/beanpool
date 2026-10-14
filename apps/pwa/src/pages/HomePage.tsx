@@ -60,7 +60,7 @@ import {
     START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourRecord, tourSteps, type TourProgress,
 } from '@beanpool/core';
 import {
-    keepPendingTourRecord, lendTourHome, pendingTourRecord, readProgress, startTour, takePendingEnd, takeTourAgain, useTour,
+    keepPendingTourRecord, lendTourHome, offerTour, pendingTourRecord, readProgress, startTour, takePendingEnd, takeTourAgain, useTour,
 } from '../lib/tour-store';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID } from '../lib/marketplace';
 import { EXAMPLE_BADGE, EXAMPLE_LISTINGS, EXAMPLES_HEADING, EXAMPLES_NOTE, exampleLabel } from '../lib/example-listings';
@@ -725,6 +725,10 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
         if (kind) applyTourEnd(kind);
         if (takeTourAgain(publicKey)) tourAgain();
     }, [publicKey, member, pendingEnd, pendingAgain]);
+    // App holds the install banner back while the tour is offered here (rehearsal 14 Oct, B1): said once Home has an answer.
+    useEffect(() => {
+        if (publicKey && answer) offerTour(publicKey, member && startUp);
+    }, [publicKey, !!answer, member, startUp]);
     // A tour part way is read whenever the bar closes; a Done or Skip the node didn't take is sent again.
     useEffect(() => {
         if (!publicKey || !member) return;

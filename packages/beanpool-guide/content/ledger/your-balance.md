@@ -12,7 +12,7 @@ Tap **Ledger** in the row of tabs. Your balance is at the top right, in **BEANS*
 
 On the global community there are no Beans, so the Ledger shows an example member of a local community, Example Valley, marked **🏘️ Local community**. Its buttons say why Beans live in a local community, and send nothing. See "Beans and the global community".
 
-The Ledger has two tabs: **Levels** (your trust, see "Trust badges") and **Wallet**. Tap your balance to go straight to Wallet.
+The Ledger has two tabs: **Levels** (your trust, see "Trust badges") and **Wallet**. On the phone, tap your balance to go straight to Wallet.
 
 ## The Wallet tab
 
@@ -24,9 +24,11 @@ The Ledger has two tabs: **Levels** (your trust, see "Trust badges") and **Walle
 - **Project pledges:** beans you have pledged to projects, if any.
 - **Send Credits:** send a gift. See "Sending a gift".
 
+In the web app the Wallet tab is shorter: **Overdraft Floor**, **Commons Pool**, **Send Credits** and **Community Circulation**. Your balance is at the top of the Ledger.
+
 ## Recent transactions
 
-Every trade, gift and fee, newest first, with who it was with, a note, the time, and plus or minus. If a note mentions a post, tap **View Offer** to open it.
+Every trade, gift and fee, newest first, with a note, the time, and plus or minus. On the phone each line also says who it was with; in the web app it says **Sent** or **Received**. If a note mentions a post, tap **View Offer** to open it.
 
 Only you can see your balance and these transactions. Nobody else in your community can read them. **Export CSV** (**Export mine** in the web app) saves your own transactions as a file.
 
@@ -34,4 +36,4 @@ The list has no search or filters yet.
 
 ## ⓘ buttons
 
-Tap the **ⓘ** next to Your balance for a short explanation of your balance and your floor.
+On the phone, tap the **ⓘ** next to Your balance for a short explanation of your balance and your floor.

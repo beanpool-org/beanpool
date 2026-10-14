@@ -14,6 +14,8 @@ Most problems are a misunderstanding. Tap **Message** on the post and talk it th
 - **Before it is agreed:** the person who asked taps **Withdraw Request**. The person who posted a Need taps **Deny**, then **Decline**, and can add a short message. A request nobody answers ends by itself after 7 days.
 - **While the beans are held:** either of you can tap **Cancel Trust Hold**, then **Yes, Cancel**. All the held beans go back to the person paying, and the post goes back on the market. The other person is told.
 
+In the web app, **Withdraw Request** is **Cancel Offer**, and **Deny** declines at once, with no message. To call off a held deal there, tap **Cancel Hold**, then **OK**.
+
 Either person can cancel alone, at any time before the beans are released. That includes after the work is done. If that happens to you, talk to them, and then to your community's admins.
 
 ## When you cannot agree

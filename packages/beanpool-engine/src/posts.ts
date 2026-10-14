@@ -14,7 +14,7 @@ import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
 import { avatarUrlOf, tierForCredit } from '@beanpool/core';
-import { areaBox, boundingBox, roundToArea, neighbourhoodOf, neighbourhoodBox } from './geo.js';
+import { areaBox, boundingBox, roundToArea, placeForOthers, neighbourhoodBox } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 import { prepared } from './statements.js';
 
@@ -1881,11 +1881,12 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             post.lat = typeof r.lat === 'number' ? roundToArea(r.lat) : r.lat;
             post.lng = typeof r.lng === 'number' ? roundToArea(r.lng) : r.lng;
         } else if (toNeighbourhood) {
-            // The neighbourhood, never the place: the rounding the query measured from (geo.ts neighbourhood_km).
-            if (typeof r.lat === 'number' && typeof r.lng === 'number') {
-                const cell = neighbourhoodOf(r.lat, r.lng);
-                post.lat = cell.lat;
-                post.lng = cell.lng;
+            // The neighbourhood, never the place: the rounding the query measured from (geo.ts neighbourhood_km). Half a
+            // place is no place (placeForOthers).
+            const shown = placeForOthers(r.lat, r.lng);
+            if (shown) {
+                post.lat = shown.lat as number;
+                post.lng = shown.lng as number;
             }
         }
         if (near) {

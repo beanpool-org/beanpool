@@ -337,6 +337,7 @@ import {
     type ListGroupsFilter,
     exactPlaceReaders,
     neighbourhoodOf,
+    placeForOthers,
 } from '@beanpool/engine';
 import {
     addRating,
@@ -1666,10 +1667,11 @@ function placeOfListingEvent(event: any): { event: any; exact: Set<string> } | n
 /** A copy of a listing's event (a JSON string) with its place to the neighbourhood (placeOfListingEvent). */
 function withNeighbourhood(json: string): string {
     const e = JSON.parse(json);
-    if (e?.post && typeof e.post.lat === 'number' && typeof e.post.lng === 'number') {
-        const cell = neighbourhoodOf(e.post.lat, e.post.lng);
-        e.post.lat = cell.lat;
-        e.post.lng = cell.lng;
+    // Half a place is no place (engine placeForOthers): the one coordinate there would be exact.
+    const shown = e?.post ? placeForOthers(e.post.lat, e.post.lng) : null;
+    if (shown) {
+        e.post.lat = shown.lat;
+        e.post.lng = shown.lng;
     }
     return JSON.stringify(e);
 }

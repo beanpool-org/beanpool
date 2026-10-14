@@ -21,6 +21,9 @@
  *      - the Home screen's market card: whole km from each neighbourhood;
  *      - a listing's socket copy: exact to its author, the neighbourhood to another member, even when the copy was read
  *        for someone else (an RSVP's, already rounded);
+ *      - half a place (one coordinate, the other null): no place at all to another member, both null, in reads and socket
+ *        copies; as it is to its author; and on a local community as it is (#1965 round 4: rounding only a whole place
+ *        left the one coordinate exact);
  *      - WHICH sockets get a new listing's copy (state-engine.ts listingReach, 250 km from each member's 0.1° area): for 3
  *        listings posted through the route, about 25 members each set their area through the route at the 0.1° grid
  *        points 250 ± 0.8 km from the listing's neighbourhood; the members who get the copy are exactly those within
@@ -220,6 +223,10 @@ async function main() {
     listing('bakery', shop, -28.642371, 153.561234, 301);
     listing('ev-gate', alice, -28.661234, 153.598765, 302, { note: 'Blue gate, number 12', letsIn: 1 });
     listing('ev-park', alice, -28.633333, 153.577777, 303, { note: 'Bring gloves', letsIn: 0 });
+    // Half a place: a listing posted with no pin takes its author's area only if they have one (apps/server engine/posts.ts),
+    // and the post route takes each coordinate on its own, so a row can hold one coordinate and not the other.
+    listing('half-lat', alice, -28.612345, null as unknown as number, 305);
+    listing('half-lng', alice, null as unknown as number, 153.512345, 306);
     const insRsvp = db.prepare("INSERT INTO event_rsvps (post_id, member_pubkey, status, signature, let_in_at, let_in_by, updated_at) VALUES (?, ?, 'going', 'test', ?, ?, ?)");
     insRsvp.run('ev-gate', carol.pubKeyHex, iso(T0 + 7_200_000), alice.pubKeyHex, iso(T0 + 7_200_000));
     insRsvp.run('ev-gate', dan.pubKeyHex, null, null, iso(T0 + 7_200_000));
@@ -333,6 +340,15 @@ async function main() {
     assert(landOwn.body?.nearbyPosts?.count === 1, `global: the author's counts her own, 1 (got ${JSON.stringify(landOwn.body?.nearbyPosts)})`);
 
     // By id, ids=, the sync delta, and the member's own set.
+    // Half a place is no place to another member: both null, by id and in the list; to its author, as it is.
+    for (const id of ['half-lat', 'half-lng']) {
+        const other = (await get(`/api/marketplace/posts?id=${id}`, bob)).body?.[0];
+        const own = (await get(`/api/marketplace/posts?id=${id}`, alice)).body?.[0];
+        const inList = list.find(p => p.id === id);
+        assert(!!other && other.lat === null && other.lng === null && !!inList && inList.lat === null && inList.lng === null,
+            `global: ${id} (one coordinate) reads to another member as no place, both null, by id and in the list (got ${JSON.stringify(other && [other.lat, other.lng])}, ${JSON.stringify(inList && [inList.lat, inList.lng])})`);
+        assert(!!own && exactOf(own), `global: and to its author as it is (${JSON.stringify(own && [own.lat, own.lng])})`);
+    }
     const byId = await get('/api/marketplace/posts?id=pin-007', bob);
     assert(byId.status === 200 && byId.body.length === 1 && neighbourhoodOf(byId.body[0]) && !exactOf(byId.body[0]),
         `global: by id, another member reads the neighbourhood (${JSON.stringify(byId.body?.[0] && [byId.body[0].lat, byId.body[0].lng])}, the place ${JSON.stringify(place.get('pin-007'))})`);
@@ -401,6 +417,18 @@ async function main() {
         `global: a listing's socket copy reaches its author with the place, even sent from someone else's read (got ${JSON.stringify(aliceCopy?.post && [aliceCopy.post.lat, aliceCopy.post.lng])})`);
     assert(!!bobCopy && bobCopy.post.lat === cellOf(t.lat, t.lng).lat && bobCopy.post.lng === cellOf(t.lat, t.lng).lng,
         `global: and another member's socket with the neighbourhood (got ${JSON.stringify(bobCopy?.post && [bobCopy.post.lat, bobCopy.post.lng])})`);
+    // A socket copy of half a place, sent to its recipients as a group listing's is (a public one with no whole place
+    // reaches its parties alone, so another member gets no copy of it at all): no place to another member, as it is to
+    // its author.
+    for (const sock of [aliceSock, bobSock]) sock.raw.length = 0;
+    se.broadcast({ type: 'post_updated', post: { id: 'half-lat', type: 'offer', authorPublicKey: alice.pubKeyHex, title: 'Listing half-lat', lat: -28.612345, lng: null, audienceScope: 'public' } },
+        [alice.pubKeyHex, bob.pubKeyHex]);
+    await sleep(500);
+    const halfOwn = listingCopies(aliceSock).find(e => e.post.id === 'half-lat');
+    const halfOther = listingCopies(bobSock).find(e => e.post.id === 'half-lat');
+    assert(!!halfOther && halfOther.post.lat === null && halfOther.post.lng === null,
+        `global: a socket copy of half a place reaches another member as no place, both null (got ${JSON.stringify(halfOther?.post && [halfOther.post.lat, halfOther.post.lng])})`);
+    assert(!!halfOwn && halfOwn.post.lat === -28.612345 && halfOwn.post.lng === null, `global: and its author as it is (got ${JSON.stringify(halfOwn?.post && [halfOwn.post.lat, halfOwn.post.lng])})`);
     aliceSock.ws.close();
     bobSock.ws.close();
 

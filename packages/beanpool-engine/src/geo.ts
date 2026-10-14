@@ -152,6 +152,19 @@ export function areaBox(box: GeoBox): GeoBox {
 }
 
 /**
+ * A place as a reader who doesn't have it exactly reads it (a neighbourhood read, a socket copy): its neighbourhood's
+ * centre (neighbourhoodOf); no place at all, both null, where only one coordinate is there, since half a place would give
+ * the other coordinate exactly (#1965 round 4: a listing whose author has no area takes none, and the post route takes
+ * each coordinate on its own); and null where it has neither, which leaves the row as it is.
+ */
+export function placeForOthers(lat: unknown, lng: unknown): { lat: number | null; lng: number | null } | null {
+    const hasLat = typeof lat === 'number', hasLng = typeof lng === 'number';
+    if (hasLat && hasLng) return neighbourhoodOf(lat, lng);
+    if (hasLat || hasLng) return { lat: null, lng: null };
+    return null;
+}
+
+/**
  * `box` grown by `latDeg` north and south and `lngDeg` east and west, on the true columns: it holds every place within
  * that of a place in the box on each axis. Across the antimeridian a range that runs past it carries on from the other
  * side, so a place at -179.996 (whose neighbourhood may be 180) is in a box that ends at 180.

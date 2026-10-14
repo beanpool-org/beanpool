@@ -242,6 +242,12 @@ interface Route {
     auth: 'none' | 'signed' | 'custodian';
     /** Answers while the keyholder is locked or fresh. */
     whenLocked: boolean;
+    /**
+     * On a fresh vault, also answers a key that the backup named in the body (`backup`) lists as its custodians (V1):
+     * the hello and the restore, so the custodians in force at a backup can rebuild a vault whose image pins only the
+     * genesis keys. See {@link backupListsKey}.
+     */
+    backupListed?: boolean;
     handler: Handler;
 }
 
@@ -790,8 +796,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     // ─── Routes ─────────────────────────────────────────────────────────────────────────────
 
     const routes: Record<string, Route> = {};
-    const route = (method: string, p: string, auth: Route['auth'], whenLocked: boolean, handler: Handler) => {
-        routes[`${method} ${p}`] = { auth, whenLocked, handler };
+    const route = (method: string, p: string, auth: Route['auth'], whenLocked: boolean, handler: Handler, backupListed = false) => {
+        routes[`${method} ${p}`] = { auth, whenLocked, handler, backupListed };
     };
 
     // A vault still finishing a restore from backup serves nothing yet: locked, to the outside.
@@ -1095,7 +1101,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     route('POST', '/v1/unlock/hello', 'custodian', true, async ctx => {
         if (ctx.status.state === 'open') throw new HttpError(409, 'open', 'The vault is already open.');
         return json(200, await call('hello', { custodianNonce: ctx.body.custodianNonce }));
-    });
+    }, true);
 
     /** Nothing is in force after a genesis until two custodians confirm their shares (/v1/unlock/confirm). */
     route('POST', '/v1/unlock/genesis', 'custodian', true, async ctx => {
@@ -1188,7 +1194,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             db = null;
         });
         return json(200, { state: 'locked', vaultId: header.vaultId, generation: header.generation });
-    });
+    }, true);
 
     route('POST', '/v1/reshare/hello', 'custodian', false, async ctx => json(200, await call('hello', { custodianNonce: ctx.body.custodianNonce })));
 
@@ -1618,6 +1624,39 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         }
     }
 
+    /**
+     * V1 (case 16): a fresh vault's custodians in force are the genesis keys its image pins, so after a reshare the new
+     * custodians alone could not rebuild one. A fresh vault also lets a key make the hello and the restore when the
+     * backup the request names, read by name from the vault's own stores (never from the request), lists that key in
+     * its state's `custodians`. Never a key the backup doesn't list: the keyholder's `adoptState` checks the list again
+     * on the very state it adopts, with the key's signature over the restore statement for this boot and that name.
+     *
+     * The header is checked here only for which keys it names: a fresh vault has no keys to check its signature with.
+     * It is authenticated by the restore that follows, before anything is served: the state it adopts opens only with
+     * an `M` that two shares of custodians it lists rebuild (its mCheck, and its sealed working keys take the header's
+     * vaultId, generation, custodians and threshold as associated data; keyholder `submitShare` refuses shares from keys
+     * outside the list), and `openBackup` then takes only a file signed by that state's ticket key, with the name and
+     * state hash the adoption recorded. What it can't tell is a whole vault someone else made, with their own `M`,
+     * written into the vault's stores: that needs write access to them (the vault's own partition or the off-box
+     * bucket's key), and the genesis keys handed to the new custodians as rebuild keys at the reshare are the way that
+     * needs nothing of the stores (apps/vault/README.md, "Rebuild keys").
+     */
+    async function backupListsKey(raw: string, key: string): Promise<boolean> {
+        let name: unknown;
+        try {
+            name = (JSON.parse(raw) as { backup?: unknown })?.backup;
+        } catch {
+            return false;
+        }
+        if (typeof name !== 'string' || !BACKUP_NAME_RE.test(name)) return false;
+        try {
+            const custodians = (parseBackupFile(await readBackup(name)).header.state as { custodians?: unknown }).custodians;
+            return Array.isArray(custodians) && custodians.includes(key);
+        } catch {
+            return false;
+        }
+    }
+
     async function handle(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
         const origin = req.headers.origin;
         const cors: Record<string, string> = origin === GLOBAL_ORIGIN ? { 'Access-Control-Allow-Origin': GLOBAL_ORIGIN, Vary: 'Origin' } : {};
@@ -1649,10 +1688,17 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 if (!check.ok) throw new HttpError(check.status, check.code, check.error);
                 key = check.key;
                 if (r.auth === 'custodian') {
-                    if (!status.custodians.includes(key) && !status.pending?.custodians.includes(key)) {
+                    if (status.custodians.includes(key) || status.pending?.custodians.includes(key)) {
+                        limited(limits.ceremony.take(clientAddress(req), now), 'ceremony calls from this address');
+                    } else if (r.backupListed && status.state === 'fresh') {
+                        // Counted before the store is read for a key the image doesn't pin.
+                        limited(limits.ceremony.take(clientAddress(req), now), 'ceremony calls from this address');
+                        if (!(await backupListsKey(raw, key))) {
+                            throw new HttpError(403, 'not_custodian', 'That key is not one of this vault\'s custodians, nor of the backup named.');
+                        }
+                    } else {
                         throw new HttpError(403, 'not_custodian', 'That key is not one of this vault\'s custodians.');
                     }
-                    limited(limits.ceremony.take(clientAddress(req), now), 'ceremony calls from this address');
                 }
             }
             if (raw) {

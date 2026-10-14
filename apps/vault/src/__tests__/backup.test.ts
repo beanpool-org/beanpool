@@ -12,8 +12,9 @@ import { custodianKey, presentShare, restoreFromBackup } from '../custodian/lib.
 import { openState, readStateFile, type WorkingKeys } from '../keyholder/keys.js';
 import { combineMnemonics, splitMasterSecret } from '../keyholder/slip39.js';
 import { BACKUP_BODY_AAD, BACKUP_DELETIONS_AAD, compareBackupNames, parseBackupFile } from '../shared/backup-format.js';
-import { openCustodianShare } from '../shared/ceremony.js';
+import { openCustodianShare, type CustodianShare } from '../shared/ceremony.js';
 import {
+    confirmWith,
     deposit,
     doGenesis,
     get,
@@ -195,6 +196,35 @@ describe('backups', () => {
         const missing = await restoreFromBackup(b.baseUrl, b.custodians[0], 'bv-20990101T000000Z.bin', b.call());
         expect(missing.status).toBe(404);
         expect(b.keyholder().status().state).toBe('fresh');
+    });
+
+    it('after a reshare to three new custodians, two of them alone rebuild a fresh vault from a backup that lists them; a key the backup doesn\'t list is refused (V1)', async () => {
+        const a = await vault();
+        const g = await doGenesis(a);
+        const member = newMember();
+        await deposit(a, g, member, 'google', 'after-the-reshare');
+        const before = await a.api.runBackup();
+        const fresh = [0, 1, 2].map(() => custodianKey(crypto.randomBytes(32)));
+        const newSet = fresh.map(c => c.publicKey);
+        await presentShare(a.baseUrl, a.custodians[0], g.shares[0], { ...a.call(), purpose: 'reshare', newCustodians: newSet });
+        const reshared = await presentShare(a.baseUrl, a.custodians[1], g.shares[1], { ...a.call(), purpose: 'reshare', newCustodians: newSet });
+        const shares = reshared.body.custodianShares as CustodianShare[];
+        expect((await confirmWith(a, shares, [0, 1], fresh))[1].body).toMatchObject({ switched: true, generation: 2 });
+        await a.api.idle();
+        a.clock.advance(1000);
+        const after = await a.api.runBackup();
+
+        // A fresh vault whose image pins only the genesis keys, and no genesis key takes part.
+        const b = await vault({ stub: a.stub, clock: a.clock, custodians: a.custodians, storeDir: a.storeDir });
+        // Not a key the named backup doesn't list: an outsider, or a new custodian naming a backup from before the reshare.
+        await expect(restoreFromBackup(b.baseUrl, custodianKey(crypto.randomBytes(32)), after, b.call())).rejects.toThrow(/403/);
+        await expect(restoreFromBackup(b.baseUrl, fresh[0], before, b.call())).rejects.toThrow(/403/);
+        expect(b.keyholder().status().state).toBe('fresh');
+
+        expect((await restoreFromBackup(b.baseUrl, fresh[1], after, b.call())).body).toMatchObject({ state: 'locked', generation: 2 });
+        await presentShare(b.baseUrl, fresh[0], shares[0], b.call());
+        expect((await presentShare(b.baseUrl, fresh[2], shares[2], b.call())).body.state).toBe('open');
+        await expectCopy(b, 'google', 'after-the-reshare', member);
     });
 
     it('two backups in the same second keep their order: the second one\'s deletions still reach the first', async () => {

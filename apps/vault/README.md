@@ -11,8 +11,9 @@ custodians one person, BeanPool's founder, holds all three shares, every release
 nothing proves in hardware what it runs** (`platform: none`). **The vault can open every copy it keeps**: it checks the
 sign-in itself, so it learns the `sub` that opens a copy, at every deposit and every restore. Against the vault itself,
 only who runs it protects a member; against someone else using their sign-in, the 24-hour wait on every restore (unless another of the member's own devices approves it), the
-alert to their devices and Stop do. Nothing here
-holds a real member's copy until the reshare is done.
+alert to their devices and Stop do. Real members' copies may go in before the reshare (Marty, 2026-10-05: one
+person holding all three shares meanwhile is said, as above, not hidden); the reshare stays a hard gate before the
+public launch, and it re-wraps every envelope, so copies made before it survive it.
 
 ## Two programs, the launcher and the install step
 
@@ -491,7 +492,9 @@ there are, a count the public report gives anyway. Requests to the store are sig
 **Restoring on a new machine** (the cold path, design §4; rehearse it before launch, target 24 hours):
 
 1. Install the signed image on the new machine: a fresh vault, with no keys, no data and an empty local store.
-2. Two genesis custodians set the settings: `vault-custodian settings send …` twice, as above.
+2. Two genesis custodians set the settings: `vault-custodian settings send …` twice, as above. After a reshare these
+   are the **rebuild keys** (below): a fresh vault has no backup to read anyone else from until the settings name the
+   off-box store.
 3. `vault-custodian backups --url … --key …` lists what each store holds; pick the newest.
 4. `vault-custodian restore --url … --key … --backup bv-<time>.bin`: the vault fetches it (from its own store, or else
    the off-box one) and takes the backup's keyholder state; it is locked.
@@ -499,6 +502,19 @@ there are, a count the public report gives anyway. Requests to the store are sig
    serves anything: it applies the deletion records of every newer backup in either store (an off-box store it can't
    list makes it wait and try again, rather than bring back a copy its member deleted), holds every open restore a
    fresh 24 hours and tells those members' devices again, then opens.
+
+**Rebuild keys (the custody step at the reshare).** A fresh vault's custodians in force are the genesis keys its
+image pins: they alone set its settings, and the off-box store is in the settings. So at the reshare the genesis key
+files go to the new custodians as their rebuild keys, kept like their shares; without them nobody can point a new
+machine at the off-box backups. A rebuild key opens nothing by itself: the restore still unlocks only with two shares
+of the custodians the backup lists. Step 4 (its hello and the restore) also takes a key that the named backup's header
+lists (V1, `backupListsKey` in `src/api/server.ts`), so once the settings are in, or when the vault's
+own store still holds its backups, the custodians in force at that backup restore it with their own keys. The header
+can't be checked at that point (a fresh vault has no keys to check it with): it is checked by the unlock (two shares of
+custodians it lists must rebuild an `M` that opens its state) and by `openBackup` (the file signed by that state's
+ticket key, with the name and state the restore recorded) before anything is served. What that can't tell is a whole
+vault someone else made with their own `M` and wrote into the vault's stores, which needs write access to them; the
+rebuild keys need nothing of the stores.
 
 `offsite.test.ts` does this end to end: a backup, the machine wiped, a new one restored from the off-box store alone,
 the database the same as at the backup in every byte but SQLite's write counter.

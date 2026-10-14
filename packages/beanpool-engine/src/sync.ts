@@ -1005,6 +1005,12 @@ function postOfRow(row: any): MarketplacePost {
             eventPlaceName: row.event_place_name || undefined,
             eventPrivateNote: row.event_private_note || undefined,
             eventState: row.event_state || undefined,
+            // The host's clock, its zone, online and the join link (DESIGN-event-times §2). The link replicates as the note does.
+            eventStartLocal: row.event_start_local || undefined,
+            eventEndLocal: row.event_end_local || undefined,
+            eventTz: row.event_tz || undefined,
+            ...(row.event_online != null ? { eventOnline: row.event_online === 1 } : {}),
+            eventLink: row.event_link || undefined,
         } : {}),
         // Moderation (G3): a hidden post stays hidden, and a takedown still counts, on a standby and after a take-over.
         hiddenByReportsAt: row.hidden_by_reports_at ?? null,

@@ -121,6 +121,17 @@ export interface MarketplacePost {
     /** Host and `going` only — omitted for every other reader (§2.3). */
     eventPrivateNote?: string;
     eventState?: EventState;
+    /**
+     * The clock the host typed, "YYYY-MM-DDTHH:MM", in `eventTz` (a canonical IANA id); the node made the instants above from
+     * them (DESIGN-event-times §1-§2). Absent on an event from before them.
+     */
+    eventStartLocal?: string;
+    eventEndLocal?: string;
+    eventTz?: string;
+    /** An online event: no pin. */
+    eventOnline?: boolean;
+    /** Where to join an online event. Host and `going` only, exactly like `eventPrivateNote`. */
+    eventLink?: string;
     goingCount?: number;
     interestedCount?: number;
     /** The viewer's own RSVP; null when they have none. */
@@ -520,6 +531,10 @@ export function rowToPost(db: Db, row: any, photosByPost: Map<string, any[]>, fo
             eventEndAt: row.event_end_at || undefined,
             eventPlaceName: row.event_place_name || undefined,
             eventState: (row.event_state || 'scheduled') as EventState,
+            eventStartLocal: row.event_start_local || undefined,
+            eventEndLocal: row.event_end_local || undefined,
+            eventTz: row.event_tz || undefined,
+            eventOnline: row.event_online === 1,
         } : {}),
         ...(row.hidden_by_reports_at ? { hiddenByReportsAt: row.hidden_by_reports_at } : {}),
     };
@@ -1763,6 +1778,8 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             post.interestedCount = interestedCount;
             post.myRsvp = (mine?.status as EventRsvpStatus | undefined) ?? null;
             if ((host || going) && r.event_private_note) post.eventPrivateNote = r.event_private_note;
+            // The join link goes by the note's rule, and nowhere else (DESIGN-event-times §9).
+            if ((host || going) && r.event_link) post.eventLink = r.event_link;
             if (host) {
                 post.eventRsvps = rsvps.map((v: any) => ({
                     memberPubkey: v.member_pubkey,
@@ -1886,6 +1903,8 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     repeatable: 'keep', cashAlsoNeeded: 'keep', photos: 'keep', originNode: 'keep', reach: 'keep', audienceScope: 'keep',
     pollOptions: 'keep', pollClosesAt: 'keep', pollOpenVote: 'keep', totalVotes: 'keep', pollNewOrWordsVotes: 'keep',
     eventStartAt: 'keep', eventEndAt: 'keep', eventState: 'keep', goingCount: 'keep', interestedCount: 'keep',
+    // The clock, its zone (the label is read from it) and online: what the time means, not who or where exactly.
+    eventStartLocal: 'keep', eventEndLocal: 'keep', eventTz: 'keep', eventOnline: 'keep',
     // Neutral, not absent, so an app written against the member's shape meets no `undefined`: each falls back to its
     // "nobody" (an empty name reads as Anonymous / Unknown in both apps).
     authorPublicKey: () => HIDDEN_AUTHOR,
@@ -1902,7 +1921,7 @@ const GUEST_FIELDS: { readonly [K in keyof MarketplacePost]-?: GuestRule<K> } = 
     // The trade, the keeper behind an enterprise's post, the voters, the reader's own vote and RSVP, the host's lists and
     // note, the peers named, who a direct or group post was for, the typed place (often an address), and moderation.
     acceptedBy: 'drop', acceptedAt: 'drop', pendingTransactionId: 'drop', completedAt: 'drop', createdBy: 'drop',
-    pollVotes: 'drop', userVotedOptionId: 'drop', myRsvp: 'drop', eventRsvps: 'drop', eventPrivateNote: 'drop',
+    pollVotes: 'drop', userVotedOptionId: 'drop', myRsvp: 'drop', eventRsvps: 'drop', eventPrivateNote: 'drop', eventLink: 'drop',
     reachPeers: 'drop', targetPubkey: 'drop', assignedTo: 'drop', targetGroupId: 'drop', targetGroupName: 'drop',
     eventPlaceName: 'drop', hiddenByReportsAt: 'drop', removedByModeratorAt: 'drop',
     // A member's own delta only: a visitor's read is for nobody in particular and never has it.
@@ -1928,7 +1947,7 @@ export function guestPost(post: MarketplacePost): MarketplacePost {
 
 /**
  * The copy of a post that may go to every socket. `new_post` / `post_updated` broadcasts are not addressed
- * to the viewer the post was read for, so the viewer-only fields come off first: an event's note, RSVP list
+ * to the viewer the post was read for, so the viewer-only fields come off first: an event's note and join link, RSVP list
  * and the reader's own RSVP, and — for every type — `reachPeers`, which `getPosts` gives to the author alone.
  * These posts are read for the author (or the voter, for a poll vote), and the apps now keep what the feed
  * sends them (@beanpool/core `livePostChange`). So the reader's own poll vote (`userVotedOptionId`) comes off too: sent
@@ -1937,7 +1956,7 @@ export function guestPost(post: MarketplacePost): MarketplacePost {
 export function publicBroadcastPost(post: MarketplacePost): MarketplacePost {
     const { reachPeers: _peers, userVotedOptionId: _ownVote, ...shared } = post;
     if (shared.type !== 'event') return shared;
-    const { eventPrivateNote: _note, eventRsvps: _rsvps, myRsvp: _mine, ...rest } = shared;
+    const { eventPrivateNote: _note, eventLink: _link, eventRsvps: _rsvps, myRsvp: _mine, ...rest } = shared;
     return rest;
 }
 

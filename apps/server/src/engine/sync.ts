@@ -98,8 +98,11 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *     rows a copy made by format 8 or older gave it with tokens in the clear (it has no key to lock them), and its main
  *     server's locked rows, stamped when that server locked them, may be behind this standby's cursor already: the re-seed
  *     brings them all.
+ * 10. Events keep the host's clock, its zone, and whether they are online, with the join link (event_start_local,
+ *     event_end_local, event_tz, event_online, event_link; DESIGN-event-times §2): an importer before this one drops the
+ *     five, so a copy it made lacks them and the re-seed brings them.
  */
-export const REPLICA_FORMAT = 9;
+export const REPLICA_FORMAT = 10;
 
 /** The format a standby must say it reads for its main server to send it a copy (routes/backup.ts sync-copy): photos by reference. */
 export const PHOTOS_BY_REFERENCE_FORMAT = 8;
@@ -1090,6 +1093,22 @@ function postScope(rp: any): [string, string | null, string | null, string | nul
 }
 
 /**
+ * An event's clock, zone and online columns (DESIGN-event-times §2): event_start_local, event_end_local, event_tz,
+ * event_online, event_link, in that order. Plain assignment on update, like the note: an edit that clears the link must
+ * clear it here too. A main server from before them sends none, and held none.
+ */
+function postEventTimes(rp: any): [string | null, string | null, string | null, number | null, string | null] {
+    if (rp.type !== 'event') return [null, null, null, null, null];
+    return [
+        typeof rp.eventStartLocal === 'string' ? rp.eventStartLocal : null,
+        typeof rp.eventEndLocal === 'string' ? rp.eventEndLocal : null,
+        typeof rp.eventTz === 'string' ? rp.eventTz : null,
+        rp.eventOnline === true ? 1 : rp.eventOnline === false ? 0 : null,
+        typeof rp.eventLink === 'string' ? rp.eventLink : null,
+    ];
+}
+
+/**
  * hidden_by_reports_at, removed_by_moderator_at (G3, engine/auto-moderation.ts), in that order. Plain assignment on
  * update: a restore clears the hide on the replica too. A main server from before G3 sends neither, and never set
  * either, so null is what it holds.
@@ -1855,9 +1874,10 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                 if (!existing) {
                     db.prepare(`INSERT INTO posts (id, type, category, title, description, credits, author_pubkey, created_at, active, status, repeatable, lat, lng, origin_node, price_type, accepted_by, accepted_at, pending_transaction_id, completed_at, updated_at, poll_options, poll_closes_at, poll_open_vote, created_by,
                                 event_start_at, event_end_at, event_place_name, event_private_note, event_state,
+                                event_start_local, event_end_local, event_tz, event_online, event_link,
                                 audience_scope, target_group_id, target_pubkey, assigned_to, reach, reach_peers,
                                 hidden_by_reports_at, removed_by_moderator_at, cash_also_needed, search_keywords)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''))`).run(
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, ''))`).run(
                         rp.id,
                         rp.type,
                         rp.category,
@@ -1893,6 +1913,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         rp.eventPlaceName ?? null,
                         rp.eventPrivateNote ?? null,
                         rp.eventState ?? null,
+                        ...postEventTimes(rp),
                         ...postScope(rp),
                         ...postModeration(rp),
                         ...postSearch(rp),
@@ -1928,6 +1949,11 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         event_place_name = ?,
                         event_private_note = ?,
                         event_state = ?,
+                        event_start_local = ?,
+                        event_end_local = ?,
+                        event_tz = ?,
+                        event_online = ?,
+                        event_link = ?,
                         audience_scope = ?,
                         target_group_id = ?,
                         target_pubkey = ?,
@@ -1966,6 +1992,7 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
                         rp.eventPlaceName ?? null,
                         rp.eventPrivateNote ?? null,
                         rp.eventState ?? null,
+                        ...postEventTimes(rp),
                         ...postScope(rp),
                         ...postModeration(rp),
                         ...postSearch(rp),

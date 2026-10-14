@@ -112,7 +112,7 @@ vi.mock('../crypto', async (orig) => ({
 import {
     insertMessage, postGroupChatMessage, editThreadMessage, groupKeyringFor, groupScreenKeyringFor, isHeldGroupChat,
     isKnownDmConversation, knownDmConversationId, getConversationKind, joinGroupApi, approveGroupMemberApi, leaveGroupApi,
-    proposeGroupDecision, createPost, _resetDmPeerPinsForTests,
+    proposeGroupDecision, createPost, updateGroupApi, _resetDmPeerPinsForTests,
 } from '../db';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { dmConversationsSeenStoreKey, dmPeerPinsStoreKey } from '../storage-keys';
@@ -815,4 +815,97 @@ describe('a pinned DM the node relists as a LOCKED group while the pins can\'t b
             } finally { (globalThis as any).fetch = nodeFetch; }
         }, 120_000);
     }
+
+    // #1938 confirmation 9: updateGroupApi's name and about are words for the group's id (no screen sends them today). A
+    // known DM's id refuses (GXF in dm-line-binding); a held group's edit never waits on the pins; a never-held group's waits.
+    for (const how of ['a read that throws', 'a corrupt value'] as const) {
+        it(`GXFh-held edit (${how}) a held group's name and about while the pins can't be read go; a never-held group's wait with the pins sentence, then go`, async () => {
+            fresh();
+            store.asyncStore.set(DM_SEEN, JSON.stringify([]));
+            store.asyncStore.set(PINS, JSON.stringify({ pins: {} }));
+            _resetDmPeerPinsForTests();
+            const member = mkId();
+            const [held, neverHeld] = [randomUUID(), randomUUID()];
+            for (const g of [held, neverHeld]) {
+                const e = epochWithKey(g, 1, [ME.publicKey, member.publicKey], member);
+                views.set(g, { keys: { current: 1, roster: [ME.publicKey, member.publicKey], epochs: [e.header], myWraps: [e.wrap] } });
+            }
+            expect(await outcome(async () => { await (await groupScreenKeyringFor(held)).sync(); })).toBe('went');
+            const took = groupEditsTaken();
+            try {
+                const unread = await whilePinsUnread(how, async () => ({ held: await edit(held, `Bakers (${how})`), neverHeld: await edit(neverHeld, 'Gardeners') }));
+                expect(unread).toEqual({ held: 'went', neverHeld: 'DmPinStoreError' });
+                expect(await edit(neverHeld, 'Gardeners again')).toBe('went');
+                expect([...took]).toEqual([`Bakers (${how})`, `Bakers (${how}) (about)`, 'Gardeners again', 'Gardeners again (about)']);
+            } finally { took.restore(); }
+        }, 120_000);
+    }
+    /** Every group edit's name and about the node took (PATCH /api/groups/:id), answered as the node does. */
+    function groupEditsTaken(): string[] & { restore: () => void } {
+        const took = [] as unknown as string[] & { restore: () => void };
+        const nodeFetch = (globalThis as any).fetch;
+        (globalThis as any).fetch = async (url: string, init: any = {}) => {
+            if (init.method === 'PATCH' && /\/api\/groups\/[^/]+$/.test(String(url))) {
+                const b = JSON.parse(init.body ?? 'null');
+                took.push(...[b?.name, b?.description].filter((x): x is string => typeof x === 'string'));
+                return reply(200, { success: true, group: null });
+            }
+            return nodeFetch(url, init);
+        };
+        took.restore = () => { (globalThis as any).fetch = nodeFetch; };
+        return took;
+    }
+    const edit = (g: string, name: string) => outcome(() => updateGroupApi(g, { name, description: `${name} (about)` }));
+
+    // #1938 confirmation 9, finding 4 (M1, GXDk's twin on createPost and updateGroupApi): the held-group skip asks the key
+    // memory; a key memory that can't be read is not "held". For a known DM's id and for a never-held group alike, a key
+    // store that throws refuses the group post and the group edit, and the node reads nothing; once it reads, the DM's id
+    // refuses as a DM and the group's go.
+    it('GXFk a group post and a group edit when the key memory can\'t be read: for a known DM\'s id and for a never-held group, both refused and the node reads nothing; once it reads, the group\'s go', async () => {
+        fresh();
+        store.asyncStore.set(DM_SEEN, JSON.stringify([]));
+        const [dmId, group] = [randomUUID(), randomUUID()];
+        store.asyncStore.set(PINS, pinFor(dmId));
+        _resetDmPeerPinsForTests();
+        store.conversations.set(dmId, { id: dmId, type: 'dm', created_by: null });
+        const member = mkId();
+        const e = epochWithKey(group, 1, [ME.publicKey, member.publicKey], member);
+        views.set(group, { keys: { current: 1, roster: [ME.publicKey, member.publicKey], epochs: [e.header], myWraps: [e.wrap] } });
+        const edits = groupEditsTaken();
+        const posts: string[] = [];
+        const nodeFetch = (globalThis as any).fetch;
+        (globalThis as any).fetch = async (url: string, init: any = {}) => {
+            if ((init.method ?? 'GET') === 'POST' && /\/api\/marketplace\/posts$/.test(String(url))) {
+                const b = JSON.parse(init.body ?? 'null');
+                posts.push(b?.title, b?.description);
+                return reply(201, { success: true, post: null });
+            }
+            return nodeFetch(url, init);
+        };
+        const post = (g: string, words: string) => outcome(() => createPost({ id: randomUUID(), type: 'offer', title: words, description: `${words} (why)`, category: 'other', credits: 1, author_pubkey: ME.publicKey, created_at: new Date().toISOString(), audienceScope: 'group', targetGroupId: g, reach: 'local' }));
+        const getAll = vi.mocked(mockDb.getAllAsync);
+        const real = getAll.getMockImplementation()!;
+        getAll.mockImplementation(async (sql: string, params: any[] = []) => {
+            if (/FROM group_chat_epochs WHERE group_id = \?/.test(sql)) throw new Error('database disk image is malformed');
+            return real(sql, params);
+        });
+        try {
+            const unread = {
+                dmPost: await post(dmId, 'The code is 4821'), groupPost: await post(group, 'Bread on Friday'),
+                dmEdit: await edit(dmId, 'The code is 4821'), groupEdit: await edit(group, 'Bakers'),
+            };
+            console.log(`GXFk ${JSON.stringify({ unread, posts, edits })}`);
+            for (const [k, v] of Object.entries(unread)) expect(v, k).not.toBe('went');
+            expect(posts).toEqual([]);
+            expect([...edits]).toEqual([]);
+        } finally { getAll.mockImplementation(real); }
+        try {
+            expect(await post(dmId, 'The code is 4822')).toBe('GroupChatKeyError');
+            expect(await edit(dmId, 'The code is 4822')).toBe('GroupChatKeyError');
+            expect(await post(group, 'Bread on Saturday')).toBe('went');
+            expect(await edit(group, 'Bakers again')).toBe('went');
+            expect(posts).toEqual(['Bread on Saturday', 'Bread on Saturday (why)']);
+            expect([...edits]).toEqual(['Bakers again', 'Bakers again (about)']);
+        } finally { (globalThis as any).fetch = nodeFetch; edits.restore(); }
+    }, 120_000);
 });

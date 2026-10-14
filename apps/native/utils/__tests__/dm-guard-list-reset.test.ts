@@ -78,4 +78,27 @@ describe('the DM guard list\'s reset under its caps (GR4)', () => {
             expect(warn.mock.calls.some((c) => String(c[0]).includes('The DM pins could not be read at the reset'))).toBe(true);
         } finally { warn.mockRestore(); }
     });
+
+    // #1938 confirmation 9, finding 4 (M6): the salvage reads only literals standing as array elements. Taking any literal,
+    // one lost or extra quote pairs every quote after it the wrong way round: the ids after it lost, and the text between
+    // two ids (`","`, an id with its comma) added as ids.
+    for (const [what, damage] of [
+        ['one closing quote lost', (raw: string, id: string) => { const q = raw.indexOf(id) + id.length; return raw.slice(0, q) + raw.slice(q + 1); }],
+        ['one opening quote lost', (raw: string, id: string) => { const q = raw.indexOf(id) - 1; return raw.slice(0, q) + raw.slice(q + 1); }],
+        ['one extra quote', (raw: string, id: string) => { const q = raw.indexOf(id); return raw.slice(0, q) + '"' + raw.slice(q); }],
+    ] as const) {
+        it(`GR4q (${what}) in an honest list of ten: only the damaged id is lost, every id after it kept, no junk id added, and the reset keeps them after the pins'`, async () => {
+            const ids = Array.from({ length: 10 }, () => randomUUID());
+            const damaged = damage(JSON.stringify(ids), ids[3]);
+            const intact = ids.filter((_, i) => i !== 3);
+            const got = salvageSeenIds(damaged);
+            expect(got).toEqual(intact);
+            const storage = memoryStorage();
+            const list = createDmSeenList(storage);
+            storage.store.set(KEY, damaged);
+            expect(await list.reset(ME, FILE, ['pinned'])).toBe('set-aside');
+            expect(JSON.parse(storage.store.get(KEY)!).keep).toEqual(['pinned', ...intact]);
+            expect(await list.read(ME, FILE, async () => [])).toEqual(['pinned', ...intact]);
+        });
+    }
 });

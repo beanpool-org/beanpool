@@ -4266,8 +4266,42 @@ describe('the DM guard list: one bounded list per community file, never read as 
         'event edit': ({ ev }, w) => dbPort.updateEvent(ev, { title: `${w} (event edit)`, description: `${w} (event edit why)` } as any),
         'post edit': ({ ev }, w) => dbPort.updatePost(ev, { type: 'event', category: 'event', title: `${w} (post edit)`, description: 'x', credits: 0 }),
         'commons decision about an enterprise': ({ ent }, w) => dbPort.createDecision({ authorPubkey: ana.publicKey, title: `${w} (decision)`, description: `${w} (decision why)`, touches: 'pool', effect: 'write_off_deficit' as any, subject: ent }),
+        // updateGroupApi's name and about (#1938 confirmation 9: no screen sends them today, GroupDetailModal sends joinPolicy).
+        'group edit (name, about)': ({ g }, w) => dbPort.updateGroupApi(g, { name: `${w} (group name)`, description: `${w} (group about)` }),
     };
     const everyForm = (v: unknown) => Object.fromEntries(Object.keys(ID_FORMS).map((name) => [name, v]));
+    // The three report boxes (#1938 confirmation 9, finding 1): EventDetail's and treasury-detail's ReportReasonBox, and the
+    // post screen's details, each with the reason picked and the member's words, as each screen sends them. A report is
+    // never held up: where refuseReadableIntoDm refuses (a known DM's id, or pins that can't be read), the reason picked goes
+    // alone and reportAbuse says so (`wordsLeftOut`), so "Child safety" still alerts.
+    const REPORT_FORMS: Record<string, { picked: string; send: (ids: { g: string; ev: string; ent: string }, w: string) => Promise<any> }> = {
+        'event report': { picked: 'Child safety', send: ({ ev }, w) => dbPort.reportAbuse(ana.publicKey, puppet.publicKey, `Child safety: ${w} (event report)`, ev) },
+        'enterprise report': { picked: 'Spam or scam', send: ({ ent }, w) => dbPort.reportAbuse(ana.publicKey, ent, `Spam or scam: ${w} (enterprise report)`, ent) },
+        'post report': { picked: 'Other', send: ({ ev }, w) => dbPort.reportAbuse(ana.publicKey, puppet.publicKey, `Other: ${w} (post report)`, ev) },
+    };
+    /** Every report the node took without words `formsTaken` saw (its reason), answered as the node takes one. Install before formsTaken. */
+    function reportsTaken(): string[] {
+        const reasons: string[] = [];
+        const before = (globalThis as any).fetch;
+        (globalThis as any).fetch = async (url: string, init: any = {}) => {
+            if ((init.method ?? 'GET') === 'POST' && new URL(url).pathname === '/api/reports') {
+                reasons.push(JSON.parse(init.body).reason);
+                return answer(201, { success: true });
+            }
+            return before(url, init);
+        };
+        return reasons;
+    }
+    /** One report box's send: its error, what reportAbuse said of the words, the words the node read, and the reasons it took without words. */
+    async function reportOnScreen(took: string[], reasons: string[], send: () => Promise<any>) {
+        const [t, r] = [took.length, reasons.length];
+        let err: any = null;
+        let said: any = null;
+        try { said = await send(); } catch (e) { err = e; }
+        return { err: err ? (err.name && err.name !== 'Error' ? err.name : String(err.message)) : null, wordsLeftOut: said?.wordsLeftOut ?? null, nodeReads: took.slice(t), reasons: reasons.slice(r) };
+    }
+    const reasonAlone = (name: string) => ({ err: null, wordsLeftOut: true, nodeReads: [], reasons: [REPORT_FORMS[name].picked] });
+    const everyReport = (f: (name: string) => unknown) => Object.fromEntries(Object.keys(REPORT_FORMS).map((name) => [name, f(name)]));
     for (const how of ['a read that throws', 'a corrupt value'] as const) {
         it(`GXF (${how}) the list full when the DM is met; pruned, then relisted as an unlocked group (and served as an event and a treasury) while the pins can't be read: every id-keyed form with typed words is refused and the node reads nothing, the pins back and after the sync too`, async () => {
             const filler = Array.from({ length: 26_886 }, () => randomUUID());
@@ -4281,11 +4315,13 @@ describe('the DM guard list: one bounded list per community file, never read as 
             node.lines = node.lines.filter((l) => l.conversationId !== dm.id);
             unlocked.add(dm.id);
             node.convs = [relistedAsGroup()];
+            const reasons = reportsTaken();
             const took = formsTaken('The code is');
             const ids = { g: dm.id, ev: dm.id, ent: dm.id };
             const all = async (words: string) => {
                 const out: Record<string, unknown> = {};
                 for (const [name, form] of Object.entries(ID_FORMS)) out[name] = await onScreen(took, () => form(ids, words));
+                for (const [name, form] of Object.entries(REPORT_FORMS)) out[name] = await reportOnScreen(took, reasons, () => form.send(ids, words));
                 return out;
             };
             const unread = await whilePinsUnread(how, async () => {
@@ -4296,9 +4332,9 @@ describe('the DM guard list: one bounded list per community file, never read as 
             await syncMessages(ana.publicKey);
             const after = { row: typeOf(dm.id), forms: await all('The code is 4823') };
             console.log(`GXF (${how}) ${JSON.stringify({ unread, back, after, took })}`);
-            expect(unread).toEqual({ row: 'group_thread', forms: everyForm(refusedUnread) });
-            expect(back).toEqual(everyForm(refusedAsDm));
-            expect(after).toEqual({ row: 'dm', forms: everyForm(refusedAsDm) });
+            expect(unread).toEqual({ row: 'group_thread', forms: { ...everyForm(refusedUnread), ...everyReport(reasonAlone) } });
+            expect(back).toEqual({ ...everyForm(refusedAsDm), ...everyReport(reasonAlone) });
+            expect(after).toEqual({ row: 'dm', forms: { ...everyForm(refusedAsDm), ...everyReport(reasonAlone) } });
             expect(took).toEqual([]);
         }, 180_000);
     }
@@ -4311,27 +4347,78 @@ describe('the DM guard list: one bounded list per community file, never read as 
         unlocked.add(g.id);
         node.convs = [g, ev, ent];
         await syncMessages(ana.publicKey);
+        const reasons = reportsTaken();
         const took = formsTaken('Hello');
         const ids = { g: g.id, ev: ev.id, ent: ent.id };
         const all = async (w: string) => {
             const out: Record<string, unknown> = {};
             const went = (r: { err: string | null; nodeReads: string[] }) => r.err ?? (r.nodeReads.length ? 'went' : 'no post');
             for (const [name, form] of Object.entries(ID_FORMS)) out[name] = went(await onScreen(took, () => form(ids, w)));
+            for (const [name, form] of Object.entries(REPORT_FORMS)) {
+                const r = await reportOnScreen(took, reasons, () => form.send(ids, w));
+                out[name] = r.err ?? (r.nodeReads.length === 1 && !r.reasons.length && r.wordsLeftOut === false ? 'went'
+                    : !r.nodeReads.length && r.reasons.length === 1 && r.reasons[0] === form.picked && r.wordsLeftOut === true ? 'the reason alone, said' : JSON.stringify(r));
+            }
             out['community event (no group)'] = went(await onScreen(took, () => dbPort.createPost({ id: randomUUID(), type: 'event', title: `${w} (public event)`, description: 'x', category: 'event', credits: 0, author_pubkey: ana.publicKey, created_at: new Date().toISOString(), ...soon() })));
             let noMemo: string = 'went';
             try { await dbPort.treasuryPledge(ent.id, 1); } catch (e: any) { if (e?.name && e.name !== 'Error') noMemo = e.name; }
             out['pledge, no memo'] = noMemo;
             return out;
         };
-        const went = { ...everyForm('went'), 'community event (no group)': 'went', 'pledge, no memo': 'went' };
+        const went = { ...everyForm('went'), ...everyReport(() => 'went'), 'community event (no group)': 'went', 'pledge, no memo': 'went' };
         const readable = await all('Hello');
         const unread = await whilePinsUnread('a corrupt value', () => all('Hello again'));
         const back = await all('Hello once more');
         console.log(`GXFh ${JSON.stringify({ readable, unread, back })}`);
         expect(readable).toEqual(went);
-        expect(unread).toEqual({ ...everyForm('DmPinStoreError'), 'community event (no group)': 'went', 'pledge, no memo': 'went' });
+        expect(unread).toEqual({ ...everyForm('DmPinStoreError'), ...everyReport(() => 'the reason alone, said'), 'community event (no group)': 'went', 'pledge, no memo': 'went' });
         expect(back).toEqual(went);
     }, 180_000);
+
+    // GXR (#1938 confirmation 9, finding 1, the director's ruling (a)): what each report box sends for the DM's id from GX1's
+    // state, the pins unreadable, back, and after the sync: the reason picked alone, said, the node reading none of the words;
+    // a report with no words goes as it is. An honest event's and enterprise's reports go without the words while the pins
+    // can't be read (the cost: never held up), and keep their words once the pins read.
+    for (const how of ['a read that throws', 'a corrupt value'] as const) {
+        it(`GXR (${how}) the three report boxes for the DM's id relisted as an event: the reason picked alone, said, the node reading no words, the pins unreadable, back and after the sync; an honest event's and enterprise's reports keep their words once the pins read`, async () => {
+            const filler = Array.from({ length: 26_886 }, () => randomUUID());
+            h.store.set(seenKey(), JSON.stringify(filler));
+            const { first, pin } = await anaHasSentToBen();
+            expect(first).toEqual(sealedToBen);
+            expect(pin).toMatchObject({ peer: ben.publicKey, checked: true });
+            node.convs = [];
+            await syncMessages(ana.publicKey);   // the prune
+            node.lines = node.lines.filter((l) => l.conversationId !== dm.id);
+            const ev: Conv = { id: randomUUID(), type: 'event_thread', participants: [ana.publicKey, puppet.publicKey] };
+            const ent: Conv = { id: randomUUID(), type: 'enterprise_thread', participants: [ana.publicKey, puppet.publicKey] };
+            node.convs = [{ id: dm.id, type: 'event_thread', participants: [ana.publicKey, ben.publicKey, puppet.publicKey] }, ev, ent];
+            const reasons = reportsTaken();
+            const took = formsTaken('The code is');
+            const honestTook = formsTaken('Loud music');
+            const three = async (ids: { g: string; ev: string; ent: string }, w: string, words: string[]) => {
+                const out: Record<string, unknown> = {};
+                for (const [name, form] of Object.entries(REPORT_FORMS)) out[name] = await reportOnScreen(words, reasons, () => form.send(ids, w));
+                return out;
+            };
+            const dmIds = { g: dm.id, ev: dm.id, ent: dm.id };
+            const honestIds = { g: ev.id, ev: ev.id, ent: ent.id };
+            const unread = await whilePinsUnread(how, async () => {
+                await syncMessages(ana.publicKey);
+                return { row: typeOf(dm.id), dm: await three(dmIds, 'The code is 4821', took), honest: await three(honestIds, 'Loud music', honestTook) };
+            });
+            const back = { dm: await three(dmIds, 'The code is 4822', took), honest: await three(honestIds, 'Loud music', honestTook) };
+            await syncMessages(ana.publicKey);
+            const after = { row: typeOf(dm.id), dm: await three(dmIds, 'The code is 4823', took), honest: await three(honestIds, 'Loud music', honestTook) };
+            const noWords = await reportOnScreen(took, reasons, () => dbPort.reportAbuse(ana.publicKey, puppet.publicKey, 'Child safety', dm.id));
+            console.log(`GXR (${how}) ${JSON.stringify({ unread, back, after, noWords, took, honestTook })}`);
+            const honestWent = everyReport((name) => ({ err: null, wordsLeftOut: false, nodeReads: [`${REPORT_FORMS[name].picked}: Loud music (${name})`], reasons: [] }));
+            expect(unread).toEqual({ row: 'event_thread', dm: everyReport(reasonAlone), honest: everyReport(reasonAlone) });
+            expect(back).toEqual({ dm: everyReport(reasonAlone), honest: honestWent });
+            expect(after).toEqual({ row: 'dm', dm: everyReport(reasonAlone), honest: honestWent });
+            expect(noWords).toEqual({ err: null, wordsLeftOut: false, nodeReads: [], reasons: ['Child safety'] });
+            expect(took).toEqual([]);
+        }, 180_000);
+    }
 
     // ── §3.4 amendment 8 (DESIGN-dm-guard-reset-fable.md + the director's amendment): the member's way out of a list that
     // can't be read is the same Chat memory reset as the pins', never the phone's own. The list goes first, in the pins'

@@ -43,6 +43,47 @@ registerNameFunctions(db);
 
 const pendingPostCommitHooks: (() => void)[] = [];
 
+/**
+ * Names in any alphabet (#1956). `callsign_fold` is `foldName(callsign)` (the engine's names.ts), the one rule by which two
+ * names are the same name. The lower(callsign) index above folds A–Z only, so "Олег" typed as stored matched nothing.
+ *
+ * Two triggers write it, on INSERT and on any UPDATE OF callsign (an upsert included), so no writer can forget it: a
+ * standby's import and a key move are inserts like any other. They call `name_fold`, which lives on the connection
+ * (registerNameFunctions above, and the two command-line tools that write members): a write to members from a handle
+ * without it fails loudly, never with a stale fold. Every boot re-folds a row whose fold differs, so a change of the rule
+ * reaches every row, and a node from before this column gets it. That UPDATE names no column of members_touch_updated_at,
+ * so it stamps nothing and sends nothing to a standby (each server makes its own; replication-manifest.ts).
+ *
+ * The index is NOT unique, on purpose. A node may already hold two members whose names fold the same ("Олег" and
+ * "олег", both allowed before this): both are kept, neither is renamed, boot goes on, and one line per such name tells
+ * the operator. A unique index would fail to build there, and on a standby it would refuse the copy of that pair.
+ * isCallsignAvailable (engine/members.ts) refuses a new one: registration and rename are its only paths, and
+ * better-sqlite3 runs them one at a time.
+ */
+export function migrateCallsignFold(conn: Database.Database): void {
+    try {
+        const has = conn.prepare(`SELECT 1 FROM pragma_table_info('members') WHERE name = 'callsign_fold'`).get();
+        if (!has) conn.prepare(`ALTER TABLE members ADD COLUMN callsign_fold TEXT`).run();
+        conn.exec(`CREATE TRIGGER IF NOT EXISTS members_callsign_fold_insert AFTER INSERT ON members BEGIN
+            UPDATE members SET callsign_fold = name_fold(NEW.callsign) WHERE public_key = NEW.public_key;
+        END`);
+        conn.exec(`CREATE TRIGGER IF NOT EXISTS members_callsign_fold_rename AFTER UPDATE OF callsign ON members BEGIN
+            UPDATE members SET callsign_fold = name_fold(NEW.callsign) WHERE public_key = NEW.public_key;
+        END`);
+        conn.prepare(`UPDATE members SET callsign_fold = name_fold(callsign) WHERE callsign_fold IS NOT name_fold(callsign)`).run();
+        conn.prepare(`CREATE INDEX IF NOT EXISTS idx_members_callsign_fold ON members(callsign_fold) WHERE status NOT IN ('migrated', 'pruned')`).run();
+        const clashes = conn.prepare(`SELECT json_group_array(callsign) AS names, count(*) AS n FROM members
+            WHERE status NOT IN ('migrated', 'pruned') AND callsign_fold IS NOT NULL
+            GROUP BY callsign_fold HAVING count(*) > 1 ORDER BY callsign_fold`).all() as { names: string; n: number }[];
+        for (const c of clashes) {
+            const names = (JSON.parse(c.names) as string[]).map((n) => JSON.stringify(n)).join(', ');
+            console.warn(`[DB] ⚠️  ${c.n} members hold one name in different cases: ${names}. All are kept and none is renamed; a sign-in restore by this name asks which one, and no one else can take it.`);
+        }
+    } catch (e) {
+        console.error('[DB] ⚠️  Could not set up callsign_fold; names outside A–Z may not be found or kept unique until the next boot.', e);
+    }
+}
+
 export function afterTransactionCommit(fn: () => void): void {
     if (!(db as any).inTransaction) {
         fn();
@@ -1906,6 +1947,7 @@ export function initSchema() {
     } catch (e) {
         console.error(`[DB] ⚠️  Could not build unique callsign index — this node has duplicate callsigns. De-duplicate the members table and restart to enforce uniqueness at the DB level. App-level rename checks remain active.`, e);
     }
+    migrateCallsignFold(db);
 
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at)`).run(); } catch { }
 
@@ -2766,7 +2808,7 @@ export function createCrowdfundProject(
     const now = new Date().toISOString();
     const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
     const existingCallsign = db.prepare(
-        "SELECT public_key FROM members WHERE name_fold(callsign) = name_fold(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
+        "SELECT public_key FROM members WHERE callsign_fold = name_fold(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
     ).get(baseCallsign, id) as any;
     const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${id.slice(0, 6)}` : baseCallsign;
 

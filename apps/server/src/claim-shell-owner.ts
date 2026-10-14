@@ -41,7 +41,7 @@ export async function claimFromShell(rawKey: string, rawCallsign: string, claimI
             if (member && !visitor && member.status !== 'active') return `That key's account here is ${member.status}.`;
             // An active member keeps their own callsign; the typed one is used only by a key that joins here.
             if (member && !visitor) { shown = member.callsign; }
-            const clash = member && !visitor ? null : conn.prepare(`SELECT 1 FROM members WHERE name_fold(callsign) = name_fold(?) AND public_key != ?
+            const clash = member && !visitor ? null : conn.prepare(`SELECT 1 FROM members WHERE callsign_fold = name_fold(?) AND public_key != ?
                 AND status NOT IN ('migrated', 'pruned')`).get(callsign, key);
             if (clash) return `The callsign @${callsign} is in use here. Pick another.`;
             const now = new Date().toISOString();

@@ -50,7 +50,7 @@ export const CURATED_LEARN_ITEMS: readonly CuratedItemDef[] = [
 export function ensureBeanPoolIdentity(): string {
     const existing = db.prepare(
         `SELECT public_key, is_treasury FROM members
-          WHERE name_fold(callsign) = name_fold(?) AND status NOT IN ('migrated', 'pruned')`
+          WHERE callsign_fold = name_fold(?) AND status NOT IN ('migrated', 'pruned')`
     ).get(BEANPOOL_CALLSIGN) as { public_key: string; is_treasury: number } | undefined;
 
     if (existing?.public_key) {

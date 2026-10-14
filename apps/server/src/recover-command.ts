@@ -51,7 +51,7 @@ function resolveMember(conn: Database.Database, who: string): { pubkey: string }
     const callsign = text.replace(/^@/, '');
     if (!callsign) return { reason: 'Give a member public key (64 hex digits) or @callsign.' };
     // As the unique index reads callsigns (db/db.ts idx_members_callsign_unique): a pruned or migrated row may share one.
-    const rows = conn.prepare(`SELECT public_key FROM members WHERE name_fold(callsign) = name_fold(?) AND is_visitor = 0
+    const rows = conn.prepare(`SELECT public_key FROM members WHERE callsign_fold = name_fold(?) AND is_visitor = 0
         AND status NOT IN ('migrated', 'pruned')`).all(callsign) as { public_key: string }[];
     if (rows.length === 0) return { reason: `There is no member @${callsign} on this server.` };
     if (rows.length > 1) return { reason: `More than one member is called @${callsign}; give the public key instead.` };

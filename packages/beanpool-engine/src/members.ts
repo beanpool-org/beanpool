@@ -9,7 +9,7 @@ import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
 import { avatarRefOf, avatarUrlOf, parseInviteTicketText, signedRequestBytes } from '@beanpool/core';
 import { prepared } from './statements.js';
-import { foldName, registerNameFunctions } from './names.js';
+import { foldName } from './names.js';
 
 type Db = Database.Database;
 
@@ -416,19 +416,22 @@ export function getMemberDirectoryRowsByKeys(db: Db, keys: string[], updatedAfte
 /**
  * The members whose name starts with `prefix`, case forgiven by the one name rule (`foldName`, any alphabet), shortest
  * name first, at most `limit` (`GET /api/members?q=`). Never an account that is not a person: an escrow, a project or a
- * treasury. LIKE with `%` and `_` escaped, so a typed wildcard is only a character. It reads every member row: SQLite's
- * `lower()` folds A–Z only, so the old range of idx_members_callsign_unique missed "Олег" for "ол", and no index can
- * hold `name_fold` (names.ts). Measured in the PR: 30,000 members in a few milliseconds.
+ * treasury. Answered from idx_members_callsign_fold (the server's db.ts migrateCallsignFold; SQLite's `lower()` folds A–Z
+ * only, so the old index on it missed "Олег" for "ол"): a range of the index, the folded prefix and every name after it
+ * that still starts with it, then LIKE with `%` and `_` escaped, so a typed wildcard is only a character. The range term
+ * is what the index answers (SQLite never turns a LIKE into a range on an index of an expression), and the `status` term
+ * is the index's own WHERE, without which the planner may not use it.
  */
 export function searchMemberDirectoryRows(db: Db, prefix: string, limit: number): DirectoryRow[] {
-    const escaped = foldName(prefix).replace(/[\\%_]/g, c => '\\' + c);
-    registerNameFunctions(db);
+    const folded = foldName(prefix);
+    const escaped = folded.replace(/[\\%_]/g, c => '\\' + c);
     return db.prepare(`SELECT ${directoryColumns(db)} FROM members
-        WHERE name_fold(callsign) LIKE @like ESCAPE '\\'
+        WHERE callsign_fold >= @p AND callsign_fold < (@p || char(1114111))
+          AND callsign_fold LIKE @like ESCAPE '\\'
           AND status NOT IN ('migrated', 'pruned')
           AND NOT coalesce(is_treasury, 0) AND substr(public_key, 1, 7) != 'escrow_' AND substr(public_key, 1, 8) != 'project_'
         ORDER BY length(callsign), callsign
-        LIMIT @limit`).all({ like: escaped + '%', limit }) as DirectoryRow[];
+        LIMIT @limit`).all({ p: folded, like: escaped + '%', limit }) as DirectoryRow[];
 }
 
 export function generateShortCode(): string {

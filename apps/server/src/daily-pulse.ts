@@ -18,7 +18,7 @@ let _stmtGetActivePulse: any = null;
 function getStmtFindPulseMember() {
     if (!_stmtFindPulseMember) {
         _stmtFindPulseMember = db.prepare(
-            "SELECT public_key, is_treasury FROM members WHERE name_fold(callsign) = name_fold(?) AND status NOT IN ('migrated', 'pruned')"
+            "SELECT public_key, is_treasury FROM members WHERE callsign_fold = name_fold(?) AND status NOT IN ('migrated', 'pruned')"
         );
     }
     return _stmtFindPulseMember;

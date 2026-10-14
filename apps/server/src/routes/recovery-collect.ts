@@ -80,7 +80,7 @@ import type { RouteDeps } from './types.js';
 function resolveCallsign(callsign: string): { pubkey?: string; ambiguous: boolean } {
     const rows = db.prepare(`
         SELECT public_key FROM members
-        WHERE name_fold(callsign) = ? AND status NOT IN ('migrated', 'pruned')
+        WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned')
     `).all(foldName(callsign)) as { public_key: string }[];
     if (rows.length > 1) return { ambiguous: true };
     return { pubkey: rows[0]?.public_key, ambiguous: false };

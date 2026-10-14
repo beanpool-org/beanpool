@@ -282,7 +282,7 @@ function safeVisitorCallsign(raw: unknown, publicKey: string): string | undefine
     const callsign = raw.trim();
     if (!callsign) return undefined;
     const holder = db.prepare(
-        `SELECT public_key FROM members WHERE name_fold(callsign) = name_fold(?) AND status NOT IN ('migrated', 'pruned')`
+        `SELECT public_key FROM members WHERE callsign_fold = name_fold(?) AND status NOT IN ('migrated', 'pruned')`
     ).get(callsign) as any;
     // Free, or already this same author's — anyone else's and we fall back.
     return !holder || holder.public_key === publicKey ? callsign : undefined;

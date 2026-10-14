@@ -132,7 +132,7 @@ export function isCallsignAvailable(callsign: string, excludePublicKey?: string)
     const norm = foldName(callsign.trim());
     if (callsign.trim().length < 2) return false;
     const row = db.prepare(
-        `SELECT 1 FROM members WHERE name_fold(callsign) = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ? LIMIT 1`
+        `SELECT 1 FROM members WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ? LIMIT 1`
     ).get(norm, excludePublicKey ?? '');
     return !row;
 }
@@ -205,7 +205,7 @@ export function findRecoveryCandidates(callsign: string, options: { exact?: bool
                        AND s.generation = (SELECT MAX(generation) FROM recovery_shares
                                             WHERE owner_pubkey = m.public_key)) AS sso_count
             FROM members m
-            WHERE ${options.exact ? 'name_fold(m.callsign) = ?' : "name_fold(m.callsign) LIKE ? ESCAPE '\\'"}
+            WHERE ${options.exact ? 'm.callsign_fold = ?' : "m.callsign_fold LIKE ? ESCAPE '\\'"}
               AND m.status NOT IN ('migrated', 'pruned')
         )
         WHERE sso_count > 0

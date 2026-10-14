@@ -99,6 +99,7 @@ import { DM_PIN_STORE_UNREAD_TEXT } from '../dm-peer-pins';
 import { routeChat } from '../chat-route';
 import { dmQuoteFor } from '../chat-actions';
 import { GROUP_KEYS_FOR_DM_TEXT } from '../group-chat-lines';
+import { GROUP_KEY_STORE_UNREAD_TEXT } from '../group-chat-keys';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
 import { dmPeerPinsStoreKey, dmLinesAtUpdateStoreKey, dmConversationsSeenStoreKey } from '../storage-keys';
 import { encryptDmFormat2 } from '../e2e-crypto';
@@ -4880,6 +4881,136 @@ describe('the DM guard list: one bounded list per community file, never read as 
             expect(took).toEqual([CHILD, PLAIN]);
         }, 180_000);
     }
+
+    // SEC1 (Fable's security review of the trio, finding 1): the key memory (group_chat_key_state, group_chat_epochs) can't be
+    // read, GXFk's fault. Ben's DM is sent in with the list full since before it was met, pruned while everything read, then
+    // relisted with PUPPET as an event's, an enterprise's or an unlocked group's chat while the fault lasts. keptInDmPins took
+    // a key-memory fault for "held", so it answered "not pinned": the row took the node's type and every readable path carried
+    // the words. A fault there fails closed now (amendment 7 §3 iv, as the pins' own store): with only the pins knowing the id,
+    // "not a DM" is never answered, a send refuses with the key store's sentence, the pass writes nothing of the id, and once
+    // the memory reads it is a DM again.
+    async function keyMemoryFault(): Promise<{ restore: () => void; hits: () => number }> {
+        const db: any = await getDb();
+        let hits = 0;
+        const bad = (q: string) => /FROM group_chat_key_state|FROM group_chat_epochs/.test(q);
+        const first = vi.mocked(db.getFirstAsync); const realFirst = first.getMockImplementation()!;
+        const all = vi.mocked(db.getAllAsync); const realAll = all.getMockImplementation()!;
+        first.mockImplementation(async (q: string, p?: unknown) => { if (bad(q)) { hits++; throw new Error('database disk image is malformed'); } return realFirst(q, p); });
+        all.mockImplementation(async (q: string, p?: unknown) => { if (bad(q)) { hits++; throw new Error('database disk image is malformed'); } return realAll(q, p); });
+        return { restore: () => { first.mockImplementation(realFirst); all.mockImplementation(realAll); }, hits: () => hits };
+    }
+    /** Every readable path the relisted id can reach (each screen's sends, the id-keyed forms, the reports), and the DM screen's send. */
+    async function everyReadablePath(id: string, w: string) {
+        const reasons = reportsTaken();
+        const took = formsTaken(w);
+        const posts = groupPosts.length;
+        const paths: Record<string, unknown> = {};
+        for (const screen of Object.values(READABLE_SCREENS)) for (const [name, send] of Object.entries(screen.sends)) paths[name] = (await onScreen(took, () => send(id, `${w} (${name})`))).err ?? 'went';
+        for (const [name, form] of Object.entries(ID_FORMS)) paths[name] = (await onScreen(took, () => form({ g: id, ev: id, ent: id }, w))).err ?? 'went';
+        const reports: Record<string, unknown> = {};
+        for (const [name, form] of Object.entries(REPORT_FORMS)) reports[name] = await reportOnScreen(took, reasons, () => form.send({ g: id, ev: id, ent: id }, w));
+        // An old node's group edit goes base64 under plaintext-v1: read on the decoded body the stand-in node took.
+        const readableEdits = groupPosts.slice(posts).filter((p) => p.body?.nonce === 'plaintext-v1' && Buffer.from(String(p.body.ciphertext ?? ''), 'base64').toString('utf8').includes(w)).length;
+        const dmScreen = await sent(id, `${w} (dm screen)`);
+        return { paths, reports, nodeReads: took.length + readableEdits, dmScreen: { err: dmScreen.err, notice: dmScreen.notice, plaintext: dmScreen.plaintext.length, readBy: dmScreen.readBy } };
+    }
+    for (const kind of ['event_thread', 'enterprise_thread', 'group_thread'] as const) {
+        for (const when of ['the fault from the relist on', 'the fault only after the relist (control)', 'no fault (control)'] as const) {
+            it(`SEC1 (${kind}; ${when}) the key memory can't be read: Ben's DM sent in with the list full, pruned, relisted with PUPPET; the pins keep the id, so it is never the node's chat: every readable path refuses and the node reads none of the words; the fault cleared, a DM again`, async () => {
+                const filler = Array.from({ length: 26_886 }, () => randomUUID());
+                h.store.set(seenKey(), JSON.stringify(filler));
+                const { first, pin } = await anaHasSentToBen();
+                expect(first).toEqual(sealedToBen);
+                expect(pin).toMatchObject({ peer: ben.publicKey, checked: true });
+                expect(seenIn()).not.toContain(dm.id);
+                node.convs = [];
+                await syncMessages(ana.publicKey);   // the prune, everything readable
+                node.lines = node.lines.filter((l) => l.conversationId !== dm.id);
+                expect(typeOf(dm.id)).toBeNull();
+                if (kind === 'group_thread') unlocked.add(dm.id);
+                node.convs = [{ id: dm.id, type: kind, participants: [ana.publicKey, ben.publicKey, puppet.publicKey] }];
+                const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+                let fault: Awaited<ReturnType<typeof keyMemoryFault>> | null = null;
+                let under: Record<string, unknown>;
+                try {
+                    if (when === 'the fault from the relist on') fault = await keyMemoryFault();
+                    await syncMessages(ana.publicKey);   // the relist
+                    if (when === 'the fault only after the relist (control)') fault = await keyMemoryFault();
+                    under = { row: typeOf(dm.id), knownDm: await dbPort.isKnownDmConversation(dm.id).catch((e: any) => `threw ${e?.name}`), listed: (seenIn() as string[]).includes(dm.id), ...(await everyReadablePath(dm.id, 'The code is 4821')) };
+                    if (fault) expect(fault.hits()).toBeGreaterThan(0);
+                } finally {
+                    fault?.restore();
+                }
+                await syncMessages(ana.publicKey);   // the fault cleared
+                const cleared = { row: typeOf(dm.id), knownDm: await dbPort.isKnownDmConversation(dm.id), ...(await everyReadablePath(dm.id, 'The code is 4822')) };
+                warn.mockRestore();
+                console.log(`SEC1 (${kind}; ${when}) ${JSON.stringify({ under, cleared })}`);
+                // `why`: what the report dialog says of the words (case 14): 'unread' while the key memory can't tell, else 'private'.
+                const refusedEverywhere = (r: any, why: 'private' | 'unread') => {
+                    for (const [name, v] of Object.entries(r.paths)) expect(v, name).not.toBe('went');
+                    for (const [name, v] of Object.entries(r.reports) as [string, any][]) {
+                        expect(v, name).toEqual({ err: null, wordsLeftOut: why, nodeReads: [], reasons: [REPORT_FORMS[name].picked] });
+                    }
+                    expect(r.nodeReads).toBe(0);
+                    expect(r.dmScreen.plaintext).toBe(0);
+                    expect(r.dmScreen.readBy).not.toContain('Puppet');
+                };
+                const sealedToBenHere = { err: null, notice: null, plaintext: 0, readBy: ['Ben'] };
+                // While the key memory can't be read and only the pins know the id, the DM screen's own send waits too (the cost:
+                // it can't tell a held group from this DM), with the key store's sentence; nothing is sealed to anyone.
+                const waitsForKeyMemory = { err: 'GroupChatKeyError', notice: GROUP_KEY_STORE_UNREAD_TEXT, plaintext: 0, readBy: [] };
+                // The fault from the relist on: the pins are the only memory that knows the id, so no row is written from the
+                // node's type, a known-DM ask can't answer (it throws, never "not a DM"), and nothing goes in the list. In the
+                // controls the relist pass read the key memory, so the row says dm and answers.
+                const canTell = when !== 'the fault from the relist on';
+                expect(under.row).toBe(canTell ? 'dm' : null);
+                expect(under.knownDm).toBe(canTell ? true : 'threw GroupChatKeyError');
+                expect(under.listed).toBe(false);
+                refusedEverywhere(under, canTell ? 'private' : 'unread');
+                expect(under.dmScreen).toEqual(canTell ? sealedToBenHere : waitsForKeyMemory);
+                expect(cleared.row).toBe('dm');
+                expect(cleared.knownDm).toBe(true);
+                refusedEverywhere(cleared, 'private');
+                expect(cleared.dmScreen).toEqual(sealedToBenHere);
+                expect(storedPins(ana)[dm.id.toLowerCase()]).toMatchObject({ peer: ben.publicKey, checked: true });
+            }, 240_000);
+        }
+    }
+
+    // SEC1h, the other side of SEC1's rule: a group whose keys this phone holds, its id in the pins too (a node listed it as a
+    // DM once, and the pins heard it at first sight). While the key memory can't be read the phone can't tell it from a DM, so
+    // nothing is written from it: neither the retype of rows held under another type (holdDmTypes) nor the pass's type check
+    // (heldConversationType) makes its row a DM or puts it in the list. Taking the pins' word there ("a DM") turned its row
+    // into a DM for good: an existing row's type is never rewritten. The memory back, it is its group, and the list never had it.
+    it('SEC1h a held group whose id the pins keep, while the key memory can\'t be read: its row stays its group and nothing goes in the list; the memory back, the same', async () => {
+        await phoneOf(ana);
+        const g: Conv = { id: randomUUID(), type: 'group_thread', participants: [ana.publicKey, puppet.publicKey] };
+        sql.prepare('INSERT OR REPLACE INTO group_chat_key_state (group_id, highest, after) VALUES (?, 1, 0)').run(`${ana.publicKey}/${g.id.toLowerCase()}`);
+        node.convs = [dm, g];
+        await syncMessages(ana.publicKey);
+        expect(typeOf(g.id)).toBe('group_thread');
+        h.store.set(dmPeerPinsStoreKey(ana.publicKey, FILE_A), JSON.stringify({ pins: { ...storedPins(ana), [g.id.toLowerCase()]: { peer: puppet.publicKey, since: new Date().toISOString(), by: 'first-seen' } } }));
+        restarted();
+        const listed = () => ((seenIn() as string[] | null) ?? []).some((s) => s.toLowerCase() === g.id.toLowerCase());
+        expect(listed()).toBe(false);
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const fault = await keyMemoryFault();
+        const r: Record<string, unknown> = {};
+        try {
+            await syncSingleConversation(g.id);   // holdDmTypes: the group's row, held as a group_thread
+            r.afterRetype = { row: typeOf(g.id), listed: listed() };
+            await syncMessages(ana.publicKey);    // heldConversationType: the node lists it as its group
+            r.afterPass = { row: typeOf(g.id), listed: listed() };
+            expect(fault.hits()).toBeGreaterThan(0);
+        } finally {
+            fault.restore();
+        }
+        await syncMessages(ana.publicKey);
+        r.back = { row: typeOf(g.id), listed: listed() };
+        warn.mockRestore();
+        console.log(`SEC1h ${JSON.stringify(r)}`);
+        expect(r).toEqual({ afterRetype: { row: 'group_thread', listed: false }, afterPass: { row: 'group_thread', listed: false }, back: { row: 'group_thread', listed: false } });
+    }, 120_000);
 
     // ── §3.4 amendment 8 (DESIGN-dm-guard-reset-fable.md + the director's amendment): the member's way out of a list that
     // can't be read is the same Chat memory reset as the pins', never the phone's own. The list goes first, in the pins'

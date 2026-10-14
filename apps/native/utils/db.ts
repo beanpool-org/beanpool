@@ -10,7 +10,7 @@ import {
     dmLineKind, dmQuoteLabel, dmQuoteFrom, isEncryptedNonce, V2_NONCE_PREFIX, DM_LINE_NOT_ENCRYPTED_TEXT,
     type DMKeyContext, type DmPart,
 } from './e2e-crypto';
-import { DmNotLockedError, DmKeyChangedError, isNodeReadableChatType } from './dm-lock';
+import { DmNotLockedError, DmKeyChangedError, isNodeReadableChatType, isKeyStoreUnread } from './dm-lock';
 import {
     createDmPinBook, dmPinFor, dmSightFor, dmPinId, pinKeyOf, pinAtFirstSight, applyDmListings, applySightVerdict, applyResetVerdict, judgeFirstSight,
     settleFirstSight, isUnplacedSight, isHeldLostSight, markHeldLost, isDmPinStoreError, isDmPinsFullError, DmPinsFullError, isPinnableId,
@@ -40,7 +40,7 @@ import type { GroupSuccessionData } from './group-succession';
 import { mergeIncomingMessage, isRemovedPayload, accountDeletedAuthor, accountDeletedMetadata, stillHoldsWords, withoutSendState, type LocalMessageRow } from './chat-sync';
 import { DELETED_BY_AUTHOR_TEXT } from './chat-actions';
 import type { BeanPoolIdentity } from './identity';
-import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, forgetGroupKeys, GroupChatKeyError, GroupKeysRequestError, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
+import { groupKeyring, joinGroupWithEpoch, approveWithEpoch, removeWithEpoch, forgetGroupKeys, GroupChatKeyError, GroupKeysRequestError, GROUP_KEY_STORE_UNREAD_TEXT, type GroupKeyring, type GroupKeyStore } from './group-chat-keys';
 import {
     unlockWithOldWords, newPhoneQrPayload, checkNewPhone, confirmNewPhone, handOversHeld, noteConfirmations, confirmedNotes,
     lockedHistoryCounts, noteLockedHistoryCount, type ConfirmedNote, type HistoryGroup, type NewPhoneCheck, type OldWordsResult,
@@ -2692,8 +2692,12 @@ async function rememberDmConversations(ids: string[], database?: SQLite.SQLiteDa
 /**
  * True when this community file's DM pins keep anything for the id (a pin, a rule-5 record, a heldLost mark): it is a DM
  * whatever the node now says (§3.4 amendment 7 §3 iv). False when they keep nothing, or can't be read (the list decides),
- * and for a group whose keys this phone has held (or whose key memory can't be read): the held guard is asked before
- * anything, so a node listing a held group as a DM, which the pins hear at first sight, never makes it one here.
+ * and for a group whose keys this phone has held: the held guard is asked before anything, so a node listing a held group
+ * as a DM, which the pins hear at first sight, never makes it one here. A key memory that can't be read can't tell a held
+ * group from the DM the pins keep, so it fails closed as the pins' own store does (Fable's security review of the trio,
+ * finding 1): it throws the key store's sentence (GroupChatKeyError 'store'), "can't tell", which knownDmConversationId
+ * passes on when nothing else knows the id. Taking it as held made it "not pinned", and a pruned DM relisted as an
+ * event's, an enterprise's or an unlocked group's chat while the key memory couldn't be read sent its words readable (SEC1).
  * `pinsMustRead` (a send): pins that can't be read throw (DmPinStoreError), so nothing goes on the list's word alone.
  * `myPub`: this identity's key when the caller has it (a sync pass asks every row), so the identity isn't loaded per ask.
  */
@@ -2709,7 +2713,13 @@ async function keptInDmPins(conversationId: string, database: SQLite.SQLiteDatab
         return false;
     }
     if (!dmSightFor(pins, conversationId)) return false;
-    return !(await heldInKeyMemory(conversationId, me).catch(() => true));
+    let held: boolean;
+    try {
+        held = await heldInKeyMemory(conversationId, me);
+    } catch {
+        throw new GroupChatKeyError(GROUP_KEY_STORE_UNREAD_TEXT, 'store');
+    }
+    return !held;
 }
 
 /**
@@ -2732,7 +2742,11 @@ export async function knownDmConversationId(conversationId: string, seenByFold?:
     if (!conversationId) return null;
     const folded = conversationId.toLowerCase();
     const db = await getDb().catch(() => null);
-    const pinned = db ? await keptInDmPins(conversationId, db, opts.pinsMustRead, opts.me) : false;
+    let pinned = false;
+    let keyMemoryUnread: unknown = null;
+    if (db) {
+        try { pinned = await keptInDmPins(conversationId, db, opts.pinsMustRead, opts.me); } catch (e) { if (!isKeyStoreUnread(e)) throw e; keyMemoryUnread = e; }
+    }
     let listed: string[] | null;
     if (seenByFold !== undefined) listed = seenByFold ? (seenByFold.get(folded) ?? []) : null;
     else listed = await dmConversationsSeen().then((seen) => [...seen].filter((s) => s.toLowerCase() === folded), () => null);
@@ -2755,6 +2769,10 @@ export async function knownDmConversationId(conversationId: string, seenByFold?:
         if (line === conversationId) return line;
     } catch {}
     const known = listed?.[0] ?? row ?? line ?? (pinned ? conversationId : null);
+    // The pins keep the id, but the key memory can't say whether it is a held group's: with nothing else knowing it, "not a
+    // DM" is never answered (SEC1). Every caller fails closed on it: a send refuses, a pass writes nothing of the id, a route
+    // and a screen take it as a DM.
+    if (known === null && keyMemoryUnread) throw keyMemoryUnread;
     if (known === null && listed === null) throw new DmGuardUnreadError();
     return known;
 }
@@ -6862,7 +6880,7 @@ export async function cancelMarketplaceRequest(transactionId: string, buyerPubli
  * the reason picked goes alone, so a report is never held up and "Child safety" still alerts (#1938 confirmation 9, the
  * director's ruling: no readable words for a known DM's id anywhere), and the cause is kept for the dialog (case 14):
  * 'private' for a known DM's id (GroupChatKeyError), 'unread' when the guard can't tell (DmPinStoreError,
- * DmGuardUnreadError, or anything else it throws). The server sorts and alerts on its own rule over the full reason
+ * DmGuardUnreadError, the key memory unreadable (GroupChatKeyError 'store'), or anything else it throws). The server sorts and alerts on its own rule over the full reason
  * (@beanpool/core reportKind), which also reads the words; so when they stay here and that rule reads the full reason as
  * child safety, "Child safety" goes as the reason, and the urgent alert fires as it would have with the words (#1938
  * confirmation 10, finding 1, the director's ruling (i)). The words still never leave.
@@ -6875,7 +6893,7 @@ async function reportReasonFor(id: string, reason: string): Promise<{ reason: st
         return { reason };
     } catch (e) {
         const sendAs = reportKind(reason) === 'child safety' ? CHILD_SAFETY_REASON : picked ?? 'Other';
-        return { reason: sendAs, wordsLeftOut: e instanceof GroupChatKeyError ? 'private' : 'unread' };
+        return { reason: sendAs, wordsLeftOut: e instanceof GroupChatKeyError && e.code !== 'store' ? 'private' : 'unread' };
     }
 }
 

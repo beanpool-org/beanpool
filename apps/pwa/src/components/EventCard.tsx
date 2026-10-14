@@ -398,7 +398,10 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 {t('Join')}
                             </a>
                         ) : !isHost && open ? (
-                            <p className="m-0 text-xs text-nature-500 dark:text-nature-400">{t('The link to join shows here once you tap Going.')}</p>
+                            // Going already: the host has not added one (yet). Never "tap Going" to someone who did.
+                            <p data-testid="event-join-hint" className="m-0 text-xs text-nature-500 dark:text-nature-400">
+                                {p.myRsvp === 'going' ? t('The host has not added a link to join yet.') : t('The link to join shows here once you tap Going.')}
+                            </p>
                         ) : null}
                     </div>
                 )}

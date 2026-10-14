@@ -498,6 +498,15 @@ describe('Event times on the card and the detail (DESIGN-event-times §4, slice 
         expect(screen.getByText('The link to join shows here once you tap Going.')).toBeInTheDocument();
     });
 
+    it('never tells someone who is Going to tap Going: with no link yet, it says the host has not added one', () => {
+        const { unmount } = render(<EventDetail post={{ ...online, myRsvp: 'going' }} identity={identity} />);
+        expect(screen.getByTestId('event-join-hint')).toHaveTextContent('The host has not added a link to join yet.');
+        expect(within(screen.getByTestId('event-online')).queryByText(/tap Going/)).not.toBeInTheDocument();
+        unmount();
+        render(<EventDetail post={{ ...online, myRsvp: null }} identity={identity} />);
+        expect(screen.getByTestId('event-join-hint')).toHaveTextContent('The link to join shows here once you tap Going.');
+    });
+
     it('never makes a link of anything but http(s)', () => {
         render(<EventDetail post={{ ...online, eventLink: 'javascript:alert(1)' }} identity={identity} />);
         expect(screen.queryByTestId('event-join')).not.toBeInTheDocument();

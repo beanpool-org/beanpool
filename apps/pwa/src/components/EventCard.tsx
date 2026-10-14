@@ -24,6 +24,7 @@ import {
     isEventHostView, isEventOpen,
 } from '../lib/events';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
+import { t } from '@beanpool/core';
 import { visitorDistanceText } from '../lib/visitor-lobby';
 
 interface RsvpState {
@@ -244,7 +245,7 @@ export function EventCard({ post, identity, distanceKm, viewMode = 'grid', onOpe
     const p = rsvp.livePost;
     // An online event has no place and no distance: "Online" stands where they go (DESIGN-event-times §4).
     const place = p.eventOnline
-        ? 'Online'
+        ? t('Online')
         : visitor
             ? (distanceKm != null ? visitorDistanceText(distanceKm) : '')
             : [p.eventPlaceName, distanceKm != null ? formatDistance(distanceKm) : ''].filter(Boolean).join(' · ');
@@ -384,7 +385,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                 {p.eventOnline && (
                     <div data-testid="event-online" className="flex flex-col items-start gap-1 min-w-0">
                         <span className="w-full min-w-0 break-words text-sm font-semibold text-nature-700 dark:text-nature-300">
-                            <span aria-hidden="true">🌐 </span>Online
+                            <span aria-hidden="true">🌐 </span>{t('Online')}
                         </span>
                         {joinHref(p.eventLink) ? (
                             <a
@@ -394,10 +395,10 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
                             >
-                                Join
+                                {t('Join')}
                             </a>
                         ) : !isHost && open ? (
-                            <p className="m-0 text-xs text-nature-500 dark:text-nature-400">The link to join shows here once you tap Going.</p>
+                            <p className="m-0 text-xs text-nature-500 dark:text-nature-400">{t('The link to join shows here once you tap Going.')}</p>
                         ) : null}
                     </div>
                 )}

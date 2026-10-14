@@ -17,14 +17,14 @@ describe('the zone line under the times (§3)', () => {
         expect(eventZoneLine(false, SYDNEY, 'pin', 'Australia/Sydney')).toBeNull();
         expect(eventZoneLine(false, null, null, 'Australia/Sydney')).toBeNull();
     });
-    it('in person elsewhere: "Lagos time (where the pin is)"', () => {
-        expect(eventZoneLine(false, LAGOS, 'pin', 'Australia/Sydney')).toEqual({ label: 'Lagos time', why: '(where the pin is)' });
+    it('in person elsewhere: Lagos time, because of the pin', () => {
+        expect(eventZoneLine(false, LAGOS, 'pin', 'Australia/Sydney')).toEqual({ label: 'Lagos time', why: 'pin' });
     });
     it('a picked zone always shows, even the device\'s own', () => {
         expect(eventZoneLine(false, SYDNEY, 'picked', 'Australia/Sydney')).toEqual({ label: 'Sydney time', why: null });
     });
-    it('online: always, "(your device)"; with no zone, the line asks for one', () => {
-        expect(eventZoneLine(true, SYDNEY, 'device', 'Australia/Sydney')).toEqual({ label: 'Sydney time', why: '(your device)' });
+    it('online: always, because of this device; with no zone, the line asks for one', () => {
+        expect(eventZoneLine(true, SYDNEY, 'device', 'Australia/Sydney')).toEqual({ label: 'Sydney time', why: 'device' });
         expect(eventZoneLine(true, null, null, null)).toEqual({ label: null, why: null });
     });
 });

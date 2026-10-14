@@ -6,7 +6,7 @@
  * online event's is this device's, from one Intl call; the node turns clock + zone into the instant.
  */
 
-import { localClockMs, utcOffsetName, zoneLabelFor } from '@beanpool/core';
+import { formatDate, localClockMs, utcOffsetName, zoneLabelFor } from '@beanpool/core';
 import type { EventTimeAdjusted, EventZone } from './api';
 
 /** Where the form's zone came from: the pin (in person), this device (online), or the host's own pick. */
@@ -52,8 +52,9 @@ export function zoneOptions(zones: EventZone[]): Array<{ tz: string; text: strin
 export interface EventZoneLine {
     /** "Lagos time"; null when the form has no zone to name (online, and this device cannot name its own). */
     label: string | null;
-    /** Why that zone: "(where the pin is)", "(your device)", or nothing when the host picked it. */
-    why: string | null;
+    /** Why that zone: the pin's ("(where the pin is)"), this device's ("(your device)"), or null when the host picked it.
+     *  A reason, not words: the form says it in the member's language (t()). */
+    why: 'pin' | 'device' | null;
 }
 
 /**
@@ -67,11 +68,11 @@ export interface EventZoneLine {
 export function eventZoneLine(online: boolean, zone: EventZone | null, source: EventZoneSource | null, deviceTz: string | null): EventZoneLine | null {
     if (online) {
         if (!zone) return { label: null, why: null };
-        return { label: zone.label, why: source === 'device' ? '(your device)' : null };
+        return { label: zone.label, why: source === 'device' ? 'device' : null };
     }
     if (!zone) return null;
     if (source !== 'picked' && zone.tz === deviceTz) return null;
-    return { label: zone.label, why: source === 'pin' ? '(where the pin is)' : null };
+    return { label: zone.label, why: source === 'pin' ? 'pin' : null };
 }
 
 /**
@@ -109,13 +110,11 @@ export function eventClockBody(start: string, end: string, online: boolean, zone
     };
 }
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
 function clockWords(local: string): { time: string; date: string } | null {
     const ms = localClockMs(local);
     if (!Number.isFinite(ms)) return null;
     const d = new Date(ms);
-    return { time: `${d.getUTCHours()}:${String(d.getUTCMinutes()).padStart(2, '0')}`, date: `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}` };
+    return { time: `${d.getUTCHours()}:${String(d.getUTCMinutes()).padStart(2, '0')}`, date: formatDate(d, 'day-month', { utc: true }) };
 }
 
 /**

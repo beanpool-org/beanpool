@@ -30,7 +30,7 @@ import {
     approxInstantMs, deviceZone, deviceZoneId, eventAdjustedWords, eventClockBody, eventLinkProblem, eventZoneLine, zoneOptions,
     type EventZoneSource,
 } from '../lib/event-zone';
-import { offsetMinutesOf, zoneLabelFor } from '@beanpool/core';
+import { offsetMinutesOf, t, zoneLabelFor } from '@beanpool/core';
 import { haversineDistance, loadRadiusSettings } from '../lib/geo';
 import { nearRead, nearParams, listingDistanceKm } from '../lib/listings-near';
 import { MARKETPLACE_CATEGORIES, MARKETPLACE_CATEGORIES_BY_ID, POST_TYPE_COLORS } from '../lib/marketplace';
@@ -2333,11 +2333,20 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 if (!line) return null;
                                 return (
                                     <div data-testid="event-zone-line" className="mt-2 text-sm text-nature-600 dark:text-nature-300">
-                                        {line.label ? (
-                                            <span>Times are <strong className="font-bold text-nature-800 dark:text-nature-100">{line.label}</strong>{line.why ? ` ${line.why}` : ''} · </span>
-                                        ) : (
-                                            <span>Pick the time zone these times are in · </span>
-                                        )}
+                                        {(() => {
+                                            // Whole sentences for the words layer; the zone's name is then set in bold where the
+                                            // sentence (in whatever language) puts it.
+                                            const zone = line.label;
+                                            const sentence = !zone ? t('Pick the time zone these times are in')
+                                                : line.why === 'pin' ? t('Times are {zone} (where the pin is)', { zone })
+                                                : line.why === 'device' ? t('Times are {zone} (your device)', { zone })
+                                                : t('Times are {zone}', { zone });
+                                            const at = zone ? sentence.indexOf(zone) : -1;
+                                            return at >= 0 ? (
+                                                <span>{sentence.slice(0, at)}<strong className="font-bold text-nature-800 dark:text-nature-100">{zone}</strong>{sentence.slice(at + zone!.length)}</span>
+                                            ) : <span>{sentence}</span>;
+                                        })()}
+                                        <span> · </span>
                                         {!eventZonePicking && (
                                             <button
                                                 type="button"
@@ -2345,16 +2354,16 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                                 onClick={openEventZonePicker}
                                                 className="inline-flex items-center min-h-[48px] bg-transparent border-0 p-0 font-bold text-violet-800 dark:text-violet-200 underline cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 rounded-sm"
                                             >
-                                                Change
+                                                {t('Change')}
                                             </button>
                                         )}
                                         {eventZonePicking && (
                                             <div className="mt-1">
-                                                <label htmlFor="event-zone" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Time zone</label>
+                                                <label htmlFor="event-zone" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">{t('Time zone')}</label>
                                                 {eventZoneList == null ? (
-                                                    <p className="m-0 text-xs text-nature-500 dark:text-nature-400">Loading the list…</p>
+                                                    <p className="m-0 text-xs text-nature-500 dark:text-nature-400">{t('Loading the list…')}</p>
                                                 ) : eventZoneList.length === 0 ? (
-                                                    <p className="m-0 text-xs text-nature-500 dark:text-nature-400">The list could not be loaded. Try again in a moment.</p>
+                                                    <p className="m-0 text-xs text-nature-500 dark:text-nature-400">{t('The list could not be loaded. Try again in a moment.')}</p>
                                                 ) : (
                                                     <select
                                                         id="event-zone"
@@ -2363,7 +2372,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                                         onChange={e => pickEventZone(e.target.value)}
                                                         className="w-full min-w-0 py-3 px-4 rounded-xl border bg-white dark:bg-nature-800 text-nature-900 dark:text-white text-[15px] focus:outline-none focus:ring-2 focus:ring-violet-300 border-nature-200 dark:border-nature-700"
                                                     >
-                                                        {!eventZone && <option value="">Pick a time zone</option>}
+                                                        {!eventZone && <option value="">{t('Pick a time zone')}</option>}
                                                         {zoneOptions(eventZone && !eventZoneList.some(z => z.tz === eventZone.tz) ? [eventZone, ...eventZoneList] : eventZoneList).map(o => (
                                                             <option key={o.tz} value={o.tz}>{o.text}</option>
                                                         ))}
@@ -2376,12 +2385,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             })()}
                         </div>
 
-                        <div role="radiogroup" aria-label="Where" data-testid="event-where" className="flex flex-col gap-1">
-                            <span className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Where</span>
+                        <div role="radiogroup" aria-label={t('Where')} data-testid="event-where" className="flex flex-col gap-1">
+                            <span className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">{t('Where')}</span>
                             <div className="flex flex-wrap gap-2">
-                                {([[false, 'At a place'], [true, 'Online']] as const).map(([online, label]) => (
+                                {[false, true].map(online => (
                                     <button
-                                        key={label}
+                                        key={String(online)}
                                         type="button"
                                         role="radio"
                                         aria-checked={eventOnline === online}
@@ -2392,7 +2401,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                                 : 'border-nature-200 dark:border-nature-700 bg-white dark:bg-nature-800 text-nature-700 dark:text-nature-200'
                                         }`}
                                     >
-                                        <span aria-hidden="true">{eventOnline === online ? '◉ ' : '○ '}</span>{label}
+                                        <span aria-hidden="true">{eventOnline === online ? '◉ ' : '○ '}</span>{online ? t('Online') : t('At a place')}
                                     </button>
                                 ))}
                             </div>
@@ -2400,12 +2409,12 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
 
                         {eventOnline && (
                             <div>
-                                <label htmlFor="event-link" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">Link to join</label>
+                                <label htmlFor="event-link" className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">{t('Link to join')}</label>
                                 <input
                                     id="event-link"
                                     type="url"
                                     inputMode="url"
-                                    placeholder="https://"
+                                    placeholder={t('https://')}
                                     maxLength={500}
                                     value={eventJoinLink}
                                     onChange={e => { setEventJoinLink(e.target.value); setValidationErrors(prev => { const n = new Set(prev); n.delete('event_link'); return n; }); }}
@@ -2414,7 +2423,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 {validationErrors.has('event_link') ? (
                                     <p className="m-0 mt-1 text-xs font-semibold text-red-600 dark:text-red-300">{eventLinkProblem(eventJoinLink)}</p>
                                 ) : (
-                                    <p className="m-0 mt-1 text-xs text-nature-500 dark:text-nature-400">Only people who tap Going see it.</p>
+                                    <p className="m-0 mt-1 text-xs text-nature-500 dark:text-nature-400">{t('Only people who tap Going see it.')}</p>
                                 )}
                             </div>
                         )}

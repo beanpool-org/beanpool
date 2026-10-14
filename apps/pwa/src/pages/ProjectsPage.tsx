@@ -336,14 +336,16 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
     return (
         <div className="flex flex-col h-full relative" style={{ overflowY: 'auto', overflowX: 'hidden', paddingBottom: 'var(--bottom-nav-offset)' }}>
             {/* Header — scrolls away with the list. Only the section switcher below stays pinned:
-                on a 640px-tall phone at 1.3x text, a fully sticky header left ~29px for the list. */}
-            <header className="bg-nature-900 px-4 pt-4 pb-3 flex flex-col gap-3">
+                on a 640px-tall phone at 1.3x text, a fully sticky header left ~29px for the list.
+                No ground of its own, nor the two rows under it: the screen sits on the doodle wallpaper
+                like Home and the Market (index.css "Doodle wallpaper"); the cards keep their fills. */}
+            <header className="px-4 pt-4 pb-3 flex flex-col gap-3">
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex justify-between items-center">
                     <div>
-                        <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+                        <h1 className="text-xl font-bold text-nature-950 dark:text-white tracking-tight flex items-center gap-2">
                             <span>🌱</span> The Commons
                         </h1>
-                        <p className="text-nature-400 text-sm mt-0.5">Community decisions, the Commons, and your groups: projects, enterprises and more</p>
+                        <p className="text-nature-700 dark:text-nature-300 text-sm mt-0.5">Community decisions, the Commons, and your groups: projects, enterprises and more</p>
                     </div>
                     {identity && (
                         <button
@@ -381,22 +383,22 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 {/* Commons Pool & Available Governance Credits */}
                 {enterprisesMode !== 'preview' && (<>
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-2 gap-3 pt-1">
-                    <div className="bg-nature-950/70 border border-nature-800 rounded-xl p-3">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-nature-400">
+                    <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
                             Commons Pool
                         </div>
-                        <div className="text-base sm:text-lg font-black text-white mt-1 truncate">
+                        <div className="text-base sm:text-lg font-black text-nature-950 dark:text-white mt-1 truncate">
                             {balanceInfo ? Number(balanceInfo.commonsBalance ?? balanceInfo.commons ?? 0).toFixed(2) : '0.00'} 🫘
                         </div>
                     </div>
-                    <div className="bg-nature-950/70 border border-nature-800 rounded-xl p-3" data-testid="voice-credits-card">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-nature-400">
+                    <div className="bg-white dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3" data-testid="voice-credits-card">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-nature-600 dark:text-nature-300">
                             Voice credits for money votes
                         </div>
-                        <div className="text-base sm:text-lg font-black text-white mt-1 truncate">
+                        <div className="text-base sm:text-lg font-black text-nature-950 dark:text-white mt-1 truncate">
                             {Math.floor(myPoolVoting?.voiceCredits ?? 0)}
                         </div>
-                        <div className="text-[10px] text-nature-400 mt-0.5 leading-snug">
+                        <div className="text-[10px] text-nature-600 dark:text-nature-300 mt-0.5 leading-snug">
                             {myPoolVoting && !myPoolVoting.hasCompletedTrade
                                 ? 'Opens after your first completed trade'
                                 : 'From completed trades · N votes cost N×N'}
@@ -407,7 +409,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             </header>
 
             {/* Section Switcher: Decide vs Groups — the one sticky row */}
-            <div className="sticky top-0 z-40 bg-nature-900 px-4 py-2" data-testid="commons-section-tabs">
+            <div className="sticky top-0 z-40 px-4 py-2" data-testid="commons-section-tabs">
                 {/* Emoji over label below `sm`: side by side, the three tabs need ~400px and pushed
                     Groups off a 320px screen at 1.3x text. */}
                 <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex bg-nature-950 p-1 rounded-xl border border-nature-800">
@@ -439,7 +441,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             </div>
 
             {/* Filters scroll away with the content */}
-            <div className="bg-nature-900 border-b border-nature-800 px-4 pb-3 shadow-sm empty:hidden" data-testid="commons-filters">
+            <div className="px-4 pb-3 empty:hidden" data-testid="commons-filters">
                 {/* Filter Controls: Groups Category */}
                 {activeSection === 'groups' && (
                     <div className="max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full flex items-center justify-between gap-2 pt-1">
@@ -496,7 +498,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
             ) : (
                 <>
                 <div className="px-4 pt-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full">
-                    <div className="p-3 bg-nature-950/60 border border-nature-800 rounded-xl text-xs text-nature-300 leading-relaxed">
+                    <div className="p-3 bg-white dark:bg-nature-950/60 border border-nature-200 dark:border-nature-800 rounded-xl text-xs text-nature-800 dark:text-nature-300 leading-relaxed">
                         👥 <strong>Groups:</strong> A group is a place for some people rather than everyone. Projects and enterprises hold Beans; chat groups hold none. Being in a group does not change your trust or your vote.
                     </div>
                 </div>
@@ -506,10 +508,10 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                     {loadingGroups ? (
                         <div className="py-12 text-center text-sm text-nature-400">Loading groups...</div>
                     ) : filteredGroups.length === 0 ? (
-                        <div className="text-center py-16 px-4 bg-nature-950/40 rounded-2xl border border-nature-800/80">
+                        <div className="text-center py-16 px-4 bg-white dark:bg-nature-950/40 rounded-2xl border border-nature-200 dark:border-nature-800/80">
                             <div className="text-4xl mb-3">👥</div>
-                            <h3 className="text-base font-bold text-white mb-1">No groups found</h3>
-                            <p className="text-xs text-nature-400 max-w-xs mx-auto mb-4">
+                            <h3 className="text-base font-bold text-nature-950 dark:text-white mb-1">No groups found</h3>
+                            <p className="text-xs text-nature-600 dark:text-nature-400 max-w-xs mx-auto mb-4">
                                 {groupCategoryFilter === 'my_groups'
                                     ? 'You have not joined any groups yet.'
                                     : 'Start a working group, guild, or team to coordinate discussions.'}

@@ -7,7 +7,7 @@ import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migrati
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { addDecisionScope } from './decision-scope-migration.js';
 import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount, replaceLoneSurrogates } from '@beanpool/core';
-import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
+import { registerGeoFunctions, registerNameFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
@@ -38,6 +38,8 @@ export const db: Database.Database = new Database(DB_PATH);
 // `haversine_km`, for the posts listing searched by distance (G4). A function lives on the connection, not in the file,
 // and this is the one connection that runs the listing; the read-only handles opened on backups and snapshots never do.
 registerGeoFunctions(db);
+// `name_fold`, the one rule by which two member names are the same name (names.ts in the engine).
+registerNameFunctions(db);
 
 const pendingPostCommitHooks: (() => void)[] = [];
 
@@ -2764,7 +2766,7 @@ export function createCrowdfundProject(
     const now = new Date().toISOString();
     const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
     const existingCallsign = db.prepare(
-        "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
+        "SELECT public_key FROM members WHERE name_fold(callsign) = name_fold(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
     ).get(baseCallsign, id) as any;
     const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${id.slice(0, 6)}` : baseCallsign;
 

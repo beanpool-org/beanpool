@@ -19,7 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
-import { getMember, isVisitorKey } from '@beanpool/engine';
+import { getMember, isVisitorKey, registerNameFunctions } from '@beanpool/engine';
 import { generateBreakGlassCode, hashBreakGlassCode } from './break-glass-code.js';
 import { noteSecurityEvent } from './services/security-signal.js';
 
@@ -51,7 +51,7 @@ function resolveMember(conn: Database.Database, who: string): { pubkey: string }
     const callsign = text.replace(/^@/, '');
     if (!callsign) return { reason: 'Give a member public key (64 hex digits) or @callsign.' };
     // As the unique index reads callsigns (db/db.ts idx_members_callsign_unique): a pruned or migrated row may share one.
-    const rows = conn.prepare(`SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND is_visitor = 0
+    const rows = conn.prepare(`SELECT public_key FROM members WHERE name_fold(callsign) = name_fold(?) AND is_visitor = 0
         AND status NOT IN ('migrated', 'pruned')`).all(callsign) as { public_key: string }[];
     if (rows.length === 0) return { reason: `There is no member @${callsign} on this server.` };
     if (rows.length > 1) return { reason: `More than one member is called @${callsign}; give the public key instead.` };
@@ -66,6 +66,7 @@ export function recoverOwner(who: string, dir = dataDir()): RecoverResult {
     const dbPath = path.join(dir, 'state.db');
     if (!fs.existsSync(dbPath)) return { ok: false, reason: `No node database at ${dbPath}. Run this inside the node's container, or set BEANPOOL_DATA_DIR.` };
     const conn = new Database(dbPath, { fileMustExist: true });
+    registerNameFunctions(conn);
     try {
         conn.pragma('busy_timeout = 10000');
         const found = resolveMember(conn, who);

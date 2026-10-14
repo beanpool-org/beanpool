@@ -28,7 +28,7 @@ export function migrateProjectsAndCommonsToEnterprises(targetDb: Database.Databa
     const getUniqueCallsign = (title: string, selfPubkey: string): string => {
         const base = (title || 'Project').trim().slice(0, 40) || 'Project';
         const existing = targetDb.prepare(
-            "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
+            "SELECT public_key FROM members WHERE name_fold(callsign) = name_fold(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
         ).get(base, selfPubkey) as any;
         if (!existing) return base;
         const suffix = selfPubkey.slice(0, 6);

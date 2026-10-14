@@ -7790,7 +7790,7 @@ export function createTreasury(
     // so this pre-check agrees with the index that will actually enforce it on INSERT. Under
     // the old `status!='migrated'` a pruned member's callsign still read as taken here, while
     // the index happily allowed it — a treasury name refused for a member the node has let go.
-    if (db.prepare("SELECT 1 FROM members WHERE lower(callsign)=lower(?) AND status NOT IN ('migrated', 'pruned')").get(trimmed)) {
+    if (db.prepare("SELECT 1 FROM members WHERE name_fold(callsign)=name_fold(?) AND status NOT IN ('migrated', 'pruned')").get(trimmed)) {
         throw new Error('That name is already taken');
     }
     if (opts.leadKeeperPubkey && isOperatorSwitchedOff(opts.leadKeeperPubkey)) {
@@ -8695,7 +8695,7 @@ export function createProject(proposerPubkey: string, title: string, description
     const now = new Date().toISOString();
     const baseCallsign = (project.title || 'Project').trim().slice(0, 40) || 'Project';
     const existingCallsign = db.prepare(
-        "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
+        "SELECT public_key FROM members WHERE name_fold(callsign) = name_fold(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
     ).get(baseCallsign, project.id) as any;
     const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${project.id.slice(0, 6)}` : baseCallsign;
 

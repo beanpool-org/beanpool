@@ -9,6 +9,7 @@ import type Database from 'better-sqlite3';
 import crypto from 'node:crypto';
 import { avatarRefOf, avatarUrlOf, parseInviteTicketText, signedRequestBytes } from '@beanpool/core';
 import { prepared } from './statements.js';
+import { foldName, registerNameFunctions } from './names.js';
 
 type Db = Database.Database;
 
@@ -413,22 +414,21 @@ export function getMemberDirectoryRowsByKeys(db: Db, keys: string[], updatedAfte
 }
 
 /**
- * The members whose name starts with `prefix`, case forgiven as the callsign check forgives it (SQLite's lower(), ASCII),
- * shortest name first, at most `limit` (`GET /api/members?q=`). Never an account that is not a person: an escrow, a
- * project or a treasury. Answered from idx_members_callsign_unique: a range of the index, `prefix` and every name after
- * it that still starts with it, then LIKE with `%` and `_` escaped, so a typed wildcard is only a character. The range
- * term is what the index answers (SQLite never turns a LIKE into a range on an index of an expression), and the
- * `status` term is the index's own WHERE, without which the planner may not use it.
+ * The members whose name starts with `prefix`, case forgiven by the one name rule (`foldName`, any alphabet), shortest
+ * name first, at most `limit` (`GET /api/members?q=`). Never an account that is not a person: an escrow, a project or a
+ * treasury. LIKE with `%` and `_` escaped, so a typed wildcard is only a character. It reads every member row: SQLite's
+ * `lower()` folds A–Z only, so the old range of idx_members_callsign_unique missed "Олег" for "ол", and no index can
+ * hold `name_fold` (names.ts). Measured in the PR: 30,000 members in a few milliseconds.
  */
 export function searchMemberDirectoryRows(db: Db, prefix: string, limit: number): DirectoryRow[] {
-    const escaped = prefix.replace(/[\\%_]/g, c => '\\' + c);
+    const escaped = foldName(prefix).replace(/[\\%_]/g, c => '\\' + c);
+    registerNameFunctions(db);
     return db.prepare(`SELECT ${directoryColumns(db)} FROM members
-        WHERE lower(callsign) >= lower(@p) AND lower(callsign) < (lower(@p) || char(1114111))
-          AND lower(callsign) LIKE @like ESCAPE '\\'
+        WHERE name_fold(callsign) LIKE @like ESCAPE '\\'
           AND status NOT IN ('migrated', 'pruned')
           AND NOT coalesce(is_treasury, 0) AND substr(public_key, 1, 7) != 'escrow_' AND substr(public_key, 1, 8) != 'project_'
         ORDER BY length(callsign), callsign
-        LIMIT @limit`).all({ p: prefix, like: escaped + '%', limit }) as DirectoryRow[];
+        LIMIT @limit`).all({ like: escaped + '%', limit }) as DirectoryRow[];
 }
 
 export function generateShortCode(): string {

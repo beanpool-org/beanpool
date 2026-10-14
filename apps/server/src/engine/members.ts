@@ -5,7 +5,7 @@
 import { db, seedNodeRolesFromGenesis, afterTransactionCommit } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { ledger } from './ledger.js';
-import { getMember, getProfile, isNodeMember, isVisitorKey, prepared, publicMemberCard, setMemberPhoto, type Member, type MemberProfile } from '@beanpool/engine';
+import { foldName, getMember, getProfile, isNodeMember, isVisitorKey, prepared, publicMemberCard, setMemberPhoto, type Member, type MemberProfile } from '@beanpool/engine';
 import { recordActivity as recordFeedActivity } from '../db/activity-feed-db.js';
 import { bumpMembersVersion } from './versions.js';
 import { isAcceptablePhotoValue } from './avatar.js';
@@ -129,10 +129,10 @@ export function seedGenesisMember(adminPublicKey: string, callsign: string): Mem
  * ("every name is taken") — and tsc cannot catch it, since `!someObject` is valid TS.
  */
 export function isCallsignAvailable(callsign: string, excludePublicKey?: string): boolean {
-    const norm = callsign.trim().toLowerCase();
-    if (norm.length < 2) return false;
+    const norm = foldName(callsign.trim());
+    if (callsign.trim().length < 2) return false;
     const row = db.prepare(
-        `SELECT 1 FROM members WHERE lower(callsign) = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ? LIMIT 1`
+        `SELECT 1 FROM members WHERE name_fold(callsign) = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ? LIMIT 1`
     ).get(norm, excludePublicKey ?? '');
     return !row;
 }
@@ -171,7 +171,7 @@ export interface RecoveryCandidate {
  * row, which was N+1 queries on that same public endpoint.
  */
 export function findRecoveryCandidates(callsign: string, options: { exact?: boolean } = {}): RecoveryCandidate[] {
-    const norm = callsign.trim().toLowerCase();
+    const norm = foldName(callsign.trim());
     if (!norm) return [];
     // PREFIX by default. Callsigns are unique per node, so the member who wanted `paul` and was
     // given `paul12` has no reason to remember the digits months later — and an exact match returns
@@ -205,7 +205,7 @@ export function findRecoveryCandidates(callsign: string, options: { exact?: bool
                        AND s.generation = (SELECT MAX(generation) FROM recovery_shares
                                             WHERE owner_pubkey = m.public_key)) AS sso_count
             FROM members m
-            WHERE ${options.exact ? 'lower(m.callsign) = ?' : "lower(m.callsign) LIKE ? ESCAPE '\\'"}
+            WHERE ${options.exact ? 'name_fold(m.callsign) = ?' : "name_fold(m.callsign) LIKE ? ESCAPE '\\'"}
               AND m.status NOT IN ('migrated', 'pruned')
         )
         WHERE sso_count > 0
@@ -462,7 +462,7 @@ export function updateProfile(
         const requested = update.callsign.trim().slice(0, 32);
         if (requested !== existing.callsign) {
             if (requested.length < 2) throw new Error('CALLSIGN_TOO_SHORT');
-            if (requested.toLowerCase() !== String(existing.callsign || '').toLowerCase()) {
+            if (foldName(requested) !== foldName(String(existing.callsign || ''))) {
                 if (!isCallsignAvailable(requested, publicKey)) throw new Error('CALLSIGN_TAKEN');
             }
             callsign = requested;

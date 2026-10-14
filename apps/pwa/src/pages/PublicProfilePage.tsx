@@ -540,7 +540,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                             <span className="text-3xl select-none">{balanceInfo.tier?.emoji || '🌱'}</span>
                             <div className="min-w-0">
                                 <h4 className="font-extrabold text-nature-950 dark:text-white text-base truncate">{balanceInfo.tier?.name || 'Member'}</h4>
-                                <p className="text-xs text-nature-450 dark:text-nature-400 mt-0.5">{Math.round(balanceInfo.earnedCredit || 0)} trust points</p>
+                                <p className="text-xs text-nature-700 dark:text-nature-400 mt-0.5">{Math.round(balanceInfo.earnedCredit || 0)} trust points</p>
                             </div>
                         </div>
                         <div className="flex items-center gap-1.5">
@@ -911,7 +911,7 @@ export function PublicProfilePage({ identity, pubkey, onBack, onMessage, onNavig
                                                             {resolveAvatarUrl(r.target_avatar) ? (
                                                                 <img src={resolveAvatarUrl(r.target_avatar)!} alt={r.target_callsign || 'avatar'} className="w-7 h-7 rounded-full object-cover border" />
                                                             ) : (
-                                                                <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs bg-oat-105 border">
+                                                                <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs bg-oat-100 dark:bg-nature-800 border">
                                                                     {r.target_callsign?.charAt(0).toUpperCase() || '?'}
                                                                 </div>
                                                             )}

@@ -16,7 +16,7 @@ Your trust badge shows how much trust you have built:
 
 A member who has not traded yet shows **FOUNDING** on their posts.
 
-Trust comes from a vouch when you join, from completed trades, and from trust an admin has granted.
+Trust comes from a vouch when you join, from completed trades, and from trust an admin has granted. In a community that confirms its members, the credit line a confirmed member gets counts too.
 
 ## They unlock nothing
 
@@ -30,7 +30,7 @@ What your trust does change is how deep your credit line can go. See "Your credi
 - **What builds your trust:** how much you have traded, with how many people, and your rating.
 - On posts and profiles, next to each member's name.
 
-In the **Market**, the **Trust** filter can show only posts from members with a certain badge or higher.
+On the phone, the Market's **Trust** filter can show only posts from members with a certain badge or higher, or only newcomers. In the web app, **🌱 New members** shows posts from members who have not traded yet.
 
 ## Admins and badges
 

@@ -7,7 +7,7 @@ related: blocking, getting-help, when-a-deal-goes-wrong, the-pulse
 
 ## What you can report
 
-- **A post in the Market:** open it and tap **Report Post**.
+- **A post in the Market:** open it and tap **Report Post** (in the web app, **Report**).
 - **An event:** open it and tap **Report event**.
 - **A Pulse post:** tap the flag on it.
 - **A project or an enterprise:** open it and tap **Report Project** or **Report Enterprise** at the bottom.
@@ -22,7 +22,7 @@ Choose a reason (**Spam or scam**, **Offensive content**, **Misleading post**, *
 
 There is no separate button to report a person or a single message in the phone app yet. Block them instead: blocking also sends a report to your community's moderators. See "Blocking someone".
 
-In the web app, a chat with one person has a report button at the top: a flag, with the word **Report** on a wide screen.
+In the web app, a chat with one person has a report button at the top: a flag, with the word **Report** on a wide screen. A member's profile in the web app has one too: the flag at the top, or **Report Member** lower down. Both use the same reasons.
 
 ## What happens next
 
@@ -33,6 +33,8 @@ Your report goes to your community's moderators: the owners and admins who run i
 - The moderators see who sent each report. Nobody else is told who reported: not the person you reported, and not anyone else who reported the same thing.
 
 These alerts come under **Marketplace Activity** in your notification settings. On your phone's lock screen each one says only "Your community has a notice for you."; open BeanPool to read it. See "Notifications". The web app has no notifications: it shows each alert while it is open, or the next time you open it.
+
+The owners and admins are told when any report comes in: only its kind and how many are waiting, never who sent it or what it is about. Reports that follow soon after are told together as one line.
 
 If one of your own posts is removed by the moderators, you get an alert saying so, and why if they gave a reason. It does not say who reported it.
 

@@ -38,7 +38,7 @@ import { ProjectsPage } from './pages/ProjectsPage';
 import { PulsePage } from './pages/PulsePage';
 import { HomePage } from './pages/HomePage';
 import { HeaderControls, HeaderTitle, HelpIcon, useDotOnlyChip } from './components/HeaderControls';
-import { helpSheetFor, tourStepForTab, tourSteps, webHelpKey } from '@beanpool/core';
+import { helpSheetFor, tourStepForTab, tourSteps, webHelpKey, type HomeSearchSettings } from '@beanpool/core';
 import { TourBar } from './components/TourBar';
 import { HelpDialog } from './components/HelpDialog';
 import { OPEN_HELP_EVENT, askTourAgain, endTour, moveTour, openHelp, useTour } from './lib/tour-store';
@@ -161,6 +161,9 @@ export function App() {
     // A saved search's See more on Home: the words the Market's search opens with.
     const [openMarketSearch, setOpenMarketSearch] = useState<string | null>(null);
     const clearMarketSearch = useCallback(() => setOpenMarketSearch(null), []);
+    // The Market's "Save this search to Home": the search Home opens the saved search's dialog with, taken once.
+    const [saveSearchToHome, setSaveSearchToHome] = useState<HomeSearchSettings | null>(null);
+    const clearSaveSearch = useCallback(() => setSaveSearchToHome(null), []);
     const [openNewPost, setOpenNewPost] = useState(false);
     const [openNewPostGroupId, setOpenNewPostGroupId] = useState<string | undefined>(undefined);
     // An event's "Show on map" (docs/events-on-the-map.md §3): the map centres on it.
@@ -966,6 +969,8 @@ export function App() {
                             {activeTab === 'home' && (
                                 <HomePage
                                     identity={identity}
+                                    saveSearch={saveSearchToHome}
+                                    onSaveSearchTaken={clearSaveSearch}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     onSeeWords={() => { setSettingsInitialMode('seed'); setShowSettings(true); }}
                                 />
@@ -978,6 +983,7 @@ export function App() {
                                     onPostOpened={() => setOpenMarketPostId(null)}
                                     openSearch={openMarketSearch}
                                     onSearchOpened={clearMarketSearch}
+                                    onSaveSearch={(settings) => { setSaveSearchToHome(settings); setActiveTab('home'); }}
                                     onNavigate={(tab, ctxId) => navigateToTab(tab, ctxId)}
                                     onOpenProfile={(pubkey) => setOpenProfilePubkey(pubkey)}
                                     transactions={myTransactions}

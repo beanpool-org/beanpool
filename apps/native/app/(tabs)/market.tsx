@@ -40,8 +40,9 @@ import { CATEGORY_FILTER_CHIPS, categoryChipLabel, categoryPanelReducer } from '
 import {
     MARKET_TYPE_PILLS, marketFilterFromLink, marketSearchFromLink, marketSecondRow, feedPostVisible, marketFiltersActive, marketFilterSummary, marketFeedQuery, distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketTypeFilter, type MarketFilterState,
-    marketSearchQuery, marketSearchMatches,
+    marketSearchQuery, marketSearchMatches, marketSearchToSave, saveSearchParam,
 } from '../../utils/market-filters';
+import { SaveSearchButton } from '../../components/SaveSearchButton';
 import { localDaysAgo } from '../../utils/feed-sections';
 import { useNodeProfile } from '../../utils/use-node-profile';
 import { useReaderFeatures } from '../../utils/use-reader-features';
@@ -1184,6 +1185,9 @@ export default function MarketScreen() {
         trustLabel: id => TRUST_FILTERS.find(t => t.id === id)?.label,
         groupName: id => userGroups.find(g => g.id === id)?.name,
     });
+    // "Save this search to Home" (Marty, 7 Oct): a member's search, Offers and Needs only, handed to Home, which opens the
+    // saved search's own sheet with it (or says why it can't: the same search there, five there, Home full).
+    const toSave = identity && !membersOnly ? marketSearchToSave(filterState, searchQuery) : null;
     const clearAllFilters = () => {
         setSearchQuery('');
         setFilter('all');
@@ -1204,6 +1208,15 @@ export default function MarketScreen() {
     // Out of the list's 16dp gutter: these rows bring their own 16dp margins, as they did above the list.
     const ListHeader = (
         <View style={{ marginHorizontal: -16 }}>
+            {toSave && (
+                <View style={{ marginHorizontal: 16, marginBottom: 8 }}>
+                    <SaveSearchButton
+                        q={toSave.q}
+                        colors={colors}
+                        onPress={() => router.navigate({ pathname: '/(tabs)', params: { saveSearch: saveSearchParam(toSave) } })}
+                    />
+                </View>
+            )}
             {noArea && (
                 <View style={{ marginHorizontal: 16, marginBottom: 8 }}>
                     <NoAreaLine colors={colors} onPress={() => router.push('/your-area' as any)} />

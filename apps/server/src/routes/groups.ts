@@ -166,6 +166,16 @@ export function createGroupRoutes(deps: RouteDeps): Router {
         const limit = clampLimit(ctx.query.limit);
         const offset = clampOffset(ctx.query.offset);
         const viewerPubkey = ctx.state?.actor as string | undefined;
+        // Where anyone can join in a minute (`openMembership`), which groups someone is in is theirs: `?member=` answers
+        // only for the signer's own key. Anyone else's would rebuild an open group's roster one key at a time, the list
+        // GET /api/groups/:id/members refuses an outsider (DESIGN-global-member-privacy-fable.md §5; #1939 review B1).
+        // Before the ETag, so a refusal is never a 304.
+        if (member !== undefined && getProfileSwitches().openMembership && member !== viewerPubkey) {
+            ctx.status = 403;
+            ctx.set('Cache-Control', 'private, no-store');
+            ctx.body = { error: 'Join the group to see who is here', code: 'join_to_see' };
+            return;
+        }
 
         const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}`;
         const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);

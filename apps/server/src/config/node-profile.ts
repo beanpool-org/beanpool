@@ -400,7 +400,17 @@ export function getConfiguredSwitches(profile: NodeProfile = getNodeProfile()): 
  * money kept on and the open door shut wherever the ledger has moved.
  */
 export function getProfileSwitches(profile: NodeProfile = getNodeProfile()): ProfileSwitches {
-    return lockKnocksToInvites(lockToPrivatePreview(lockToLedger({ ...getConfiguredSwitches(profile), ...NOT_BUILT_YET })));
+    return lockOnDemandToOpenMembership(lockKnocksToInvites(lockToPrivatePreview(lockToLedger({ ...getConfiguredSwitches(profile), ...NOT_BUILT_YET }))));
+}
+
+/**
+ * Where the whole directory is refused (`openMembership`), both apps must find people on demand: with `membersOnDemand`
+ * off they would keep asking for the whole list and be told no (#1939 review N2). So the one holds the other on,
+ * whatever the overrides say.
+ */
+function lockOnDemandToOpenMembership(s: ProfileSwitches): ProfileSwitches {
+    if (s.openMembership) s.membersOnDemand = true;
+    return s;
 }
 
 /**

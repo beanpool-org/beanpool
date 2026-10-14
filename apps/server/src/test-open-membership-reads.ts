@@ -15,9 +15,13 @@
  *      still answers; the whole invite tree and someone else's branch are 403, the signer's own branch 200; the feed has
  *      no `member_joined` line and keeps the posts; an open group's roster is 403 `join_to_see` to a member outside it and
  *      to an invitee, 200 to its members and convenor; the card keeps its count and convenor, and an invitee's card keeps
- *      who invited them, face and all (amendment 1 item 2); an invite-only group is still 404 to an outsider.
+ *      who invited them, face and all (amendment 1 item 2); an invite-only group is still 404 to an outsider; which groups
+ *      someone is in (`GET /api/groups?member=`) answers only for the signer's own key, 403 `join_to_see` for anyone
+ *      else's, If-None-Match or not (#1939 review B1).
  *   3. The operator's override `nodeProfile.openMembership = false` on the global node: every one of those reads answers
  *      as before, the exhausted nearest budget included, and `features` has no `openMembership`.
+ *   4. `openMembership` holds `membersOnDemand` on whatever the overrides say, on the global node and on a local one
+ *      switched open; with both off, the operator's choice holds (#1939 review N2).
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-open-membership-reads)
  */
@@ -150,6 +154,8 @@ async function main() {
         ['invite-only group roster, outsider', `/api/groups/${quiet.id}/members`, dan],
         ['invite-only group roster, member', `/api/groups/${quiet.id}/members`, carol],
         ['groups list', '/api/groups', dan],
+        ['groups list, another member\'s groups', `/api/groups?member=${bob.pubKeyHex}`, dan],
+        ['groups list, own groups', `/api/groups?member=${bob.pubKeyHex}`, bob],
     ];
     /** The same bytes whatever run made them: what this run made afresh (runOwn) and the times it wrote are named, not printed. */
     const normalise = (text: string) => {
@@ -192,6 +198,8 @@ async function main() {
         `local: an open group's roster answers a member outside it, as before (got ${local['open group roster, outsider'].status})`);
     assert(local['open group roster, invitee (the invite landing)'].status === 200,
         `local: an invitee's landing reads the faces, as before (got ${local['open group roster, invitee (the invite landing)'].status})`);
+    assert(local['groups list, another member\'s groups'].status === 200 && local['groups list, another member\'s groups'].body.includes('Open Garden'),
+        `local: ?member= answers for another member's key, as before (got ${local['groups list, another member\'s groups'].status})`);
     let localNearest = 0;
     for (let i = 0; i < 101; i++) if ((await get(`/api/members?${at}&limit=2`, carol)).status === 200) localNearest++;
     assert(localNearest === 101, `local: 101 nearest reads in a day all answer, no budget (${localNearest} of 101)`);
@@ -274,6 +282,21 @@ async function main() {
     const hidden = await get(`/api/groups/${quiet.id}/members`, dan);
     assert(hidden.status === 404, `global: an invite-only group's roster is still 404 to an outsider (got ${hidden.status})`);
     assert((await get(`/api/groups/${quiet.id}/members`, carol)).status === 200, 'global: and 200 to its member');
+    // Which groups someone is in (#1939 review B1): `?member=` over every key found would rebuild the roster refused above.
+    for (const [p, inm, label] of [
+        [`/api/groups?member=${bob.pubKeyHex}`, {}, 'another member\'s key'],
+        [`/api/groups?member=${bob.pubKeyHex}`, { 'If-None-Match': '*' }, 'another member\'s key (If-None-Match: *)'],
+        [`/api/groups?member=${dan.pubKeyHex}&member=${bob.pubKeyHex}`, {}, 'the signer\'s key and another'],
+    ] as Array<[string, Record<string, string>, string]>) {
+        const r = await get(p, dan, inm);
+        assert(r.status === 403 && r.body?.code === 'join_to_see' && !r.text.includes('Open Garden'),
+            `global: ?member= with ${label} → 403 join_to_see (got ${r.status} ${r.text.slice(0, 80)})`);
+    }
+    const ownGroups = await get(`/api/groups?member=${bob.pubKeyHex}`, bob);
+    assert(ownGroups.status === 200 && ownGroups.body.some((g: any) => g.name === 'Open Garden'),
+        `global: ?member= with the signer's own key → 200 with their groups (got ${ownGroups.status})`);
+    const allGroups = await get('/api/groups', dan);
+    assert(allGroups.status === 200 && allGroups.body.some((g: any) => g.name === 'Open Garden'), `global: the list without ?member= still answers (got ${allGroups.status})`);
 
     // ── 3. The operator's override on the global node: every read as before ──
     console.log('\n── 3. nodeProfile.openMembership = false on the global node ──');
@@ -292,9 +315,32 @@ async function main() {
     assert((await get(`/api/groups/${open.id}/members`, dan)).status === 200, 'override: the open group\'s roster answers a member outside it');
     assert((await get(`/api/groups/${open.id}/members?status=active`, eve)).status === 200, 'override: and the invitee\'s landing reads the faces');
     assert((await get(`/api/members?${at}&limit=2`, carol)).status === 200, 'override: the nearest read has no budget (Carol, spent above, reads)');
+    const othersOff = await get(`/api/groups?member=${bob.pubKeyHex}`, dan);
+    assert(othersOff.status === 200 && othersOff.text.includes('Open Garden'), `override: ?member= answers for another member's key (got ${othersOff.status})`);
     db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.openMembership`);
     assert((await features(dan)).openMembership === true, 'override removed: global is open-membership again');
+
+    // ── 4. openMembership holds membersOnDemand on, whatever the overrides say (#1939 review N2) ──
+    console.log('\n── 4. openMembership ⇒ membersOnDemand ──');
+    const setOverride = (name: string, value: string | null) => value === null
+        ? db.prepare('DELETE FROM node_config WHERE key = ?').run(`${NODE_PROFILE_KEY}.${name}`)
+        : db.prepare('INSERT INTO node_config (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(`${NODE_PROFILE_KEY}.${name}`, value);
+    setOverride('membersOnDemand', 'false');
+    const lockedGlobal = await features(dan);
+    assert(lockedGlobal.openMembership === true && lockedGlobal.membersOnDemand === true,
+        `global + membersOnDemand=false: still on demand while openMembership is on (got ${JSON.stringify({ o: lockedGlobal.openMembership, d: lockedGlobal.membersOnDemand })})`);
+    setOverride('openMembership', 'false');
+    assert(!('membersOnDemand' in await features(dan)), 'global + both off: the operator\'s membersOnDemand=false holds');
+    setOverride('openMembership', null);
+    setOverride('membersOnDemand', null);
     delete process.env.NODE_PROFILE;
+    setOverride('openMembership', 'true');
+    const lockedLocal = await features(dan);
+    assert(lockedLocal.openMembership === true && lockedLocal.membersOnDemand === true,
+        `local + openMembership=true: membersOnDemand comes on with it (got ${JSON.stringify({ o: lockedLocal.openMembership, d: lockedLocal.membersOnDemand })})`);
+    setOverride('openMembership', null);
+    const localAgain = await features(dan);
+    assert(!('openMembership' in localAgain) && !('membersOnDemand' in localAgain), 'local, override removed: neither switch, as before');
 
     console.log(`\n${passed}/${run} passed`);
     process.exit(passed === run ? 0 : 1);

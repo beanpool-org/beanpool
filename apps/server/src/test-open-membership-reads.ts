@@ -207,7 +207,7 @@ async function main() {
         `/api/members?${at}`, '/api/community/members', `/api/community/members?${at}`,
     ];
     for (const p of WHOLE) {
-        for (const inm of [{}, { 'If-None-Match': 'W/"members-1"' }]) {
+        for (const inm of [{}, { 'If-None-Match': 'W/"members-1"' }] as Record<string, string>[]) {
             const r = await get(p, dan, inm);
             assert(r.status === 403 && r.body?.code === 'members_on_demand' && typeof r.body?.error === 'string',
                 `global: ${p}${'If-None-Match' in inm ? ' (If-None-Match)' : ''} → 403 members_on_demand (got ${r.status} ${r.text.slice(0, 80)})`);

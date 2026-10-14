@@ -125,6 +125,9 @@ async function main() {
     stopPricingAggregatorWorker();
     // About 1,500 signed reads from one address: the gateway's minute throttle is another suite's (test-global-server-limits).
     updateGatewayConfig({ ...DEFAULT_GATEWAY_CONFIG, rateLimiting: { enabled: false, maxRequestsPerMinute: 120 } });
+    // This suite reads the whole directory and its delta as the bytes the small forms must match, and makes hundreds of nearest reads. Where `openMembership` is on (the global node's default) those reads are refused, which
+    // test-open-membership-reads proves; here the operator's override keeps them, and nothing this suite measures depends on it.
+    db.prepare("INSERT INTO node_config (key, value) VALUES ('nodeProfile.openMembership', 'false') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run();
 
     const insert = db.prepare(`INSERT INTO members (public_key, callsign, status, joined_at, invited_by, invite_code, is_treasury,
                                    area_lat, area_lng, area_updated_at, profile_updated_at)

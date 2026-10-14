@@ -80,7 +80,8 @@ export interface ProfileSwitches {
     /** Invites (engine/invites.ts): a member makes a code or an offline ticket, an owner or admin a seed invite, and
      *  whoever holds one joins with it. Off: nobody here makes one, members and node roles alike, and none joins
      *  anyone, a code already in the database included (the routes are 404 `feature_off`, and the engine refuses
-     *  underneath). The invites already made, and the invite tree, still read. Off on the global node (Marty,
+     *  underneath). The invites already made, and the invite tree, still read (where `openMembership` is on, a member's
+     *  own branch of the tree). Off on the global node (Marty,
      *  2026-10-01): an invite needs no sign-in, so one sign-in account minting 20 a day grew into hundreds of accounts
      *  that no sign-in stood behind, past the door's one-account-one-member rule (D1) and its per-address limit
      *  (FABLE-sec-global-abuse HIGH-1). There the open door is the only way in. A member of the global node joining a

@@ -28,7 +28,11 @@ interface PairingSession {
 }
 
 const PAIRING_TTL_MS = 120_000; // 2 minutes
-const MAX_SESSIONS = 500;
+// Live sessions on the whole server. Measured (#1950, the real functions, --expose-gc): ~0.7 KB a waiting session
+// (578 B here, 682 B in the review), so ~6-7 MB at the cap; one holding its largest payload ~17 KB, so ~170 MB only if
+// every session held one, which takes ~670 addresses for 2 minutes (init + transfer both spend the pairing bucket, 15 a
+// minute per address). At 500, ~17 addresses filled it for 2 minutes and pairing answered "at capacity" to everyone.
+const MAX_SESSIONS = 10_000;
 const MAX_CIPHERTEXT_HEX_LEN = 16_384; // 16KB max encrypted payload
 
 const sessions = new Map<string, PairingSession>();

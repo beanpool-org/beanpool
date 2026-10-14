@@ -87,7 +87,7 @@ import { doorRateLimit, rekeyStatusRateLimit } from '../auth-rate-limit.js';
 import { checkAdminPassword, notePasswordFailure, notePasswordSuccess } from '../password-brake.js';
 import { issue2faSessionToken, requireAdminRole, refusePasswordRetired, type AdminRole } from '../admin-auth.js';
 import { restampPasswordSession } from '../admin-key-auth.js';
-import { avatarUrlOf } from '@beanpool/core';
+import { avatarUrlOf, postRulesFor } from '@beanpool/core';
 import { tellOwedWatcher } from '../services/directory-mirror.js';
 import { noteNewReport, reportKind } from '../services/alerts.js';
 import { cleanLabel } from '../config/clean-label.js';
@@ -1552,6 +1552,8 @@ router.get('/api/ledger/balance/:publicKey', async (ctx) => {
     }
     const trust = getMemberTrustProfile(publicKey);
     const listedOffer = hasListedOffer(publicKey);
+    // Gate 1 holds only where Beans are on (engine/posts.ts createPost): a node without them blocks no Need.
+    const { offerFirst } = postRulesFor(getProfileSwitches().beans);
     ctx.body = {
         ...getBalance(publicKey),
         callsign: member.callsign,
@@ -1563,7 +1565,7 @@ router.get('/api/ledger/balance/:publicKey', async (ctx) => {
         elderVouchedBy: member.elderVouchedBy || null,
         hasListedOffer: listedOffer,
         // Gate 1: blocked from posting Needs / accepting Offers until an Offer is listed.
-        isBlockedFromTrading: !listedOffer,
+        isBlockedFromTrading: offerFirst && !listedOffer,
         // Gate 2 (offer covenant): must keep a LIVE Offer to spend into a negative balance.
         hasLiveOffer: hasLiveOffer(publicKey),
     };

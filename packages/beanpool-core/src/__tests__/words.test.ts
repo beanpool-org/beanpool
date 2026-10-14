@@ -357,7 +357,7 @@ describe('dates and numbers from tables', () => {
         expect([say('uk', 'day-month-year'), say('id', 'time'), say('fa', 'day-month-year', 'long')]).toEqual(['15 жовт. 2026 р.', '09.05', '15 اکتبر 2026']);
     });
 
-    it('capitals on an event card are a per-language choice: Turkish dotted İ, Greek without accents', () => {
+    it('capitals on an event card are a per-language choice: Turkish dotted İ, Greek without accents but with the dialytika', () => {
         const oct15 = new Date(Date.UTC(2026, 9, 15, 9, 5));
         const caps = (lang: Lang) => formatDate(oct15, 'weekday-day-month', { utc: true, lang, caps: true });
         expect(caps('en')).toBe('THU 15 OCT');
@@ -367,6 +367,29 @@ describe('dates and numbers from tables', () => {
         expect(formatDate(oct15, 'weekday', { utc: true, lang: 'el', caps: true, width: 'long' })).toBe('ΠΕΜΠΤΗ');
         expect(caps('de')).toBe('DO., 15. OKT.');
         expect(caps('zh-Hans')).toBe('10月15日周四');
+        // May keeps its dialytika (N-b): ΜΑΙ would read as the diphthong "αι".
+        const may = new Date(Date.UTC(2026, 4, 15));
+        expect(formatDate(may, 'day-month', { utc: true, lang: 'el', caps: true })).toBe('15 ΜΑΪ');
+        expect(formatDate(may, 'day-month-year', { utc: true, lang: 'el', caps: true, width: 'long' })).toBe('15 ΜΑΪΟΥ 2026');
+    });
+
+    it('capitals equal ICU\'s toLocaleUpperCase in every language, for every month and day name in every pattern', () => {
+        const differ: string[][] = [];
+        for (const lang of LANGS) {
+            for (let m = 0; m < 12; m++) {
+                for (let i = 0; i < 7; i++) {
+                    const d = new Date(Date.UTC(2026, m, 1 + i, 9, 5));
+                    for (const width of ['short', 'long'] as const) {
+                        for (const p of ['day-month', 'day-month-year', 'weekday-day-month', 'weekday'] as const) {
+                            const plain = formatDate(d, p, { utc: true, lang, width });
+                            const caps = formatDate(d, p, { utc: true, lang, width, caps: true });
+                            if (caps !== plain.toLocaleUpperCase(lang)) differ.push([lang, p, width, plain, caps, plain.toLocaleUpperCase(lang)]);
+                        }
+                    }
+                }
+            }
+        }
+        expect(differ, RECHECK).toEqual([]);
     });
 
     it('digits are data: ten glyphs would replace 0–9 (none in v1)', () => {
@@ -392,6 +415,26 @@ describe('dates and numbers from tables', () => {
             const icu = new Intl.NumberFormat(INTL_TAG(lang)).formatToParts(1.5).find((p) => p.type === 'decimal')!.value;
             expect([lang, DATE_WORDS[lang].decimal], RECHECK).toEqual([lang, icu]);
         }
+    });
+
+    it('a tag that is not one of LANGS reads English and never throws (N-a: a stale stored tag must not break every date)', () => {
+        const oct15 = new Date(Date.UTC(2026, 9, 15, 9, 5));
+        for (const bad of ['zh', 'he', 'pt-BR', 'EN', '', undefined, null, 42] as unknown as UiLang[]) {
+            const at = String(bad);
+            setLanguage(bad, [{ 'Save': 'Enregistrer' }]);
+            expect([at, currentLanguage()]).toEqual([at, 'en']);
+            expect([at, t('Save'), tn(1, '{n} bean', '{n} beans'), tn(2.5, '{n} bean', '{n} beans')]).toEqual([at, 'Save', '1 bean', '2.5 beans']);
+            expect([at, formatDate(oct15, 'weekday-day-month', { utc: true }), timeAgo(3 * 60e3), formatNumber(1.5)]).toEqual([at, 'Thu 15 Oct', '3 minutes ago', '1.5']);
+            setLanguage('ru');
+            // A tag passed per call (undefined and null there mean "the current language", ru here).
+            const perCall = bad == null ? ['15 окт.', '1,5'] : ['15 Oct', '1.5'];
+            expect([at, formatDate(oct15, 'day-month', { utc: true, lang: bad }), formatNumber(1.5, 1, bad), pluralCategory(bad, 1)]).toEqual([at, ...perCall, 'one']);
+            const w = wordsFor(bad);
+            expect([at, w.lang, w.tn(3, '{n} bean', '{n} beans'), w.formatDate(oct15, 'time', { utc: true }), w.timeAgo(2 * 3600e3)]).toEqual([at, 'en', '3 beans', '9:05', '2 hours ago']);
+            setLanguage('en');
+        }
+        // A real language and the pseudo-locale are kept.
+        expect([wordsFor('fil').lang, wordsFor(PSEUDO_LANG).lang, wordsFor('zh-Hant').lang]).toEqual(['fil', PSEUDO_LANG, 'zh-Hant']);
     });
 
     it('timeAgo in en, and in ru from a catalog', () => {
@@ -471,7 +514,65 @@ describe('one table of month and day names', () => {
     });
 });
 
+/**
+ * What a server or engine file does with core's device-language globals (N11): every way it can reach them — a named
+ * import or re-export (also from a deep path), a destructured dynamic import or require, a namespace or default import
+ * (`core.t(…)`, `const { t } = core`), `export * from` — and every formatDate without a lang.
+ */
+function deviceLanguageUses(rel: string, src: string): string[] {
+    const problems: string[] = [];
+    const globals = ['t', 'tn', 'timeAgo', 'setLanguage', 'formatNumber'];
+    const core = String.raw`['"]@beanpool\/core(?:\/[^'"]*)?['"]`;
+    const names = (list: string) => list.split(',').map((x) => x.trim().replace(/^type\s+/, '').split(/\s+as\s+|\s*:\s*/)[0]);
+    const refuse = (list: string, how: string) => {
+        for (const name of names(list)) if (globals.includes(name)) problems.push(`${rel}: ${how} ${name} (use wordsFor(lang))`);
+    };
+    for (const m of src.matchAll(new RegExp(String.raw`\b(import|export)\s*(?:type\s*)?\{([^}]*)\}\s*from\s*${core}`, 'g'))) refuse(m[2], m[1] === 'import' ? 'imports' : 're-exports');
+    for (const m of src.matchAll(new RegExp(String.raw`\{([^}]*)\}\s*=\s*(?:await\s+)?(?:import|require)\(\s*${core}\s*\)`, 'g'))) refuse(m[1], 'imports');
+    if (new RegExp(String.raw`\bexport\s*\*\s*(?:as\s+[\w$]+\s*)?from\s*${core}`).test(src)) problems.push(`${rel}: re-exports all of core`);
+    const spaces = new Set<string>();
+    for (const m of src.matchAll(new RegExp(String.raw`\bimport\s+(?:([\w$]+)\s*,\s*)?(?:\*\s*as\s+([\w$]+)|([\w$]+))?\s*(?:,\s*\{[^}]*\}\s*)?from\s*${core}`, 'g'))) {
+        for (const ns of [m[1], m[2], m[3]]) if (ns) spaces.add(ns);
+    }
+    for (const m of src.matchAll(new RegExp(String.raw`\b(?:const|let|var)\s+([\w$]+)\s*=\s*(?:await\s+)?(?:import|require)\(\s*${core}\s*\)`, 'g'))) spaces.add(m[1]);
+    for (const ns of spaces) {
+        const at = ns.replace(/\$/g, '\\$');
+        for (const m of src.matchAll(new RegExp(String.raw`(?<![\w$.])${at}\s*(?:\.\s*|\[\s*['"])(${globals.join('|')})\b`, 'g'))) problems.push(`${rel}: ${ns}.${m[1]} (use wordsFor(lang))`);
+        for (const m of src.matchAll(new RegExp(String.raw`\{([^}]*)\}\s*=\s*${at}(?![\w$])`, 'g'))) refuse(m[1], `takes from ${ns}`);
+    }
+    src.split('\n').forEach((line, i) => {
+        if (/\bformatDate\(/.test(line) && !/\blang:/.test(line) && !/function formatDate/.test(line)) problems.push(`${rel}:${i + 1}: formatDate without lang`);
+    });
+    return problems;
+}
+
 describe('a node never writes in the device language (N11)', () => {
+    it('the guard sees every way to reach the globals: named, deep, namespace, default, dynamic, destructured, re-exported (N-e)', () => {
+        const seen = (src: string) => deviceLanguageUses('x.ts', src);
+        // The review's probe, which the named-import check alone passed.
+        expect(seen("import * as core from '@beanpool/core';\ncore.setLanguage('fr');\nconst s = core.t('Saved');")).toEqual([
+            'x.ts: core.t (use wordsFor(lang))', 'x.ts: core.setLanguage (use wordsFor(lang))',
+        ].reverse());
+        expect(seen("import { t } from '@beanpool/core';")).toEqual(['x.ts: imports t (use wordsFor(lang))']);
+        expect(seen("import { tn as plural } from '@beanpool/core/dist/words.js';")).toEqual(['x.ts: imports tn (use wordsFor(lang))']);
+        expect(seen("export { timeAgo } from '@beanpool/core';")).toEqual(['x.ts: re-exports timeAgo (use wordsFor(lang))']);
+        expect(seen("export * from '@beanpool/core';")).toEqual(['x.ts: re-exports all of core']);
+        expect(seen("const { t: say } = await import('@beanpool/core');")).toEqual(['x.ts: imports t (use wordsFor(lang))']);
+        expect(seen("const core = await import('@beanpool/core');\nawait core.tn(2, 'a', 'b');")).toEqual(['x.ts: core.tn (use wordsFor(lang))']);
+        expect(seen("const c = require('@beanpool/core');\nc['formatNumber'](1);")).toEqual(['x.ts: c.formatNumber (use wordsFor(lang))']);
+        expect(seen("import core, { wordsFor } from '@beanpool/core';\nconst { timeAgo } = core;")).toEqual(['x.ts: takes from core timeAgo (use wordsFor(lang))']);
+        expect(seen("import * as core from '@beanpool/core';\ncore.formatDate(d, 'time');")).toEqual(['x.ts:2: formatDate without lang']);
+        // What a server may do: wordsFor, a date with a lang, anything else core exports, a local t.
+        expect(seen([
+            "import * as core from '@beanpool/core';",
+            "import { wordsFor, formatDate, openEnvelope } from '@beanpool/core';",
+            "const { sealSeedToSso } = await import('@beanpool/core');",
+            "const w = core.wordsFor('fr'); w.t('Saved'); core.wordsFor(lang).tn(2, 'a', 'b'); core.tokens; core.timeAgoish;",
+            "core.formatDate(d, 'time', { lang: 'en' }); formatDate(d, 'time', { lang });",
+            'const t = (s: string) => s; t(x); other.t(y);',
+        ].join('\n'))).toEqual([]);
+    });
+
     it('server and engine code pass a language to every date, and never use the global t/tn/timeAgo/setLanguage', () => {
         const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../../..');
         const problems: string[] = [];
@@ -481,17 +582,7 @@ describe('a node never writes in the device language (N11)', () => {
                 if (name === 'node_modules' || name === '__tests__' || name === 'dist') continue;
                 if (statSync(path).isDirectory()) { walk(path); continue; }
                 if (!/\.ts$/.test(name) || /^test-|\.test\.ts$/.test(name)) continue;
-                const src = readFileSync(path, 'utf8');
-                const rel = relative(root, path);
-                for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]@beanpool\/core['"]/g)) {
-                    const names = m[1].split(',').map((x) => x.trim().replace(/^type\s+/, '').split(/\s+as\s+/)[0]);
-                    for (const bad of ['t', 'tn', 'timeAgo', 'setLanguage', 'formatNumber']) {
-                        if (names.includes(bad)) problems.push(`${rel}: imports ${bad} (use wordsFor(lang))`);
-                    }
-                }
-                src.split('\n').forEach((line, i) => {
-                    if (/\bformatDate\(/.test(line) && !/\blang:/.test(line) && !/function formatDate/.test(line)) problems.push(`${rel}:${i + 1}: formatDate without lang`);
-                });
+                problems.push(...deviceLanguageUses(relative(root, path), readFileSync(path, 'utf8')));
             }
         };
         walk(join(root, 'apps/server/src'));

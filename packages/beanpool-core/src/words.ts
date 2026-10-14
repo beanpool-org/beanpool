@@ -49,6 +49,12 @@ export const PSEUDO_LANG = 'xx' as const;
 export type UiLang = Lang | typeof PSEUDO_LANG;
 
 /**
+ * A tag BeanPool can write in, or English: a stale stored tag, a device's `he` or `pt-BR` cast to UiLang, or '' reads
+ * English and never throws, so a bad tag can never break every date on every screen (onboarding-no-hard-gates).
+ */
+const usableLang = (lang: UiLang): UiLang => (isLang(lang) || lang === PSEUDO_LANG ? lang : 'en');
+
+/**
  * The request header that carries the device's language to a node: one of the LANGS tags exactly as written there
  * (`ru`, `zh-Hant`, `fil`), never "two letters" and never the browser's Accept-Language. A node reads it with
  * `normaliseLang` and stores or uses nothing that fails `isLang`. Never logged, never stored on its own.
@@ -181,7 +187,7 @@ export const PLURAL_FORMS: Readonly<Record<Lang, readonly PluralCategory[]>> = O
 
 export function pluralCategory(lang: UiLang, n: number): PluralCategory {
     if (!Number.isFinite(n)) return 'other';
-    return PLURAL_RULES[lang === PSEUDO_LANG ? 'en' : lang].select(operands(n));
+    return PLURAL_RULES[isLang(lang) ? lang : 'en'].select(operands(n));
 }
 
 // ── Keys ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -301,11 +307,13 @@ export function withDigits(text: string, digits: string | null): string {
 
 function inCapitals(text: string, caps: DateWords['caps']): string {
     if (caps === 'turkic') return text.replace(/i/g, 'İ').toUpperCase();
-    if (caps === 'greek') return text.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').normalize('NFC');
+    // Greek capitals drop the accents (oxia/tonos, varia, perispomeni) and keep the dialytika: Μαΐ → ΜΑΪ, as ICU writes it;
+    // without it ΜΑΙ reads as the diphthong "αι". The tests compare every name with ICU's toLocaleUpperCase('el').
+    if (caps === 'greek') return text.toUpperCase().normalize('NFD').replace(/[\u0300\u0301\u0342]/g, '').normalize('NFC');
     return text.toUpperCase();
 }
 
-const dateLang = (lang: UiLang): Lang => (lang === PSEUDO_LANG ? 'en' : lang);
+const dateLang = (lang: UiLang): Lang => (isLang(lang) ? lang : 'en');
 
 function numberIn(lang: UiLang, n: number, decimals?: number): string {
     if (!Number.isFinite(n)) return String(n);
@@ -403,8 +411,10 @@ function timeAgoWith(t: TFunction, tn: TnFunction, ms: number): string {
 /**
  * The words of one language: the app's catalogs and core's for that language (`en` needs none: the key is the
  * English). Holds no global state, so two requests rendering for two recipients never see each other's language.
+ * A tag that is not one of LANGS (or xx) gives English, never a throw.
  */
-export function wordsFor(lang: UiLang, catalogs: readonly Catalog[] = []): Words {
+export function wordsFor(requested: UiLang, catalogs: readonly Catalog[] = []): Words {
+    const lang = usableLang(requested);
     const table = new Map<string, string | PluralForms>();
     if (lang !== 'en' && lang !== PSEUDO_LANG) {
         for (const catalog of catalogs) {

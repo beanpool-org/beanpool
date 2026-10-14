@@ -43,8 +43,8 @@ function assert(cond: boolean, msg: string): void {
         testsPassed++;
         console.log(`✓ ${msg}`);
     } else {
+        // Counted, and the run goes on, so a run against a server without these gates reports every hole, not the first.
         console.error(`✗ ${msg}`);
-        throw new Error(`Assertion failed: ${msg}`);
     }
 }
 
@@ -88,8 +88,13 @@ async function main(): Promise<void> {
     const { resetAdminAuthTarpit, requireFreshProof } = await import('./admin-auth.js');
     const { mintHandshakeToken, consumeHandshakeToken, createPasswordSession, backdateAdminSessionForTests, PHONE_HANDOFF_IDLE_TTL_MS } = await import('./admin-key-auth.js');
     const { turnOn2faForTests, ownerTokenHeaders } = await import('./admin-auth-test-harness.js');
-    const { createSnapshot, listSnapshots, getAutoSnapshotConfig, MIN_SNAPSHOTS_KEPT } = await import('./services/snapshot-scheduler.js');
-    const { readOffboxSettings, MIN_OFFBOX_RETENTION_DAYS } = await import('./services/offbox-backups.js');
+    const snapshots: any = await import('./services/snapshot-scheduler.js');
+    const { createSnapshot, listSnapshots, getAutoSnapshotConfig } = snapshots;
+    const offbox: any = await import('./services/offbox-backups.js');
+    const { readOffboxSettings } = offbox;
+    // The floors (design case 18, A4, and amendment 1), as the server names them; 3 and 7 where it names none.
+    const MIN_SNAPSHOTS_KEPT: number = snapshots.MIN_SNAPSHOTS_KEPT ?? 3;
+    const MIN_OFFBOX_RETENTION_DAYS: number = offbox.MIN_OFFBOX_RETENTION_DAYS ?? 7;
     const { getConnectors } = await import('./connector-manager.js');
     const { initTls } = await import('./services/tls.js');
     const https = await import('./https-server.js');
@@ -260,10 +265,20 @@ async function main(): Promise<void> {
                 assert(inWords(adminDisconnect), `nor disconnect it (${short(adminDisconnect)})`);
             }
         }
-        // Burst removal of established accounts is an owner's; the brand-new accounts of a burst stay an admin's.
-        const burst = await call('POST', `/api/local/admin/members/${admin}/burst/remove`, asAdmin, { members: [], count: 0, includeEstablished: true });
-        assert(burst.status === 403 || burst.status === 404, `burst removal with established accounts, by an admin: refused or not offered here (${short(burst)})`);
-        if (burst.status === 403) assert(/owner/i.test(burst.json?.error || ''), 'and the refusal says it is an owner\'s');
+        // Burst removal of established accounts is an owner's; the brand-new accounts of a burst stay an admin's. Bursts are
+        // cleaned up where the open door is (the global profile), so for these calls this node runs that profile.
+        process.env.NODE_PROFILE = 'global';
+        try {
+            const burstRoute = `/api/local/admin/members/${admin}/burst/remove`;
+            const burst = await call('POST', burstRoute, asAdmin, { members: [], count: 0, includeEstablished: true });
+            assert(inWords(burst) && /owner/i.test(burst.json?.error || ''), `burst removal with established accounts, by an admin → 403, an owner's (${short(burst)})`);
+            const burstNew = await call('POST', burstRoute, asAdmin, { members: [], count: 0 });
+            assert(burstNew.status !== 403 && burstNew.status !== 401, `burst removal of brand-new accounts stays an admin's: past the gate (${short(burstNew)})`);
+            const burstOwner = await call('POST', burstRoute, asComputer, { members: [], count: 0, includeEstablished: true });
+            assert(burstOwner.status !== 403 && burstOwner.status !== 401, `an owner removes established accounts too: past the gate (${short(burstOwner)})`);
+        } finally {
+            delete process.env.NODE_PROFILE;
+        }
 
         // ── 3. OWNER + FRESH PROOF ────────────────────────────────────────────────────────────────────────────────
         console.log('\n── 3. owner + fresh proof: a current code, or Manage pressed within 90 seconds ──');
@@ -383,11 +398,11 @@ async function main(): Promise<void> {
         const staleOff = await call('POST', '/api/local/admin/auth/break-glass-mode', asStalePhone(), { enabled: false });
         assert(staleOff.status === 403 && staleOff.json?.code === 'step_up_required', `a stale phone session is still refused (${short(staleOff)})`);
         const ctx: any = { state: { adminRole: 'owner', isPasswordSession: true }, status: 200, body: null };
-        const helper = await requireFreshProof(ctx, '123456', 'test the helper');
+        const helper = typeof requireFreshProof === 'function' ? await requireFreshProof(ctx, '123456', 'test the helper') : true;
         assert(helper === false && ctx.status === 403 && ctx.body?.code === 'fresh_proof_needs_2fa',
             `requireFreshProof refuses a password caller when 2FA is off, where requireCurrentSecondFactor would pass (${ctx.status} ${ctx.body?.code})`);
         const tokenCtx: any = { state: { adminRole: 'owner', automationTokenId: 't', tokenOwnerRoute: true }, status: 200, body: null };
-        assert(await requireFreshProof(tokenCtx, '123456', 'x') === false && tokenCtx.body?.code === 'token_not_allowed',
+        assert(typeof requireFreshProof === 'function' && (await requireFreshProof(tokenCtx, '123456', 'x')) === false && tokenCtx.body?.code === 'token_not_allowed',
             'and any automation token, the backups scope included');
 
         // Last: retiring the password with Manage pressed just now goes through (it needs the owner's break-glass code).

@@ -284,7 +284,7 @@ export function PulseIntakePage({
                     <button
                         type="button"
                         onClick={onManageChannels}
-                        className="px-4 py-2 rounded-xl text-sm font-bold bg-terra-600 hover:bg-terra-500 text-white cursor-pointer shadow-sm"
+                        className="px-4 py-2 rounded-xl text-sm font-bold bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on cursor-pointer shadow-sm"
                     >
                         Add a Channel
                     </button>
@@ -362,7 +362,7 @@ export function PulseIntakePage({
                                     }}
                                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                                         isSelected
-                                            ? 'bg-terra-500 dark:bg-terra-600 border-terra-500 text-white shadow-sm'
+                                            ? 'bg-bp-cta-fill border-bp-cta-fill text-bp-cta-on shadow-sm'
                                             : 'bg-nature-50 dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                     }`}
                                     aria-pressed={isSelected}
@@ -392,7 +392,7 @@ export function PulseIntakePage({
                                     onClick={() => setSelectedCategory(cat.id)}
                                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-all cursor-pointer ${
                                         isSelected
-                                            ? 'bg-terra-500 dark:bg-terra-600 border-terra-500 text-white shadow-sm'
+                                            ? 'bg-bp-cta-fill border-bp-cta-fill text-bp-cta-on shadow-sm'
                                             : 'bg-nature-50 dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-700 dark:text-nature-300 hover:bg-nature-100 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                                     }`}
                                     aria-pressed={isSelected}
@@ -443,7 +443,7 @@ export function PulseIntakePage({
                 type="button"
                 onClick={handleSubmit}
                 disabled={submitting || resolving || submitSuccess || !urlInput.trim() || channels.length === 0}
-                className="w-full py-3.5 px-6 rounded-2xl font-bold text-base bg-terra-600 hover:bg-terra-500 disabled:opacity-50 text-white cursor-pointer shadow-md transition-all active:scale-[0.99] flex items-center justify-center gap-2"
+                className="w-full py-3.5 px-6 rounded-2xl font-bold text-base bg-bp-cta-fill hover:bg-bp-cta-hover disabled:opacity-50 text-bp-cta-on cursor-pointer shadow-md transition-all active:scale-[0.99] flex items-center justify-center gap-2"
             >
                 {submitting ? (
                     <>

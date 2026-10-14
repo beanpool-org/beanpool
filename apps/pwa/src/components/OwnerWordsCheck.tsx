@@ -98,7 +98,7 @@ export function OwnerWordsCheck({ identity, startOpen = false, hasWords = true }
                     <button
                         type="button"
                         onClick={() => setOpen(true)}
-                        className="w-full min-h-[48px] px-4 py-3 rounded-xl bg-emerald-700 text-white font-bold text-[15px] hover:bg-emerald-800"
+                        className="w-full min-h-[48px] px-4 py-3 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-[15px]"
                     >
                         {COPY.checkNow}
                     </button>
@@ -142,7 +142,7 @@ export function OwnerWordsCheck({ identity, startOpen = false, hasWords = true }
                                     type="button"
                                     onClick={onCheck}
                                     disabled={busy || count === 0}
-                                    className="flex-grow basis-[140px] min-h-[48px] px-4 py-3 rounded-xl bg-emerald-700 text-white font-bold text-[15px] disabled:opacity-50"
+                                    className="flex-grow basis-[140px] min-h-[48px] px-4 py-3 rounded-xl bg-bp-commit-fill text-bp-commit-on font-bold text-[15px] disabled:opacity-50"
                                 >
                                     {busy ? 'Checking…' : 'Check my words'}
                                 </button>

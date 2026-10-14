@@ -617,7 +617,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                 type="button"
                                 onClick={() => requestReleaseNameConfirmation(n)}
                                 disabled={releasingName !== null}
-                                className="shrink-0 px-3 py-1.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-semibold text-white disabled:opacity-50"
+                                className="shrink-0 px-3 py-1.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-semibold text-bp-cta-on disabled:opacity-50"
                             >
                                 {releasingName === n.name ? 'Releasing…' : 'Release'}
                             </button>
@@ -650,7 +650,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                     ) : isLive ? (
                         <div className="space-y-3">
                             <div className="flex flex-wrap items-center gap-2 text-xs">
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 font-bold">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-bp-chip-ok-tint border border-emerald-500/30 text-bp-chip-ok-ink font-bold">
                                     <span>🟢</span>
                                     <span>Live</span>
                                 </span>
@@ -753,7 +753,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                     ) : isPaused ? (
                         <div className="space-y-1.5 text-xs" data-testid="public-address-paused">
                             <div className="flex flex-wrap items-center gap-2">
-                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-400 font-bold">
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-bp-chip-warn-tint border border-amber-500/30 text-bp-chip-warn-ink font-bold">
                                     <span>⏸️</span>
                                     <span>Paused</span>
                                 </span>
@@ -802,7 +802,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                 type="button"
                                 onClick={requestRotateConfirmation}
                                 disabled={rotating}
-                                className="px-3.5 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 hover:text-amber-300 text-xs font-bold border border-amber-500/30 transition-all disabled:opacity-50 min-h-[44px] flex items-center gap-1.5"
+                                className="px-3.5 py-2 rounded-xl bg-bp-chip-warn-tint hover:opacity-90 text-bp-chip-warn-ink text-xs font-bold border border-amber-500/30 transition-all disabled:opacity-50 min-h-[44px] flex items-center gap-1.5"
                             >
                                 <span>🔑</span>
                                 <span>{rotating ? 'Getting a new key…' : 'New tunnel key'}</span>
@@ -814,7 +814,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                                 type="button"
                                 onClick={requestOfflineConfirmation}
                                 disabled={takingOffline}
-                                className="px-3.5 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 hover:text-red-300 text-xs font-bold border border-red-500/30 transition-all disabled:opacity-50 min-h-[44px] flex items-center gap-1.5"
+                                className="px-3.5 py-2 rounded-xl bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink text-xs font-bold border border-red-500/30 transition-all disabled:opacity-50 min-h-[44px] flex items-center gap-1.5"
                             >
                                 <span>🛑</span>
                                 <span>{takingOffline ? 'Taking offline…' : 'Take offline'}</span>
@@ -995,7 +995,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                         <button
                             type="submit"
                             disabled={submittingClaim}
-                            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 active:scale-95 text-xs font-bold text-white transition-all shadow-lg disabled:opacity-50 min-h-[44px]"
+                            className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover active:scale-95 text-xs font-bold text-bp-cta-on transition-all shadow-lg disabled:opacity-50 min-h-[44px]"
                         >
                             {submittingClaim ? 'Registering with Registrar…' : 'Go public · Claim Web Address'}
                         </button>
@@ -1014,7 +1014,7 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                 >
                     <div className="m-auto w-full max-w-md bg-nature-900 border border-nature-700 rounded-2xl p-6 shadow-2xl space-y-4">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center text-lg shrink-0">
+                            <div className="w-10 h-10 rounded-xl bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-amber-500/30 flex items-center justify-center text-lg shrink-0">
                                 ⚠️
                             </div>
                             <h3 id="confirm-modal-title" className="text-base font-bold text-white m-0">
@@ -1037,12 +1037,12 @@ export function PublicAddressPanel({ activeNode, onRefreshDiag }: PublicAddressP
                             <button
                                 type="button"
                                 onClick={handleConfirmAction}
-                                className={`px-4 py-2 rounded-xl text-xs font-bold text-white transition-all min-h-[44px] ${
+                                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all min-h-[44px] ${
                                     confirmModal.actionType === 'offline'
-                                        ? 'bg-red-600 hover:bg-red-500'
+                                        ? 'bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on'
                                         : confirmModal.actionType === 'release-name'
-                                            ? 'bg-terra-600 hover:bg-terra-500'
-                                            : 'bg-blue-600 hover:bg-blue-500'
+                                            ? 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
+                                            : 'bg-blue-600 hover:bg-blue-500 text-white'
                                 }`}
                             >
                                 {confirmModal.confirmButtonText}

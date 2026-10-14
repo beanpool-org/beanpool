@@ -235,7 +235,7 @@ export function PhoneSignIn({ onSignedIn, onUsePassword }: PhoneSignInProps) {
                     <button
                         type="submit"
                         disabled={state.busy || digits.length !== 2}
-                        className="w-full min-h-[48px] px-4 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white font-semibold text-sm disabled:opacity-50"
+                        className="w-full min-h-[48px] px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-semibold text-sm disabled:opacity-50"
                     >
                         Confirm
                     </button>

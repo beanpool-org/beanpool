@@ -206,7 +206,7 @@ export function AppAddressesPanel({ activeNode }: { activeNode: NodeProfile }) {
     const switchDay = formatSwitchDay(report.unboundSignaturesUntil);
     const formerLine = formerAppsText(report);
     const button = 'min-h-[44px] max-w-full break-words text-left px-4 py-2 rounded-xl text-sm font-semibold border transition-colors disabled:opacity-50';
-    const confirmButton = `${button} bg-emerald-700 border-emerald-600 text-white hover:bg-emerald-600`;
+    const confirmButton = `${button} bg-bp-commit-fill border-bp-commit-fill text-bp-commit-on hover:bg-bp-commit-hover`;
 
     return (
         <div className="p-6 rounded-2xl bg-nature-900/80 border border-nature-800 shadow-xl space-y-4" data-testid="app-addresses">

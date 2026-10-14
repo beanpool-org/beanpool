@@ -212,7 +212,7 @@ export function ThreatReviewModal({
                         <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
                                 <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase font-mono tracking-wide ${
-                                    severity === 'critical' ? 'bg-red-600 text-white' : 'bg-amber-600 text-white'
+                                    severity === 'critical' ? 'bg-bp-danger-fill text-bp-danger-on' : 'bg-bp-gold-fill text-bp-gold-on'
                                 }`}>
                                     {severity}
                                 </span>
@@ -293,7 +293,7 @@ export function ThreatReviewModal({
                                         <div className="flex items-center gap-2">
                                             <span className={`px-2 py-0.5 rounded font-mono text-[10px] border ${
                                                 isItemFrozen
-                                                    ? 'bg-red-600 text-white border-red-500 font-bold'
+                                                    ? 'bg-bp-danger-fill text-bp-danger-on border-bp-danger-fill font-bold'
                                                     : 'bg-red-950 text-red-400 border-red-900'
                                             }`}>
                                                 {isItemFrozen ? '🛑 FROZEN' : 'FLAGGED'}
@@ -347,7 +347,7 @@ export function ThreatReviewModal({
                         <button
                             onClick={() => handleAction('freeze')}
                             disabled={freezing || (isReport && involvedPubkeys.length === 0)}
-                            className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold transition-all border border-red-500 flex items-center gap-1 shadow-lg shadow-red-950/50"
+                            className="px-4 py-2 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-bold transition-all border border-bp-danger-fill flex items-center gap-1 shadow-lg shadow-red-950/50"
                         >
                             <span>{freezing ? 'Freezing...' : '🛑 Freeze Accounts'}</span>
                         </button>

@@ -572,7 +572,7 @@ export function MembersModule({
                     <div className="min-w-0">
                         <h4 className="text-sm font-bold text-white m-0 flex flex-wrap lg:flex-nowrap items-center gap-2">
                             <span>🏛️ Community Treasuries & Enterprises</span>
-                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-amber-500/30">
                                 {treasuries.length} Active
                             </span>
                         </h4>
@@ -582,7 +582,7 @@ export function MembersModule({
                     </div>
                     <button
                         onClick={() => setShowCreateTreasuryModal(true)}
-                        className="px-3.5 py-1.5 rounded-xl bg-terra-500/20 hover:bg-terra-500/30 text-terra-300 border border-terra-500/40 font-bold text-xs transition-all flex items-center gap-1.5"
+                        className="px-3.5 py-1.5 rounded-xl bg-bp-chip-need-tint hover:opacity-90 text-bp-chip-need-ink border border-terra-500/40 font-bold text-xs transition-all flex items-center gap-1.5"
                     >
                         <span>➕ Create Treasury</span>
                     </button>
@@ -600,7 +600,7 @@ export function MembersModule({
                                     <Avatar
                                         src={t.avatar}
                                         alt={t.name}
-                                        className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center justify-center font-bold text-lg shrink-0 overflow-hidden"
+                                        className="w-10 h-10 rounded-full bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-amber-500/40 flex items-center justify-center font-bold text-lg shrink-0 overflow-hidden"
                                         fallbackGlyph="🏛️"
                                     />
                                     <div className="min-w-0">
@@ -618,7 +618,7 @@ export function MembersModule({
                                         setOfferCredits('12');
                                         setOfferDescription('Fresh daily from the community flock');
                                     }}
-                                    className="px-2.5 py-1.5 rounded-lg bg-terra-600/30 hover:bg-terra-600/50 text-terra-300 border border-terra-500/40 font-bold text-[11px] transition-all shrink-0 ml-2"
+                                    className="px-2.5 py-1.5 rounded-lg bg-bp-chip-need-tint hover:opacity-90 text-bp-chip-need-ink border border-terra-500/40 font-bold text-[11px] transition-all shrink-0 ml-2"
                                 >
                                     + Post Offer
                                 </button>
@@ -646,7 +646,7 @@ export function MembersModule({
                                 <div className="space-y-1 min-w-0 break-words">
                                     <div className="flex items-center gap-2">
                                         <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase font-mono ${
-                                            flag.severity === 'critical' ? 'bg-red-600 text-white' : 'bg-amber-600 text-white'
+                                            flag.severity === 'critical' ? 'bg-bp-danger-fill text-bp-danger-on' : 'bg-bp-gold-fill text-bp-gold-on'
                                         }`}>
                                             {flag.severity || 'ALERT'}
                                         </span>
@@ -656,7 +656,7 @@ export function MembersModule({
                                 </div>
                                 <button
                                     onClick={() => setActiveThreat(flag)}
-                                    className="px-3 py-1 rounded-lg bg-red-900/50 hover:bg-red-900/80 text-red-200 text-[11px] font-bold transition-all border border-red-800 shrink-0"
+                                    className="px-3 py-1 rounded-lg bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink text-[11px] font-bold transition-all border border-red-800 shrink-0"
                                 >
                                     Review Threat
                                 </button>
@@ -667,7 +667,7 @@ export function MembersModule({
                             <div key={idx} className="p-3 bg-nature-950/80 border border-amber-900/60 rounded-xl flex items-start justify-between gap-3">
                                 <div className="space-y-1 min-w-0 break-words">
                                     <div className="flex flex-wrap lg:flex-nowrap items-center gap-2">
-                                        <span className="px-1.5 py-0.5 rounded bg-amber-600 text-white text-[9px] font-bold uppercase font-mono">
+                                        <span className="px-1.5 py-0.5 rounded bg-bp-gold-fill text-bp-gold-on text-[9px] font-bold uppercase font-mono">
                                             USER REPORT
                                         </span>
                                         <span className="font-mono text-amber-300">
@@ -682,7 +682,7 @@ export function MembersModule({
                                 </div>
                                 <button
                                     onClick={() => setActiveThreat({ ...report, isReport: true })}
-                                    className="px-3 py-1 rounded-lg bg-amber-900/50 hover:bg-amber-900/80 text-amber-200 text-[11px] font-bold transition-all border border-amber-800 shrink-0"
+                                    className="px-3 py-1 rounded-lg bg-bp-chip-warn-tint hover:opacity-90 text-bp-chip-warn-ink text-[11px] font-bold transition-all border border-amber-800 shrink-0"
                                 >
                                     Moderate Report
                                 </button>
@@ -854,7 +854,7 @@ export function MembersModule({
                                                 </div>
                                                 <div className="col-span-3 font-mono text-xs font-semibold uppercase">
                                                     {isMemberFrozen ? (
-                                                        <span className="px-2 py-0.5 rounded bg-red-600 text-white font-bold text-[10px] shadow-sm">
+                                                        <span className="px-2 py-0.5 rounded bg-bp-danger-fill text-bp-danger-on font-bold text-[10px] shadow-sm">
                                                             🛑 FROZEN
                                                         </span>
                                                     ) : (
@@ -888,7 +888,7 @@ export function MembersModule({
                                                                 handleToggleVouchMember(pubkey, true);
                                                             }}
                                                             title="Click to toggle voucher authority"
-                                                            className="px-2 py-0.5 rounded-md bg-emerald-900/40 hover:bg-emerald-800/60 text-emerald-400 text-[10px] font-bold border border-emerald-800/60 transition-all hover:scale-105"
+                                                            className="px-2 py-0.5 rounded-md bg-bp-chip-ok-tint hover:opacity-90 text-bp-chip-ok-ink text-[10px] font-bold border border-emerald-800/60 transition-all hover:scale-105"
                                                         >
                                                             🛡️ VOUCHER
                                                         </button>
@@ -938,7 +938,7 @@ export function MembersModule({
                                                                 e.stopPropagation();
                                                                 handleToggleFreezeMember(pubkey);
                                                             }}
-                                                            className="px-2.5 py-1 rounded bg-emerald-900/60 hover:bg-emerald-800 text-emerald-200 text-[10px] font-sans font-bold transition-all border border-emerald-700/80 shrink-0"
+                                                            className="px-2.5 py-1 rounded bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-[10px] font-sans font-bold transition-all border border-bp-commit-fill shrink-0"
                                                         >
                                                             🟢 Unfreeze
                                                         </button>
@@ -1125,7 +1125,7 @@ export function MembersModule({
                             <button
                                 onClick={handleApplyTierUpgrade}
                                 disabled={isUpdatingTier}
-                                className="px-5 py-2 rounded-xl bg-terra-500 hover:bg-terra-600 disabled:opacity-50 font-bold text-white text-xs transition-all shadow-md flex items-center gap-2"
+                                className="px-5 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover disabled:opacity-50 font-bold text-bp-cta-on text-xs transition-all shadow-md flex items-center gap-2"
                             >
                                 {isUpdatingTier && <span className="animate-spin">🔄</span>}
                                 <span>{isUpdatingTier ? 'Applying Upgrade...' : 'Apply Tier Upgrade'}</span>
@@ -1182,7 +1182,7 @@ export function MembersModule({
                             <button
                                 onClick={handleCreateTreasury}
                                 disabled={creatingTreasury || !newTreasuryName.trim()}
-                                className="px-5 py-2 rounded-xl bg-terra-500 hover:bg-terra-600 disabled:opacity-50 font-bold text-white text-xs transition-all shadow-md"
+                                className="px-5 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover disabled:opacity-50 font-bold text-bp-cta-on text-xs transition-all shadow-md"
                             >
                                 {creatingTreasury ? 'Creating...' : 'Create Treasury'}
                             </button>
@@ -1253,7 +1253,7 @@ export function MembersModule({
                             <button
                                 onClick={handleSeedOffer}
                                 disabled={seedingOffer || !offerTitle.trim()}
-                                className="px-5 py-2 rounded-xl bg-terra-500 hover:bg-terra-600 disabled:opacity-50 font-bold text-white text-xs transition-all shadow-md"
+                                className="px-5 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover disabled:opacity-50 font-bold text-bp-cta-on text-xs transition-all shadow-md"
                             >
                                 {seedingOffer ? 'Posting...' : 'Post Offer to Market'}
                             </button>

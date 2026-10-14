@@ -457,6 +457,10 @@ async function main() {
         `each route refuses a sample id under each field it reads (${checks.size} route × field pairs on ${routesChecked} routes; missed: ${fieldMissed.slice(0, 10).join(', ') || 'none'})`);
 
     console.log('\n── 6. what the guard costs, before the signature is checked ──');
+    const median = (xs: number[]) => {
+        const s = [...xs].sort((a, b) => a - b);
+        return s[Math.floor(s.length / 2)];
+    };
     for (const [label, text] of [
         ['2 MB array of 0s', JSON.stringify({ a: new Array(1_000_000).fill(0) })],
         ['2 MB array of short strings', JSON.stringify({ a: new Array(400_000).fill('x') })],
@@ -464,12 +468,24 @@ async function main() {
         ['2 MB of ids under an id key', JSON.stringify({ postIds: Array.from({ length: 150_000 }, (_, k) => 'post-' + k.toString(36).padStart(6, '0')) })],
     ] as const) {
         const parsed = JSON.parse(text);
-        let parse = Infinity, guard = Infinity;
-        for (let r = 0; r < 5; r++) {
-            const t0 = performance.now(); JSON.parse(text); const t1 = performance.now();
-            bodyCarriesSampleId(parsed); const t2 = performance.now();
-            parse = Math.min(parse, t1 - t0); guard = Math.min(guard, t2 - t1);
+        // Warm up JIT and ICs so cold start doesn't skew early runs.
+        JSON.parse(text);
+        bodyCarriesSampleId(parsed);
+        const parses: number[] = [];
+        const guards: number[] = [];
+        for (let r = 0; r < 7; r++) {
+            if (r % 2 === 0) {
+                const t0 = performance.now(); JSON.parse(text); const t1 = performance.now();
+                const t2 = performance.now(); bodyCarriesSampleId(parsed); const t3 = performance.now();
+                parses.push(t1 - t0); guards.push(t3 - t2);
+            } else {
+                const t0 = performance.now(); bodyCarriesSampleId(parsed); const t1 = performance.now();
+                const t2 = performance.now(); JSON.parse(text); const t3 = performance.now();
+                guards.push(t1 - t0); parses.push(t3 - t2);
+            }
         }
+        const parse = median(parses);
+        const guard = median(guards);
         assert(guard <= 2 * parse + 10, `${label}: the guard ${guard.toFixed(1)} ms against the parse's ${parse.toFixed(1)} ms (at most 2× + 10 ms)`);
     }
 

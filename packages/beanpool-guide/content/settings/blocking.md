@@ -40,7 +40,7 @@ Your community does this for blocks it keeps for you. Today that is a block made
 ## What it does not do
 
 - They are not told. To them, their messages look sent, and so do the notes with their Beans.
-- It does not end the friendship: they still have you as a friend, and if your contact is set to Friends they still see it. To end that too, take them off your Friends tab on the phone; on the web, where a blocked member is hidden from your lists, unblock them, take them off your friends, then block them again. They can notice a removal.
+- It does not end the friendship: they still have you as a friend, and if your contact is set to Friends they still see it. To end that too, open **Manage Blocked Users** (on the web, **Manage Blocked Members**; see "Unblocking" below) and tap **Also remove from friends** under their name. They stay blocked. They can notice a removal.
 - Group chats, event chats and project and enterprise chats are shared: everyone in them sees the same messages. Their messages there still show, to you as to everyone else.
 - A deal you already have with them goes on as before, with its notices and notifications.
 - If you have traded with them before, they can still send you Beans. Every Bean arrives, with no notification.

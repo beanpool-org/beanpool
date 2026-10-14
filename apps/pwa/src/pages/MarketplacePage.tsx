@@ -58,6 +58,7 @@ import {
     type MarketplacePost, type MemberProfile, type NodeInfo, type MarketplaceTransaction, type NodeConfig,
     type CommissionCapacity,
 } from '../lib/api';
+import { iRated, reviewTargetOf } from '../lib/trade-review';
 import { type BeanPoolIdentity } from '../lib/identity';
 
 import { marketSearchFromLink, marketSearchToSave, matchesExpandedSearch } from '../lib/search';
@@ -89,6 +90,9 @@ interface Props {
     marketClickCount?: number;
     openPostId?: string | null;
     onPostOpened?: () => void;
+    /** A finished trade to rate (a chat's "Rate your partner"): its rating form opens here; taken once, then `onReviewOpened`. */
+    openReviewTxId?: string | null;
+    onReviewOpened?: () => void;
     /** Words to put in the search (a saved search's See more on Home); taken once, then `onSearchOpened`. */
     openSearch?: string | null;
     onSearchOpened?: () => void;
@@ -168,7 +172,7 @@ function feedListFilter(typeFilter: PostType | 'all' | 'for-you', categoryFilter
 /** How long the first read waits to learn whether this node reads by area, before it reads as before. */
 const NEAR_WAIT_MS = 1500;
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, openReviewTxId, onReviewOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
     const isVisitor = !!visitor;
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
@@ -411,6 +415,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
     // Handle deep-link from Map pins or routes
     const deepLinkFetched = useRef<string | null>(null);
+    // A link that opened nothing says so, in place of the bare market (Marty 15 Oct: "View Post just takes me to the marketplace").
+    const [postLinkNotice, setPostLinkNotice] = useState<string | null>(null);
     useEffect(() => {
         if (openPostId === 'deals_active') {
              setShowDealsModal(true);
@@ -429,9 +435,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                 // people going can still open it by id — from its chat, for one. Ask the node once.
                 const id = openPostId;
                 deepLinkFetched.current = id;
+                // The node's own read rules decide: a listing taken down, or one this member may not read, comes back empty.
+                const notReadable = () => { setPostLinkNotice(t('That listing can no longer be opened. It may have been taken down.')); onPostOpened?.(); };
                 getMarketplacePosts({ id, types: CLIENT_POST_TYPES })
-                    .then(rows => { if (rows[0]) { setSelectedPost(rows[0]); onPostOpened?.(); } })
-                    .catch(() => { });
+                    .then(rows => { if (rows[0]) { setPostLinkNotice(null); setSelectedPost(rows[0]); onPostOpened?.(); } else notReadable(); })
+                    .catch(notReadable);
             }
         }
     }, [openPostId, posts, loading, onPostOpened]);
@@ -520,6 +528,33 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     const [dealsTab, setDealsTab] = useState<'active' | 'pending' | 'history'>('active');
     const [historyFilter, setHistoryFilter] = useState<'all' | 'buying' | 'selling'>('all');
     const [promptReviewForTx, setPromptReviewForTx] = useState<{ txId: string; targetPubkey: string; targetCallsign: string; targetRole: 'provider' | 'receiver' } | null>(null);
+    // A chat's "Rate your partner" lands on the same rating form My Deals opens, for that trade. The member's own trades
+    // are read once if the ones this page holds don't have it yet (the page has just opened).
+    useEffect(() => {
+        if (!openReviewTxId || !identity) return;
+        let live = true;
+        const me = identity.publicKey;
+        const open = (txs: MarketplaceTransaction[]) => {
+            if (!live) return;
+            const tx = txs.find(x => x.id === openReviewTxId);
+            if (tx && tx.status === 'completed' && !iRated(tx, me)) {
+                setReviewStars(5);
+                setReviewComment('');
+                setPromptReviewForTx(reviewTargetOf(tx, me));
+            } else if (tx && tx.status === 'completed') {
+                setPostLinkNotice(t('You have already rated this trade.'));
+            } else {
+                setPostLinkNotice(t('That trade could not be found.'));
+            }
+            onReviewOpened?.();
+        };
+        const held = myTransactions.find(x => x.id === openReviewTxId);
+        if (held) open(myTransactions);
+        else getMyMarketplaceTransactions(me).then(open).catch(() => open([]));
+        return () => { live = false; };
+        // Taken once per link: myTransactions is read at the moment the link arrives.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [openReviewTxId, identity?.publicKey]);
     const [reviewStars, setReviewStars] = useState(5);
     const [reviewComment, setReviewComment] = useState('');
     const [submittingReview, setSubmittingReview] = useState(false);
@@ -1157,6 +1192,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                             )}
                             {selectedPost.title}
                         </h2>
+                        {selectedPost.status === 'completed' && (
+                            <p className="text-sm font-semibold text-nature-600 dark:text-nature-300 mb-3">
+                                {selectedPost.type === 'need' ? t('This need has been met.') : t('This offer is finished.')}
+                            </p>
+                        )}
 
                         {(selectedPost.audienceScope === 'group' || !!selectedPost.targetGroupId) && (
                             <div className="p-3 mb-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border-2 border-emerald-500 flex items-center gap-2.5 text-xs text-emerald-900 dark:text-emerald-200 font-bold">
@@ -2669,6 +2709,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
             {error && (
                 <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-xl p-3 mb-4 text-red-600 dark:text-red-300 text-sm text-center shadow-sm">
                     {error}
+                </div>
+            )}
+            {postLinkNotice && (
+                <div role="status" className="bg-nature-50 dark:bg-nature-900 border border-nature-200 dark:border-nature-800 rounded-xl p-3 mb-4 text-nature-700 dark:text-nature-200 text-sm text-center shadow-sm flex items-center justify-center gap-2">
+                    <span>{postLinkNotice}</span>
+                    <button type="button" onClick={() => setPostLinkNotice(null)} aria-label={t('Dismiss')} className="min-w-[32px] min-h-[32px] font-bold">✕</button>
                 </div>
             )}
 

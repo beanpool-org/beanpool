@@ -158,6 +158,7 @@ export function App() {
     const helpWords = helpSheetFor(getBundledGuide(), webHelpKey({ tab: activeTab, settings: showSettings }));
     const [openConversationId, setOpenConversationId] = useState<string | null>(null);
     const [openMarketPostId, setOpenMarketPostId] = useState<string | null>(null);
+    const [openMarketReviewTxId, setOpenMarketReviewTxId] = useState<string | null>(null);
     // A saved search's See more on Home: the words the Market's search opens with.
     const [openMarketSearch, setOpenMarketSearch] = useState<string | null>(null);
     const clearMarketSearch = useCallback(() => setOpenMarketSearch(null), []);
@@ -324,6 +325,12 @@ export function App() {
         if (tab === 'settings-profile') {
             setSettingsInitialMode('profile');
             setShowSettings(true);
+            return;
+        }
+        // A chat's "Rate your partner": the Market with that trade's rating form open.
+        if (tab === 'marketplace-review') {
+            setActiveTab('marketplace');
+            if (contextId) setOpenMarketReviewTxId(contextId);
             return;
         }
         // A saved search's See more: the Market with the words in its search.
@@ -959,6 +966,8 @@ export function App() {
                                     marketClickCount={marketClickCount}
                                     openPostId={openMarketPostId}
                                     onPostOpened={() => setOpenMarketPostId(null)}
+                                    openReviewTxId={openMarketReviewTxId}
+                                    onReviewOpened={() => setOpenMarketReviewTxId(null)}
                                     openSearch={openMarketSearch}
                                     onSearchOpened={clearMarketSearch}
                                     onSaveSearch={(settings) => { setSaveSearchToHome(settings); setActiveTab('home'); }}

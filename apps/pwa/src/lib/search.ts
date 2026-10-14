@@ -4,7 +4,7 @@
  * punctuation, Chinese and full-width included ("鸡蛋，牛奶" finds 牛奶 mid-run, #1781).
  */
 
-import { foldApostrophes, HOME_SEARCH_MAX_CHARS, searchTermsFor } from '@beanpool/core';
+import { foldApostrophes, HOME_SEARCH_MAX_CHARS, searchFromMarket, searchTermsFor, type HomeSearchSettings } from '@beanpool/core';
 
 /**
  * Whether a listing's title or description holds one of the search's terms; an empty search matches everything. The
@@ -23,4 +23,22 @@ export function matchesExpandedSearch(searchQuery: string, title: string, descri
 export function marketSearchFromLink(value: string | null | undefined): string | null {
     const v = value?.trim().slice(0, HOME_SEARCH_MAX_CHARS).trim();
     return v ? v : null;
+}
+
+/**
+ * "Save this search to Home" (core home-save-search.ts): the Market's search as a saved search's settings, or null where
+ * there is none to save: no words, or the Events or Polls tab (a saved search is Offers and Needs). Offers or Needs from
+ * the tab (All and For You are both), the category chip, and the distance filter as the card's smallest distance that
+ * holds it.
+ */
+export function marketSearchToSave(
+    state: { type: string; category: string; radiusKm: number | null | undefined }, search: string,
+): HomeSearchSettings | null {
+    if (state.type === 'event' || state.type === 'poll') return null;
+    return searchFromMarket({
+        q: search,
+        kind: state.type === 'offer' ? 'offer' : state.type === 'need' ? 'need' : 'any',
+        category: state.category === 'all' ? null : state.category,
+        radiusKm: state.radiusKm,
+    });
 }

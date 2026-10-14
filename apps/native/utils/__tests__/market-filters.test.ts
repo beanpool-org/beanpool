@@ -10,7 +10,7 @@ import {
     MARKET_TYPE_PILLS, marketSecondRow, feedPostVisible, marketFiltersActive, marketFeedQuery, DEFAULT_MARKET_FILTERS,
     distanceChipLabel, trustChipLabel, beansChipLabel,
     type MarketFilterState,
-    marketSearchFromLink, marketSearchQuery, marketSearchMatches,
+    marketSearchFromLink, marketSearchQuery, marketSearchMatches, marketSearchToSave, saveSearchParam, readSaveSearchParam,
 } from '../market-filters';
 import { CATEGORY_FILTER_CHIPS, categoryPanelReducer } from '../map-filters';
 import { CATEGORY_META } from '../../constants/categories';
@@ -208,6 +208,28 @@ describe('marketSearchFromLink: a saved search\'s See more fills the Market\'s s
         expect(marketSearchFromLink('   ')).toBeNull();
         expect(marketSearchFromLink('')).toBeNull();
         expect(marketSearchFromLink(undefined)).toBeNull();
+    });
+});
+
+describe('Save this search to Home: the Market\'s search as a saved search (Marty, 7 Oct)', () => {
+    const at = (over: Partial<MarketFilterState>) => ({ ...DEFAULT_MARKET_FILTERS, ...over });
+    it('takes the words, Offers or Needs from the pill, the category chip and the distance chip', () => {
+        expect(marketSearchToSave(at({ type: 'offers', category: 'food', radiusKm: 5 }), 'eggs')).toEqual({ q: 'eggs', kind: 'offer', category: 'food', km: 5 });
+        expect(marketSearchToSave(at({ type: 'needs' }), ' help moving ')).toEqual({ q: 'help moving', kind: 'need' });
+        expect(marketSearchToSave(at({ type: 'all', category: 'tools', radiusKm: 3 }), 'drill')).toEqual({ q: 'drill', kind: 'any', category: 'tools', km: 5 });
+        expect(marketSearchToSave(at({ type: 'for-you' }), 'eggs')?.kind).toBe('any');
+    });
+    it('offers nothing to save without words, or under Events or Polls (a saved search is Offers and Needs)', () => {
+        expect(marketSearchToSave(at({}), '   ')).toBeNull();
+        expect(marketSearchToSave(at({ type: 'events' }), 'market day')).toBeNull();
+        expect(marketSearchToSave(at({ type: 'polls' }), 'compost')).toBeNull();
+    });
+    it('carries the search to Home and reads it back; anything else is nothing', () => {
+        const s = marketSearchToSave(at({ type: 'offers', category: 'food', radiusKm: 2 }), 'eggs')!;
+        expect(readSaveSearchParam(saveSearchParam(s))).toEqual(s);
+        expect(readSaveSearchParam([saveSearchParam(s), 'x'])).toEqual(s);
+        for (const bad of [undefined, '', 'eggs', '{', '[]', JSON.stringify({ q: '  ' }), JSON.stringify({ kind: 'offer' })]) expect(readSaveSearchParam(bad)).toBeNull();
+        expect(readSaveSearchParam(JSON.stringify({ q: 'eggs', kind: 'nope', km: 7, category: 'zzz' }))).toEqual({ q: 'eggs', kind: 'any' });
     });
 });
 

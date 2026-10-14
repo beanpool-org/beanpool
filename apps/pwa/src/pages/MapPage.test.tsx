@@ -8,6 +8,7 @@ import L from 'leaflet';
 import { livePostChange } from '@beanpool/core';
 import { routeLivePostChange, resetLivePostsForTest } from '../lib/live-posts';
 import { resetCommunityInfoOnce } from '../lib/visitor-lobby-gate';
+import { getProfileStatus } from '../lib/profile-status';
 
 vi.mock('leaflet.markercluster', () => ({}));
 
@@ -1529,5 +1530,131 @@ describe('a Need where Beans are off (B4/M2)', () => {
         expect(within(panel).getByText(/Contributions First/)).toBeInTheDocument();
         expect(within(panel).getByText(/List an Offer first to post Needs/)).toBeInTheDocument();
         expect(within(panel).getByText(/0\/5 photos/)).toHaveTextContent('(at least 1 required)');
+    });
+});
+
+/*
+ * Sending a Need from the global node's real form (review #1936 N2/N3): `showcase` marks Beans, so there is no price box,
+ * and a Need with no photo goes up free, even from a member an older node still calls blocked. A local community keeps
+ * Offer first and the photo. The button's rule is lib/offer-need-submit (#1933): a call that left out `photoRequired`
+ * would ask for the photo on global again.
+ */
+describe('sending a Need where Beans are off (review #1936 N3)', () => {
+    const info = (beans: boolean) => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: beans ? 'local' : 'global', features: beans ? { beans } : { openJoin: true, guestListingsOnly: true, beans, showcase: true } });
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        resetSavedMapView();
+        resetCommunityInfoOnce();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([] as any);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+    });
+
+    /** A Need with a title, a description and a pin, and no photo; the price too where there is a box. */
+    async function fillNeed(beans: boolean, blocked: boolean) {
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(info(beans) as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: blocked } as any);
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'n1' } } as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        await act(async () => { await new Promise(r => setTimeout(r, 30)); });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: '🟠 Need' })); });
+        fireEvent.change(within(panel).getByPlaceholderText('What do you need/offer?'), { target: { value: 'Help moving a couch' } });
+        fireEvent.change(within(panel).getByPlaceholderText('Describe what you need/offer...'), { target: { value: 'Saturday morning' } });
+        if (beans) fireEvent.change(within(panel).getByPlaceholderText('B'), { target: { value: '5' } });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
+        const map = vi.mocked(L.map).mock.results.at(-1)!.value as any;
+        const clicks = map.on.mock.calls.filter((c: any[]) => c[0] === 'click').map((c: any[]) => c[1]);
+        await act(async () => { clicks.forEach((h: any) => h({ latlng: { lat: -28.55437, lng: 153.50261 } })); });
+        const approx = within(panel).queryByRole('button', { name: 'Approximate (~100m)' });
+        if (approx) await act(async () => { fireEvent.click(approx); });
+        return { panel, create };
+    }
+
+    it('Beans off (global, no price box): a Need with no photo says "Post Need", is enabled, and goes up free', async () => {
+        const { panel, create } = await fillNeed(false, true);
+        expect(within(panel).queryByPlaceholderText('B')).toBeNull();
+        const send = within(panel).getByRole('button', { name: 'Post Need' });
+        expect(send).toBeEnabled();
+        await act(async () => { fireEvent.click(send); });
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+        const body = create.mock.calls[0][0] as any;
+        expect(body.type).toBe('need');
+        expect(body.credits).toBe(0);
+        expect(body.photos ?? []).toHaveLength(0);
+    });
+
+    it('Beans on: a member the node calls blocked is asked for an Offer first, and nothing is sent', async () => {
+        const { panel, create } = await fillNeed(true, true);
+        const send = within(panel).getByRole('button', { name: '🔵 List an Offer first to post Needs' });
+        expect(send).toBeDisabled();
+        await act(async () => { fireEvent.click(send); });
+        expect(create).not.toHaveBeenCalled();
+    });
+
+    it('Beans on: a Need with a price and no photo stays disabled until a photo is added', async () => {
+        const { panel, create } = await fillNeed(true, false);
+        expect(within(panel).getByText(/0\/5 photos/)).toHaveTextContent('(at least 1 required)');
+        const send = within(panel).getByRole('button', { name: 'Post Need' });
+        expect(send).toBeDisabled();
+        await act(async () => { fireEvent.click(send); });
+        expect(create).not.toHaveBeenCalled();
+    });
+});
+
+/*
+ * The post form opened from another tab (review #1936 N1): the Market's "+", Home's first steps or a group's "post
+ * here" mount the map with openNewPost, and App clears it at once. The photo rule must come from the node's info, which
+ * has not reached this first render yet; a member with no photo on the global node gets the form, not the photo gate.
+ */
+describe('the post form opened from another tab (review #1936 N1)', () => {
+    const info = (beans: boolean) => ({ memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: beans ? 'local' : 'global', features: beans ? { beans } : { openJoin: true, guestListingsOnly: true, beans, showcase: true } });
+    const gate = /likes to know who they're dealing with/;
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        resetSavedMapView();
+        resetCommunityInfoOnce();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([] as any);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+    });
+
+    /** As App mounts it from another tab: openNewPost, cleared as soon as the map says it has it. A member with no photo. */
+    async function openFromAnotherTab(beans: boolean) {
+        vi.mocked(getProfileStatus).mockResolvedValueOnce({ complete: false, missingName: false, missingAvatar: true });
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(info(beans) as any);
+        function Host() {
+            const [open, setOpen] = React.useState(true);
+            return <MapPage identity={mockIdentity} openNewPost={open} onOpenNewPostHandled={() => setOpen(false)} />;
+        }
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<Host />); });
+        return view!;
+    }
+
+    it('Beans off (global): the form opens for a member with no photo, with no photo gate', async () => {
+        const view = await openFromAnotherTab(false);
+        expect(await view.findByTestId('map-new-post-panel')).toBeInTheDocument();
+        expect(view.queryByText(gate)).toBeNull();
+    });
+
+    it('Beans on: the same member is asked for a photo first, and the form stays shut', async () => {
+        const view = await openFromAnotherTab(true);
+        expect(await view.findByText(gate)).toBeInTheDocument();
+        expect(view.queryByTestId('map-new-post-panel')).toBeNull();
     });
 });

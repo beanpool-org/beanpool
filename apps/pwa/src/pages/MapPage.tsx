@@ -9,6 +9,7 @@
  *  - User location marker (pulsing purple dot)
  */
 
+import { offerNeedSubmit } from '../lib/offer-need-submit';
 import { placelessListingNote } from '@beanpool/core';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
@@ -358,14 +359,19 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const tryOpenComposer = useCallback(async () => {
         // A visitor has no key to post with; the lobby's Join is the way.
         if (!identity) return;
-        const status = await getProfileStatus(identity);
-        if (!postRules.profilePhoto) status.missingAvatar = false;
+        // The Beans switch from the page's shared read, not this render's nodeInfo: opened from another tab (openNewPost),
+        // this runs on the first render, before the info has arrived. A read that fails keeps the local rules.
+        const [status, info] = await Promise.all([
+            getProfileStatus(identity),
+            Promise.resolve().then(() => communityInfoOnce()).catch(() => null),
+        ]);
+        if (!postRulesFor((info?.features as { beans?: unknown } | undefined)?.beans !== false).profilePhoto) status.missingAvatar = false;
         if (status.missingName || status.missingAvatar) {
             setProfileGateMsg(`Your community likes to know who they're dealing with, so you need ${describeMissing(status)} before you can post. It only takes a moment.`);
             return;
         }
         setShowNewPost(true);
-    }, [identity, postRules.profilePhoto]);
+    }, [identity]);
 
     // Fetch user groups for audience scoping (Item 10)
     useEffect(() => {
@@ -1632,7 +1638,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         ? (posting || !newPostTitle.trim() || !eventStart || postLat == null)
         : newPostType === 'poll'
             ? (posting || !newPostTitle.trim() || pollOptions.filter(o => o.trim()).length < 2)
-            : (needBlocked || posting || !newPostTitle.trim() || !newPostDescription.trim() || newPostCredits === '' || postLat == null || (photoRequired && newPostPhotos.length === 0));
+            : offerNeedSubmit({ type: newPostType === 'need' ? 'need' : 'offer', title: newPostTitle, description: newPostDescription, credits: newPostCredits, priceMarked, hasLocation: postLat != null, photoCount: newPostPhotos.length, photoRequired, needBlocked, posting }).disabled;
 
 
     return (
@@ -2646,10 +2652,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     {posting ? 'Posting...' :
                      newPostType === 'event' ? (postLat == null ? '📍 Map location required' : !newPostTitle.trim() || !eventStart ? '✏️ Add a title and start time' : eventEdit ? 'Save changes' : 'Create Event') :
                      newPostType === 'poll' ? '🗳️ Create Poll' :
-                     needBlocked ? '🔵 List an Offer first to post Needs' :
-                     postLat == null ? '📍 Map location required' :
-                     !newPostTitle.trim() || !newPostDescription.trim() || newPostCredits === '' ? '✏️ Fill required fields' :
-                     `Post ${newPostType === 'offer' ? 'Offer' : 'Need'}`}
+                     offerNeedSubmit({ type: newPostType === 'need' ? 'need' : 'offer', title: newPostTitle, description: newPostDescription, credits: newPostCredits, priceMarked, hasLocation: postLat != null, photoCount: newPostPhotos.length, photoRequired, needBlocked, posting }).label}
                 </button>
             </div>
         )}

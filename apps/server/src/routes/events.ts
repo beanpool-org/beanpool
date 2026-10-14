@@ -34,9 +34,9 @@ export function createEventsRoutes(_deps: RouteDeps): Router {
      * only ever open to a member.
      */
     router.get('/api/events/zone', async (ctx) => {
-        const lat = Number(ctx.query.lat);
-        const lng = Number(ctx.query.lng);
-        const tz = ctx.query.lat != null && ctx.query.lng != null ? zoneOfPin(lat, lng) : null;
+        const rawLat = ctx.query.lat;
+        const rawLng = ctx.query.lng;
+        const tz = typeof rawLat === 'string' && typeof rawLng === 'string' && rawLat && rawLng ? zoneOfPin(Number(rawLat), Number(rawLng)) : null;
         if (!tz) {
             ctx.status = 400;
             ctx.body = { error: 'lat and lng must be a point on the map' };

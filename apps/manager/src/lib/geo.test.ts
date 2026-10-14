@@ -34,6 +34,21 @@ describe('geo utility', () => {
                 lng: 0,
             });
         });
+
+        it('handles extreme coordinate boundaries (poles and anti-meridian)', () => {
+            const northPole = approximateLocation(90.000001, -180.000001);
+            expect(northPole).toEqual({ lat: 90, lng: -180 });
+
+            const southPole = approximateLocation(-90.000001, 180.000001);
+            expect(southPole).toEqual({ lat: -90, lng: 180 });
+        });
+
+        it('rounds values based on standard 3-decimal-place thresholds', () => {
+            // Rounds up when 4th digit >= 5
+            expect(approximateLocation(12.3455, 67.8905)).toEqual({ lat: 12.346, lng: 67.891 });
+            // Rounds down when 4th digit < 5
+            expect(approximateLocation(12.3454, 67.8904)).toEqual({ lat: 12.345, lng: 67.89 });
+        });
     });
 
     describe('roundToRoughly100m', () => {

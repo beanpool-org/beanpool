@@ -908,9 +908,10 @@ function groupsWithPictures(db: Db, rows: any[]): SyncGroup[] {
 // column added later travels without anyone listing it; rowToMember leaves most of them out because the member
 // directory is built from it too. The named fields beside it (the mute, the area, the visitor's mark, the owner's
 // delete, the board standing) are what a standby older than `standing` reads. This payload goes only to a standby
-// pulling with the replication token or the admin password (routes/backup.ts): the database's own trust.
+// pulling with the replication token or the admin password (routes/backup.ts): the database's own trust. Never
+// `callsign_fold`: each server makes its own from the name (the server's db.ts migrateCallsignFold).
 function memberOfRow(row: any, preferencesOf: ReadonlyMap<string, Record<string, string>>): Member {
-    const { public_key: _key, updated_at: _stamp, ...standing } = row;
+    const { public_key: _key, updated_at: _stamp, callsign_fold: _fold, ...standing } = row;
     return {
         ...rowToMember(row),
         moderationMutedUntil: row.moderation_muted_until ?? null,

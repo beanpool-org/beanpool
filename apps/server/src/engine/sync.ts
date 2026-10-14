@@ -1718,9 +1718,10 @@ export async function importRemoteState(cb: SyncCallbacks, received: SyncPayload
             }
 
             // This table's own columns, which alone a member's `standing` may name; never the key or the stamp, written apart,
-            // nor the avatar's reference and size, which go with the photo (importMemberPhoto).
+            // nor the avatar's reference and size, which go with the photo (importMemberPhoto), nor callsign_fold, which this
+            // server's own triggers make from the name it writes (db.ts migrateCallsignFold), whatever a main server sends.
             const memberColumns = new Set((db.prepare('SELECT name FROM pragma_table_info(?)').all('members') as { name: string }[])
-                .map((c) => c.name).filter((c) => c !== 'public_key' && c !== 'updated_at' && !MEMBER_PHOTO_COLUMNS.has(c)));
+                .map((c) => c.name).filter((c) => c !== 'public_key' && c !== 'updated_at' && c !== 'callsign_fold' && !MEMBER_PHOTO_COLUMNS.has(c)));
             const standingStatements = new Map<string, Database.Statement>();
             // This table's own rules, which a whole row is checked against before it is written (writeMemberStanding); only
             // for a copy that carries whole rows.

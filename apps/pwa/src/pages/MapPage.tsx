@@ -2148,11 +2148,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             onClick={() => { setNewPostType(t); setValidationErrors(new Set()); if (t !== 'event') setEventIsCopy(false); }}
                             className={`flex-1 py-3 rounded-xl border text-[15px] font-bold capitalize transition-all shadow-sm ${
                                 newPostType === t
-                                    ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-md scale-[1.02]' : t === 'need' ? 'bg-bp-action-fill border-bp-action-fill text-bp-action-on shadow-md scale-[1.02]' : t === 'event' ? 'bg-violet-700 border-violet-700 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
+                                    ? (t === 'offer' ? 'bg-bp-commit-fill border-bp-commit-fill text-bp-commit-on shadow-md scale-[1.02]' : t === 'need' ? 'bg-bp-action-fill border-bp-action-fill text-bp-action-on shadow-md scale-[1.02]' : t === 'event' ? 'bg-violet-700 border-violet-700 text-white shadow-md scale-[1.02]' : 'bg-purple-600 border-purple-600 text-white shadow-md scale-[1.02]')
                                     : 'bg-white dark:bg-nature-800 border-nature-200 dark:border-nature-700 text-nature-500 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-700 dark:hover:text-nature-200'
                             }`}
                         >
-                            {t === 'offer' ? '🔵 Offer' : t === 'need' ? '🟠 Need' : t === 'event' ? 'Event' : '🗳️ Poll'}
+                            {t === 'offer' ? '🟢 Offer' : t === 'need' ? '🟠 Need' : t === 'event' ? 'Event' : '🗳️ Poll'}
                         </button>
                     ))}
                 </div>
@@ -2645,7 +2645,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             <div className="mb-4 p-3 rounded-xl border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200 text-sm">
                                 <p className="font-bold mb-1">💡 Contributions First</p>
                                 <p className="text-[13px] leading-snug">
-                                    BeanPool is a mutual-credit community. To encourage a culture of giving, new members must list at least one Offer before they can post Needs. Let the community know what you can give back — switch to <span className="font-bold">🔵 Offer</span> above. (Or ask an Elder to vouch for you.)
+                                    BeanPool is a mutual-credit community. To encourage a culture of giving, new members must list at least one Offer before they can post Needs. Let the community know what you can give back — switch to <span className="font-bold">🟢 Offer</span> above. (Or ask an Elder to vouch for you.)
                                 </p>
                             </div>
                         )}

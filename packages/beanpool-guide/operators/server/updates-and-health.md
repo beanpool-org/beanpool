@@ -49,7 +49,7 @@ deploy.sh replaces everything in the server folder except the data folder and .e
 
 ## Is there a new version?
 
-The server asks GitHub for the newest release shortly after it starts and every 6 hours. **Appliance & Data**, then **Diagnostics & Logs**, shows the version and whether an update is out, with a button to check now.
+The server asks GitHub for the newest release shortly after it starts and every 6 hours. **Appliance & Data**, then **Diagnostics & Logs**: press **Check Release Updates**, and Settings says which version your server runs and whether a newer one is out. Until you press it the tiles don't show your server's real version (the Node Version tile always says v1.4.2). Your server's address followed by /api/version always does.
 
 To stop the server asking on its own, put DISABLE_UPDATE_CHECK=true in .env and run docker compose up -d. Take the new docker-compose.yml first: older ones don't pass the setting to the server. Nothing else depends on the check. The button to check now still asks GitHub, but only when you press it, and /api/version no longer says whether an update is out.
 
@@ -64,7 +64,7 @@ If neither answers, the server is down or unreachable. See Troubleshooting.
 
 ## Checking from inside
 
-**Diagnostics & Logs** shows the processor, memory, database size, live connections, peers and the disk. Home shows the same at a glance, and a card after an unclean shutdown (power cut, crash). After an unclean shutdown the server checks its database as it starts; read the card, then acknowledge it.
+**Diagnostics & Logs** shows the processor, memory, database size, live connections and the disk. Peers are under **Gateway & Peers**. Home shows the live connections, a warning when the disk is filling, and a card after an unclean shutdown (power cut, crash). After an unclean shutdown the server checks its database as it starts; read the card, then acknowledge it.
 
 ![Diagnostics and system health cards in Settings](images/appliance-diagnostics.webp)
 
@@ -99,14 +99,15 @@ It also tells them when someone gains power on the server, saying what happened 
 - wrong admin passwords keep arriving from one address (it now waits between tries), or from many addresses (high); over after an hour without another;
 - more than 20 wrong claim proofs arrive in a minute;
 - the address service names another community as the holder of this community's address, or the address was released and its hold is over (high), until every address it watches is this community's again. The server reads this from its list of addresses every minute, so a database restored from a backup says what that backup's list says;
-- another server took over this community with the same keys, so this one is read-only (urgent): told again every day until an owner taps **Seen** in the Alerts card.
+- another server took over this community with the same keys, so this one is read-only (urgent): told again every day until an owner taps **Seen** in the Alerts card;
+- an AI assistant is connected or disconnected, or an owner allows or turns off AI assistants (high when a used pass came back and the assistant was cut off).
 
 And when members report something, so a report never waits unseen in the Manager's Reports queue:
 
 - the first report is told at once: "A new report came in (spam or scam). 3 reports wait in the Manager's Reports queue." The ones after it, for an hour, come as one line when the hour is over: "49 more reports came in in the hour after the first was told (spam or scam 13, offensive content 12, other 24)". To change the hour, put ALERTS_REPORT_FOLD_MINUTES in .env (1 to 1440 minutes) and run docker compose up -d;
 - a report in the child-safety category is urgent: members pick **Child safety** in the report list (phone and web), and a report from an older app that says it in words ("CSAM", "sexual abuse of a minor") counts too. It is never folded into the hour's line. Each member's first in their hour is told and pushed at once; the rest of that member's hour comes as one urgent line when it ends, pushed: "9 more child-safety reports came in from the same member in the hour after their first was told". So one member reporting all hour sends 2 pushes, not 10. Your server tells at most 10 of these lines an hour; past that (a flood from many members), the reports are counted into one urgent line, told and pushed within about 10 minutes: "86 more child-safety reports came in, from 12 members, past the 10 lines an hour this server tells on their own". None is dropped, and every one is in the Reports queue at once.
 
-These go to the owners and the admins (who work the queue), on their phones and on your channel. An admin's push carries the report lines alone, never the owners' other alerts. They say how many and what kind, from the reason the member picked; never who reported whom, and never what they wrote. Open the Manager's Reports queue to read them: there each report shows who sent it and what they wrote. Report lines never push another alert out of the alert history or the channel's queue: past 50 lines, report lines make room first, and the same report line is counted (×14) rather than kept again. In a message held while your channel was down, they come after every other line.
+These go to the owners and the admins (who work the queue), on their phones and on your channel. An admin's push carries the report lines alone, never the owners' other alerts. They say how many and what kind, from the reason the member picked; never who reported whom, and never what they wrote. Open **People & Safety**, then **Triage & Moderation** in Settings to read them: there each report shows who sent it and what they wrote. Report lines never push another alert out of the alert history or the channel's queue: past 50 lines, report lines make room first, and the same report line is counted (×14) rather than kept again. In a message held while your channel was down, they come after every other line.
 
 For role changes, the claim and key changes, each owner gets a push at once for the first 3 an hour by the same person (or by the admin password), and for up to 3 more that make or remove an owner or use a break-glass code. The rest of that hour comes as one line an hour later, pushed: "40 more changes by the same admin". A change that makes or removes an owner, or uses a break-glass code, is always listed on its own in the channel and the Alerts card, and is never dropped to make room; the same line repeated is shown once with a count (×5). An owner or admin who loses that role gets that push too, while it is among the changes pushed at once; the hourly line goes to the owners as they are then.
 
@@ -116,7 +117,7 @@ A standby tells its own changes on its own channel and in its own Alerts card, a
 
 Each alert is told once when it starts, again every 24 hours while it lasts, and once when it is resolved: when it has been over for 15 minutes. One that comes back within those 15 minutes is not told again, so something swinging on and off sends one message, not one for each swing.
 
-**Owners always hear.** Each owner gets a push on their phone (one for everything that started in the same minute, and at most one a day for each alert, unless it gets worse; security changes as above), whatever their Marketplace Activity setting, and a banner in Settings until it is over. Admins and moderators are not told (admins are, of reports), and only an owner can open the **Alerts** card: **Appliance & Data**, then **Backups & Restore**.
+**Owners always hear.** Each owner gets a push on their phone (one for everything that started in the same minute, and at most one a day for each alert, unless it gets worse; security changes as above), whatever their Marketplace Activity setting, and a banner in Settings until it is over. The watchdog going quiet is the one alert that is never pushed: it shows in the Alerts card, the banner and your channel. Admins and moderators are not told (admins are, of reports), and only an owner can open the **Alerts** card: **Appliance & Data**, then **Backups & Restore**.
 
 **Your own channel, if you want one.** In the Alerts card, add an ntfy topic (for example https://ntfy.sh/ followed by a long name nobody can guess: the topic's name is its password) or any address that takes a JSON POST, with an optional token. Or put ALERTS_WEBHOOK_URL, ALERTS_WEBHOOK_FORMAT (ntfy or json) and ALERTS_WEBHOOK_TOKEN in .env and run docker compose up -d. **Send a test** checks it arrives. The channel is yours: nothing goes through BeanPool, and with no channel set nothing leaves the server.
 
@@ -166,7 +167,7 @@ How many have happened since the server last started, and what the last one said
 
 A few of these are not an emergency, and the server is still doing its work. Many of the same one is worth reporting — see Feedback.
 
-A real crash is different. The server still stops and starts again, because carrying on half-way through a change could damage the ledger, and it leaves a report file in data named report-something.json, beside the freeze reports. That file holds no passwords and no keys, so it is safe to hand on when you ask someone for help. Reports written by older versions of the server did hold them, in full, and the server cleans those up the next time it starts, without deleting a single one. It can only do that once it has started: if the server is not starting at all, any older reports still in the folder have not been through that cleanup, so say so before you hand the folder to anyone.
+A real crash is different. The server still stops and starts again, because carrying on half-way through a change could damage the ledger, and it leaves a report file in data whose name starts with report. and ends in .json, beside the freeze reports. That file holds no passwords and no keys, so it is safe to hand on when you ask someone for help. Reports written by older versions of the server did hold them, in full, and the server cleans those up the next time it starts, without deleting a single one. It can only do that once it has started: if the server is not starting at all, any older reports still in the folder have not been through that cleanup, so say so before you hand the folder to anyone.
 
 ## Disk space
 
@@ -174,4 +175,4 @@ The disk card warns at **80%** full. Nothing stops the server writing when the d
 
 - **Clean Orphaned Media & Compress Logs** shows what it would remove, then deletes photos no post uses and cached Pulse pictures no item uses, packs old log lines into data/logs/archived, and trims the database's write-ahead file.
 - Keep fewer snapshots, or copy old ones off the server.
-- Things that grow with no limit: data/logs/archived, the freeze reports (files named report-something.json in data), and Docker's own logs.
+- Things that grow with no limit: the crash and freeze reports in data (names starting report. and ending .json). Archived log lines go after 30 days. Docker's own log is held to two files of 5 MB by the current docker-compose.yml.

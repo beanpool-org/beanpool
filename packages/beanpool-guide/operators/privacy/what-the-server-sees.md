@@ -77,7 +77,7 @@ Profile pictures on your community are not locked with a key of their own yet. A
 - The list of devices connected right now, with their internet address, device type and member name. It is kept in memory only, while they are connected. Its live traffic shows each message's kind, size, direction and time, never what it says: not who paid whom, an amount or a note.
 - Reports, and the people they are about.
 - On the global community, which accounts joined from the same internet connection within a day of each other (above). Moderators see this too.
-- Not who took a listing, or the deal: Settings shows a listing as taken, nothing more. The only place an admin sees a trade is Escrow Disputes, and every look there is written down where every owner and admin can read it (Community health, "Who looked at trades and alerts").
+- Not who took a listing, or in which deal: the member data in Settings shows a listing as taken, nothing more. An admin sees a trade itself only when it is stuck or was settled by an admin (Escrow Disputes, and **Stranded Escrows** under Appliance & Data), and every look there is written down where every owner and admin can read it (Community health, "Who looked at trades and alerts"). Running a known community lists everything an admin can see of trades.
 
 ## When a member deletes their account
 

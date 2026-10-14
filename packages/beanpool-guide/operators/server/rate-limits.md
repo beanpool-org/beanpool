@@ -51,11 +51,13 @@ These stop one account filling your server, and its standby copies, with rows. E
 
 - **Changes**: 5,000 a day per member (posts, messages, edits and the like), even with the gateway switched off. Settings is not counted, and neither is marking a chat read or a notice seen: the apps do that on their own while a chat is open, and it adds nothing to your server. What a keeper does for an enterprise counts against the enterprise's own 50,000, not the keeper's, and against a second 50,000 for everything that keeper does for all the enterprises they keep. Once the enterprise's 50,000 are used up, a keeper's further changes for it count against their own 5,000 instead, and not the second 50,000: so one keeper who uses up an enterprise's day can only stop themselves, and every other keeper keeps their own 5,000 for it. Running the enterprise (taking on, removing or replacing keepers, stepping down, pausing, resuming, winding up, and completing or turning down its deals) always counts against the keeper's own 5,000. Its lead can remove a keeper who misuses it (the removal waits out the usual 3-day objection window; you can remove a keeper at once in Settings).
 - **Posts**: 100 new ones a day of their own. What they put up for an enterprise they keep counts against the enterprise, 1,000 a day, and against 1,000 a day for all the enterprises they keep together. Once the enterprise's 1,000 are up, what they put up for it counts against their own 100 instead.
+- **Friends**: 100 people added a day, counting anyone added and removed again.
 - **Groups**: 5 new ones a day. **Enterprises**: 3 new ones a day, and 20 of theirs still running.
 - **Invites**: 20 a day, and 50 that nobody has used yet. An offline ticket counts when someone joins with it. Invites made in Settings don't count. An invite nobody used is deleted 30 days after it was made, when it has stopped working.
-- **New people**: conversations with 20 people from outside the community a day. A new account on the global community is held to 10 new people for its first days.
+- **New people**: conversations with 20 people from outside the community a day. A new account on the global community is held to 3 posts, 5 photos and 10 new people a day, until it is 3 days old and 3 of its posts have stayed up. One made with 12 words and no sign-in is held to 2 posts, 4 photos and 3 new people a day, for 7 days and until 3 of its posts have stayed up. They are told "While your account is new you can …".
 - **The Pulse**: 50 links added by hand a day, and 300 items synced from connected accounts (the rest come with a later sync). Your server also collects new items from members' websites, blogs, YouTube and SoundCloud channels itself: 400 a day per member, all their channels together. Past that, the rest wait until the next day.
-- **A message's words**: up to 64 KB. Photos are attachments and don't count.
+- **A message's words**: a direct message up to about 48 KB of words (64 KB as stored); a line in a group, event or enterprise chat up to 2,000 characters. Photos are attachments and don't count.
+- **Looking up people nearby**: on the global community, a member can ask for the people nearest a place 100 times a day. A restart starts the count again. A local community has no such limit.
 
 ## Payments and deals
 
@@ -83,15 +85,15 @@ This one slows down anyone guessing the admin password, without ever letting the
 
 Signing in from the app's Manage button never goes through the brake. The two-factor code asked for when switching it off or moving it does, even when you are signed in from the app. A break-glass code is checked only when adding an admin key, even from an address that is waiting (at most once every 10 seconds from one address); anywhere else it counts as a wrong password.
 
-The two-factor code typed at the Manage button, or when approving a computer's sign-in from the phone, has a brake of its own. It counts wrong codes for each person's key and for each internet address: 5 are free, then each further try waits 2 seconds, then 4, 8 and so on, up to an hour. A right code clears both, and so does a day with no wrong code. Wrong passwords never slow this down, and wrong codes here never slow down the password.
+Signing in with Manage, and approving a computer's sign-in from the phone, ask for no two-factor code: the phone's own lock is the second factor. A computer's sign-in code lasts 2 minutes. It is cancelled after 5 refused approvals or 3 wrong tries at the two digits.
 
-If it keeps happening, someone is guessing your password. The logs name the address by a code, such as ip#k3Jx9QaB7d, never the address itself: the same code means the same address, until the code changes the next day. Sign in from the app meanwhile, and make sure the password is long and not used anywhere else.
+If it keeps happening, someone is guessing your password. The logs name the address by a code, such as ip#k3Jx9QaB7d, never the address itself: the same code means the same address, until the code changes: at the next day (UTC), or when the server restarts. Sign in from the app meanwhile, and make sure the password is long and not used anywhere else.
 
 ## Many people on one connection
 
 A school, a village hall's wifi or a mobile network can put many people behind one internet address. Signed-in members each get their own gateway allowance, but sign-in and recovery attempts are counted per address, so a crowd all joining with invites at once can hit the 15-a-minute limit. Ask them to wait a minute and try again. Joining through the open door has its own limits instead (see The open door's numbers): there, a crowd is asked for a little more setting up, not turned away by the join limits. A very large crowd on one address can still meet the open door's own 600 requests a minute per address, or the gateway's allowance for people who are not members yet (on the global community, 600 a minute per address), and both answer with a refusal.
 
-If your server sits behind a proxy on another machine, list that proxy in TRUSTED_PROXIES in .env. Otherwise every member looks like the proxy's address and shares one allowance. That goes for the password brake too: everyone is one address, so a few wrong passwords from anyone make everyone wait, for up to 10 minutes. The log says so and names TRUSTED_PROXIES, with the proxy's code rather than its address. Add your proxy's address there and restart the server; the restart also clears the brake.
+If your server sits behind a proxy on another machine, list that proxy in TRUSTED_PROXIES in .env. Otherwise everyone looks like the proxy's address, so everything counted per address (people not signed in, sign-in and recovery attempts, Settings, the password brake) is one shared allowance. Signed-in members still keep their own. For the password brake that means everyone is one address, so a few wrong passwords from anyone make everyone wait, for up to 10 minutes. The log says so and names TRUSTED_PROXIES, with the proxy's code rather than its address. Add your proxy's address there and restart the server; the restart also clears the brake.
 
 ## Finding out which limit
 
@@ -106,7 +108,11 @@ The message says which:
 - "You can put up 100 new posts", "You can start 5 groups", "You can start 3 enterprises", "You have started 20 enterprises", "You can make 20 invites", "You have 50 invites nobody has used yet", "You can add 50 links to the Pulse", "You can start conversations with 20 people": what one member can make in a day. "… for the enterprises you keep, all of them together": one keeper's posts, payments, new people or deals for all their enterprises.
 - "You can make 100 payments", "You can pay 30 people you have never paid before", "You can ask for, accept or approve 100 deals", "You can make or change 20 pledges": payments and deals.
 - One of the member's own messages above, then "… has reached its own limit for today, so what you do for it counts against yours": the member's own limit, reached doing something for an enterprise that had used up its own. An enterprise's own limits never refuse anything themselves: past them, its keepers' own limits count.
-- "This message is too long to send" (HTTP 413): a message's words.
+- "This message is too long to send" (HTTP 413): a direct message's words. "Message is too long (maximum 2000 characters)": a line in a group, event or enterprise chat.
+- "You can add 100 people": friends added in a day.
+- "You have looked up the people near a place 100 times today": people nearby, on the global community.
+- "Too many new codes" or "Too many sign-ins waiting on this node right now": new sign-in codes for a computer.
+- "While your account is new you can …": a new account's limits on the global community.
 - "You have sent a lot of reports recently": reports, 10 an hour.
 - "Too many wrong admin passwords from your network", or "This node is getting a lot of wrong admin passwords from elsewhere": the password brake.
 

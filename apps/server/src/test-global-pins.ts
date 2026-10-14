@@ -20,7 +20,12 @@
  *      - an enterprise's listing: exact for its keeper, the neighbourhood for everyone else;
  *      - the Home screen's market card: whole km from each neighbourhood;
  *      - a listing's socket copy: exact to its author, the neighbourhood to another member, even when the copy was read
- *        for someone else (an RSVP's, already rounded).
+ *        for someone else (an RSVP's, already rounded);
+ *      - WHICH sockets get a new listing's copy (state-engine.ts listingReach, 250 km from each member's 0.1° area): for 3
+ *        listings posted through the route, about 25 members each set their area through the route at the 0.1° grid
+ *        points 250 ± 0.8 km from the listing's neighbourhood; the members who get the copy are exactly those within
+ *        250 km of the neighbourhood, and for at least one listing that differs from who is within 250 km of the place,
+ *        so the check can tell (#1965 deciding review B1: from the place, ~25 such yes-or-no answers put it to ~100 m).
  *   3. The operator's override `nodeProfile.openMembership = false` on the global node: every place exact again.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-global-pins)
@@ -35,6 +40,16 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import WebSocket from 'ws';
 import { localFetch } from './keepalive-test-fetch.js';
+
+// With GLOBAL_PINS_LOG_OUT set, everything this run prints is also written there (the runner keeps no log of a passing run).
+if (process.env.GLOBAL_PINS_LOG_OUT) {
+    const out = process.env.GLOBAL_PINS_LOG_OUT;
+    fs.writeFileSync(out, '');
+    for (const k of ['log', 'error'] as const) {
+        const write = console[k].bind(console);
+        console[k] = (...args: unknown[]) => { write(...args); fs.appendFileSync(out, args.map(String).join(' ') + '\n'); };
+    }
+}
 
 let BASE = '';
 let run = 0, passed = 0;
@@ -368,6 +383,54 @@ async function main() {
         `global: and another member's socket with the neighbourhood (got ${JSON.stringify(bobCopy?.post && [bobCopy.post.lat, bobCopy.post.lng])})`);
     aliceSock.ws.close();
     bobSock.ws.close();
+
+    // Which sockets get a new listing's copy at all: measured from its neighbourhood, never from the place.
+    const REACH_KM = 250;
+    /** The 0.1° grid points (areas are stored on it) whose distance to `c` is within `band` km of the radius. */
+    const ring = (c: { lat: number; lng: number }, band: number) => {
+        const out: Array<{ lat: number; lng: number }> = [];
+        const dLat = REACH_KM / 111.2 + 0.2, dLng = dLat / Math.cos(rad(c.lat)) + 0.2;
+        for (let la = Math.round((c.lat - dLat) * 10); la <= Math.round((c.lat + dLat) * 10); la++) {
+            for (let lo = Math.round((c.lng - dLng) * 10); lo <= Math.round((c.lng + dLng) * 10); lo++) {
+                const A = { lat: la / 10, lng: lo / 10 };
+                if (Math.abs(haversine(A.lat, A.lng, c.lat, c.lng) - REACH_KM) < band) out.push(A);
+            }
+        }
+        return out;
+    };
+    const reachRand = prng(77);
+    let tellsApart = 0;
+    for (let k = 0; k < 3; k++) {
+        const P = { lat: six(-33.9 + (reachRand() - 0.5) * 0.4), lng: six(151.1 + (reachRand() - 0.5) * 0.4) };
+        const c = { lat: nbhd(P.lat), lng: nbhd(P.lng) };
+        const watchers: Array<{ A: { lat: number; lng: number }; s: Sock }> = [];
+        for (const [i, A] of ring(c, 0.8).entries()) {
+            const id = member(`Ring ${k}-${i}`, null);
+            const r = await post('/api/community/me/area', { lat: A.lat, lng: A.lng }, id);
+            if (r.status !== 200) throw new Error(`area ${r.status} ${r.text.slice(0, 120)}`);
+            watchers.push({ A: { lat: r.body.area.lat, lng: r.body.area.lng }, s: await openSocket(`${wsBase}?${signedWsQuery(id)}`) });
+        }
+        const authorSock = await openSocket(`${wsBase}?${signedWsQuery(alice)}`);
+        await sleep(300);
+        const made = await post('/api/marketplace/posts', { type: 'offer', category: 'general', title: `Reach ${k}`, description: 'Spare seedlings',
+            credits: 0, authorPublicKey: alice.pubKeyHex, lat: P.lat, lng: P.lng }, alice);
+        const newId = made.body?.id ?? made.body?.post?.id;
+        await sleep(800);
+        const got = (s: Sock) => s.raw.some(x => { try { const e = JSON.parse(x); return (e.post?.id ?? e.id) === newId; } catch { return false; } });
+        const byCell = watchers.map(w => haversine(w.A.lat, w.A.lng, c.lat, c.lng) <= REACH_KM);
+        const byPlace = watchers.map(w => haversine(w.A.lat, w.A.lng, P.lat, P.lng) <= REACH_KM);
+        const received = watchers.map(w => got(w.s));
+        const asCell = received.every((g, i) => g === byCell[i]);
+        if (byCell.some((b, i) => b !== byPlace[i])) tellsApart++;
+        const copies = watchers.flatMap(w => w.s.raw.map(x => { try { return JSON.parse(x); } catch { return null; } }).filter(e => e?.post?.id === newId));
+        assert((made.status === 200 || made.status === 201) && !!newId && watchers.length >= 15 && asCell && received.some(Boolean) && received.some(g => !g),
+            `global: listing ${k} posted through the route reaches exactly the ${byCell.filter(Boolean).length} of ${watchers.length} members within ${REACH_KM} km of its neighbourhood (got ${received.filter(Boolean).length}; within ${REACH_KM} km of the place: ${byPlace.filter(Boolean).length}; ${made.status})`);
+        assert(copies.every(e => e.post.lat === c.lat && e.post.lng === c.lng) && got(authorSock),
+            `global: and each of them gets the neighbourhood, the author her copy (${[...new Set(copies.map(e => `${e.post.lat},${e.post.lng}`))].join(' ')})`);
+        for (const w of watchers) w.s.ws.close();
+        authorSock.ws.close();
+    }
+    assert(tellsApart >= 1, `global: for ${tellsApart} of 3 listings who is within ${REACH_KM} km of the neighbourhood differs from who is within it of the place, so the check can tell`);
 
     // ── 3. The operator's override on the global node: every place exact again ──
     console.log('\n── 3. nodeProfile.openMembership = false on the global node ──');

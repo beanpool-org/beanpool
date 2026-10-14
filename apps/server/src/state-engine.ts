@@ -1564,8 +1564,11 @@ function keepersOf(treasuries: string[]): Set<string> {
 /**
  * Who a public listing's own event (new_post, post_updated, post_removed, sent to no `recipients`) reaches on a node that
  * syncs by area (the profile's `nearbyListings`; DESIGN-global-sync-by-area §2.5): a socket whose member's area
- * (member-area.ts memberAreaFor) is within the set's radius of the listing's place (as getNearbySet measures it), and the
- * listing's parties always: its author, the member who took it, both sides of each open deal on it (asked for, or taken
+ * (member-area.ts memberAreaFor) is within the set's radius of the listing's place (as getNearbySet measures it: where
+ * anyone can join, `openMembership`, from its neighbourhood, 0.01°, for everyone but the members who have the place
+ * exactly, engine exactPlaceReaders, who are measured from the place and visited as parties; whether a socket gets a copy
+ * is a yes or no about the place, so measured from the place it located a listing to ~100 m from ~25 areas, #1965
+ * deciding review B1), and the listing's parties always: its author, the member who took it, both sides of each open deal on it (asked for, or taken
  * and not yet done: a member's set ties them to it, getNearbySet) or of one a removal just closed (`extraParties`,
  * BroadcastOptions.listingParties), and an enterprise's keepers for any of them. A member near it who blocked its author
  * is not reached, as their set holds none of that author's listings (getNearbySet: the member's own list, never the
@@ -1591,8 +1594,8 @@ interface ListingReach {
 function listingReach(event: any, extraParties: string[] = []): ListingReach | null {
     const id = typeof event.post?.id === 'string' ? event.post.id : typeof event.id === 'string' ? event.id : null;
     if (!id) return null;
-    const row = db.prepare('SELECT author_pubkey, accepted_by, lat, lng FROM posts WHERE id = ?').get(id) as
-        { author_pubkey: string; accepted_by: string | null; lat: number | null; lng: number | null } | undefined;
+    const row = db.prepare('SELECT id, author_pubkey, accepted_by, lat, lng, type, audience_scope, target_group_id, event_host_lets_in FROM posts WHERE id = ?').get(id) as
+        { id: string; author_pubkey: string; accepted_by: string | null; lat: number | null; lng: number | null; type: string; audience_scope: string | null; target_group_id: string | null; event_host_lets_in: number | null } | undefined;
     if (!row) return null;
     const { radiusKm } = nearbyListingsLimits();
     const placed = row.lat != null && row.lng != null;
@@ -1602,14 +1605,21 @@ function listingReach(event: any, extraParties: string[] = []): ListingReach | n
         .filter((k): k is string => !!k);
     const keepers = keepersOf(sides.filter(isTreasuryKey));
     const blockers = placed ? blockersOfKept(row.author_pubkey) : null;
+    // Where anyone can join in a minute, each member's set measures another's listing from its neighbourhood
+    // (engine getNearbySet, exactPlacesFor), so its copy reaches them as their set holds it: from the neighbourhood, or
+    // from the place for those who have it exactly (exactPlaceReaders). Measured from the place for everyone, which
+    // sockets get a copy would place it to ~100 m from ~25 areas (#1965 deciding review C).
+    const nb = placed && getProfileSwitches().openMembership ? { lat: roundToNeighbourhood(row.lat!), lng: roundToNeighbourhood(row.lng!) } : null;
+    const exactReaders = nb ? exactPlaceReaders(db, row) : null;
     const reaches = (pubkey: string | null | undefined) => {
         if (!pubkey) return false;
         if (sides.includes(pubkey) || keepers.has(pubkey)) return true;
         if (!placed || blockers!.has(pubkey)) return false;
         const area = memberAreaFor(pubkey);
-        return !!area && engine.haversineKm(area.lat, area.lng, row.lat!, row.lng!) <= radiusKm;
+        const at = nb && !exactReaders!.has(pubkey) ? nb : { lat: row.lat!, lng: row.lng! };
+        return !!area && engine.haversineKm(area.lat, area.lng, at.lat, at.lng) <= radiusKm;
     };
-    return { reaches, parties: [...sides, ...keepers], place: placed ? { lat: row.lat!, lng: row.lng! } : null, radiusKm };
+    return { reaches, parties: [...sides, ...keepers, ...(exactReaders ?? [])], place: placed ? (nb ?? { lat: row.lat!, lng: row.lng! }) : null, radiusKm };
 }
 
 // Whether a listing's push by area visits only the sockets the index finds (wsClients.reachable), not every socket. On,

@@ -87,6 +87,8 @@ describe('PulseFeedCard Report', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Submit Report' }));
         await waitFor(() => expect(reportAbuse).toHaveBeenCalledTimes(1));
         expect(reportAbuse).toHaveBeenCalledWith('pubkey-viewer', 'pubkey-owner', 'Spam or scam', undefined, 'pulse-123');
+        // Sent is said in the dialog (rehearsal 14 Oct N3, was an alert()); Done closes it.
+        fireEvent.click(await screen.findByRole('button', { name: 'Done' }));
         await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     });
 });

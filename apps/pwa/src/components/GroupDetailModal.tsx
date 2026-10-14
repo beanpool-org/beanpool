@@ -116,6 +116,9 @@ export function GroupDetailModal({
     const isConvenor = groupData.viewerRole === 'convenor' || (myMembership?.role === 'convenor' && myMembership?.status === 'active');
     const isMember = (myMembership && myMembership.status === 'active') || groupData.viewerStatus === 'active';
     const isPending = (myMembership && myMembership.status === 'pending_approval') || groupData.viewerStatus === 'pending_approval';
+    // Invited, from the phone or the web (the same row): accepting is a join (engine joinGroup takes an 'invited' row
+    // to active, whatever the join policy), so an invite-only group no longer shows a dead "Invite Only" to its invitee.
+    const isInvited = myMembership ? myMembership.status === 'invited' : groupData.viewerStatus === 'invited';
 
     // Exactly whom the node lets invite: an active convenor, the group not closed, not muted (lib/group-invite.ts).
     const canInvite = canInviteToGroup({ group: groupData, members, myPubkey, muted });
@@ -579,6 +582,16 @@ export function GroupDetailModal({
                             <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-300 font-bold text-sm text-center">
                                 Request Pending Approval
                             </div>
+                        ) : isInvited ? (
+                            <button
+                                type="button"
+                                data-testid="group-accept-invite"
+                                onClick={handleJoin}
+                                disabled={actionLoading}
+                                className="w-full py-3 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                            >
+                                {t('Accept invitation')}
+                            </button>
                         ) : groupData.joinPolicy === 'invite_only' ? (
                             <div className="w-full py-2.5 px-4 rounded-xl bg-nature-200 dark:bg-nature-800 text-nature-500 dark:text-nature-300 font-bold text-sm text-center">
                                 Invite Only

@@ -7,7 +7,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent, within, cleanup } from '@testing-library/react';
 import { GroupDetailModal } from './GroupDetailModal';
-import { getGroup, getGroupMembers, getCommunityMe, inviteGroupMember, getMembers, type Group } from '../lib/api';
+import { getGroup, getGroupMembers, getCommunityMe, inviteGroupMember, getMembers, joinGroup, type Group } from '../lib/api';
 
 const ME = 'pk-marty';
 const BEN = 'pk-ben';
@@ -144,5 +144,18 @@ describe('Invite people on the web group sheet', () => {
         fireEvent.change(within(sheet).getByRole('searchbox'), { target: { value: 'ev' } });
         expect(within(sheet).queryByText('Dee')).toBeNull();
         expect(within(sheet).getByText('Eve')).toBeInTheDocument();
+    });
+
+    it('the person invited can accept on the web, even in an invite-only group (a join: the node makes the row active)', async () => {
+        vi.mocked(getGroup).mockImplementation(async () => ({ ...card(), viewerRole: 'member', viewerStatus: 'invited' }) as any);
+        vi.mocked(getGroupMembers).mockRejectedValue(Object.assign(new Error('Join the group to see who is here'), { code: 'join_to_see' }));
+        vi.mocked(joinGroup).mockResolvedValue({ success: true, member: {} as any });
+        render(<GroupDetailModal group={{ ...card(), viewerRole: 'member', viewerStatus: 'invited' } as any} isOpen onClose={() => {}} myPubkey={CAT} />);
+        const accept = await screen.findByTestId('group-accept-invite');
+        expect(accept).toHaveTextContent('Accept invitation');
+        expect(screen.queryByText('Invite Only')).toBeNull();
+        expect(screen.queryByTestId('group-invite-people')).toBeNull();
+        fireEvent.click(accept);
+        await waitFor(() => expect(joinGroup).toHaveBeenCalledWith('g-1'));
     });
 });

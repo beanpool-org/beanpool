@@ -30,3 +30,14 @@ export function roundToArea(deg: number): number {
 export function roundPointToArea(lat: number, lng: number): { lat: number; lng: number } {
     return { lat: roundToArea(lat), lng: roundToArea(lng) };
 }
+
+/**
+ * A neighbourhood: a latitude or longitude to the nearest 0.01° (about 1.1 km north-south). Where anyone can join in a
+ * minute (the node's `openMembership`, the global node), a listing's place is served to its members rounded to it, all
+ * but its author and the people the author chose (scratch/global-node/DESIGN-global-member-privacy-fable.md §4): a
+ * block of houses is what a hostile reader wants, and a town's 0.1° area means nothing to someone there to meet people.
+ * The node's SQL `neighbourhood_km` measures from it. Halves round up, never -0, as roundToArea.
+ */
+export function roundToNeighbourhood(deg: number): number {
+    return Math.round(deg * 100) / 100 + 0;
+}

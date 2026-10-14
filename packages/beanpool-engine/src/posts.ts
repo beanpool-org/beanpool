@@ -14,7 +14,7 @@ import { getMemberTrustProfile } from './trust.js';
 import { isVisitorKey, isSuspendedAccount } from './members.js';
 import { isGroupConvenor } from './groups.js';
 import { avatarUrlOf, tierForCredit } from '@beanpool/core';
-import { areaBox, boundingBox, roundToArea } from './geo.js';
+import { areaBox, boundingBox, roundToArea, roundToNeighbourhood, widenBox, NEIGHBOURHOOD_HALF_STEP_DEG } from './geo.js';
 import { onPublicBoard, postPhotoUrl } from './photo-url.js';
 import { prepared } from './statements.js';
 
@@ -229,6 +229,15 @@ export interface PostFilter {
      */
     coarse?: boolean;
     /**
+     * Every place read as its neighbourhood (geo.ts roundToNeighbourhood, 0.01°, about 1 km) but the ones the reader
+     * (`viewerPubkey`) may have exactly (exactPlacesFor): a member's read where anyone can join in a minute (the node's
+     * `openMembership`, scratch/global-node/DESIGN-global-member-privacy-fable.md §4). Inside the query as `coarse` is:
+     * the distance, the order, the radius and the paging of each other post are worked out from its neighbourhood, so no
+     * number of reads from different points places it better than that. Each such post carries its neighbourhood as
+     * `lat`/`lng` and `distanceKm` in whole km; the reader's own carry the place, as without it. `coarse` wins over it.
+     */
+    neighbourhood?: boolean;
+    /**
      * The reader gets each post as guestPost gives it (a visitor on a node that shows them the listings but not the
      * people, apps/server routes/marketplace.ts). guestPost puts a neutral value in place of the author's name, face,
      * standing and trade count, so the read neither reads nor works out any of them (GUEST_POST_ROW_SELECT, rowToPost):
@@ -355,6 +364,82 @@ export function mayReadEventPrivate(
         return false; // table absent on an older schema
     }
     return eventPrivateOpenTo(false, rsvp, row.event_host_lets_in === 1);
+}
+
+/**
+ * The places a reader has exactly on a neighbourhood read (PostFilter.neighbourhood): every listing whose author is the
+ * reader or an enterprise they keep (whoever may edit it, so an edit never loads a rounded pin), and every event whose
+ * note they may read (mayReadEventPrivate: its host, or Going and let in where the host lets people in). Everyone else's
+ * places are read to their neighbourhood. Both the SQL and the rows read it, so the distance and the pin always agree.
+ * A visitor's row hosts nothing and is let in to nothing here (rowToPost's `viewerIsVisitor`).
+ */
+export interface ExactPlaces { authors: string[]; posts: string[] }
+export function exactPlacesFor(db: Db, viewer: string | undefined): ExactPlaces {
+    if (!viewer) return { authors: [], posts: [] };
+    if (isVisitorKey(db, viewer)) return { authors: [viewer], posts: [] };
+    const authors = [viewer, ...enterprisesKeptBy(db, viewer)];
+    const posts: string[] = [];
+    // Hosted as an active convenor of the event's group (isEventHost's third branch).
+    for (const r of prepared(db, `
+        SELECT p.id FROM group_members gm
+        JOIN members m ON m.public_key = gm.member_pubkey
+        JOIN posts p ON p.target_group_id = gm.group_id AND p.audience_scope = 'group' AND p.type = 'event'
+        WHERE gm.member_pubkey = ? AND gm.role = 'convenor' AND gm.status = 'active' AND m.status = 'active' AND m.is_visitor = 0
+    `).all(viewer) as Array<{ id: string }>) posts.push(r.id);
+    // Going, and let in where the host lets people in (eventPrivateOpenTo).
+    try {
+        for (const r of prepared(db, `
+            SELECT r.post_id AS id FROM event_rsvps r JOIN posts p ON p.id = r.post_id AND p.type = 'event'
+            WHERE r.member_pubkey = ? AND r.status = 'going' AND (p.event_host_lets_in IS NOT 1 OR COALESCE(r.let_in_at, '') != '')
+        `).all(viewer) as Array<{ id: string }>) posts.push(r.id);
+    } catch {
+        // No event_rsvps table: an engine-only database.
+    }
+    return { authors, posts: [...new Set(posts)] };
+}
+
+/** Whether a row's place is exact for the reader whose places these are (exactPlacesFor). */
+export function placeIsExact(places: ExactPlaces, row: { id: string; author_pubkey: string }): boolean {
+    return places.authors.includes(row.author_pubkey) || places.posts.includes(row.id);
+}
+
+/**
+ * Who has a post's place exactly (exactPlacesFor, from the post's side): its author, the keepers of an enterprise
+ * author, and for an event its convenor hosts and the people Going who may read its note. For a copy sent to many
+ * (apps/server state-engine.ts broadcast), every other socket's copy carries the neighbourhood.
+ */
+export function exactPlaceReaders(db: Db, row: { id: string; author_pubkey: string; type?: string | null; audience_scope?: string | null; target_group_id?: string | null; event_host_lets_in?: number | null }): Set<string> {
+    const readers = new Set<string>([row.author_pubkey]);
+    for (const r of prepared(db, `
+        SELECT o.member_pubkey FROM treasury_operators o
+        JOIN members m ON m.public_key = o.member_pubkey
+        WHERE o.treasury_pubkey = ? AND m.status = 'active' AND m.is_visitor = 0`).all(row.author_pubkey) as Array<{ member_pubkey: string }>) readers.add(r.member_pubkey);
+    if (row.type !== 'event') return readers;
+    if (row.audience_scope === 'group' && row.target_group_id) {
+        for (const r of prepared(db, `
+            SELECT gm.member_pubkey FROM group_members gm
+            JOIN members m ON m.public_key = gm.member_pubkey
+            WHERE gm.group_id = ? AND gm.role = 'convenor' AND gm.status = 'active' AND m.status = 'active' AND m.is_visitor = 0`)
+            .all(row.target_group_id) as Array<{ member_pubkey: string }>) readers.add(r.member_pubkey);
+    }
+    try {
+        const letsIn = row.event_host_lets_in === 1;
+        for (const r of prepared(db, `
+            SELECT r.member_pubkey FROM event_rsvps r JOIN members m ON m.public_key = r.member_pubkey
+            WHERE r.post_id = ? AND r.status = 'going' AND m.is_visitor = 0${letsIn ? " AND COALESCE(r.let_in_at, '') != ''" : ''}`)
+            .all(row.id) as Array<{ member_pubkey: string }>) readers.add(r.member_pubkey);
+    } catch {
+        // No event_rsvps table: an engine-only database.
+    }
+    return readers;
+}
+
+/** The exact places of one read, worked out once for its rank and its rows (getPostsRankedBy, postRowsNear). */
+const exactPlacesOfRead = new WeakMap<PostFilter, ExactPlaces>();
+function exactPlacesOf(db: Db, filter: PostFilter): ExactPlaces {
+    let places = exactPlacesOfRead.get(filter);
+    if (!places) { places = exactPlacesFor(db, filter.viewerPubkey); exactPlacesOfRead.set(filter, places); }
+    return places;
 }
 
 /**
@@ -978,6 +1063,8 @@ const CIRCLE_FIELDS: { readonly [K in keyof PostFilter]-?: ((filter: PostFilter)
     category: f => f.category === 'all',
     // The area is read for every post in a box as the place is: which posts a circle holds doesn't change.
     coarse: () => true,
+    // The same for the neighbourhood.
+    neighbourhood: () => true,
     // What is read of each post, not which posts.
     guest: () => true,
     // Bounds the one pass only; a circle reads a box near the reader either way.
@@ -1013,14 +1100,27 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
     // How far a post is from the reader's point (the two `?`): from its place, or for a coarse read from its area
     // (geo.ts area_km, haversine_km from the roundToArea of each). Every distance, radius and order below reads it through
     // this, so a coarse read is worked out from the area alone.
-    const km = (t: string) => filter.coarse ? `area_km(?, ?, ${t}.lat, ${t}.lng)` : `haversine_km(?, ?, ${t}.lat, ${t}.lng)`;
+    // A neighbourhood read measures each post from its neighbourhood but the reader's exact ones (exactPlacesFor), so its
+    // distance carries the reader's places as two parameters after the point (kmParams).
+    const neighbourhood = !filter.coarse && !!filter.neighbourhood;
+    const km = (t: string) => filter.coarse ? `area_km(?, ?, ${t}.lat, ${t}.lng)`
+        : neighbourhood ? `neighbourhood_km(?, ?, ${t}.lat, ${t}.lng, ${t}.author_pubkey IN (SELECT value FROM json_each(?)) OR ${t}.id IN (SELECT value FROM json_each(?)))`
+        : `haversine_km(?, ?, ${t}.lat, ${t}.lng)`;
+    const places = neighbourhood ? exactPlacesOf(db, filter) : null;
+    const kmParams: unknown[] = places
+        ? [near.lat, near.lng, JSON.stringify(places.authors), JSON.stringify(places.posts)]
+        : [near.lat, near.lng];
+    // The box on the true columns: for a coarse read every post whose area is in the circle's box (geo.ts areaBox), for a
+    // neighbourhood read every post in it or whose neighbourhood is (widenBox).
+    const boxFor = (exact: ReturnType<typeof boundingBox>) => filter.coarse ? areaBox(exact)
+        : neighbourhood ? widenBox(exact, NEIGHBOURHOOD_HALF_STEP_DEG) : exact;
 
     // `m` is joined for the author's filters in `where` (paused, winding up); it is one row at most, as are the joins
     // POST_ROW_SELECT adds, so no join changes which posts there are.
     const rank = (withinKm: number | undefined, limit: number | undefined, skip: number, circle: boolean) => {
         let sql = `
         SELECT p.id, ${km('p')} AS distance_km`;
-        const params: unknown[] = [near.lat, near.lng];
+        const params: unknown[] = [...kmParams];
         if (withinKm === undefined) {
             sql += `
         FROM posts p
@@ -1036,8 +1136,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
             // pass (a radius, or everything) is left to the planner.
             // For a coarse read the box holds every post whose AREA is in the circle's box: still the true columns, so
             // the index still answers it (geo.ts areaBox).
-            const exact = boundingBox(near.lat, near.lng, withinKm);
-            const box = filter.coarse ? areaBox(exact) : exact;
+            const box = boxFor(boundingBox(near.lat, near.lng, withinKm));
             const t = circle ? 'b' : 'p';
             sql += circle ? `
         FROM posts b
@@ -1049,7 +1148,7 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
         WHERE ${t}.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => `${t}.lng BETWEEN ? AND ?`).join(' OR ')})
           AND ${km(t)} <= ?${circle ? `
           AND p.id = b.id` : ''}`;
-            params.push(box.latMin, box.latMax, ...box.lngRanges.flat(), near.lat, near.lng, withinKm);
+            params.push(box.latMin, box.latMax, ...box.lngRanges.flat(), ...kmParams, withinKm);
         }
         sql += where;
         params.push(...whereParams);
@@ -1068,15 +1167,14 @@ function postRowsNear(db: Db, near: NonNullable<PostFilter['near']>, where: stri
     // `cap`; with a radius or a filter it takes the box's or the filter's index and sorts every match before the LIMIT,
     // so only the distance calls are bounded there (F5 still open for those reads, see PostFilter.measureAtMost).
     const rankBounded = (withinKm: number | undefined, limit: number | undefined, skip: number, cap: number) => {
-        const params: unknown[] = [near.lat, near.lng];
+        const params: unknown[] = [...kmParams];
         let inner = `
-                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at, p.event_start_at
+                SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at, p.event_start_at${neighbourhood ? ', p.author_pubkey' : ''}
                 FROM posts p
                 LEFT JOIN members m ON p.author_pubkey = m.public_key
                 WHERE 1=1`;
         if (withinKm !== undefined) {
-            const exact = boundingBox(near.lat, near.lng, withinKm);
-            const box = filter.coarse ? areaBox(exact) : exact;
+            const box = boxFor(boundingBox(near.lat, near.lng, withinKm));
             inner += ` AND p.lat BETWEEN ? AND ? AND (${box.lngRanges.map(() => 'p.lng BETWEEN ? AND ?').join(' OR ')})`;
             params.push(box.latMin, box.latMax, ...box.lngRanges.flat());
         }
@@ -1228,6 +1326,8 @@ export interface NearbySetQuery {
     excludeEvents?: boolean;
     /** A moderator's read keeps posts hidden by reports (PostFilter.includeHidden). */
     includeHidden?: boolean;
+    /** Each other member's listing measured from its neighbourhood, and its rows read so (PostFilter.neighbourhood). */
+    neighbourhood?: boolean;
     /** The DoS bound of the one pass (PostFilter.measureAtMost). */
     measureAtMost?: number;
 }
@@ -1285,7 +1385,11 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
         // No conversations table: an engine-only database.
     }
     const blocked = authorsBlockedBy(db, member);
-    const base: PostFilter = { viewerPubkey: member, types: q.types, excludeEvents: q.excludeEvents, includeHidden: q.includeHidden };
+    const base: PostFilter = { viewerPubkey: member, types: q.types, excludeEvents: q.excludeEvents, includeHidden: q.includeHidden,
+        ...(q.neighbourhood ? { neighbourhood: true } : {}) };
+    // Which listings are in the set is worked out from their neighbourhoods too, all but the member's exact ones, so the
+    // set's edge places nobody's listing better than its rows do (exactPlacesFor).
+    const places = q.neighbourhood ? exactPlacesFor(db, member) : null;
 
     // near(M): the rows are never read in full; the hook keeps what the lean pass ranked. `m` stays joined for any
     // other condition on the author's row; with none, SQLite leaves the join out. Each statement is compiled once
@@ -1302,7 +1406,12 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
         WHERE 1=1${where} ORDER BY p.updated_at DESC, p.created_at DESC, p.id DESC LIMIT ?`).all(...whereParams, q.newestWithoutArea) as typeof ranked;
             return [];
         }
-        const box = boundingBox(near.lat, near.lng, q.radiusKm);
+        const exactBox = boundingBox(near.lat, near.lng, q.radiusKm);
+        const box = places ? widenBox(exactBox, NEIGHBOURHOOD_HALF_STEP_DEG) : exactBox;
+        const km = places
+            ? 'neighbourhood_km(?, ?, q.lat, q.lng, q.author_pubkey IN (SELECT value FROM json_each(?)) OR q.id IN (SELECT value FROM json_each(?)))'
+            : 'haversine_km(?, ?, q.lat, q.lng)';
+        const kmParams = places ? [near.lat, near.lng, JSON.stringify(places.authors), JSON.stringify(places.posts)] : [near.lat, near.lng];
         // The bound (measureAtMost): at most `cap` of the matching posts are measured, the newest when more match. First
         // in the index's order, stopping at cap + 1, and the statement says how many it measured: when that is not over
         // `cap`, every matching post was measured, which is what the newest `cap` are then, without sorting them first
@@ -1311,7 +1420,7 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
         const cap = q.measureAtMost && q.measureAtMost > 0 ? Math.floor(q.measureAtMost) : 0;
         const pass = (newestFirst: boolean) => prepared(d, `
         WITH measured AS MATERIALIZED (
-            SELECT q.id, q.updated_at, q.created_at, q.author_pubkey, haversine_km(?, ?, q.lat, q.lng) AS distance_km FROM (
+            SELECT q.id, q.updated_at, q.created_at, q.author_pubkey, ${km} AS distance_km FROM (
                 SELECT p.id, p.lat, p.lng, p.updated_at, p.created_at, p.author_pubkey
                 FROM posts p
                 LEFT JOIN members m ON p.author_pubkey = m.public_key
@@ -1323,7 +1432,7 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
             SELECT p.id, p.updated_at, p.created_at, p.author_pubkey, p.distance_km FROM measured p WHERE p.distance_km <= ?${NEAREST_ORDER} LIMIT ?
         )
         SELECT c.n, p.id, p.updated_at, p.author_pubkey FROM (SELECT count(*) AS n FROM measured) c LEFT JOIN nearest p ON 1${NEAREST_ORDER}`)
-            .all(near.lat, near.lng, box.latMin, box.latMax, ...box.lngRanges.flat(), ...whereParams, ...(cap > 0 ? [newestFirst ? cap : cap + 1] : []), q.radiusKm, q.max) as
+            .all(...kmParams, box.latMin, box.latMax, ...box.lngRanges.flat(), ...whereParams, ...(cap > 0 ? [newestFirst ? cap : cap + 1] : []), q.radiusKm, q.max) as
             Array<{ n: number; id: string | null; updated_at: string | null; author_pubkey: string }>;
         let rows = pass(false);
         if (cap > 0 && rows[0].n > cap) rows = pass(true);
@@ -1765,14 +1874,20 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             continue;
         }
         if (post.authorPublicKey !== viewer) delete post.reachPeers;
+        // A neighbourhood read's post that isn't the reader's to have exactly (exactPlacesFor).
+        const toNeighbourhood = !filter?.coarse && !!filter?.neighbourhood && !placeIsExact(exactPlacesOf(db, filter), r);
         if (filter?.coarse) {
             // The area, never the place: the rounding the query measured from (geo.ts area_km).
             post.lat = typeof r.lat === 'number' ? roundToArea(r.lat) : r.lat;
             post.lng = typeof r.lng === 'number' ? roundToArea(r.lng) : r.lng;
+        } else if (toNeighbourhood) {
+            // The neighbourhood, never the place: the rounding the query measured from (geo.ts neighbourhood_km).
+            post.lat = typeof r.lat === 'number' ? roundToNeighbourhood(r.lat) : r.lat;
+            post.lng = typeof r.lng === 'number' ? roundToNeighbourhood(r.lng) : r.lng;
         }
         if (near) {
             post.distanceKm = typeof r.distance_km !== 'number' ? null
-                : filter?.coarse ? Math.round(r.distance_km) : Math.round(r.distance_km * 10) / 10;
+                : filter?.coarse || toNeighbourhood ? Math.round(r.distance_km) : Math.round(r.distance_km * 10) / 10;
         }
 
         if (post.type === 'event') {

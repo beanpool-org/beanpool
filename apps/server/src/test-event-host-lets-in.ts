@@ -280,6 +280,22 @@ async function main() {
         'ticked again: Uma, not let in, waits and loses the seat; Sam keeps it');
     assert(((await chat(ev, sam)).body?.messages ?? []).filter((m: any) => m.type === 'system').length === 1, 'ticking again writes no line');
 
+    // An online event's join link goes by the note's rule (#1937, DESIGN-event-times §9): where the host lets people in, it
+    // waits for them too.
+    const LINK = 'https://meet.example/garden-dinner';
+    const onlineMade = await call('POST', '/api/marketplace/posts', hana, {
+        type: 'event', category: 'community', title: 'Online planning call', description: '', authorPublicKey: hana.pubKeyHex,
+        eventOnline: true, eventStartAt: inHours(30), eventEndAt: inHours(31), eventLink: LINK, eventPrivateNote: NOTE,
+    });
+    const onlineId = onlineMade.body?.post?.id ?? onlineMade.body?.id;
+    assert(!!onlineId && flagOf(onlineId) === 1, `an online event waits for the host on the global node too (${onlineMade.status} ${JSON.stringify(onlineMade.body).slice(0, 160)})`);
+    await rsvp(onlineId, tia, 'going');
+    const linkWaiting = await byId(onlineId, tia);
+    assert(linkWaiting && !('eventLink' in linkWaiting) && !('eventPrivateNote' in linkWaiting), 'waiting: no join link, no note');
+    assert((await byId(onlineId, hana))?.eventLink === LINK, 'the host has the link');
+    await letIn(onlineId, hana, { memberPublicKey: tia.pubKeyHex });
+    assert((await byId(onlineId, tia))?.eventLink === LINK, 'let in: the link');
+
     // A group's event, to someone outside the group: as an id nobody has.
     const group = se.createGroup({ name: 'Quiet Circle', slug: 'quiet-circle-lets-in', description: 'Invite only', joinPolicy: 'invite_only', createdBy: hana.pubKeyHex });
     const gev = await makeEvent('Circle supper', { audienceScope: 'group', targetGroupId: group.id });

@@ -19,7 +19,7 @@ import { useStyles, useTheme, type ThemeContextType } from '../app/ThemeContext'
 import { rsvpEvent } from '../utils/db';
 import { hapticTick } from '../utils/haptics';
 import {
-    formatEventWhenFor, eventWhen, eventPlaceLine, eventBadge, isEventEnded, eventStateOf, nextRsvp, applyRsvp, formatRsvpCounts,
+    formatEventWhenFor, eventWhen, eventPlaceLine, isOnlineEvent, eventBadge, isEventEnded, eventStateOf, nextRsvp, applyRsvp, formatRsvpCounts,
     formatDistance, distanceKm, isOwnEvent, eventCoverPhoto, type EventRsvpStatus, type RsvpCounts,
 } from '../utils/events';
 
@@ -158,7 +158,7 @@ export function EventCard({ post, currentPubkey, myLocation, onRsvpChanged }: Ev
                     </View>
                     {!!timeNote && <Text style={styles.timeNote} numberOfLines={2}>{timeNote}</Text>}
                     <Text style={styles.title} numberOfLines={2}>{post.title}</Text>
-                    {!!placeLine && <Text style={styles.meta} numberOfLines={1}>📍 {placeLine}</Text>}
+                    {!!placeLine && <Text style={styles.meta} numberOfLines={1}>{isOnlineEvent(post) ? '💻' : '📍'} {placeLine}</Text>}
                     {countsKnown && <Text style={styles.meta} numberOfLines={1}>👥 {formatRsvpCounts(counts.going, counts.interested)}</Text>}
                 </View>
             </View>

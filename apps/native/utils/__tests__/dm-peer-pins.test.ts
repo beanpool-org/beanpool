@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { readDmPeerPins, writeDmPeerPins, applyDmListings, pinAtFirstSight, dmPinFor, dmSightFor, judgeFirstSight, applySightVerdict, settleFirstSight, dmOpenPeers, createDmPinBook, DmPinStoreError, DM_PIN_STORE_UNREAD_TEXT, type DmPeerPins, type DmPeerPin } from '../dm-peer-pins';
-import { dmPeerPinsStoreKey } from '../storage-keys';
+import { readDmPeerPins, writeDmPeerPins, applyDmListings, pinAtFirstSight, dmPinFor, dmSightFor, judgeFirstSight, applySightVerdict, settleFirstSight, dmOpenPeers, createDmPinBook, DmPinStoreError, DM_PIN_STORE_UNREAD_TEXT, markHeldLost, noRoomForFirstSight, rekeyDateOf, DmPinsFullError, DM_PINS_MAX_BYTES, FORMER_MAX, type DmPeerPins, type DmPeerPin } from '../dm-peer-pins';
+import { dmPeerPinsStoreKey, dmPeerPinsSetAsideStoreKey } from '../storage-keys';
 
 // The pin store itself (utils/dm-peer-pins.ts): what a listing may do to a pin, and what an unreadable store does. The
 // phone's real sync and send over it are in dm-line-binding.test.ts.
@@ -23,6 +23,7 @@ function memory(seed: Record<string, string> = {}) {
         data,
         getItem: async (k: string) => data.get(k) ?? null,
         setItem: async (k: string, v: string) => { data.set(k, v); },
+        removeItem: async (k: string) => { data.delete(k); },
     };
 }
 
@@ -333,5 +334,107 @@ describe('first sight judged on the thread (§3.4 amendment): judgeFirstSight, a
         const back = await readDmPeerPins(s, ME, FA);
         expect(dmSightFor(back, D0)).toEqual({ peer: BEN, since: NOW, by: 'first-seen', checked: true, heard: { tryKeys: [OTHER], rekeyedAt: NOW } });
         expect(dmSightFor(back, D1)).toEqual({ unplaced: true, since: NOW, listed: L, heard: { tryKeys: [BEN] } });
+    });
+});
+
+describe('the caps: a node can\'t make the phone keep unbounded pins (§3.4 amendment 6)', () => {
+    const D1 = '1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed';
+    const D2 = '7c9e6679-7425-40de-944b-e07fc1f90ae7';
+
+    it('an id over 64 characters after folding gets no entry of any kind (no pin, no judgement, no mark); one of 64 does', () => {
+        const p: DmPeerPins = {};
+        const long = 'a'.repeat(65);
+        expect(pinAtFirstSight(p, long, BEN, NOW)).toBe(false);
+        expect(applyDmListings(p, long, [[BEN]], NOW)).toBe(false);
+        expect(applySightVerdict(p, long, { rule: 2, pin: BEN, offer: false }, BEN, undefined, NOW)).toBe(false);
+        expect(applySightVerdict(p, long, { rule: 5 }, BEN, undefined, NOW)).toBe(false);
+        expect(markHeldLost(p, [long, long.toUpperCase()], NOW)).toBe(false);
+        expect(Object.keys(p)).toEqual([]);
+        const ok = 'B'.repeat(64);
+        expect(pinAtFirstSight(p, ok, BEN, NOW)).toBe(true);
+        expect(Object.keys(p)).toEqual(['b'.repeat(64)]);
+    });
+
+    it('a value of exactly 1 MiB as UTF-8 is written; one byte more is refused as full, nothing written', async () => {
+        const frame = JSON.stringify({ pins: { [D0]: { peer: BEN, since: '', by: 'first-seen' } } }).length;
+        const at = (bytes: number) => ({ [D0]: { peer: BEN, since: 'é'.repeat(8) + 'a'.repeat(bytes - frame - 16), by: 'first-seen' } }) as DmPeerPins;
+        const s = memory();
+        await writeDmPeerPins(s, ME, FA, at(DM_PINS_MAX_BYTES));
+        expect(Buffer.byteLength(s.data.get(dmPeerPinsStoreKey(ME, FA))!)).toBe(DM_PINS_MAX_BYTES);
+        const t = memory();
+        await expect(writeDmPeerPins(t, ME, FA, at(DM_PINS_MAX_BYTES + 1))).rejects.toBeInstanceOf(DmPinsFullError);
+        expect(t.data.size).toBe(0);
+    });
+
+    it('in a book: a new first-sight pin is added only while the value stays within the cap, a change to a kept pin always applies, and a write still over the cap is refused (DmPinsFullError): the copy dropped and read again', async () => {
+        const frame = JSON.stringify({ pins: { [D0]: { peer: BEN, since: '', by: 'first-seen' } } }).length;
+        const s = memory({ [dmPeerPinsStoreKey(ME, FA)]: record({ [D0]: { peer: BEN, since: 'a'.repeat(DM_PINS_MAX_BYTES - 150 - frame), by: 'first-seen' } }) });
+        const writes: string[] = [];
+        const book = createDmPinBook<string>({ ...s, setItem: async (k, v) => { writes.push(v); await s.setItem(k, v); } }, (f) => f);
+        expect(Buffer.byteLength(s.data.get(dmPeerPinsStoreKey(ME, FA))!)).toBe(DM_PINS_MAX_BYTES - 150);
+        // A first-sight pin under a UUID takes 168 bytes with its comma: no room. Refused, nothing written.
+        expect(noRoomForFirstSight(await book.read(ME, FA), D1)).toBe(true);
+        expect(await book.update(ME, FA, (p) => pinAtFirstSight(p, D1, PUPPET, NOW))).toBe(false);
+        expect(await book.update(ME, FA, (p) => applyDmListings(p, D1, [[PUPPET]], NOW))).toBe(false);
+        expect(await book.update(ME, FA, (p) => applySightVerdict(p, D1, { rule: 1 }, PUPPET, undefined, NOW))).toBe(false);
+        expect(writes).toEqual([]);
+        // An offer on the kept pin (118 bytes) always applies.
+        expect(await book.update(ME, FA, (p) => applyDmListings(p, D0, [[PUPPET]], NOW))).toBe(true);
+        expect(Buffer.byteLength(writes[0])).toBe(DM_PINS_MAX_BYTES - 32);
+        // A judgement on a DM with nothing kept is a replacement too: it applies, and the write is over: refused whole.
+        await expect(book.update(ME, FA, (p) => applySightVerdict(p, D2, { rule: 3, pin: BEN, offer: true }, PUPPET, undefined, NOW))).rejects.toBeInstanceOf(DmPinsFullError);
+        expect(writes).toHaveLength(1);
+        const again = await book.read(ME, FA);
+        expect(dmSightFor(again, D2)).toBeNull();
+        expect(dmPinFor(again, D0)?.offered?.peer).toBe(PUPPET);
+    });
+
+    it('a re-key date is kept as the instant it parses to, 24 characters, never the node\'s string; one that doesn\'t parse, not at all; former keys read back the newest 4', async () => {
+        expect(rekeyDateOf('2026-10-03T00:00:00.000Z')).toBe('2026-10-03T00:00:00.000Z');
+        expect(rekeyDateOf(`Thu Oct 01 2026 00:00:00 GMT+0000 (${'x'.repeat(100_000)})`)).toBe('2026-10-01T00:00:00.000Z');
+        for (const bad of ['', 'soon', 'x'.repeat(100_000), 7, null]) expect(rekeyDateOf(bad)).toBeUndefined();
+        const formers = [OTHER, PUPPET, 'ee'.repeat(32), 'ff'.repeat(32), '11'.repeat(32), '22'.repeat(32)];
+        const s = memory({ [dmPeerPinsStoreKey(ME, FA)]: record({
+            [D0]: { peer: BEN, since: NOW, by: 'member', former: formers, offered: { peer: PUPPET, at: NOW, nodeSays: { rekeyedAt: `Thu Oct 01 2026 00:00:00 GMT+0000 (${'x'.repeat(1000)})` } } },
+            [D1]: { unplaced: true, since: NOW, listed: PUPPET, heard: { tryKeys: Array.from({ length: 20 }, (_, i) => String(i).padStart(2, '0').repeat(32)), rekeyedAt: 'not a date' } },
+        }) });
+        const back = await readDmPeerPins(s, ME, FA);
+        expect(dmPinFor(back, D0)).toEqual({ peer: BEN, since: NOW, by: 'member', former: formers.slice(0, FORMER_MAX), offered: { peer: PUPPET, at: NOW, nodeSays: { rekeyedAt: '2026-10-01T00:00:00.000Z' } } });
+        expect(FORMER_MAX).toBe(4);
+        expect(dmSightFor(back, D1)).toEqual({ unplaced: true, since: NOW, listed: PUPPET, heard: { tryKeys: Array.from({ length: 8 }, (_, i) => String(i).padStart(2, '0').repeat(32)) } });
+    });
+
+    it('the member\'s reset of one file: the raw value is set aside (the newest kept) and removed, the copy forgotten, and the next ask seeds the file again; another file is untouched; a value storage can\'t return is removed with nothing set aside; nothing stored, nothing set aside', async () => {
+        const s = memory({
+            [dmPeerPinsStoreKey(ME, FA)]: '{not json',
+            [dmPeerPinsStoreKey(ME, FB)]: record({ [D1]: { peer: BEN, since: NOW, by: 'first-seen' } }),
+            [dmPeerPinsSetAsideStoreKey(ME, FA)]: 'an older one',
+        });
+        let seeds = 0;
+        const book = createDmPinBook<string>(s, (f) => f, async () => { seeds++; return (p) => pinAtFirstSight(p, D0, BEN, NOW, undefined, true); });
+        await expect(book.read(ME, FA)).rejects.toBeInstanceOf(DmPinStoreError);
+        await expect(book.read(ME, FA)).rejects.toBeInstanceOf(DmPinStoreError);   // never reset by the phone on its own
+        expect(seeds).toBe(0);
+        expect(await book.reset(ME, FA)).toBe('set-aside');
+        expect(s.data.get(dmPeerPinsSetAsideStoreKey(ME, FA))).toBe('{not json');
+        expect(dmPinFor(await book.read(ME, FA), D0)).toMatchObject({ peer: BEN, checked: true });
+        expect(seeds).toBe(1);
+        expect(s.data.get(dmPeerPinsStoreKey(ME, FB))).toBe(record({ [D1]: { peer: BEN, since: NOW, by: 'first-seen' } }));
+        // A readable value is set aside as it was, too, and the copy in memory is forgotten.
+        const before = s.data.get(dmPeerPinsStoreKey(ME, FA));
+        expect(await book.reset(ME, FA)).toBe('set-aside');
+        expect(s.data.get(dmPeerPinsSetAsideStoreKey(ME, FA))).toBe(before);
+        expect(s.data.has(dmPeerPinsStoreKey(ME, FA))).toBe(false);
+        expect(await book.reset(ME, FA)).toBe('nothing-stored');
+        expect(s.data.get(dmPeerPinsSetAsideStoreKey(ME, FA))).toBe(before);
+        // Storage can't return it (a value past the read window): removed, nothing set aside.
+        const t = memory({ [dmPeerPinsStoreKey(ME, FA)]: 'x' });
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const throwing = createDmPinBook<string>({ ...t, getItem: async () => { throw new Error('Row too big to fit into CursorWindow'); } }, (f) => f);
+        try {
+            expect(await throwing.reset(ME, FA)).toBe('unreadable-removed');
+            expect(warn).toHaveBeenCalled();
+        } finally { warn.mockRestore(); }
+        expect(t.data.size).toBe(0);
     });
 });

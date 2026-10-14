@@ -35,7 +35,10 @@ vi.mock('expo-crypto', async () => {
     const { randomBytes } = await import('node:crypto');
     return { getRandomBytes: vi.fn((len: number) => new Uint8Array(randomBytes(len))) };
 });
-vi.mock('../db', () => ({ clearDB: vi.fn(async () => {}), closeDB: vi.fn(async () => {}) }));
+vi.mock('../db', () => ({
+    clearDB: vi.fn(async () => {}), closeDB: vi.fn(async () => {}),
+    seedDmPinsHere: vi.fn(async () => {}), seedDmPinsBeforeLeaving: vi.fn(async () => {}),
+}));
 vi.mock('../community-cache', () => ({ removeCommunityCaches: vi.fn(async () => {}) }));
 // For the real community-cache below.
 vi.mock('expo-sqlite', () => ({ defaultDatabaseDirectory: '/data/user/0/org.beanpool.app/files/SQLite' }));
@@ -60,10 +63,10 @@ import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import {
-    communitiesOnThisPhone, deleteAccountFromThisPhone, signOutOfThisPhone, unregisterPushToken, UNREGISTER_TIMEOUT_MS,
+    communitiesOnThisPhone, deleteAccountFromThisPhone, releaseAccountFromPhone, signOutOfThisPhone, unregisterPushToken, UNREGISTER_TIMEOUT_MS,
 } from '../account-leaves-phone';
 import { removeCommunityCaches } from '../community-cache';
-import { clearDB, closeDB } from '../db';
+import { clearDB, closeDB, seedDmPinsHere, seedDmPinsBeforeLeaving } from '../db';
 import { resetSyncFingerprints } from '../../services/pillar-sync';
 import { draftIdentity, importIdentity, loadIdentity, type BeanPoolIdentity } from '../identity';
 import { boundSignatureValid } from './server-signature-check';
@@ -207,8 +210,8 @@ describe('Sign Out (Device Only)', () => {
         expect(removeCommunityCaches).toHaveBeenCalledTimes(1);
         expect([...vi.mocked(removeCommunityCaches).mock.calls[0][0]].sort()).toEqual([MULLUM, BELLINGEN, BYRON].sort());
         // And every other community copy on the phone: one a Wipe left keeps this identity's group key memory
-        // (confirmation 2 of #1788, finding 5).
-        expect(vi.mocked(removeCommunityCaches).mock.calls[0][1]).toEqual({ everyCopy: true });
+        // (confirmation 2 of #1788, finding 5). Each of them first keeps Kim's DM memory (§3.4 amendment 6 §5, below).
+        expect(vi.mocked(removeCommunityCaches).mock.calls[0][1]).toEqual({ everyCopy: true, beforeRemoving: expect.any(Function) });
         // The open community's tables are dropped first, as before; the cached copies go after the unregister.
         expect(callOrder(clearDB)).toBeLessThan(callOrder(fetch));
         // The identity leaves this phone, so what it knew of its groups' keys goes too (utils/db.ts clearDB; confirmation 2
@@ -253,6 +256,62 @@ describe('Sign Out (Device Only)', () => {
         expect(fetch).not.toHaveBeenCalled();
         expect(await loadIdentity()).toBeNull();
         expect(mem.secure.has(PUSH_TOKEN_STORE_KEY)).toBe(false);
+    });
+});
+
+describe('Sign Out keeps the account\'s DM memory of each community file before it goes (DM pins §3.4 amendment 6 §5)', () => {
+    const dir = 'file:///data/user/0/org.beanpool.app/files/SQLite';
+    const mullum = 'community_mullum.beanpool.org_0f80ace00fd23a4b8c3a33f625a40a87.db';
+    const byron = 'community_byron.beanpool.org_0123456789abcdef0123456789abcdef.db';
+
+    it('the open community\'s pins are seeded before its tables are dropped, and every file the directory lists before any is deleted, with Kim\'s key', async () => {
+        const real = await vi.importActual<typeof import('../community-cache')>('../community-cache');
+        vi.mocked(removeCommunityCaches).mockImplementation(real.removeCommunityCaches);
+        vi.mocked(FileSystem.readDirectoryAsync).mockResolvedValue([byron, `${byron}-wal`, mullum, 'notes.db']);
+        await kimsPhone();
+        nodes();
+
+        await signOutOfThisPhone(kim, { namesCopiesSaved: true });
+
+        expect(seedDmPinsHere).toHaveBeenCalledWith(kim.publicKey);
+        expect(callOrder(seedDmPinsHere)).toBeLessThan(callOrder(clearDB));
+        expect(seedDmPinsBeforeLeaving).toHaveBeenCalledTimes(1);
+        expect(vi.mocked(seedDmPinsBeforeLeaving).mock.calls[0][0]).toBe(kim.publicKey);
+        expect([...vi.mocked(seedDmPinsBeforeLeaving).mock.calls[0][1]].sort()).toEqual([byron, mullum].sort());
+        expect(callOrder(seedDmPinsBeforeLeaving)).toBeLessThan(callOrder(FileSystem.deleteAsync));
+        expect(await loadIdentity()).toBeNull();
+    });
+
+    it('a seed that throws is logged, and every file still goes and Sign Out completes', async () => {
+        const real = await vi.importActual<typeof import('../community-cache')>('../community-cache');
+        vi.mocked(removeCommunityCaches).mockImplementation(real.removeCommunityCaches);
+        vi.mocked(FileSystem.readDirectoryAsync).mockResolvedValue([byron, mullum]);
+        vi.mocked(seedDmPinsHere).mockRejectedValueOnce(new Error('pins unreadable'));
+        vi.mocked(seedDmPinsBeforeLeaving).mockRejectedValueOnce(new Error('Access to closed resource'));
+        await kimsPhone();
+        nodes();
+
+        await expect(signOutOfThisPhone(kim, { namesCopiesSaved: true })).resolves.toBeUndefined();
+
+        const removed = new Set(vi.mocked(FileSystem.deleteAsync).mock.calls.map(([uri]) => String(uri).slice(dir.length + 1)));
+        for (const f of [byron, mullum]) expect(removed.has(f), f).toBe(true);
+        expect(clearDB).toHaveBeenCalledWith({ identityLeaves: true });
+        expect(await loadIdentity()).toBeNull();
+    });
+
+    it('the self-delete purge, "Delete this account from this phone" and Replace take no seed', async () => {
+        const real = await vi.importActual<typeof import('../community-cache')>('../community-cache');
+        vi.mocked(removeCommunityCaches).mockImplementation(real.removeCommunityCaches);
+        vi.mocked(FileSystem.readDirectoryAsync).mockResolvedValue([byron, mullum]);
+        await kimsPhone();
+        nodes();
+        await signOutOfThisPhone(kim, { purge: true });
+        await kimsPhone();
+        await deleteAccountFromThisPhone(kim);
+        await kimsPhone();
+        await releaseAccountFromPhone(kim);   // Replace (restore-account.ts) takes this door
+        expect(seedDmPinsHere).not.toHaveBeenCalled();
+        expect(seedDmPinsBeforeLeaving).not.toHaveBeenCalled();
     });
 });
 

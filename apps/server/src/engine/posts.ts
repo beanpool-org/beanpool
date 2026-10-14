@@ -405,8 +405,9 @@ function normaliseReach(rawReach: unknown, rawPeers: unknown): { reach: PostReac
  * Where a listing with no place stands on a node that syncs by area (DESIGN-global-sync-by-area §3.4, Q4): at its
  * author's area, which was rounded to 0.1° when it was stored, so visibly rough. Placeless, it would be in nobody's set
  * but its author's. A poll too: poll isolation drops any pin it is sent, and the area is how the polls a member sees are
- * the ones made near them. An event carries its own pin. Null where the node doesn't sync by area or the author has no
- * area: the listing stays placeless. createPost and updatePost both place by it, so an edit that takes the pin away
+ * the ones made near them. An event carries its own pin, or none when it is online (DESIGN-event-times §9), and is not
+ * placed here: on a node that syncs by area an online event reaches only its host until the rule that design's Director
+ * amendment 2 asks for. Null where the node doesn't sync by area or the author has no area: the listing stays placeless. createPost and updatePost both place by it, so an edit that takes the pin away
  * puts the listing back at the area.
  */
 function placelessListingArea(authorPublicKey: string): { lat: number; lng: number } | null {
@@ -1151,7 +1152,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     }
 
     // An edit that takes the pin away, on a node that syncs by area, puts the listing at its author's area, as a new one
-    // with no place is (placelessListingArea). An event can't lose its pin (assertEventPin); a poll's place is never edited.
+    // with no place is (placelessListingArea). An event keeps its pin (assertEventPin), or none online; a poll's place is never edited.
     if (existingPost.type !== 'event' && (updates.lat === null || updates.lng === null)) {
         const area = placelessListingArea(existingPost.authorPublicKey);
         if (area) { updates.lat = area.lat; updates.lng = area.lng; }

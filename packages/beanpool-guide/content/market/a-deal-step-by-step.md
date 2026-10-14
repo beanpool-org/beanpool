@@ -27,9 +27,11 @@ You need to have posted an Offer of your own first. If you have not, the app off
 - They see your request under **Fulfillment Requests**, and can **Message** you, **Deny** it or **Approve & Commit**.
 - When they approve, their beans are held. Unless the post is Repeatable, anyone else who offered sees their request marked declined.
 
+In the web app, **Withdraw Request** is **Cancel Offer** and **Approve & Commit** is **Approve & Hold in Trust**. The person who posted the Need can only **Deny** or approve there: a request has no **Message** button.
+
 ## While the beans are held
 
-Both of you see a **Message** button to talk, and **Cancel Trust Hold** to call it off.
+Both of you see a **Message** button to talk, and **Cancel Trust Hold** to call it off. In the web app, only the person who did not post the listing sees **Message**, and the button to call it off is **Cancel Hold**.
 
 - Do the job, or hand over the thing.
 - The person paying taps **Release Credits**, then **Release Credits** again to confirm. For hourly work they first enter the hours actually worked. If it was less, the rest goes back to them. If it was more, the extra is taken from them. Every hour is paid at the rate the deal was made at.
@@ -47,6 +49,8 @@ A Repeatable post goes back up after each deal, and several people can be in a d
 
 After releasing, the person paying is asked to rate the deal: 1 to 5 stars and a short, optional comment. Tap **Submit Rating**, or **Skip for now**.
 
-Both people can rate later: tap **Rate** and the name on the finished post (not on a Repeatable post, which goes back up), or **Review** in My Deals, History. You can change your rating; the new one replaces the old.
+Both people can rate later: tap **Rate** and the name on the finished post (not on a Repeatable post, which goes back up), or **Review** in My Deals, History (**Leave Review** in the web app). You can change your rating; the new one replaces the old.
+
+Everyone in your community can read the stars and words of a review. Only the two people in the trade can see who wrote it and which deal it was about.
 
 Stars matter. A low average reduces how much trust the other person earns from their trades. Be fair.

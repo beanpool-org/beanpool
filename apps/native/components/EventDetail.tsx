@@ -162,7 +162,8 @@ export function EventDetail({ post }: EventDetailProps) {
 
     // The same short reason list as a post (ReportReasonBox): "Child safety" is told to the owners at once.
     const [reporting, setReporting] = useState(false);
-    // The report went with the reason picked but not the member's words (reportAbuse says so): the line under the button.
+    // The report went with the reason picked but not the member's words (reportAbuse says so): the line under the button,
+    // until the box opens again.
     const [wordsLeftOut, setWordsLeftOut] = useState(false);
     const report = async (reason: string) => {
         if (!identity?.publicKey) return;
@@ -358,7 +359,7 @@ export function EventDetail({ post }: EventDetailProps) {
                             <Text style={styles.reportText}>🚩 Report event</Text>
                         </Pressable>
                         {reporting && <ReportReasonBox onSubmit={report} onCancel={() => setReporting(false)} />}
-                        {wordsLeftOut && !reporting && <ReportWordsLeftOut />}
+                        {wordsLeftOut && <ReportWordsLeftOut />}
                     </>
                 )}
             </ScrollView>

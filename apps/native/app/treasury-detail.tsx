@@ -77,7 +77,8 @@ export default function TreasuryDetailScreen() {
     const [pledging, setPledging] = useState(false);
     const [cancelling, setCancelling] = useState(false);
     const [showReportForm, setShowReportForm] = useState(false);
-    // The report went with the reason picked but not the member's words (reportAbuse says so): the line under Report.
+    // The report went with the reason picked but not the member's words (reportAbuse says so): the line under Report,
+    // until the box opens again.
     const [reportWordsLeftOut, setReportWordsLeftOut] = useState(false);
     const [identity, setIdentity] = useState<any>(null);
 
@@ -1855,7 +1856,7 @@ export default function TreasuryDetailScreen() {
                                     }}
                                 />
                             )}
-                            {reportWordsLeftOut && !showReportForm && <ReportWordsLeftOut />}
+                            {reportWordsLeftOut && <ReportWordsLeftOut />}
                         </View>
                     </ScrollView>
                 </KeyboardAvoidingView>

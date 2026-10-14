@@ -91,13 +91,13 @@ describe('the phone\'s report lists', () => {
 
     // #1938 confirmation 9: a report naming a known DM's id (or one the guard can't tell) goes with the reason picked alone,
     // and reportAbuse says so (`wordsLeftOut`). Each screen keeps that answer and, once its box has closed, shows the one
-    // shared line (REPORT_WORDS_LEFT_OUT, ReportWordsLeftOut); opening the box again clears it. The event screen's side is
+    // shared line (REPORT_WORDS_LEFT_OUT, ReportWordsLeftOut) until the box opens again. The event screen's side is
     // drawn in event-report-render.test.ts; these two screens can't be drawn here, so their wiring is read.
     for (const [rel, imports, flag, open] of [
         ['app/treasury-detail.tsx', "'../components/ReportReasonBox'", 'reportWordsLeftOut', 'showReportForm'],
         ['app/post/[id].tsx', "'../../components/ReportReasonBox'", 'reportWordsLeftOut', 'showReportForm'],
     ] as const) {
-        it(`${rel} shows the words-left-out line only after a report that left them out, never while the box is open`, () => {
+        it(`${rel} shows the words-left-out line only after a report that left them out, until the box opens again`, () => {
             const src = read(rel);
             expect(src).toMatch(new RegExp(`import \\{[^}]*\\bReportWordsLeftOut\\b[^}]*\\} from ${imports.replace(/[./[\]]/g, '\\$&')};`));
             const setter = `set${flag[0].toUpperCase()}${flag.slice(1)}`;
@@ -105,7 +105,7 @@ describe('the phone\'s report lists', () => {
             expect(src).toMatch(new RegExp(`const sent = await reportAbuse\\([^)]*\\);[\\s\\S]{0,120}${setter}\\(sent\\?\\.wordsLeftOut === true\\);`));
             expect(src.match(new RegExp(`${setter}\\(sent\\?\\.wordsLeftOut === true\\)`, 'g'))).toHaveLength(1);
             expect(src).toMatch(new RegExp(`${setter}\\(false\\);\\s*set${open[0].toUpperCase()}${open.slice(1)}\\(`));
-            expect(src).toContain(`{${flag} && !${open} && <ReportWordsLeftOut />}`);
+            expect(src).toContain(`{${flag} && <ReportWordsLeftOut />}`);
         });
     }
 

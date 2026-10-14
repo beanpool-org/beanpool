@@ -416,7 +416,8 @@ export default function PostDetailModal() {
     const [showReportForm, setShowReportForm] = useState(false);
     const [reportReason, setReportReason] = useState('');
     const [reportDetails, setReportDetails] = useState('');
-    // The report went with the reason picked but not the member's words (reportAbuse says so): the line under Report.
+    // The report went with the reason picked but not the member's words (reportAbuse says so): the line under Report,
+    // until the box opens again.
     const [reportWordsLeftOut, setReportWordsLeftOut] = useState(false);
     const [submittingReport, setSubmittingReport] = useState(false);
     const [isBlocking, setIsBlocking] = useState(false);
@@ -1825,7 +1826,7 @@ export default function PostDetailModal() {
                                 </Pressable>
                             </View>
                         )}
-                        {reportWordsLeftOut && !showReportForm && <ReportWordsLeftOut />}
+                        {reportWordsLeftOut && <ReportWordsLeftOut />}
                     </View>
                 )}
             </ScrollView>

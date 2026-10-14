@@ -120,7 +120,7 @@ describe('the event screen reports through the shared box (drawn)', () => {
     // #1938 confirmation 9: where the guard refuses the event's id (a known DM's, or one it can't tell), reportAbuse sends
     // the reason picked alone and says so; the screen then says the words were left out. Never before a send, never as an
     // error (the title stays "Reported"), and never when the words went.
-    it('a report whose words were left out: "Reported", the box closes, and the one line says so; opening the box again clears it', async () => {
+    it('a report whose words were left out: "Reported", the box closes, and the one line says so; opening the box again clears it for good', async () => {
         await act(async () => { root.render(createElement(EventDetail, { post }) as unknown as Parameters<Root['render']>[0]); });
         await click(button('Report event'));
         await click(button('Child safety'));
@@ -133,6 +133,10 @@ describe('the event screen reports through the shared box (drawn)', () => {
         expect(host.textContent!.split(REPORT_WORDS_LEFT_OUT).length - 1).toBe(1);
         await click(button('Report event'));
         expect(host.textContent).toContain('WHY ARE YOU REPORTING IT?');
+        expect(host.textContent).not.toContain(REPORT_WORDS_LEFT_OUT);
+        // Closed again with nothing sent: the line belonged to the earlier send and stays gone.
+        await click(button('Cancel'));
+        expect(host.textContent).not.toContain('WHY ARE YOU REPORTING IT?');
         expect(host.textContent).not.toContain(REPORT_WORDS_LEFT_OUT);
     });
 

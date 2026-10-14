@@ -1677,3 +1677,106 @@ describe('the post form opened from another tab (review #1936 N1)', () => {
         expect(view.queryByTestId('map-new-post-panel')).toBeNull();
     });
 });
+
+// Where anyone can join in a minute (features.openMembership, the global node), a new pin starts Approximate, rounded to
+// about 100 m, and the member can still choose the exact spot (DESIGN-global-member-privacy-fable.md, director amendment 1
+// item 3; #1965). A local node: as before, the spot itself.
+describe('MapPage: a new pin starts Approximate where anyone can join', () => {
+    const OPEN_INFO = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false, openMembership: true } };
+    const LOCAL_INFO = { memberCount: 3, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { openJoin: false, guestListingsOnly: false, beans: true } };
+    const TAP = { lat: -28.55437, lng: 153.50261 };
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockCreatedMarkers.length = 0;
+        resetSavedMapView();
+        resetCommunityInfoOnce();
+        vi.spyOn(api, 'getMarketplacePosts').mockResolvedValue([] as any);
+        vi.spyOn(api, 'getEnterpriseStatuses').mockResolvedValue({ enterprises: [] });
+        vi.spyOn(api, 'getTreasuries').mockResolvedValue({ treasuries: [] });
+        vi.spyOn(api, 'getGroups').mockResolvedValue([]);
+        vi.spyOn(api, 'getNodeConfig').mockResolvedValue({} as any);
+        vi.spyOn(api, 'getBalance').mockResolvedValue({ balance: 0, isBlockedFromTrading: false } as any);
+        vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
+        vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
+    });
+    afterEach(() => resetCommunityInfoOnce());
+
+    const open = async (info: unknown) => {
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue(info as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => { view = render(<MapPage identity={mockIdentity} openNewPost onNavigate={vi.fn()} />); });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+        return panel;
+    };
+    const tapPin = async (panel: HTMLElement) => {
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Drop a pin/ })); });
+        const map = vi.mocked(L.map).mock.results.at(-1)!.value as any;
+        const clicks = map.on.mock.calls.filter((c: any[]) => c[0] === 'click').map((c: any[]) => c[1]);
+        await act(async () => { clicks.forEach((h: any) => h({ latlng: TAP })); });
+    };
+    const fillNeed = async (panel: HTMLElement) => {
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Need$/ })); });
+        fireEvent.change(within(panel).getByPlaceholderText('What do you need/offer?'), { target: { value: 'A ladder for a day' } });
+        fireEvent.change(within(panel).getByPlaceholderText('Describe what you need/offer...'), { target: { value: 'To clear the gutters' } });
+        // The price field, where this render shows one (the node's Beans switch arrives with its info).
+        const price = within(panel).queryByPlaceholderText('B');
+        if (price) fireEvent.change(price, { target: { value: '5' } });
+    };
+
+    it('a listing: the pin is sent to about 100 m, and the member can choose the exact spot', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'need-new' } } as any);
+        const panel = await open(OPEN_INFO);
+        await fillNeed(panel);
+        await tapPin(panel);
+        const precision = within(panel).getByTestId('listing-pin-precision');
+        expect(precision).toHaveTextContent('Saved to about 100 m. Other members see about 1 km.');
+        await act(async () => { fireEvent.click(within(precision).getByRole('button', { name: 'Use the exact spot' })); });
+        expect(precision).toHaveTextContent('Saved at the exact spot. Other members see about 1 km.');
+        await act(async () => { fireEvent.click(within(precision).getByRole('button', { name: 'Approximate (~100m)' })); });
+        expect(precision).toHaveTextContent('Saved to about 100 m.');
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Post Need' })); });
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+        expect(create.mock.calls[0][0]).toMatchObject({ type: 'need', lat: -28.554, lng: 153.503 });
+    });
+
+    it('a listing posted at the exact spot when the member chooses it', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'need-new' } } as any);
+        const panel = await open(OPEN_INFO);
+        await fillNeed(panel);
+        await tapPin(panel);
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Use the exact spot' })); });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Post Need' })); });
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+        expect(create.mock.calls[0][0]).toMatchObject({ lat: -28.5544, lng: 153.5026 });
+    });
+
+    it('an event: Approximate is on from the first tap, and Use the exact spot takes it back', async () => {
+        const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'ev-new' } } as any);
+        const panel = await open(OPEN_INFO);
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Event' })); });
+        fireEvent.change(within(panel).getByLabelText("What's happening"), { target: { value: 'Working bee' } });
+        fireEvent.change(within(panel).getByLabelText('Starts'), { target: { value: '2030-09-28T09:00' } });
+        fireEvent.change(within(panel).getByLabelText('Place name'), { target: { value: 'Bindarrabi Hall' } });
+        await tapPin(panel);
+        expect(within(panel).getByRole('button', { name: 'Approximate (~100m)' })).toHaveAttribute('aria-pressed', 'true');
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Use the exact spot' })); });
+        expect(within(panel).getByRole('button', { name: 'Approximate (~100m)' })).toHaveAttribute('aria-pressed', 'false');
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Approximate (~100m)' })); });
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Create Event' })); });
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+        expect(create.mock.calls[0][0]).toMatchObject({ type: 'event', lat: -28.554, lng: 153.503 });
+    });
+
+    it('a local node: the pin is the spot, with no new control, as before', async () => {
+        const panel = await open(LOCAL_INFO);
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: /Offer$/ })); });
+        await tapPin(panel);
+        expect(within(panel).queryByTestId('listing-pin-precision')).toBeNull();
+        expect(within(panel).queryByRole('button', { name: 'Use the exact spot' })).toBeNull();
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Event' })); });
+        await tapPin(panel);
+        expect(within(panel).getByRole('button', { name: 'Approximate (~100m)' })).toHaveAttribute('aria-pressed', 'false');
+    });
+});

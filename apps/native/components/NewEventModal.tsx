@@ -35,7 +35,7 @@ import { useNodeProfile } from '../utils/use-node-profile';
 import { HAS_MAPS_KEY } from '../utils/maps';
 import { pageSheetTopInset } from '../utils/modal-safe-area';
 import {
-    buildEventDraft, buildEventEditPatch, approximatePin, defaultEventEnd, formatPickerValue,
+    buildEventDraft, buildEventEditPatch, approximatePin, freshEventPin, defaultEventEnd, formatPickerValue,
     EVENT_PIN_WARNING, EVENT_PIN_HINT, EVENT_PLACE_NAME_MAX, EVENT_PRIVATE_NOTE_MAX, EVENT_TITLE_MAX,
     hostLetsInLabel, hostLetsInHint, hostLetsInOffWarning, hostLetsInDefault, privateNoteHelper,
     type EventCopy, type EventEditValues,
@@ -97,6 +97,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const scrollRef = useRef<ScrollView | null>(null);
     // Where the address box sits in the scroll content, for bringing it (and the map under it) into view.
     const addressY = useRef(0);
+    // The spot a new pin was placed at, kept while the pin shows Approximate, so the host can still choose it.
+    const exactPin = useRef<{ lat: number; lng: number } | null>(null);
     const centreMap = (latitude: number, longitude: number) => {
         mapRef.current?.animateToRegion({ ...DEFAULT_REGION, latitude, longitude }, 400);
     };
@@ -174,7 +176,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
     const effectiveAudience = effectiveEventAudience(host, audienceGroupId);
 
     const reset = () => {
-        setTitle(''); setStart(null); setEnd(null); setPlaceName(''); setPin(null); setApproximate(false);
+        setTitle(''); setStart(null); setEnd(null); setPlaceName(''); setPin(null); setApproximate(false); exactPin.current = null;
         setDescription(''); setPhoto(null); setNote(''); setAudienceGroupId(null); setHostKey('me'); setPicker(null);
         setCopiedHost(null); setIsCopy(false); setHostLetsIn(null);
     };
@@ -193,7 +195,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setPlaceName(prefill.placeName);
         setNote(prefill.privateNote);
         setStart(null); setEnd(null); setPicker(null); setPhoto(null);
-        setApproximate(false);
+        setApproximate(false); exactPin.current = null;
         setAudienceGroupId(prefill.groupId);
         const copied: HostOption | null = prefill.enterprisePubkey
             ? { key: `ent:${prefill.enterprisePubkey}`, label: 'Enterprise', authorPubkey: prefill.enterprisePubkey, groupId: null }
@@ -227,7 +229,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         setHostLetsIn(v.hostLetsIn);
         setPhoto(v.photo);
         setPicker(null);
-        setApproximate(false);
+        setApproximate(false); exactPin.current = null;
         if (v.lat != null && v.lng != null) {
             setPin({ lat: v.lat, lng: v.lng });
             centreMap(v.lat, v.lng);
@@ -243,7 +245,8 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         if (!visible) { appliedInitialPin.current = false; return; }
         if (prefill || editOf || appliedInitialPin.current || !initialPin) return;
         appliedInitialPin.current = true;
-        setPin({ lat: initialPin.lat, lng: initialPin.lng });
+        // A new pin, as a tap in the form is: Approximate from the start where anyone can join (freshEventPin).
+        placePin(initialPin.lat, initialPin.lng);
         centreMap(initialPin.lat, initialPin.lng);
     }, [visible, prefill, initialPin]);
 
@@ -278,8 +281,17 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
         }
     };
 
+    // Where anyone can join, a new pin starts Approximate (freshEventPin); "Use the exact spot" takes it back.
     const placePin = (lat: number, lng: number) => {
-        setPin({ lat, lng });
+        const fresh = freshEventPin(lat, lng, openMembership);
+        exactPin.current = fresh.exact;
+        setPin(fresh.pin);
+        setApproximate(fresh.approximate);
+    };
+
+    const chooseExactPin = () => {
+        if (!exactPin.current) return;
+        setPin(exactPin.current);
         setApproximate(false);
     };
 
@@ -319,6 +331,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
 
     const makeApproximate = () => {
         if (!pin) return;
+        if (!approximate) exactPin.current = pin;
         setPin(approximatePin(pin.lat, pin.lng));
         setApproximate(true);
     };
@@ -592,6 +605,17 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                 >
                                     <Text style={[styles.secondaryText, (!pin || approximate) && styles.secondaryTextDisabled]} numberOfLines={1}>{approximate ? 'Approximate ✓' : 'Approximate (~100 m)'}</Text>
                                 </Pressable>
+                                {approximate && exactPin.current && (
+                                    <Pressable
+                                        onPress={chooseExactPin}
+                                        style={[styles.secondaryBtn, styles.approxBtn]}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={t('Use the exact spot')}
+                                        testID="event-pin-exact"
+                                    >
+                                        <Text style={styles.secondaryText} numberOfLines={1}>{t('Use the exact spot')}</Text>
+                                    </Pressable>
+                                )}
                             </View>
                         </View>
 

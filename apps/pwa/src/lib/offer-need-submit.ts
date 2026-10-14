@@ -14,6 +14,8 @@ export type OfferNeedForm = {
     priceMarked: boolean;
     hasLocation: boolean;
     photoCount: number;
+    /** False where a Need's photo is optional (Beans off: postRulesFor().needPhoto). Left out, a photo is required. */
+    photoRequired?: boolean;
     needBlocked: boolean;
     posting: boolean;
 };
@@ -21,7 +23,7 @@ export type OfferNeedForm = {
 export function offerNeedSubmit(f: OfferNeedForm): { disabled: boolean; label: string } {
     const priceMissing = !f.priceMarked && f.credits === '';
     const fieldsMissing = !f.title.trim() || !f.description.trim() || priceMissing;
-    const disabled = f.needBlocked || f.posting || fieldsMissing || !f.hasLocation || f.photoCount === 0;
+    const disabled = f.needBlocked || f.posting || fieldsMissing || !f.hasLocation || (f.photoRequired !== false && f.photoCount === 0);
     const label = f.posting ? 'Posting...'
         : f.needBlocked ? '🔵 List an Offer first to post Needs'
         : !f.hasLocation ? '📍 Map location required'

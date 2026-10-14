@@ -175,6 +175,8 @@ export interface NodeHealthFlag {
 
 export interface NodeReport {
     id?: string;
+    /** A child-safety report, as the node's alerts read it: the node lists these first, and the queues mark them. */
+    childSafety?: boolean;
     targetPubkey?: string;
     target_pubkey?: string;
     reporterPubkey?: string;

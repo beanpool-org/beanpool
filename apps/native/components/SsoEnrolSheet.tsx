@@ -320,7 +320,7 @@ function makeStyles(colors: AppColors) {
             fontSize: 48,
         },
         primaryButton: {
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             borderRadius: 12,
             paddingVertical: 16,
             alignItems: 'center',

@@ -82,6 +82,7 @@ import { standbyIncidentOpen } from './standby-health.js';
 import { snapshotFailuresInARow } from './snapshot-scheduler.js';
 import { tlsFellBackToSelfSigned } from './tls.js';
 import { getReplacedInfo } from './identity-epoch.js';
+import { reportKind, type ReportKind } from './report-kind.js';
 import { setSecurityAlertHandler, SECURITY_PUSHES_PER_HOUR, NAME_ALERT_WORDS, type SecurityNote } from './security-signal.js';
 import { registrarNames } from '../engine/registrar-names.js';
 import { listAutomationTokens } from '../automation-tokens.js';
@@ -1021,7 +1022,8 @@ export async function acknowledgeSecurityAlerts(by: 'owner' | 'password' = 'owne
 
 // ── Reports coming in (B9) ─────────────────────────────────────────────────────────────────
 
-export type ReportKind = 'child safety' | 'spam or scam' | 'offensive content' | 'misleading post' | 'other';
+export type { ReportKind } from './report-kind.js';
+export { CHILD_SAFETY_REASON, pickedChildSafety, reportKind } from './report-kind.js';
 
 /** The fold window when .env sets none: the first report told at once, the rest of the hour as one line. */
 export const REPORT_FOLD_DEFAULT_MINUTES = 60;
@@ -1051,30 +1053,8 @@ export function reportFoldWarning(env: NodeJS.ProcessEnv = process.env): string 
         + `from ${REPORT_FOLD_MIN_MINUTES} to ${REPORT_FOLD_MAX_MINUTES}: reports are folded over the hour (${REPORT_FOLD_DEFAULT_MINUTES} minutes) instead.`;
 }
 
-/** The apps' "Child safety" report choice: the reason is it, alone or followed by ": " and the member's own words. */
-export const CHILD_SAFETY_REASON = 'Child safety';
-
-/** Whether the member picked "Child safety" from the apps' list: read from where the choice goes, never from their words. */
-export function pickedChildSafety(reason: unknown): boolean {
-    const r = typeof reason === 'string' ? reason.trim().toLowerCase() : '';
-    const c = CHILD_SAFETY_REASON.toLowerCase();
-    return r === c || r.startsWith(`${c}:`);
-}
-
-/**
- * Child safety written in rather than picked (an app from before the choice, or another choice with words that say it):
- * read to sort the report, never repeated. The fallback for every reason that is not the choice.
- */
-const CHILD_SAFETY = /\b(child[- ]safety|csae|csam|child (sexual|abuse|exploitation|porn)\w*|sexual(ly)? (abuse|exploit)\w* (of )?(a )?(child|minor)s?|underage)\b/i;
-
-/** What kind a report is, from its reason: one of the apps' fixed choices, child safety, or other. Never its words. */
-export function reportKind(reason: unknown): ReportKind {
-    if (pickedChildSafety(reason)) return 'child safety';
-    const r = typeof reason === 'string' ? reason.trim().toLowerCase() : '';
-    if (CHILD_SAFETY.test(r)) return 'child safety';
-    for (const k of ['spam or scam', 'offensive content', 'misleading post'] as const) if (r.startsWith(k)) return k;
-    return 'other';
-}
+// What kind a report is (CHILD_SAFETY_REASON, pickedChildSafety, reportKind) lives in report-kind.ts, which imports
+// nothing, so the state engine can sort the Reports queue by it (re-exported here for the callers that read it from here).
 
 function pendingReports(): number {
     try {

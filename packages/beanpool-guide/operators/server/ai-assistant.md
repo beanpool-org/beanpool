@@ -44,7 +44,7 @@ The other owners get a message when anyone connects or disconnects an assistant,
 - **Health**: disk and memory, an unclean stop or a restart loop, the watchdog, a certificate problem, and, for an owner's assistant, a standby that needs you and the names of the alerts that are on (never their details).
 - **Backups**: when the last snapshot was taken and whether it worked, failures in a row, how many off-box destinations there are and of what kind, whether backups are sealed and a recovery code is set, and how far behind the standby is.
 - **Totals**: Beans in circulation, the credit and debt sums, how many members are in debit, the Commons pot, trades this month, new members, posts and trades. Never one member's balance.
-- **Reports**: their id, when, status, category and what was reported. Only when asked, the report's reason, the reported post's title and description, and the reported post's author's name or the reported member's name.
+- **Reports**: their id, when, status, whether it is a child-safety report, and what was reported. Open child-safety reports come first, then the rest newest first. Only when asked, the report's reason, the reported post's title and description, and the reported post's author's name or the reported member's name.
 - **Join requests**: how many wait. Only when asked, each one's name and message, and the community it says it came from.
 - **Safety settings**: yes or no only, for example whether two-factor sign-in is on, whether there are two owners, whether a recovery code is set.
 - **Its own connection**: its name, who it acts for, until when, and its calls today.

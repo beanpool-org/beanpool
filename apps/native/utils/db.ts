@@ -498,6 +498,10 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
             created_at DATETIME DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
             UNIQUE(rater_pubkey, transaction_id)
         );
+        -- Another member's reviews as the node last answered this phone (getMemberRatings), one row per member, for their
+        -- Reviews tab and their stars on a market card offline: since #1914 a review names no rater and no deal to anyone but
+        -- its two parties, so these never go into ratings. The most recently read REVIEWS_READ_KEPT members are kept.
+        CREATE TABLE IF NOT EXISTS member_reviews_read (target_pubkey TEXT PRIMARY KEY, answer TEXT NOT NULL, read_at TEXT NOT NULL);
 
         -- 6b. Friends
         CREATE TABLE IF NOT EXISTS friends (
@@ -691,6 +695,8 @@ ${NEARBY_TAG_FORGOTTEN_ON_POSTS_WRITE}
                 );
             `);
         } catch (e) {}
+        // Another member's reviews as the node last answered (getMemberRatings), for a phone whose schema ran before it.
+        try { await database.execAsync(`CREATE TABLE IF NOT EXISTS member_reviews_read (target_pubkey TEXT PRIMARY KEY, answer TEXT NOT NULL, read_at TEXT NOT NULL);`); } catch (e) {}
 
         // Force full synchronization once to populate new columns
         AsyncStorage.getItem('bp_trust_sync_v3').then(async (val) => {
@@ -793,7 +799,7 @@ export async function clearDB(opts: { identityLeaves?: boolean } = {}) {
         // Again, under the lock: a sync that began while this waited took the generation above and read the old copy's
         // cursor and row count; it must store nothing either (#1719 confirmation 2, P1).
         newCopyGeneration();
-        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps; DROP TABLE IF EXISTS nearby_tied; DROP TABLE IF EXISTS nearby_held;'
+        await database.execAsync('DROP TABLE IF EXISTS messages; DROP TABLE IF EXISTS conversation_participants; DROP TABLE IF EXISTS conversations; DROP TABLE IF EXISTS posts; DROP TABLE IF EXISTS marketplace_transactions; DROP TABLE IF EXISTS transactions; DROP TABLE IF EXISTS accounts; DROP TABLE IF EXISTS members; DROP TABLE IF EXISTS projects; DROP TABLE IF EXISTS friends; DROP TABLE IF EXISTS ratings; DROP TABLE IF EXISTS member_reviews_read; DROP TABLE IF EXISTS poll_votes; DROP TABLE IF EXISTS event_rsvps; DROP TABLE IF EXISTS nearby_tied; DROP TABLE IF EXISTS nearby_held;'
             + (opts.identityLeaves ? ' DROP TABLE IF EXISTS group_chat_epochs; DROP TABLE IF EXISTS group_chat_key_state; DROP TABLE IF EXISTS group_line_verdicts; DROP TABLE IF EXISTS group_line_signers;' : ''));
     } finally {
         releaseSyncLock();
@@ -6589,7 +6595,25 @@ export async function submitRating(raterPublicKey: string, targetPublicKey: stri
     return res;
 }
 
-export async function getMemberRatings(publicKey: string): Promise<{ ratings: any[]; average: number; count: number; asProvider: { average: number; count: number }; asReceiver: { average: number; count: number } }> {
+/** How many members' reviews the phone keeps as the node last answered (member_reviews_read): the market draws
+ *  PostAuthorTrust on every card, about 120 a screen. */
+const REVIEWS_READ_KEPT = 300; // not exported: utils/__tests__/net-spy-db.ts stands in only for string exports (the test uses 300)
+
+type MemberRatings = { ratings: any[]; average: number; count: number; asProvider: { average: number; count: number }; asReceiver: { average: number; count: number } };
+
+/** Keeps another member's reviews as the node answered them, by member: stars, words, side, date, and `mine` on the
+ *  reader's own, and no rater and no deal, whatever the node sent. Forgets all but the REVIEWS_READ_KEPT read last. */
+async function keepReviewsRead(database: Awaited<ReturnType<typeof getDb>>, targetPubkey: string, data: any): Promise<void> {
+    const ratings = (data.ratings as any[])
+        .map(r => ({ stars: r.stars ?? r.rating, comment: r.comment ?? null, role: r.role ?? 'provider', createdAt: r.createdAt ?? r.created_at ?? null, ...(r.mine === true ? { mine: true } : {}) }))
+        .filter(r => typeof r.stars === 'number' && r.stars >= 1 && r.stars <= 5);
+    const side = (s: any) => ({ average: Number(s?.average) || 0, count: Number(s?.count) || 0 });
+    const answer = { ratings, average: Number(data.average) || 0, count: Number(data.count ?? ratings.length) || 0, asProvider: side(data.asProvider), asReceiver: side(data.asReceiver) };
+    await database.runAsync('INSERT OR REPLACE INTO member_reviews_read (target_pubkey, answer, read_at) VALUES (?, ?, ?)', [targetPubkey, JSON.stringify(answer), new Date().toISOString()]);
+    await database.runAsync('DELETE FROM member_reviews_read WHERE target_pubkey NOT IN (SELECT target_pubkey FROM member_reviews_read ORDER BY read_at DESC, rowid DESC LIMIT ?)', [REVIEWS_READ_KEPT]);
+}
+
+export async function getMemberRatings(publicKey: string): Promise<MemberRatings> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) {
         await acquireSyncLock();
@@ -6642,7 +6666,8 @@ export async function getMemberRatings(publicKey: string): Promise<{ ratings: an
             throw new Error(`Failed to fetch ratings: ${res.statusText}`);
         }
         const data = await res.json();
-        if (data.ratings) {
+        if (Array.isArray(data.ratings)) {
+            const me = (await loadIdentity().catch(() => null))?.publicKey;
             await acquireSyncLock();
             try {
                 const database = await getDb();
@@ -6656,10 +6681,9 @@ export async function getMemberRatings(publicKey: string): Promise<{ ratings: an
                         const rId = r.id ?? null;
                         const targetPubkey = r.targetPubkey ?? r.target_pubkey ?? null;
                         const raterPubkey = r.raterPubkey ?? r.rater_pubkey ?? null;
-                        if (!rId || !targetPubkey || !raterPubkey) {
-                            console.warn(`[DB] Skipping rating due to missing required keys in getMemberRatings:`, r);
-                            continue;
-                        }
+                        // Another member's review as a third member reads it (#1914) names no rater and no deal: it is
+                        // kept with that member's answer below, not here.
+                        if (!rId || !targetPubkey || !raterPubkey) continue;
                         await database.runAsync(`
                             INSERT OR REPLACE INTO ratings (id, target_pubkey, rater_pubkey, role, stars, comment, transaction_id, created_at)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -6674,6 +6698,8 @@ export async function getMemberRatings(publicKey: string): Promise<{ ratings: an
                             r.createdAt ?? r.created_at ?? new Date().toISOString()
                         ]);
                     }
+                    // The member's own reviews stay in ratings alone, with their raters' names (unchanged).
+                    if (publicKey !== me) await keepReviewsRead(database, publicKey, data);
                 });
             } finally {
                 releaseSyncLock();
@@ -6682,9 +6708,15 @@ export async function getMemberRatings(publicKey: string): Promise<{ ratings: an
         return data;
     } catch (e: any) {
         console.warn('Failed to fetch ratings, defaulting to local DB:', e.message);
+        const me = (await loadIdentity().catch(() => null))?.publicKey;
         await acquireSyncLock();
         try {
             const database = await getDb();
+            // Another member's reviews as the node last answered, when it has: the same count, average and rows offline.
+            const kept = publicKey !== me
+                ? await database.getFirstAsync<{ answer: string }>('SELECT answer FROM member_reviews_read WHERE target_pubkey = ?', [publicKey])
+                : null;
+            if (kept) return JSON.parse(kept.answer) as MemberRatings;
             const rows = await database.getAllAsync<any>(`
                 SELECT r.id, r.target_pubkey, r.rater_pubkey, r.stars, r.comment, r.role, r.transaction_id, r.created_at,
                        m.callsign as rater_callsign, m.avatar_url as rater_avatar
@@ -6931,16 +6963,47 @@ export async function isFriendLocal(ownerPubkey: string, friendPubkey: string): 
     return !!row;
 }
 
-/** Add a friend locally + sync to server */
+/**
+ * Add a friend: the node first, then this phone's copy. The node tells the person added (their People tab's "added you"),
+ * so it can refuse: past 100 adds in a day, or someone you blocked. Then this THROWS the node's own words and adds
+ * nothing here, so the member is told, never left believing a refused add went through. When the node can't be reached
+ * at all (off-grid, no answer), it is kept on this phone, as every add was before.
+ */
 export async function addFriendLocal(ownerPubkey: string, friendPubkey: string): Promise<void> {
     if (ownerPubkey === friendPubkey) return;
+    try {
+        await _syncFriendToServer('add', ownerPubkey, friendPubkey);
+    } catch (e: any) {
+        if (e?.nodeAnswered) throw new Error(String(e.message || 'Your community did not add them.'));
+        console.warn('[Friends] Server sync failed:', e?.message);
+    }
     const database = await getDb();
     await database.runAsync(
         'INSERT OR IGNORE INTO friends (owner_pubkey, friend_pubkey, added_at) VALUES (?, ?, ?)',
         [ownerPubkey, friendPubkey, new Date().toISOString()]
     );
-    // Fire-and-forget server sync
-    _syncFriendToServer('add', ownerPubkey, friendPubkey).catch(e => console.warn('[Friends] Server sync failed:', e.message));
+}
+
+/** Someone who added you lately and whom you haven't added back (GET /api/friends/added-you, your own only). */
+export interface AddedYou {
+    publicKey: string;
+    callsign: string;
+    avatarUrl: string | null;
+    addedAt: string;
+}
+
+/** Who added you lately, newest first (at most 20) and how many more; nothing when the node can't say (an older node, off-grid). */
+export async function fetchAddedYou(): Promise<{ addedYou: AddedYou[]; more: number }> {
+    try {
+        const res = await signedGet('/api/friends/added-you');
+        if (res.ok) {
+            const body = await res.json();
+            if (Array.isArray(body?.addedYou)) return { addedYou: body.addedYou, more: Number(body.more) || 0 };
+        }
+    } catch (e) {
+        console.warn('[Friends] Could not read who added you:', e);
+    }
+    return { addedYou: [], more: 0 };
 }
 
 /** Remove a friend locally + sync to server */

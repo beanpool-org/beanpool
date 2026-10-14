@@ -24,6 +24,7 @@ import { WsClients } from './ws-area-index.js';
 import { installRecoverySealAtBoot, clearCopiesDroppedBeforeSeal } from './services/recovery-seal-key.js';
 import { installPushTokenSealAtBoot, lockPushToken, pushTokenOpener, pushTokenId, retiredPushTokenIds, type PushTokenOpener } from './services/push-token-seal.js';
 import { installOpenJoinKeyAtBoot } from './services/open-join-key.js';
+import { reportKind } from './services/report-kind.js';
 import { getVersion } from './version.js';
 import { getAppStoreVersions, getUnnamedAppFloor, getMinAppVersionFrom, getAppFloors, type AppStoreVersions, type AppPlatform, type PlatformFloor } from './app-store-versions.js';
 import { db, initSchema, runMainServerSchemaPasses, migrateLegacyState, writeTombstone, deletePlainRows, setBalanceMutationHook, setDemurrageSettleHook, setMoneyGuardHook, afterTransactionCommit, isOperatorSwitchedOff, OPERATOR_SWITCHED_OFF_CREATE_ERROR, INACTIVE_MEMBER_CREATE_ERROR, raiseCreatorOperatorSwitch, isAcceptableGoal, GOAL_AMOUNT_ERROR, resumeMemberPhotoMove } from './db/db.js';
@@ -552,6 +553,11 @@ export interface AbuseReport {
     reporterCallsign?: string;
     targetCallsign?: string;
     postTitle?: string | null;
+    /**
+     * A child-safety report, read from its reason as the alerts read it (services/report-kind.ts reportKind): the Reports
+     * queue marks it and lists it first. A flag only: the reason itself is shown as before.
+     */
+    childSafety?: boolean;
     /** The same status in the moderation list's words: 'open' (pending), 'dismissed' (reviewed), 'actioned'. */
     outcome?: 'open' | 'dismissed' | 'actioned';
     /** The reported post's id, its author's callsign, and whether it is gone (null when no post is reported). */
@@ -2201,13 +2207,6 @@ export interface ViewerTrustProfile {
 }
 
 /**
- * Assembles the viewer-aware Trust Profile for `targetPubkey` as seen by
- * `viewerPubkey`. Aggregate signals are public; identities are graduated —
- * only connections in common are named: members who are friends both ways with
- * the viewer AND friends both ways with the target (all four friend rows).
- * See docs/trust-profile-and-trade-safety.md §2.
- */
-/**
  * "Vouched in by" — who brought this member in.
  *
  * A peer inviter is returned by name, so invitations carry accountability: bringing someone in
@@ -2242,6 +2241,13 @@ export function resolveVouchedInBy(targetPubkey: string): ViewerTrustProfile['vo
     };
 }
 
+/**
+ * Assembles the viewer-aware Trust Profile for `targetPubkey` as seen by
+ * `viewerPubkey`. Aggregate signals are public; identities are graduated —
+ * only connections in common are named: members who are friends both ways with
+ * the viewer AND friends both ways with the target (all four friend rows).
+ * See docs/trust-profile-and-trade-safety.md §2.
+ */
 export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: string): ViewerTrustProfile | null {
     const member = getMember(targetPubkey);
     if (!member) return null;
@@ -2267,8 +2273,12 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
     // A friend row is one-way and needs nobody's consent, so trusting one row on either side made this a probe and a
     // forgery: a viewer who added everyone read the target's list by name, and a target who added everyone looked
     // "in your circle" to every viewer. With all four rows, the viewer's only probes are people who chose the viewer,
-    // nothing the target adds alone counts, and every edge shown was chosen by both its ends. mutualCount and the
-    // risk band read this same list. See docs/trust-profile-and-trade-safety.md §2.
+    // nothing the target adds alone counts, and every edge shown was chosen by both its ends. A member who turned off
+    // "show me as a connection in common" (SHOW_AS_CONNECTION_PREF) is never F. A block takes the trust out of the
+    // blocker's row to the blocked member for every reader but the blocked member; the row stays so their reads don't
+    // change: F is not counted on T's profile when F has blocked T, nor for V when V has blocked F. T's block of F does
+    // not hide F from T's profile: that would hand any blocked member a probe (F's friend reads T and watches F leave).
+    // mutualCount and the risk band read this same list. See docs/trust-profile-and-trade-safety.md §2.
     const mutualConnections = (viewerPubkey && viewerPubkey !== targetPubkey)
         ? (db.prepare(`
             SELECT m.public_key as publicKey, m.callsign, m.avatar_ref as avatarRef
@@ -2279,9 +2289,13 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
             JOIN members m ON m.public_key = vf.friend_pubkey
             WHERE vf.owner_pubkey = ?
               AND vf.friend_pubkey != ? AND vf.friend_pubkey != ?
+              AND NOT EXISTS (SELECT 1 FROM member_preferences p
+                               WHERE p.public_key = vf.friend_pubkey AND p.pref_key = '${SHOW_AS_CONNECTION_PREF}' AND p.pref_value = 'false')
+              AND NOT EXISTS (SELECT 1 FROM member_blocks b WHERE b.owner_pubkey = vf.friend_pubkey AND b.blocked_pubkey = ?)
+              AND NOT EXISTS (SELECT 1 FROM member_blocks b WHERE b.owner_pubkey = ? AND b.blocked_pubkey = vf.friend_pubkey)
             ORDER BY m.callsign COLLATE NOCASE
             LIMIT 12
-        `).all(targetPubkey, targetPubkey, viewerPubkey, viewerPubkey, targetPubkey) as any[]).map(r => ({
+        `).all(targetPubkey, targetPubkey, viewerPubkey, viewerPubkey, targetPubkey, targetPubkey, viewerPubkey) as any[]).map(r => ({
             publicKey: r.publicKey,
             callsign: r.callsign,
             avatarUrl: avatarUrlOf(r.publicKey, r.avatarRef)
@@ -6826,7 +6840,18 @@ export function getReportablePulseItemOwner(itemId: string): string | null {
     return row?.owner_pubkey ?? null;
 }
 
+/** The databases that have report_is_child_safety() (a test may open more than one in a process). */
+const childSafetyFnOn = new WeakSet<object>();
+
 export function getReports(statusFilter?: string, limit?: number, offset?: number): { reports: AbuseReport[]; total: number; pendingCount: number } {
+    // Open child-safety reports first, read as the alerts read them, in SQL so a page of the queue holds the right ones
+    // (the alert says "look at it first, in the Manager's Reports queue": the follow-up to #1895). Once handled, one takes
+    // its date's place, so "All" never keeps a dismissed one (a false positive among them) above open ordinary reports
+    // (director, 14 Oct, on the review of #1912). It stays marked (childSafety) wherever it is listed.
+    if (!childSafetyFnOn.has(db)) {
+        db.function('report_is_child_safety', { deterministic: true }, (reason: unknown) => (reportKind(reason) === 'child safety' ? 1 : 0));
+        childSafetyFnOn.add(db);
+    }
     let whereClause = '';
     const params: any[] = [];
 
@@ -6863,7 +6888,8 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         LEFT JOIN pulse_items pi ON ar.target_pulse_item_id = pi.id
         LEFT JOIN members mpi ON pi.owner_pubkey = mpi.public_key
         ${whereClause}
-        ORDER BY ar.created_at DESC
+        ORDER BY CASE WHEN (ar.status = 'pending' OR ar.status IS NULL) AND report_is_child_safety(ar.reason) = 1 THEN 1 ELSE 0 END DESC,
+                 ar.created_at DESC
     `;
 
     const queryParams = [...params];
@@ -6885,6 +6911,7 @@ export function getReports(statusFilter?: string, limit?: number, offset?: numbe
         targetPubkey: r.target_pulse_item_id ? (r.pulse_owner_pubkey || r.target_pubkey)
             : r.post_row_id ? (r.post_author_pubkey || '') : r.target_pubkey,
         targetPostId: r.target_pulse_item_id ? undefined : r.target_post_id, reason: r.reason, createdAt: r.created_at,
+        childSafety: reportKind(r.reason) === 'child safety',
         status: r.status || 'pending',
         outcome: (r.status === 'reviewed' ? 'dismissed' : r.status === 'actioned' ? 'actioned' : 'open') as AbuseReport['outcome'],
         reporterCallsign: r.reporter_callsign || (r.reporter_pubkey ? `@${r.reporter_pubkey.substring(0, 8)}` : 'Unknown Member'),
@@ -9285,6 +9312,13 @@ export function getMemberPreference(publicKey: string, prefKey: string): string 
  */
 export const PUSH_PREFERENCE_KEYS: readonly string[] = ['notify_chat', 'notify_marketplace', 'notify_escrow', 'notify_recovery', 'eventReminderOffsets'];
 
+/**
+ * "Show me as a connection in common" (docs/trust-profile-and-trade-safety.md §2), on unless the member turns it off: off,
+ * getTrustProfileForViewer never names them to anyone, nor counts them. Set with the push settings (setMemberPreferences,
+ * true or false) by a member, never a visitor; served to the member alone.
+ */
+export const SHOW_AS_CONNECTION_PREF = 'show_as_connection_in_common';
+
 /** A body of preferences that names push settings and nothing else: an object, not a list, whose every key is in PUSH_PREFERENCE_KEYS. */
 export function namesOnlyPushSettings(preferences: unknown): preferences is Record<string, unknown> {
     return !!preferences && typeof preferences === 'object' && !Array.isArray(preferences)
@@ -9293,9 +9327,10 @@ export function namesOnlyPushSettings(preferences: unknown): preferences is Reco
 
 export const HOLIDAY_NOT_A_PREFERENCE_MESSAGE =
     "Holiday mode isn't saved with your preferences. Switch it with Holiday mode in Settings, which first checks you have no trades in progress.";
+export const SHOW_AS_CONNECTION_MEMBERS_ONLY_MESSAGE = 'Only a member of this community shows as a connection in common.';
 /** A body naming a key that is neither a push setting nor a Home key. */
 export const NOT_A_PUSH_SETTING_MESSAGE =
-    `Only your notification settings and your Home are saved here: ${[...PUSH_PREFERENCE_KEYS, ...HOME_PREFERENCE_KEYS].join(', ')}, each sent by name.`;
+    `Only your notification settings, your Home and whether you show as a connection in common are saved here: ${[...PUSH_PREFERENCE_KEYS, ...HOME_PREFERENCE_KEYS, SHOW_AS_CONNECTION_PREF].join(', ')}, each sent by name.`;
 export const PUSH_TOGGLE_MESSAGE = 'A notification setting is on or off: send true or false.';
 
 /**
@@ -9324,7 +9359,10 @@ export function getMemberPreferences(publicKey: string, reader?: string): Record
         if (r.pref_key === 'holiday_mode' || PUSH_PREFERENCE_KEYS.includes(r.pref_key)) prefs[r.pref_key] = r.pref_value;
     }
     prefs.eventReminderOffsets = getMemberDefaultReminderOffsets(publicKey);
-    if (reader === publicKey) Object.assign(prefs, ownHomePreferences(publicKey));
+    if (reader === publicKey) {
+        Object.assign(prefs, ownHomePreferences(publicKey));
+        prefs[SHOW_AS_CONNECTION_PREF] = rows.find(r => r.pref_key === SHOW_AS_CONNECTION_PREF)?.pref_value === 'false' ? 'false' : 'true';
+    }
     return prefs;
 }
 
@@ -9344,7 +9382,7 @@ export function setMemberPreferences(publicKey: string, preferences: unknown): b
     }
     const isHomeKey = (key: string) => HOME_PREFERENCE_KEYS.includes(key);
     if (!preferences || typeof preferences !== 'object' || Array.isArray(preferences)
-        || !Object.keys(preferences).every(key => PUSH_PREFERENCE_KEYS.includes(key) || isHomeKey(key))) {
+        || !Object.keys(preferences).every(key => PUSH_PREFERENCE_KEYS.includes(key) || isHomeKey(key) || key === SHOW_AS_CONNECTION_PREF)) {
         throw new Error(NOT_A_PUSH_SETTING_MESSAGE);
     }
     const body = preferences as Record<string, unknown>;
@@ -9360,6 +9398,7 @@ export function setMemberPreferences(publicKey: string, preferences: unknown): b
     // A Home is a member's: a key with no row here, or a visitor's row, keeps none (the visitor gate refuses it first).
     const namesHome = Object.keys(body).some(isHomeKey);
     if (namesHome && !getActingMember(publicKey)) throw new Error(HOME_MEMBERS_ONLY_MESSAGE);
+    if (Object.prototype.hasOwnProperty.call(body, SHOW_AS_CONNECTION_PREF) && !getActingMember(publicKey)) throw new Error(SHOW_AS_CONNECTION_MEMBERS_ONLY_MESSAGE);
     const homeWrites = namesHome ? homePreferenceWrites(publicKey, body) : [];
     try {
         const stmt = db.prepare(`INSERT OR REPLACE INTO member_preferences (public_key, pref_key, pref_value) VALUES (?, ?, ?)`);

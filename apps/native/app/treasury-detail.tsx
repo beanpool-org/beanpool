@@ -32,6 +32,7 @@ import { groupKindLine, keeperWords } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
+import { ReportReasonBox } from '../components/ReportReasonBox';
 import { pledgeClosedLine } from '../utils/enterprise-pledge';
 import { useTheme, useStyles } from './ThemeContext';
 
@@ -76,8 +77,6 @@ export default function TreasuryDetailScreen() {
     const [pledging, setPledging] = useState(false);
     const [cancelling, setCancelling] = useState(false);
     const [showReportForm, setShowReportForm] = useState(false);
-    const [reportReason, setReportReason] = useState('');
-    const [reporting, setReporting] = useState(false);
     const [identity, setIdentity] = useState<any>(null);
 
     // Keeper Join Request State
@@ -136,7 +135,7 @@ export default function TreasuryDetailScreen() {
         progressLabel: { fontSize: 13, fontWeight: 'normal', color: colors.text.secondary },
         goalAmt: { fontSize: 13, fontWeight: '600', color: colors.text.secondary },
         deadlineBadge: { fontSize: 12, fontWeight: '700', color: colors.brand.primary, backgroundColor: colors.brand.tint, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, overflow: 'hidden' },
-        deadlineExpired: { color: colors.feedback.danger.solid, backgroundColor: colors.surface.subtle },
+        deadlineExpired: { color: colors.feedback.danger.fg, backgroundColor: colors.surface.subtle },
         progressBarBg: { height: 8, backgroundColor: colors.surface.subtle, borderRadius: 4, overflow: 'hidden', marginBottom: 10 },
         progressBarFill: { height: '100%', borderRadius: 4 },
         escrowNotice: { fontSize: 12, color: colors.text.secondary, lineHeight: 17, marginBottom: 14 },
@@ -145,7 +144,7 @@ export default function TreasuryDetailScreen() {
         pledgeInputRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
         pledgeAmountInput: { flex: 1, height: 44, backgroundColor: colors.surface.card, borderRadius: 10, paddingHorizontal: 12, fontSize: 15, fontWeight: '700', color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
         pledgeMemoInput: { flex: 2, height: 44, backgroundColor: colors.surface.card, borderRadius: 10, paddingHorizontal: 12, fontSize: 14, color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
-        pledgeButton: { backgroundColor: colors.brand.primary, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+        pledgeButton: { backgroundColor: colors.brand.fill, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
         pledgeButtonText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13, letterSpacing: 0.5 },
 
         keepersCard: { backgroundColor: colors.surface.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16 },
@@ -165,7 +164,7 @@ export default function TreasuryDetailScreen() {
         joinInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
         joinInput: { width: 80, height: 44, backgroundColor: colors.surface.app, borderRadius: 10, paddingHorizontal: 12, fontSize: 15, fontWeight: '700', color: colors.text.body, borderWidth: 1, borderColor: colors.border.strong },
         joinAvailableText: { fontSize: 12, fontWeight: '700', color: colors.text.secondary, flex: 1 },
-        joinButton: { backgroundColor: colors.brand.primary, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+        joinButton: { backgroundColor: colors.brand.fill, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
         joinButtonDisabled: { opacity: 0.5 },
         joinButtonText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },
         pendingRequestBanner: { backgroundColor: colors.brand.tint, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.brand.primary, marginBottom: 16 },
@@ -184,7 +183,7 @@ export default function TreasuryDetailScreen() {
         requestStanding: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
         requestStandingShort: { color: colors.feedback.warning.fg, fontWeight: '600' },
         requestBtnRow: { flexDirection: 'row', gap: 8 },
-        approveBtn: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand.primary, paddingHorizontal: 12, borderRadius: 8 },
+        approveBtn: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand.fill, paddingHorizontal: 12, borderRadius: 8 },
         approveBtnText: { color: colors.text.inverse, fontWeight: '700', fontSize: 13 },
         declineBtn: { flex: 1, minHeight: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface.subtle, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default },
         declineBtnText: { color: colors.text.secondary, fontWeight: '600', fontSize: 13 },
@@ -192,15 +191,15 @@ export default function TreasuryDetailScreen() {
         // Lead Succession
         successionCard: { backgroundColor: colors.feedback.warning.bg, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: colors.feedback.warning.border, marginBottom: 16 },
         successionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-        successionTitle: { fontSize: 13, fontWeight: '800', color: colors.feedback.warning.solid },
+        successionTitle: { fontSize: 13, fontWeight: '800', color: colors.feedback.warning.fg },
         successionText: { fontSize: 12, color: colors.text.body, lineHeight: 18, marginBottom: 12 },
         successionVoteBox: { backgroundColor: colors.surface.card, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 8 },
         successionCandidateText: { fontSize: 14, fontWeight: '700', color: colors.text.heading },
         successionVotesText: { fontSize: 12, color: colors.text.secondary, marginTop: 2, marginBottom: 8 },
         voteBtn: { backgroundColor: colors.feedback.warning.solid, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
-        voteBtnText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },
+        voteBtnText: { color: colors.text.onGold, fontWeight: '800', fontSize: 13 },
         votedBadge: { fontSize: 12, fontWeight: '700', color: colors.brand.primary, marginTop: 4 },
-        proposeBtn: { backgroundColor: colors.brand.primary, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+        proposeBtn: { backgroundColor: colors.brand.fill, paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
         proposeBtnText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },
         changeBody: { fontSize: 12, color: colors.text.body, lineHeight: 18, marginTop: 4 },
         keeperActionBtn: { minHeight: 48, alignItems: 'center', justifyContent: 'center', marginTop: 8, paddingHorizontal: 12, borderRadius: 8, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.subtle },
@@ -213,7 +212,7 @@ export default function TreasuryDetailScreen() {
         balanceLabel: { fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
         balanceValue: { fontSize: 34, fontWeight: '900', letterSpacing: -1, marginTop: 4 },
         balancePos: { color: colors.brand.primary },
-        balanceNeg: { color: colors.feedback.warning.solid },
+        balanceNeg: { color: colors.feedback.warning.fg },
         balanceMetaRow: { flexDirection: 'row', marginTop: 14, gap: 12 },
         metaBox: { flex: 1, backgroundColor: colors.surface.app, borderRadius: 12, padding: 10, borderWidth: 1, borderColor: colors.border.default },
         metaLabel: { fontSize: 10, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
@@ -225,7 +224,7 @@ export default function TreasuryDetailScreen() {
         opTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 12 },
         opTitle: { fontSize: 13, fontWeight: '800', color: colors.brand.primary, letterSpacing: 0.3 },
         opBtnRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-        opBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.brand.primary, paddingVertical: 12, borderRadius: 12 },
+        opBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: colors.brand.fill, paddingVertical: 12, borderRadius: 12 },
         opBtnText: { color: colors.text.inverse, fontWeight: '800', fontSize: 13 },
         opBtnDisabled: { opacity: 0.45 },
         opNotice: { fontSize: 12, fontWeight: '600', color: colors.feedback.warning.fg, backgroundColor: colors.feedback.warning.bg, borderRadius: 8, padding: 8, marginTop: -4, marginBottom: 12, textAlign: 'center', overflow: 'hidden' },
@@ -272,7 +271,7 @@ export default function TreasuryDetailScreen() {
         threadMsgRemoved: { fontSize: 13, fontStyle: 'italic', color: colors.text.muted },
         threadInputRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 14, paddingTop: 10, borderTopWidth: 1, borderTopColor: colors.border.default },
         threadInput: { flex: 1, backgroundColor: colors.surface.app, height: 48, borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: colors.border.default, color: colors.text.body, fontSize: 13 },
-        threadSendBtn: { height: 48, flexShrink: 0, paddingHorizontal: 16, borderRadius: 8, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center' },
+        threadSendBtn: { height: 48, flexShrink: 0, paddingHorizontal: 16, borderRadius: 8, backgroundColor: colors.brand.fill, alignItems: 'center', justifyContent: 'center' },
         threadSendBtnText: { color: colors.text.inverse, fontWeight: '700', fontSize: 13 },
         // A real 48x48dp target (was ~22x23). hitSlop cannot stand in: Android drops touches outside the parent row.
         threadRemoveBtn: { width: 48, height: 48, flexShrink: 0, alignItems: 'center', justifyContent: 'center' },
@@ -938,7 +937,7 @@ export default function TreasuryDetailScreen() {
                                         )}
                                     </View>
                                     <View style={styles.progressBarBg}>
-                                        <View style={[styles.progressBarFill, { width: `${progress}%`, backgroundColor: isFunded ? colors.brand.primary : colors.accent.primary }]} />
+                                        <View style={[styles.progressBarFill, { width: `${progress}%`, backgroundColor: isFunded ? colors.brand.fill : colors.accent.fill }]} />
                                     </View>
                                     <Text style={styles.escrowNotice}>
                                         {isFunded 
@@ -1079,7 +1078,7 @@ export default function TreasuryDetailScreen() {
                         {Boolean(leadInactivity?.isEligible ?? leadInactivity?.isEligibleForSuccession) && (
                             <View style={styles.successionCard}>
                                 <View style={styles.successionHeader}>
-                                    <MaterialCommunityIcons name="alert-circle" size={18} color={colors.feedback.warning.solid} />
+                                    <MaterialCommunityIcons name="alert-circle" size={18} color={colors.feedback.warning.fg} />
                                     <Text style={styles.successionTitle}>{successionHeading(leadInactivity, kw)}</Text>
                                 </View>
                                 <Text style={styles.successionText}>{successionExplainer(leadInactivity, kw)}</Text>
@@ -1289,7 +1288,7 @@ export default function TreasuryDetailScreen() {
                                     accessibilityLabel={`Warning: Operator eats last. This ${kw.kind} is currently in deficit with ${balance} beans. Credit buys inputs and supplies, but ${kw.keepers} can only be paid from profit. ${kw.Keepers} cannot be paid while the ${kw.kind} is in deficit.`}
                                     style={{ marginTop: 12, padding: 10, backgroundColor: colors.surface.app, borderRadius: 10, borderWidth: 1, borderColor: colors.feedback.warning.solid }}
                                 >
-                                    <Text style={{ fontSize: 11, color: colors.feedback.warning.solid, fontWeight: '700', lineHeight: 16 }}>
+                                    <Text style={{ fontSize: 11, color: colors.feedback.warning.fg, fontWeight: '700', lineHeight: 16 }}>
                                         ⚠️ OPERATOR EATS LAST: This {kw.kind} is currently in deficit ({balance} 🫘). Credit buys inputs and supplies, but {kw.keepers} can only be paid from profit. {kw.Keepers} cannot be paid while the {kw.kind} is in deficit.
                                     </Text>
                                 </View>
@@ -1300,7 +1299,7 @@ export default function TreasuryDetailScreen() {
                                         <Text style={{ fontSize: 11, color: colors.text.secondary, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 }}>
                                             Pending Wage Claims ({pendingClaims.length})
                                         </Text>
-                                        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.feedback.warning.solid }}>
+                                        <Text style={{ fontSize: 13, fontWeight: '800', color: colors.feedback.warning.fg }}>
                                             {pendingClaimsTotal} 🫘
                                         </Text>
                                     </View>
@@ -1405,9 +1404,9 @@ export default function TreasuryDetailScreen() {
                                                         accessibilityRole="button"
                                                     >
                                                         {actionState?.id === b.id && actionState?.type === 'reject' ? (
-                                                            <ActivityIndicator size="small" color={colors.feedback.warning.solid} />
+                                                            <ActivityIndicator size="small" color={colors.feedback.warning.fg} />
                                                         ) : (
-                                                            <Text style={[styles.sweepBtnText, { color: colors.feedback.warning.solid }]}>Decline</Text>
+                                                            <Text style={[styles.sweepBtnText, { color: colors.feedback.warning.fg }]}>Decline</Text>
                                                         )}
                                                     </Pressable>
                                                 </View>
@@ -1470,11 +1469,11 @@ export default function TreasuryDetailScreen() {
                                             accessibilityLabel="Cancel initiative and refund escrow"
                                         >
                                             {cancelling ? (
-                                                <ActivityIndicator size="small" color={colors.feedback.danger.solid} />
+                                                <ActivityIndicator size="small" color={colors.feedback.danger.fg} />
                                             ) : (
                                                 <>
-                                                    <MaterialCommunityIcons name="cancel" size={16} color={colors.feedback.danger.solid} />
-                                                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.feedback.danger.solid }}>
+                                                    <MaterialCommunityIcons name="cancel" size={16} color={colors.feedback.danger.fg} />
+                                                    <Text style={{ fontSize: 13, fontWeight: '700', color: colors.feedback.danger.fg }}>
                                                         Cancel Initiative & Refund Escrow
                                                     </Text>
                                                 </>
@@ -1724,7 +1723,7 @@ export default function TreasuryDetailScreen() {
                                     <Text style={styles.flowMemo} numberOfLines={1}>{f.memo || (f.incoming ? 'Received' : 'Sent')}</Text>
                                     <Text style={styles.flowTime}>{formatTime(f.timestamp)}</Text>
                                 </View>
-                                <Text style={[styles.flowAmount, { color: f.incoming ? colors.brand.primary : colors.feedback.warning.solid }]}>
+                                <Text style={[styles.flowAmount, { color: f.incoming ? colors.brand.primary : colors.feedback.warning.fg }]}>
                                     {f.incoming ? '+' : '−'}{Math.abs(f.amount)} 🫘
                                 </Text>
                             </View>
@@ -1779,9 +1778,9 @@ export default function TreasuryDetailScreen() {
                                                                 accessibilityState={{ disabled: threadRemovingId === m.id, busy: threadRemovingId === m.id }}
                                                             >
                                                                 {threadRemovingId === m.id ? (
-                                                                    <ActivityIndicator size="small" color={colors.feedback.danger.solid} />
+                                                                    <ActivityIndicator size="small" color={colors.feedback.danger.fg} />
                                                                 ) : (
-                                                                    <MaterialCommunityIcons name="trash-can-outline" size={18} color={colors.feedback.danger.solid} />
+                                                                    <MaterialCommunityIcons name="trash-can-outline" size={18} color={colors.feedback.danger.fg} />
                                                                 )}
                                                             </Pressable>
                                                         )}
@@ -1833,42 +1832,25 @@ export default function TreasuryDetailScreen() {
                         {/* Report Enterprise Action */}
                         <View style={{ marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.border.default, marginBottom: 20 }}>
                             <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => setShowReportForm(!showReportForm)} accessibilityRole="button" accessibilityLabel={`Report ${kw.Kind}`}>
-                                <MaterialCommunityIcons name="shield-alert-outline" size={18} color={colors.feedback.danger.solid} />
-                                <Text style={{ color: colors.feedback.danger.solid, fontSize: 14, fontWeight: '600' }}>Report {kw.Kind}</Text>
+                                <MaterialCommunityIcons name="shield-alert-outline" size={18} color={colors.feedback.danger.fg} />
+                                <Text style={{ color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '600' }}>Report {kw.Kind}</Text>
                             </Pressable>
                             {showReportForm && (
-                                <View style={{ marginTop: 12, backgroundColor: colors.feedback.danger.bg, padding: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.feedback.danger.border }}>
-                                    <Text style={{ fontSize: 11, fontWeight: '700', color: colors.feedback.danger.solid, marginBottom: 8, letterSpacing: 0.5 }}>REPORT REASON</Text>
-                                    <TextInput
-                                        accessibilityLabel="Report reason"
-                                        style={{ backgroundColor: colors.surface.card, height: 40, borderRadius: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.border.default, marginBottom: 10, color: colors.text.body }}
-                                        placeholder={`Why are you reporting this ${kw.kind}?`}
-                                        placeholderTextColor={colors.text.muted}
-                                        value={reportReason}
-                                        onChangeText={setReportReason}
-                                    />
-                                    <Pressable
-                                        accessibilityRole="button"
-                                        style={{ backgroundColor: reportReason ? colors.feedback.danger.solid : colors.surface.subtle, height: 40, borderRadius: 8, justifyContent: 'center', alignItems: 'center' }}
-                                        disabled={!reportReason || reporting}
-                                        onPress={async () => {
-                                            if (!identity?.publicKey || !treasuryKey) return;
-                                            setReporting(true);
-                                            try {
-                                                await reportAbuse(identity.publicKey, treasuryKey, reportReason, treasuryKey);
-                                                setShowReportForm(false);
-                                                setReportReason('');
-                                                Alert.alert('Reported', `This ${kw.kind} has been flagged for review.`);
-                                            } catch (e: any) {
-                                                Alert.alert('Error', e.message || 'Could not submit report.');
-                                            } finally {
-                                                setReporting(false);
-                                            }
-                                        }}
-                                    >
-                                        <Text style={{ color: colors.text.inverse, fontWeight: 'bold' }}>{reporting ? 'Reporting...' : 'Submit Report'}</Text>
-                                    </Pressable>
-                                </View>
+                                // The same short reason list as a post (ReportReasonBox): "Child safety" is told to the owners at once.
+                                <ReportReasonBox
+                                    onCancel={() => setShowReportForm(false)}
+                                    onSubmit={async (reason) => {
+                                        if (!identity?.publicKey || !treasuryKey) return;
+                                        try {
+                                            await reportAbuse(identity.publicKey, treasuryKey, reason, treasuryKey);
+                                            setShowReportForm(false);
+                                            Alert.alert('Reported', `This ${kw.kind} has been flagged for review.`);
+                                        } catch (e: any) {
+                                            Alert.alert('Error', e.message || 'Could not submit report.');
+                                            throw e; // the box keeps the choice and the words
+                                        }
+                                    }}
+                                />
                             )}
                         </View>
                     </ScrollView>

@@ -312,6 +312,20 @@ describe('PeopleSafetySection Component', () => {
         expect(screen.getByText('Actioned report')).toBeInTheDocument();
     });
 
+    it('marks a child-safety report and keeps the node\'s order, which lists those first (the follow-up to #1895)', async () => {
+        renderModeration([
+            { id: 'rep_child', targetPubkey: mockMembers[0].publicKey, reason: 'Child safety: messages to my daughter', outcome: 'open', status: 'pending', childSafety: true },
+            { id: 'rep_spam', targetPubkey: mockMembers[1].publicKey, reason: 'Spam or scam', outcome: 'open', status: 'pending', childSafety: false },
+        ]);
+        const child = await screen.findByText('Child safety: messages to my daughter');
+        const spam = screen.getByText('Spam or scam');
+        expect(child.compareDocumentPosition(spam) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+        const badges = screen.getAllByTestId('child-safety-badge');
+        expect(badges).toHaveLength(1);
+        expect(badges[0]).toHaveTextContent('Child safety');
+        expect(badges[0].compareDocumentPosition(spam) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
     it('displays post title, author callsign, and Removed badge when postRemoved is true', async () => {
         renderModeration([
             {

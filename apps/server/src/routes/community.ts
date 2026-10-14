@@ -67,9 +67,12 @@ import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.j
 import { muteOf } from '../engine/auto-moderation.js';
 import { respondIfMuted, respondProfileRefusal, isNote, respondIfNoteTooLong } from './profile-feature-gate.js';
 import { assertMayMakeInvite } from '../engine/writer-bounds.js';
+import { FriendRefusal } from '../engine/social.js';
+import { getAddedYou } from '../engine/friends-added-you.js';
 import { isPoint, nearestPeople, readMemberArea, setMemberArea, withAreaDistances } from '../engine/member-area.js';
 import { parsePoint, type Point } from './distance-query.js';
 import { isSyntheticAccount, CONTACT_VALUE_LIMIT, textTooLongMessage } from '@beanpool/core';
+import { ratingsForReader } from '@beanpool/engine';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { inviteLogTag } from '../sanitize-message.js';
@@ -2042,14 +2045,32 @@ router.post('/api/ratings', async (ctx) => {
     }
 });
 
+// A review is public opinion about the RATED member; the trade behind it stays the two parties' (Marty, 2026-10-14,
+// decision A). Members of this node read a member's reviews, whatever ENFORCE_READ_AUTH says, as they read a member's
+// standing (/api/trust/profile): a suspended member and a visitor are refused too. A member's OWN lists (received and
+// given) are theirs whatever their standing, as their ledger is: a suspended member may need to answer a 1★. A third
+// member reads stars, words, side and month, and no rater and no deal (ratingsForReader). The reviews a member WROTE are
+// a list of who they traded with, so only they read it, in the ledger's words. The reader is the verified signer only,
+// never a parameter.
 router.get('/api/ratings/:publicKey', async (ctx) => {
+    const reader = ctx.state.actor as string | undefined;
+    if (!reader) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
     const { publicKey } = ctx.params;
+    if (reader !== publicKey && !memberReadsOnlyHere(ctx)) return;
     const { direction } = ctx.query;
     if (direction === 'given') {
-        const memberRatings = getRatingsGiven(publicKey);
-        ctx.body = { ratings: memberRatings };
+        if (reader !== publicKey) {
+            refuseOthersLedger(ctx);
+            return;
+        }
+        ctx.body = { ratings: getRatingsGiven(publicKey) };
     } else {
-        const memberRatings = getRatings(publicKey);
+        const memberRatings = ratingsForReader(getRatings(publicKey), reader, publicKey);
         const average = getAverageRating(publicKey);
         ctx.body = { ratings: memberRatings, ...average };
     }
@@ -2129,16 +2150,19 @@ router.post('/api/reports', async (ctx) => {
     }
     // Repeating a still-pending report succeeds without a new row, even at the limit: the member's
     // report is already on file.
+    // Every alert judges the 500 characters the queue keeps (submitReport), so a child-safety alert always points at a
+    // report the queue marks and lists first (the review of #1912, finding 6: words past them were told, then lost).
+    const kept = reason.slice(0, 500);
     const pending = findPendingReport(activeReporter, targetPubkey, targetPostId, targetPulseItemId || undefined);
     if (pending) {
         // Reported again with "Child safety" after another reason (the review of #1895, finding 3): the report on file
         // becomes child safety and is told as a new one would be. Once: it is child safety from then on, and a member's
         // are bounded like any (alerts.ts childAtOnce). Judged on the 500 characters the queue keeps, as the report on
         // file was: words past them would make every repeat look like a change.
-        if (reportKind(reason.slice(0, 500)) === 'child safety' && reportKind(pending.reason) !== 'child safety') {
+        if (reportKind(kept) === 'child safety' && reportKind(pending.reason) !== 'child safety') {
             const changed = updatePendingReportReason(pending.id, reason);
             if (changed) {
-                noteNewReport(reason, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A report changed to child safety could not be told: ${e instanceof Error ? e.message : String(e)}`));
+                noteNewReport(kept, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A report changed to child safety could not be told: ${e instanceof Error ? e.message : String(e)}`));
                 ctx.body = { success: true, report: changed, duplicate: true };
                 return;
             }
@@ -2159,11 +2183,26 @@ router.post('/api/reports', async (ctx) => {
     }
     // The owners and admins hear of it (by kind and count, never who or what): not awaited, so a slow alert channel
     // never holds the reporter's answer.
-    noteNewReport(reason, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A new report could not be told: ${e instanceof Error ? e.message : String(e)}`));
+    noteNewReport(kept, activeReporter).catch((e) => logger.warn('SYS', `[Alerts] A new report could not be told: ${e instanceof Error ? e.message : String(e)}`));
     ctx.body = { success: true, report };
 });
 
 // ======================== FRIENDS ========================
+
+// Who added the signer lately and hasn't been added back (engine/friends-added-you.ts): the signer's own, nobody else's.
+// Registered before /api/friends/:publicKey, which would otherwise take this path as a key.
+router.get('/api/friends/added-you', async (ctx) => {
+    const actor = ctx.state.actor as string | undefined;
+    if (!actor) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    // It names other members: a member's read only (a visitor, a suspended account and a guest are refused).
+    if (!memberReadsOnlyHere(ctx)) return;
+    ctx.set('Cache-Control', 'private, no-store');
+    ctx.body = getAddedYou(actor);
+});
 
 // A member's friends list (each friend's name and face) is read by that member alone, whatever ENFORCE_READ_AUTH says:
 // every app asks only for its own. Anyone else, an admin and the owner included, is refused before any lookup with one
@@ -2200,7 +2239,19 @@ router.post('/api/friends/add', async (ctx) => {
         ctx.body = { error: 'ownerPubkey and friendPubkey are required' };
         return;
     }
-    const entry = addFriend(activeOwner, friendPubkey);
+    let entry;
+    try {
+        entry = addFriend(activeOwner, friendPubkey);
+    } catch (e) {
+        // Over the day's adds (429, with when it lets up), or someone the signer blocked: refused in words, never dropped.
+        if (respondProfileRefusal(ctx, e)) return;
+        if (e instanceof FriendRefusal) {
+            ctx.status = 400;
+            ctx.body = { error: e.message, code: 'blocked' };
+            return;
+        }
+        throw e;
+    }
     if (!entry) {
         ctx.status = 400;
         ctx.body = { error: 'Failed — both must be registered members' };

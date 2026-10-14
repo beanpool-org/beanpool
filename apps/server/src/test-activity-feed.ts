@@ -86,9 +86,13 @@ async function main() {
     const feed = getActivityFeed(10, 0, 'pubkey-alice');
     assert(feed.length >= 4, 'Retrieves all recorded events');
     const asCarol = getActivityFeed(10, 0, 'pubkey-carol');
-    assert(!asCarol.some(e => e.eventType === 'trade_completed') && asCarol.some(e => e.eventType === 'rating_given'),
-        'Someone outside the trade reads every other event, and not the trade');
-    assert(!getActivityFeed(10, 0).some(e => e.eventType === 'trade_completed'), 'Nor does a read for nobody in particular');
+    // A review names both people of the trade, so it reaches only them too (Marty, 2026-10-14, decision A).
+    assert(!asCarol.some(e => e.eventType === 'trade_completed') && !asCarol.some(e => e.eventType === 'rating_given')
+        && asCarol.some(e => e.eventType === 'post_created'),
+        'Someone outside the trade reads every other event, and neither the trade nor the review of it');
+    assert(getActivityFeed(10, 0, 'pubkey-bob').some(e => e.eventType === 'rating_given'), 'The review\'s writer reads it');
+    assert(!getActivityFeed(10, 0).some(e => e.eventType === 'trade_completed' || e.eventType === 'rating_given'),
+        'Nor does a read for nobody in particular');
 
     // Latest event should be rating_given by Bob to Alice
     const latest = feed[0];

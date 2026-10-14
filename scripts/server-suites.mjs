@@ -299,6 +299,7 @@ export const SUITES = [
     'test-group-rosters-photo-urls',
     'test-group-pictures-crowdfund-urls',
     'test-contact-trade-partners',
+    'test-ratings-privacy',
     'test-sync-signature',
     'test-trust-value-curve',
     'test-trust-tiers-one-source',
@@ -333,6 +334,7 @@ export const SUITES = [
     'test-membership-probe',
     'test-friends-routes',
     'test-trust-mutuals',
+    'test-friends-added-you',
     'test-message-attachment',
     'test-social-ratings',
     'test-app-store-versions',
@@ -553,6 +555,14 @@ export const VARIANTS = [
     { name: 'test-invite-bound-name', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
     // A member's friends list is read by its owner alone under the opt-out too: unsigned 401, anyone else's key 403.
     { name: 'test-friends-routes', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // Connections in common under the opt-out too: "show me as a connection in common" is read by its owner alone (T10),
+    // and an F who turned it off is named to nobody, whatever the flag says.
+    { name: 'test-trust-mutuals', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // "Added you" under the opt-out: still the signer's own, and a visitor's read meets the route's own members_only (A9).
+    { name: 'test-friends-added-you', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
+    // A member's reviews are read by members of this node only, and a review names its writer and its deal only to the
+    // two people in it, under the opt-out too: unsigned 401, a non-member 403, anyone else's given list 403 own_only.
+    { name: 'test-ratings-privacy', tag: 'readauth-off', label: 'read auth opted out', env: { ENFORCE_READ_AUTH: 'false' } },
 
     // Consolidated/legacy conversation-id resolution: a send to a legacy id remaps to the active DM, preserves
     // metadata.originalConversationId (the E2EE AAD fallback), and survives a malformed-metadata row. Always run

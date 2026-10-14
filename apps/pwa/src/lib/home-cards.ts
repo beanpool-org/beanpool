@@ -456,7 +456,7 @@ export function findBody(f: HomeFind): string {
     }
     if (f.point === null) {
         const n = f.communityCount;
-        return `${n.toLocaleString('en')} communit${n === 1 ? 'y is' : 'ies are'} listed. Share your area to see the nearest.`;
+        return `${n.toLocaleString('en')} communit${n === 1 ? 'y is' : 'ies are'} listed. Share your area, or type your town, to see the nearest.`;
     }
     return 'No community is listed near you yet. Start one, or ask to be told when one starts here.';
 }

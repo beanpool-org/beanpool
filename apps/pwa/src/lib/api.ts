@@ -1638,6 +1638,19 @@ export async function removeFriendApi(ownerPubkey: string, friendPubkey: string)
     return request('POST', '/api/friends/remove', { ownerPubkey, friendPubkey });
 }
 
+/** Someone who added you lately and whom you haven't added back (GET /api/friends/added-you, your own only). */
+export interface AddedYou {
+    publicKey: string;
+    callsign: string;
+    avatarUrl: string | null;
+    addedAt: string;
+}
+
+/** Who added you lately: newest first, at most 20, and how many more (server engine/friends-added-you.ts). */
+export async function getAddedYou(): Promise<{ addedYou: AddedYou[]; more: number }> {
+    return request('GET', '/api/friends/added-you');
+}
+
 
 
 // ===================== MEMBERS =====================

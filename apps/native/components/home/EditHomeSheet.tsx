@@ -130,7 +130,7 @@ export function EditHomeSheet({
                         )}
                         <Pressable
                             onPress={onAdd}
-                            style={[editHomeStyles.addRow, { backgroundColor: colors.brand.primary }]}
+                            style={[editHomeStyles.addRow, { backgroundColor: colors.brand.fill }]}
                             accessibilityRole="button"
                             accessibilityLabel="Add a card to Home"
                             testID="edit-home-add"

@@ -10,6 +10,11 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./brand-colours": {
+      "types": "./dist/brand-colours.d.ts",
+      "import": "./dist/brand-colours.js",
+      "default": "./dist/brand-colours.js"
+    },
     "./ed25519-key": {
       "types": "./dist/ed25519-key.d.ts",
       "import": "./dist/ed25519-key.js",

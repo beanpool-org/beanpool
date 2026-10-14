@@ -98,7 +98,7 @@ export function CardSettingsSheet({ visible, type, settings, mode, hasPoint = fa
                         <Pressable
                             disabled={!ready}
                             onPress={done}
-                            style={[settingsStyles.button, { backgroundColor: ready ? colors.brand.primary : colors.surface.subtle }]}
+                            style={[settingsStyles.button, { backgroundColor: ready ? colors.brand.fill : colors.surface.subtle }]}
                             accessibilityRole="button"
                             accessibilityLabel={mode === 'add' ? `Add ${name} to Home` : `Save ${name}`}
                             accessibilityState={{ disabled: !ready }}

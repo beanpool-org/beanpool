@@ -15,7 +15,8 @@ process.env.BEANPOOL_ADDRESSES = OWN_NAME;
 import crypto from 'node:crypto';
 import { buildBoundRequestHeaders, ed25519Signer } from '@beanpool/core';
 import { initTls } from './services/tls.js';
-import { initStateEngine, seedGenesisMember } from './state-engine.js';
+import { initStateEngine, seedGenesisMember, broadcast } from './state-engine.js';
+import { registerMemberInternal } from './engine/members.js';
 import { startHttpsServer } from './https-server.js';
 import { resetGatewayRateLimit } from './gateway-rate-limit.js';
 import { localFetch } from './keepalive-test-fetch.js';
@@ -36,11 +37,18 @@ function keypair(callsign: string): Id {
     return { pk: publicKey.export({ type: 'spki', format: 'der' }).subarray(-32).toString('hex'), seed, callsign };
 }
 let memberNo = 0;
-/** A new member of this node, joined just now with no trades (so with no connection in common the band is red). */
-function member(prefix: string): Id {
-    const id = keypair(`${prefix}-${String(++memberNo).padStart(3, '0')}`);
-    seedGenesisMember(id.pk, id.callsign);
+/** The one founder, who holds `owner` (seedGenesisMember grants it) and only invites: no check reads as them. */
+let founder: Id | null = null;
+/** A plain member of this node (invited by the founder: no owner or admin role), joined just now with no trades, so
+ *  with no connection in common the band is red. The trade-safety band is mostly read by plain members, so every
+ *  viewer, friend, target and attacker here is one (#1911 review finding 1: a rule kept only for owners passed). */
+function join(id: Id): Id {
+    if (!founder) { founder = keypair('founder'); seedGenesisMember(founder.pk, founder.callsign); }
+    if (!registerMemberInternal(broadcast, id.pk, id.callsign, founder.pk, null)) throw new Error(`could not join ${id.callsign}`);
     return id;
+}
+function member(prefix: string): Id {
+    return join(keypair(`${prefix}-${String(++memberNo).padStart(3, '0')}`));
 }
 
 /** Set-up rows, seeded straight into the table: `a` has added `b`. */
@@ -51,12 +59,13 @@ function bothWays(a: Id, b: Id): void { oneWay(a, b); oneWay(b, a); }
 let requests = 0;
 async function signed(signer: Id, method: string, path: string, body: unknown): Promise<{ status: number; body: any; text: string }> {
     requests++;
-    const bodyString = JSON.stringify(body);
-    const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json' };
+    const bodyString = body === undefined ? '' : JSON.stringify(body);
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
     Object.assign(headers, await buildBoundRequestHeaders({
         method, url: `https://${OWN_NAME}${path}`, body: bodyString, publicKeyHex: signer.pk, sign: ed25519Signer(signer.seed),
     }));
-    const res = await localFetch(`${BASE}${path}`, { method, headers, body: bodyString });
+    const res = await localFetch(`${BASE}${path}`, { method, headers, body: body === undefined ? undefined : bodyString });
     const text = await res.text();
     let parsed: any = null;
     try { parsed = JSON.parse(text); } catch { /* not JSON */ }
@@ -136,7 +145,7 @@ async function main() {
         resetGatewayRateLimit();
         const v = member('t2b-viewer'), t2 = member('t2b-target');
         const refs = Array.from({ length: 13 }, () => keypair('')).sort((x, y) => (x.pk < y.pk ? -1 : 1));
-        refs.forEach((r, i) => { r.callsign = `t2b-ref-${String(13 - i).padStart(2, '0')}`; seedGenesisMember(r.pk, r.callsign); });
+        refs.forEach((r, i) => { r.callsign = `t2b-ref-${String(13 - i).padStart(2, '0')}`; join(r); });
         for (const r of refs) { bothWays(v, r); bothWays(r, t2); }
         const q = await profile(v, t2);
         const want = refs.map(r => r.callsign).sort().slice(0, 12);
@@ -173,13 +182,20 @@ async function main() {
         for (const f of friends) bothWays(viewer, f);
         const scammer = member('t4-scammer');
         const everyone = db.prepare('SELECT public_key FROM members WHERE public_key != ?').all(scammer.pk) as { public_key: string }[];
-        let adds = 0, sent = 0;
+        // Through the signed route the day's 100 adds go through and the rest are refused (test-friends-added-you holds the
+        // cap); the rest are seeded as the days after would add them, so the scammer has added every member.
+        let adds = 0, refused = 0, sent = 0;
         for (const { public_key } of everyone) {
             if (sent > 0 && sent % 100 === 0) resetGatewayRateLimit(); // the per-minute limiter is not what is tested here
             sent++;
-            if (await add(scammer, { pk: public_key, seed: new Uint8Array(), callsign: '' })) adds++;
+            const r = await signed(scammer, 'POST', '/api/friends/add', { friendPubkey: public_key });
+            if (r.status === 200 && r.body?.success === true) adds++;
+            else if (r.status === 429) { refused++; oneWay(scammer, { pk: public_key, seed: new Uint8Array(), callsign: '' }); }
         }
-        assert(adds === everyone.length && adds >= 90, `T4: the new member added all ${everyone.length} members through the signed route (${adds})`);
+        assert(everyone.length > 100 && adds === 100 && refused === everyone.length - 100,
+            `T4: the new member added 100 of ${everyone.length} members through the signed route, the rest refused (${adds}, ${refused})`);
+        const scammerRows = (db.prepare('SELECT COUNT(*) AS n FROM friends WHERE owner_pubkey = ?').get(scammer.pk) as { n: number }).n;
+        assert(scammerRows === everyone.length, `T4: and over the following days has added all of them (${scammerRows})`);
         const p = await profile(viewer, scammer);
         assert(p.status === 200 && keys(p.body).length === 0 && p.body?.mutualCount === 0,
             `T4: the viewer with 5 two-way friends sees no connection in common (${names(p.body).join(',') || 'none'}, ${p.body?.mutualCount})`);
@@ -239,6 +255,132 @@ async function main() {
         const ok = await profile(a, t);
         assert(ok.status === 200 && JSON.stringify(keys(ok.body)) === JSON.stringify([f.pk]), `T8: a member still reads it (${ok.status})`);
     }
+
+    // T9 — two viewers of one target get their own answers, in either order: V1↔F↔T names F for V1; V2, who knows none
+    // of them, gets nobody. A list kept per target and handed to the next viewer fails here (review finding 2, R2).
+    {
+        resetGatewayRateLimit();
+        const v1 = member('t9-viewer1'), v2 = member('t9-viewer2'), f = member('t9-friend'), t = member('t9-target');
+        bothWays(v1, f); bothWays(f, t);
+        for (const order of [[v1, v2], [v2, v1]] as const) {
+            const seen = new Map<string, any>();
+            for (const v of order) seen.set(v.pk, (await profile(v, t)).body);
+            const label = order[0] === v1 ? 'V1 then V2' : 'V2 then V1';
+            assert(JSON.stringify(keys(seen.get(v1.pk))) === JSON.stringify([f.pk]) && seen.get(v1.pk)?.mutualCount === 1,
+                `T9 ${label}: V1 sees F (${names(seen.get(v1.pk)).join(',') || 'none'})`);
+            assert(keys(seen.get(v2.pk)).length === 0 && seen.get(v2.pk)?.mutualCount === 0 && seen.get(v2.pk)?.risk?.band === 'red',
+                `T9 ${label}: V2 sees nobody, red (${names(seen.get(v2.pk)).join(',') || 'none'}, ${seen.get(v2.pk)?.risk?.band})`);
+        }
+    }
+
+    // T10 — "show me as a connection in common", on by default: F turns it off with their own signed request and is
+    // named to nobody, nor counted (V's band goes red); turned back on, F is named again. Only F reads the setting.
+    {
+        resetGatewayRateLimit();
+        const v = member('t10-viewer'), f = member('t10-friend'), t = member('t10-target');
+        bothWays(v, f); bothWays(f, t);
+        const pref = (who: Id, on: boolean) => signed(who, 'POST', '/api/members/preferences', { publicKey: who.pk, preferences: { show_as_connection_in_common: on } });
+        const readPrefs = (reader: Id, of: Id) => signed(reader, 'GET', `/api/members/preferences?publicKey=${of.pk}`, undefined);
+        const before = await readPrefs(f, f);
+        assert(before.status === 200 && before.body?.show_as_connection_in_common === 'true', `T10: on by default (${before.body?.show_as_connection_in_common})`);
+        assert(JSON.stringify(keys((await profile(v, t)).body)) === JSON.stringify([f.pk]), 'T10: F is named while it is on');
+        const off = await pref(f, false);
+        assert(off.status === 200 && off.body?.success === true, `T10: F turns it off (${off.status} ${off.text.slice(0, 80)})`);
+        const p = await profile(v, t);
+        assert(p.status === 200 && keys(p.body).length === 0 && p.body?.mutualCount === 0 && p.body?.risk?.band === 'red',
+            `T10: then F is named to nobody and not counted: red (${names(p.body).join(',') || 'none'}, ${p.body?.risk?.band})`);
+        const own = await readPrefs(f, f), other = await readPrefs(v, f);
+        assert(own.body?.show_as_connection_in_common === 'false', `T10: F reads it back off (${own.body?.show_as_connection_in_common})`);
+        assert(!other.text.includes('show_as_connection_in_common'), `T10: another member never reads it (${other.status})`);
+        const bad = await signed(f, 'POST', '/api/members/preferences', { publicKey: f.pk, preferences: { show_as_connection_in_common: 'no' } });
+        assert(bad.status === 400, `T10: only true or false is taken (${bad.status})`);
+        const on = await pref(f, true);
+        assert(on.status === 200 && JSON.stringify(keys((await profile(v, t)).body)) === JSON.stringify([f.pk]), 'T10: turned back on, F is named again');
+    }
+
+    // T11-T14 — a blocker never vouches for the member they blocked (#1913 confirmation 1, finding 2): a block takes the
+    // trust out of the blocker's row to the blocked member for every reader but the blocked member; the rows stay, so
+    // the blocked member's own reads don't change. Every block is the blocker's own signed POST /api/blocks.
+    const block = (owner: Id, target: Id) => signed(owner, 'POST', '/api/blocks', { targetPubkey: target.pk });
+    const unblock = (owner: Id, target: Id) => signed(owner, 'POST', '/api/blocks/remove', { targetPubkey: target.pk });
+    const rowsAmong = (...ids: Id[]): number => {
+        const pks = ids.map(i => i.pk), marks = pks.map(() => '?').join(',');
+        return (db.prepare(`SELECT COUNT(*) AS n FROM friends WHERE owner_pubkey IN (${marks}) AND friend_pubkey IN (${marks})`).get(...pks, ...pks) as { n: number }).n;
+    };
+    const seen = (p: { status: number; body: any }) => ({ status: p.status, names: keys(p.body), count: p.body?.mutualCount, band: p.body?.risk?.band });
+
+    // T11 — B↔A, B↔V, then B blocks A: V reads A's profile and B is not named, not counted, and the band is red. B
+    // unblocks: B is named again, since no friend row was touched.
+    {
+        resetGatewayRateLimit();
+        const a = member('t11-blocked'), b = member('t11-blocker'), v = member('t11-viewer');
+        bothWays(b, a); bothWays(b, v);
+        const before = await profile(v, a);
+        assert(JSON.stringify(keys(before.body)) === JSON.stringify([b.pk]) && before.body?.mutualCount === 1 && before.body?.risk?.band === 'green',
+            `T11: before the block, B is V's connection in common with A, green (${names(before.body).join(',') || 'none'}, ${before.body?.risk?.band})`);
+        const blk = await block(b, a);
+        assert(blk.status === 200, `T11: B blocks A with their own signed request (${blk.status} ${blk.text.slice(0, 80)})`);
+        const after = await profile(v, a);
+        assert(after.status === 200 && keys(after.body).length === 0 && after.body?.mutualCount === 0 && after.body?.risk?.band === 'red',
+            `T11: after B blocks A, V reads A's profile: B is not named, mutualCount 0, red (${names(after.body).join(',') || 'none'}, ${after.body?.mutualCount}, ${after.body?.risk?.band})`);
+        assert(rowsAmong(a, b) === 2 && rowsAmong(b, v) === 2, `T11: the block touched no friend row (${rowsAmong(a, b)} B-A rows, ${rowsAmong(b, v)} B-V rows)`);
+        const ub = await unblock(b, a);
+        const again = await profile(v, a);
+        assert(ub.status === 200 && JSON.stringify(keys(again.body)) === JSON.stringify([b.pk]) && again.body?.mutualCount === 1 && again.body?.risk?.band === 'green',
+            `T11: B unblocks A (${ub.status}): B is named again, green (${names(again.body).join(',') || 'none'}, ${again.body?.risk?.band})`);
+    }
+
+    // T12 — the viewer's own blockers still count: A reads T's profile (B↔A, B↔T) before and after B blocks A, and gets
+    // the same names, count and band. What the blocked member reads does not change.
+    {
+        resetGatewayRateLimit();
+        const a = member('t12-blocked'), b = member('t12-blocker'), t = member('t12-target');
+        bothWays(b, a); bothWays(b, t);
+        const before = seen(await profile(a, t));
+        const blk = await block(b, a);
+        const after = seen(await profile(a, t));
+        assert(blk.status === 200 && JSON.stringify(before.names) === JSON.stringify([b.pk]) && before.band === 'green',
+            `T12: setup — A sees B in common with T, green; B blocks A (${blk.status}) (${JSON.stringify(before)})`);
+        assert(JSON.stringify(after) === JSON.stringify(before),
+            `T12: after B blocks A, A reads T's profile exactly as before (${JSON.stringify(after)})`);
+    }
+
+    // T13 — the rejected case, pinned: T blocks F, and V still sees F on T's profile. T's own block hiding F there would
+    // hand any blocked member a probe (F↔F2 reads T's profile and watches F leave).
+    {
+        resetGatewayRateLimit();
+        const v = member('t13-viewer'), f = member('t13-blocked'), t = member('t13-blocker-target');
+        bothWays(v, f); bothWays(f, t);
+        const blk = await block(t, f);
+        const p = await profile(v, t);
+        assert(blk.status === 200 && JSON.stringify(keys(p.body)) === JSON.stringify([f.pk]) && p.body?.mutualCount === 1 && p.body?.risk?.band === 'green',
+            `T13: T blocks F (${blk.status}); V still sees F in common with T, green (${names(p.body).join(',') || 'none'}, ${p.body?.risk?.band})`);
+    }
+
+    // T14 — the viewer's seat: V blocks F, rows intact. V reads T's profile and F is not counted for V: never green on
+    // the word of someone V blocked. F's own reads of V's and T's profiles do not change.
+    {
+        resetGatewayRateLimit();
+        const v = member('t14-blocker-viewer'), f = member('t14-blocked'), t = member('t14-target');
+        bothWays(v, f); bothWays(f, t); bothWays(v, t);
+        const vBefore = await profile(v, t);
+        const fOfV = seen(await profile(f, v)), fOfT = seen(await profile(f, t));
+        assert(JSON.stringify(keys(vBefore.body)) === JSON.stringify([f.pk]) && vBefore.body?.risk?.band === 'green'
+            && JSON.stringify(fOfV.names) === JSON.stringify([t.pk]) && JSON.stringify(fOfT.names) === JSON.stringify([v.pk]),
+            `T14: setup — V sees F in common with T; F sees T in common with V and V in common with T (${names(vBefore.body).join(',')}, ${fOfV.names.length}, ${fOfT.names.length})`);
+        const blk = await block(v, f);
+        const vAfter = await profile(v, t);
+        assert(blk.status === 200 && vAfter.status === 200 && keys(vAfter.body).length === 0 && vAfter.body?.mutualCount === 0 && vAfter.body?.risk?.band !== 'green',
+            `T14: after V blocks F (${blk.status}), V reads T's profile: F is not named or counted, not green (${names(vAfter.body).join(',') || 'none'}, ${vAfter.body?.mutualCount}, ${vAfter.body?.risk?.band})`);
+        assert(rowsAmong(v, f) === 2 && rowsAmong(f, t) === 2, `T14: the block touched no friend row (${rowsAmong(v, f)} V-F rows, ${rowsAmong(f, t)} F-T rows)`);
+        const fOfVAfter = seen(await profile(f, v)), fOfTAfter = seen(await profile(f, t));
+        assert(JSON.stringify(fOfVAfter) === JSON.stringify(fOfV) && JSON.stringify(fOfTAfter) === JSON.stringify(fOfT),
+            `T14: F reads V's and T's profiles exactly as before (${JSON.stringify(fOfVAfter)} ${JSON.stringify(fOfTAfter)})`);
+    }
+
+    // Every actor above was a plain member: only the founder holds a role.
+    const roled = (db.prepare('SELECT member_pubkey FROM node_roles').all() as { member_pubkey: string }[]).map(r => r.member_pubkey);
+    assert(roled.length === 1 && roled[0] === founder?.pk, `every viewer, friend and target was a plain member: only the founder has a role (${roled.length})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

@@ -37,7 +37,7 @@ export function AddCardSheet({ visible, groups, full, colors, onAdd, onClose }: 
             {r.state === 'add' ? (
                 <Pressable
                     onPress={() => onAdd(r)}
-                    style={({ pressed }) => [addCardStyles.add, { backgroundColor: colors.brand.primary }, pressed && { opacity: 0.85 }]}
+                    style={({ pressed }) => [addCardStyles.add, { backgroundColor: colors.brand.fill }, pressed && { opacity: 0.85 }]}
                     accessibilityRole="button"
                     accessibilityLabel={`Add ${r.name} to Home`}
                     testID={`add-card-${r.type}-add`}

@@ -19,6 +19,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView, Alert, ActivityIndicator, Linking, Platform, DeviceEventEmitter } from 'react-native';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
 import { fetchEventDetail, rsvpEvent, deletePost, reportAbuse } from '../utils/db';
@@ -27,6 +28,7 @@ import { PhotoCarousel } from './PhotoCarousel';
 import { EVENT_ACCENT } from './EventCard';
 import { NewEventModal } from './NewEventModal';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
+import { ReportReasonBox } from './ReportReasonBox';
 import {
     formatEventWhen, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
     canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, isOwnEvent, eventEditBlockedReason, eventEditValues,
@@ -158,21 +160,18 @@ export function EventDetail({ post }: EventDetailProps) {
         ]);
     };
 
-    const report = () => {
+    // The same short reason list as a post (ReportReasonBox): "Child safety" is told to the owners at once.
+    const [reporting, setReporting] = useState(false);
+    const report = async (reason: string) => {
         if (!identity?.publicKey) return;
-        Alert.alert('Report this event?', "This community's moderators will review it.", [
-            { text: 'Cancel', style: 'cancel' },
-            {
-                text: 'Report', style: 'destructive', onPress: async () => {
-                    try {
-                        await reportAbuse(identity.publicKey, p.author_pubkey || p.authorPublicKey, 'Event reported from the event screen', post.id);
-                        Alert.alert('Reported', 'Thanks. A moderator will take a look.');
-                    } catch (e: any) {
-                        Alert.alert('Not sent', e?.message || 'Could not reach the node.');
-                    }
-                },
-            },
-        ]);
+        try {
+            await reportAbuse(identity.publicKey, p.author_pubkey || p.authorPublicKey, reason, post.id);
+            setReporting(false);
+            Alert.alert('Reported', "Thanks. This community's moderators will take a look.");
+        } catch (e: any) {
+            Alert.alert('Not sent', e?.message || 'Could not reach the node.');
+            throw e; // the box keeps the choice and the words
+        }
     };
 
     const goBack = () => { if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); };
@@ -214,7 +213,13 @@ export function EventDetail({ post }: EventDetailProps) {
                 <View style={{ width: 72 }} />
             </View>
 
-            <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]}>
+            {/*
+              * The report box's words and Submit are the last things here: under edge-to-edge the window does not resize
+              * for the keyboard, so this view moves them up (review of #1912, finding 2; the post screen's pattern). No
+              * keyboardVerticalOffset: the screen draws its own header, and keyboard-controller measures this view's frame.
+              */}
+            <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+            <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: insets.bottom + 40 }]} keyboardShouldPersistTaps="handled">
                 {photos.length > 0 && (
                     <View style={{ marginBottom: 14 }}>
                         <PhotoCarousel photos={photos} height={200} borderRadius={14} />
@@ -338,18 +343,22 @@ export function EventDetail({ post }: EventDetailProps) {
                                 accessibilityLabel="Cancel event"
                                 accessibilityState={{ busy: cancelling }}
                             >
-                                {cancelling ? <ActivityIndicator size="small" color={colors.feedback.danger.solid} /> : <Text style={styles.cancelText}>Cancel event</Text>}
+                                {cancelling ? <ActivityIndicator size="small" color={colors.feedback.danger.fg} /> : <Text style={styles.cancelText}>Cancel event</Text>}
                             </Pressable>
                         )}
                     </View>
                 )}
 
                 {!isHost && identity?.publicKey && (
-                    <Pressable onPress={report} style={styles.reportBtn} accessibilityRole="button" accessibilityLabel="Report event">
-                        <Text style={styles.reportText}>🚩 Report event</Text>
-                    </Pressable>
+                    <>
+                        <Pressable onPress={() => setReporting((r) => !r)} style={styles.reportBtn} accessibilityRole="button" accessibilityLabel="Report event" accessibilityState={{ expanded: reporting }}>
+                            <Text style={styles.reportText}>🚩 Report event</Text>
+                        </Pressable>
+                        {reporting && <ReportReasonBox onSubmit={report} onCancel={() => setReporting(false)} />}
+                    </>
                 )}
             </ScrollView>
+            </KeyboardAvoidingView>
 
             <NewEventModal
                 visible={!!copyDraft}
@@ -440,7 +449,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         copyBtn: { minHeight: 48, justifyContent: 'center', alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.border.default, marginTop: 4 },
         copyText: { fontSize: 15, fontWeight: '700', color: EVENT_ACCENT },
         cancelBtn: { minHeight: 48, justifyContent: 'center', alignItems: 'center', borderTopWidth: 1, borderTopColor: colors.border.default, marginTop: 4 },
-        cancelText: { fontSize: 15, fontWeight: '700', color: colors.feedback.danger.solid },
+        cancelText: { fontSize: 15, fontWeight: '700', color: colors.feedback.danger.fg },
         reportBtn: { minHeight: 48, justifyContent: 'center', alignSelf: 'flex-start' },
-        reportText: { fontSize: 13, fontWeight: '700', color: colors.feedback.danger.solid },
+        reportText: { fontSize: 13, fontWeight: '700', color: colors.feedback.danger.fg },
     });

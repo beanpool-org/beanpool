@@ -71,7 +71,7 @@ Your community's server deletes all of the above at once. It also takes your nam
 - To take BeanPool off the phone altogether, use **Sign Out (Device Only)**.
 - If the community refuses the delete, or does not answer within 20 seconds, nothing on the phone changes. The app says so, and you can try again.
 
-The web app keeps your key in the browser for each community's web address, and deleting removes it for that address only. The phone app and other communities' web addresses keep their own copy. If you pointed the web app at another community under **Advanced / Subsystem**, and the community whose web address it is still has you, the key stays and the web app goes back to that community. If the phone app put a copy of your key in BeanPool's key vault, deleting in the web app does not remove it: remove it in the phone app, with **Disconnect** in **Account Protection**.
+The web app keeps your key in the browser for each community's web address, and deleting removes it for that address only. The phone app and other communities' web addresses keep their own copy. If you pointed the web app at another community under **Advanced / Subsystem**, and the community whose web address it is still has you, the key stays and the web app goes back to that community. If the phone app put a copy of your key in BeanPool's key vault, deleting in the web app does not remove it: remove it in the phone app first, with **Disconnect** in **Account Protection**.
 
 ### If a community does not recognise you
 

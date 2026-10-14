@@ -92,6 +92,54 @@ function* timedSteps<T>(steps: Generator<void, T>, time: { ms: number }): Genera
  */
 export const WASH_PAIR_PAGE_BUYERS = 2000;
 
+/**
+ * Trades one page of the 30-day query reads (the cluster step's first, #1908). Set from the 100,000-member review world
+ * (39,925 trades in 30 days): see the PR for the step times.
+ */
+export const WASH_30_DAY_PAGE_ROWS = 5000;
+
+/** Members the cluster step's search visits between yields (#1908). */
+export const WASH_BFS_STEP_NODES = 5000;
+
+/** A row of the 30-day query: a completed trade between two members, completed in the last 30 days. */
+export interface ThirtyDayTrade {
+    buyer_pubkey: string;
+    seller_pubkey: string;
+    credits: number;
+}
+
+/**
+ * The cluster step's 30-day query, a page at a time: every completed trade between two members, completed after
+ * datetime('now', '-30 days') (worked out once, before the first page), `pageRows` rows a page. The pages run on in
+ * (completed_at, rowid) order, the order of the index the one query read through (idx_marketplace_transactions_status_completed:
+ * status, completed_at, then rowid), so together they are its rows in its order: the same edges, summed in the same order.
+ * A tie on completed_at goes on by rowid, so a page's edge drops no row and doubles none.
+ */
+export function* thirtyDayTradePages(db: Db, pageRows = WASH_30_DAY_PAGE_ROWS): Generator<ThirtyDayTrade[]> {
+    const { since } = db.prepare(`SELECT datetime('now', '-30 days') AS since`).get() as { since: string };
+    const firstPage = db.prepare(`
+        SELECT rowid AS rid, completed_at AS at, buyer_pubkey, seller_pubkey, credits
+        FROM marketplace_transactions
+        WHERE status = 'completed' AND buyer_pubkey != seller_pubkey
+          AND completed_at > ?
+        ORDER BY completed_at, rowid LIMIT ?
+    `);
+    const nextPage = db.prepare(`
+        SELECT rowid AS rid, completed_at AS at, buyer_pubkey, seller_pubkey, credits
+        FROM marketplace_transactions
+        WHERE status = 'completed' AND buyer_pubkey != seller_pubkey
+          AND completed_at >= ? AND (completed_at > ? OR rowid > ?)
+        ORDER BY completed_at, rowid LIMIT ?
+    `);
+    let rows = firstPage.all(since, pageRows) as (ThirtyDayTrade & { rid: number; at: unknown })[];
+    while (rows.length > 0) {
+        yield rows;
+        if (rows.length < pageRows) return;
+        const last = rows[rows.length - 1];
+        rows = nextPage.all(last.at, last.at, last.rid, pageRows) as (ThirtyDayTrade & { rid: number; at: unknown })[];
+    }
+}
+
 /** A pair whose gross is at least the cap and whose flows are this close (|a − b| / gross below it) is a wash pair. */
 export const WASH_PAIR_MAX_RATIO = 0.15;
 
@@ -178,31 +226,28 @@ function* analysisSteps(db: Db, strict: boolean, countFor: Db): Generator<void, 
 
     // --- 2. Cluster insularity (connected components over rolling 30 days) ---
     try {
-        const txs30 = db.prepare(`
-            SELECT buyer_pubkey, seller_pubkey, credits
-            FROM marketplace_transactions
-            WHERE status = 'completed' AND buyer_pubkey != seller_pubkey
-              AND completed_at > datetime('now', '-30 days')
-        `).all() as { buyer_pubkey: string; seller_pubkey: string; credits: number }[];
-        yield;
-
         const adj = new Map<string, Set<string>>();
         const edgeVol30 = new Map<string, number>();
         const nodes30 = new Set<string>();
 
-        for (const tx of txs30) {
-            const u = tx.buyer_pubkey;
-            const v = tx.seller_pubkey;
-            nodes30.add(u);
-            nodes30.add(v);
+        // A page at a time (#1908): in one query it held the loop 140 ms at 39,925 trades (load 6-8), which no slice could
+        // split. Every page reads the rows in the one query's order, so the analysis is the same to the last bit.
+        for (const txs30 of thirtyDayTradePages(db)) {
+            for (const tx of txs30) {
+                const u = tx.buyer_pubkey;
+                const v = tx.seller_pubkey;
+                nodes30.add(u);
+                nodes30.add(v);
 
-            if (!adj.has(u)) adj.set(u, new Set());
-            if (!adj.has(v)) adj.set(v, new Set());
-            adj.get(u)!.add(v);
-            adj.get(v)!.add(u);
+                if (!adj.has(u)) adj.set(u, new Set());
+                if (!adj.has(v)) adj.set(v, new Set());
+                adj.get(u)!.add(v);
+                adj.get(v)!.add(u);
 
-            const key = u < v ? `${u}|${v}` : `${v}|${u}`;
-            edgeVol30.set(key, (edgeVol30.get(key) || 0) + tx.credits);
+                const key = u < v ? `${u}|${v}` : `${v}|${u}`;
+                edgeVol30.set(key, (edgeVol30.get(key) || 0) + tx.credits);
+            }
+            yield;
         }
 
         const visited = new Set<string>();
@@ -214,8 +259,10 @@ function* analysisSteps(db: Db, strict: boolean, countFor: Db): Generator<void, 
             const queue = [node];
             visited.add(node);
 
-            while (queue.length > 0) {
-                const curr = queue.shift()!;
+            // A head index, not queue.shift() (the same order), and a yield every WASH_BFS_STEP_NODES members: one
+            // component can hold most of the node (#1908).
+            for (let head = 0; head < queue.length; head++) {
+                const curr = queue[head];
                 comp.push(curr);
                 const neighbors = adj.get(curr) || new Set();
                 for (const next of neighbors) {
@@ -224,6 +271,7 @@ function* analysisSteps(db: Db, strict: boolean, countFor: Db): Generator<void, 
                         queue.push(next);
                     }
                 }
+                if ((head + 1) % WASH_BFS_STEP_NODES === 0) yield;
             }
             components.push(comp);
             yield;
@@ -425,6 +473,8 @@ export async function runWashAnalysisInSlices(db: Db, opts: { sliceMs?: number; 
     try {
         const time = { ms: 0 };
         const analysis = await runStepsInSlices(timedSteps(analysisSteps(snap ?? db, true, db), time), opts);
+        // Reached with the handle closed too (closed after the last step: the test "closes after its last step"), where
+        // the catch below would name it WashSnapshotClosed anyway; named here so this line says which it is (#1908).
         if (snap && !(snap.open && snap.inTransaction)) throw snap.open ? new Error('the snapshot ended before the analysis did') : new WashSnapshotClosed();
         return { analysis, snapshotAt, finishedAt: Date.now(), stepMs: time.ms, wallMs: performance.now() - wallStart };
     } catch (e) {
@@ -459,9 +509,12 @@ export const WASH_HARD_CAP_MS = 60_000;
  *   last one's snapshot, less the time its turns took (its `D` less its `c`), never sooner than WASH_MIN_DUE_MS: so the
  *   next lands about WASH_KEEP_MS after the last one's rows were read, and what a read sees is at most WASH_KEEP_MS + `c`
  *   old, as when it was worked out in one go. A read that finds it older than that with no refresh running that can land
- *   (after a quiet spell, when no read started one; or one that read its rows before an analysis worked out in one go
- *   since) works the next out in one go, as before. A snapshot WASH_HARD_CAP_MS old (refreshes
- *   failing to land) is worked out in one go at the read, as before, and said once a minute.
+ *   in time (after a quiet spell, when no read started one; or one that read its rows before an analysis worked out in one
+ *   go since; or one that `again` or the server started at or past that bound) works the next out in one go, as before.
+ *   A refresh that started before that bound holds the one go off, whoever started it: a read, `again`, or the server's
+ *   Step 6.1 (a take-over, or once it listens). What a read sees is then at most that refresh's run time past the bound,
+ *   under WASH_HARD_CAP_MS. A snapshot WASH_HARD_CAP_MS old (refreshes failing to land) is worked out in one go at the
+ *   read, as before, and said once a minute.
  *
  * Wash pairs are also caught live, per member, whatever the analysis's age (qualifiedTradeValue); clusters are the
  * analysis's alone.

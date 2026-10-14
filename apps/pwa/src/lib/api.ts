@@ -299,6 +299,8 @@ export interface CommunityInfo {
      */
     features?: {
         openJoin?: boolean; guestListingsOnly?: boolean; beans?: boolean; exampleListings?: boolean; wordsDoor?: boolean; privatePreview?: boolean;
+        /** This node carries online events (DESIGN-event-times §9). Absent (a node from before): the form offers no "Online". */
+        onlineEvents?: boolean;
         /** Present only where the node keeps each member to the listings near their area (the worldwide community): the nearest `max` within `radiusKm`. */
         nearbyListings?: { radiusKm: number; max: number };
         /** An off feature is previewed from the sample community rather than hidden (lib/features.ts). Absent: hidden, as before. */

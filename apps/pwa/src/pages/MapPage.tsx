@@ -2385,6 +2385,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             })()}
                         </div>
 
+                        {/* Online only where the node carries it (features.onlineEvents), or for an event that already is one. */}
+                        {(nodeInfo?.features?.onlineEvents === true || eventOnline) && (
                         <div role="radiogroup" aria-label={t('Where')} data-testid="event-where" className="flex flex-col gap-1">
                             <span className="block text-xs font-bold text-nature-600 dark:text-nature-300 uppercase tracking-wider mb-1">{t('Where')}</span>
                             <div className="flex flex-wrap gap-2">
@@ -2406,6 +2408,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 ))}
                             </div>
                         </div>
+                        )}
 
                         {eventOnline && (
                             <div>

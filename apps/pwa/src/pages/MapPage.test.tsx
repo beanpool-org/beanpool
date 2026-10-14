@@ -1,4 +1,4 @@
-import { render, waitFor, act, fireEvent, within } from '@testing-library/react';
+import { render, waitFor, act, fireEvent, within, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { MapPage, resetSavedMapView } from './MapPage';
@@ -1702,6 +1702,9 @@ describe('Event times in the form (DESIGN-event-times §3, slice 2)', () => {
         vi.spyOn(api, 'getReachablePeers').mockResolvedValue({ peers: [] });
         vi.spyOn(api, 'getEnterpriseMapPins').mockResolvedValue({ enterprises: [] });
         vi.spyOn(api, 'getEventZones').mockResolvedValue({ zones: [SYDNEY, LAGOS, ACCRA] });
+        // A node that carries online events (features.onlineEvents, review of #1952 finding 5).
+        resetCommunityInfoOnce();
+        vi.spyOn(api, 'getCommunityInfo').mockResolvedValue({ profile: 'local', features: { beans: true, onlineEvents: true } } as any);
     });
     afterEach(() => { if (savedTz === undefined) delete process.env.TZ; else process.env.TZ = savedTz; });
 
@@ -1775,6 +1778,20 @@ describe('Event times in the form (DESIGN-event-times §3, slice 2)', () => {
         for (const key of ['lat', 'lng', 'eventPlaceName', 'eventStartAt']) expect(body).not.toHaveProperty(key);
     });
 
+    it('offers Online only where the node carries online events (features.onlineEvents)', async () => {
+        const panel = await openEventForm();
+        await waitFor(() => expect(within(panel).getByTestId('event-where')).toBeInTheDocument());
+        cleanup();
+        resetCommunityInfoOnce();
+        // A node from before online events says nothing of them: no Where choice, an in-person event as before.
+        vi.mocked(api.getCommunityInfo).mockResolvedValue({ profile: 'local', features: { beans: true } } as any);
+        const older = await openEventForm();
+        await act(async () => { await Promise.resolve(); });
+        expect(within(older).queryByTestId('event-where')).toBeNull();
+        expect(within(older).queryByRole('radio', { name: /Online/ })).toBeNull();
+        expect(within(older).getByLabelText('Place name')).toBeInTheDocument();
+    });
+
     it('refuses a link that is not http(s), in words, before sending', async () => {
         const create = vi.spyOn(api, 'createMarketplacePost').mockResolvedValue({ success: true, post: { id: 'ev-new' } } as any);
         const panel = await openEventForm();
@@ -1816,6 +1833,27 @@ describe('Event times in the form (DESIGN-event-times §3, slice 2)', () => {
         await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Create Event' })); });
         await waitFor(() => expect(alert).toHaveBeenCalledWith('2:30 does not exist on 6 Oct in Sydney (clocks go forward). It was saved as 3:30.'));
         alert.mockRestore();
+    });
+
+    it('editing an event that is already online keeps the Where choice, even on a node that does not say onlineEvents', async () => {
+        resetCommunityInfoOnce();
+        vi.mocked(api.getCommunityInfo).mockResolvedValue({ profile: 'local', features: { beans: true } } as any);
+        const hosted: any = {
+            id: 'ev-online', type: 'event', category: 'community', title: 'Vibe coding', description: '', credits: 0, priceType: 'fixed',
+            authorPublicKey: mockIdentity.publicKey, authorCallsign: 'Alice', createdAt: '2026-09-01T00:00:00.000Z', active: true,
+            status: 'active', repeatable: false, eventState: 'scheduled', eventOnline: true, eventLink: 'https://meet.example/a',
+            eventStartAt: '2030-10-19T09:50:00.000Z', eventEndAt: '2030-10-19T11:50:00.000Z',
+            eventStartLocal: '2030-10-19T20:50', eventEndLocal: '2030-10-19T22:50', eventTz: 'Australia/Sydney',
+            audienceScope: 'public', photos: [], eventRsvps: [],
+        };
+        vi.spyOn(api, 'getMarketplacePosts').mockImplementation(async (filter?: any) => (filter?.id === hosted.id ? [hosted] : []) as any);
+        let view: ReturnType<typeof render> | undefined;
+        await act(async () => {
+            view = render(<MapPage identity={mockIdentity} editEventPostId={hosted.id} onEditEventHandled={vi.fn()} onNavigate={vi.fn()} />);
+        });
+        const panel = await view!.findByTestId('map-new-post-panel');
+        expect(within(panel).getByRole('radio', { name: /Online/ }).getAttribute('aria-checked')).toBe('true');
+        expect((within(panel).getByLabelText('Link to join') as HTMLInputElement).value).toBe('https://meet.example/a');
     });
 
     it("editing an event with a stored clock shows the place's clock and sends the clock, not an instant", async () => {

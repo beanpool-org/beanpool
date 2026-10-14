@@ -42,7 +42,7 @@ In the web app the steps are a little different:
 
 There are no Beans on the global community, so a post there has no price. The form has no **Price**: say in the description what you would like in return, or that it is free. Where the price would go, the web app's form, and the phone's form for changing a post, say "🏘️ In a local community this is a price in Beans ›": tap it to see why. See "Beans and the global community".
 
-Visitors to the global community can see this listing's photos and its rough area before they join. They see the post's words and photos and roughly where it is, not your name, your face or the exact spot. In the web app the form says so under the photos.
+Visitors to the global community can see this listing's photos and its rough area before they join. They see the post's words and photos and roughly where it is, not your name, your face or the exact spot. In the web app the form says so under the photos. Members of the global community see your spot to about a kilometre.
 
 ## Not sure what to charge?
 

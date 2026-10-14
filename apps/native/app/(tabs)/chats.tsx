@@ -159,6 +159,9 @@ export default function ChatsScreen() {
         messageRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 },
         lastMessage: { fontSize: 14, color: colors.text.secondary, flex: 1, paddingRight: 16 },
         lastMessageUnread: { color: colors.text.heading, fontWeight: '700' },
+        // A DM whose key changed and waits for the member (utils/dm-peer-pins.ts): the warning colours, as the banner's.
+        keyChangedTag: { backgroundColor: colors.feedback.warning.bg, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 1, marginLeft: 6, flexShrink: 0 },
+        keyChangedTagText: { fontSize: 11, fontWeight: '700', color: colors.feedback.warning.fg },
         actionNeededText: { fontSize: 13, color: colors.feedback.warning.fg, fontWeight: '700', flex: 1 },
         unreadBadge: { backgroundColor: colors.accent.fill, width: 20, height: 20, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
         unreadCount: { color: colors.text.onAccent, fontSize: 11, fontWeight: '800' },
@@ -508,6 +511,11 @@ export default function ChatsScreen() {
                 <View style={styles.chatDetails}>
                     <View style={styles.chatHeader}>
                         <Text style={[styles.peerName, item.unread > 0 && styles.peerNameUnread]}>{item.peer}</Text>
+                        {item.keyChanged && (
+                            <View style={styles.keyChangedTag} accessibilityLabel="The key behind this chat changed">
+                                <Text style={styles.keyChangedTagText}>key changed</Text>
+                            </View>
+                        )}
                         <Text style={[styles.timestamp, item.unread > 0 && styles.timestampUnread]}>{item.timestamp}</Text>
                     </View>
                     

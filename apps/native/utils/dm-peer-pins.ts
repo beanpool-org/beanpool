@@ -870,6 +870,24 @@ function applyDmListingsTo(pin: DmPeerPin, named: string[][], now: string, heard
     return true;
 }
 
+/**
+ * The member's "Continue with the new key" (slice 2, pick 1): the key on offer becomes the pinned key, `by: 'member'`,
+ * and the key before it goes first in `former`, so the old lines still open (pick 3). The offer, the first-sight verdict
+ * and what the listing said go with it: the member decided. Only the key on offer moves a pin, from a sync or a
+ * first-sight pause alike (§3.4 amendment, rules 3-4). Any other key, an offer of several keys (peer null), a pin with no
+ * offer, a rule-5 record (no key placed: there is nothing to continue from), or a DM with no pin: nothing changes. True
+ * when it changed.
+ */
+export function acceptOffer(pins: DmPeerPins, conversationId: string, peer: string, now: string): boolean {
+    const id = dmPinId(conversationId);
+    const key = pinKeyOf(peer);
+    const pin = dmPinFor(pins, id);
+    if (!key || !pin?.offered || pin.offered.peer !== key) return false;
+    // Newest first, the oldest dropped past FORMER_MAX (§3.4 amendment 6): its lines then read "couldn't be verified".
+    const former = [...new Set([pin.peer, ...(pin.former ?? [])])].filter((k) => k !== key).slice(0, FORMER_MAX);
+    return resized(pins, id, () => setPin(pins, id, { peer: key, since: now, by: 'member', ...(former.length ? { former } : {}) }));
+}
+
 /** The keys a thread's old lines may open under: the pinned one, then the ones before it. */
 export function dmOpenPeers(pin: DmPeerPin): string[] {
     return [pin.peer, ...(pin.former ?? []).filter((k) => k !== pin.peer)];

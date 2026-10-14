@@ -14,7 +14,8 @@ import { DmNotLockedError, DmKeyChangedError, isNodeReadableChatType } from './d
 import {
     createDmPinBook, dmPinFor, dmSightFor, dmPinId, pinKeyOf, pinAtFirstSight, applyDmListings, applySightVerdict, applyResetVerdict, judgeFirstSight,
     settleFirstSight, isUnplacedSight, isHeldLostSight, markHeldLost, isDmPinStoreError, isDmPinsFullError, DmPinsFullError, isPinnableId,
-    noRoomForFirstSight, rekeyDateOf, DM_PINS_UNREAD_LINE, type DmPeerPins, type DmPinEntry, type DmHeard, type SightVerdict, type DmPinsReset,
+    noRoomForFirstSight, rekeyDateOf, DM_PINS_UNREAD_LINE, acceptOffer, type DmPeerPins, type DmPinEntry, type DmHeard, type SightVerdict,
+    type DmPinsReset, type DmPeerOffer,
 } from './dm-peer-pins';
 import { dmLinesAtUpdateStoreKey } from './storage-keys';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError } from './dm-guard-list';
@@ -1304,6 +1305,9 @@ export async function getConversations(myPubkey: string) {
             peerAvatar: row.otherAvatar || null,
             peerUpdatedAt: row.otherProfileUpdatedAt || null,
             peerPubkey: row.otherPubkey || null,
+            // The "key changed" tag: an offer waiting for the member, from a sync or a first-sight pause (from the same one
+            // read as the preview; unreadable pins, no tag: the chat itself says why it can't send).
+            keyChanged: (row.convType || 'dm') === 'dm' && !!previewPins && !!dmPinFor(previewPins, row.id)?.offered,
             lastMessage: displayMsg,
             lastMsgType: row.lastMsgType,
             lastSysType: row.lastSysType,
@@ -4841,6 +4845,10 @@ export function _resetDmPeerPinsForTests(): void {
 interface PinnedDmKeyContext extends DMKeyContext {
     /** Keys this phone sealed the DM to before the pinned one: its old lines open under them too. */
     formerPeers: string[];
+    /** The key offered in place of the pinned one, waiting for the member (the DM screen's banner). */
+    offered?: DmPeerOffer;
+    /** My public key, as the rows name my lines. */
+    myPubHex: string;
     /** True while nothing may be sealed here: another key is offered in place of the pinned one, for the member to decide. */
     keyChanged: boolean;
     /** The key offered in the pinned one's place (null: none, or the node lists several): its lines are marked, never read. */
@@ -5001,7 +5009,7 @@ async function getDmKeyContext(conversationId: string, use: 'seal' | 'check' | '
         // Reading only, with no key pinned: the rows' one other key, as before pins. Nothing is written from a read.
         peers = await peersFromThread(database, conversationId, conv.created_by, me, peers, false);
         if (peers.length !== 1) return null;
-        return { myEdPrivHex: identity.privateKey, peerEdPubHex: peers[0], conversationId, formerPeers: [], keyChanged: false, offeredPeer: null };
+        return { myEdPrivHex: identity.privateKey, peerEdPubHex: peers[0], conversationId, formerPeers: [], keyChanged: false, offeredPeer: null, myPubHex: me };
     }
     const pin = entry;
     if (use === 'seal' && !pin.checked && pin.by === 'first-seen' && !pin.offered) {
@@ -5012,7 +5020,7 @@ async function getDmKeyContext(conversationId: string, use: 'seal' | 'check' | '
         await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conversationId, pin.peer]).catch(() => {});
         await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conversationId, identity.publicKey]).catch(() => {});
     }
-    return { myEdPrivHex: identity.privateKey, peerEdPubHex: pin.peer, conversationId, formerPeers: pin.former ?? [], keyChanged: !!pin.offered, offeredPeer: pin.offered?.peer ?? null };
+    return { myEdPrivHex: identity.privateKey, peerEdPubHex: pin.peer, conversationId, formerPeers: pin.former ?? [], keyChanged: !!pin.offered, offered: pin.offered, offeredPeer: pin.offered?.peer ?? null, myPubHex: me };
 }
 
 /**
@@ -5278,6 +5286,116 @@ export async function isDmUnplaced(conversationId: string): Promise<boolean> {
     } catch {
         return false;
     }
+}
+
+/** What the DM screen's banner says about a key change (DESIGN-dm-peer-key-pin §3.5). */
+export interface DmKeyChange {
+    /**
+     * The key the member would continue with: the one offered in place of the pinned one. Null when the node lists
+     * several other keys: there is no one key to continue with, and the banner offers none.
+     */
+    offeredPeer: string | null;
+    /**
+     * True when first sight on this thread's own lines made the pause (§3.4 amendment, rules 3-4: a restored phone, or
+     * a DM the update met with two keys in its rows), not a sync against a pin this phone already had.
+     */
+    firstSight: boolean;
+    /** True when that first-sight pause came from the re-seed after the member's reset (§3.4 amendment 7 §1): the banner says so. */
+    afterReset?: boolean;
+    /** When the node says the account was re-keyed (slice 3). Only ever wording for the banner, never a reason to accept (pick 4). */
+    rekeyedAt?: string;
+    /**
+     * The person's name: the pinned key's member row, else the offered key's (the community's current name for the
+     * account after an honest re-key moves the row), else null ("this person"). Never the conversation id (#1873 review,
+     * finding 2).
+     */
+    name?: string | null;
+}
+
+/** A member's callsign by key, as this phone holds the directory; null when it holds none. */
+async function callsignOfKey(pubkey: string | null | undefined): Promise<string | null> {
+    if (!pubkey) return null;
+    const database = await getDb();
+    const row = await database.getFirstAsync<any>('SELECT callsign FROM members WHERE public_key IN (?, ?) LIMIT 1', [pubkey, pubkey.toLowerCase()]).catch(() => null);
+    const name = typeof row?.callsign === 'string' ? row.callsign.trim() : '';
+    return name || null;
+}
+
+/**
+ * The key change waiting in this DM, or null when there is none. The DM screen's check whether it may send ('check':
+ * first sight is judged on the thread's lines first). Throws DmPinStoreError when the pins can't be read (the screen
+ * then keeps the box as it was, and a send says why).
+ */
+export async function getDmKeyChange(conversationId: string): Promise<DmKeyChange | null> {
+    const ctx = await getDmKeyContext(conversationId, 'check');
+    if (!ctx?.keyChanged || !ctx.offered) return null;
+    const name = (await callsignOfKey(ctx.peerEdPubHex)) ?? (await callsignOfKey(ctx.offered.peer));
+    const change: DmKeyChange = { offeredPeer: ctx.offered.peer, firstSight: !!ctx.offered.firstSight, name };
+    if (ctx.offered.afterReset) change.afterReset = true;
+    if (ctx.offered.nodeSays?.rekeyedAt) change.rekeyedAt = ctx.offered.nodeSays.rekeyedAt;
+    return change;
+}
+
+/**
+ * The member's "Continue with the new key" on the banner (pick 1), after checking the key code with the person:
+ * `expectedPeer` (the key whose code the banner showed) becomes the key this DM is sealed to, `by: 'member'`, and the one
+ * before it is kept in `former` so the old lines still read (pick 3). The participant rows become [me, that key].
+ *
+ * Refuses (false, nothing written) unless `expectedPeer` is still the key on offer when the tap's turn comes in the pins'
+ * queue: a sync that offers a third key, or clears the offer, between the banner and the tap moves nothing. A rule-5
+ * record (no key placed) has nothing to continue from. What the node says about a re-key never moves a pin here (pick 4);
+ * only this call does. Throws DmPinStoreError when the pins can't be read or written.
+ *
+ * Through the pins' one queue (#1873 review, finding 4): the sync, first sight and the refresh write there too, so no
+ * writer's older copy can be written over the member's choice, and the in-memory copy every send reads is the one changed.
+ */
+export async function acceptOfferedPeer(conversationId: string, expectedPeer: string): Promise<boolean> {
+    const identity = await loadIdentity();
+    const expected = pinKeyOf(expectedPeer);
+    if (!identity?.publicKey || !expected) return false;
+    const me = identity.publicKey;
+    // One handle for the pin and the rows (§3.4 amendment 5): the community this tap is in, never the one open afterwards.
+    const database = await getDb();
+    const change = await getDmKeyChange(conversationId);
+    if (!change || change.offeredPeer !== expected) return false;
+    const now = new Date().toISOString();
+    let moved = false;
+    await dmPins.update(me, database, (pins) => (moved = acceptOffer(pins, conversationId, expected, now)));
+    if (!moved) return false;
+    // The rows follow the pin (the next resolve puts them right if this fails; the pin has moved either way).
+    await database.runAsync('DELETE FROM conversation_participants WHERE conversation_id = ? AND public_key NOT IN (?, ?)', [conversationId, me, expected]).catch(() => {});
+    await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conversationId, expected]).catch(() => {});
+    await database.runAsync('INSERT OR IGNORE INTO conversation_participants (conversation_id, public_key) VALUES (?, ?)', [conversationId, me]).catch(() => {});
+    return true;
+}
+
+/**
+ * Open one part of a DM line under the pinned key, then under each key pinned before it (pick 3), as the thread check
+ * does (core checkDmThread): a former key is tried only for a line the row names as mine, the pinned key's or that key's
+ * own. Returns the keys and sender it opened under, so a photo opens under the same ones as its words. Throws the pinned
+ * key's error when none opens.
+ */
+function openDmPartWithFormer(
+    payload: { ciphertext: string; nonce: string },
+    ctx: PinnedDmKeyContext,
+    ref: { conversationId: string; senderPubHex: string; messageId: string; metadata: unknown; part: DmPart },
+    formats?: ReadonlyArray<2 | 3>,
+): { opened: ReturnType<typeof openDmLine>; keys: DMKeyContext; senderPubHex: string } {
+    let first: unknown;
+    try {
+        return { opened: openDmLine(payload, ctx, ref as any, formats as any), keys: ctx, senderPubHex: ref.senderPubHex };
+    } catch (e) { first = e; }
+    const mine = ctx.myPubHex && ref.senderPubHex === ctx.myPubHex;
+    for (const peer of ctx.formerPeers) {
+        if (!peer || peer === ctx.peerEdPubHex) continue;
+        if (!mine && ref.senderPubHex !== ctx.peerEdPubHex && ref.senderPubHex !== peer) continue;
+        const keys: DMKeyContext = { myEdPrivHex: ctx.myEdPrivHex, peerEdPubHex: peer, conversationId: ctx.conversationId };
+        const senderPubHex = mine ? ref.senderPubHex : peer;
+        try {
+            return { opened: openDmLine(payload, keys, { ...ref, senderPubHex } as any, formats as any), keys, senderPubHex };
+        } catch { /* the next former key */ }
+    }
+    throw first;
 }
 
 /**
@@ -5582,6 +5700,18 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
     const lineViews = isDm
         ? checkDmThread(rows.map(r => ({ id: r.id, authorPubkey: r.author_pubkey, ciphertext: r.ciphertext, nonce: r.nonce, type: r.type, metadata: r.metadata })), dmCtx, conversationId, dmCtx?.formerPeers)
         : null;
+    // The lines that open only under the key offered in the pinned one's place (design §3.4 amendment 2, item 3): marked
+    // so the screen draws one fixed line in their slot (dm-lock dmLineSlotText), and never read out (no text from a key the
+    // member hasn't accepted). Only whether each opened is kept. Computed here, where it is drawn (#1872 ultrareview, U8).
+    const fromOfferedKey = new Set<string>();
+    if (lineViews && dmCtx?.offeredPeer) {
+        const unopened = rows.filter(r => lineViews.get(r.id)?.mark === 'not-verified' && isEncryptedNonce(r.nonce));
+        if (unopened.length) {
+            const underOffer = checkDmThread(unopened.map(r => ({ id: r.id, authorPubkey: r.author_pubkey, ciphertext: r.ciphertext, nonce: r.nonce, type: r.type, metadata: r.metadata })),
+                { myEdPrivHex: dmCtx.myEdPrivHex, peerEdPubHex: dmCtx.offeredPeer }, conversationId);
+            for (const r of unopened) if (underOffer.get(r.id)?.format != null) fromOfferedKey.add(r.id);
+        }
+    }
 
     return rows.map(row => {
         let displayTxt = row.ciphertext;
@@ -5646,6 +5776,9 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
             integrityNote,
             // A DM row shown as nobody's: a line that didn't open, one that wasn't encrypted, or the admin page's message.
             unattributed,
+            // A DM line that opens only under the key offered in the pinned one's place: its text is the not-verified line,
+            // never its words; the screen draws "Sent from the new key. Shown after you continue." in its slot.
+            fromOfferedKey: fromOfferedKey.has(row.id),
             // Who a reply quoting this line shows it as from (e2e-crypto dmQuoteFrom): its check, never its row's name.
             quoteFrom: lineViews ? dmQuoteFrom({ authorPubkey: row.author_pubkey, nonce: row.nonce, type: row.type, metadata: row.metadata }, view) : 'author',
             rawTimestamp: row.timestamp,
@@ -5908,8 +6041,10 @@ export async function getDecryptedAttachment(conversationId: string, messageId: 
             'SELECT ciphertext, nonce, author_pubkey, metadata FROM messages WHERE id = ?', [messageId]
         );
         if (!msgRow || !isEncryptedNonce(msgRow.nonce)) return null;
+        // Under the pinned key, or a key pinned before it (pick 3): a photo from before "Continue with the new key" still
+        // opens, under the same key and sender as its words.
         const ref = { conversationId, senderPubHex: msgRow.author_pubkey, messageId, metadata: msgRow.metadata };
-        const words = openDmLine({ ciphertext: msgRow.ciphertext, nonce: msgRow.nonce }, dmCtx, { ...ref, part: 'body' });
+        const words = openDmPartWithFormer({ ciphertext: msgRow.ciphertext, nonce: msgRow.nonce }, dmCtx, { ...ref, part: 'body' });
 
         // 2. Local cache next. Lives in the filesystem (survives a DB wipe-and-fetch), so an
         //    image is downloaded+decrypted at most once per device and re-opens instantly/offline.
@@ -5922,7 +6057,7 @@ export async function getDecryptedAttachment(conversationId: string, messageId: 
         const res = await signedGet(`/api/messages/${messageId}/attachment`);
         if (!res.ok) return null;
         const { data, nonce } = await res.json();
-        const decrypted = openDmLine({ ciphertext: data, nonce }, dmCtx, { ...ref, part: 'attachment' }, [words.format]).text;
+        const decrypted = openDmLine({ ciphertext: data, nonce }, words.keys, { ...ref, senderPubHex: words.senderPubHex, part: 'attachment' }, [words.opened.format]).text;
 
         // 4. Persist to the filesystem cache. Decrypted-at-rest is acceptable: E2E protects the
         //    image from the NODE, and the device owner already views it. Falls back to the inline

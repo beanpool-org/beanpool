@@ -997,7 +997,7 @@ export default function HomeScreen() {
                                     <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-hint">
                                         <Text style={[st.hintText, { color: colors.text.body }]}>{HOME_HINT_LINE}</Text>
                                         <Pressable onPress={() => setHint(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel="Got it, hide this tip">
-                                            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text.secondary }}>✕</Text>
+                                            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.accent.primary }}>✕</Text>
                                         </Pressable>
                                     </View>
                                 )}
@@ -1005,7 +1005,7 @@ export default function HomeScreen() {
                                     <View style={[st.hint, { borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-fewer">
                                         <Text style={[st.hintText, { color: colors.text.body }]}>{FEWER_CARDS_LINE}</Text>
                                         <Pressable onPress={() => setFewer(false)} style={st.hintClose} accessibilityRole="button" accessibilityLabel="Got it, hide this line">
-                                            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text.secondary }}>✕</Text>
+                                            <Text style={{ fontSize: 16, fontWeight: '700', color: colors.accent.primary }}>✕</Text>
                                         </Pressable>
                                     </View>
                                 )}

@@ -146,7 +146,7 @@ export function DecideSection({
             paddingHorizontal: 6,
             paddingVertical: 2,
             borderRadius: 10,
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
         },
         badgePillText: {
             color: colors.text.inverse,
@@ -184,7 +184,7 @@ export function DecideSection({
             marginBottom: 12,
         },
         proposeBtn: {
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             borderRadius: 12,
             paddingVertical: 12,
             paddingHorizontal: 16,
@@ -207,7 +207,7 @@ export function DecideSection({
         },
         gateWarning: {
             fontSize: 11,
-            color: colors.feedback.warning.solid,
+            color: colors.feedback.warning.fg,
             marginTop: 6,
             fontWeight: '600',
         },
@@ -275,7 +275,7 @@ export function DecideSection({
         timePillText: {
             fontSize: 11,
             fontWeight: '700',
-            color: theme === 'dark' ? colors.feedback.warning.solid : palette.amber700,
+            color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber700,
         },
         decisionTitle: {
             fontSize: 17,
@@ -354,7 +354,7 @@ export function DecideSection({
         keepHeadline: {
             fontSize: 14,
             fontWeight: '800',
-            color: theme === 'dark' ? colors.feedback.warning.solid : palette.amber800,
+            color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber800,
         },
         keepBody: {
             fontSize: 13,
@@ -364,7 +364,7 @@ export function DecideSection({
         blockerText: {
             fontSize: 13,
             fontWeight: '700',
-            color: colors.feedback.warning.solid,
+            color: colors.feedback.warning.fg,
             marginBottom: 6,
         },
         creditsText: {
@@ -425,10 +425,10 @@ export function DecideSection({
             color: colors.text.heading,
         },
         voteBtnYes: {
-            backgroundColor: palette.green600,
+            backgroundColor: colors.brand.fill,
         },
         voteBtnNo: {
-            backgroundColor: palette.red600,
+            backgroundColor: colors.feedback.danger.solid,
         },
         voteBtnText: {
             flexShrink: 1,
@@ -509,7 +509,7 @@ export function DecideSection({
             borderColor: colors.border.default,
         },
         filterBtnActive: {
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             borderColor: colors.brand.dark,
         },
         filterBtnText: {
@@ -727,7 +727,7 @@ export function DecideSection({
                                                 <Text style={styles.metricLabel}>
                                                     Turnout: {turnoutLine(tally)}
                                                 </Text>
-                                                <Text style={[styles.metricValue, { color: tally.quorumMet ? palette.green600 : colors.text.secondary }]}>
+                                                <Text style={[styles.metricValue, { color: tally.quorumMet ? colors.feedback.success.fg : colors.text.secondary }]}>
                                                     {tally.quorumMet ? 'Met ✅' : 'Pending'}
                                                 </Text>
                                             </View>
@@ -766,7 +766,7 @@ export function DecideSection({
                                                 <View
                                                     style={[
                                                         styles.barFill,
-                                                        { width: `${supportPct}%`, backgroundColor: tally.passed ? palette.green500 : palette.amber500 },
+                                                        { width: `${supportPct}%`, backgroundColor: tally.passed ? palette.green500 : colors.feedback.warning.solid },
                                                     ]}
                                                 />
                                             </View>

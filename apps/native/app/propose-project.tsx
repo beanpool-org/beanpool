@@ -38,7 +38,7 @@ export default function ProposeProjectModal() {
         typeBtnTitle: { fontSize: 14, fontWeight: 'bold', color: colors.text.heading, marginBottom: 4 },
         typeBtnDesc: { fontSize: 11, color: colors.text.secondary, lineHeight: 15 },
         footer: { padding: 20, borderTopWidth: 1, borderTopColor: colors.border.default, backgroundColor: colors.surface.app },
-        submitBtn: { paddingVertical: 16, borderRadius: 14, alignItems: 'center', backgroundColor: colors.brand.primary, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 5 },
+        submitBtn: { paddingVertical: 16, borderRadius: 14, alignItems: 'center', backgroundColor: colors.brand.fill, shadowColor: colors.brand.dark, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 5 },
         submitBtnText: { color: colors.text.inverse, fontSize: 14, fontWeight: 'bold', letterSpacing: 0.5 },
         toast: { position: 'absolute', bottom: 100, left: 20, right: 20, backgroundColor: theme === 'dark' ? colors.feedback.warning.bg : palette.amber100, borderColor: theme === 'dark' ? colors.feedback.warning.border : palette.amber500, borderWidth: 1, padding: 12, borderRadius: 12, alignItems: 'center' },
         toastText: { color: theme === 'dark' ? colors.feedback.warning.fg : palette.amber800, fontWeight: '700', fontSize: 13 },
@@ -258,7 +258,7 @@ export default function ProposeProjectModal() {
                                         accessibilityRole="button"
                                         accessibilityLabel="Clear deadline"
                                     >
-                                        <Text style={{ fontSize: 12, color: colors.feedback.danger.solid }}>Clear deadline</Text>
+                                        <Text style={{ fontSize: 12, color: colors.feedback.danger.fg }}>Clear deadline</Text>
                                     </Pressable>
                                 )}
                             </View>

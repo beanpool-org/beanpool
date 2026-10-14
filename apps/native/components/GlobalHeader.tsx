@@ -479,7 +479,7 @@ export function GlobalHeader({ onMeasure }: { onMeasure?: (height: number) => vo
                             }
                         }}
                     >
-                        <MaterialCommunityIcons name="tune" size={24} color={pathname === '/settings' ? colors.accent.primary : '#ffffff'} />
+                        <MaterialCommunityIcons name="tune" size={24} color={pathname === '/settings' ? colors.feedback.warning.solid : '#ffffff'} />
                     </TouchableOpacity>
                     <TouchableOpacity
                         accessibilityRole="button"

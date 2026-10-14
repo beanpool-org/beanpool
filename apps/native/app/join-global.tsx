@@ -54,7 +54,7 @@ export default function JoinGlobalScreen() {
         chips: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 8, marginBottom: 4 },
         chip: { minHeight: 40, justifyContent: 'center', backgroundColor: colors.surface.subtle, borderWidth: 1, borderColor: colors.border.strong, borderRadius: 999, paddingHorizontal: 14, paddingVertical: 8, marginRight: 8, marginBottom: 8 },
         chipText: { color: colors.text.body, fontSize: 14, fontWeight: '600' },
-        primary: { minHeight: 48, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
+        primary: { minHeight: 48, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12, backgroundColor: colors.brand.fill, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
         primaryText: { color: colors.text.inverse, fontSize: 16, fontWeight: '800', textAlign: 'center' },
         secondary: { minHeight: 48, paddingHorizontal: 18, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center', marginTop: 12 },
         secondaryText: { color: colors.text.body, fontSize: 15, fontWeight: '700', textAlign: 'center' },

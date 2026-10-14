@@ -145,5 +145,5 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         rowTitle: { fontSize: 14, fontWeight: '700', color: colors.text.body },
         rowSub: { fontSize: 12, color: colors.text.secondary, marginTop: 2 },
         helper: { fontSize: 12, color: colors.text.secondary, marginTop: 6, lineHeight: 16 },
-        error: { fontSize: 12, fontWeight: '700', color: colors.feedback.danger.solid, marginTop: 6, lineHeight: 16 },
+        error: { fontSize: 12, fontWeight: '700', color: colors.feedback.danger.fg, marginTop: 6, lineHeight: 16 },
     });

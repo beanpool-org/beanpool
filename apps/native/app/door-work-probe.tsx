@@ -129,7 +129,7 @@ function styles(colors: ReturnType<typeof useTheme>['colors']) {
         scroll: { padding: 16 },
         title: { fontSize: 20, fontWeight: '800', color: colors.text.heading, marginBottom: 8 },
         body: { fontSize: 15, color: colors.text.body, lineHeight: 22, marginBottom: 12 },
-        button: { minHeight: 48, borderRadius: 12, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center', padding: 12, marginBottom: 8 },
+        button: { minHeight: 48, borderRadius: 12, backgroundColor: colors.brand.fill, alignItems: 'center', justifyContent: 'center', padding: 12, marginBottom: 8 },
         buttonText: { color: colors.text.inverse, fontSize: 16, fontWeight: '800', textAlign: 'center' },
         secondary: { minHeight: 48, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, alignItems: 'center', justifyContent: 'center', padding: 12, marginBottom: 8 },
         secondaryText: { color: colors.text.body, fontSize: 15, fontWeight: '700', textAlign: 'center' },

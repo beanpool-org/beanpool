@@ -70,7 +70,7 @@ export default function PostDetailModal() {
         container: { flex: 1, backgroundColor: colors.surface.page },
         errorContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, backgroundColor: colors.surface.app },
         errorText: { color: colors.text.secondary, fontSize: 16, textAlign: 'center', marginBottom: 24, lineHeight: 24 },
-        closeBtn: { backgroundColor: palette.orangeAlt500, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12 },
+        closeBtn: { backgroundColor: colors.action.cta, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12 },
         closeBtnText: { color: colors.text.inverse, fontWeight: 'bold' },
 
         header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.surface.subtle },
@@ -112,20 +112,20 @@ export default function PostDetailModal() {
 
         // Own Post Actions
         ownPostActions: { paddingHorizontal: 20, gap: 10 },
-        editPostBtn: { backgroundColor: palette.orangeAlt500, borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
+        editPostBtn: { backgroundColor: colors.action.cta, borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
         editPostBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: '800' },
         deletePostBtn: { borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 2, borderColor: colors.feedback.danger.border },
-        deletePostBtnText: { color: colors.feedback.danger.solid, fontSize: 14, fontWeight: '700' },
+        deletePostBtnText: { color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '700' },
         pauseOfferBtn: { borderRadius: 14, paddingVertical: 14, alignItems: 'center', borderWidth: 2, borderColor: '#f59e0b' },
-        pauseOfferBtnText: { color: '#d97706', fontSize: 14, fontWeight: '700' },
+        pauseOfferBtnText: { color: colors.feedback.warning.fg, fontSize: 14, fontWeight: '700' },
 
         // Other's Post Actions
         otherPostActions: { paddingHorizontal: 20, gap: 10 },
         messageBtn: { backgroundColor: colors.surface.card, borderRadius: 14, paddingVertical: 16, alignItems: 'center', borderWidth: 1, borderColor: colors.border.default },
         messageBtnText: { color: colors.text.body, fontSize: 16, fontWeight: '700' },
         acceptBtn: { borderRadius: 14, paddingVertical: 16, alignItems: 'center' },
-        acceptBtnOffer: { backgroundColor: colors.brand.primary },
-        acceptBtnNeed: { backgroundColor: palette.orange600 },
+        acceptBtnOffer: { backgroundColor: colors.brand.fill },
+        acceptBtnNeed: { backgroundColor: colors.action.fab },
         acceptBtnText: { color: colors.text.inverse, fontSize: 16, fontWeight: '800' },
 
         // Edit Section
@@ -133,8 +133,8 @@ export default function PostDetailModal() {
         editSectionTitle: { color: colors.text.body, fontSize: 18, fontWeight: '800', marginBottom: 16 },
         editTypeRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
         editTypeBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.app, alignItems: 'center' },
-        editTypeBtnOffer: { backgroundColor: colors.brand.primary, borderColor: colors.brand.primary },
-        editTypeBtnNeed: { backgroundColor: palette.orange600, borderColor: palette.orange600 },
+        editTypeBtnOffer: { backgroundColor: colors.brand.fill, borderColor: colors.brand.primary },
+        editTypeBtnNeed: { backgroundColor: colors.action.fab, borderColor: palette.orange600 },
         editTypeBtnText: { fontSize: 14, fontWeight: '800', color: colors.text.muted },
         editTypeBtnTextActive: { color: colors.text.inverse },
         editPickerWrap: { backgroundColor: colors.surface.card, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 10, overflow: 'hidden' },
@@ -151,7 +151,7 @@ export default function PostDetailModal() {
         editBtnRow: { flexDirection: 'row', gap: 10 },
         editCancelBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card, alignItems: 'center' },
         editCancelBtnText: { color: colors.text.secondary, fontSize: 15, fontWeight: '700' },
-        editSaveBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: palette.orangeAlt500, alignItems: 'center' },
+        editSaveBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: colors.action.cta, alignItems: 'center' },
         editSaveBtnDisabled: { backgroundColor: colors.border.strong },
         editSaveBtnText: { color: colors.text.inverse, fontSize: 15, fontWeight: '800' },
 
@@ -163,10 +163,10 @@ export default function PostDetailModal() {
         cancelActionBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center' },
         cancelActionBtnText: { color: colors.text.secondary, fontSize: 14, fontWeight: '700' },
         confirmActionBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-        confirmActionBtnGreen: { backgroundColor: colors.brand.primary },
+        confirmActionBtnGreen: { backgroundColor: colors.brand.fill },
         confirmActionBtnText: { color: colors.text.inverse, fontSize: 14, fontWeight: '800' },
         cancelTxBtn: { marginTop: 12, borderWidth: 1, borderColor: colors.feedback.danger.border, backgroundColor: colors.surface.card, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
-        cancelTxBtnText: { color: colors.feedback.danger.solid, fontSize: 14, fontWeight: '700' },
+        cancelTxBtnText: { color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '700' },
         requestsContainer: {
             marginTop: 20,
             backgroundColor: colors.surface.card,
@@ -202,7 +202,7 @@ export default function PostDetailModal() {
             fontWeight: '700'
         },
         approveBtn: {
-            backgroundColor: colors.brand.primary,
+            backgroundColor: colors.brand.fill,
             paddingHorizontal: 16,
             paddingVertical: 8,
             borderRadius: 10
@@ -221,7 +221,7 @@ export default function PostDetailModal() {
             borderColor: colors.feedback.danger.border
         },
         rejectBtnText: {
-            color: colors.feedback.danger.solid,
+            color: colors.feedback.danger.fg,
             fontSize: 13,
             fontWeight: 'bold'
         },
@@ -954,7 +954,7 @@ export default function PostDetailModal() {
                 <View style={styles.typeBadgeRow}>
                     <View style={styles.catBadge}>
                         <Text style={styles.catEmoji}>{isPulsePost ? '🗞️' : emoji}</Text>
-                        <Text style={[styles.catLabel, { color: isPulsePost ? (theme === 'dark' ? colors.feedback.warning.fg : '#92400e') : (isOffer ? colors.brand.primary : palette.orange600) }]} numberOfLines={1}>
+                        <Text style={[styles.catLabel, { color: isPulsePost ? colors.feedback.warning.fg : (isOffer ? colors.brand.primary : colors.market.need.fg) }]} numberOfLines={1}>
                             {isPulsePost ? '● DAILY PULSE' : `${isOffer ? '● ' : '● '}${post.type.toUpperCase()} · ${categoryLabel(post.category).toUpperCase()}${post.repeatable ? ' · RECURRING' : ''}`}
                         </Text>
                     </View>
@@ -1140,7 +1140,7 @@ export default function PostDetailModal() {
                             </>
                         ) : (
                             <>
-                                <Text style={{ color: palette.amber500, fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8, marginBottom: 8 }}>
+                                <Text style={{ color: colors.feedback.warning.fg, fontSize: 13, fontWeight: '700', textAlign: 'center', marginTop: 8, marginBottom: 8 }}>
                                     ⏳ Pending Release by {targetPeerCallsign}
                                 </Text>
                                 <View style={{ paddingHorizontal: 16, marginBottom: 16, gap: 8 }}>
@@ -1278,7 +1278,7 @@ export default function PostDetailModal() {
                                 onPress={() => setEditRepeatable(!editRepeatable)}
                                 style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface.app, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: colors.border.default, marginBottom: 15 }}
                             >
-                                <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: editRepeatable ? palette.orange500 : colors.border.strong, backgroundColor: editRepeatable ? palette.orange500 : 'transparent', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
+                                <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: editRepeatable ? palette.orange500 : colors.border.strong, backgroundColor: editRepeatable ? colors.action.fab : 'transparent', alignItems: 'center', justifyContent: 'center', marginRight: 12 }}>
                                     {editRepeatable && <Text style={{ color: 'white', fontWeight: 'bold', fontSize: 14 }}>✓</Text>}
                                 </View>
                                 <View style={{ flex: 1 }}>
@@ -1338,12 +1338,12 @@ export default function PostDetailModal() {
                 {isOwnPost && post.status === 'paused' && (
                     <View style={styles.ownPostActions}>
                         <View style={styles.confirmBox}>
-                            <Text style={[styles.confirmBoxTitle, { color: '#d97706' }]}>⏸️ Offer paused</Text>
+                            <Text style={[styles.confirmBoxTitle, { color: colors.feedback.warning.fg }]}>⏸️ Offer paused</Text>
                             <Text style={{ color: theme === 'dark' ? colors.text.secondary : palette.gray600, fontSize: 13, textAlign: 'center' }}>
                                 This offer is hidden from the marketplace and isn't counting toward your credit line. Re-activate it to make it live again.
                             </Text>
                         </View>
-                        <Pressable accessibilityRole="button" style={[styles.editPostBtn, { backgroundColor: colors.brand.primary }]} onPress={handleToggleActive} disabled={toggling}>
+                        <Pressable accessibilityRole="button" style={[styles.editPostBtn, { backgroundColor: colors.brand.fill }]} onPress={handleToggleActive} disabled={toggling}>
                             <Text style={styles.editPostBtnText}>{toggling ? 'Activating…' : '▶️ Activate Offer'}</Text>
                         </Pressable>
                         <Pressable accessibilityRole="button" accessibilityHint="Permanently deletes this post" style={styles.deletePostBtn} onPress={handleDelete} disabled={deleting}>
@@ -1539,11 +1539,11 @@ export default function PostDetailModal() {
                                             <Pressable accessibilityRole="button" onPress={() => {
                                                 if (reqPubkey) router.push({ pathname: '/public-profile', params: { publicKey: reqPubkey, callsign: reqCallsign } });
                                             }}>
-                                                <Text style={[styles.requestName, { textDecorationLine: 'underline', color: palette.amber400 }]} numberOfLines={1}>
+                                                <Text style={[styles.requestName, { textDecorationLine: 'underline', color: colors.feedback.warning.fg }]} numberOfLines={1}>
                                                     🤝 {reqCallsign}
                                                 </Text>
                                             </Pressable>
-                                            <Text style={{ fontSize: 12, color: palette.amber400, marginTop: 2, fontWeight: '600' }}>
+                                            <Text style={{ fontSize: 12, color: colors.feedback.warning.fg, marginTop: 2, fontWeight: '600' }}>
                                                 {req.count > 0 ? `★ ${req.avgRating.toFixed(1)} (${req.count} reviews)` : '☆☆☆☆☆ No ratings yet'}
                                             </Text>
                                             <Text style={styles.requestAmt}>{req.hours ? `${req.hours} hours estimated` : 'Offered to fulfill'}</Text>
@@ -1607,7 +1607,7 @@ export default function PostDetailModal() {
                         {identity && (post.status === 'completed' || activeTx?.status === 'completed') && (activeTx?.id || post.pending_transaction_id) && targetPeerPubkey && (
                             <View style={{ marginTop: 16 }}>
                                 <Pressable accessibilityRole="button" style={[styles.messageBtn, { borderColor: hasExistingRating ? colors.brand.primary : colors.feedback.warning.border, backgroundColor: hasExistingRating ? colors.feedback.success.bg : colors.feedback.warning.bg }]} onPress={() => setShowRatingForm(!showRatingForm)}>
-                                    <Text style={[styles.messageBtnText, { color: hasExistingRating ? colors.brand.primary : palette.amber500 }]}>
+                                    <Text style={[styles.messageBtnText, { color: hasExistingRating ? colors.brand.primary : colors.feedback.warning.fg }]}>
                                         {hasExistingRating ? `★ Edit rating for ${targetPeerCallsign}` : `★ Rate ${targetPeerCallsign}`}
                                     </Text>
                                 </Pressable>
@@ -1621,7 +1621,7 @@ export default function PostDetailModal() {
                                             ))}
                                         </View>
                                         <TextInput accessibilityLabel="Rating comment" style={[styles.editInput, { minHeight: 60, marginBottom: 12 }]} value={ratingComment} onChangeText={setRatingComment} placeholder="Leave an optional comment..." placeholderTextColor={colors.text.muted} multiline />
-                                        <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, { backgroundColor: myRating >= 1 ? (hasExistingRating ? colors.brand.primary : palette.amber500) : colors.border.default }]} disabled={myRating < 1 || submittingRating} onPress={async () => {
+                                        <Pressable accessibilityRole="button" style={[styles.confirmActionBtn, { backgroundColor: myRating >= 1 ? (hasExistingRating ? colors.brand.fill : colors.feedback.warning.solid) : colors.border.default }]} disabled={myRating < 1 || submittingRating} onPress={async () => {
                                             const txToRate = activeTx?.id || post.pending_transaction_id;
                                             if(!identity || !txToRate) return;
                                             try {
@@ -1633,7 +1633,7 @@ export default function PostDetailModal() {
                                                 Alert.alert('Success', hasExistingRating ? 'Rating updated!' : 'Rating submitted!');
                                             } catch(e:any) { hapticWarning(); Alert.alert('Error', e.message); } finally { setSubmittingRating(false); }
                                         }}>
-                                            <Text style={styles.confirmActionBtnText}>
+                                            <Text style={[styles.confirmActionBtnText, myRating >= 1 && !hasExistingRating && { color: colors.text.onGold }]}>
                                                 {submittingRating ? 'Submitting...' : hasExistingRating ? 'Update Rating' : 'Submit Rating'}
                                             </Text>
                                         </Pressable>
@@ -1704,7 +1704,7 @@ export default function PostDetailModal() {
                                     }
                                 }}
                             >
-                                <Text style={{ color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700' }}>🚩 Report Post</Text>
+                                <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, fontWeight: '700' }}>🚩 Report Post</Text>
                             </Pressable>
                             <Text style={{ color: colors.text.muted }}>•</Text>
                             <Pressable
@@ -1744,9 +1744,9 @@ export default function PostDetailModal() {
                                 }}
                             >
                                 {isBlocking ? (
-                                    <ActivityIndicator size="small" color={colors.feedback.danger.solid} style={{ marginRight: 4 }} />
+                                    <ActivityIndicator size="small" color={colors.feedback.danger.fg} style={{ marginRight: 4 }} />
                                 ) : null}
-                                <Text style={{ color: colors.feedback.danger.solid, fontSize: 13, fontWeight: '700', opacity: isBlocking ? 0.6 : 1 }}>
+                                <Text style={{ color: colors.feedback.danger.fg, fontSize: 13, fontWeight: '700', opacity: isBlocking ? 0.6 : 1 }}>
                                     {isBlocking ? 'Blocking…' : (<><Text aria-hidden={true} importantForAccessibility="no">🚫 </Text>Block User</>)}
                                 </Text>
                             </Pressable>
@@ -1884,7 +1884,7 @@ export default function PostDetailModal() {
                             </Text>
                             <Pressable
                                 accessibilityRole="button"
-                                style={{ marginTop: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: palette.emerald600 || '#059669', alignItems: 'center' }}
+                                style={{ marginTop: 8, paddingVertical: 14, borderRadius: 12, backgroundColor: colors.brand.fill, alignItems: 'center' }}
                                 onPress={() => { setShowContributionRequired(false); router.push({ pathname: '/(tabs)/map', params: { newPost: 'true' } }); }}
                             >
                                 <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>➕ Create an Offer</Text>

@@ -25,7 +25,7 @@ const showsApp = () => appLockScreen() === 'none';
 
 /** The lock screen, or the plain cover, over one surface. */
 export function AppLockScreenView({ screen }: { screen: 'cover' | 'lock' }): React.JSX.Element {
-    const { theme } = useTheme();
+    const { theme, colors } = useTheme();
     const isDark = theme === 'dark';
     const background = isDark ? '#0a0a0a' : '#FAF9F6';
     if (screen === 'cover') {
@@ -69,7 +69,7 @@ export function AppLockScreenView({ screen }: { screen: 'cover' | 'lock' }): Rea
                 </Text>
                 <Pressable
                     style={{
-                        backgroundColor: '#10b981',
+                        backgroundColor: colors.brand.fill,
                         paddingVertical: 14,
                         paddingHorizontal: 28,
                         borderRadius: 12,

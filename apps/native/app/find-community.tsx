@@ -72,7 +72,7 @@ export default function FindCommunityScreen() {
         note: { fontSize: 14, color: colors.text.body, marginTop: 8, lineHeight: 20 },
         refusal: { fontSize: 14, color: colors.feedback.warning.fg, marginTop: 8, lineHeight: 20 },
         actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
-        primary: { minHeight: 48, paddingHorizontal: 18, borderRadius: 12, backgroundColor: colors.brand.primary, alignItems: 'center', justifyContent: 'center' },
+        primary: { minHeight: 48, paddingHorizontal: 18, borderRadius: 12, backgroundColor: colors.brand.fill, alignItems: 'center', justifyContent: 'center' },
         primaryText: { color: colors.text.inverse, fontSize: 15, fontWeight: '800', textAlign: 'center' },
         secondary: { minHeight: 48, paddingHorizontal: 18, borderRadius: 12, borderWidth: 1, borderColor: colors.border.strong, backgroundColor: colors.surface.card, alignItems: 'center', justifyContent: 'center' },
         secondaryText: { color: colors.text.body, fontSize: 15, fontWeight: '700', textAlign: 'center' },

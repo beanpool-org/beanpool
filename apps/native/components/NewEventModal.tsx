@@ -701,7 +701,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => {
         dateBtn: { flex: 1, justifyContent: 'center' },
         dateText: { fontSize: 15, color: colors.text.heading },
         clearBtn: { minHeight: 48, minWidth: 48, justifyContent: 'center', alignItems: 'center', flexShrink: 0 },
-        clearText: { fontSize: 13, fontWeight: '700', color: colors.feedback.danger.solid },
+        clearText: { fontSize: 13, fontWeight: '700', color: colors.feedback.danger.fg },
         doneBtn: { alignSelf: 'flex-end', minHeight: 44, paddingHorizontal: 16, justifyContent: 'center' },
         doneText: { fontSize: 15, fontWeight: '800', color: accentText },
         mapBox: {

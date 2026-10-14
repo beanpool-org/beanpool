@@ -194,7 +194,7 @@ function make(colors: AppColors) {
         sso: { marginBottom: 10, width: '100%' },
         center: { alignItems: 'center', justifyContent: 'center', minHeight: 180 },
         busyText: { fontSize: 15, color: colors.text.secondary, marginTop: 14, textAlign: 'center' },
-        primary: { backgroundColor: colors.brand.primary, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 8 },
+        primary: { backgroundColor: colors.brand.fill, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 8 },
         primaryText: { color: colors.text.inverse, fontSize: 16, fontWeight: 'bold' },
         secondary: { minHeight: 48, paddingVertical: 12, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
         secondaryText: { color: colors.text.secondary, fontSize: 16 },

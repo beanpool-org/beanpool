@@ -680,7 +680,7 @@ export function GroupChatView({ kind, id, justCreated, initialName, openInfo }: 
             item.sendState === 'sending' ? (
                 <Text style={{ fontSize: 10, color: colors.chat.tickUnread }}> ◷</Text>
             ) : item.sendState === 'failed' ? (
-                <Text style={{ fontSize: 10, color: colors.feedback.danger.solid, fontWeight: '800' }}> ! not delivered</Text>
+                <Text style={{ fontSize: 10, color: colors.feedback.danger.fg, fontWeight: '800' }}> ! not delivered</Text>
             ) : (
                 // One tick: the node has it. A group has no single reader, so there is no second tick to earn.
                 <Text style={{ fontSize: 10, color: colors.chat.tickUnread }}> ✓</Text>
@@ -910,7 +910,7 @@ const makeStyles = ({ colors }: ThemeContextType) =>
         inviteBody: { fontSize: 15, lineHeight: 21, color: colors.text.secondary, textAlign: 'center', marginTop: 8 },
         inviteBigBtn: {
             flexDirection: 'row', gap: 10, alignSelf: 'stretch', minHeight: 56, marginTop: 18, borderRadius: 16,
-            alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand.primary, paddingHorizontal: 16,
+            alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brand.fill, paddingHorizontal: 16,
         },
         inviteBigText: { color: colors.text.inverse, fontSize: 18, fontWeight: '800' },
         skipBtn: { minHeight: 48, justifyContent: 'center', paddingHorizontal: 16, marginTop: 4 },

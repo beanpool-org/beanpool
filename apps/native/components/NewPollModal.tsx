@@ -482,7 +482,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) =>
         },
         removeOptionText: {
             fontSize: 14,
-            color: '#ef4444',
+            color: colors.feedback.danger.fg,
             fontWeight: '800',
         },
         durationRow: {

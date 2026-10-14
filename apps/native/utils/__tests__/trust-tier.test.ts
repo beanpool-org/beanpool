@@ -8,7 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { PROTOCOL_CONSTANTS, TIER_LEVELS, getTier, tierForCredit } from '@beanpool/core';
 import { getTrustTier, isElder } from '../trust-tier';
 import { feedPostVisible, DEFAULT_MARKET_FILTERS } from '../market-filters';
-import { lightColors, earthColors, slateColors, darkColors } from '../../constants/colors';
+import { lightColors, darkColors } from '../../constants/colors';
 
 const BOUNDARIES = [0, 199, 200, 599, 600, 1399, 1400, 2000];
 const coreTier = (credit: number) => getTier(PROTOCOL_CONSTANTS.CREDIT_BASE_FLOOR - credit).name;
@@ -64,7 +64,7 @@ describe('the Newcomer label', () => {
         return (hi + 0.05) / (lo + 0.05);
     };
 
-    it.each([['classic', lightColors], ['earth', earthColors], ['slate', slateColors], ['dark', darkColors]] as const)(
+    it.each([['light', lightColors], ['dark', darkColors]] as const)(
         '%s palette reads at 4.5:1 or better', (_name, palette) => {
             const { fg, bg } = palette.trust.newcomer;
             expect(ratio(fg, bg)).toBeGreaterThanOrEqual(4.5);

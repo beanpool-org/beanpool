@@ -113,7 +113,8 @@ export interface ThirtyDayTrade {
  * datetime('now', '-30 days') (worked out once, before the first page), `pageRows` rows a page. The pages run on in
  * (completed_at, rowid) order, the order of the index the one query read through (idx_marketplace_transactions_status_completed:
  * status, completed_at, then rowid), so together they are its rows in its order: the same edges, summed in the same order.
- * A tie on completed_at goes on by rowid, so a page's edge drops no row and doubles none.
+ * A tie on completed_at goes on by rowid, so a page's edge drops no row and doubles none. There is always a first page,
+ * empty or not: the read is a step, as the one query was.
  */
 export function* thirtyDayTradePages(db: Db, pageRows = WASH_30_DAY_PAGE_ROWS): Generator<ThirtyDayTrade[]> {
     const { since } = db.prepare(`SELECT datetime('now', '-30 days') AS since`).get() as { since: string };
@@ -131,7 +132,6 @@ export function* thirtyDayTradePages(db: Db, pageRows = WASH_30_DAY_PAGE_ROWS): 
           AND completed_at >= ? AND (completed_at > ? OR rowid > ?)
         ORDER BY completed_at, rowid LIMIT ?
     `);
-    // At least one page, empty or not: the read is a step, as the one query was.
     let rows = firstPage.all(since, pageRows) as (ThirtyDayTrade & { rid: number; at: unknown })[];
     for (;;) {
         yield rows;
@@ -145,9 +145,10 @@ export function* thirtyDayTradePages(db: Db, pageRows = WASH_30_DAY_PAGE_ROWS): 
 export const WASH_PAIR_MAX_RATIO = 0.15;
 
 /**
- * runWashTradingAnalysis, one step at a time: it yields after each page of buyers' pair totals and after each cluster's
- * query, so a caller can give the event loop a turn between steps (engine audit.ts computeWashSybilMetricsInSlices) and
- * the analysis never holds it for long. runWashTradingAnalysis drains it in one go, so both give the same analysis.
+ * runWashTradingAnalysis, one step at a time: it yields after each page of buyers' pair totals, each page of the 30-day
+ * trades, every WASH_BFS_STEP_NODES members of a search and each cluster's query, so a caller can give the event loop a
+ * turn between steps (engine audit.ts computeWashSybilMetricsInSlices) and the analysis never holds it for long.
+ * runWashTradingAnalysis drains it in one go, so both give the same analysis.
  */
 export function washTradingAnalysisSteps(db: Db): Generator<void, WashAnalysis> {
     return analysisSteps(db, false, db);

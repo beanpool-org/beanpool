@@ -20,6 +20,8 @@ Going away for a while? Holiday Mode may be what you want. See "Going away".
 - Type **WIPE** and tap **Confirm Sign Out**.
 - Pass your phone's lock screen check, then tap **Sign Out** to confirm.
 
+In the web app, tap **Sign Out (Device Only)**, then **Confirm Sign Out**. There is no **WIPE** to type and no lock screen step.
+
 Your account and every community you saved are removed from this phone. So are the links to Instagram or TikTok you made for your channels, and the categories you starred under **For You**. In the phone app, your community keeps those categories with your account, so they come back when you do. Your block list stays on the phone, kept for your account: come back with the same account and your blocks are still there. Another account on this phone does not get them. In the web app, your community keeps your blocks with your account: sign in again, on any browser, and they are back. Nothing about them stays on the computer. **Without your 12 words you cannot get back in.** Check you have them first.
 
 A phone restored with a sign-in account may have no 12 words. Settings says so. There, **without a linked sign-in account you cannot get back in.** The app says so before you sign out, and **Check Account Protection first** takes you there. If you have the words written down, add them to the phone first (see "Your 12 words").
@@ -31,11 +33,14 @@ A phone restored with a sign-in account may have no 12 words. Settings says so. 
 - Type **DELETE** or your name and tap **Permanently Purge Account**.
 - Pass your phone's lock screen check, then tap **Permanently Purge** to confirm.
 
+In the web app, type **DELETE** or your name and tap **Purge Account**. There is no lock screen step.
+
 This cannot be undone, even with your 12 words.
 
 - You cannot delete while you have a deal under way. Finish or cancel it first.
 - If you hold beans, they go to the Commons.
 - If you are below zero, the Commons covers the debt.
+- If an admin had confirmed you and you owe Beans, the admins' names list keeps a note of what you owed for 3 years, and nobody can be confirmed against that entry until it is settled. See "What the admins can see".
 - Your profile becomes "Deleted Member".
 - Your posts come down, and their words, photos and places are wiped, also from posts that were done or taken down before. A deal made on one still shows, as "Deleted post".
 - Every message you wrote reads **This message was deleted**: in chats with a person, group chats, event chats and project and enterprise discussions. The photos you sent are deleted. Other people's messages stay as they are, so a conversation still makes sense. This cannot reach a copy someone saved, a screenshot, or a backup of the server made before you deleted (see "What stays a while" below). The other person's app blanks the older messages of yours it already holds too, and deletes the photos of yours it had opened, the next time it syncs. An older version of the app may keep those older messages, like a screenshot or a backup.

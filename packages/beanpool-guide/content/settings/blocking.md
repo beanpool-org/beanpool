@@ -9,16 +9,16 @@ related: reporting, messages, privacy, getting-help
 ## Blocking
 
 - On their profile: tap **Block**, or **Block** and their name lower down.
-- On one of their posts: tap **Block User**.
-- From a chat: tap their name at the top to open their profile, then **Block**.
+- On one of their posts (phone app): tap **Block User**. A post in the web app has no block button.
+- From a chat: tap their name at the top to open their profile, then **Block**. In the web app, a chat with one person also has **Block** at the top.
 
-Confirm with **Block User**.
+In the phone app, confirm with **Block User**. In the web app, your browser asks you to confirm: tap **OK**.
 
 ## What it does
 
 - Their posts in the Market are hidden from you.
-- They disappear from your People list and your chats, and you cannot message each other.
-- Their pins on the Map and their Pulse posts still show.
+- They disappear from your chats and from the People list, and you cannot message each other. In the phone app, someone you had added still shows on your **Friends** tab: see "What it does not do" below. The web app hides them from every list.
+- Their Pulse posts still show. On the phone, their pins on the Map still show too. The web app's Map hides them.
 - On your Ledger, Beans from them show "Beans from a member you blocked" instead of any note they sent.
 - A report goes to your community's moderators, who can look into it.
 
@@ -34,13 +34,13 @@ Your community does this for blocks it keeps for you. Today that is a block made
 - If they ask for a deal on one of your listings, the request waits in your deals with no notification. If you leave it, it ends after 7 days, also with no notification.
 - If they accept one of your Offers straight away, you get no notification, and none if they then cancel that deal. The deal still shows in your deals, and its messages in your chat with them, as with anyone. Their Beans are held and given back as usual.
 - They cannot make a listing addressed only to you.
-- You can't add them. If they add you, you aren't told. If they had added you, the "added you" line on your People tab goes. Your friends no longer see you as a connection in common on their profile.
+- You can't add them. If they add you, you aren't told. If they had added you, the "added you" line on your People tab goes. Your friends no longer see you as a connection in common on the profile of the person you blocked.
 - If they send you Beans with a note, the Beans arrive in full and the note does not. You see "Beans from a member you blocked" instead, and you still do after you unblock them.
 
 ## What it does not do
 
 - They are not told. To them, their messages look sent, and so do the notes with their Beans.
-- It does not end the friendship: they still have you as a friend, and if your contact is set to Friends they still see it. To end that too, open **Manage Blocked Users** (on the web, **Manage Blocked Members**; see "Unblocking" below) and tap **Also remove from friends** under their name. They stay blocked. They can notice a removal.
+- It does not end the friendship: if you had added them, they are still your friend, and if your contact is set to Friends they still see it. To end that too, open **Manage Blocked Users** (on the web, **Manage Blocked Members**; see "Unblocking" below) and tap **Also remove from friends** under their name. It is there only for someone you added. They stay blocked. They can notice a removal.
 - Group chats, event chats and project and enterprise chats are shared: everyone in them sees the same messages. Their messages there still show, to you as to everyone else.
 - A deal you already have with them goes on as before, with its notices and notifications.
 - If you have traded with them before, they can still send you Beans. Every Bean arrives, with no notification.

@@ -7,11 +7,13 @@ related: home, the-bean, communities, my-deals, decisions, messages, notificatio
 
 ## What is in it
 
-The bar at the top of the screen is the same on every tab. From left to right:
+On the phone, the bar at the top of the screen is the same on every tab. From left to right:
 
 - **The bean:** your community, and this guide.
 - **The "needs you" icons:** only while something is waiting for you.
 - **The ? icon, the invite icon, Settings and your picture.**
+
+In a web browser the top bar is simpler. It has the connection status on the left, the page's name, and your profile, the **?** and Settings on the right. It has no bean sheet, no "needs you" icons and no invite icon: **Invites** is under **People**. The tabs are along the bottom, or down the left side on a wide screen.
 
 ## The bean
 
@@ -58,7 +60,7 @@ When nothing needs you, there are no icons at all. You have not missed anything.
 
 Instead of the icons, you may see a button:
 
-- **Join** (amber): you are visiting as a guest. Tap it to open **Invites**, where you can join with an invite.
+- **Join** (amber): you are visiting as a guest. Tap it to open **Invites**. In a local community you join there with an invite. In the global community, tap **Join with a sign-in** (**Join with 12 words or a sign-in** where the community takes the 12 words).
 - **Connect** (red): this phone is not connected to a community. Tap it to open **Settings**, where you can add one.
 
 While one of these shows, the invite icon is hidden.

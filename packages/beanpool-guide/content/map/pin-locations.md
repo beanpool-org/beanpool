@@ -26,5 +26,5 @@ Everyone can see the event's place name, so do not type your home address there.
 
 ## What is never shown
 
-- Your own position. The blue dot that shows where you are is only on your phone.
-- Polls have no place on the map.
+- Your own position. The dot that shows where you are is only on your own screen. It is blue on the phone and green in the web app.
+- Polls have no place of their own. On the global community a poll is shown at its poster's area, about 10 km around it, if the poster has set one.

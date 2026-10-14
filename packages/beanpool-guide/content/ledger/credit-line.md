@@ -18,7 +18,7 @@ On the **Ledger**, under your balance, a bar shows where you are:
 - the marks on the left show how deep your Offers let you go;
 - past **+200** on the right is where the circulation fee starts.
 
-Tap the bar for **Credit Slider Info**, which explains each part.
+On the phone, tap the bar for **Credit Slider Info**, which explains each part.
 
 ## How it opens
 
@@ -28,7 +28,7 @@ It starts at zero. It opens when you complete your first trade in the market (a 
 
 - **Trust:** completed trades build trust, especially with many different people. See "The 500-bean partner limit".
 - **Ratings:** stars can only lower the trust you earn. An average of 5 stars keeps it all; a lower average takes some off.
-- The deepest any credit line goes is 2,000 beans, unless your community has set a higher cap (up to 5,000).
+- The deepest any credit line goes is 2,000 beans. A community that confirms its members can set a higher cap, up to 5,000 (see below).
 
 ## Your Offers set how much you can use
 

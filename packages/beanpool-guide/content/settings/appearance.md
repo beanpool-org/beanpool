@@ -16,6 +16,8 @@ related: privacy, notifications, the-bean, web-app
 
 There is one set of colours for light and one for dark.
 
-The map has its own light and dark button, on the left of the map.
+Just below **Appearance**, **Background pattern** puts doodles behind the app. Switch it off for a plain background. It is on to begin with, and it is kept on each device.
+
+On the phone, the map has its own light and dark button, on the left of the map.
 
 In the web app, the first choice is called **Same as device**.

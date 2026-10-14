@@ -8,7 +8,7 @@
  * they checked the code with the person (pick 1). What the node says about a re-key is only a line of words here, never
  * a reason to continue (pick 4).
  */
-import { palette, type AppColors } from '../constants/colors';
+import { type AppColors } from '../constants/colors';
 
 /** The name as the banner says it: the node's callsign, or "this person" while it is unknown. */
 function nameOf(peerName?: string | null): string {
@@ -36,6 +36,11 @@ export interface DmKeyChangeCopyInput {
      * on offer.
      */
     firstSight: boolean;
+    /**
+     * The first-sight pause was made by the re-seed after the member reset this community's chat memory (§3.4 amendment 7
+     * §1): the banner opens with the reset's sentence in the restored-phone sentence's place.
+     */
+    afterReset?: boolean;
     /** The date the node says the account was re-keyed (slice 3), when it says so. */
     rekeyedAt?: string;
 }
@@ -54,8 +59,11 @@ export interface DmKeyChangeCopy {
 /** The first-sight banner's opening sentence (design §3.4 amendment), true after a restore and after an update alike. */
 export const DM_FIRST_SIGHT_LEAD = 'This phone is checking this chat from the start, as it does after you restore it or update the app.';
 
+/** The opening sentence when the member's reset of this community's chat memory made the pause (§3.4 amendment 7 §1). */
+export const DM_RESET_LEAD = "This community's chat memory was reset, so this phone is checking this chat from the start.";
+
 /** The banner's words. */
-export function dmKeyChangeCopy({ peerName, code, firstSight, rekeyedAt }: DmKeyChangeCopyInput): DmKeyChangeCopy {
+export function dmKeyChangeCopy({ peerName, code, firstSight, afterReset, rekeyedAt }: DmKeyChangeCopyInput): DmKeyChangeCopy {
     const name = nameOf(peerName);
     const title = `The key behind "${name}" changed.`;
     const on = rekeyedOnText(rekeyedAt);
@@ -70,7 +78,7 @@ export function dmKeyChangeCopy({ peerName, code, firstSight, rekeyedAt }: DmKey
     // The first-sight case opens with the amendment's sentence, worded so it is true after an update too (P17), not only
     // after a restore.
     const body = firstSight
-        ? `${DM_FIRST_SIGHT_LEAD} The earlier messages here came from a different key than the one this community now gives for ${name}. Anything you send now would go to the new key. Check with ${name} first, in person or on a call: their key code should be`
+        ? `${afterReset ? DM_RESET_LEAD : DM_FIRST_SIGHT_LEAD} The earlier messages here came from a different key than the one this community now gives for ${name}. Anything you send now would go to the new key. Check with ${name} first, in person or on a call: their key code should be`
         : `Anything you send now would go to the new key. If ${name} got a new phone and re-keyed, check with them first, in person or on a call: their key code should be`;
     return {
         title, body, dateLine,
@@ -86,9 +94,6 @@ export const MY_KEY_CODE_COPY = {
     body: 'If a chat with you ever says your key changed, the other person can check this code against the one their phone shows. It isn\'t secret: it\'s safe to read out.',
     unknown: 'Your key code shows here once this phone has your key.',
 } as const;
-
-/** One step darker than the brand green, so white text on it reads at 5.5:1 in both themes (as names-list-style.ts). */
-const BUTTON_GREEN = palette.emerald700;
 
 /** What you press. Each has minHeight ≥ 48. */
 export const DM_KEY_CHANGE_TOUCH_TARGETS = ['continueBtn', 'notNowBtn', 'confirmRow'] as const;
@@ -125,9 +130,9 @@ export function dmKeyChangeStyleSpec(colors: AppColors) {
         confirmText: { color: colors.text.heading, fontSize: 14, flex: 1, flexShrink: 1 },
         // Stacked, full width: two buttons never share a row at 320 dp.
         buttons: { flexDirection: 'column' as const, gap: 8 },
-        continueBtn: { backgroundColor: BUTTON_GREEN, borderRadius: 10, minHeight: 48, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center' as const, justifyContent: 'center' as const },
+        continueBtn: { backgroundColor: colors.brand.fill, borderRadius: 10, minHeight: 48, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center' as const, justifyContent: 'center' as const },
         continueBtnOff: { backgroundColor: colors.surface.subtle, borderColor: colors.border.strong, borderWidth: 1 },
-        continueText: { color: palette.white, fontSize: 15, fontWeight: '700' as const, textAlign: 'center' as const },
+        continueText: { color: colors.text.onBrand, fontSize: 15, fontWeight: '700' as const, textAlign: 'center' as const },
         continueTextOff: { color: colors.text.secondary },
         notNowBtn: { backgroundColor: colors.surface.card, borderColor: colors.border.strong, borderWidth: 1, borderRadius: 10, minHeight: 48, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center' as const, justifyContent: 'center' as const },
         notNowText: { color: colors.text.heading, fontSize: 15, fontWeight: '600' as const, textAlign: 'center' as const },

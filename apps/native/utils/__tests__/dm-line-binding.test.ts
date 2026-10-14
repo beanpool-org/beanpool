@@ -4168,6 +4168,24 @@ describe('a node can\'t make the phone keep unbounded pins, and the gate holds o
         expect(await sendTo(dmB.id, 'And Ben', [ben, cat, puppet])).toEqual({ err: null, posts: 1, readBy: ['Ben'] });
     }, 300_000);
 
+    for (const resetFirst of [false, true]) {
+        it(`R2 on the banner (slice 2): ${resetFirst ? 'after the member\'s reset, the screen\'s check reports the pause as the reset\'s and the banner opens with the reset\'s sentence' : 'control, no reset: the restored-phone sentence'}`, async () => {
+            const e = await firstMetWithBensLines();
+            if (resetFirst) {
+                expect(await resetB()).toBe('set-aside');
+                await syncMessages(ana.publicKey);
+            }
+            const change = await dbPort.getDmKeyChange(e.id);
+            expect(change).toMatchObject({ offeredPeer: puppet.publicKey, firstSight: true });
+            expect(!!change!.afterReset).toBe(resetFirst);
+            const body = dmKeyChangeCopy({ peerName: 'Ben', code: 'x', firstSight: change!.firstSight, afterReset: change!.afterReset }).body;
+            expect(body.startsWith(resetFirst
+                ? "This community's chat memory was reset, so this phone is checking this chat from the start."
+                : 'This phone is checking this chat from the start, as it does after you restore it or update the app.')).toBe(true);
+            expect(await sendTo(e.id, 'The code is 4821')).toEqual(paused);
+        });
+    }
+
     it('U6 the gate is for DMs only: with the pin store unreadable, a push tap for a group the phone doesn\'t hold writes the group\'s row, so it routes as the group it is', async () => {
         await phoneOf(ana);
         const group = { id: randomUUID(), type: 'group_thread', participants: [ana.publicKey, ben.publicKey] };

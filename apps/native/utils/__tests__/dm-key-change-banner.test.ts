@@ -42,7 +42,7 @@ vi.mock('../db', () => ({}));
 import { lightColors, darkColors } from '../../constants/colors';
 import { DmKeyChangedBanner } from '../../components/chat/DmKeyChangedBanner';
 import { MyKeyCodeCard } from '../../components/MyKeyCodeCard';
-import { dmKeyChangeStyleSpec, DM_KEY_CHANGE_TEXT_ON, DM_KEY_CHANGE_TOUCH_TARGETS, dmKeyChangeCopy, rekeyedOnText, DM_FIRST_SIGHT_LEAD, dmKeyBannerMaxHeight, dmThreadFloor, DM_KEY_BANNER_FLOOR } from '../dm-key-change';
+import { dmKeyChangeStyleSpec, DM_KEY_CHANGE_TEXT_ON, DM_KEY_CHANGE_TOUCH_TARGETS, dmKeyChangeCopy, rekeyedOnText, DM_FIRST_SIGHT_LEAD, DM_RESET_LEAD, dmKeyBannerMaxHeight, dmThreadFloor, DM_KEY_BANNER_FLOOR } from '../dm-key-change';
 import { keyCodeOf, keyCodeSpoken } from '../key-code';
 
 const CODE = /^\d{4} \d{4} \d{4} \d{4} \d{4}$/;
@@ -126,9 +126,17 @@ describe.each([['light', lightColors], ['dark', darkColors]] as const)('the key-
         expect(rekeyedOnText('not a date')).toBeNull();
     });
 
+    it('a first-sight pause the re-seed made after the member\'s reset opens with the reset\'s sentence in the restored-phone sentence\'s place (§3.4 amendment 7 §1)', () => {
+        render(createElement(DmKeyChangedBanner, { peerName: 'Ben', change: { offeredPeer: newKey, firstSight: true, afterReset: true }, onContinue: vi.fn(), onNotNow: vi.fn() }));
+        expect(host.textContent).toContain("This community's chat memory was reset, so this phone is checking this chat from the start. The earlier messages here came from a different key than the one this community now gives for Ben.");
+        expect(host.textContent).not.toContain(DM_FIRST_SIGHT_LEAD);
+        expect(DM_RESET_LEAD).toBe("This community's chat memory was reset, so this phone is checking this chat from the start.");
+    });
+
     it('a change after a sync (not first sight) never says the phone is checking from the start', () => {
         render(createElement(DmKeyChangedBanner, { peerName: 'Ben', change: { offeredPeer: newKey, firstSight: false }, onContinue: vi.fn(), onNotNow: vi.fn() }));
         expect(host.textContent).not.toContain(DM_FIRST_SIGHT_LEAD);
+        expect(host.textContent).not.toContain(DM_RESET_LEAD);
         expect(host.textContent).not.toContain('This community says');
     });
 

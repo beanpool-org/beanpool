@@ -103,6 +103,9 @@ describe('Settings → Account → Chat memory at 320dp with 1.3× text (amendme
         expect(src).toMatch(/onPress=\{\(\) => setMode\('chatMemory'\)\}/);
         expect(src).toMatch(/\{mode === 'chatMemory' && \([\s\S]*?<ChatMemoryCard[\s\S]*?onReset=\{resetDmChatMemory\}/);
         expect(CHAT_MEMORY_COPY.row).toBe('Chat memory');
+        // §3.4 amendment 7 §1 and §5: true as written once the reset judges before it trusts, each pinned word for word.
+        expect(CHAT_MEMORY_COPY.body).toBe("This phone remembers who each of your chats in a community is with, so the community can't quietly swap the person behind a chat. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.");
+        expect(chatMemoryDoneLine('Castlemaine')).toBe('Reset. Every chat in Castlemaine is checked again from the start.');
     });
 
     it.each([['light', lightColors], ['dark', darkColors]] as const)('%s: every line whole, buttons full width and stacked, the reset asked first in place and then done', async (_name, colors) => {

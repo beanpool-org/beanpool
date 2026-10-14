@@ -24,7 +24,7 @@ export function DmKeyChangedBanner({ peerName, change, onContinue, onNotNow }: D
     const [checked, setChecked] = useState(false);
     const [busy, setBusy] = useState(false);
     const code = keyCodeOf(change.offeredPeer);
-    const copy = dmKeyChangeCopy({ peerName, code, firstSight: change.firstSight, rekeyedAt: change.rekeyedAt });
+    const copy = dmKeyChangeCopy({ peerName, code, firstSight: change.firstSight, afterReset: change.afterReset, rekeyedAt: change.rekeyedAt });
     const canContinue = !!code && checked && !busy;
 
     const handleContinue = async () => {

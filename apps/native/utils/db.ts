@@ -5165,6 +5165,8 @@ export interface DmKeyChange {
      * a DM the update met with two keys in its rows), not a sync against a pin this phone already had.
      */
     firstSight: boolean;
+    /** True when that first-sight pause came from the re-seed after the member's reset (§3.4 amendment 7 §1): the banner says so. */
+    afterReset?: boolean;
     /** When the node says the account was re-keyed (slice 3). Only ever wording for the banner, never a reason to accept (pick 4). */
     rekeyedAt?: string;
     /**
@@ -5194,6 +5196,7 @@ export async function getDmKeyChange(conversationId: string): Promise<DmKeyChang
     if (!ctx?.keyChanged || !ctx.offered) return null;
     const name = (await callsignOfKey(ctx.peerEdPubHex)) ?? (await callsignOfKey(ctx.offered.peer));
     const change: DmKeyChange = { offeredPeer: ctx.offered.peer, firstSight: !!ctx.offered.firstSight, name };
+    if (ctx.offered.afterReset) change.afterReset = true;
     if (ctx.offered.nodeSays?.rekeyedAt) change.rekeyedAt = ctx.offered.nodeSays.rekeyedAt;
     return change;
 }

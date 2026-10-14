@@ -179,7 +179,7 @@ describe('rule 5\'s line under the DM box at 320dp with 1.3× text, light and da
 
 describe('amendment 6\'s two lines under the DM box at 320dp with 1.3× text, light and dark: a community\'s pins full, and pins this phone can\'t read', () => {
     it('a refused send shows each one word for word, as its own error says it', () => {
-        expect(DM_PINS_FULL_TEXT).toBe("This community lists more chats than this phone can keep track of, so a new chat here can't send. Your other chats here still can.");
+        expect(DM_PINS_FULL_TEXT).toBe("This community lists more chats than this phone can keep track of, so a chat you haven't sent in yet can't send. Your other chats here still can.");
         expect(DM_PIN_STORE_UNREAD_TEXT).toBe("This phone couldn't read who this community's chats are with, so nothing was sent. Try again; if it keeps failing, Settings → Account → Chat memory can reset this community's, which re-checks every chat here from the start.");
         expect(refusedSendNotice(new DmPinsFullError(), 'Ben')).toBe(DM_PINS_FULL_TEXT);
         expect(refusedSendNotice(new DmPinStoreError(), 'Ben')).toBe(DM_PIN_STORE_UNREAD_TEXT);

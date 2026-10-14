@@ -28,14 +28,39 @@ interface PairingSession {
 }
 
 const PAIRING_TTL_MS = 120_000; // 2 minutes
-// Live sessions on the whole server. Measured (#1950, the real functions, --expose-gc): ~0.7 KB a waiting session
-// (578 B here, 682 B in the review), so ~6-7 MB at the cap; one holding its largest payload ~17 KB, so ~170 MB only if
-// every session held one, which takes ~670 addresses for 2 minutes (init + transfer both spend the pairing bucket, 15 a
-// minute per address). At 500, ~17 addresses filled it for 2 minutes and pairing answered "at capacity" to everyone.
+// The relay's memory, measured (#1950: the real functions, --expose-gc, --max-old-space-size=512, the deciding review's
+// probes/relay-full.mts). Anyone can open a session and fill it without signing in, so the caps bound what an unsigned
+// sender can hold for the 2 minutes.
+// - Waiting sessions: ~0.55 KB each, so MAX_SESSIONS of them is +5.3 MB. At 500, ~17 addresses filled the relay and
+//   pairing answered "at capacity" to a hall; 10,000 takes ~670 (init + transfer both spend the pairing bucket, 15 a
+//   minute per address).
+// - A session holding a phone's payload until the computer fetches it was ~17 KB at the old 16,384-hex payload limit:
+//   10,000 of them +164 MB, on a 1 GB node with a 512 MB heap. MAX_HELD_PAYLOADS alone brings that to +21 MB, and
+//   the payload limit of 4,096 hex to +9.4 MB in all (10,000 waiting, 1,000 holding the largest payload allowed).
+//   4,096 is 2.6x the largest the phone builds (1,548 hex: a 32-character name in the costliest characters, the longest
+//   key and 24 of the longest words, through core's encryptPairingPayload; a 5-letter name and 12 words is 782).
+// A payload past MAX_HELD_PAYLOADS is refused with the busy answer, which the phone shows, and its session stays waiting
+// so the phone can try again; nobody else's held payload is ever dropped to make room.
 const MAX_SESSIONS = 10_000;
-const MAX_CIPHERTEXT_HEX_LEN = 16_384; // 16KB max encrypted payload
+const MAX_HELD_PAYLOADS = 1_000;
+const MAX_CIPHERTEXT_HEX_LEN = 4_096;
+const RELAY_BUSY = 'Pairing relay at capacity. Please try again shortly.';
+
+export const PAIRING_RELAY_LIMITS = {
+    sessions: MAX_SESSIONS,
+    heldPayloads: MAX_HELD_PAYLOADS,
+    ciphertextHex: MAX_CIPHERTEXT_HEX_LEN,
+} as const;
 
 const sessions = new Map<string, PairingSession>();
+/** The sessions holding a payload (status 'transferred'), so MAX_HELD_PAYLOADS is counted without a walk. */
+const held = new Set<string>();
+
+/** Every way a session ends goes through here, so `held` never counts one that is gone. */
+function dropSession(sessionId: string): void {
+    sessions.delete(sessionId);
+    held.delete(sessionId);
+}
 
 /**
  * Initializes a new pairing session requested by the desktop PWA.
@@ -50,21 +75,21 @@ export function initPairingSession(sessionId: string, desktopPubHex: string): { 
 
     // Capacity limit
     if (sessions.size >= MAX_SESSIONS) {
-        return { ok: false, error: 'Pairing relay at capacity. Please try again shortly.' };
+        return { ok: false, error: RELAY_BUSY };
     }
 
     // Clean up existing session if re-initialized
     const existing = sessions.get(sessionId);
     if (existing) {
         clearTimeout(existing.timer);
-        sessions.delete(sessionId);
+        dropSession(sessionId);
     }
 
     const now = Date.now();
     const expiresAt = now + PAIRING_TTL_MS;
 
     const timer = setTimeout(() => {
-        sessions.delete(sessionId);
+        dropSession(sessionId);
     }, PAIRING_TTL_MS);
 
     if (timer.unref) timer.unref();
@@ -115,12 +140,18 @@ export function transferPairingPayload(
         return { ok: false, error: `Invalid ciphertextHex (must be hex up to ${MAX_CIPHERTEXT_HEX_LEN} chars)` };
     }
 
+    // At most MAX_HELD_PAYLOADS wait for their computers (above). Past it, the busy answer; this session stays waiting.
+    if (held.size >= MAX_HELD_PAYLOADS) {
+        return { ok: false, error: RELAY_BUSY };
+    }
+
     session.status = 'transferred';
     session.payload = {
         mobilePubHex,
         nonceHex,
         ciphertextHex,
     };
+    held.add(sessionId);
 
     return { ok: true };
 }
@@ -149,7 +180,7 @@ export function pollPairingSession(sessionId: string): {
         // Schedule deletion within 15 seconds to allow retry resilience
         clearTimeout(session.timer);
         session.timer = setTimeout(() => {
-            sessions.delete(sessionId);
+            dropSession(sessionId);
         }, 15_000);
         if (session.timer.unref) session.timer.unref();
 
@@ -172,7 +203,7 @@ export function cancelPairingSession(sessionId: string): void {
     const session = sessions.get(sessionId);
     if (session) {
         clearTimeout(session.timer);
-        sessions.delete(sessionId);
+        dropSession(sessionId);
     }
 }
 
@@ -184,4 +215,5 @@ export function clearAllPairingSessions(): void {
         clearTimeout(session.timer);
     }
     sessions.clear();
+    held.clear();
 }

@@ -108,6 +108,18 @@ export const LIMITS = {
     restoresPerAccountPerDay: 5,
     depositsPerKeyPerDay: 10,
     ceremonyCallsPerAddressPerMinute: 20,
+    /**
+     * Signed member calls from one address (case 16 NOTE: none had a limit; each refusal costs a keyholder signature,
+     * each call a stored nonce). A phone makes a handful in a sign-in, so 60 a minute leaves room for many members behind
+     * one carrier's shared address. Counted before the signature is checked, so a flood costs neither.
+     */
+    signedCallsPerAddressPerMinute: 60,
+    /**
+     * `GET /v1/report` from one address (case 16 NOTE: unmetered; each one scans the copies table and asks the keyholder
+     * for a signature). Ten a second: what a poller reading it every 100 ms needs (handover.test.ts does; 10 a minute
+     * broke it), while one address can no longer ask for signatures as fast as it can send.
+     */
+    reportsPerAddressPerMinute: 600,
 } as const;
 
 export interface VaultApiOptions {
@@ -407,6 +419,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
         restores: new RateLimiter(LIMITS.restoresPerAccountPerDay, DAY_MS),
         deposits: new RateLimiter(LIMITS.depositsPerKeyPerDay, DAY_MS),
         ceremony: new RateLimiter(LIMITS.ceremonyCallsPerAddressPerMinute, 60_000),
+        signed: new RateLimiter(LIMITS.signedCallsPerAddressPerMinute, 60_000),
+        reports: new RateLimiter(LIMITS.reportsPerAddressPerMinute, 60_000),
     };
 
     // Tickets spent, by their `n`, until they expire. In memory: see auth.ts on restarts.
@@ -998,6 +1012,8 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
                 cancelled_at: null, released_at: null,
             };
             database.transaction(() => {
+                // A hold past its wait that its device never collected gives way to this one; that device's collect then
+                // answers `stopped` too, which the phone words as stopped or replaced (case 16 F6).
                 if (open) database.cancelHold(open.id, ctx.now);
                 database.insertHold(hold);
             });
@@ -1076,6 +1092,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
     });
 
     route('GET', '/v1/report', 'none', false, async ctx => {
+        limited(limits.reports.take(ctx.address, ctx.now), 'reports from this address');
         const database = await ensureDb();
         await rollReport(ctx.now);
         const text = reportText(ctx.now, counters.day, counters.counts, database, ctx.status);
@@ -1716,6 +1733,7 @@ export function createVaultApi(opts: VaultApiOptions): VaultApi {
             const raw = await readBody(req);
             const status = await keyholderStatus();
             if (!r.whenLocked && status.state !== 'open') throw new HttpError(503, 'locked', 'The key vault is locked.', { locked: true });
+            if (r.auth === 'signed') limited(limits.signed.take(clientAddress(req), now), 'requests from this address');
             if (r.auth !== 'none') {
                 const check = verifySignedRequest({ headers: req.headers, method, path: url.pathname, body: raw, hosts: opts.hosts, nonces, now });
                 if (!check.ok) throw new HttpError(check.status, check.code, check.error);

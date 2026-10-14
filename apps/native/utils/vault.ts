@@ -124,8 +124,10 @@ export const VAULT_MESSAGES = {
     wrongAccount: "The copy that came back doesn't make the account it belongs to, so nothing was saved. Your 12 words "
         + 'work any time.',
     notOpened: "The copy that came back didn't open with this sign-in, so nothing was saved. Your 12 words work any time.",
-    stopped: 'This restore was stopped from a phone or computer that has your account, so nothing came back. If that '
-        + "wasn't you, use your 12 words.",
+    // Also the answer when a newer restore of the same account, from another device, took this one's place (server.ts
+    // /v1/restore): F6, case 16, so it doesn't say a phone stopped it.
+    stopped: 'This restore was stopped, from a phone or computer that has your account or by a newer restore started on '
+        + "another device, so nothing came back. If that wasn't you, use your 12 words.",
     gone: 'This restore is no longer waiting at the key vault. Start again, or use your 12 words.',
     noCopy: "BeanPool's key vault keeps no copy for this sign-in account. Your 12 words work any time.",
     tooMany: 'Too many tries just now. Please try again later.',

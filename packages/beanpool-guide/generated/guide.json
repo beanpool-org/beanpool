@@ -1,7 +1,7 @@
 {
   "schema": 2,
-  "version": 131,
-  "hash": "583ae7994a55f0d941ed42e446da0f48c3e9b5368ca3309f2d48883c8a701dd1",
+  "version": 132,
+  "hash": "92dfee90ac6dee839f58b6eb0cc62b7add6ccb0d9d674c9b62041a9779ea3768",
   "sections": [
     {
       "id": "about",
@@ -1385,7 +1385,7 @@
           "type": "ul",
           "items": [
             "Tap **Communities near you** to see the whole list.",
-            "Communities are listed nearest first when the app knows where you are. If it doesn't, tap **Use my location**, or search by name.",
+            "Communities are listed nearest first when the app knows where you are. If it doesn't, tap **Use my location**, or search by name. Rather not share your location? Tap **or type your town**, start typing, and pick your town from the list: only a rough point is kept, and **change** picks another.",
             "Each one shows how far away it is and how many members it has, when the community has said."
           ]
         },
@@ -1955,7 +1955,7 @@
           "items": [
             "your name, when you joined and your bio;",
             "your trust badge, how many trades you have done, with how many people, and how many you finished;",
-            "star ratings and reviews from people you traded with;",
+            "star ratings and reviews from people you traded with (nobody else can see who wrote a review);",
             "your posts."
           ]
         },
@@ -3958,12 +3958,27 @@
           "type": "ul",
           "items": [
             "In **Community**, tap **+ Add** next to a name. It changes to **Added**. Tap **Added** to take them off again.",
-            "In **Friends**, tap the message button to start a chat, or the remove button, then **Remove**, to take someone off."
+            "In **Friends**, tap the message button to start a chat, or the remove button, then **Remove**, to take someone off.",
+            "When someone adds you, the top of **Friends** says who, such as \"Sam added you\", with **Add back**. Tap their name to see their profile first. There is no notification. The line goes when you add them back, or after 30 days. Up to 20 are shown, then how many more.",
+            "You can add up to 100 people in any 24 hours. Taking someone off counts too. If you reach it, the app says so and when you can add someone again.",
+            "You can't add someone you have blocked: unblock them first. See \"Blocking someone\"."
           ]
         },
         {
           "type": "p",
           "text": "Friends are a shortcut for you. If you choose **Friends** for your contact details, only they can see them. See \"Your profile\"."
+        },
+        {
+          "type": "h2",
+          "text": "Connections in common"
+        },
+        {
+          "type": "p",
+          "text": "A member's profile can show **connections in common**: people you can ask about them. Someone is shown there only when you are friends both ways with someone who is friends both ways with them. That means you and that person have added each other, and that person and the member have added each other too. Adding someone on your own never puts anyone there, and nor does someone adding you. Up to 12 are shown. Tap a name to see their profile."
+        },
+        {
+          "type": "p",
+          "text": "You can choose not to be shown as anyone's connection in common. In Settings, under **Legal & Privacy**, turn off **Show me as a connection in common**. Then nobody sees your name there, and you are not counted. It is on until you turn it off. See \"Your privacy\"."
         },
         {
           "type": "h2",
@@ -5584,7 +5599,7 @@
           "type": "ul",
           "items": [
             "Your name, photo, bio, when you joined and when you were last active.",
-            "Your trust badge, your reviews, and your trust profile: how many of your trades were finished and how many were cancelled, and the share finished, how many Bean payments you have sent to or received from members plus the trades you have finished, with how many different members you have paid, been paid by or traded with, how many payments and trades you have done with the member looking, and your Trust Points. The admins see it as any member does, and it isn't logged.",
+            "Your trust badge, your reviews (nobody else can see who wrote a review), and your trust profile: how many of your trades were finished and how many were cancelled, and the share finished, how many Bean payments you have sent to or received from members plus the trades you have finished, with how many different members you have paid, been paid by or traded with, how many payments and trades you have done with the member looking, and your Trust Points. The admins see it as any member does, and it isn't logged.",
             "Your posts, and where their pins are. See \"Where your pin goes\".",
             "How you voted on a Poll, but only on a Poll its creator made an **open vote**. Polls are anonymous otherwise, and votes on **Decisions** are always secret."
           ]
@@ -5626,6 +5641,8 @@
           "type": "ul",
           "items": [
             "**Contact details:** in your profile, choose **Who can see this?**: **Hidden**, **Trade Partners**, **Friends** or **Community**. See \"Your profile\".",
+            "**Connections in common:** when you and two people have each added each other, each of them can see your name on the other's profile, as someone they can ask. In Settings, under **Legal & Privacy**, turn off **Show me as a connection in common** and nobody sees your name there. It is on until you turn it off. See \"People and friends\".",
+            "**Who added you:** when you add someone, they see a line on their People tab saying you added them, so they can add you back. They are not sent a notification.",
             "**Location:** in Settings, under **App Settings**, turn **Location** on to use your position for the map and nearby posts. To turn it off, change it in your phone's own settings; the app shows you how.",
             "**Your area** (on the global community): in Settings, under **Your area**, see the area you gave, about 10 km around a town or two numbers, or **Not set**. **Clear** removes it. Below it, **Roughly where are you?** sets a new one with **Use my location** or **Type a town or suburb**, and **Cancel** (in a browser, **← Back to Settings**) leaves it as it is. Only the rounded area is ever sent. Other members see how far away you are, and a poll you make is shown at your area. Without one, you see the newest listings worldwide, and members nearby won't see a poll you make in their list, though they can still find it by searching. See \"Your area\".",
             "**App Lock:** asks for your phone's screen lock (its PIN, pattern, password, fingerprint or face) when the app opens, and when you come back to it after 15 seconds or more away. The lock covers the app's screens and pop-ups. On an iPhone it also closes a web page the app opened, such as your community's Settings from **Manage**. It can't cover a web page the app opened on an Android phone, which opens outside the app, or the panel for sharing something on either phone: close them before you put your phone down. Your community's Settings, opened from **Manage**, signs you out after 15 minutes unused. While App Lock is on, the app goes blank as you leave it, and comes back when you return. It needs a screen lock on the phone: without one there is nothing for it to ask.",
@@ -6042,6 +6059,7 @@
             "If they ask for a deal on one of your listings, the request waits in your deals with no notification. If you leave it, it ends after 7 days, also with no notification.",
             "If they accept one of your Offers straight away, you get no notification, and none if they then cancel that deal. The deal still shows in your deals, and its messages in your chat with them, as with anyone. Their Beans are held and given back as usual.",
             "They cannot make a listing addressed only to you.",
+            "You can't add them. If they add you, you aren't told. If they had added you, the \"added you\" line on your People tab goes. Your friends no longer see you as a connection in common on their profile.",
             "If they send you Beans with a note, the Beans arrive in full and the note does not. You see \"Beans from a member you blocked\" instead, and you still do after you unblock them."
           ]
         },
@@ -6053,6 +6071,7 @@
           "type": "ul",
           "items": [
             "They are not told. To them, their messages look sent, and so do the notes with their Beans.",
+            "It does not end the friendship: they still have you as a friend, and if your contact is set to Friends they still see it. To end that too, take them off your Friends tab on the phone; on the web, where a blocked member is hidden from your lists, unblock them, take them off your friends, then block them again. They can notice a removal.",
             "Group chats, event chats and project and enterprise chats are shared: everyone in them sees the same messages. Their messages there still show, to you as to everyone else.",
             "A deal you already have with them goes on as before, with its notices and notifications.",
             "If you have traded with them before, they can still send you Beans. Every Bean arrives, with no notification.",
@@ -6113,17 +6132,12 @@
           "text": "Then:"
         },
         {
-          "type": "ul",
-          "items": [
-            "**A Market post:** choose a reason (**Spam or scam**, **Offensive content**, **Misleading post**, **Child safety** or **Other**), add a few words if they help, and tap **Submit Report**.",
-            "**A Pulse post:** choose a reason and tap **Submit report**.",
-            "**An event:** tap **Report** to confirm.",
-            "**A project or an enterprise:** type why, and tap **Submit Report**."
-          ]
+          "type": "p",
+          "text": "Choose a reason (**Spam or scam**, **Offensive content**, **Misleading post**, **Child safety** or **Other**), add a few words if there is a box for them, and tap **Submit report**. Every report screen offers the same reasons, in the phone app and the web app."
         },
         {
           "type": "p",
-          "text": "**Child safety** is for a child at risk, or sexual content involving a minor. Choose it whenever that is what you saw, even if another reason fits too: the people who run your community's server are told at once and look at it first. Their alert says only that a report came in. In the Reports queue, your community's moderators see it as they see any report: the reason you chose, any words you added, and that it came from you. Nobody else is told who reported. If you already reported a Market or Pulse post with another reason, report it again and choose **Child safety**. If a child is in danger right now, call your local emergency number first."
+          "text": "**Child safety** is for a child at risk, or sexual content involving a minor. Choose it whenever that is what you saw, even if another reason fits too: the people who run your community's server are told at once and look at it first. Their alert says only that a report came in. In the Reports queue, your community's moderators see it as they see any report: the reason you chose, any words you added, and that it came from you. Nobody else is told who reported. If you already reported it with another reason, report it again and choose **Child safety**. If a child is in danger right now, call your local emergency number first."
         },
         {
           "type": "h2",
@@ -6365,7 +6379,7 @@
         },
         {
           "type": "p",
-          "text": "When the app is light, **Light Color Scheme** lets you choose **Classic**, **Earth** or **Slate**."
+          "text": "There is one set of colours for light and one for dark."
         },
         {
           "type": "p",

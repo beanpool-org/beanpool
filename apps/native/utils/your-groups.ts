@@ -337,6 +337,20 @@ export function inviteLandingPhase(s: {
     return 'ready';
 }
 
+/**
+ * The landing's "Convenor: X": from the roster's faces when they were read, else from the group's own card. Where anyone
+ * can join in a minute (openMembership) an invitee's faces read is refused, and the card still names its convenor
+ * (#1939 review N4). Null when neither does.
+ */
+export function inviteLandingConvenor(
+    active: ReadonlyArray<{ role: string; callsign?: string | null; memberPubkey: string }>,
+    card: { convenorCallsign?: string | null } | null | undefined,
+): string | null {
+    const fromRoster = active.find(m => m.role === 'convenor');
+    if (fromRoster) return fromRoster.callsign || fromRoster.memberPubkey.slice(0, 6);
+    return card?.convenorCallsign || null;
+}
+
 /** "Garden Crew · 4 members": the facts line, from the node's answer or the tap's preview. */
 export function inviteLandingFacts(p: { category?: string | null; memberCount?: number | null; joinPolicy?: string | null }): string {
     const bits: string[] = [];

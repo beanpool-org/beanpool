@@ -57,7 +57,8 @@ const realLoad = (Module as any)._load;
 };
 afterAll(() => { (Module as any)._load = realLoad; });
 
-import { getDb, getMemberRatings, REVIEWS_READ_KEPT } from '../db';
+import { getDb, getMemberRatings } from '../db';
+const REVIEWS_READ_KEPT = 300; // db.ts keeps the 300 members read last (module-private there)
 
 const ANA = 'b'.repeat(64);
 const BEN = 'c'.repeat(64);

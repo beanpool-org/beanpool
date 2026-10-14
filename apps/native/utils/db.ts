@@ -5896,7 +5896,7 @@ export async function submitRating(raterPublicKey: string, targetPublicKey: stri
 
 /** How many members' reviews the phone keeps as the node last answered (member_reviews_read): the market draws
  *  PostAuthorTrust on every card, about 120 a screen. */
-export const REVIEWS_READ_KEPT = 300;
+const REVIEWS_READ_KEPT = 300; // not exported: utils/__tests__/net-spy-db.ts stands in only for string exports (the test uses 300)
 
 type MemberRatings = { ratings: any[]; average: number; count: number; asProvider: { average: number; count: number }; asReceiver: { average: number; count: number } };
 

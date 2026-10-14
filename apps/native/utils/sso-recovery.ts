@@ -280,10 +280,13 @@ export async function recoverAccountWithSso(options: {
         createdAt: new Date().toISOString(),
     };
 
-    // 2. Open recovery collection
+    // 2. Open recovery collection. With one account listed, for that account's key (`candidatePublicKey`): the community
+    // opens it even when another account holds the same name in another case (routes/recovery-collect.ts resolveCallsign).
+    // With several, by the name alone, as before: this screen has no list to pick from.
     options.onProgress?.({ step: 'opening', message: 'Connecting to node recovery session...' });
     const openRes = await signedPost(finalAnchorUrl, '/api/recovery/collect', {
         callsign: rawCallsign,
+        ...(restorable.length === 1 ? { candidatePublicKey: restorable[0].publicKey } : {}),
     }, ephIdentity);
 
     if (!openRes.ok) {

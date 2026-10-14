@@ -78,9 +78,9 @@ describe('a community’s address', () => {
 
 describe('the requests', () => {
     it('communities near a point go to the global node, public, nearest first by the point', async () => {
-        answer = () => ({ status: 200, body: { communities: [row()], total: 1 } });
+        answer = () => ({ status: 200, body: { communities: [row()], total: 1, fetchedAt: '2026-10-14T08:00:00.000Z' } });
         const r = await fetchCommunities({ point: { lat: -28.55123, lng: 153.49876 }, q: ' Mullum ', limit: 20 });
-        expect(r).toEqual({ ok: true, value: { communities: [readCommunity(row())], total: 1 } });
+        expect(r).toEqual({ ok: true, value: { communities: [readCommunity(row())], total: 1, fetchedAt: '2026-10-14T08:00:00.000Z' } });
         expect(sent[0].url).toBe(`${GLOBAL_NODE_URL}/api/global/communities?lat=-28.5512&lng=153.4988&q=Mullum&limit=20`);
         expect(sent[0].headers['X-Signature']).toBeUndefined();
     });
@@ -120,8 +120,9 @@ describe('the requests', () => {
 });
 
 describe('the "Find your community" card, in each state', () => {
+    const LOADED = '2026-10-14T08:00:00.000Z';
     const home = (over: Partial<GlobalHome>): Fetched<GlobalHome> => ({
-        ok: true, value: { point: 'request', communities: [], communityCount: 0, nearbyPosts: null, watches: null, ...over },
+        ok: true, value: { point: 'request', communities: [], communityCount: 0, nearbyPosts: null, watches: null, directoryFetchedAt: LOADED, ...over },
     });
 
     it('loading', () => {
@@ -144,16 +145,31 @@ describe('the "Find your community" card, in each state', () => {
             .toBe('10 communities are listed. Use your location, or type your town, to see the nearest.');
     });
 
-    it('nothing near: start one, or be told', () => {
-        expect(findCommunityCardCopy(home({ communityCount: 10 }), true).body)
-            .toBe('No community is listed near you yet. Start one, or ask to be told when one starts here.');
+    it('nothing near, the directory loaded: the one "none" sentence (the buttons carry Start and Tell me)', () => {
+        expect(findCommunityCardCopy(home({ communityCount: 10 }), true).body).toBe('No community near you yet.');
+        expect(findCommunityCardCopy(home({ communityCount: 0 }), true).body).toBe('No community near you yet.');
+        expect(findCommunityCardCopy(home({ point: null, communityCount: 0 }), false).body).toBe('No community near you yet.');
     });
 
-    it('empty directory: no community near you yet — start one', () => {
-        expect(findCommunityCardCopy(home({ communityCount: 0 }), true).body)
-            .toBe('No community near you yet — start one');
-        expect(findCommunityCardCopy(home({ point: null, communityCount: 0 }), false).body)
-            .toBe('No community near you yet — start one');
+    it('far is not near: Lismore at 12,489 km is named with its distance under "No community near you yet" (rehearsal B2)', () => {
+        const lismore = readCommunity(row({ key: 'l', name: 'Lismore', distanceKm: 12_489 }))!;
+        const lyon = readCommunity(row({ key: 'm', name: 'Byron', distanceKm: 12_530 }))!;
+        expect(findCommunityCardCopy(home({ communities: [lismore, lyon], communityCount: 10 }), true).body)
+            .toBe('No community near you yet. The nearest listed is Lismore, 12,489 km away.');
+        expect(findCommunityCardCopy(home({ communities: [readCommunity(row({ distanceKm: 250 }))!], communityCount: 1 }), true).body)
+            .toBe('Mullumbimby is 250 km away. Ask to join, and trade with your neighbours there.');
+    });
+
+    it('before the node has fetched the directory: never "none" (privacy review M3)', () => {
+        // The node's measured answer in the first hour after a boot: communities [], count 0, directoryFetchedAt null.
+        for (const over of [{ communityCount: 0 }, { communityCount: 10 }, { point: 'area' as const, communityCount: null }]) {
+            const body = findCommunityCardCopy(home({ ...over, directoryFetchedAt: null }), true).body;
+            expect(body).toBe("The list of communities isn't available right now. Try again soon.");
+            expect(body).not.toMatch(/No community/);
+        }
+        // A count it did send is still said: 3 are listed, from no point.
+        expect(findCommunityCardCopy(home({ point: null, communityCount: 3, directoryFetchedAt: null }), false).body)
+            .toBe('3 communities are listed. Use your location, or type your town, to see the nearest.');
     });
 
     it('says nothing of Beans in any state (there are none on the global node)', () => {
@@ -175,8 +191,12 @@ describe('the "Find your community" card, in each state', () => {
     });
 
     it('reads the card’s answer, dropping what isn’t what it claims', () => {
+        // A count that isn't one is unknown, never 0; no fetch time is never fetched.
         expect(readGlobalHome({ point: 'elsewhere', communities: [row(), { nope: 1 }], communityCount: 'x', nearbyPosts: { count: 3 }, watches: 'no' }))
-            .toEqual({ point: null, communities: [readCommunity(row())], communityCount: 0, nearbyPosts: null, watches: null });
+            .toEqual({ point: null, communities: [readCommunity(row())], communityCount: null, nearbyPosts: null, watches: null, directoryFetchedAt: null });
+        expect(readGlobalHome({ point: 'request', communities: [], communityCount: 0, directoryFetchedAt: '2026-10-14T08:00:00.000Z' }))
+            .toMatchObject({ communityCount: 0, directoryFetchedAt: '2026-10-14T08:00:00.000Z' });
+        expect(readGlobalHome({ point: 'request', communities: [] })!.communityCount).toBeNull();
         expect(readGlobalHome({})).toBeNull();
     });
 });

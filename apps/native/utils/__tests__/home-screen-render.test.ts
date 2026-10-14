@@ -942,6 +942,38 @@ describe('every line on Home opens a screen this node shows, with what the line 
         });
     }
 
+    // Find your community on the real screen (rehearsal B2, privacy review M3): far is not near, Start leads when nothing
+    // listed is near, and nothing says "none" before the node has fetched the directory.
+    const findCard = () => document.querySelector('[data-testid="home-card-find"]') as HTMLElement;
+    const findButtons = () => Array.from(findCard().querySelectorAll('button')).map(b => b.getAttribute('data-testid'));
+    it('Find your community, a member in Nairobi: Lismore 12,489 km away is named as far, and Start a community leads', async () => {
+        const base = everyCard('global', 1);
+        const lismore = { ...(base.cards.find!.communities[0] as Record<string, unknown>), name: 'Lismore', distanceKm: 12_489 };
+        node.answer = { ...base, cards: { ...base.cards, find: findBody({ communities: [lismore] }) } };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        expect(findCard().textContent).toContain('No community near you yet. The nearest listed is Lismore, 12,489 km away.');
+        expect(findCard().textContent).not.toMatch(/Lismore is 12,489/);
+        expect(findButtons().slice(0, 2)).toEqual(['home-find-start', 'home-find-near']);
+    });
+
+    it('Find your community, near: Communities near you leads, Start follows', async () => {
+        node.answer = everyCard('global', 1);
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        expect(findCard().textContent).toContain('Byron Shire BeanPool is 12 km away.');
+        expect(findButtons().slice(0, 2)).toEqual(['home-find-near', 'home-find-start']);
+    });
+
+    it('Find your community before the node has fetched the directory: no "none", the truth', async () => {
+        const base = everyCard('global', 1);
+        node.answer = { ...base, cards: { ...base.cards, find: findBody({ communities: [], communityCount: 0, directoryFetchedAt: null }) } };
+        mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');
+        await render();
+        expect(findCard().textContent).toContain("The list of communities isn't available right now. Try again soon.");
+        expect(findCard().textContent).not.toMatch(/No community/);
+    });
+
     it('a poll and no Decision on a local node: the polls line opens the Market\'s polls, not Decide (which lists Decisions only)', async () => {
         node.answer = { ...localMember(), cards: { ...localMember().cards, decide: { open: 0, soonestClosesAt: null, polls: 1, pollsMore: false } } };
         mem.store.set(homeHintStoreKey(who.identity.publicKey), '1');

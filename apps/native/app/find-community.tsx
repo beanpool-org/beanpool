@@ -21,7 +21,7 @@ import {
 import { joinAnotherCommunity, joinedNudge, PROTECT_REDIRECT, HOME_REDIRECT } from '../utils/join-another-community';
 import { claimProbeOrigin, claimRouteFor } from '../utils/claim-link';
 import { readClaimStatus } from '../utils/node-claim';
-import { FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, type AddressResult } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, FIND_TOWN_SEARCH_WORDS, NOT_HERE_TYPE_YOUR_TOWN, TYPE_YOUR_TOWN, findCommunityState, type AddressResult } from '@beanpool/core';
 import { AddressSearch } from '../components/AddressSearch';
 import { readTypedPlace, saveTypedPlace, forgetTypedPlace, nearLine, LOCATION_NOTES, type TypedPlace } from '../utils/typed-place';
 
@@ -149,6 +149,8 @@ export default function FindCommunityScreen() {
     const [query, setQuery] = useState('');
     const [communities, setCommunities] = useState<DirectoryCommunity[] | null>(null);
     const [listError, setListError] = useState<string | null>(null);
+    // When the node last fetched the directory: until it has, an empty list is unknown, never "none" (M3).
+    const [listFetchedAt, setListFetchedAt] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const listAsk = useRef(0);
 
@@ -158,7 +160,7 @@ export default function FindCommunityScreen() {
         const r = await fetchCommunities({ point, q: query.trim() || undefined, limit: LIST_LIMIT });
         if (mine !== listAsk.current) return;
         setLoading(false);
-        if (r.ok) { setCommunities(r.value.communities); setListError(null); }
+        if (r.ok) { setCommunities(r.value.communities); setListFetchedAt(r.value.fetchedAt); setListError(null); }
         else { setCommunities([]); setListError(r.message); }
     }, [point, query]);
 
@@ -412,6 +414,10 @@ export default function FindCommunityScreen() {
     };
 
     const listed = communities ?? [];
+    // Nearest first from a place, with no name typed, and the nearest past 250 km: say so above the list (B2).
+    const farLine = point && !query.trim() && findCommunityState({ communities: listed, point: 'request', directoryFetchedAt: listFetchedAt }) === 'far'
+        ? `${FIND_COMMUNITY_WORDS.noneNear} ${FIND_COMMUNITY_WORDS.farLead(listed.length)}`
+        : null;
     const askedNotListed = asked.filter(a => !listed.some(c => c.url === a.url));
 
     return (
@@ -529,10 +535,12 @@ export default function FindCommunityScreen() {
                             </Pressable>
                         </View>
                     ) : listed.length === 0 ? (
-                        <Text style={styles.empty}>
-                            {query.trim() ? 'No community by that name is listed.' : 'No community is listed yet.'}
+                        <Text style={styles.empty} testID="find-empty">
+                            {!listFetchedAt ? FIND_COMMUNITY_WORDS.notLoaded : query.trim() ? 'No community by that name is listed.' : FIND_COMMUNITY_WORDS.noneNear}
                         </Text>
-                    ) : listed.map(c => (
+                    ) : [
+                        farLine ? <Text key="far" style={styles.empty} testID="find-far">{farLine}</Text> : null,
+                        ...listed.map(c => (
                         <View key={c.key} style={styles.card}>
                             <Text style={styles.name} numberOfLines={2}>{communityLabel(c)}</Text>
                             {!!communityFacts(c) && <Text style={styles.facts}>{communityFacts(c)}</Text>}
@@ -543,7 +551,8 @@ export default function FindCommunityScreen() {
                             )}
                             {renderKnock(c.url, c.name, c)}
                         </View>
-                    ))}
+                    )),
+                    ]}
                 </View>
 
                 <Text style={styles.sectionLabel}>NOTHING NEAR YOU?</Text>

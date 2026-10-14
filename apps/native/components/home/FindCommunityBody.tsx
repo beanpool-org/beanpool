@@ -6,7 +6,7 @@ import type { BeanPoolIdentity } from '../../utils/identity';
 import {
     communityFacts, communityLabel, findCommunityCardCopy, nearbyPostsLine, watchPlace, type GlobalHome, type Point,
 } from '../../utils/community-directory';
-import { TYPE_YOUR_TOWN } from '@beanpool/core';
+import { FIND_COMMUNITY_WORDS, TYPE_YOUR_TOWN, findCommunityState } from '@beanpool/core';
 import { cardKnockLines, readKnockStatus, type KnockStatusResult, type RememberedKnock } from '../../utils/knock';
 import { FabAware, HomeButton, HomeLink, homeStyles } from './HomeParts';
 
@@ -52,6 +52,12 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
     const others = home.communities.slice(1, 3);
     const lines = cardKnockLines(knocks, statuses);
     const watching = watched || (home.watches?.length ?? 0) > 0;
+    // Nothing listed near (and the list loaded): Start a community leads, as the web's card does (rehearsal B2).
+    const state = findCommunityState(home);
+    const startFirst = state === 'none' || state === 'far';
+    const start = (
+        <HomeButton key="start" primary={startFirst} colors={colors} text={FIND_COMMUNITY_WORDS.start} onPress={() => router.push('/start-community')} testID="home-find-start" />
+    );
 
     const tellMe = async () => {
         if (!point || !identity) { router.push('/find-community'); return; }
@@ -74,8 +80,9 @@ export function FindCommunityBody({ home, knocks, identity, nodeUrl, point, colo
             ))}
             {!!watchNote && <Text style={[s.rowLine, { marginTop: 6 }]} accessibilityLiveRegion="polite" testID="home-find-watch-note">{watchNote}</Text>}
             <FabAware id="find:actions" style={s.buttonRow}>
-                <HomeButton primary colors={colors} text="Communities near you" onPress={() => router.push('/find-community')} testID="home-find-near" />
-                <HomeButton colors={colors} text="Start a community" onPress={() => router.push('/start-community')} testID="home-find-start" />
+                {startFirst && start}
+                <HomeButton primary={!startFirst} colors={colors} text="Communities near you" onPress={() => router.push('/find-community')} testID="home-find-near" />
+                {!startFirst && start}
                 {!watching && (
                     <HomeButton colors={colors} text="Tell me when one starts here" a11y="Tell me when a community starts near here"
                         onPress={() => void tellMe()} testID="home-find-watch" />

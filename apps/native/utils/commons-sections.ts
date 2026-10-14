@@ -129,6 +129,15 @@ export function commonsGroupsEmpty(kind: GroupKind, features: NodeFeatures | nul
     return { title: 'No other groups yet', desc: 'Start one with +: a chat group, a project or an enterprise.', action: 'group' };
 }
 
+/**
+ * Whether the Commons "+" starts a project or an enterprise rather than a group: on Groups, on their chip, and only
+ * where this node lists them (enterprisesOn, as the chips and the empty state). A link that asked for Enterprises picks
+ * that chip even where they are off (the global node), and the "+" then opened a Beans form the node refuses.
+ */
+export function commonsPlusStartsProject(section: CommonsSection, kind: GroupKind, features: NodeFeatures | null | undefined): boolean {
+    return section === 'groups' && enterprisesOn(features) && (kind === 'projects' || kind === 'enterprises');
+}
+
 /** Whether Talk's Groups view offers "Find groups": only where the Commons tab, which has them, is hidden. */
 export function findGroupsInTalk(features: NodeFeatures | null | undefined): boolean {
     return hiddenTabsFor(features).includes('projects');

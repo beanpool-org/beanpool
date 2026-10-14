@@ -1231,7 +1231,7 @@ export default function PostDetailModal() {
                             {/* Type Toggle */}
                             <View style={styles.editTypeRow}>
                                 <Pressable accessibilityRole="button" accessibilityState={{ selected: editType === 'offer' }} style={[styles.editTypeBtn, editType === 'offer' && styles.editTypeBtnOffer]} onPress={() => setEditType('offer')}>
-                                    <Text style={[styles.editTypeBtnText, editType === 'offer' && styles.editTypeBtnTextActive]}>🔵 Offer</Text>
+                                    <Text style={[styles.editTypeBtnText, editType === 'offer' && styles.editTypeBtnTextActive]}>🟢 Offer</Text>
                                 </Pressable>
                                 <Pressable accessibilityRole="button" accessibilityState={{ selected: editType === 'need' }} style={[styles.editTypeBtn, editType === 'need' && styles.editTypeBtnNeed]} onPress={() => setEditType('need')}>
                                     <Text style={[styles.editTypeBtnText, editType === 'need' && styles.editTypeBtnTextActive]}>🟠 Need</Text>

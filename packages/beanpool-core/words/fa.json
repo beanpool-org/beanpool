@@ -13,7 +13,7 @@
     }
   },
   "Roughly where are you?": "تقریباً کجا هستید؟",
-  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "ما منطقه شما را فقط تا حدود ۱۰ کیلومتر نگه می‌داریم، نه مکان دقیقتان را. اعضای دیگر می‌بینند چقدر با شما فاصله دارند، و نظرسنجی‌ای که می‌سازید در منطقه شما نمایش داده می‌شود.",
+  "We keep your area to about 10 km, never your exact spot. Other members see how far away you are, and a poll you make is shown at your area.": "ما منطقه شما را فقط تا حدود 10 کیلومتر نگه می‌داریم، نه مکان دقیقتان را. اعضای دیگر می‌بینند چقدر با شما فاصله دارند، و نظرسنجی‌ای که می‌سازید در منطقه شما نمایش داده می‌شود.",
   "Use my location": "استفاده از مکان من",
   "Type a town or suburb": "نام یک شهر یا محله را بنویسید",
   "Skip for now": "فعلاً رد کردن",
@@ -21,5 +21,5 @@
   "Your area": "منطقه شما",
   "Not set": "تنظیم نشده",
   "The worldwide community shows you what's on offer near you: the nearest {max} listings within {km} km.": "جامعه جهانی نشان می‌دهد در نزدیکی شما چه چیزهایی عرضه می‌شود: {max} آگهی نزدیک‌تر در محدوده {km} کیلومتر.",
-  "About 10 km around {place}": "حدود ۱۰ کیلومتر دور و بر {place}"
+  "About 10 km around {place}": "حدود 10 کیلومتر دور و بر {place}"
 }

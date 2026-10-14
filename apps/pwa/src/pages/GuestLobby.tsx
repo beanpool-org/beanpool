@@ -183,7 +183,7 @@ export function GuestLobby({ info, onComplete, linkedPostId = null, onLinkedPost
                     ))}
                 </nav>
                 <div className="p-3 border-t border-nature-200 dark:border-nature-800 bg-nature-100/50 dark:bg-nature-900/50 flex items-center gap-2">
-                    {helpButton('shrink-0 min-w-[44px] min-h-[44px] rounded-xl text-nature-700 dark:text-nature-300 hover:bg-nature-200/60 dark:hover:bg-nature-800/60')}
+                    {helpButton('shrink-0 min-w-[44px] min-h-[44px] rounded-xl text-bp-ink-warning hover:bg-nature-200/60 dark:hover:bg-nature-800/60')}
                     {headerJoin('w-full min-h-[44px] rounded-xl text-sm')}
                 </div>
             </aside>

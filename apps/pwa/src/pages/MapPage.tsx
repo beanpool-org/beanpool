@@ -9,6 +9,7 @@
  *  - User location marker (pulsing purple dot)
  */
 
+import { offerNeedSubmit } from '../lib/offer-need-submit';
 import { placelessListingNote } from '@beanpool/core';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
@@ -45,9 +46,9 @@ import { NewAccountCard } from '../components/NewAccountCard';
 import { nodeRefusal, PROBATION_LIMIT, type NodeRefusal } from '../lib/node-refusal';
 import { composerVisitorNote, visitorsSeeListings } from '../lib/visitor-lobby';
 import { communityInfoOnce } from '../lib/visitor-lobby-gate';
-import { marked, useFeatureMode } from '../lib/features';
+import { marked, useCommunityInfo, useFeatureMode } from '../lib/features';
 import { LocalCommunityLine } from '../components/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
 import {
     CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
     eventInWindow, isEventHostView, isEventOpen, localInputToIso, type EventEditForm, type EventWindow,
@@ -196,6 +197,11 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     // Beans live in a local community here (preview or read-only, lib/features.ts): no price field, the line in its slot,
     // and the listing goes up free with its terms in the description (design §1 row 2). Live and hidden: as before.
     const priceMarked = marked(useFeatureMode('beans', !visitor));
+    // What a post needs first (@beanpool/core postRulesFor), from the node's own Beans switch as the node decides it: where
+    // Beans are off (the global node) a Need needs no Offer first and no photo, and no post waits for a profile photo.
+    // Until the node's info arrives, the local rules stand.
+    const nodeInfo = useCommunityInfo(!visitor);
+    const postRules = postRulesFor((nodeInfo?.features as { beans?: unknown } | undefined)?.beans !== false);
     const [newPostPriceType, setNewPostPriceType] = useState<'fixed' | 'hourly' | 'daily' | 'weekly' | 'monthly'>('fixed');
     const [newPostRepeatable, setNewPostRepeatable] = useState(false);
     const [newPostCashAlsoNeeded, setNewPostCashAlsoNeeded] = useState(false);  // #108
@@ -305,7 +311,8 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         return () => { cancelled = true; };
     }, [identity?.publicKey, canLoadBalance]);
 
-    const needBlocked = blockedFromTrading && newPostType === 'need';
+    const needBlocked = postRules.offerFirst && blockedFromTrading && newPostType === 'need';
+    const photoRequired = newPostType !== 'need' || postRules.needPhoto;
 
     // Names for the "Post as" choices, fetched only when a keeper opens the event form.
     useEffect(() => {
@@ -352,8 +359,14 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
     const tryOpenComposer = useCallback(async () => {
         // A visitor has no key to post with; the lobby's Join is the way.
         if (!identity) return;
-        const status = await getProfileStatus(identity);
-        if (!status.complete) {
+        // The Beans switch from the page's shared read, not this render's nodeInfo: opened from another tab (openNewPost),
+        // this runs on the first render, before the info has arrived. A read that fails keeps the local rules.
+        const [status, info] = await Promise.all([
+            getProfileStatus(identity),
+            Promise.resolve().then(() => communityInfoOnce()).catch(() => null),
+        ]);
+        if (!postRulesFor((info?.features as { beans?: unknown } | undefined)?.beans !== false).profilePhoto) status.missingAvatar = false;
+        if (status.missingName || status.missingAvatar) {
             setProfileGateMsg(`Your community likes to know who they're dealing with, so you need ${describeMissing(status)} before you can post. It only takes a moment.`);
             return;
         }
@@ -957,7 +970,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         if (!priceMarked && (newPostCredits.trim() === '' || isNaN(Number(newPostCredits)) || Number(newPostCredits) < 0)) errors.add('credits');
         if (!newPostDescription.trim()) errors.add('description');
         if (postLat == null || postLng == null) errors.add('location');
-        if (newPostPhotos.length < 1) errors.add('photos');
+        if (photoRequired && newPostPhotos.length < 1) errors.add('photos');
         setValidationErrors(errors);
         if (errors.size > 0) return;
 
@@ -1625,7 +1638,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         ? (posting || !newPostTitle.trim() || !eventStart || postLat == null)
         : newPostType === 'poll'
             ? (posting || !newPostTitle.trim() || pollOptions.filter(o => o.trim()).length < 2)
-            : (needBlocked || posting || !newPostTitle.trim() || !newPostDescription.trim() || newPostCredits === '' || postLat == null || newPostPhotos.length === 0);
+            : offerNeedSubmit({ type: newPostType === 'need' ? 'need' : 'offer', title: newPostTitle, description: newPostDescription, credits: newPostCredits, priceMarked, hasLocation: postLat != null, photoCount: newPostPhotos.length, photoRequired, needBlocked, posting }).disabled;
 
 
     return (
@@ -2610,7 +2623,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                             }`}
                         />
 
-                        {renderPhotoPicker(true)}
+                        {renderPhotoPicker(photoRequired)}
                     </>
                 )}
 
@@ -2639,10 +2652,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     {posting ? 'Posting...' :
                      newPostType === 'event' ? (postLat == null ? '📍 Map location required' : !newPostTitle.trim() || !eventStart ? '✏️ Add a title and start time' : eventEdit ? 'Save changes' : 'Create Event') :
                      newPostType === 'poll' ? '🗳️ Create Poll' :
-                     needBlocked ? '🔵 List an Offer first to post Needs' :
-                     postLat == null ? '📍 Map location required' :
-                     !newPostTitle.trim() || !newPostDescription.trim() || newPostCredits === '' ? '✏️ Fill required fields' :
-                     `Post ${newPostType === 'offer' ? 'Offer' : 'Need'}`}
+                     offerNeedSubmit({ type: newPostType === 'need' ? 'need' : 'offer', title: newPostTitle, description: newPostDescription, credits: newPostCredits, priceMarked, hasLocation: postLat != null, photoCount: newPostPhotos.length, photoRequired, needBlocked, posting }).label}
                 </button>
             </div>
         )}

@@ -5,7 +5,8 @@
  * Chromium at 320 x 569 with 130% text, light and dark (the header also at 360, 375, 390, 412 and 430 px, 100% and 130%
  * text). Fails on sideways scroll, a control under 44 px, words over four lines, contrast under 4.5:1, an axe (WCAG 2
  * A/AA) violation, a title whose box meets the real sync chip's or the pill's (or covers the "?"), a title not centred
- * in the room between them, a tab's title cut (the chip goes to its dot first; only Marketplace, no tab's name now, may
+ * in the room between them, a pill control (profile, "?", Settings) under 44 px tall or its icon under 3:1 on the pill,
+ * a tab's title cut (the chip goes to its dot first; only Marketplace, no tab's name now, may
  * be cut, with its ellipsis), a chip at its dot alone where the title fits beside its words, a chip whose name doesn't say
  * its state (Online, Offline, Guest: also its title at its dot alone), a dot under 3:1 against the chip, the bar
  * covering a button above it, or the bar covering the tab's own bottom button (the Market's + ADD POST, which step 2
@@ -105,7 +106,11 @@ const measure = () => {
         const need = w.width + pl + parseFloat(cs.paddingRight), box = t.parentElement.getBoundingClientRect().width;
         const roomWithWords = box - (dotOnly && words ? words.getBoundingClientRect().width + (parseFloat(getComputedStyle(chipEl).columnGap) || 0) : 0);
         const a = lum(rgb(getComputedStyle(dot).backgroundColor)), b = lum(bgOf(chipEl));
-        return { row: h.dataset.row, chip: [Math.round(chip.left), Math.round(chip.right)], title: [Math.round(title.left), Math.round(title.right)], pill: [Math.round(pill.left), Math.round(pill.right)],
+        // The pill's three controls: each target's height, and each icon's gold against what it is drawn on (the pill).
+        const pillButtons = [...h.querySelectorAll('[data-testid="header-pill"] button')];
+        const pillTall = Math.round(Math.min(...pillButtons.map(e => e.getBoundingClientRect().height)) * 10) / 10;
+        const pillInk = Math.min(...pillButtons.map(e => ratio(e.querySelector('svg'))));
+        return { row: h.dataset.row, pillTall, pillInk, chip: [Math.round(chip.left), Math.round(chip.right)], title: [Math.round(title.left), Math.round(title.right)], pill: [Math.round(pill.left), Math.round(pill.right)],
             gapToChip: Math.round(title.left - chip.right), gapToPill: Math.round(pill.left - title.right), meets: meets(title, chip) || meets(title, pill),
             offCentre: Math.round((mid - (chip.right + pill.left) / 2) * 10) / 10, cut, ellipsis: cs.textOverflow === 'ellipsis',
             dotOnly, wordsShown, need: Math.round(need * 10) / 10, roomWithWords: Math.round(roomWithWords * 10) / 10, name: chipEl.getAttribute('aria-label') ?? '', tip: chipEl.getAttribute('title') ?? '',
@@ -166,7 +171,7 @@ for (const dark of [false, true]) {
             if (process.env.TOUR_SHOTS) { fs.mkdirSync(process.env.TOUR_SHOTS, { recursive: true }); await page.screenshot({ path: path.join(process.env.TOUR_SHOTS, 'header-' + scheme + '-' + width + '-' + text + '.png'), clip: { x: 0, y: 0, width, height: 1100 } }); }
             if (m.scrollW > width) problems.push(at + ': sideways ' + m.scrollW);
             for (const r of m.headers) {
-                rows.push([at, r.row, JSON.stringify({ chip: r.chip, title: r.title, pill: r.pill, gapToChip: r.gapToChip, gapToPill: r.gapToPill, offCentre: r.offCentre, cut: r.cut, dotOnly: r.dotOnly, dot: r.dotContrast })]);
+                rows.push([at, r.row, JSON.stringify({ chip: r.chip, title: r.title, pill: r.pill, pillTall: r.pillTall, pillInk: r.pillInk, gapToChip: r.gapToChip, gapToPill: r.gapToPill, offCentre: r.offCentre, cut: r.cut, dotOnly: r.dotOnly, dot: r.dotContrast })]);
                 const [title, chipWords] = r.row.split(' · '), state = chipWords.split(' ')[0].replace(/^./, c => c.toUpperCase());
                 tally[scheme].rows++; if (r.cut) tally[scheme].cut++; if (r.dotOnly) tally[scheme].dotOnly++;
                 // Whole for every tab (Marketplace, a name no tab has now, may still be cut: the ellipsis is the last resort).
@@ -178,6 +183,8 @@ for (const dark of [false, true]) {
                 // A dot that carries the state on its own needs 3:1 against the chip (WCAG 1.4.11).
                 if (r.dotContrast < 3) problems.push(at + ' ' + r.row + ': the dot is ' + r.dotContrast + ':1 against the chip ' + JSON.stringify(r));
                 if (r.meets || r.gapToChip < 0 || r.gapToPill < 0) problems.push(at + ' ' + r.row + ': the title meets the chip or the pill ' + JSON.stringify(r));
+                // The pill's profile, "?" and Settings: 44 px tall targets, their icons at least 3:1 on the pill (WCAG 1.4.11).
+                if (r.pillTall < 44 || r.pillInk < 3) problems.push(at + ' ' + r.row + ': a pill control is ' + r.pillTall + ' px tall or its icon ' + r.pillInk + ':1 ' + JSON.stringify(r));
                 if (!r.helpTappable || !r.fits) problems.push(at + ' ' + r.row + ': the "?" is covered or the pill is off screen ' + JSON.stringify(r));
                 if (!r.cut && Math.abs(r.offCentre) > 1.5) problems.push(at + ' ' + r.row + ': the title is ' + r.offCentre + ' px off the middle of the room ' + JSON.stringify(r));
                 if (r.cut && !r.ellipsis) problems.push(at + ' ' + r.row + ': the title is cut without an ellipsis ' + JSON.stringify(r));

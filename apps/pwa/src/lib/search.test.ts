@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { searchTermsFor } from '@beanpool/core';
-import { matchesExpandedSearch } from './search';
+import { marketSearchToSave, matchesExpandedSearch } from './search';
 
 describe('matchesExpandedSearch', () => {
     it('finds a word between Chinese or full-width punctuation, mid-run (#1781)', () => {
@@ -35,5 +35,19 @@ describe('matchesExpandedSearch', () => {
         for (const q of ['鸡蛋，牛奶', 'fruit', 'NEAR(a b)']) {
             expect(searchTermsFor(q).length).toBeGreaterThan(0);
         }
+    });
+});
+
+describe('marketSearchToSave: Save this search to Home on the web (Marty, 7 Oct)', () => {
+    it('takes the words, Offers or Needs from the tab, the category and the distance filter', () => {
+        expect(marketSearchToSave({ type: 'offer', category: 'food', radiusKm: 5 }, 'eggs')).toEqual({ q: 'eggs', kind: 'offer', category: 'food', km: 5 });
+        expect(marketSearchToSave({ type: 'need', category: 'all', radiusKm: null }, ' help  moving ')).toEqual({ q: 'help moving', kind: 'need' });
+        expect(marketSearchToSave({ type: 'all', category: 'tools', radiusKm: 12 }, 'drill')).toEqual({ q: 'drill', kind: 'any', category: 'tools', km: 25 });
+        expect(marketSearchToSave({ type: 'for-you', category: 'all', radiusKm: 100 }, 'eggs')).toEqual({ q: 'eggs', kind: 'any' });
+    });
+    it('offers nothing without words, or under Events or Polls', () => {
+        expect(marketSearchToSave({ type: 'all', category: 'all', radiusKm: null }, '  ')).toBeNull();
+        expect(marketSearchToSave({ type: 'event', category: 'all', radiusKm: null }, 'market day')).toBeNull();
+        expect(marketSearchToSave({ type: 'poll', category: 'all', radiusKm: null }, 'compost')).toBeNull();
     });
 });

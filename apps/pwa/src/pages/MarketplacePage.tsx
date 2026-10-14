@@ -59,7 +59,8 @@ import {
 } from '../lib/api';
 import { type BeanPoolIdentity } from '../lib/identity';
 
-import { marketSearchFromLink, matchesExpandedSearch } from '../lib/search';
+import { marketSearchFromLink, marketSearchToSave, matchesExpandedSearch } from '../lib/search';
+import { SAVE_SEARCH_BUTTON, saveSearchLabel, type HomeSearchSettings } from '@beanpool/core';
 import { getProfileStatus, describeMissing } from '../lib/profile-status';
 import { getBlockedUsers, onBlocklistUpdated } from '../lib/blocklist';
 import { VisitorCard, VisitorPostDetail } from '../components/VisitorListing';
@@ -90,6 +91,11 @@ interface Props {
     /** Words to put in the search (a saved search's See more on Home); taken once, then `onSearchOpened`. */
     openSearch?: string | null;
     onSearchOpened?: () => void;
+    /**
+     * "Save this search to Home" (Marty, 7 Oct): the search as a saved search's settings; App opens Home, which opens the
+     * saved search's own dialog with them filled in. Absent (the lobby), the button isn't drawn.
+     */
+    onSaveSearch?: (settings: HomeSearchSettings) => void;
     onNavigate?: (tab: string, conversationId?: string) => void;
     onOpenProfile?: (pubkey: string) => void;
     transactions?: MarketplaceTransaction[];
@@ -161,7 +167,7 @@ function feedListFilter(typeFilter: PostType | 'all' | 'for-you', categoryFilter
 /** How long the first read waits to learn whether this node reads by area, before it reads as before. */
 const NEAR_WAIT_MS = 1500;
 
-export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, openSearch, onSearchOpened, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
+export function MarketplacePage({ identity, marketClickCount = 0, openPostId, onPostOpened, openSearch, onSearchOpened, onSaveSearch, onNavigate, onOpenProfile, transactions: externalTransactions, onRefreshTransactions, isMember, visitor }: Props) {
     // Asks the node nothing about people: no authors' ratings, faces, profiles or enterprises, and no member-only read.
     const isVisitor = !!visitor;
     const [posts, setPosts] = useState<MarketplacePost[]>([]);
@@ -2348,6 +2354,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
         );
     }
 
+    // "Save this search to Home": a member's search, Offers and Needs only (not under Events or Polls).
+    const toSave = onSaveSearch && !isVisitor && isMember !== false
+        ? marketSearchToSave({ type: typeFilter, category: categoryFilter, radiusKm: radiusSettings?.radiusKm }, searchQuery) : null;
+
     // =================== LIST VIEW ===================
     return (
         <div className="px-3 md:px-6 pt-4 pb-24 max-w-7xl mx-auto w-full">
@@ -2413,6 +2423,18 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     </button>
                     </>)}
                 </div>
+                {toSave && (
+                    <button
+                        type="button"
+                        data-testid="market-save-search"
+                        aria-label={saveSearchLabel(toSave.q)}
+                        onClick={() => onSaveSearch!(toSave)}
+                        className="mt-1.5 w-full min-h-[44px] px-3 py-2 rounded-xl border border-border-primary bg-bg-card text-text-primary text-sm font-bold flex items-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                    >
+                        <span aria-hidden="true" className="text-text-primary text-base leading-none">＋</span>
+                        <span className="min-w-0 flex-1 text-left break-words">{SAVE_SEARCH_BUTTON}</span>
+                    </button>
+                )}
 
                 {/* Row 2: Full-Width Type Segmented Control. Six types: two rows of three on a phone, so every type
                     stays on screen at 320px with large text; one row from sm up. */}

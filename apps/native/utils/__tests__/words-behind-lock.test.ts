@@ -358,7 +358,7 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
     }
 
     it('every door is one of these, and each is pinned to the check before it by the test named beside it', () => {
-        const DOOR = /readWordsBehindLock\(|signOutOfThisPhone\(|deleteAccountHere\(|deleteAccountFromThisPhone\(|leaveFromUpdateBlock\(|answerReplace\(true\)|signInAtDoor\(|submitJoin\(|encryptPairingPayload\(|connectAndDeposit\(|approveVaultHold\(/g;
+        const DOOR = /readWordsBehindLock\(|signOutOfThisPhone\(|deleteAccountHere\(|finishLastDelete\(|deleteAccountFromThisPhone\(|leaveFromUpdateBlock\(|answerReplace\(true\)|signInAtDoor\(|submitJoin\(|encryptPairingPayload\(|connectAndDeposit\(|approveVaultHold\(/g;
         const doors: Record<string, number> = {
             // View Recovery Phrase and Account Protection's Show (above; settings-words-put-away.test.ts).
             'app/(tabs)/settings.tsx:readWordsBehindLock(': 2,
@@ -366,6 +366,9 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
             // utils/delete-here.ts): authenticateUser first, as they always have.
             'app/(tabs)/settings.tsx:signOutOfThisPhone(': 1,
             'app/(tabs)/settings.tsx:deleteAccountHere(': 1,
+            // Its Try Again or Delete Anyway, when the key vault did not remove its copy: the wipe at the last community,
+            // inside the same purge, after its check (below).
+            'app/(tabs)/settings.tsx:finishLastDelete(': 1,
             // The replace screen's Show (above); Safety Backup's Show for the phone's own key (join-words-behind-lock.test.ts).
             'app/welcome.tsx:readWordsBehindLock(': 2,
             // Replace Account (account-removal-behind-lock.test.ts).
@@ -417,6 +420,7 @@ describe("every way the account leaves this phone, or comes off it, asks the pho
         for (const [start, reason, removal] of [
             ['async function handleLocalWipe() {', 'Confirm authentication to sign out of this device.', 'await signOutOfThisPhone(identity, { namesCopiesSaved: true });'],
             ['async function handleNodePurge() {', 'Confirm authentication to permanently purge your account from the node.', 'await deleteAccountHere(identity, plan);'],
+            ['async function handleNodePurge() {', 'Confirm authentication to permanently purge your account from the node.', 'await finishLastDelete(identity, choice);'],
         ] as const) {
             const body = slice(s, start, '\n    }\n');
             const asked = body.indexOf(`const success = await authenticateUser('${reason}');`);

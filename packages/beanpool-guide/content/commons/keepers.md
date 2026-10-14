@@ -11,7 +11,7 @@ Keepers run an enterprise: they post its Offers and Needs, pay out its beans and
 
 A project's keepers are its **leader** and **collaborators**: the app uses those words on a project. A collaborator is a keeper: they can post the project's Offers and Needs and they stand behind it the same way. Everything on this page applies to them too.
 
-A keeper can back the enterprise with some of their own trust. That deepens the enterprise's credit line. It never takes beans from your own balance or your own credit line.
+A keeper can back the enterprise with some of their own trust. That deepens the enterprise's credit line. It never takes beans from your balance. Where your community uses the known floor, backing beyond your earned standing comes off your own credit line, bean for bean. See "Your credit line".
 
 The full rules, including what happens when a lead goes quiet, are in "Rules and how decisions work".
 
@@ -27,7 +27,7 @@ Only you see how much trust you have left to back with. The lead keeper sees you
 
 ## For keepers
 
-- **Approve** or **Decline** requests under **Pending keeper requests**. Each request shows the pledge and says whether the person's standing covers it. If it doesn't, approving is refused until it does.
+- **Approve** or **Decline** requests under **Pending keeper requests** (**Asking to join as keepers** in the web app). Each request shows the pledge and says whether the person's standing covers it. If it doesn't, approving is refused until it does.
 - Changes waiting under **Keeper changes waiting** show the objection window. Tap **Object** to stop one. **Object works on the first tap, with no second question.** One objection cancels the change.
 - The lead can remove a keeper with **Remove** and their name. Other keepers can object in the same way.
 - **Operator controls** let keepers post the enterprise's Offers and Needs.
@@ -51,10 +51,10 @@ Everyone who was a keeper when the vote opened can vote **Yes** or **No**, the p
 
 While a vote is open, everyone sees how many have voted, not how. Yes and No show once it closes. Nobody sees who voted how. In a very small group, though, the result and who has voted can show it: if three keepers all vote and it ends 3–0, everyone knows how everyone voted.
 
-Each keeper on the vote gets one notification when it opens. It names nobody: it says a vote opened in one of your groups, and the app shows the rest. On Home, an open vote you haven't cast shows under **Needs you** and opens the enterprise.
+Every keeper on the vote but the one who proposed it gets one notification when it opens, unless they muted the enterprise's chat or turned chat notifications off. It names nobody: it says a vote opened in one of your groups, and the app shows the rest. On Home, an open vote you haven't cast shows under **Needs you** and opens the enterprise.
 
 A keeper who steps down during a vote leaves it, and their vote goes with them. A keeper removed during a vote keeps the vote they cast. If the enterprise starts winding up, its open votes end without doing anything.
 
 ## When the lead goes quiet
 
-If the lead keeper has not been active for a long time, the other keepers see **Propose Active Keeper as Lead** and can vote **Yes** or **No**. Votes on keepers cannot be changed.
+If the lead keeper has not been active for a long time, the other keepers see **Propose Active Keeper as Lead** and can vote **Yes** or **No**. In the web app, pick an active keeper from the list, then tap **Propose Lead**. Votes on keepers cannot be changed.

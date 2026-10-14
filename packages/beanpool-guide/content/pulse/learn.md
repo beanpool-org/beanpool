@@ -7,7 +7,7 @@ related: the-pulse, the-bean, how-it-works, your-channels
 
 ## What is in it
 
-In the **Pulse**, tap **Learn**. It holds:
+On the phone, open the **Pulse** and tap **Learn**. In the web app, open the Pulse and tap **How it works** along the top. It holds:
 
 - videos from BeanPool about how it works;
 - the **Daily Reflection**, a short thought that changes every morning. It is just a heading; there is nothing to open.
@@ -18,7 +18,7 @@ Members can add their own how-to channels to Learn too, by choosing the subject 
 
 Everything you need is written in this guide. The videos are there if you would rather watch.
 
-In the Learn lane, tap a video's picture and it plays there in the card. Nothing is loaded from YouTube until you tap. See "The Pulse".
+On the phone, in the Learn lane, tap a video's picture and it plays there in the card. Nothing is loaded from YouTube until you tap. In the web app, tapping a video opens it on YouTube in a new tab. See "The Pulse".
 
 When BeanPool has made a video for a guide page, and it is in your community's Learn lane, the page shows **Watch:** and the video's name at the top. Tap it to open the video on YouTube. If there is no video for that page, or you are offline, the link simply does not show.
 

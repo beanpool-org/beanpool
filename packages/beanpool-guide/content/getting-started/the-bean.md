@@ -7,7 +7,7 @@ related: getting-help, how-it-works, faq, whats-new, the-top-bar
 
 ## Opening it
 
-Tap the bean at the top left of the screen. Or:
+On the phone, tap the bean at the top left of the screen. Or:
 
 - Open **Settings** with the sliders button at the top of the screen.
 - Under **BeanPool**, tap **Help & how it works**.
@@ -19,11 +19,11 @@ In the web app, it is in the same place: **Settings**, then **Help & how it work
 - **Your community:** its name, and whether its server can be reached right now. On the phone, under it, **Your communities**: tap one to switch to it, or tap **Add a community**.
 - **Guides:** how BeanPool works, the rules and how decisions are made, and common questions.
 - **How to use the app:** one short page for each task, grouped the way the app is: Getting started, Market, Map, Talk, Pulse, Commons, Ledger and Settings and safety.
-- **The BeanPool project:** what is new in this version, and a link to the website beanpool.org, with a **Share** button to send it to a friend.
+- **The BeanPool project:** what is new in this version, and a link to the website beanpool.org (on the phone, with a **Share** button to send it to a friend).
 
 ## Searching
 
-Type a word or two in **Search the guide** at the top. It shows every page with all of your words. It works without a connection.
+Type a word or two in **Search the guide** (at the top in the web app; under **Your communities** on the phone). It shows every page with all of your words. It works without a connection.
 
 - Short words work: "vot" finds "vote" and "voting".
 - If nothing comes up, try one simpler word, like "gift", "photo" or "block".

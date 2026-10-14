@@ -14,50 +14,53 @@ The people who look after a chat group are its **convenors**; one of them is the
 
 ## Your groups
 
-Tap **Talk**, then **Groups**. Every group you are in is listed there, newest message first, with the projects and enterprises you keep (🥖) and the events you are going to (📅). An enterprise's chat is its public discussion: any member of your community can read it. See "Messages". Each shows its latest message and how many you have not read.
+Tap **Talk**, then **Groups**. Every group you are in is listed there, newest message first, with the projects you lead or work on (🎯), the enterprises you keep (🥖) and the events you host or are going to (📅). An enterprise's chat is its public discussion: any member of your community can read it. See "Messages". Each shows its latest message and how many you have not read. In an encrypted chat the row shows who wrote last and **🔒 Message**, not the words.
 
 - The number on **Groups** at the top adds up your unread messages, except in chats you have muted.
 - Tap a group to open its chat. That marks it read.
 - Pull the list down to refresh it.
 
-The same list is in **Commons**, under **Groups**, as **Your groups**, without the unread numbers. It opens the same chats.
+On the phone, the same list is in **Commons**, under **Groups**, as **Your groups**, without the unread numbers. It opens the same chats.
 
 ## Starting a group
 
-- In **Talk**, under **Groups**, tap **New group**. Or in **Commons**, under **Groups**, tap the round **+** button. Both open the same **Create a Group** form. (On the **Projects** or **Enterprises** chip, the **+** starts a project or an enterprise instead.)
+- On the phone, in **Talk**, under **Groups**, tap **New group**. Or in **Commons**, under **Groups**, tap the round **+** button. Both open the same **Create a Group** form. (On the **Projects** or **Enterprises** chip, the **+** starts a project or an enterprise instead.)
+- In the web app, open **Commons**, then **Groups**, and tap **+ Create Group**. You stay on **Commons** afterwards; inviting people is on the phone.
 - Give it a **Group Name**, up to 60 characters, and, if you like, a **Purpose / Description**, up to 300: what the group is for and who it is for.
-- Choose a **Category**: **Social Circle** is chosen for you; the others are **General**, **Working Group** and **Guild**.
+- Choose a **Category**: **Social Circle**, **General**, **Working Group** or **Guild**. On the phone **Social Circle** is chosen for you. In the web app **Working Group** is.
 - Choose a **Join Policy**: **Open**, **Request to Join** or **Invite Only**.
-- Tap **Create Group**. You become its **lead convenor**, and the app takes you straight into the new group's chat.
+- Tap **Create Group**. You become its **lead convenor**. On the phone, the app takes you straight into the new group's chat.
 
 With Beans involved? Start a project or an enterprise instead, from the bottom of the categories: on the phone **Start a project or an enterprise**, on the web **Start a project** or **Start an enterprise**. See "Projects and enterprises".
 
 ## Inviting people
+
+You invite people in the phone app. The web app cannot send invitations yet.
 
 A new group's chat asks **Who do you want to invite?**
 
 - Tap **Invite people**, tick the people you want, and tap the button at the bottom (for example **Invite 2 people**).
 - Or tap **Not now** to skip it.
 
-Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. Each person you invite sees the group in **Commons**, under **Groups**, marked **INVITED** (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). When they join, the chat says so.
+Later, a convenor can invite people from the chat's **⋮** menu, **Invite people**. Each person you invite sees the group in **Commons**, under **Groups**, marked **INVITED** in the phone app (on the phone, in a community with no **Commons** tab, under **Find groups** in **Talk**). The web app does not mark invitations yet; accept them on the phone. When they join, the chat says so.
 
 ## The group's chat
 
-- Tap the group's name at the top of the chat to see the group: its members, **Leave Group**, and for convenors, **Convenor Tools**.
-- The **⋮** menu has **Invite people** (convenors), **Mute notifications**, **Search this chat** and **Group info**. The search runs on your phone, not on your community's server.
+- On the phone, tap the group's name at the top of the chat to see the group: its members, **Leave Group**, and for convenors, **Convenor Tools**. In the web app, open the group from **Commons**, under **Groups**.
+- The **⋮** menu has **Invite people** (convenors), **Mute notifications** (or **Unmute**), **Search this chat**, **Confirm new phone** and **Group info**. The search runs on your phone, not on your community's server.
 - Joins, leaves and role changes show in the chat as small grey lines.
 - Write **@** and someone's name to alert them. See "Mentions".
 - The newest message sits just above the message box, and stays there when the keyboard opens. Scroll up to read back; a new message arriving then waits for you rather than dragging you down.
 
-A group's chat on the phone is end-to-end encrypted: only the group's members can read it, not the people who run your community's server. Above the message box it says it is **End-to-end encrypted**. Your community's server still sees who wrote, when, who was mentioned, which message each line answers, and the emoji reactions.
+A group's chat is end-to-end encrypted: only the group's members can read it, not the people who run your community's server. Above the message box it says it is **End-to-end encrypted**. Your community's server still sees who wrote, when, who was mentioned, which message each line answers, and the emoji reactions.
 
-- You see the chat only from the day you joined. Nothing written before is shown, and your phone never holds the key to it.
+- You see the chat only from the day you joined. Nothing written before is shown, and your phone never holds the key to it. You still see the grey lines from before, but nobody's words.
 - When someone is removed, or leaves, the group makes a new key. In a group of 10 or more the chat says **Securing the chat for N people…** while your phone makes it.
 - A message that cannot be locked is not sent. It shows **! not delivered**, and a line above the message box can say why. Tap it to **Resend** or **Discard** it.
 - A message that does not check out as written by a member shows as **Unverified**, as nobody's, with **This message couldn't be verified.** A message whose key has not reached your phone yet reads **Waiting for the key to this message.**
-- If your community's server is older and cannot lock group chats yet, the chat says the server can read it, and that it will be locked once the server is updated. When it is updated, the group's earlier messages, which the server could read, are removed, and a line in the chat says so.
+- If your community's server is older and cannot lock group chats yet, the chat says the server can read it, and that it will be locked once the server is updated. When it is updated, the group's earlier messages, which the server could read, are removed, and a line in the chat says so. Each earlier message then reads **Removed by a convenor**, though no convenor removed it.
 
-The web app cannot yet read or write in a group's chat; use the phone. An enterprise's chat is not encrypted: see "Messages".
+In the web app your group chats are in **Chat**, marked 👥. You can read and write there, end-to-end encrypted as on the phone: reply, react, edit for 15 minutes and search the chat. Inviting people, muting, **Group info**, **Delete** and **Remove** are on the phone only. An enterprise's chat is not encrypted: see "Messages".
 
 ## Talking in a group's chat
 
@@ -93,10 +96,12 @@ At the end your phone says what happened: **Done** only when it handed every key
 
 ## Joining a group
 
-In **Commons**, under **Groups**, **Groups you could join** lists the groups you are not in. Filter them by kind with the buttons above the list. Each one shows the start of its description. Open a group to read all of it, then:
+On the phone, in **Commons**, under **Groups**, **Groups you could join** lists the groups you are not in. Filter them by kind with the buttons above the list. In the web app, **Groups** lists every group you can see, yours marked with your role; **My groups** shows only yours. Each one shows the start of its description. Open a group to read all of it, then:
 
 - **Join Group** if it is open to anyone;
 - **Request to Join** if a convenor approves members. You see **Request Pending Approval** until they do.
+
+On the phone, a group you asked to join is in neither list until a convenor lets you in. On the web it stays in the list marked **Pending**.
 
 An **Invite Only** group is hidden from everyone who is not in it or invited to it.
 
@@ -108,7 +113,7 @@ While your account is suspended, you cannot start a group, join one, ask to join
 
 ## Joining by invitation
 
-A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED**. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it, and who can read its chat.
+A group you are invited to shows in **Commons**, under **Groups**, marked **INVITED** in the phone app. The web app does not mark invitations yet; accept them on the phone. On the phone, in a community with no **Commons** tab, it is under **Find groups** in **Talk**. Tap it to see the invitation: who invited you, what the group is, who is in it (for an invite-only group, how many), and who can read its chat.
 
 - Tap **Join the group**. You land in its chat.
 - Tap **Not now** to decide later. The invitation stays.
@@ -117,28 +122,31 @@ A group you are invited to shows in **Commons**, under **Groups**, marked **INVI
 
 ## Posting to a group
 
-Tap the group's name at the top of its chat, then **Post to** and its name. Only the group's members see the post. It shows in the Market with a lock and the group's name.
+On the web, open the group in **Commons**, under **Groups**, and tap **Post to** and its name. The phone app cannot yet post to a group you are already in. Only the group's members see the post. It shows in the Market with a lock and the group's name.
 
 ## Convenors and the lead convenor
 
 A convenor looks after the group. Whoever created it is its **lead convenor**, and the group's card names them, as **Lead convenor: Ali**. In the members list their row is marked **LEAD**.
 
-Under **Convenor Tools**, any convenor can:
+In **Convenor Tools**, any convenor can:
 
 - change the join policy;
-- **Approve** or **Decline** requests to join;
-- change a member's or an observer's role — including making them a convenor;
-- remove a member or an observer;
-- remove a post or a message;
-- edit the group.
+- **Approve** or **Decline** requests to join.
+
+Beside a name in the **Roster**, any convenor can:
+
+- change a member's or an observer's role (**Role**), including making them a convenor;
+- remove a member or an observer (**✕**).
+
+A convenor removes a post from the post itself, and on the phone a message in the chat. A group's name and description cannot be changed in the app yet.
 
 Only the **lead convenor** can remove a convenor, or take the convenor role off someone. Beside a row you cannot act on, no **Role** or **✕** is shown at all — that is the app telling you it is not yours to do.
 
 **Nobody can remove the lead convenor, or take the lead off them.** Not another convenor, and not a community admin. Apart from the lead handing it over, only a vote of the group can choose a new lead. See "Votes in a group".
 
-**Handing the lead over.** The lead can pass it on: **Hand over** in **Convenor Tools**, or the shield button beside someone's name. Choose another convenor, or a member — a member becomes a convenor at the same time. An observer cannot be the lead; make them a member or a convenor first. Once it is done, you cannot take the lead back.
+**Handing the lead over.** The lead can pass it on. On the phone, tap **Hand over** in **Convenor Tools**, or the shield button beside someone's name. In the web app, tap **Make lead** beside their name. Choose another convenor, or a member — a member becomes a convenor at the same time. An observer cannot be the lead; make them a member or a convenor first. Once it is done, you cannot take the lead back.
 
-**Leaving as the lead.** Hand the lead over first; the app offers you that when you tap **Leave Group**. If nobody else is in the group, you can simply leave.
+**Leaving as the lead.** Hand the lead over first; the phone offers you that when you tap **Leave Group**, and the web app tells you to. If nobody else is in the group, you can simply leave.
 
 The last convenor cannot step down or leave while anyone else is still in the group.
 
@@ -146,9 +154,9 @@ The last convenor cannot step down or leave while anyone else is still in the gr
 
 The group carries on meanwhile. Its members keep chatting and posting, and people can still join an open group. Any other convenor can still do everything above; only the lead's own powers wait. Requests to join and new invitations wait for a convenor. Anyone can still report a post or a person to your community's moderators. If the suspended convenor is the group's only convenor, they are its lead, and nothing they do while suspended counts as activity: 30 days after they were last active, the group can vote a new lead in, as below.
 
-**When the lead goes quiet.** After 30 days with no activity from the lead, the group has a second way to vote a new lead in. (Its members can also vote for a new lead at any time: see "Votes in a group".) Open the group and look just above the **Roster**: a panel appears there naming the lead and how long they have been away. Nothing shows while a group's lead is active — apart from one line saying how the last vote ended, which stays for two weeks after it closes.
+**When the lead goes quiet.** After 30 days with no activity from the lead, the group has a second way to vote a new lead in. (Its members can also vote for a new lead at any time, except on the global community: see "Votes in a group".) Open the group and look just above the **Roster**: a panel appears there naming the lead and how long they have been away. Nothing shows while a group's lead is active — apart from one line saying how the last vote ended, which stays for two weeks after it closes.
 
-Who votes is the group's **other convenors** — or its **members**, when none of the other convenors was made a convenor by the day the lead was last active. Anyone who joined the group, or was made a convenor, after that day has no part in the vote. Any of those who vote can tap **Propose** beside a name in that panel, including their own; proposing counts as that person's Yes. Everyone who can vote then sees **Yes** and **No**. You are asked to confirm, because a vote cannot be changed, and you only ever see the totals — never who voted which way. The vote runs for 14 days and passes when more than half of those who answer say Yes. If the quiet lead comes back and does anything in the app, the vote closes at once. While the lead's account is suspended, nothing they do counts. Observers can see the panel but have no vote, and neither does the quiet lead.
+Who votes is the group's **other convenors** — or its **members**, when none of the other convenors was made a convenor by the day the lead was last active. Anyone who joined the group, or was made a convenor, after that day has no part in the vote. Any of those who vote can tap **Propose** beside a name in that panel, including their own; proposing counts as that person's Yes. Everyone who can vote then sees **Yes** and **No**. You are asked to confirm, because a vote cannot be changed, and you only ever see the totals — never who voted which way. The vote runs for 14 days and passes when more than half of those who answer say Yes. If it passes, the old lead stays a convenor when the other convenors voted, and becomes a member when the members voted. If the quiet lead comes back and does anything in the app, the vote closes at once. On the phone, with notifications allowed, just opening the app counts. While the lead's account is suspended, nothing they do counts. Observers can see the panel but have no vote, and neither does the quiet lead.
 
 The full rules are in "Rules and how decisions work", under "A quiet lead convenor".
 
@@ -156,7 +164,9 @@ The full rules are in "Rules and how decisions work", under "A quiet lead conven
 
 ## Votes in a group
 
-A group's members can vote together on the group's own things. Open the group (tap its name at the top of its chat): its votes are under **Decisions**, high on the page. Only the people in the group see them.
+A group's members can vote together on the group's own things. Open the group (on the phone, tap its name at the top of its chat; on the web, open it in **Commons**, under **Groups**): its votes are under **Decisions**, high on the page. Only the people in the group see them.
+
+On the global community a group has no votes of its own and no **Propose a vote**; only the quiet-lead vote works there.
 
 Tap **Propose a vote** and choose what should happen:
 
@@ -164,7 +174,7 @@ Tap **Propose a vote** and choose what should happen:
 - **Make someone a convenor**, or **Make a convenor a member**. A vote never changes the lead's role; to change the lead, vote for a new one.
 - **Remove someone** from the group. Not the lead, and not yourself: to go, leave the group.
 - **Change who can join**: open to anyone, people ask and a convenor lets them in, or by invitation only.
-- **Close the group.** Its chat stays to read, but it takes no new messages, posts or members, and its other open votes end.
+- **Close the group.** Its chat stays to read, but it takes no new messages, posts or members, and its other open votes end. Its posts come down from the Market.
 
 Give it a title and say why, then tap **Open the vote**. A vote never moves Beans: a group holds none. Nor can it change anyone's standing in the community; that takes a community Decision.
 
@@ -174,7 +184,7 @@ Give it a title and say why, then tap **Open the vote**. A vote never moves Bean
 
 **What you see.** While a vote is open, everyone sees how many have voted, not how. Yes and No show once it closes. A vote can't be changed once cast. Nobody sees who voted how. In a very small group, though, the result and who has voted can show it: if three people all vote and it ends 3–0, everyone knows how everyone voted.
 
-**Being told.** Everyone on the vote but the person who proposed it gets one notification when it opens, unless they muted the group's chat or turned chat notifications off. It names no person: its title is the group's name and it says a vote opened. Tap it and the group opens on its **Decisions**. On Home, an open vote you haven't cast shows under **Needs you** and opens the group too.
+**Being told.** Everyone on the vote but the person who proposed it gets one notification when it opens, unless they muted the group's chat or turned chat notifications off. It names no person and no group: it says **A vote opened in one of your groups.** Tap it and the group opens on its **Decisions**. On Home, an open vote you haven't cast shows under **Needs you** and opens the group too.
 
 **When people come and go.** Someone who leaves the group during a vote leaves the vote, and their vote goes with them. Someone a convenor removes, or makes an observer, during a vote stays on it: they keep the vote they cast, and can still vote if they haven't. Removing people is never a way to swing a vote. If fewer than two people are left on it, the vote ends without an answer.
 
@@ -183,4 +193,4 @@ Give it a title and say why, then tap **Open the vote**. A vote never moves Bean
 ## Coming soon
 
 - Removing a rogue lead convenor by a community Decision. Coming in a later update.
-- A group's chat and invitations in the web app. Today they are in the phone app. The web app's Commons can list groups, start one, join one and vote in one, but it cannot read or write in a group's chat.
+- Invitations in the web app. Today you invite people, and accept an invitation to an invite-only group, in the phone app. The web app can already read and write in a group's chat (in **Chat**), and its **Commons** can list groups, start one, join one and vote in one.

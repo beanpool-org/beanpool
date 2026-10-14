@@ -589,6 +589,9 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                 ) : error ? (
                     <div className="p-8 text-center text-red-700 dark:text-red-500">{error}</div>
                 ) : filteredEnterprises.length === 0 ? (
+                    // Beans off (the global node): no enterprise can be proposed here, and the preview above already says
+                    // what a local community's Commons holds, so no empty state offering one.
+                    !beansOn ? null : (
                     <div className="p-8 text-center text-nature-500 max-w-md mx-auto my-12">
                         <p className="text-4xl opacity-50 mb-3">🌱</p>
                         <p className="text-base font-bold text-nature-950 dark:text-white mb-1">No enterprises found</p>
@@ -607,6 +610,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             </button>
                         )}
                     </div>
+                    )
                 ) : (
                     <div className="p-4 max-w-lg sm:max-w-2xl lg:max-w-4xl mx-auto w-full grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {filteredEnterprises.map(t => {

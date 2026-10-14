@@ -40,6 +40,10 @@ On the phone and in the web app, your Home is a list of cards you choose. After 
 - Your cards are kept on your account, so they follow you to your other phones and browsers. If your community's server has not been updated yet, they stay on this phone or in this browser, and **Edit home** says "Your community's server needs an update before your cards follow you to other devices." They are sent again each time you open Home.
 - If you had already moved or hidden cards before this change, your Home keeps your order, without the cards you had hidden. If you had not, you see **Getting started** on its own, and the tour's **Skip** or **Done** gives you the five, or the cards you picked (above). If you joined more than a week ago, Home also tells you once, under **Getting started** the first time it opens: "Home now starts with fewer cards. Add a card brings the rest back."
 
+## Save a search from the Market
+
+While there are words in the Market's search, a button under it says **Save this search to Home**. It opens Home with a saved search ready to add: your words, **Offers** or **Needs** if you were looking at only one, the category you picked, and the distance you picked (the nearest of 1, 2, 5, 10 or 25 km that covers it). Change anything you like, then tap **Add to Home**: the card goes to the top. It shows the newest listings that match first; on the worldwide community, the nearest first, as its Market does. If the same search is on Home already, or you have five, Home says so and adds nothing. Under **Events** and **Polls** there is no button: a saved search looks for Offers and Needs.
+
 ## The cards
 
 Home shows only the cards that have something to tell you, in this order from top to bottom unless you change it:

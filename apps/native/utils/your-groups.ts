@@ -8,7 +8,7 @@
  * The helpers below are pure so the row wording and the one-header-for-every-chat label are unit tested.
  */
 
-import { keeperWords } from '@beanpool/core';
+import { formatDate, keeperWords } from '@beanpool/core';
 import type { GroupCategory, GroupItem } from './db';
 
 export type YourChatKind = 'group' | 'enterprise' | 'event';
@@ -130,9 +130,8 @@ export function rowTime(iso: string | null | undefined, now: Date = new Date()):
     const sameDay = t.toDateString() === now.toDateString();
     if (sameDay) return `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
     const ageDays = (now.getTime() - t.getTime()) / 86_400_000;
-    if (ageDays >= 0 && ageDays < 6) return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][t.getDay()];
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${t.getDate()} ${months[t.getMonth()]}`;
+    if (ageDays >= 0 && ageDays < 6) return formatDate(t, 'weekday');
+    return formatDate(t, 'day-month');
 }
 
 /**

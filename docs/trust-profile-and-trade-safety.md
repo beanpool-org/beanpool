@@ -71,8 +71,9 @@ Adding a friend is visible and bounded, because a connection in common is made o
   does (engine/member-blocks.ts). You stop counting as a connection in common between them and your friends: a blocker
   is never counted on the profile of the member they blocked, nor for a viewer who blocked them; the friend rows stay,
   so the blocked member's own reads don't change (`getTrustProfileForViewer`; `test-trust-mutuals` T11-T14). It does
-  not take them off your People list, and if your contact is set to Friends they still see it. Remove them if you want
-  that; they can notice a removal.
+  not end the friendship: they still have you as a friend, and if your contact is set to Friends they still see it. Both
+  apps hide a blocked member from your own lists, so to end it too: unblock, take them off your friends, block again;
+  they can notice a removal.
 
 ### Suggested "trust at a glance" layout
 1. Tier badge · member since · last active

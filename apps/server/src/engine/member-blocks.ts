@@ -16,8 +16,8 @@
  *   of that deal (the trade itself, its escrow and its SYSTEM lines unchanged); they can't address a listing to the
  *   owner; and, as the guide says, "You stop counting as a connection in common between them and your friends", nor
  *   does anyone the owner blocked count for the owner (getTrustProfileForViewer). No friend row is touched: "It does
- *   not take them off your People list, and if your contact is set to Friends they still see it. Remove them if you
- *   want that; they can notice a removal." A shared room (a
+ *   not end the friendship: they still have you as a friend, and if your contact is set to Friends they still see it. To
+ *   end that too, unblock them, take them off your friends, then block them again; they can notice a removal." A shared room (a
  *   group's, an event's or an enterprise's chat) shows everyone the same lines, so the apps hide theirs there.
  * - A blocked key is any key in the one spelling (engine/member-key.ts), a member's or not: the marketplace shows listings
  *   from a connected community's public board straight from that node (MarketplacePage's peer browse), and their author

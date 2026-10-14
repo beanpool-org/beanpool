@@ -298,6 +298,86 @@ async function main() {
         assert(on.status === 200 && JSON.stringify(keys((await profile(v, t)).body)) === JSON.stringify([f.pk]), 'T10: turned back on, F is named again');
     }
 
+    // T11-T14 — a blocker never vouches for the member they blocked (#1913 confirmation 1, finding 2): a block takes the
+    // trust out of the blocker's row to the blocked member for every reader but the blocked member; the rows stay, so
+    // the blocked member's own reads don't change. Every block is the blocker's own signed POST /api/blocks.
+    const block = (owner: Id, target: Id) => signed(owner, 'POST', '/api/blocks', { targetPubkey: target.pk });
+    const unblock = (owner: Id, target: Id) => signed(owner, 'POST', '/api/blocks/remove', { targetPubkey: target.pk });
+    const rowsAmong = (...ids: Id[]): number => {
+        const pks = ids.map(i => i.pk), marks = pks.map(() => '?').join(',');
+        return (db.prepare(`SELECT COUNT(*) AS n FROM friends WHERE owner_pubkey IN (${marks}) AND friend_pubkey IN (${marks})`).get(...pks, ...pks) as { n: number }).n;
+    };
+    const seen = (p: { status: number; body: any }) => ({ status: p.status, names: keys(p.body), count: p.body?.mutualCount, band: p.body?.risk?.band });
+
+    // T11 — B↔A, B↔V, then B blocks A: V reads A's profile and B is not named, not counted, and the band is red. B
+    // unblocks: B is named again, since no friend row was touched.
+    {
+        resetGatewayRateLimit();
+        const a = member('t11-blocked'), b = member('t11-blocker'), v = member('t11-viewer');
+        bothWays(b, a); bothWays(b, v);
+        const before = await profile(v, a);
+        assert(JSON.stringify(keys(before.body)) === JSON.stringify([b.pk]) && before.body?.mutualCount === 1 && before.body?.risk?.band === 'green',
+            `T11: before the block, B is V's connection in common with A, green (${names(before.body).join(',') || 'none'}, ${before.body?.risk?.band})`);
+        const blk = await block(b, a);
+        assert(blk.status === 200, `T11: B blocks A with their own signed request (${blk.status} ${blk.text.slice(0, 80)})`);
+        const after = await profile(v, a);
+        assert(after.status === 200 && keys(after.body).length === 0 && after.body?.mutualCount === 0 && after.body?.risk?.band === 'red',
+            `T11: after B blocks A, V reads A's profile: B is not named, mutualCount 0, red (${names(after.body).join(',') || 'none'}, ${after.body?.mutualCount}, ${after.body?.risk?.band})`);
+        assert(rowsAmong(a, b) === 2 && rowsAmong(b, v) === 2, `T11: the block touched no friend row (${rowsAmong(a, b)} B-A rows, ${rowsAmong(b, v)} B-V rows)`);
+        const ub = await unblock(b, a);
+        const again = await profile(v, a);
+        assert(ub.status === 200 && JSON.stringify(keys(again.body)) === JSON.stringify([b.pk]) && again.body?.mutualCount === 1 && again.body?.risk?.band === 'green',
+            `T11: B unblocks A (${ub.status}): B is named again, green (${names(again.body).join(',') || 'none'}, ${again.body?.risk?.band})`);
+    }
+
+    // T12 — the viewer's own blockers still count: A reads T's profile (B↔A, B↔T) before and after B blocks A, and gets
+    // the same names, count and band. What the blocked member reads does not change.
+    {
+        resetGatewayRateLimit();
+        const a = member('t12-blocked'), b = member('t12-blocker'), t = member('t12-target');
+        bothWays(b, a); bothWays(b, t);
+        const before = seen(await profile(a, t));
+        const blk = await block(b, a);
+        const after = seen(await profile(a, t));
+        assert(blk.status === 200 && JSON.stringify(before.names) === JSON.stringify([b.pk]) && before.band === 'green',
+            `T12: setup — A sees B in common with T, green; B blocks A (${blk.status}) (${JSON.stringify(before)})`);
+        assert(JSON.stringify(after) === JSON.stringify(before),
+            `T12: after B blocks A, A reads T's profile exactly as before (${JSON.stringify(after)})`);
+    }
+
+    // T13 — the rejected case, pinned: T blocks F, and V still sees F on T's profile. T's own block hiding F there would
+    // hand any blocked member a probe (F↔F2 reads T's profile and watches F leave).
+    {
+        resetGatewayRateLimit();
+        const v = member('t13-viewer'), f = member('t13-blocked'), t = member('t13-blocker-target');
+        bothWays(v, f); bothWays(f, t);
+        const blk = await block(t, f);
+        const p = await profile(v, t);
+        assert(blk.status === 200 && JSON.stringify(keys(p.body)) === JSON.stringify([f.pk]) && p.body?.mutualCount === 1 && p.body?.risk?.band === 'green',
+            `T13: T blocks F (${blk.status}); V still sees F in common with T, green (${names(p.body).join(',') || 'none'}, ${p.body?.risk?.band})`);
+    }
+
+    // T14 — the viewer's seat: V blocks F, rows intact. V reads T's profile and F is not counted for V: never green on
+    // the word of someone V blocked. F's own reads of V's and T's profiles do not change.
+    {
+        resetGatewayRateLimit();
+        const v = member('t14-blocker-viewer'), f = member('t14-blocked'), t = member('t14-target');
+        bothWays(v, f); bothWays(f, t); bothWays(v, t);
+        const vBefore = await profile(v, t);
+        const fOfV = seen(await profile(f, v)), fOfT = seen(await profile(f, t));
+        assert(JSON.stringify(keys(vBefore.body)) === JSON.stringify([f.pk]) && vBefore.body?.risk?.band === 'green'
+            && JSON.stringify(fOfV.names) === JSON.stringify([t.pk]) && JSON.stringify(fOfT.names) === JSON.stringify([v.pk]),
+            `T14: setup — V sees F in common with T; F sees T in common with V and V in common with T (${names(vBefore.body).join(',')}, ${fOfV.names.length}, ${fOfT.names.length})`);
+        const blk = await block(v, f);
+        const vAfter = await profile(v, t);
+        assert(blk.status === 200 && vAfter.status === 200 && keys(vAfter.body).length === 0 && vAfter.body?.mutualCount === 0 && vAfter.body?.risk?.band !== 'green',
+            `T14: after V blocks F (${blk.status}), V reads T's profile: F is not named or counted, not green (${names(vAfter.body).join(',') || 'none'}, ${vAfter.body?.mutualCount}, ${vAfter.body?.risk?.band})`);
+        assert(rowsAmong(v, f) === 2 && rowsAmong(f, t) === 2, `T14: the block touched no friend row (${rowsAmong(v, f)} V-F rows, ${rowsAmong(f, t)} F-T rows)`);
+        const fOfVAfter = seen(await profile(f, v)), fOfTAfter = seen(await profile(f, t));
+        assert(JSON.stringify(fOfVAfter) === JSON.stringify(fOfV) && JSON.stringify(fOfTAfter) === JSON.stringify(fOfT),
+            `T14: F reads V's and T's profiles exactly as before (${JSON.stringify(fOfVAfter)} ${JSON.stringify(fOfTAfter)})`);
+    }
+
     // Every actor above was a plain member: only the founder holds a role.
     const roled = (db.prepare('SELECT member_pubkey FROM node_roles').all() as { member_pubkey: string }[]).map(r => r.member_pubkey);
     assert(roled.length === 1 && roled[0] === founder?.pk, `every viewer, friend and target was a plain member: only the founder has a role (${roled.length})`);

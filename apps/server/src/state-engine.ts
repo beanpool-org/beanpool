@@ -2268,8 +2268,11 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
     // forgery: a viewer who added everyone read the target's list by name, and a target who added everyone looked
     // "in your circle" to every viewer. With all four rows, the viewer's only probes are people who chose the viewer,
     // nothing the target adds alone counts, and every edge shown was chosen by both its ends. A member who turned off
-    // "show me as a connection in common" (SHOW_AS_CONNECTION_PREF) is never F. mutualCount and the risk band read this
-    // same list. See docs/trust-profile-and-trade-safety.md §2.
+    // "show me as a connection in common" (SHOW_AS_CONNECTION_PREF) is never F. A block takes the trust out of the
+    // blocker's row to the blocked member for every reader but the blocked member; the row stays so their reads don't
+    // change: F is not counted on T's profile when F has blocked T, nor for V when V has blocked F. T's block of F does
+    // not hide F from T's profile: that would hand any blocked member a probe (F's friend reads T and watches F leave).
+    // mutualCount and the risk band read this same list. See docs/trust-profile-and-trade-safety.md §2.
     const mutualConnections = (viewerPubkey && viewerPubkey !== targetPubkey)
         ? (db.prepare(`
             SELECT m.public_key as publicKey, m.callsign, m.avatar_ref as avatarRef
@@ -2282,9 +2285,11 @@ export function getTrustProfileForViewer(viewerPubkey: string, targetPubkey: str
               AND vf.friend_pubkey != ? AND vf.friend_pubkey != ?
               AND NOT EXISTS (SELECT 1 FROM member_preferences p
                                WHERE p.public_key = vf.friend_pubkey AND p.pref_key = '${SHOW_AS_CONNECTION_PREF}' AND p.pref_value = 'false')
+              AND NOT EXISTS (SELECT 1 FROM member_blocks b WHERE b.owner_pubkey = vf.friend_pubkey AND b.blocked_pubkey = ?)
+              AND NOT EXISTS (SELECT 1 FROM member_blocks b WHERE b.owner_pubkey = ? AND b.blocked_pubkey = vf.friend_pubkey)
             ORDER BY m.callsign COLLATE NOCASE
             LIMIT 12
-        `).all(targetPubkey, targetPubkey, viewerPubkey, viewerPubkey, targetPubkey) as any[]).map(r => ({
+        `).all(targetPubkey, targetPubkey, viewerPubkey, viewerPubkey, targetPubkey, targetPubkey, viewerPubkey) as any[]).map(r => ({
             publicKey: r.publicKey,
             callsign: r.callsign,
             avatarUrl: avatarUrlOf(r.publicKey, r.avatarRef)

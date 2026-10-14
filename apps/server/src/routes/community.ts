@@ -70,6 +70,7 @@ import { assertMayMakeInvite } from '../engine/writer-bounds.js';
 import { isPoint, nearestPeople, readMemberArea, setMemberArea, withAreaDistances } from '../engine/member-area.js';
 import { parsePoint, type Point } from './distance-query.js';
 import { isSyntheticAccount, CONTACT_VALUE_LIMIT, textTooLongMessage } from '@beanpool/core';
+import { ratingsForReader } from '@beanpool/engine';
 import { getP2PNode } from '../p2p.js';
 import { logger } from '../logger.js';
 import { inviteLogTag } from '../sanitize-message.js';
@@ -2042,14 +2043,32 @@ router.post('/api/ratings', async (ctx) => {
     }
 });
 
+// A review is public opinion about the RATED member; the trade behind it stays the two parties' (Marty, 2026-10-14,
+// decision A). Members of this node read a member's reviews, whatever ENFORCE_READ_AUTH says, as they read a member's
+// standing (/api/trust/profile): a suspended member and a visitor are refused too. A member's OWN lists (received and
+// given) are theirs whatever their standing, as their ledger is: a suspended member may need to answer a 1★. A third
+// member reads stars, words, side and month, and no rater and no deal (ratingsForReader). The reviews a member WROTE are
+// a list of who they traded with, so only they read it, in the ledger's words. The reader is the verified signer only,
+// never a parameter.
 router.get('/api/ratings/:publicKey', async (ctx) => {
+    const reader = ctx.state.actor as string | undefined;
+    if (!reader) {
+        ctx.status = 401;
+        ctx.body = { error: 'A signed request is required' };
+        return;
+    }
+    ctx.set('Cache-Control', 'private, no-store');
     const { publicKey } = ctx.params;
+    if (reader !== publicKey && !memberReadsOnlyHere(ctx)) return;
     const { direction } = ctx.query;
     if (direction === 'given') {
-        const memberRatings = getRatingsGiven(publicKey);
-        ctx.body = { ratings: memberRatings };
+        if (reader !== publicKey) {
+            refuseOthersLedger(ctx);
+            return;
+        }
+        ctx.body = { ratings: getRatingsGiven(publicKey) };
     } else {
-        const memberRatings = getRatings(publicKey);
+        const memberRatings = ratingsForReader(getRatings(publicKey), reader, publicKey);
         const average = getAverageRating(publicKey);
         ctx.body = { ratings: memberRatings, ...average };
     }

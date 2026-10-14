@@ -4031,6 +4031,139 @@ describe('the DM guard list: one bounded list per community file, never read as 
         }, 120_000);
     }
 
+    it('GD4 a DM only its pin knows, with room on the list, relisted by the node as a group: the type path keeps it a DM and puts it back on the list, its second memory (§3 iv; #1938 confirmation 6, finding 4)', async () => {
+        const { first } = await anaHasSentToBen();
+        expect(first).toEqual(sealedToBen);
+        node.convs = [];
+        await syncMessages(ana.publicKey);   // the prune
+        h.store.set(seenKey(), JSON.stringify([]));   // a list that never took it (full then, or its write failed), with room now
+        node.lines = node.lines.filter((l) => l.conversationId !== dm.id);
+        unlocked.add(dm.id);
+        node.convs = [relistedAsGroup()];
+        await syncMessages(ana.publicKey);
+        expect({ typeHeld: typeOf(dm.id), listed: seenIn() }).toEqual({ typeHeld: 'dm', listed: [dm.id] });
+    }, 120_000);
+
+    // GX1, GX1e (#1938 confirmation 6, finding 1): A's list at its cap when Ana meets the DM, so only its pin (Ben, checked)
+    // remembers it. The node prunes it and relists it as an unlocked group, an event's chat or an enterprise's thread while
+    // the pins can't be read, so its row takes the node's type (the type path asks the pins leniently, by design) and the
+    // route opens that chat's own screen. Those screens post readable words: each now asks the pins strictly, as the DM
+    // screen's send does (§3.4 amendment 7 §3 iv, "refusing when unreadable"), so nothing goes on the list's word alone.
+    /** Every readable post or edit the node took (the route's own words), answered as an old node, an event or an enterprise would. */
+    function readableTaken(): string[] {
+        const took: string[] = [];
+        const before = (globalThis as any).fetch;
+        (globalThis as any).fetch = async (url: string, init: any = {}) => {
+            const u = new URL(url);
+            if ((init.method ?? 'GET') === 'POST') {
+                const b = JSON.parse(init.body ?? 'null');
+                if (/^\/api\/(groups\/[^/]+\/chat|marketplace\/posts\/[^/]+\/chat|enterprise\/[^/]+\/thread|treasury\/[^/]+\/thread)\/message$/.test(u.pathname) && typeof b?.text === 'string') {
+                    took.push(b.text);
+                    return answer(200, { success: true, message: { id: randomUUID() } });
+                }
+                if (u.pathname === '/api/messages/edit' && b?.nonce === 'plaintext-v1') {
+                    took.push(Buffer.from(b.ciphertext, 'base64').toString('utf8'));
+                    return answer(200, { success: true });
+                }
+            }
+            return before(url, init);
+        };
+        return took;
+    }
+    /** One screen's own send: its refusal (the error's name, and the line the member reads), and the words the node took. */
+    async function onScreen(took: string[], send: () => Promise<unknown>) {
+        const before = took.length;
+        let err: any = null;
+        try { await send(); } catch (e) { err = e; }
+        return { err: err ? (err.name && err.name !== 'Error' ? err.name : String(err.message)) : null, says: err ? (refusedSendNotice(err) ?? err.message) : null, nodeReads: took.slice(before) };
+    }
+    /** The pins can't be read while `fn` runs: a read that throws, or a value that doesn't parse (the app started again each way). */
+    async function whilePinsUnread<T>(how: 'a read that throws' | 'a corrupt value', fn: () => Promise<T>): Promise<T> {
+        const getItem = vi.mocked(AsyncStorage.getItem);
+        const real = getItem.getMockImplementation()!;
+        const key = dmPeerPinsStoreKey(ana.publicKey, FILE_A);
+        const kept = h.store.get(key);
+        if (how === 'a corrupt value') h.store.set(key, '{"pins": {corrupt');
+        else getItem.mockImplementation(async (k: string) => { if (k.startsWith(dmPeerPinsStoreKey(ana.publicKey, ''))) throw new Error('storage unavailable'); return real(k); });
+        restarted();
+        try { return await fn(); } finally {
+            getItem.mockImplementation(real);
+            if (how === 'a corrupt value') { if (kept === undefined) h.store.delete(key); else h.store.set(key, kept); }
+            restarted();
+        }
+    }
+    type ReadableScreen = { view: string; sends: Record<string, (id: string, text: string) => Promise<unknown>> };
+    const READABLE_SCREENS: Record<'group_thread' | 'event_thread' | 'enterprise_thread', ReadableScreen> = {
+        // components/GroupChatView.tsx: a group's chat with no `lock` (the node's answer has no `encryption`), its send and edit.
+        group_thread: { view: 'group_thread', sends: {
+            'group send': (id, text) => dbPort.postGroupChatMessage(id, text, randomUUID()),
+            'group edit': (id, text) => dbPort.editThreadMessage(randomUUID(), text, { groupId: id, metadata: null, locked: false }),
+        } },
+        // components/EventChatView.tsx.
+        event_thread: { view: 'event', sends: { 'event send': (id, text) => dbPort.postEventChatMessage(id, text, randomUUID()) } },
+        // components/GroupChatView.tsx's enterprise thread, and app/treasury-detail.tsx's (the same thread by its other route).
+        enterprise_thread: { view: 'enterprise_thread', sends: {
+            'enterprise send': (id, text) => dbPort.postEnterpriseChatMessage(id, text, randomUUID()),
+            'treasury thread send': (id, text) => dbPort.postEnterpriseThreadMessage(id, text, randomUUID()),
+        } },
+    };
+    const refusedUnread = { err: 'DmPinStoreError', says: DM_PIN_STORE_UNREAD_TEXT, nodeReads: [] };
+    const refusedAsDm = { err: 'GroupChatKeyError', says: GROUP_KEYS_FOR_DM_TEXT, nodeReads: [] };
+
+    for (const kind of ['group_thread', 'event_thread', 'enterprise_thread'] as const) {
+        for (const how of ['a read that throws', 'a corrupt value'] as const) {
+            const label = kind === 'group_thread' ? 'GX1' : 'GX1e';
+            it(`${label} (${kind}, ${how}) the list full when the DM is met; pruned, then relisted as an unlocked ${kind} while the pins can't be read: that screen's every send is refused and the node reads nothing; a true ${kind} waits for the pins too; the pins back, the DM refuses as a DM, sends sealed to Ben, and the true chat sends`, async () => {
+                const screen = READABLE_SCREENS[kind];
+                const filler = Array.from({ length: 26_886 }, () => randomUUID());
+                h.store.set(seenKey(), JSON.stringify(filler));
+                expect(bytesOf(seenKey())).toBe(1_048_555);
+                const { first, pin } = await anaHasSentToBen();
+                expect(first).toEqual(sealedToBen);
+                expect(pin).toMatchObject({ peer: ben.publicKey, checked: true });
+                expect((seenIn() as string[]).includes(dm.id)).toBe(false);
+                node.convs = [];
+                await syncMessages(ana.publicKey);   // the prune
+                node.lines = node.lines.filter((l) => l.conversationId !== dm.id);
+                // A chat of this kind that never was a DM, listed beside it (the control: what the guard costs it).
+                const truly: Conv = { id: randomUUID(), type: kind, participants: [ana.publicKey, puppet.publicKey] };
+                unlocked.add(dm.id);
+                unlocked.add(truly.id);
+                node.convs = [{ id: dm.id, type: kind, participants: [ana.publicKey, ben.publicKey, puppet.publicKey] }, truly];
+                const took = readableTaken();
+                const sendAll = async (id: string, words: string) => {
+                    const out: Record<string, unknown> = {};
+                    for (const [name, send] of Object.entries(screen.sends)) out[name] = await onScreen(took, () => send(id, `${words} (${name})`));
+                    return out;
+                };
+                const every = (v: unknown) => Object.fromEntries(Object.keys(screen.sends).map((name) => [name, v]));
+                const unread = await whilePinsUnread(how, async () => {
+                    await syncMessages(ana.publicKey);
+                    return {
+                        row: typeOf(dm.id), view: (await routeChat(ROUTE_ASKS_GX, dm.id, {})).view,
+                        screens: await sendAll(dm.id, 'The code is 4821'), dmScreen: await sent(dm.id, 'The code is 4821 (DM screen)'),
+                        truly: await sendAll(truly.id, 'Hello'),
+                    };
+                });
+                const back = { view: (await routeChat(ROUTE_ASKS_GX, dm.id, {})).view, screens: await sendAll(dm.id, 'The code is 4822') };
+                await syncMessages(ana.publicKey);   // the type path asks the pins first: the row goes back to dm
+                const after = { row: typeOf(dm.id), dmScreen: await sent(dm.id, 'The code is 4823'), truly: await sendAll(truly.id, 'Hello again') };
+                console.log(`${label} (${kind}, ${how}) ${JSON.stringify({ unread, back, after, took })}`);
+                expect(unread).toEqual({
+                    row: kind, view: screen.view, screens: every(refusedUnread),
+                    dmScreen: { err: 'DmPinStoreError', notice: DM_PIN_STORE_UNREAD_TEXT, posts: 0, plaintext: [], readBy: [] }, truly: every(refusedUnread),
+                });
+                expect(back).toEqual({ view: 'dm', screens: every(refusedAsDm) });
+                expect(after).toEqual({
+                    row: 'dm', dmScreen: sealedToBen,
+                    truly: Object.fromEntries(Object.keys(screen.sends).map((name) => [name, { err: null, says: null, nodeReads: [`Hello again (${name})`] }])),
+                });
+                expect(took.filter((w) => w.includes('code'))).toEqual([]);
+            }, 180_000);
+        }
+    }
+    const ROUTE_ASKS_GX = { isHeldGroupChat, knownDmConversationId, getConversationKind };
+
     it('GD3 the caps: 30,000 UUID DMs in one listing; then, in another community, 22 ids of 100,000 characters and one each of 64 and 65: the value stays within 1 MiB, every id read before is still there, the newest are refused and logged; the long ids are never remembered', async () => {
         await phoneOf(ana);
         const before = seenIn() as string[];

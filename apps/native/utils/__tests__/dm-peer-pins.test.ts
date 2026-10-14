@@ -104,6 +104,13 @@ describe('applyDmListings: a listing offers, never moves', () => {
         expect((p[D0] as DmPeerPin).peer).toBe(BEN);
     });
 
+    it('a pause the member\'s reset made stays one when a later listing offers a third key (§3.4 amendment 7 §1; #1872/#1873 confirmation 6, finding 4)', () => {
+        const LATER = '2026-10-15T00:00:00.000Z';
+        const p: DmPeerPins = { [D0]: { peer: BEN, since: NOW, by: 'first-seen', offered: { peer: PUPPET, at: NOW, firstSight: true, afterReset: true } } };
+        expect(applyDmListings(p, D0, [[OTHER]], LATER)).toBe(true);
+        expect((p[D0] as DmPeerPin).offered).toEqual({ peer: OTHER, at: LATER, firstSight: true, afterReset: true });
+    });
+
     it('a first-sight pause ends only on the member\'s tap: no listing lifts it, and a third key in between keeps it a first-sight pause (§3.4 amendment 2, option H)', () => {
         const LATER = '2026-10-15T00:00:00.000Z';
         const p: DmPeerPins = { [D0]: { peer: PUPPET, since: NOW, by: 'first-seen', checked: true, offered: { peer: BEN, at: NOW, firstSight: true } } };

@@ -2579,6 +2579,7 @@ export async function getEnterpriseThread(treasury: string, limit = 50, offset =
 }
 
 export async function postEnterpriseThreadMessage(treasury: string, text: string, clientId?: string): Promise<{ success: boolean; message: any } | null> {
+    await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/treasury/${encodeURIComponent(treasury)}/thread/message`, { text, clientId });
 }
 
@@ -2599,6 +2600,7 @@ export async function getEventChat(postId: string, limit = 50, offset = 0): Prom
 }
 
 export async function postEventChatMessage(postId: string, text: string, clientId?: string): Promise<any> {
+    await refuseReadableIntoDm(postId);
     return _signedRequest(`/api/marketplace/posts/${encodeURIComponent(postId)}/chat/message`, { text, clientId });
 }
 
@@ -2672,12 +2674,13 @@ async function rememberDmConversations(ids: string[], database?: SQLite.SQLiteDa
  * and for a group whose keys this phone has held (or whose key memory can't be read): the held guard is asked before
  * anything, so a node listing a held group as a DM, which the pins hear at first sight, never makes it one here.
  * `pinsMustRead` (a send): pins that can't be read throw (DmPinStoreError), so nothing goes on the list's word alone.
+ * `myPub`: this identity's key when the caller has it (a sync pass asks every row), so the identity isn't loaded per ask.
  */
-async function keptInDmPins(conversationId: string, database: SQLite.SQLiteDatabase, pinsMustRead = false): Promise<boolean> {
-    let me: string | undefined;
+async function keptInDmPins(conversationId: string, database: SQLite.SQLiteDatabase, pinsMustRead = false, myPub?: string | null): Promise<boolean> {
+    let me: string | null | undefined;
     let pins: DmPeerPins;
     try {
-        me = (await loadIdentity())?.publicKey;
+        me = myPub ?? (await loadIdentity())?.publicKey;
         if (!me || !isPinnableId(conversationId)) return false;
         pins = await dmPins.read(me, database);
     } catch (e) {
@@ -2701,13 +2704,14 @@ async function keptInDmPins(conversationId: string, database: SQLite.SQLiteDatab
  * The pins are asked first (§3.4 amendment 7 §3 iv): an id this file's pins keep anything for is a known DM (under the
  * spelling asked for, unless the list, a row or a line knows it under another). With the list unreadable and nothing else
  * knowing the id this throws DmGuardUnreadError: "not a DM" is never answered from a list it couldn't read. `pinsMustRead`
- * (a send): pins that can't be read throw DmPinStoreError rather than leave the answer to the list.
+ * (a send): pins that can't be read throw DmPinStoreError rather than leave the answer to the list. `me`: this identity's
+ * key, when the caller already has it (holdDmTypes asks every non-DM row of a pass).
  */
-export async function knownDmConversationId(conversationId: string, seenByFold?: Map<string, string[]> | null, opts: { pinsMustRead?: boolean } = {}): Promise<string | null> {
+export async function knownDmConversationId(conversationId: string, seenByFold?: Map<string, string[]> | null, opts: { pinsMustRead?: boolean; me?: string | null } = {}): Promise<string | null> {
     if (!conversationId) return null;
     const folded = conversationId.toLowerCase();
     const db = await getDb().catch(() => null);
-    const pinned = db ? await keptInDmPins(conversationId, db, opts.pinsMustRead) : false;
+    const pinned = db ? await keptInDmPins(conversationId, db, opts.pinsMustRead, opts.me) : false;
     let listed: string[] | null;
     if (seenByFold !== undefined) listed = seenByFold ? (seenByFold.get(folded) ?? []) : null;
     else listed = await dmConversationsSeen().then((seen) => [...seen].filter((s) => s.toLowerCase() === folded), () => null);
@@ -2772,7 +2776,7 @@ async function isKnownDmInAnySpelling(conversationId: string): Promise<boolean> 
 }
 
 /** True for a conversation this phone has seen as a DM, or that holds an encrypted line, in any spelling of its id. */
-export async function isKnownDmConversation(conversationId: string, opts: { pinsMustRead?: boolean } = {}): Promise<boolean> {
+export async function isKnownDmConversation(conversationId: string, opts: { pinsMustRead?: boolean; me?: string | null } = {}): Promise<boolean> {
     return (await knownDmConversationId(conversationId, undefined, opts)) !== null;
 }
 
@@ -2812,7 +2816,7 @@ async function heldConversationType(conversationId: string, nodeType: string | n
         if (held !== null && !listedLater) await rememberDmConversations([conversationId]);
         return 'dm';
     }
-    if (await isKnownDmConversation(conversationId)) {
+    if (await isKnownDmConversation(conversationId, { me: myPub })) {
         console.warn(`[DM guard] the node calls DM ${String(conversationId).slice(0, 8)} a ${t}: ignored, it stays a DM`);
         await rememberDmConversations([conversationId]);
         return 'dm';
@@ -2841,8 +2845,9 @@ async function holdDmTypes(database?: SQLite.SQLiteDatabase): Promise<void> {
         const rows = await db.getAllAsync<any>("SELECT id, type FROM conversations WHERE IFNULL(type, 'dm') != 'dm'");
         if (!rows?.length) return;
         const byFold = await dmConversationsByFold(db).catch(() => null);
+        const me = (await loadIdentity().catch(() => null))?.publicKey ?? null;
         for (const r of rows) {
-            if (r?.id && (await knownDmConversationId(r.id, byFold).catch(() => null)) !== null) {
+            if (r?.id && (await knownDmConversationId(r.id, byFold, { me }).catch(() => null)) !== null) {
                 console.warn(`[DM guard] DM ${String(r.id).slice(0, 8)} was held as a ${r.type}: back to a DM`);
                 await db.runAsync("UPDATE conversations SET type = 'dm' WHERE id = ?", [r.id]);
                 await rememberDmConversations([r.id], db);
@@ -7693,6 +7698,7 @@ export async function postGroupChatMessage(
             throw e;
         }
     }
+    await refuseReadableIntoDm(groupId);
     return _signedRequest(`/api/groups/${encodeURIComponent(groupId)}/chat/message`, { text, clientId, replyToId: replyToId || undefined });
 }
 
@@ -7805,6 +7811,17 @@ async function refuseGroupKeysForDm(ring: GroupKeyring): Promise<void> {
     if (await isKnownDmInAnySpelling(ring.groupId)) throw new GroupChatKeyError(GROUP_KEYS_FOR_DM_TEXT, 'refused');
 }
 
+/**
+ * Before every readable send, the node reading the words (an old node's group post and edit, an event's chat, an enterprise's
+ * thread from either screen): a known DM refuses, its pins asked strictly as the DM screen's send asks them (§3.4 amendment
+ * 7 §3 iv, "refusing when unreadable"). Pins that can't be read throw DmPinStoreError, so nothing readable goes on the
+ * list's word alone: a DM the full list never took, relisted by the node as one of these chats while the pins couldn't be
+ * read, opens in that chat's own screen, and its next line went out readable (#1938 confirmation 6, finding 1).
+ */
+async function refuseReadableIntoDm(conversationId: string): Promise<void> {
+    if (await isKnownDmConversation(conversationId, { pinsMustRead: true })) throw new GroupChatKeyError(GROUP_KEYS_FOR_DM_TEXT, 'refused');
+}
+
 async function groupKeyContext(): Promise<{ nodeUrl: string; identity: BeanPoolIdentity }> {
     const anchorUrl = await AsyncStorage.getItem('beanpool_anchor_url');
     if (!anchorUrl) throw new Error('You are off-grid. Please connect to a BeanPool Node.');
@@ -7839,6 +7856,7 @@ export async function getEnterpriseChat(treasury: string, limit = 50): Promise<a
 }
 
 export async function postEnterpriseChatMessage(treasury: string, text: string, clientId?: string): Promise<any> {
+    await refuseReadableIntoDm(treasury);
     return _signedRequest(`/api/enterprise/${encodeURIComponent(treasury)}/thread/message`, { text, clientId });
 }
 
@@ -7955,6 +7973,7 @@ export async function editThreadMessage(messageId: string, newText: string, line
             throw e;
         }
     }
+    await refuseReadableIntoDm(line.groupId);
     return _signedRequest('/api/messages/edit', {
         messageId,
         ciphertext: encodeBase64(encodeUtf8(newText)),

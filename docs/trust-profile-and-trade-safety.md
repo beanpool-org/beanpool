@@ -62,11 +62,13 @@ Adding a friend is visible and bounded, because a connection in common is made o
 - The person added is told: a quiet line on their People tab, "*name* added you · Add back", phone and web (no push).
   Only adds made after a server first ran this are shown (no backfill), for 30 days, until they add back or either
   blocks the other; 20 named, then "and N more" (`GET /api/friends/added-you`, their own only; engine/friends-added-you.ts).
-- A member adds at most **100 people a day** (`friendAddsPerDay`, config/writer-limits.ts). Removing someone and adding
-  again frees nothing. The 101st is refused in words, with when it lets up, never silently dropped (the phone no longer
+- A member adds at most **100 people a day** (`friendAddsPerDay`, config/writer-limits.ts). Removing someone counts
+  too (its tombstone), so removing and adding again frees nothing. The 101st is refused in words, with when it lets up, never silently dropped (the phone no longer
   writes its own row before the node has answered).
-- An add to someone you blocked is refused, saying so. An add from someone who blocked you is refused in the words a key
-  that is no member gets, so the block is never told (`member_blocks`, the web's block list).
+- You can't add someone you blocked: refused, saying so. If they add you, you aren't told: the add is taken as any add
+  (it counts against their 100), and your "added you" line leaves out anyone you blocked (`member_blocks`, the web's
+  block list; the phone also leaves out its own blocks). Refusing it would tell them of the block, which a block never
+  does (engine/member-blocks.ts).
 
 ### Suggested "trust at a glance" layout
 1. Tier badge · member since · last active

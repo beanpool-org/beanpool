@@ -80,15 +80,15 @@ export const FRIEND_BLOCKED_ERROR = 'You have blocked them. Unblock them first t
  *
  * The person added is told, on their People tab (engine/friends-added-you.ts), so an add is refused, never dropped:
  * - to someone the owner blocked (member_blocks, engine/member-blocks.ts): THROWS FriendRefusal, saying so;
- * - to someone who blocked the owner: null, the answer a key with no row gets, so the owner learns nothing of the block
- *   (the blocked member is never told);
  * - past WRITER_LIMITS.friendAddsPerDay new adds in a day: THROWS WriterLimitError (engine/writer-bounds.ts).
+ * An add to someone who blocked the owner is taken as any add is (and counts against the day's adds): refusing it would
+ * tell the blocked member of the block, which a block never does (engine/member-blocks.ts). The person who blocked them
+ * is never told either: engine/friends-added-you.ts leaves out an adder they blocked.
  * Adding someone already added is no new add: it answers as before and counts nothing.
  */
 export function addFriend(ownerPubkey: string, friendPubkey: string): FriendEntry | null {
     if (!getMember(db, ownerPubkey) || isVisitorKey(db, ownerPubkey) || !getMember(db, friendPubkey) || ownerPubkey === friendPubkey) return null;
     if (hasBlocked(ownerPubkey, friendPubkey)) throw new FriendRefusal(FRIEND_BLOCKED_ERROR);
-    if (hasBlocked(friendPubkey, ownerPubkey)) return null;
 
     const exists = db.prepare("SELECT * FROM friends WHERE owner_pubkey=? AND friend_pubkey=?").get(ownerPubkey, friendPubkey);
     if (!exists) {

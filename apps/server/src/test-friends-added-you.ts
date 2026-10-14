@@ -3,8 +3,8 @@
  *   - the person added sees "added you · add back" (GET /api/friends/added-you, their own only), for new adds only;
  *   - a member adds at most 100 people a day (config/writer-limits.ts friendAddsPerDay), refused in words, never dropped,
  *     and adding and removing again frees nothing;
- *   - an add to someone the member blocked, or from someone who blocked them (member_blocks), is refused, the second in
- *     the words a key that is no member gets, so the block is never told.
+ *   - an add to someone the member blocked (member_blocks) is refused, saying so; an add from someone who blocked them
+ *     answers as any add does, and the person who blocked them never sees it, so neither side is told of the block.
  * Every request goes through the real middleware, signed; rows a check only sets up are seeded straight into the tables.
  * Every actor is a plain member (invited by one founder, no role).
  */
@@ -137,22 +137,33 @@ async function main() {
         assert(/no-store/.test(res.headers.get('cache-control') ?? ''), `A3: answered no-store (${res.headers.get('cache-control')})`);
     }
 
-    // A4 — blocks. B blocked A: A's add of B is refused in the words a key that is no member gets, and writes nothing;
-    // B's add of A is refused saying B blocked them. An add from before the block leaves B's tab.
+    // A4 — blocks. B blocked A: A's add of B answers as A's add of anyone (engine/member-blocks.ts: the blocked member is
+    // never told, and nothing they can read changes), and B's tab never shows A. B's add of A is refused saying B blocked
+    // them. An add from before the block leaves B's tab.
     {
         resetGatewayRateLimit();
-        const a = member('a4-a'), b = member('a4-b'), early = member('a4-early');
+        const a = member('a4-a'), b = member('a4-b'), c = member('a4-c'), early = member('a4-early');
         await add(early, b);
         assert(JSON.stringify(keysOf(await addedYou(b))) === JSON.stringify([early.pk]), 'A4: B sees an earlier add before blocking');
         const blocked = await block(b, a), blockedEarly = await block(b, early);
         assert(blocked.status === 200 && blockedEarly.status === 200, `A4: B blocks A and the earlier adder (${blocked.status}, ${blockedEarly.status})`);
         assert(keysOf(await addedYou(b)).length === 0, 'A4: an add by someone B blocked leaves B\'s tab');
 
+        const toAnyone = await add(a, c);
         const fromBlocked = await add(a, b);
-        const noMember = await signed(a, 'POST', '/api/friends/add', { friendPubkey: keypair('nobody').pk });
-        assert(fromBlocked.status === 400 && !hasRow(a, b), `A4: A, whom B blocked, cannot add B, and no row is written (${fromBlocked.status})`);
-        assert(fromBlocked.status === noMember.status && fromBlocked.text === noMember.text,
-            `A4: in the very words a key that is no member gets, so A learns nothing of the block (${fromBlocked.text} | ${noMember.text})`);
+        // Everything A reads of the answer but whose name and face it is.
+        const shape = (r: { status: number; body: any }, who: Id) => JSON.stringify({
+            status: r.status, keys: Object.keys(r.body ?? {}).sort(), friendKeys: Object.keys(r.body?.friend ?? {}).sort(),
+            success: r.body?.success, isGuardian: r.body?.friend?.isGuardian, isWho: r.body?.friend?.publicKey === who.pk,
+        });
+        assert(fromBlocked.status === 200 && hasRow(a, b) && shape(fromBlocked, b) === shape(toAnyone, c),
+            `A4: A's add of B, who blocked A, answers as A's add of C, with a row (${shape(fromBlocked, b)} | ${shape(toAnyone, c)})`);
+        const aFriends = await signed(a, 'GET', `/api/friends/${a.pk}`);
+        const aKeys = (aFriends.body ?? []).map((f: any) => f.publicKey);
+        assert(aFriends.status === 200 && aKeys.includes(b.pk) && aKeys.includes(c.pk), 'A4: and A\'s own list shows B as it shows C');
+        assert(!keysOf(await addedYou(b)).includes(a.pk), 'A4: and B\'s tab never shows A');
+        const again = await add(a, b);
+        assert(again.status === 200 && !keysOf(await addedYou(b)).includes(a.pk), 'A4: nor after A adds B again');
         const toBlocked = await add(b, a);
         assert(toBlocked.status === 400 && toBlocked.body?.code === 'blocked' && /blocked them/.test(toBlocked.body?.error ?? '') && !hasRow(b, a),
             `A4: B cannot add A, whom B blocked, and is told why (${toBlocked.status} ${toBlocked.body?.error})`);

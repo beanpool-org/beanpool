@@ -2,12 +2,11 @@ import { useLayoutEffect, useState, type ReactNode } from 'react';
 import { openHelp } from '../lib/tour-store';
 
 /**
- * The pill at its widest: three 44 px targets and its border. Narrower only where the header's title would be cut: at 320 px
- * with 130% text "Commons" had 10 px to spare beside the old 100 px pill, so below 346 px wide the pill gives way (two
- * pixels short of that room) and its targets narrow to 35 px at 320; they stay 44 px tall everywhere.
+ * The pill's width: profile, the "?" and Settings, a third each. Kept at 100 px when the icons grew (14 Oct 2026): three
+ * 44 px wide targets would cut "Commons" at 320 px with 130% text (it had 10 px to spare), and put the map tab's "BeanPool"
+ * under the pill from 360 to 412 px wide (32 px of it at 360), where it cleared the pill before. The targets grew in height.
  */
-export const HEADER_PILL_PX = 134;
-const PILL_WIDTH = `min(${HEADER_PILL_PX}px, calc(100vw - 212px))`;
+export const HEADER_PILL_PX = 100;
 
 /**
  * The mobile header's title: the tab's name in the middle of the room the row leaves between the sync chip and the pill
@@ -96,7 +95,7 @@ export function HelpIcon({ className, strokeWidth = 1.5 }: { className: string; 
 
 /**
  * Each control in the pill: a 24 px icon in a target 44 px tall (it overhangs the 38 px pill by 3 px above and below, so the
- * header keeps its height) and a third of the pill wide. Gold (Marty, 14 Oct 2026: "maybe gold", over the header photo),
+ * header keeps its height) and a third of the pill wide (33 px). Gold (Marty, 14 Oct 2026: "maybe gold", over the header photo),
  * the library's gold fill, as the phone's selected Settings icon; lighter (the gold's own hover) under the pointer.
  */
 const PILL_BUTTON = 'flex-1 min-w-0 h-[44px] -my-[4px] p-0 border-0 bg-transparent cursor-pointer flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bp-gold-fill';
@@ -105,18 +104,19 @@ const PILL_ICON = 'w-[24px] h-[24px] shrink-0';
 /**
  * The mobile header's pill: your profile, the "?" and Settings (its own file so its fit at 320 px can be measured alone).
  * Charcoal in both themes, the gold pair's own words colour, so the gold icons on it are the library's gold pair the other
- * way round (7.5:1) whatever the photo is under it. Settings open: a gold disc with a charcoal icon in it (the pair as the
+ * way round (7.5:1) whatever the photo is under it. Above the header's dimming layer (in dark it is black at 50%, and the
+ * pill sat under it, dimmed with the photo), still under the map tab's logo where they meet. Settings open: a gold disc with a charcoal icon in it (the pair as the
  * library draws it), so the open state is a filled shape and not a change of colour alone.
  */
 export function HeaderControls({ showSettings, setShowSettings, identityPubkey, onOpenProfile }: { showSettings: boolean, setShowSettings: (v: boolean) => void, identityPubkey?: string, onOpenProfile: (pk: string) => void }) {
     return (
-        <div data-testid="header-pill" className="bg-bp-gold-on" style={{
+        <div data-testid="header-pill" className="relative z-[5] bg-bp-gold-on" style={{
             display: 'flex',
             alignItems: 'center',
             borderRadius: '9999px',
             border: '1px solid var(--border-secondary)',
             height: '38px',
-            width: PILL_WIDTH,
+            width: `${HEADER_PILL_PX}px`,
             flexShrink: 0,
             justifyContent: 'center',
         }}>
@@ -150,7 +150,7 @@ export function HeaderControls({ showSettings, setShowSettings, identityPubkey, 
                 data-testid="header-settings"
                 className={`${PILL_BUTTON} group ${showSettings ? 'text-bp-gold-on' : 'text-bp-gold-fill hover:text-bp-gold-hover'}`}
             >
-                <span className={`w-[32px] h-[32px] rounded-full flex items-center justify-center shrink-0 ${showSettings ? 'bg-bp-gold-fill group-hover:bg-bp-gold-hover' : ''}`}>
+                <span className={`w-[30px] h-[30px] rounded-full flex items-center justify-center shrink-0 ${showSettings ? 'bg-bp-gold-fill group-hover:bg-bp-gold-hover text-bp-gold-on' : ''}`}>
                     <svg className={PILL_ICON} fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor" aria-hidden="true">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
                     </svg>

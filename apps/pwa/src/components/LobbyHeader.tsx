@@ -34,7 +34,7 @@ export function LobbyHeader({ tab, title, onHelp, onJoin, joinDisabled }: { tab:
             alignItems: 'center',
             padding: '0.3rem 0.75rem',
             minHeight: '46px',
-            borderBottom: tab === 'map' ? 'none' : '1px solid rgba(255,255,255,0.1)',
+            borderBottom: tab === 'map' ? 'none' : '1px solid #111',
             position: tab === 'map' ? 'absolute' : 'sticky',
             top: 0,
             left: 0,

@@ -317,7 +317,7 @@ export const darkColors = {
         heading: palette.white,
         body: palette.gray100,
         secondary: palette.gray400,
-        muted: '#8b919b',        // between gray-400 and gray-500: 5.49 on the card, 4.77 on the sunken row (gray-500 was 3.13)
+        muted: '#898f99',        // between gray-400 and gray-500: 5.35 on the card, 4.65 on the sunken row (gray-500 was 3.13)
         inverse: palette.white,
         link: palette.blue400,
         onBrand: brandDark.commit.on,

@@ -203,11 +203,15 @@ export async function lookupRestorable(anchorUrl: string, name: string): Promise
  *
  * - `lookup_unreachable`: before it began, the community's lookup couldn't be had. Nothing was released or saved.
  * - `no_restorable_account`: before it began, the community listed no account by that name that a sign-in can bring back.
+ * - `two_accounts_one_name`: before it began, two accounts here have this name in different cases (a pair from before
+ *   names were folded, kept, never renamed), each with a sign-in copy, and this screen has no list to pick one from. The
+ *   community's own answer (409) is English and says "callsign" and "node", so it is never shown.
  * - `not_that_account`: with the copy open, it made another key than the account the community lists. Nothing was saved.
  */
 export type CommunityRestoreRefusal =
     | { code: 'lookup_unreachable' }
     | { code: 'no_restorable_account'; name: string }
+    | { code: 'two_accounts_one_name' }
     | { code: 'not_that_account'; name: string };
 
 /** {@link recoverAccountWithSso} refused, for one of the {@link CommunityRestoreRefusal} reasons. */
@@ -290,13 +294,17 @@ export async function recoverAccountWithSso(options: {
         createdAt: new Date().toISOString(),
     };
 
-    // 2. Open recovery collection
+    // 2. Open recovery collection. With one account listed, for that account's key (`candidatePublicKey`): the community
+    // opens it even when another account holds the same name in another case (routes/recovery-collect.ts resolveCallsign).
+    // With several, by the name alone, as before: this screen has no list to pick from.
     options.onProgress?.({ step: 'opening', message: 'Connecting to node recovery session...' });
     const openRes = await signedPost(finalAnchorUrl, '/api/recovery/collect', {
         callsign: rawCallsign,
+        ...(restorable.length === 1 ? { candidatePublicKey: restorable[0].publicKey } : {}),
     }, ephIdentity);
 
     if (!openRes.ok) {
+        if (openRes.status === 409) throw new CommunityRestoreRefused({ code: 'two_accounts_one_name' });
         const err = await openRes.json().catch(() => ({}));
         throw new Error(err.error || `Could not open recovery session (${openRes.status})`);
     }

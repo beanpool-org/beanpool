@@ -17,6 +17,8 @@ export function communityRestoreRefusalText(refusal: CommunityRestoreRefusal): s
             return t("Can't reach the community right now. Try again in a minute.");
         case 'no_restorable_account':
             return t("No account called {name} here can come back with a sign-in. Check you've typed your whole name, or use your 12 words.", { name: refusal.name });
+        case 'two_accounts_one_name':
+            return t("Two accounts here have this name. Use your 12 words, or ask your community's admin.");
         case 'not_that_account':
             return t("The account that came back isn't {name}, so nothing was saved on this phone. Try again, or use your 12 words.", { name: refusal.name });
     }

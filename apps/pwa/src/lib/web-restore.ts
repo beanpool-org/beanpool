@@ -13,7 +13,8 @@
  *      community since 2026-10-01; the global one since G9a-2). The member picks theirs.
  *   2. A throwaway key is made for this restore (`makeEphemeralKey`). It is not an account and is never saved as one.
  *      It signs every call below, and the node binds the recovery session to it: the session id alone opens nothing.
- *   3. `POST /api/recovery/collect { callsign }` opens the session (the account's owner sees it in their app, and is told
+ *   3. `POST /api/recovery/collect { callsign, candidatePublicKey }` opens the session for the account picked (by its key, so
+ *      a name another account holds in another case still opens the one picked) (the account's owner sees it in their app, and is told
  *      when the copy is released), and `POST /api/recovery/collect/sso-nonce` gives the sign-in nonce for the throwaway
  *      key, with the ids a browser puts in its request to each provider (`clientIds`).
  *   4. The sign-in: Google, Apple and Facebook leave the page exactly as the join does (lib/web-join.ts builds the same
@@ -114,9 +115,12 @@ function signer(eph: EphemeralKey): BeanPoolIdentity {
 
 // ===================== THE NODE'S RECOVERY SESSION (routes/recovery-collect.ts) =====================
 
-/** Open the node's recovery session for `callsign` (the name as the lookup gave it), bound to `eph`. */
-export async function openRestoreSession(eph: EphemeralKey, callsign: string): Promise<{ collectionId: string } | { answer: DoorAnswer }> {
-    const answer = await door('POST', '/api/recovery/collect', { callsign }, signer(eph));
+/**
+ * Open the node's recovery session for `callsign` (the name as the lookup gave it), bound to `eph`: for the account the
+ * lookup listed with `publicKey`, when given, which the node opens only if that name holds it (routes/recovery-collect.ts).
+ */
+export async function openRestoreSession(eph: EphemeralKey, callsign: string, publicKey?: string): Promise<{ collectionId: string } | { answer: DoorAnswer }> {
+    const answer = await door('POST', '/api/recovery/collect', publicKey ? { callsign, candidatePublicKey: publicKey } : { callsign }, signer(eph));
     const id = answer.body.collectionId;
     if (answer.status !== 200 || typeof id !== 'string' || !id) return { answer };
     return { collectionId: id };

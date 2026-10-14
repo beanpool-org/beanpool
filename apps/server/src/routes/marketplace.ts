@@ -46,7 +46,7 @@ import { readMemberArea } from '../engine/member-area.js';
 import { viewerTier, VIEW_HEADER, membersOnlyHere } from './viewer.js';
 import { EPOCH_HEADER, syncEpochHeaderValue } from '../services/identity-epoch.js';
 import { withheldAttachmentFor } from '../engine/withheld-lines.js';
-import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, authorsBlockedBy, postsResentTo, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
+import { guestPost, isTradeParty, withoutTradeParty, parsePageKey, getNearbySet, authorsBlockedBy, postsResentTo, exactPlacesFor, ONE_PASS_MAX_MEASURED, type MarketplacePost, type SyncPage, type NearbySet } from '@beanpool/engine';
 import type { RouteDeps } from './types.js';
 import { memberErrorText } from './member-error-text.js';
 
@@ -464,6 +464,15 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // for nobody in particular: no own posts, no hidden ones, no group or direct ones.
     const reader = guestView ? undefined : viewerPubkey;
     const includeHidden = !!reader && !!nodeRoleOf(reader);
+    // Where anyone can join in a minute (`openMembership`, the global node), a member is someone who spent a minute, so
+    // each listing's place reaches them to its neighbourhood (0.01°, about 1 km) inside the query, distance and order
+    // too, all but their own and the events they may read in full (engine PostFilter.neighbourhood, exactPlacesFor;
+    // DESIGN-global-member-privacy-fable.md §4). Which places are exact for them is in the ETag: a host letting them in,
+    // or a keeper's binding, changes it without changing any listing. Elsewhere every member's read is as before.
+    const neighbourhood = !!reader && !guestView && switches.openMembership;
+    const exactPart = neighbourhood
+        ? `:nbhd-${crypto.createHash('sha256').update(JSON.stringify(exactPlacesFor(db, reader!))).digest('hex').slice(0, 16)}`
+        : '';
 
     // A member's set, worked out before the ETag, which describes it: any listing of it changing, coming in or leaving
     // changes the tag, and nothing outside it does, so a change 300 km away no longer ends this member's 304. A delta
@@ -476,7 +485,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
         const { radiusKm: setKm, max } = nearbyListingsLimits();
         nearbySet = getNearbySet(db, viewerPubkey!, {
             area: area ? { lat: area.lat, lng: area.lng } : null, radiusKm: setKm, max, newestWithoutArea: NEARBY_NEWEST_WITHOUT_AREA,
-            types, excludeEvents, includeHidden, measureAtMost: ONE_PASS_MAX_MEASURED,
+            types, excludeEvents, includeHidden, measureAtMost: ONE_PASS_MAX_MEASURED, neighbourhood: neighbourhood || undefined,
         });
         // Or from before its members' face URLs last changed (engine/avatar-keys.ts), as the member directory answers such a
         // delta whole: a phone that keeps no card for its listings' authors has each face from the row (DESIGN-global-
@@ -491,7 +500,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
         // phone holds the set as the tag describes it, which it does once a read has landed; the phone sends its tag on a
         // delta only. The identity epoch too: a take-over's server never confirms the old one's copy.
         const described = [nearbyTagQuery(ctx.querystring || ''), viewerPubkey, area ? `${area.lat},${area.lng}` : '-', nearbySet.ids.join(','),
-            nearbySet.stamp, photoKeysSince(), nearbyWhole ? 'whole' : '', nearbySet.tied.join(','), syncEpochHeaderValue()].join('\n');
+            nearbySet.stamp, photoKeysSince(), nearbyWhole ? 'whole' : '', nearbySet.tied.join(','), syncEpochHeaderValue(), ...(exactPart ? [exactPart] : [])].join('\n');
         nearbyEtag = `W/"near-${crypto.createHash('sha256').update(described).digest('hex').slice(0, 24)}"`;
     }
 
@@ -499,7 +508,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     // too: a block or an unblock changes the answer and no listing, and a copy held from before must not be confirmed
     // with a 304 (#1808 review, finding 3). The nearby set's tag holds its ids, so it needs nothing more.
     const blocksPart = q && reader ? `:blocks-${crypto.createHash('sha256').update(authorsBlockedBy(db, reader).sort().join(',')).digest('hex').slice(0, 16)}` : '';
-    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}`;
+    const queryPart = `${ctx.querystring || ''}:${viewerPubkey || ''}:${beansOnly}:${includeVoters ? 'member' : guestView ? 'guest' : 'reader'}${point ? `:${byDistance ? 'nearest' : 'recent'}` : ''}${heal ? `:${heal.tag}` : ''}${blocksPart}${exactPart}`;
     const queryHash = crypto.createHash('sha256').update(queryPart).digest('hex').slice(0, 8);
     const etag = nearbySet ? nearbyEtag : `W/"posts-${getPostsVersion()}-${queryHash}"`;
 
@@ -559,6 +568,7 @@ router.get('/api/marketplace/posts', async (ctx) => {
     const listing = {
         id, ids, type, types, excludeEvents, category, query: q, authorPubkey: author, viewerPubkey: reader, beansOnly, audienceScope,
         targetGroupId, assignedTo, includeHidden, includeVoters, coarse: guestView || undefined, guest: guestView || undefined,
+        neighbourhood: neighbourhood || undefined,
     };
     // On a node with members on demand and no by-area listings, a member's plain delta sends again each listing whose
     // author changed their card since, as a set's delta does: the phone holds no card for most of its listings' authors,

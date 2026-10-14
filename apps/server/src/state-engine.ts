@@ -334,7 +334,9 @@ import {
     type GroupMemberStatus,
     type CreateGroupParams,
     type UpdateGroupParams,
-    type ListGroupsFilter
+    type ListGroupsFilter,
+    exactPlaceReaders,
+    roundToNeighbourhood,
 } from '@beanpool/engine';
 import {
     addRating,
@@ -1622,7 +1624,39 @@ export function inspectWsClients(): ReturnType<WsClients['inspect']> {
     return wsClients.inspect();
 }
 
+/**
+ * A listing's own event where anyone can join in a minute (`openMembership`, the global node): its place as stored, and
+ * who has it exactly (engine exactPlaceReaders: the author, an enterprise's keepers, an event's hosts and the people let
+ * in). Every other socket's copy carries its neighbourhood (0.01°), as their reads do (engine PostFilter.neighbourhood;
+ * DESIGN-global-member-privacy-fable.md §4). The place is read from the row, so a copy read for one member (an RSVP's,
+ * already rounded for them) still reaches the author exact, and their app never keeps a rounded pin to edit. Null
+ * elsewhere, or for an event with no listing in it.
+ */
+function placeOfListingEvent(event: any): { event: any; exact: Set<string> } | null {
+    if ((event?.type !== 'new_post' && event?.type !== 'post_updated') || !event.post || typeof event.post !== 'object') return null;
+    if (typeof event.post.id !== 'string' || !getProfileSwitches().openMembership) return null;
+    const row = db.prepare('SELECT id, lat, lng, author_pubkey, type, audience_scope, target_group_id, event_host_lets_in FROM posts WHERE id = ?')
+        .get(event.post.id) as { id: string; lat: number | null; lng: number | null; author_pubkey: string; type: string; audience_scope: string | null; target_group_id: string | null; event_host_lets_in: number | null } | undefined;
+    if (!row) return null;
+    const post = { ...event.post };
+    if (typeof post.lat === 'number' && typeof row.lat === 'number') post.lat = row.lat;
+    if (typeof post.lng === 'number' && typeof row.lng === 'number') post.lng = row.lng;
+    return { event: { ...event, post }, exact: exactPlaceReaders(db, row) };
+}
+
+/** A copy of a listing's event (a JSON string) with its place to the neighbourhood (placeOfListingEvent). */
+function withNeighbourhood(json: string): string {
+    const e = JSON.parse(json);
+    if (e?.post && typeof e.post.lat === 'number') e.post.lat = roundToNeighbourhood(e.post.lat);
+    if (e?.post && typeof e.post.lng === 'number') e.post.lng = roundToNeighbourhood(e.post.lng);
+    return JSON.stringify(e);
+}
+
 function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOptions): number {
+    const placed = placeOfListingEvent(event);
+    if (placed) event = placed.event;
+    // Each full copy below, with the place to the neighbourhood, made once (withNeighbourhood).
+    const neighbourhoodCopies = new Map<string, string>();
     if (event && typeof event.type === 'string') {
         switch (event.type) {
             case 'new_post':
@@ -1756,6 +1790,11 @@ function deliverBroadcast(event: any, recipients?: string[], opts?: BroadcastOpt
             out = out === msg
                 ? withoutParty ??= JSON.stringify({ ...event, post: withoutTradeParty(tradePost) })
                 : withoutPartyNorVoters ??= JSON.stringify({ ...event, post: withoutTradeParty(withoutPollVoters(tradePost)) });
+        }
+        if (placed && out !== doorbell && !(ws._memberPubkey && placed.exact.has(ws._memberPubkey))) {
+            let rounded = neighbourhoodCopies.get(out);
+            if (rounded === undefined) { rounded = withNeighbourhood(out); neighbourhoodCopies.set(out, rounded); }
+            out = rounded;
         }
         try {
             ws.send(out);

@@ -260,3 +260,7 @@ every render. Wrap it in `useMemo` keyed on `members`, or it is a net loss rathe
 ## 2026-10-14 - Pre-compute Treasury Accounts Set in Marketplace Feed Handler
 **Learning:** In `apps/server/src/routes/marketplace.ts`, mapping marketplace feed responses evaluated `tradeSide(p)` for each post, which executed `isTreasury(...)` — triggering per-post SQLite queries (`SELECT is_treasury FROM members WHERE public_key=?`). For feeds containing $P$ posts, this caused up to $2P$ database queries per feed request.
 **Action:** Pre-computed `treasuryKeys` Set via a single `SELECT public_key FROM members WHERE is_treasury = 1` query prior to mapping `posts`, converting per-post treasury checks into constant-time $O(1)$ Set lookups.
+
+## 2026-10-15 - O(1) Keeper and Group Member Lookups in PWA EnterpriseDecisions
+**Learning:** In `apps/pwa/src/components/EnterpriseDecisions.tsx`, `nameOf` callbacks ran `keepers.find(k => k.publicKey === pk)` in `EnterpriseDecisions` and `people.find(p => p.pubkey === pk)` in `GroupDecisions` repeatedly when rendering decision items, causing linear array scans ($O(D \times K)$ or $O(D \times P)$) on every render cycle.
+**Action:** Pre-computed `keepersMap` and `peopleMap` via `useMemo` indexed by `publicKey` / `pubkey` at component scope, converting member name lookups into constant-time $O(1)$ retrievals ($O(D + K)$ or $O(D + P)$ overall).

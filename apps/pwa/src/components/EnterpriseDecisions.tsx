@@ -39,7 +39,9 @@ const btnNo = `${btn} border border-nature-300 dark:border-nature-600 bg-white d
 export function EnterpriseDecisions({ treasuryKey, myPubkey, keepers, balance, earnedSurplus, lifecycle }: EnterpriseDecisionsProps) {
     const roll: RollPerson[] = useMemo(() => keepers.filter(k => !k.suspended)
         .map(k => ({ pubkey: k.publicKey, name: k.callsign || 'A keeper', role: k.role })), [keepers]);
-    const nameOf = useCallback((pk: string) => keepers.find(k => k.publicKey === pk)?.callsign || 'a member', [keepers]);
+    // ⚡ Bolt: O(1) Map lookup for keepers by publicKey instead of O(K) .find() scans
+    const keepersMap = useMemo(() => new Map(keepers.map(k => [k.publicKey, k])), [keepers]);
+    const nameOf = useCallback((pk: string) => keepersMap.get(pk)?.callsign || 'a member', [keepersMap]);
     const read = useCallback(() => getEnterpriseDecisions(treasuryKey), [treasuryKey]);
     const cast = useCallback((id: string, support: boolean) => voteEnterpriseDecision(treasuryKey, id, support), [treasuryKey]);
     return (
@@ -68,7 +70,9 @@ export interface GroupDecisionsProps {
 /** A chat group's votes (slice S3), on its info: the same block, its own form (no recipient, no amount). */
 export function GroupDecisions({ groupId, myPubkey, people, joinPolicy, onChanged }: GroupDecisionsProps) {
     // Someone removed lands here with no roster (people is []): the card's own names, then plain words (#1794 N7).
-    const nameOf = useCallback((pk: string, names?: Record<string, string>) => people.find(p => p.pubkey === pk)?.name || names?.[pk] || GROUP_SOMEONE, [people]);
+    // ⚡ Bolt: O(1) Map lookup for group members by pubkey instead of O(P) .find() scans
+    const peopleMap = useMemo(() => new Map(people.map(p => [p.pubkey, p])), [people]);
+    const nameOf = useCallback((pk: string, names?: Record<string, string>) => peopleMap.get(pk)?.name || names?.[pk] || GROUP_SOMEONE, [peopleMap]);
     const read = useCallback(() => getGroupDecisions(groupId), [groupId]);
     const cast = useCallback((id: string, support: boolean) => voteGroupDecision(groupId, id, support), [groupId]);
     return (

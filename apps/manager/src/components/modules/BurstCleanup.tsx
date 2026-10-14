@@ -196,12 +196,12 @@ export function BurstPanel({ nodeUrl, anchor, canRemove, adminPassword, tfaToken
                             </p>
                             <div className="flex flex-wrap gap-2">
                                 <button type="button" disabled={busy || chosen.length === 0} onClick={() => setConfirming('hide')}
-                                    className={`${btn} bg-amber-700 hover:bg-amber-600 text-white`}>
+                                    className={`${btn} bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on`}>
                                     Hide their posts
                                 </button>
                                 {canRemove && (
                                     <button type="button" disabled={busy || chosen.length === 0} onClick={() => { setTyped(''); setConfirming('remove'); }}
-                                        className={`${btn} bg-red-900/80 hover:bg-red-800 border border-red-700 text-white`}>
+                                        className={`${btn} bg-bp-danger-fill hover:bg-bp-danger-hover border border-bp-danger-fill text-bp-danger-on`}>
                                         Remove them
                                     </button>
                                 )}
@@ -239,7 +239,7 @@ export function BurstPanel({ nodeUrl, anchor, canRemove, adminPassword, tfaToken
                                 <button type="button"
                                     disabled={busy || (confirming === 'remove' && typed.trim() !== String(chosen.length))}
                                     onClick={() => void act(confirming)}
-                                    className={`${btn} ${confirming === 'hide' ? 'bg-amber-700 hover:bg-amber-600' : 'bg-red-700 hover:bg-red-600'} text-white`}>
+                                    className={`${btn} ${confirming === 'hide' ? 'bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on' : 'bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on'}`}>
                                     {busy ? 'Working…' : confirming === 'hide' ? `Hide the posts of ${accounts(chosen.length)}` : `Remove ${accounts(chosen.length)}`}
                                 </button>
                                 <button type="button" disabled={busy} onClick={() => setConfirming(null)}

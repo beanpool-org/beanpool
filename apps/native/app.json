@@ -28,7 +28,8 @@
         "applinks:gippsland.beanpool.org",
         "applinks:eastgippy.beanpool.org",
         "applinks:bindarrabi.beanpool.org",
-        "applinks:yarravalley.beanpool.org"
+        "applinks:yarravalley.beanpool.org",
+        "applinks:global.beanpool.org"
       ],
       "infoPlist": {
         "UISupportedInterfaceOrientations": [
@@ -37,7 +38,7 @@
         "UIBackgroundModes": [
           "fetch"
         ],
-        "NSLocationWhenInUseUsageDescription": "BeanPool relies exclusively on your device's GPS to plot your independent identity on the community map, enabling you to physically discover neighboring Marketplace needs and offers.",
+        "NSLocationWhenInUseUsageDescription": "BeanPool uses your location while you use the app, to centre the map and show communities, listings and events near you. You can type your town instead.",
         "NSCameraUsageDescription": "BeanPool uses your camera to scan device pairing QR codes and community invites.",
         "NSFaceIDUsageDescription": "BeanPool asks for Face ID before sensitive steps, such as opening your community's admin settings or showing your recovery phrase.",
         "NSAppTransportSecurity": {
@@ -125,6 +126,11 @@
               "scheme": "https",
               "host": "yarravalley.beanpool.org",
               "path": "/"
+            },
+            {
+              "scheme": "https",
+              "host": "global.beanpool.org",
+              "path": "/"
             }
           ],
           "category": [
@@ -201,7 +207,7 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "BeanPool relies exclusively on your device's GPS to plot your independent identity on the community map, enabling you to physically discover neighboring Marketplace needs and offers.",
+          "locationWhenInUsePermission": "BeanPool uses your location while you use the app, to centre the map and show communities, listings and events near you. You can type your town instead.",
           "isIosBackgroundLocationEnabled": false
         }
       ],

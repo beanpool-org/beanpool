@@ -342,7 +342,7 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
                                     type="button"
                                     onClick={() => void make(false)}
                                     disabled={making}
-                                    className="min-h-[48px] px-4 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50"
+                                    className="min-h-[48px] px-4 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all disabled:opacity-50"
                                 >
                                     {making ? 'Making…' : 'Make a recovery code'}
                                 </button>
@@ -407,7 +407,7 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
                                 type="button"
                                 onClick={() => void make(true)}
                                 disabled={making}
-                                className="min-h-[48px] px-4 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50"
+                                className="min-h-[48px] px-4 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on disabled:opacity-50"
                             >
                                 {making ? 'Making…' : 'Make a new code'}
                             </button>
@@ -471,7 +471,7 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
                             type="button"
                             onClick={closeCode}
                             disabled={!writtenDown}
-                            className="w-full min-h-[48px] px-4 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50"
+                            className="w-full min-h-[48px] px-4 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on disabled:opacity-50"
                         >
                             Done
                         </button>
@@ -521,7 +521,7 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
                             type="button"
                             data-print-hide
                             onClick={() => window.print()}
-                            className="w-full min-h-[48px] px-4 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-xs font-bold text-white"
+                            className="w-full min-h-[48px] px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-xs font-bold text-bp-commit-on"
                         >
                             🖨️ Print this page
                         </button>
@@ -575,7 +575,7 @@ export function TakeoverLockPanel({ activeNode, viewer = { kind: 'password' }, c
                             <button
                                 type="submit"
                                 disabled={!typed.trim() || checking}
-                                className="w-full min-h-[48px] px-4 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50"
+                                className="w-full min-h-[48px] px-4 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on disabled:opacity-50"
                             >
                                 {checking ? 'Checking… (about a second)' : 'Check'}
                             </button>

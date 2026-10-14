@@ -101,9 +101,9 @@ export function DecideSection({
     return (
         <div className="space-y-4">
             {voteError && (
-                <div className="bg-red-500/10 border border-red-500/30 text-red-300 text-sm p-3 rounded-xl flex items-center justify-between">
+                <div className="bg-red-50 dark:bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-300 text-sm p-3 rounded-xl flex items-center justify-between">
                     <span>{voteError}</span>
-                    <button type="button" onClick={() => setVoteError(null)} aria-label="Dismiss error" className="text-red-400 hover:text-white p-1 min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded-lg">✕</button>
+                    <button type="button" onClick={() => setVoteError(null)} aria-label="Dismiss error" className="text-red-700 dark:text-red-400 hover:text-red-900 dark:hover:text-white p-1 min-w-[44px] min-h-[44px] flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 rounded-lg">✕</button>
                 </div>
             )}
 
@@ -118,7 +118,7 @@ export function DecideSection({
                     onClick={() => onChangeView('open')}
                     className={`flex-1 py-2.5 px-4 rounded-xl border text-sm font-bold flex items-center justify-center gap-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                         activeView === 'open'
-                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 shadow-sm'
+                            ? 'bg-emerald-50 dark:bg-emerald-500/20 border-emerald-500 text-emerald-800 dark:text-emerald-300 shadow-sm'
                             : 'bg-nature-900 border-nature-800 text-nature-400 hover:border-nature-700'
                     }`}
                 >
@@ -139,7 +139,7 @@ export function DecideSection({
                     onClick={() => onChangeView('history')}
                     className={`flex-1 py-2.5 px-4 rounded-xl border text-sm font-bold flex items-center justify-center gap-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                         activeView === 'history'
-                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 shadow-sm'
+                            ? 'bg-emerald-50 dark:bg-emerald-500/20 border-emerald-500 text-emerald-800 dark:text-emerald-300 shadow-sm'
                             : 'bg-nature-900 border-nature-800 text-nature-400 hover:border-nature-700'
                     }`}
                 >

@@ -249,7 +249,7 @@ export function OnboardingModule({ activeNode, profiles, activeProfileId, onSele
                                 onClick={() => setDays(w)}
                                 aria-pressed={days === w}
                                 className={`px-3 py-2 text-xs font-bold transition-all focus:outline-none focus:ring-2 focus:ring-emerald-500 min-h-[48px] lg:min-h-0 ${
-                                    days === w ? 'bg-emerald-600 text-white' : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
+                                    days === w ? 'bg-bp-commit-fill text-bp-commit-on' : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
                                 }`}
                             >
                                 {w} days

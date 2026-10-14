@@ -272,7 +272,7 @@ export function PostModerationPanel({
                                         <span
                                             className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                                                 isOffer
-                                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                                    ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-emerald-500/30'
                                                     : 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
                                             }`}
                                         >
@@ -302,7 +302,7 @@ export function PostModerationPanel({
                                         type="button"
                                         onClick={() => setDeletingPost(post)}
                                         aria-label={`Delete post ${post.title || post.id}`}
-                                        className="min-h-[44px] px-3.5 py-1.5 rounded-xl bg-red-950/80 hover:bg-red-900 border border-red-800 text-red-200 text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95"
+                                        className="min-h-[44px] px-3.5 py-1.5 rounded-xl bg-bp-chip-danger-tint hover:opacity-90 border border-red-800 text-bp-chip-danger-ink text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95"
                                     >
                                         <span>🗑️</span>
                                         <span>Delete</span>
@@ -372,7 +372,7 @@ export function PostModerationPanel({
                                 type="button"
                                 onClick={handleConfirmDelete}
                                 disabled={isDeleting}
-                                className="min-h-[44px] px-5 py-2 rounded-xl bg-red-700 hover:bg-red-600 text-xs font-bold text-white border border-red-500 shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
+                                className="min-h-[44px] px-5 py-2 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on border border-bp-danger-fill shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
                             >
                                 {isDeleting ? (
                                     <>

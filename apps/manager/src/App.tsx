@@ -1277,7 +1277,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
                     <p className="text-sm">{otherSession.message}</p>
                     <button
                         type="button"
-                        className="w-full bg-terra-600 hover:bg-terra-500 text-white font-medium rounded-lg px-4 py-3"
+                        className="w-full bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on font-medium rounded-lg px-4 py-3"
                         onClick={() => {
                             const { csrfToken } = otherSession;
                             setOtherSession(null);
@@ -1296,7 +1296,7 @@ function AppBody({ isFleetMode = IS_FLEET_MODE }: { isFleetMode?: boolean } = {}
         return (
             <div className="bp-settings">
             {keySessionNotice && (
-                <div role="alert" className="bg-terra-600 text-white text-sm px-4 py-3 text-center">
+                <div role="alert" className="bg-bp-cta-fill text-bp-cta-on text-sm px-4 py-3 text-center">
                     {keySessionNotice}
                 </div>
             )}

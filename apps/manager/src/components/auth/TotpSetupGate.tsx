@@ -113,7 +113,7 @@ export function TotpSetupGate({ nodeUrl, onDone, onSignOut }: TotpSetupGateProps
                             type="button"
                             onClick={start}
                             disabled={busy}
-                            className="w-full min-h-[48px] py-3 rounded-xl bg-terra-600 hover:bg-terra-500 text-white font-bold text-sm disabled:opacity-50"
+                            className="w-full min-h-[48px] py-3 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on font-bold text-sm disabled:opacity-50"
                         >
                             {busy ? 'Starting…' : 'Set up two-factor sign-in'}
                         </button>
@@ -160,7 +160,7 @@ export function TotpSetupGate({ nodeUrl, onDone, onSignOut }: TotpSetupGateProps
                         <button
                             type="submit"
                             disabled={busy || !code.trim()}
-                            className="w-full min-h-[48px] py-3 rounded-xl bg-terra-600 hover:bg-terra-500 text-white font-bold text-sm disabled:opacity-50"
+                            className="w-full min-h-[48px] py-3 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on font-bold text-sm disabled:opacity-50"
                         >
                             {busy ? 'Checking…' : 'Confirm and open Settings'}
                         </button>

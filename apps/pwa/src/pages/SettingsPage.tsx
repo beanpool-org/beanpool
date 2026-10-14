@@ -16,6 +16,7 @@ import {
 } from '../lib/delete-here';
 import {
     getMemberProfile, updateMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
+    getFriends, removeFriendApi,
     getNodeApiUrl, setNodeApiUrl, testNodeConnection, getNotificationPreferences,
     updateNotificationPreferences, getNodeStats, getSignInRecovery,
 } from '../lib/api';
@@ -301,6 +302,14 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     /** Said while blocks wait in this browser because the list on the community is full (lib/blocklist). */
     const [blockedFullNote, setBlockedFullNote] = useState<string | null>(null);
     const blockedNames = useRef(new Map<string, string>());
+    /**
+     * Blocked members who are still your friends. A block does not end a friendship (guide settings/blocking.md), and the
+     * web hides a blocked member from your lists, so "Also remove from friends" here ends it in one step, through the
+     * same route as any removal (POST /api/friends/remove); the block stays. Nothing is offered when the read fails.
+     */
+    const [blockedFriends, setBlockedFriends] = useState<Set<string>>(new Set());
+    /** Blocked members taken off your friends here, said on their row. */
+    const [removedFriends, setRemovedFriends] = useState<Set<string>>(new Set());
     /** The latest list asked to show: an older one whose names come in after it never replaces it. */
     const blockedShown = useRef(0);
 
@@ -326,6 +335,9 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
     const loadBlockedList = async () => {
         setLoadingBlockedList(true);
         setBlockedListError(null);
+        getFriends(identity.publicKey)
+            .then(friends => setBlockedFriends(new Set(friends.map(f => f.publicKey))))
+            .catch(() => setBlockedFriends(new Set()));
         try {
             await showBlockedList(await loadBlocklist());
         } catch (e: any) {
@@ -353,6 +365,23 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
             await unblockUser(pubkey);
         } catch (e: any) {
             setBlockedActionError(e?.message || 'That did not go through. Please try again.');
+        } finally {
+            setBlockedBusy(null);
+        }
+    };
+
+    const removeBlockedFriend = async (pubkey: string, callsign: string) => {
+        if (!window.confirm(`Remove ${callsign} from your friends? They stay blocked. They can notice a removal.`)) return;
+        setBlockedActionError(null);
+        setBlockedBusy(`friend:${pubkey}`);
+        try {
+            await removeFriendApi(identity.publicKey, pubkey);
+            setBlockedFriends(prev => { const next = new Set(prev); next.delete(pubkey); return next; });
+            setRemovedFriends(prev => new Set(prev).add(pubkey));
+        } catch (e: any) {
+            setBlockedActionError(e instanceof TypeError
+                ? 'Couldn’t reach your community, so they are still your friend. Check your connection and try again.'
+                : (e?.message || 'That did not go through, so they are still your friend. Please try again.'));
         } finally {
             setBlockedBusy(null);
         }
@@ -1619,23 +1648,40 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                             <div className="space-y-4 mb-6">
                                 <div className="divide-y divide-nature-100 dark:divide-nature-800 rounded-xl border border-nature-200 dark:border-nature-800 overflow-hidden">
                                     {blockedUsersList.map(item => (
-                                        <div key={item.pubkey} className="p-3.5 flex items-center justify-between gap-3 hover:bg-oat-50/50 dark:hover:bg-nature-800/30 transition-colors">
-                                            <div className="min-w-0 flex-1">
-                                                <div className="text-sm font-bold text-nature-900 dark:text-white truncate">
-                                                    {item.callsign}
+                                        <div key={item.pubkey} className="p-3.5 hover:bg-oat-50/50 dark:hover:bg-nature-800/30 transition-colors">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="text-sm font-bold text-nature-900 dark:text-white truncate">
+                                                        {item.callsign}
+                                                    </div>
+                                                    <div className="text-[11px] text-nature-400 dark:text-nature-300 font-mono truncate">
+                                                        {item.pubkey.slice(0, 16)}...{item.pubkey.slice(-8)}
+                                                    </div>
                                                 </div>
-                                                <div className="text-[11px] text-nature-400 dark:text-nature-300 font-mono truncate">
-                                                    {item.pubkey.slice(0, 16)}...{item.pubkey.slice(-8)}
-                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => unblockFromList(item.pubkey)}
+                                                    disabled={blockedBusy !== null}
+                                                    className="bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-default"
+                                                >
+                                                    {blockedBusy === item.pubkey ? 'Unblocking…' : 'Unblock'}
+                                                </button>
                                             </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => unblockFromList(item.pubkey)}
-                                                disabled={blockedBusy !== null}
-                                                className="bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 border border-red-200 dark:border-red-800 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors cursor-pointer shrink-0 disabled:opacity-60 disabled:cursor-default"
-                                            >
-                                                {blockedBusy === item.pubkey ? 'Unblocking…' : 'Unblock'}
-                                            </button>
+                                            {blockedFriends.has(item.pubkey) ? (
+                                                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                                                    <p className="text-xs text-nature-600 dark:text-nature-300 m-0">Still your friend. They can notice a removal.</p>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => removeBlockedFriend(item.pubkey, item.callsign || item.pubkey.slice(0, 8))}
+                                                        disabled={blockedBusy !== null}
+                                                        className="bg-oat-100 dark:bg-nature-800 text-nature-800 dark:text-nature-100 border border-nature-300 dark:border-nature-600 rounded-lg px-3 py-1.5 text-xs font-bold hover:bg-oat-200 dark:hover:bg-nature-700 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-default"
+                                                    >
+                                                        {blockedBusy === `friend:${item.pubkey}` ? 'Removing…' : 'Also remove from friends'}
+                                                    </button>
+                                                </div>
+                                            ) : removedFriends.has(item.pubkey) ? (
+                                                <p className="mt-2 text-xs text-nature-600 dark:text-nature-300 m-0">No longer your friend. Still blocked.</p>
+                                            ) : null}
                                         </div>
                                     ))}
                                 </div>

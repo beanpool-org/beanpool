@@ -216,7 +216,7 @@ export function EscrowDisputesPanel({
                                 <span>⚖️</span> Escrow Dispute Resolution
                             </h2>
                             {pendingCount !== null && (
-                                <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-semibold">
+                                <span className="px-2.5 py-0.5 rounded-full bg-bp-chip-warn-tint border border-amber-500/30 text-bp-chip-warn-ink text-xs font-semibold">
                                     {pendingCount} Pending (&gt;{minDays}d)
                                 </span>
                             )}
@@ -268,7 +268,7 @@ export function EscrowDisputesPanel({
                         }}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition min-h-[48px] lg:min-h-0 ${
                             filterStatus === 'pending'
-                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                ? 'bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-amber-500/40'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
@@ -312,7 +312,7 @@ export function EscrowDisputesPanel({
                     </div>
                     <button
                         onClick={loadDisputes}
-                        className="px-2.5 py-1 bg-rose-900 hover:bg-rose-800 text-white rounded-lg font-semibold"
+                        className="px-2.5 py-1 bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink rounded-lg font-semibold"
                     >
                         Retry
                     </button>
@@ -373,15 +373,15 @@ export function EscrowDisputesPanel({
                                         <h3 className="text-base font-bold text-white m-0">
                                             {postTitle}
                                         </h3>
-                                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-terra-500/20 text-terra-300 border border-terra-500/30">
+                                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-full bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/30">
                                             {dispute.credits.toFixed(2)} BEAN
                                         </span>
                                         {isPending ? (
-                                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-amber-500/30">
                                                 ⏳ {dispute.daysStuck}d in escrow
                                             </span>
                                         ) : (
-                                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-emerald-500/30">
                                                 ✅ Resolved: {dispute.resolution ? formatActionName(dispute.resolution) : dispute.status}
                                             </span>
                                         )}
@@ -525,7 +525,7 @@ export function EscrowDisputesPanel({
                                         {/* Action 1: Release to Seller */}
                                         <button
                                             onClick={() => handleOpenResolveModal(dispute, 'release_to_seller')}
-                                            className="px-3 py-2 rounded-xl bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700/60 text-emerald-200 text-xs font-bold transition flex flex-col items-center justify-center text-center group"
+                                            className="px-3 py-2 rounded-xl bg-bp-chip-ok-tint hover:opacity-90 border border-emerald-700/60 text-bp-chip-ok-ink text-xs font-bold transition flex flex-col items-center justify-center text-center group"
                                         >
                                             <span className="flex items-center gap-1">
                                                 <span>✅</span> Release to Seller
@@ -538,7 +538,7 @@ export function EscrowDisputesPanel({
                                         {/* Action 2: Refund to Buyer */}
                                         <button
                                             onClick={() => handleOpenResolveModal(dispute, 'refund_to_buyer')}
-                                            className="px-3 py-2 rounded-xl bg-amber-950/80 hover:bg-amber-900 border border-amber-700/60 text-amber-200 text-xs font-bold transition flex flex-col items-center justify-center text-center group"
+                                            className="px-3 py-2 rounded-xl bg-bp-chip-warn-tint hover:opacity-90 border border-amber-700/60 text-bp-chip-warn-ink text-xs font-bold transition flex flex-col items-center justify-center text-center group"
                                         >
                                             <span className="flex items-center gap-1">
                                                 <span>↩️</span> Refund to Buyer
@@ -626,7 +626,7 @@ export function EscrowDisputesPanel({
                                 <span className="text-xs text-nature-400 font-bold uppercase tracking-wider">
                                     Arbitration Action
                                 </span>
-                                <span className="px-2.5 py-1 rounded-full text-xs font-black bg-terra-500/20 text-terra-300 border border-terra-500/30">
+                                <span className="px-2.5 py-1 rounded-full text-xs font-black bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/30">
                                     {formatActionName(selectedAction)}
                                 </span>
                             </div>
@@ -714,7 +714,7 @@ export function EscrowDisputesPanel({
                             <button
                                 onClick={handleConfirmResolve}
                                 disabled={resolving}
-                                className="px-5 py-2 rounded-xl bg-terra-500 hover:bg-terra-400 text-nature-950 text-xs font-black transition flex items-center gap-2 shadow-lg shadow-terra-500/20"
+                                className="px-5 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on text-xs font-black transition flex items-center gap-2 shadow-lg shadow-terra-500/20"
                             >
                                 {resolving && <span className="animate-spin">🔄</span>}
                                 <span>Confirm &amp; Record Resolution</span>

@@ -19,6 +19,7 @@
 import ts from 'typescript';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -386,8 +387,47 @@ export function compareToBaseline(now, baseline) {
     return { rises, falls };
 }
 
+function gitIn(cwd, ...args) {
+    try {
+        return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    } catch {
+        return null;
+    }
+}
+
 /**
- * The rises in `doc` over `mainDoc` (the baseline on origin/main) that no `--raise "<reason>"` entry in `doc.raises`
+ * The commit whose baseline this tree's is compared with (words.test.mjs), found as the guide check finds its base
+ * (packages/beanpool-guide/scripts/build.mjs, findBase): where this branch left origin/main; else the commit before
+ * HEAD. CI checks out only a pull request's merge commit, two deep and with no origin/main: its first parent is
+ * main's tip. On a push to main, origin/main is HEAD, so the base is main before the push. A merge with no origin/main
+ * outside a pull request is not compared (its first parent need not be main), and says so.
+ */
+export function baselineBase({ cwd = ROOT, env = process.env } = {}) {
+    const head = gitIn(cwd, 'rev-parse', 'HEAD');
+    if (!head) return { ref: null, why: 'this is not a git checkout' };
+    const hasOriginMain = gitIn(cwd, 'rev-parse', '--verify', '--quiet', 'origin/main^{commit}') !== null;
+    const forked = hasOriginMain ? gitIn(cwd, 'merge-base', 'HEAD', 'origin/main') : null;
+    if (forked && forked !== head) return { ref: forked, why: 'where this branch left origin/main' };
+    const isMerge = gitIn(cwd, 'rev-parse', '--verify', '--quiet', 'HEAD^2') !== null;
+    if (isMerge && !hasOriginMain && env.GITHUB_EVENT_NAME !== 'pull_request') {
+        return { ref: null, why: "no origin/main (HEAD is a merge, and outside a pull request's merge commit its first parent need not be main; fetch origin/main to compare)" };
+    }
+    const parent = gitIn(cwd, 'rev-parse', '--verify', '--quiet', 'HEAD^1');
+    if (parent) return { ref: parent, why: 'the commit before this one' };
+    if (gitIn(cwd, 'rev-parse', '--is-shallow-repository') === 'true') {
+        return { ref: null, why: 'this shallow clone lacks the commit before HEAD (check out with fetch-depth: 2)', broken: true };
+    }
+    return { ref: null, why: 'this is the first commit' };
+}
+
+/** The words baseline as committed at `ref`, or null when that commit has none. */
+export function baselineAt(ref, cwd = ROOT) {
+    const text = gitIn(cwd, 'show', `${ref}:${BASELINE}`);
+    return text === null ? null : JSON.parse(text);
+}
+
+/**
+ * The rises in `doc` over `mainDoc` (main's baseline: see baselineBase) that no `--raise "<reason>"` entry in `doc.raises`
  * accounts for. Empty when every count is at or under main's, or each rise was recorded with a reason.
  */
 export function unexplainedRises(mainDoc, doc) {

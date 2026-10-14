@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import {
-    BASELINE, ROOT, catalogLangs, checkRepo, compareToBaseline, countStrings, extractFromSource, extractRepo, lintCounts, unexplainedRises,
+    BASELINE, ROOT, baselineAt, baselineBase, catalogLangs, checkRepo, compareToBaseline, countStrings, extractFromSource, extractRepo, lintCounts, unexplainedRises,
     updatedBaseline,
 } from './words.mjs';
 
@@ -195,17 +195,89 @@ test('the baseline cannot rise without --raise "<reason>", which is recorded; a 
     assert.deepEqual(unexplainedRises(null, { counts: { a: 99 } }), []);
 });
 
-test('the committed baseline has no rise over origin/main\'s that lacks a recorded reason (when main has the file)', (t) => {
-    let main = null;
-    try {
-        main = JSON.parse(execFileSync('git', ['show', `origin/main:${BASELINE}`], { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
-    } catch {
-        t.skip('origin/main has no words baseline yet (or no origin/main in this checkout)');
+test('the committed baseline has no rise over main\'s that lacks a recorded reason (when main has the file; in CI too)', (t) => {
+    const base = baselineBase();
+    assert.ok(!base.broken, base.why);
+    const main = base.ref ? baselineAt(base.ref) : null;
+    if (!main) {
+        t.skip(base.ref ? `main has no words baseline yet (${base.why}: ${base.ref.slice(0, 8)})` : base.why);
         return;
     }
     const doc = JSON.parse(fs.readFileSync(path.join(ROOT, BASELINE), 'utf8'));
     assert.deepEqual(unexplainedRises(main, doc), []);
 });
+
+test('the base is main in each checkout the comparison runs in, CI\'s pull-request merge commit included, so a rise there fails (N-c)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'words-base-'));
+    const git = (cwd, ...args) => execFileSync('git', ['-c', 'user.name=words', '-c', 'user.email=words@example.invalid', '-c', 'commit.gpgsign=false',
+        '-c', 'init.defaultBranch=main', '-c', 'advice.detachedHead=false', ...args], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    const counts = (cwd) => JSON.parse(fs.readFileSync(path.join(cwd, BASELINE), 'utf8'));
+    try {
+        const src = path.join(dir, 'src');
+        const commit = (message, doc, branch) => {
+            if (branch) git(src, 'checkout', '-q', branch);
+            const file = doc ? BASELINE : 'other.txt';
+            fs.mkdirSync(path.join(src, path.dirname(file)), { recursive: true });
+            fs.writeFileSync(path.join(src, file), doc ? JSON.stringify(doc) : message);
+            git(src, 'add', file);
+            git(src, 'commit', '-q', '-m', message);
+            return git(src, 'rev-parse', 'HEAD');
+        };
+        fs.mkdirSync(src);
+        git(src, 'init', '-q');
+        const forked = commit('main', { counts: { a: 1, b: 5 } });
+        git(src, 'checkout', '-q', '-b', 'pr');
+        commit('the pull request raises a, no reason', { counts: { a: 2, b: 5 } });
+        const mainTip = commit('main moves on', null, 'main');
+        // GitHub's refs/pull/N/merge: main's tip first, the pull request second.
+        git(src, 'checkout', '-q', '-b', 'pull-merge');
+        git(src, 'merge', '-q', '--no-ff', '-m', 'Merge pr into main', 'pr');
+        assert.deepEqual(counts(src).counts, { a: 2, b: 5 });
+
+        // CI on a pull request: actions/checkout of the merge ref, fetch-depth 2, no origin/main.
+        const ci = path.join(dir, 'ci');
+        git(dir, 'clone', '-q', '--depth', '2', '--branch', 'pull-merge', '--single-branch', `file://${src}`, ci);
+        assert.equal(gitOk(ci, 'rev-parse', '--verify', '--quiet', 'origin/main'), false);
+        const pr = baselineBase({ cwd: ci, env: { GITHUB_EVENT_NAME: 'pull_request' } });
+        assert.equal(pr.ref, mainTip, pr.why);
+        assert.deepEqual(unexplainedRises(baselineAt(pr.ref, ci), counts(ci)), [{ dir: 'a', was: 1, is: 2 }]);
+        // The same commit outside a pull request: its first parent need not be main, so no comparison (and it says why).
+        assert.equal(baselineBase({ cwd: ci, env: {} }).ref, null);
+
+        // On a developer's branch with origin/main: where the branch left main.
+        const dev = path.join(dir, 'dev');
+        git(dir, 'clone', '-q', `file://${src}`, dev);
+        git(dev, 'checkout', '-q', 'pr');
+        const local = baselineBase({ cwd: dev, env: {} });
+        assert.equal(local.ref, forked, local.why);
+        assert.deepEqual(unexplainedRises(baselineAt(local.ref, dev), counts(dev)), [{ dir: 'a', was: 1, is: 2 }]);
+
+        // A push to main (CI checks out main, two deep; origin/main is HEAD): main before the push.
+        const squash = commit('squashed onto main, raises b with no reason', { counts: { a: 1, b: 6 } }, 'main');
+        const push = path.join(dir, 'push');
+        git(dir, 'clone', '-q', '--depth', '2', '--branch', 'main', '--single-branch', `file://${src}`, push);
+        assert.equal(git(push, 'rev-parse', 'origin/main'), squash);
+        const onMain = baselineBase({ cwd: push, env: { GITHUB_EVENT_NAME: 'push' } });
+        assert.equal(onMain.ref, mainTip, onMain.why);
+        assert.deepEqual(unexplainedRises(baselineAt(onMain.ref, push), counts(push)), [{ dir: 'b', was: 5, is: 6 }]);
+
+        // One commit deep: the comparison cannot run, and says to fetch two deep rather than skip in silence.
+        const one = path.join(dir, 'one');
+        git(dir, 'clone', '-q', '--depth', '1', '--branch', 'pull-merge', '--single-branch', `file://${src}`, one);
+        assert.equal(baselineBase({ cwd: one, env: { GITHUB_EVENT_NAME: 'pull_request' } }).broken, true);
+    } finally {
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+function gitOk(cwd, ...args) {
+    try {
+        execFileSync('git', args, { cwd, stdio: 'ignore' });
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 test('catalogs follow core\'s LANGS: 24 tags may have one, a missing one is untranslated, a stray file is refused', async () => {
     const langs = await catalogLangs();

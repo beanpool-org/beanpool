@@ -29,6 +29,7 @@ vi.mock('../crypto', async (orig) => ({
 }));
 
 import { reportAbuse, signedRequest } from '../db';
+import { reportKind } from '@beanpool/core';
 
 const fetchMock = vi.fn();
 const reply = (status: number, body: any) =>
@@ -75,6 +76,24 @@ describe('reportAbuse (native)', () => {
         // Words with no reason the list knows: "Other", never the words.
         expect(await reportAbuse('me-pub', 'them-pub', 'the code is 4821', 'post-1')).toEqual({ success: true, wordsLeftOut: 'unread' });
         expect(sentReason()).toBe('Other');
+    });
+
+    // GXR10 (#1938 confirmation 10, finding 1, the director's ruling (i)): with the words left out, the server's own rule over
+    // the full reason (@beanpool/core reportKind) still decides child safety: words that say it under another reason go as
+    // "Child safety" (never the words); ordinary words under that reason go as the reason picked.
+    it('words left out that say child safety under another reason go as "Child safety"; ordinary words go as the reason picked', async () => {
+        fetchMock.mockResolvedValue(reply(201, { success: true }));
+        const child = 'Offensive content: he is grooming a child, sexual abuse of a minor';
+        expect(reportKind(child)).toBe('child safety');
+        expect(await reportAbuse('me-pub', 'them-pub', child, 'ev-1')).toEqual({ success: true, wordsLeftOut: 'unread' });
+        expect(sentReason()).toBe('Child safety');
+        expect(reportKind(sentReason())).toBe('child safety');
+        expect(await reportAbuse('me-pub', 'them-pub', 'Other: about child safety at the pool', 'post-1')).toEqual({ success: true, wordsLeftOut: 'unread' });
+        expect(sentReason()).toBe('Child safety');
+        expect(await reportAbuse('me-pub', 'them-pub', 'Offensive content: shouted at the market', 'ev-1')).toEqual({ success: true, wordsLeftOut: 'unread' });
+        expect(sentReason()).toBe('Offensive content');
+        expect(reportKind(sentReason())).toBe('offensive content');
+        expect(fetchMock.mock.calls.map((c) => c[1].body).join(' ')).not.toMatch(/grooming|minor|pool|shouted/);
     });
 
     it('a reason with no words (or only spaces) and a member report with no id go as they are, never asking the guard', async () => {

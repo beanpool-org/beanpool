@@ -106,7 +106,8 @@ import * as phoneCrypto from '../e2e-crypto';
 // The web app's own modules, as its MessagesPage uses them: what it seals, and how it reads a thread.
 import * as webCrypto from '../../../pwa/src/lib/e2e-crypto';
 import { lockForDm, payloadForChat } from '../../../pwa/src/lib/dm-lock';
-import { toEd25519Pkcs8, makeKeySuccession, deriveDmKey, dmLineAad, DM_NONCE_PREFIX } from '@beanpool/core';
+import { toEd25519Pkcs8, makeKeySuccession, deriveDmKey, dmLineAad, DM_NONCE_PREFIX, reportKind } from '@beanpool/core';
+import { reportedAlertBody, REPORT_SENT_TEXT, REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT, REPORT_WORDS_LEFT_OUT_UNREAD_TEXT, REPORT_CHILD_SAFETY_ALERTED_TEXT, CHILD_IN_DANGER_TEXT } from '../reportReasons';
 import { xchacha20poly1305 } from '@noble/ciphers/chacha.js';
 import { hexToBytes } from '@noble/hashes/utils.js';
 
@@ -4821,6 +4822,62 @@ describe('the DM guard list: one bounded list per community file, never read as 
             expect(after).toEqual({ row: 'dm', dm: everyReport(reasonAlone('private')), honest: honestWent });
             expect(noWords).toEqual({ err: null, wordsLeftOut: null, nodeReads: [], reasons: ['Child safety'] });
             expect(took).toEqual([]);
+        }, 180_000);
+    }
+
+    // GXR10 (#1938 confirmation 10, finding 1, the director's ruling (i)): the server sorts and alerts on its rule over the
+    // full reason (@beanpool/core reportKind), which reads the words too. When the phone leaves the words out and that rule
+    // reads the full reason as child safety, the report goes as "Child safety" (the words still never leave) and the dialog
+    // says it still alerts; ordinary words under the same reason go as the reason picked, with no child-safety lines.
+    for (const how of ['a read that throws', 'a corrupt value'] as const) {
+        it(`GXR10 (${how}) words that say child safety under another reason, left out for the DM's id (unread, then private) and for an honest event while the pins can't be read: "Child safety" goes, the server's kind stays child safety, the dialog says it alerts; ordinary words go as the reason picked`, async () => {
+            const filler = Array.from({ length: 26_886 }, () => randomUUID());
+            h.store.set(seenKey(), JSON.stringify(filler));
+            const { first } = await anaHasSentToBen();
+            expect(first).toEqual(sealedToBen);
+            node.convs = [];
+            await syncMessages(ana.publicKey);   // the prune
+            node.lines = node.lines.filter((l) => l.conversationId !== dm.id);
+            const ev: Conv = { id: randomUUID(), type: 'event_thread', participants: [ana.publicKey, puppet.publicKey] };
+            node.convs = [{ id: dm.id, type: 'event_thread', participants: [ana.publicKey, ben.publicKey, puppet.publicKey] }, ev];
+            const reasons = reportsTaken();
+            const took = formsTaken('(gxr10)');
+            const CHILD = 'Offensive content: he is grooming a child, sexual abuse of a minor (gxr10)';
+            const PLAIN = 'Offensive content: shouted at the market (gxr10)';
+            // What the server would have read with the words, and what it reads of what went (its own rule, core's).
+            expect(reportKind(CHILD)).toBe('child safety');
+            expect(reportKind(PLAIN)).toBe('offensive content');
+            const both = async (id: string) => {
+                const out: Record<string, unknown> = {};
+                for (const [name, reason] of [['child', CHILD], ['plain', PLAIN]] as const) {
+                    const r = await reportOnScreen(took, reasons, () => dbPort.reportAbuse(ana.publicKey, puppet.publicKey, reason, id));
+                    out[name] = { ...r, serverKind: r.reasons.map((x: string) => reportKind(x)), dialog: reportedAlertBody((r.wordsLeftOut ?? undefined) as any, reason) };
+                }
+                return out;
+            };
+            const unread = await whilePinsUnread(how, async () => {
+                await syncMessages(ana.publicKey);
+                return { dm: await both(dm.id), honest: await both(ev.id) };
+            });
+            const back = { dm: await both(dm.id), honest: await both(ev.id) };
+            console.log(`GXR10 (${how}) ${JSON.stringify({ unread, back, took })}`);
+            const thanks = REPORT_SENT_TEXT;
+            const pair = `${REPORT_CHILD_SAFETY_ALERTED_TEXT} ${CHILD_IN_DANGER_TEXT}`;
+            const leftOut = (why: 'private' | 'unread') => ({
+                child: { err: null, wordsLeftOut: why, nodeReads: [], reasons: ['Child safety'], serverKind: ['child safety'], dialog: `${thanks} ${why === 'private' ? REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT : REPORT_WORDS_LEFT_OUT_UNREAD_TEXT} ${pair}` },
+                plain: { err: null, wordsLeftOut: why, nodeReads: [], reasons: ['Offensive content'], serverKind: ['offensive content'], dialog: `${thanks} ${why === 'private' ? REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT : REPORT_WORDS_LEFT_OUT_UNREAD_TEXT}` },
+            });
+            expect(unread).toEqual({ dm: leftOut('unread'), honest: leftOut('unread') });
+            // Back: the DM's id is known ('private'); the honest event's words go whole, and the server reads them itself.
+            expect(back).toEqual({
+                dm: leftOut('private'),
+                honest: {
+                    child: { err: null, wordsLeftOut: null, nodeReads: [CHILD], reasons: [], serverKind: [], dialog: thanks },
+                    plain: { err: null, wordsLeftOut: null, nodeReads: [PLAIN], reasons: [], serverKind: [], dialog: thanks },
+                },
+            });
+            // Only the honest event's words ever went, once each, after the pins read: never the DM's.
+            expect(took).toEqual([CHILD, PLAIN]);
         }, 180_000);
     }
 

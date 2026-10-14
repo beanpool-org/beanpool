@@ -19,7 +19,7 @@ import {
 } from './dm-peer-pins';
 import { dmLinesAtUpdateStoreKey } from './storage-keys';
 import { createDmSeenList, DmGuardUnreadError, isDmGuardUnreadError } from './dm-guard-list';
-import { REPORT_REASONS, type ReportWordsLeftOut } from './reportReasons';
+import { REPORT_REASONS, CHILD_SAFETY_REASON, type ReportWordsLeftOut } from './reportReasons';
 import { getDatabaseFilenameForNode, addSavedNode } from './nodes';
 import { getCachedNodeProfile } from './node-profile';
 import { communityCachesRenamed } from './cache-file-migration';
@@ -30,6 +30,7 @@ import { emitAppEvent } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
+import { reportKind } from '@beanpool/core';
 import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -6861,7 +6862,10 @@ export async function cancelMarketplaceRequest(transactionId: string, buyerPubli
  * the reason picked goes alone, so a report is never held up and "Child safety" still alerts (#1938 confirmation 9, the
  * director's ruling: no readable words for a known DM's id anywhere), and the cause is kept for the dialog (case 14):
  * 'private' for a known DM's id (GroupChatKeyError), 'unread' when the guard can't tell (DmPinStoreError,
- * DmGuardUnreadError, or anything else it throws).
+ * DmGuardUnreadError, or anything else it throws). The server sorts and alerts on its own rule over the full reason
+ * (@beanpool/core reportKind), which also reads the words; so when they stay here and that rule reads the full reason as
+ * child safety, "Child safety" goes as the reason, and the urgent alert fires as it would have with the words (#1938
+ * confirmation 10, finding 1, the director's ruling (i)). The words still never leave.
  */
 async function reportReasonFor(id: string, reason: string): Promise<{ reason: string; wordsLeftOut?: ReportWordsLeftOut }> {
     const picked = REPORT_REASONS.find((r) => reason === r || reason.startsWith(`${r}: `));
@@ -6870,7 +6874,8 @@ async function reportReasonFor(id: string, reason: string): Promise<{ reason: st
         await refuseReadableIntoDm(id);
         return { reason };
     } catch (e) {
-        return { reason: picked ?? 'Other', wordsLeftOut: e instanceof GroupChatKeyError ? 'private' : 'unread' };
+        const sendAs = reportKind(reason) === 'child safety' ? CHILD_SAFETY_REASON : picked ?? 'Other';
+        return { reason: sendAs, wordsLeftOut: e instanceof GroupChatKeyError ? 'private' : 'unread' };
     }
 }
 

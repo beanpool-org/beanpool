@@ -129,7 +129,13 @@ describe('the phone\'s report lists', () => {
         expect(pickedChildSafety('Child safety')).toBe(true);
         expect(pickedChildSafety('Child safety: x')).toBe(true);
         expect(pickedChildSafety('Other: Child safety')).toBe(false);
-        expect(reportedAlertBody('unread', 'Other: Child safety')).toBe(`${REPORT_SENT_TEXT} ${REPORT_WORDS_LEFT_OUT_UNREAD_TEXT}`);
+        // But the server's rule over the full reason (@beanpool/core reportKind) reads words that say child safety under any
+        // reason, so with the words left out the report went as "Child safety" (db.ts reportReasonFor) and the dialog says it
+        // alerts (#1938 confirmation 10, finding 1, the director's ruling (i)); ordinary words under that reason do not.
+        expect(reportedAlertBody('unread', 'Other: Child safety')).toBe(`${REPORT_SENT_TEXT} ${REPORT_WORDS_LEFT_OUT_UNREAD_TEXT} ${both}`);
+        expect(reportedAlertBody('private', 'Offensive content: he is grooming a child, sexual abuse of a minor')).toBe(`${REPORT_SENT_TEXT} ${REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT} ${both}`);
+        expect(reportedAlertBody('unread', 'Offensive content: shouted at the market')).toBe(`${REPORT_SENT_TEXT} ${REPORT_WORDS_LEFT_OUT_UNREAD_TEXT}`);
+        expect(reportedAlertBody(undefined, 'Offensive content: he is grooming a child, sexual abuse of a minor')).toBe(REPORT_SENT_TEXT);
         for (const said of [REPORT_SENT_TEXT, REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT, REPORT_WORDS_LEFT_OUT_UNREAD_TEXT, REPORT_CHILD_SAFETY_ALERTED_TEXT, CHILD_IN_DANGER_TEXT]) {
             expect(said).toMatch(/^[A-Z].*\.$/);
             expect(said).not.toMatch(/fail|try again|report again/i);

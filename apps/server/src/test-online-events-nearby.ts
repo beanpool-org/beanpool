@@ -15,6 +15,7 @@
  *      with its clock, zone and `online`, and not the far in-person one.
  *   6. a read within a radius (the web feed and map on the global node) holds none, and `online=1` beside it answers the
  *      online events only, under the listing's rules; with no events asked for it answers none; nearby=1 refuses it.
+ *   7. "Your events" (GET /api/events/mine) carries each event's clock, zone and online, and never a join link;
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-online-events-nearby)
  */
@@ -201,6 +202,21 @@ async function main(): Promise<void> {
     assert(noEvents.status === 200 && !noEventRows.some(p => p.type === 'event'), 'online=1 without events asked for answers no event');
     const mixed = await signed('GET', `/api/marketplace/posts?limit=200&sync=true&types=${TYPES}&nearby=1&online=1`, null, sydney);
     assert(mixed.status === 400, `nearby=1 takes no online= (got ${mixed.status})`);
+
+    // ── 7. "Your events" reads as the card does ──
+    console.log('\n── 7. "Your events" carries the clock, the zone and online (review of #1952, finding 10) ──');
+    const goOnline = await signed('POST', `/api/marketplace/posts/${onlineId}/rsvp`, { status: 'going' }, sydney);
+    const goHall = await signed('POST', `/api/marketplace/posts/${inPersonId}/rsvp`, { status: 'interested' }, sydney);
+    assert(goOnline.status === 200 && goHall.status === 200, `Sydney goes to the online event and is interested in the hall (got ${goOnline.status} ${goHall.status})`);
+    const mine = await signed('GET', '/api/events/mine', null, sydney);
+    const rowsMine: any[] = mine.body?.events ?? [];
+    const onlineRow = rowsMine.find(r => r.postId === onlineId);
+    const hallRow = rowsMine.find(r => r.postId === inPersonId);
+    assert(onlineRow?.online === true && onlineRow?.tz === 'Africa/Lagos' && onlineRow?.startLocal === clockIn(3) && typeof onlineRow?.endLocal === 'string',
+        `the online event: online, its zone and its clocks (got ${JSON.stringify(onlineRow && { online: onlineRow.online, tz: onlineRow.tz, startLocal: onlineRow.startLocal, endLocal: onlineRow.endLocal })})`);
+    assert(hallRow && hallRow.online === undefined && hallRow.tz === 'Africa/Lagos' && hallRow.startLocal === clockIn(4) && hallRow.placeName === 'The hall',
+        `the in-person one: its zone and clock, no online (got ${JSON.stringify(hallRow && { online: hallRow.online, tz: hallRow.tz, startLocal: hallRow.startLocal })})`);
+    assert(rowsMine.every(r => r.eventLink === undefined && r.link === undefined), 'no row carries a join link');
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

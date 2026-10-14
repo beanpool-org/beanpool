@@ -296,6 +296,11 @@ export interface MyEvent {
     photo: string | null;
     /** `null` means "my default applies". */
     reminderOffsets: number[] | null;
+    /** The host's clock and its zone, and an online event (DESIGN-event-times §4); absent from a node before them. */
+    startLocal?: string;
+    endLocal?: string;
+    tz?: string;
+    online?: boolean;
 }
 
 /**

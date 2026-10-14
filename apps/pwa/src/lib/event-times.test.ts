@@ -144,3 +144,18 @@ describe('Home\'s "Coming up" line (§4)', () => {
         expect(homeEventWhen({ startsAt: LAGOS.eventStartAt! })).toBe('SAT 17 OCT · 15:50');
     });
 });
+
+describe('"Your events" reads as the card does (review of #1952, finding 10)', () => {
+    it('a row with the clock, zone and online maps onto the post the card reads', async () => {
+        const { myEventAsPost } = await import('../components/YourEvents');
+        const base = { postId: 'ev-1', title: 'Working bee', rsvp: 'going' as const, photo: null, reminderOffsets: null, placeName: 'The hall' };
+        const hall = myEventAsPost({ ...base, startAt: LAGOS.eventStartAt!, endAt: LAGOS.eventEndAt!, startLocal: LAGOS.eventStartLocal, endLocal: LAGOS.eventEndLocal, tz: LAGOS.eventTz });
+        expect(formatEventWhen(hall)).toBe('SAT 17 OCT · 20:50–22:50 · Lagos time · 15:50 your time');
+        const online = myEventAsPost({ ...base, placeName: null, startAt: ONLINE_SYDNEY.eventStartAt!, endAt: ONLINE_SYDNEY.eventEndAt!,
+            startLocal: ONLINE_SYDNEY.eventStartLocal, endLocal: ONLINE_SYDNEY.eventEndLocal, tz: ONLINE_SYDNEY.eventTz, online: true });
+        expect(online.eventOnline).toBe(true);
+        expect(formatEventWhen(online)).toBe('FRI 16 OCT · 5:50–7:50 your time');
+        // A node from before clocks: the reader's own time, as before.
+        expect(formatEventWhen(myEventAsPost({ ...base, startAt: LAGOS.eventStartAt!, endAt: LAGOS.eventEndAt! }))).toBe('SAT 17 OCT · 15:50–17:50');
+    });
+});

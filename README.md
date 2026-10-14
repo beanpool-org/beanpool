@@ -225,7 +225,7 @@ Multi-node control plane for community operators:
 ```
 beanpool/
 ├── apps/
-│   ├── server/        # Sovereign Node Appliance — Koa REST API, gateway, PWA host, libp2p mesh (routes/, services/, config/, engine/)
+│   ├── server/        # Sovereign Node Appliance — Koa REST API, gateway, PWA host, libp2p links to connected nodes (routes/, services/, config/, engine/)
 │   ├── pwa/           # PWA — map, marketplace (13 categories), messaging, ledger (Vite + React + Leaflet)
 │   ├── native/        # Native App — 7-tab mobile client (Expo + React Native), SQLite, background sync
 │   ├── manager/       # Fleet Manager — Decoupled multi-node control plane (Vite + React + @beanpool/engine)

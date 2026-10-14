@@ -16,7 +16,7 @@ vi.mock('./identity', async () => ({ ...(await vi.importActual('./identity')), l
 import {
     PURGE_TIMEOUT_MS, WEB_COMMUNITY_CHANGED, WEB_PURGE_NOT_CONFIRMED, WEB_PURGE_NO_ANSWER, leaveThisCommunity,
     membershipAt, otherCommunityOfThisBrowser, planWebDelete, purgeHere, webDeleteFailedLine, webKeepsKeyLine,
-    webLastCommunityLine,
+    webLastCommunityLine, WEB_VAULT_COPY_LINE,
 } from './delete-here';
 import { loadIdentity, type BeanPoolIdentity } from './identity';
 
@@ -166,6 +166,12 @@ describe('what the web app says', () => {
         expect(webLastCommunityLine(false)).toBe(
             "Your key leaves this browser, for this web address. The phone app, and other communities' web addresses, " +
             'keep their own copy.');
+    });
+
+    it('at the last community: a copy the phone app put in the key vault stays, and the line says where to remove it', () => {
+        expect(WEB_VAULT_COPY_LINE).toBe(
+            "If the phone app put a copy of your key in BeanPool's key vault, when you linked a sign-in there, deleting here " +
+            "doesn't remove it. Remove it in the phone app first: Settings → Account Protection → Disconnect.");
     });
 
     it('a delete the node refused says the key is still here', () => {

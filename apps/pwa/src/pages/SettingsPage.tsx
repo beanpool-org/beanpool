@@ -12,7 +12,7 @@ import { clearAccountStorage } from '../lib/device-prefs';
 import { clearHomeCache } from '../lib/home-cache';
 import {
     WEB_DELETE_CARD_LINE, WEB_DELETE_CHECKING_LINE, hostOf, leaveThisCommunity, planWebDelete, purgeHere, webDeleteFailedLine,
-    webDeletedButLine, webKeepsKeyLine, webLastCommunityLine, type WebDeletePlan,
+    webDeletedButLine, webKeepsKeyLine, webLastCommunityLine, WEB_VAULT_COPY_LINE, type WebDeletePlan,
 } from '../lib/delete-here';
 import {
     getMemberProfile, updateMemberProfile, redeemInvite, getMemberPreferences, setHolidayModeApi, type MemberProfile,
@@ -1249,6 +1249,11 @@ export function SettingsPage({ identity, onIdentityUpdated, onBack, themePrefere
                                                     ? `🔑 ${webKeepsKeyLine(deletePlan, hasWords)}`
                                                     : webLastCommunityLine(hasWords)}
                                         </p>
+                                        {deletePlan?.kind === 'last' && (
+                                            <p data-testid="delete-vault-copy" className="text-xs text-nature-700 dark:text-nature-300 leading-relaxed m-0">
+                                                {WEB_VAULT_COPY_LINE}
+                                            </p>
+                                        )}
                                         {purgeError && (
                                             <div id="purge-error-alert" role="alert" className="p-3 rounded-xl bg-red-100 dark:bg-red-950/60 border border-red-300 dark:border-red-800 text-red-800 dark:text-red-300 text-xs font-semibold">
                                                 {purgeError}

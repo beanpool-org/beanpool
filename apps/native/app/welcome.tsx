@@ -2238,7 +2238,7 @@ export default function WelcomeScreen() {
                             </View>
                             <View style={[guideStyles.highlightBox, { backgroundColor: 'rgba(245, 158, 11, 0.12)', borderColor: 'rgba(245, 158, 11, 0.35)' }]}>
                                 <Text style={[guideStyles.highlightText, { color: dark ? palette.amber400 : (palette.amber700 || '#b45309') }]}>
-                                    🫘 <Text style={{ fontWeight: 'bold' }}>Contributions First.</Text> To keep the credit pool healthy, list at least one Offer of what you can give back before you can post Needs or accept Offers.
+                                    🫘 <Text style={{ fontWeight: 'bold' }}>Contributions First.</Text> In a community with Beans, to keep the credit pool healthy, list at least one Offer of what you can give back before you can post Needs or accept Offers.
                                 </Text>
                             </View>
                         </View>

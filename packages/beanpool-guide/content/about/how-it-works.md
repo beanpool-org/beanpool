@@ -19,7 +19,7 @@ An **Offer** is something you can do or give: bread, a lift, an hour of gardenin
 
 A **Need** is something you are looking for.
 
-Before you can post a Need, or ask for someone else's Offer, you must have posted at least one Offer of your own. Everyone brings something.
+In a community with Beans, before you can post a Need, or ask for someone else's Offer, you must have posted at least one Offer of your own. Everyone brings something. Where there are no Beans, as on the global community, your first post can be a Need.
 
 ## How a trade works
 

@@ -15,12 +15,14 @@ export function AddedYouLines({ myKey, onAddedBack }: { myKey: string; onAddedBa
     const styles = useStyles(({ colors }) => ({
         card: { backgroundColor: colors.surface.card, borderRadius: 14, borderWidth: 1, borderColor: colors.border.default, marginBottom: 16, overflow: 'hidden' as const },
         row: { flexDirection: 'row' as const, alignItems: 'center' as const, paddingHorizontal: 12, paddingVertical: 8, gap: 10, borderBottomWidth: 1, borderBottomColor: colors.border.default },
-        who: { flex: 1, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10, minHeight: 44 },
-        line: { flex: 1, fontSize: 14, color: colors.text.body },
+        // minWidth 0 on both, so a long name wraps beside Add back instead of running under it (seen at 320 × 1.3).
+        who: { flex: 1, minWidth: 0, flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10, minHeight: 44 },
+        line: { flex: 1, minWidth: 0, flexShrink: 1, fontSize: 14, color: colors.text.body },
         name: { fontWeight: '700' as const, color: colors.text.heading },
-        addBack: { backgroundColor: colors.brand.dark, minHeight: 44, minWidth: 44, paddingHorizontal: 12, borderRadius: 10, justifyContent: 'center' as const, flexShrink: 0 },
-        addBackText: { color: colors.text.inverse, fontWeight: '700' as const, fontSize: 13 },
-        more: { fontSize: 12, color: colors.text.muted, paddingHorizontal: 12, paddingVertical: 8 },
+        // Heading text on the brand tint, edged in the brand colour: readable in light and dark (white on brand.dark is 3.8:1).
+        addBack: { backgroundColor: colors.brand.tint, borderWidth: 1, borderColor: colors.brand.primary, minHeight: 44, minWidth: 44, paddingHorizontal: 12, borderRadius: 10, justifyContent: 'center' as const, flexShrink: 0 },
+        addBackText: { color: colors.text.heading, fontWeight: '700' as const, fontSize: 13 },
+        more: { fontSize: 12, color: colors.text.secondary, paddingHorizontal: 12, paddingVertical: 8 },
     }));
     const [lines, setLines] = useState<AddedYou[]>([]);
     const [more, setMore] = useState(0);

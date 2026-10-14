@@ -191,11 +191,7 @@ export interface HomeMe {
 }
 
 export interface MarketItem { id: string; type: 'offer' | 'need'; title: string; category: string; credits?: number; photoUrl: string | null; distanceKm?: number | null }
-export interface EventItem {
-    id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null;
-    /** The host's clock and its zone (DESIGN-event-times §4), and `online: true` for an online event (no place, no distance). */
-    startLocal?: string; tz?: string; online?: true;
-}
+export interface EventItem { id: string; title: string; startsAt: string; endsAt: string | null; place: string | null; rsvp: 'going' | 'interested' | null; distanceKm?: number | null }
 
 export interface HomeCards {
     needs?: { items: NeedsItem[] };
@@ -606,17 +602,10 @@ function eventsCard(c: Ctx): HomeCards['events'] | undefined {
     const until = c.now + EVENT_DAYS * DAY_MS;
     // The soonest few in START order, in SQL (PostFilter.upcomingUntil): not the most recently updated, which an event
     // posted weeks ahead falls out of behind newer ones, and never every event on the node.
-    const nearby = postsFor(c, {
+    const items = postsFor(c, {
         types: ['event'], status: 'active', upcomingUntil: iso(until), limit: EVENT_POOL,
         near: near ? { ...near, radiusKm: EVENTS_RADIUS_KM } : undefined, measureAtMost: near ? ONE_PASS_MAX_MEASURED : undefined,
-    });
-    // Online events have no place, so no radius holds one: they are in the card regardless of it (DESIGN-event-times §4,
-    // Director amendment 2), the soonest few, beside the near ones.
-    const online = near
-        ? postsFor(c, { types: ['event'], status: 'active', upcomingUntil: iso(until), limit: EVENT_POOL, onlineEvents: true })
-            .filter(p => !nearby.some(n => n.id === p.id))
-        : [];
-    const items = [...nearby, ...online]
+    })
         .filter(p => p.status === 'active' && p.eventState !== 'cancelled' && !!bounded(p.eventStartAt, ID_CHARS) && !!bounded(p.id, ID_CHARS)
             && Date.parse(p.eventStartAt!) <= until && Date.parse(p.eventEndAt || p.eventStartAt!) > c.now)
         .sort((a, b) => Date.parse(a.eventStartAt!) - Date.parse(b.eventStartAt!))
@@ -626,10 +615,7 @@ function eventsCard(c: Ctx): HomeCards['events'] | undefined {
             // The typed place and the reader's own RSVP are a member's; a visitor gets "place shown after you join".
             place: c.member && p.eventPlaceName ? clip(p.eventPlaceName, NAME_CHARS) : null,
             rsvp: c.member ? p.myRsvp ?? null : null,
-            ...(near ? { distanceKm: p.eventOnline ? null : p.distanceKm ?? null } : {}),
-            ...(bounded(p.eventStartLocal, ID_CHARS) ? { startLocal: p.eventStartLocal } : {}),
-            ...(bounded(p.eventTz, ID_CHARS) ? { tz: p.eventTz } : {}),
-            ...(p.eventOnline ? { online: true as const } : {}),
+            ...(near ? { distanceKm: p.distanceKm ?? null } : {}),
         }));
     return items.length ? { items, radiusKm: near ? EVENTS_RADIUS_KM : null } : undefined;
 }

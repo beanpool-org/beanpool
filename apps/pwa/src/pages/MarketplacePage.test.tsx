@@ -1,4 +1,4 @@
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import React from 'react';
 import { MarketplacePage } from './MarketplacePage';
@@ -121,6 +121,34 @@ describe("MarketplacePage: a saved search's See more on Home fills the search (C
         render(<MarketplacePage identity={identity} openSearch="   " onSearchOpened={vi.fn()} />);
         await screen.findByText('Bicycle Repair');
         expect(screen.getByPlaceholderText('Search marketplace...')).toHaveValue('');
+    });
+
+    it('Save this search to Home: shown while there are words, it hands Home the words and the Offers tab (Marty, 7 Oct)', async () => {
+        const onSaveSearch = vi.fn();
+        render(<MarketplacePage identity={identity} onSaveSearch={onSaveSearch} />);
+        await screen.findByText('Bicycle Repair');
+        expect(screen.queryByTestId('market-save-search')).toBeNull();
+        fireEvent.change(screen.getByPlaceholderText('Search marketplace...'), { target: { value: '  fresh eggs ' } });
+        fireEvent.click(screen.getByRole('button', { name: /Offers/ }));
+        const save = await screen.findByTestId('market-save-search');
+        expect(save).toHaveTextContent('Save this search to Home');
+        expect(save).toHaveAccessibleName('Save the search "fresh eggs" to Home');
+        fireEvent.click(save);
+        expect(onSaveSearch).toHaveBeenCalledWith({ q: 'fresh eggs', kind: 'offer' });
+    });
+
+    it('Save this search to Home: none under Events or Polls, none without the way to Home, none for a non-member', async () => {
+        const view = render(<MarketplacePage identity={identity} onSaveSearch={vi.fn()} />);
+        await screen.findByText('Bicycle Repair');
+        fireEvent.change(screen.getByPlaceholderText('Search marketplace...'), { target: { value: 'eggs' } });
+        expect(await screen.findByTestId('market-save-search')).toBeInTheDocument();
+        fireEvent.click(screen.getByRole('button', { name: 'Events' }));
+        expect(screen.queryByTestId('market-save-search')).toBeNull();
+        view.rerender(<MarketplacePage identity={identity} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Events' }));
+        expect(screen.queryByTestId('market-save-search')).toBeNull();
+        view.rerender(<MarketplacePage identity={identity} onSaveSearch={vi.fn()} isMember={false} />);
+        expect(screen.queryByTestId('market-save-search')).toBeNull();
     });
 });
 

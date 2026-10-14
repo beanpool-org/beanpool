@@ -42,7 +42,7 @@ export function TopHeader({
                     />
                     <button
                         onClick={onAuthenticate}
-                        className="px-3.5 py-1.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-white font-bold transition-all shadow-sm active:scale-95"
+                        className="px-3.5 py-1.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on font-bold transition-all shadow-sm active:scale-95"
                     >
                         Authenticate
                     </button>

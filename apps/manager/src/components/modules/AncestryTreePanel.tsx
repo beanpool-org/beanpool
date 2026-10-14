@@ -421,7 +421,7 @@ export function AncestryTreePanel({
 
                             {/* Voucher Pill */}
                             {canVouch && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-emerald-500/30">
                                     🤝 Voucher
                                 </span>
                             )}
@@ -429,8 +429,8 @@ export function AncestryTreePanel({
                             {/* Health Flag Pill */}
                             {hasFlags && (
                                 <span
-                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold text-white ${
-                                        isAlert ? 'bg-red-600' : 'bg-amber-600'
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                        isAlert ? 'bg-bp-chip-danger-tint text-bp-chip-danger-ink' : 'bg-bp-chip-warn-tint text-bp-chip-warn-ink'
                                     }`}
                                     title={bFlags.map((f) => f?.type || '').join(', ')}
                                 >
@@ -440,7 +440,7 @@ export function AncestryTreePanel({
 
                             {/* Report Pill */}
                             {memberReportCount > 0 && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-bp-danger-fill text-bp-danger-on">
                                     🚩 {memberReportCount}
                                 </span>
                             )}
@@ -471,7 +471,7 @@ export function AncestryTreePanel({
 
                             {/* Voucher Pill */}
                             {canVouch && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-emerald-500/30">
                                     🤝 Voucher
                                 </span>
                             )}
@@ -479,8 +479,8 @@ export function AncestryTreePanel({
                             {/* Health Flag Pill */}
                             {hasFlags && (
                                 <span
-                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold text-white ${
-                                        isAlert ? 'bg-red-600' : 'bg-amber-600'
+                                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                        isAlert ? 'bg-bp-chip-danger-tint text-bp-chip-danger-ink' : 'bg-bp-chip-warn-tint text-bp-chip-warn-ink'
                                     }`}
                                     title={bFlags.map((f) => f?.type || '').join(', ')}
                                 >
@@ -490,7 +490,7 @@ export function AncestryTreePanel({
 
                             {/* Report Pill */}
                             {memberReportCount > 0 && (
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-600 text-white">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-bp-danger-fill text-bp-danger-on">
                                     🚩 {memberReportCount}
                                 </span>
                             )}
@@ -535,7 +535,7 @@ export function AncestryTreePanel({
                             <button
                                 type="button"
                                 onClick={() => setPruneTarget({ pubkey: pk, callsign })}
-                                className="min-h-[36px] px-2.5 py-1 rounded-lg bg-red-950/80 hover:bg-red-900 text-[11px] font-bold text-red-200 border border-red-800/80 transition-all"
+                                className="min-h-[36px] px-2.5 py-1 rounded-lg bg-bp-chip-danger-tint hover:opacity-90 text-[11px] font-bold text-bp-chip-danger-ink border border-red-800/80 transition-all"
                                 title="Prune this member and all descendants in their invite tree"
                             >
                                 Prune Branch ({branchStats.memberCount})

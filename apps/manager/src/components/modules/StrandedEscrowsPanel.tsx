@@ -161,7 +161,7 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
                         {e.writeOff.eligible && canWriteOff && !isStandby && !isOpen && (
                             <button
                                 onClick={() => open(e.escrowId)}
-                                className="px-3.5 py-1.5 rounded-lg bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all"
+                                className="px-3.5 py-1.5 rounded-lg bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all"
                             >
                                 Write off from the Commons
                             </button>
@@ -217,7 +217,7 @@ export function StrandedEscrowsPanel({ activeNode, refreshKey, canWriteOff, isSt
                                     <button
                                         onClick={() => submit(e)}
                                         disabled={submitting || !reasonOk || (deficit && !confirmDeficit)}
-                                        className="px-3.5 py-1.5 rounded-lg bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50"
+                                        className="px-3.5 py-1.5 rounded-lg bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all disabled:opacity-50"
                                     >
                                         {submitting ? 'Writing off…' : `Write off ${beans(-e.balance)} from the Commons`}
                                     </button>

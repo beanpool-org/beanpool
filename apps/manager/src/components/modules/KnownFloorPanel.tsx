@@ -171,7 +171,7 @@ export function KnownFloorPanel({ activeNode, viewer }: { activeNode: NodeProfil
                     onClick={guardGated(blocked, () => { void save(); })}
                     disabled={!blocked && (saving || !!problem || !changed)}
                     aria-busy={saving}
-                    className={`min-h-[48px] px-5 rounded-xl bg-terra-500 hover:bg-terra-600 text-white text-xs font-bold transition-all disabled:opacity-50 ${blocked ? GATED_LOOK : ''}`}
+                    className={`min-h-[48px] px-5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on text-xs font-bold transition-all disabled:opacity-50 ${blocked ? GATED_LOOK : ''}`}
                 >
                     {saving ? 'Saving…' : 'Save the known floor'}
                 </button>

@@ -146,7 +146,7 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
             <button
                 type="submit"
                 disabled={loading}
-                className="w-full mt-2 py-3 rounded-xl bg-terra-600 hover:bg-terra-500 active:scale-[0.98] text-white font-bold text-sm shadow-lg shadow-terra-900/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                className="w-full mt-2 py-3 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover active:scale-[0.98] text-bp-cta-on font-bold text-sm shadow-lg shadow-terra-900/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
             >
                 {loading ? (
                     <>
@@ -167,7 +167,7 @@ export function AdminLoginCard({ nodeUrl, onPasswordSession, onKeySession }: Adm
         <div className="min-h-screen bg-nature-950 flex items-center justify-center p-4 font-sans">
             <div className="w-full max-w-md bg-nature-900/90 border border-nature-800 rounded-3xl p-5 sm:p-8 shadow-2xl backdrop-blur-xl animate-fade-in">
                 <div className="flex items-center gap-3 mb-6 border-b border-nature-800/80 pb-5">
-                    <div className="w-12 h-12 shrink-0 rounded-2xl bg-terra-500/20 border border-terra-500/30 flex items-center justify-center text-2xl text-terra-400 font-bold">
+                    <div className="w-12 h-12 shrink-0 rounded-2xl bg-bp-chip-need-tint border border-terra-500/30 flex items-center justify-center text-2xl text-bp-chip-need-ink font-bold">
                         ⚙️
                     </div>
                     <div className="flex-1 min-w-0">

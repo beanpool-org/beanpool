@@ -120,6 +120,7 @@ async function main(): Promise<void> {
     const kyivHost = makeIdentity('KyivKira');
     const picker = makeIdentity('PickerPia');
     const linker = makeIdentity('LinkerLev');
+    const clocks = makeIdentity('ClocksCleo');
     const create = (who: Id, body: Record<string, unknown>) => signed('POST', '/api/marketplace/posts', {
         type: 'event', title: 'Working bee', description: 'Bring gloves', authorPublicKey: who.pubKeyHex, ...body,
     }, who);
@@ -161,10 +162,10 @@ async function main(): Promise<void> {
     assert(noPin.status === 400 && /place on the map/.test(noPin.error ?? ''), `in person still needs a pin (got ${noPin.status} ${noPin.error})`);
     // The shape is right but the date or time does not exist: refused, not rolled into 2 Mar, the next day or the next hour.
     for (const impossible of ['2027-02-30T20:50', '2027-01-15T24:00', '2027-01-15T25:00', '2027-01-15T20:60', '2027-13-01T10:00']) {
-        const r = await create(host, { ...SYDNEY, eventStartLocal: impossible, eventTz: 'Australia/Sydney' });
+        const r = await create(clocks, { ...SYDNEY, eventStartLocal: impossible, eventTz: 'Australia/Sydney' });
         assert(r.status === 400 && /^Start time must be a valid date and time/.test(r.error ?? ''), `${impossible} is refused (got ${r.status} ${r.error})`);
     }
-    const badEnd = await create(host, { ...SYDNEY, eventStartLocal: '2027-01-15T20:50', eventEndLocal: '2027-01-15T22:60', eventTz: 'Australia/Sydney' });
+    const badEnd = await create(clocks, { ...SYDNEY, eventStartLocal: '2027-01-15T20:50', eventEndLocal: '2027-01-15T22:60', eventTz: 'Australia/Sydney' });
     assert(badEnd.status === 400 && /^End time must be a valid date and time/.test(badEnd.error ?? ''), `an end at 22:60 is refused (got ${badEnd.status} ${badEnd.error})`);
 
     // ── 3b. A clock the zone skips or repeats ──────────────────────────────────────────────────
@@ -328,12 +329,12 @@ async function main(): Promise<void> {
             `a Brisbane-picked event at a Sydney pin is stored so, and a title edit keeps it (got ${p0.event_tz} ${p0.event_start_at} ${p1.event_tz})`);
         assert(nudged.status === 200 && p2.event_tz === 'Australia/Brisbane' && p2.event_start_local === '2027-01-15T20:50' && p2.event_start_at === '2027-01-15T10:50:00.000Z',
             `a pin nudged within the same zone keeps the zone the host picked, and 20:50 (got ${nudged.status} ${p2.event_tz} ${p2.event_start_local} ${nudged.error ?? ''})`);
-        // A zone's rules change after the event was set (simulated: the stored clock no longer matches the instant). A
-        // title-only edit leaves the clocks as the host set them; the boot re-resolve owns that case.
-        db.prepare(`UPDATE posts SET event_start_local = '2027-01-15T21:50', event_state = 'scheduled' WHERE id = ?`).run(pickedId);
+        // A zone's rules change after the event was set (simulated: the stored clock, 19:30, no longer matches the instant in
+        // any zone it had). A title-only edit leaves the clocks as the host set them; the boot re-resolve owns that case.
+        db.prepare(`UPDATE posts SET event_start_local = '2027-01-15T19:30', event_state = 'scheduled' WHERE id = ?`).run(pickedId);
         const renamed = await signed('POST', '/api/marketplace/posts/update', { id: pickedId, authorPublicKey: picker.pubKeyHex, title: 'Renamed again' }, picker);
         const p3 = row(pickedId);
-        assert(renamed.status === 200 && p3.event_start_local === '2027-01-15T21:50' && p3.event_start_at === '2027-01-15T10:50:00.000Z' && p3.event_state === 'scheduled',
+        assert(renamed.status === 200 && p3.event_start_local === '2027-01-15T19:30' && p3.event_start_at === '2027-01-15T10:50:00.000Z' && p3.event_state === 'scheduled',
             `a title-only edit does not rewrite the clock from the instant (got ${p3.event_start_local} ${p3.event_state})`);
         // An event from before the clocks: a title-only edit fills them in from the pin, and marks nothing.
         db.prepare(`UPDATE posts SET event_start_local = NULL, event_end_local = NULL, event_tz = NULL, event_online = NULL WHERE id = ?`).run(pickedId);

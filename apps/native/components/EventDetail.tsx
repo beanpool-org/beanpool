@@ -22,7 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext';
 import { useIdentity } from '../app/IdentityContext';
-import { t, placeShownRoughly, ROUGH_PLACE_LINE } from '@beanpool/core';
+import { t, placeShownRoughly, PLACE_WORDS } from '@beanpool/core';
 import { fetchEventDetail, rsvpEvent, deletePost, reportAbuse, letInToEvent } from '../utils/db';
 import { hapticTick } from '../utils/haptics';
 import { PhotoCarousel } from './PhotoCarousel';
@@ -315,7 +315,7 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                 )}
                 {placeShownRoughly({ authorPublicKey: p.authorPublicKey ?? p.author_pubkey, type: 'event', lat: p.lat, lng: p.lng,
                     eventRsvps: p.eventRsvps, myRsvp: p.myRsvp, myLetIn: p.myLetIn }, identity?.publicKey, openMembership) && (
-                    <Text style={styles.roughPlace} testID="rough-place-line">{t(ROUGH_PLACE_LINE, { name: hostName })}</Text>
+                    <Text style={styles.roughPlace} testID="rough-place-line">{t(PLACE_WORDS.roughPlace, { name: hostName })}</Text>
                 )}
 
                 {note ? (

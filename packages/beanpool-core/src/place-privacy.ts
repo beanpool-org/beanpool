@@ -16,6 +16,9 @@ export const PLACE_NAME_HELPER = word('Shown to everyone who can see the event. 
 /** The same field, when what was typed looks like a street address (looksLikeStreetAddress). */
 export const PLACE_NAME_ADDRESS_NUDGE = word('This looks like a street address. Everyone who can see the event will read it, so it is safer in the note below.');
 
+/** The three, as a table: t() takes a word() key from a table (words-check), never a bare constant. */
+export const PLACE_WORDS = { roughPlace: ROUGH_PLACE_LINE, nameHelper: PLACE_NAME_HELPER, addressNudge: PLACE_NAME_ADDRESS_NUDGE } as const;
+
 /** The fields of a post the test reads, as both apps hold them. */
 export interface PlaceShownPost {
     authorPublicKey?: string | null;

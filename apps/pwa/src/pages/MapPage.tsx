@@ -10,7 +10,7 @@
  */
 
 import { offerNeedSubmit } from '../lib/offer-need-submit';
-import { placelessListingNote, looksLikeStreetAddress, PLACE_NAME_ADDRESS_NUDGE, PLACE_NAME_HELPER, t } from '@beanpool/core';
+import { placelessListingNote, looksLikeStreetAddress, PLACE_WORDS, t } from '@beanpool/core';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import type { BeanPoolIdentity } from '../lib/identity';
@@ -2275,7 +2275,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                 (DESIGN-global-member-privacy-fable.md §4); a typed street address gets a gentle nudge. */}
                             {openMembership && (
                                 <p data-testid="event-place-helper" className="m-0 mt-1 text-xs text-nature-500 dark:text-nature-400 break-words">
-                                    {looksLikeStreetAddress(eventPlaceName) ? t(PLACE_NAME_ADDRESS_NUDGE) : t(PLACE_NAME_HELPER)}
+                                    {looksLikeStreetAddress(eventPlaceName) ? t(PLACE_WORDS.addressNudge) : t(PLACE_WORDS.nameHelper)}
                                 </p>
                             )}
                         </div>

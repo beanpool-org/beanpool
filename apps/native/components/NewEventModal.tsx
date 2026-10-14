@@ -46,7 +46,7 @@ import { palette } from '../constants/colors';
 import { AddressSearch } from './AddressSearch';
 import { placeNameAfterPick } from '../utils/address-search';
 import type { AddressResult } from '@beanpool/core';
-import { looksLikeStreetAddress, PLACE_NAME_ADDRESS_NUDGE, PLACE_NAME_HELPER, t } from '@beanpool/core';
+import { looksLikeStreetAddress, PLACE_WORDS, t } from '@beanpool/core';
 
 // Mullumbimby, as the radius picker uses, until the member's own location is known.
 const DEFAULT_REGION = { latitude: -28.5523, longitude: 153.4991, latitudeDelta: 0.02, longitudeDelta: 0.02 };
@@ -542,7 +542,7 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                 (DESIGN-global-member-privacy-fable.md §4); a typed street address gets a gentle nudge. */}
                             {openMembership && (
                                 <Text style={styles.helper} testID="event-place-helper">
-                                    {looksLikeStreetAddress(placeName) ? t(PLACE_NAME_ADDRESS_NUDGE) : t(PLACE_NAME_HELPER)}
+                                    {looksLikeStreetAddress(placeName) ? t(PLACE_WORDS.addressNudge) : t(PLACE_WORDS.nameHelper)}
                                 </Text>
                             )}
                         </View>

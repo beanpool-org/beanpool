@@ -20,7 +20,7 @@ import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { DealsPreviewDialog } from '../components/ShowcasePreviews';
 import { LocalCommunityAction, LocalCommunityLine, DEAL_ACTION_LABEL } from '../components/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, placeShownRoughly, ROUGH_PLACE_LINE, t } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, placeShownRoughly, PLACE_WORDS, t } from '@beanpool/core';
 import { NO_BEANS_TERMS_TEXT } from '../lib/visitor-lobby';
 import { marked, useFeatureMode } from '../lib/features';
 import { ProfileGateModal } from '../components/ProfileGateModal';
@@ -1294,7 +1294,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         §4): said here, so a pin on the map is never taken for the door. */}
                     {placeShownRoughly(selectedPost, identity?.publicKey, openMembership) && (
                         <p data-testid="rough-place-line" className="m-0 mt-2 text-sm text-nature-600 dark:text-nature-300 leading-snug break-words">
-                            {t(ROUGH_PLACE_LINE, { name: selectedPost.authorCallsign })}
+                            {t(PLACE_WORDS.roughPlace, { name: selectedPost.authorCallsign })}
                         </p>
                     )}
                 </div>

@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { t, placeShownRoughly, ROUGH_PLACE_LINE } from '@beanpool/core';
+import { t, placeShownRoughly, PLACE_WORDS } from '@beanpool/core';
 import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
@@ -386,7 +386,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                         {/* Where anyone can join, the spot is the host's to give (DESIGN-global-member-privacy-fable.md §4). */}
                         {placeShownRoughly(p, identity?.publicKey, openMembership) && (
                             <p data-testid="rough-place-line" className="m-0 text-sm text-nature-600 dark:text-nature-300 leading-snug break-words">
-                                {t(ROUGH_PLACE_LINE, { name: hostName })}
+                                {t(PLACE_WORDS.roughPlace, { name: hostName })}
                             </p>
                         )}
                     </div>

@@ -37,7 +37,7 @@ import { useNodeProfile } from '../../utils/use-node-profile';
 import { useReaderFeatures } from '../../utils/use-reader-features';
 import { showcaseMode } from '../../utils/node-profile';
 import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, ROUGH_PLACE_LINE, t } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI, placeShownRoughly, PLACE_WORDS, t } from '@beanpool/core';
 import { hostLetsInDefault } from '../../utils/events';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
 import { isDmNotLocked, dmNotLockedLine } from '../../utils/dm-lock';
@@ -1076,7 +1076,7 @@ export default function PostDetailModal() {
                     said here, so a pin on the map is never taken for the door. A keeper reads their enterprise's exactly. */}
                 {placeShownRoughly({ authorPublicKey: post.author_pubkey, type: post.type, lat: post.lat, lng: post.lng }, identity?.publicKey, hostLetsInDefault(nodeProfile?.features))
                     && !isOperatorOfAuthor && (
-                    <Text style={styles.roughPlace} testID="rough-place-line">{t(ROUGH_PLACE_LINE, { name: cardAuthor })}</Text>
+                    <Text style={styles.roughPlace} testID="rough-place-line">{t(PLACE_WORDS.roughPlace, { name: cardAuthor })}</Text>
                 )}
 
                 {/* Action Buttons */}

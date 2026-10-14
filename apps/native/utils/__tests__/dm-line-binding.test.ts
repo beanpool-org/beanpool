@@ -99,7 +99,7 @@ import { routeChat } from '../chat-route';
 import { dmQuoteFor } from '../chat-actions';
 import { GROUP_KEYS_FOR_DM_TEXT } from '../group-chat-lines';
 import { CACHE_NAMES_DONE_KEY } from '../cache-file-migration';
-import { dmPeerPinsStoreKey, dmLinesAtUpdateStoreKey } from '../storage-keys';
+import { dmPeerPinsStoreKey, dmLinesAtUpdateStoreKey, dmConversationsSeenStoreKey } from '../storage-keys';
 import { encryptDmFormat2 } from '../e2e-crypto';
 import * as phoneCrypto from '../e2e-crypto';
 // The web app's own modules, as its MessagesPage uses them: what it seals, and how it reads a thread.
@@ -235,6 +235,9 @@ const FILE_A = 'beanpool_mullum.beanpool.org.db';
 const noPinStore = (who: Person) => {
     for (const k of [...h.store.keys()]) if (k.startsWith(dmPeerPinsStoreKey(who.publicKey, '')) || k.startsWith(dmLinesAtUpdateStoreKey(who.publicKey, ''))) h.store.delete(k);
 };
+
+/** One account's DM guard list in one community file (§3.4 amendment 7 §3: one per account and file). */
+const dmSeenKey = (who: Person, file = FILE_A) => dmConversationsSeenStoreKey(who.publicKey, file);
 
 /** One account's stored pins in one community file, { conversation id → pin } (the stored value is { pins }: §3.4 amendment 6). */
 const storedPins = (who: Person, file = FILE_A): Record<string, any> => JSON.parse(h.store.get(dmPeerPinsStoreKey(who.publicKey, file)) ?? '{"pins":{}}').pins;
@@ -671,7 +674,7 @@ describe('the node retyping a DM as a group\'s, an event\'s or an enterprise\'s 
         await says(ana, dm, 'The bike is yours for 50 Beans');
         dm.type = 'group_thread';
         const plain = written(dm, ana, b64('Send me your 12 words to finish the trade'), 'plaintext-v1');
-        h.store.delete('beanpool_dm_conversations_seen');   // a phone that has never seen it
+        h.store.delete(dmSeenKey(ben));   // a phone that has never seen it (Ben's: the list is per account and file)
         await phoneOf(ben);
         expect(await bensView(plain.id)).toEqual(asDm);
     });
@@ -914,7 +917,8 @@ describe('a twin the node writes of a DM\'s id, in other capitals, with someone 
     // and lists it first. Ana's phone holds both. Tapping Ben's row (or any link to that very id) opens Ben's thread, and
     // the line Ana sends from it opens for Ben, never for the puppet. ChatRoute's asks are app/chat/[id].tsx's.
     const ROUTE_ASKS = { isHeldGroupChat, knownDmConversationId, getConversationKind };
-    const DM_SEEN = 'beanpool_dm_conversations_seen';
+    /** The DM guard's list for Ana in this community's file (§3.4 amendment 7 §3: one per account and file). */
+    const DM_SEEN = () => `beanpool_dm_conversations_seen:${ana.publicKey.toLowerCase()}:${FILE_A}`;
     let puppet: Person;
     beforeEach(() => { puppet = person('Puppet'); });
 
@@ -938,7 +942,7 @@ describe('a twin the node writes of a DM\'s id, in other capitals, with someone 
     /** The phone's own rows under any spelling of `id`, and its DM list's spellings of it in the order remembered. */
     const held = (id: string) => ({
         rows: (sql.prepare('SELECT id, type FROM conversations').all() as any[]).filter((r) => String(r.id).toLowerCase() === id.toLowerCase()).map((r) => `${r.id}:${r.type}`).sort(),
-        seen: (JSON.parse(h.store.get(DM_SEEN) ?? '[]') as string[]).filter((s) => s.toLowerCase() === id.toLowerCase()),
+        seen: (JSON.parse(h.store.get(DM_SEEN()) ?? '[]') as string[]).filter((s) => s.toLowerCase() === id.toLowerCase()),
     });
     /** Ben's thread, as the tap must show it and send to it. */
     async function expectBens(id: string, text: string, r: Awaited<ReturnType<typeof tapAndSend>>) {
@@ -955,7 +959,7 @@ describe('a twin the node writes of a DM\'s id, in other capitals, with someone 
         await aQuestionAndAnAnswer();
         const twin: Conv = { id: dm.id.toUpperCase(), type: 'dm', participants: [ana.publicKey, puppet.publicKey] };
         node.convs = [twin, dm];
-        h.store.delete(DM_SEEN);   // restored from the 12 words: the DM list starts from this sync, in the node's order
+        h.store.delete(DM_SEEN());   // restored from the 12 words: the DM list starts from this sync, in the node's order
         noPinStore(ana);   // and so do its DM pins (a phone that kept them: the pin tests below)
         restarted();
         await phoneOf(ana);
@@ -968,7 +972,7 @@ describe('a twin the node writes of a DM\'s id, in other capitals, with someone 
         await aQuestionAndAnAnswer();
         const twin: Conv = { id: dm.id.toLowerCase(), type: 'dm', participants: [ana.publicKey, puppet.publicKey] };
         node.convs = [twin, dm];
-        h.store.delete(DM_SEEN);
+        h.store.delete(DM_SEEN());
         noPinStore(ana);
         restarted();
         await phoneOf(ana);
@@ -980,12 +984,12 @@ describe('a twin the node writes of a DM\'s id, in other capitals, with someone 
         await aQuestionAndAnAnswer();
         const twin: Conv = { id: dm.id.toUpperCase(), type: 'dm', participants: [ana.publicKey, puppet.publicKey] };
         node.convs = [twin, dm];
-        h.store.delete(DM_SEEN);
+        h.store.delete(DM_SEEN());
         noPinStore(ana);
         restarted();
         await phoneOf(ana);
         expect(held(dm.id)).toEqual({ rows: [`${twin.id}:dm`, `${dm.id}:dm`], seen: [twin.id, dm.id] });
-        h.store.set(DM_SEEN, '{unreadable');
+        h.store.set(DM_SEEN(), '{unreadable');
         expect(await knownDmConversationId(dm.id)).toBe(dm.id);
         await expectBens(dm.id, 'Are you there?', await tapAndSend(dm.id, 'Are you there?'));
     });
@@ -1014,7 +1018,7 @@ describe('a twin the node writes of a DM\'s id, in other capitals, with someone 
                 if (s.line) sql.prepare("INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, timestamp) VALUES (?, ?, ?, 'x', 'x25519-xc20p-v2:abc', 'text', '2026-10-01T00:00:01.000Z')").run(randomUUID(), spellings[i], ben.publicKey);
                 if (s.listed) seen.push(spellings[i]);
             }
-            h.store.set(DM_SEEN, JSON.stringify(seen));
+            h.store.set(DM_SEEN(), JSON.stringify(seen));
             for (let i = 0; i < 3; i++) {
                 const asked = spellings[i];
                 const state = st.map((s) => `${s.row ?? '-'}${s.line ? '+line' : ''}${s.listed ? '+listed' : ''}`).join(' | ') + ` (order ${order.join('')}, asked #${i})`;
@@ -1047,7 +1051,7 @@ describe('a DM kept under a spelling the DM list never got: no group keys under 
     // screen asks for its keys (groupScreenKeyringFor), and is refused before any request, so no epoch is made to the puppet.
     const reset = () => {
         for (const t of ['messages', 'conversation_participants', 'conversations']) sql.exec(`DELETE FROM ${t}`);
-        h.store.delete('beanpool_dm_conversations_seen');
+        h.store.delete(dmSeenKey(ana));
     };
     const row = (id: string, type: string) => sql.prepare("INSERT INTO conversations (id, type, created_by, created_at) VALUES (?, ?, '', '2026-10-01T00:00:00.000Z')").run(id, type);
     const sealedLine = (id: string) => sql.prepare("INSERT INTO messages (id, conversation_id, author_pubkey, ciphertext, nonce, type, timestamp) VALUES (?, ?, ?, 'x', 'x25519-xc20p-v2:abc', 'text', '2026-10-01T00:00:01.000Z')").run(randomUUID(), id, ben.publicKey);
@@ -1175,7 +1179,7 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
         await aQuestionAndAnAnswer();
         dm.participants = [ana.publicKey, puppet.publicKey];
         noPinStore(ana);
-        h.store.delete('beanpool_dm_conversations_seen');
+        h.store.delete(dmSeenKey(ana));
         restarted();
         await phoneOf(ana);
         expect(pinOf(ana, dm.id)).toMatchObject({ peer: puppet.publicKey, by: 'first-seen' });
@@ -1202,7 +1206,7 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
         await aQuestionAndAnAnswer();
         const twin: Conv = { id: dm.id.toUpperCase(), type: 'dm', participants: [ana.publicKey, puppet.publicKey] };
         node.convs = [twin, dm];
-        h.store.delete('beanpool_dm_conversations_seen');
+        h.store.delete(dmSeenKey(ana));
         await phoneOf(ana);
         expect(pinOf(ana, dm.id)).toMatchObject({ peer: ben.publicKey, offered: { peer: puppet.publicKey } });
         for (const id of [dm.id, twin.id]) {
@@ -1218,7 +1222,7 @@ describe('the key a DM is sealed to is the one this phone pinned for it, not the
         const twin: Conv = { id: dm.id.toUpperCase(), type: 'dm', participants: [ana.publicKey, puppet.publicKey] };
         node.convs = [twin, dm];
         await phoneOf(ana);
-        h.store.set('beanpool_dm_conversations_seen', '{unreadable');
+        h.store.set(dmSeenKey(ana), '{unreadable');
         for (const id of [dm.id, twin.id]) {
             const r = await trySend(id, 'Are you there?');
             expect({ id, err: r.err?.name, sent: r.sent.length }).toEqual({ id, err: 'DmKeyChangedError', sent: 0 });
@@ -1492,7 +1496,7 @@ describe('the pin under a node that chooses its moment (#1872 review)', () => {
         dm.type = 'group_thread';   // listed as a group's chat, so the sync pins nothing; its encrypted lines keep it a DM
         dm.participants = [ana.publicKey, puppet.publicKey];
         noPinStore(ana);
-        h.store.delete('beanpool_dm_conversations_seen');
+        h.store.delete(dmSeenKey(ana));
         restarted();
         await phoneOf(ana);
         expect(pinOf(ana, dm.id)).toBeNull();
@@ -1599,7 +1603,7 @@ describe('the update seed holds whoever writes the pins first (#1872/#1873 confi
         for (const t of ['messages', 'conversation_participants', 'conversations', 'members']) sql.exec(`DELETE FROM ${t}`);
         h.me = { publicKey: ana.publicKey, privateKey: ana.privateKey };   // restored from the 12 words: no rows, no pins
         noPinStore(ana);
-        h.store.delete('beanpool_dm_conversations_seen');
+        h.store.delete(dmSeenKey(ana));
         restarted();
         expect(await getConversationKind(dm.id, { askNode: true })).toBe('dm');   // the push tap asks the node what the chat is
         expect(pinOf(ana, dm.id)).toMatchObject({ peer: puppet.publicKey, by: 'first-seen' });
@@ -1649,7 +1653,7 @@ describe('first sight is decided by the thread\'s own lines; the listing only of
     /** A phone restored from the 12 words: no pins, no rows; the history is on the node. */
     async function restoredPhone() {
         noPinStore(ana);
-        h.store.delete('beanpool_dm_conversations_seen');
+        h.store.delete(dmSeenKey(ana));
         restarted();
         await phoneOf(ana);
     }
@@ -2795,7 +2799,8 @@ describe('the update\'s memory covers every community on the phone (§3.4 amendm
         expect(await isDmKeyChangePending(dmB.id)).toBe(true);
         expect(pinOf(dmB.id)).toMatchObject({ peer: ben.publicKey, checked: true, offered: { peer: puppet.publicKey } });
         expect(seeded()).toEqual([FILE_A, FILE_B]);
-        const mine = [...h.store.keys()].filter((k) => k.includes(ana.publicKey.toLowerCase())).sort();
+        // The pins' keys (the DM guard's own per-file lists, §3.4 amendment 7 §3, sit beside them and are not these).
+        const mine = [...h.store.keys()].filter((k) => k.includes(ana.publicKey.toLowerCase()) && !k.startsWith('beanpool_dm_conversations_seen:')).sort();
         expect(mine).toEqual([dmPeerPinsStoreKey(ana.publicKey, FILE_A), dmPeerPinsStoreKey(ana.publicKey, FILE_B), dmLinesAtUpdateStoreKey(ana.publicKey, FILE_B), dmLinesAtUpdateStoreKey(ana.publicKey, FILE_A)].sort());
         expect(Object.keys(JSON.parse(h.store.get(dmPeerPinsStoreKey(ana.publicKey, FILE_B))!))).toEqual(['pins']);
         expect(await sendTo(dmB.id, 'The code is 4821')).toEqual(paused);

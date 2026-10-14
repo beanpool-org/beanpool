@@ -2671,15 +2671,21 @@ async function rememberDmConversations(ids: string[], database?: SQLite.SQLiteDa
  * whatever the node now says (§3.4 amendment 7 §3 iv). False when they keep nothing, or can't be read (the list decides),
  * and for a group whose keys this phone has held (or whose key memory can't be read): the held guard is asked before
  * anything, so a node listing a held group as a DM, which the pins hear at first sight, never makes it one here.
+ * `pinsMustRead` (a send): pins that can't be read throw (DmPinStoreError), so nothing goes on the list's word alone.
  */
-async function keptInDmPins(conversationId: string, database: SQLite.SQLiteDatabase): Promise<boolean> {
+async function keptInDmPins(conversationId: string, database: SQLite.SQLiteDatabase, pinsMustRead = false): Promise<boolean> {
+    let me: string | undefined;
+    let pins: DmPeerPins;
     try {
-        const me = (await loadIdentity())?.publicKey;
-        if (!me || !isPinnableId(conversationId) || !dmSightFor(await dmPins.read(me, database), conversationId)) return false;
-        return !(await heldInKeyMemory(conversationId, me));
-    } catch {
+        me = (await loadIdentity())?.publicKey;
+        if (!me || !isPinnableId(conversationId)) return false;
+        pins = await dmPins.read(me, database);
+    } catch (e) {
+        if (pinsMustRead && (isDmPinStoreError(e) || isDmPinsFullError(e))) throw e;
         return false;
     }
+    if (!dmSightFor(pins, conversationId)) return false;
+    return !(await heldInKeyMemory(conversationId, me).catch(() => true));
 }
 
 /**
@@ -2694,12 +2700,14 @@ async function keptInDmPins(conversationId: string, database: SQLite.SQLiteDatab
  *
  * The pins are asked first (§3.4 amendment 7 §3 iv): an id this file's pins keep anything for is a known DM (under the
  * spelling asked for, unless the list, a row or a line knows it under another). With the list unreadable and nothing else
- * knowing the id this throws DmGuardUnreadError: "not a DM" is never answered from a list it couldn't read.
+ * knowing the id this throws DmGuardUnreadError: "not a DM" is never answered from a list it couldn't read. `pinsMustRead`
+ * (a send): pins that can't be read throw DmPinStoreError rather than leave the answer to the list.
  */
-export async function knownDmConversationId(conversationId: string, seenByFold?: Map<string, string[]> | null): Promise<string | null> {
+export async function knownDmConversationId(conversationId: string, seenByFold?: Map<string, string[]> | null, opts: { pinsMustRead?: boolean } = {}): Promise<string | null> {
     if (!conversationId) return null;
     const folded = conversationId.toLowerCase();
-    const pinned = await getDb().then((database) => keptInDmPins(conversationId, database), () => false);
+    const db = await getDb().catch(() => null);
+    const pinned = db ? await keptInDmPins(conversationId, db, opts.pinsMustRead) : false;
     let listed: string[] | null;
     if (seenByFold !== undefined) listed = seenByFold ? (seenByFold.get(folded) ?? []) : null;
     else listed = await dmConversationsSeen().then((seen) => [...seen].filter((s) => s.toLowerCase() === folded), () => null);
@@ -2764,8 +2772,8 @@ async function isKnownDmInAnySpelling(conversationId: string): Promise<boolean> 
 }
 
 /** True for a conversation this phone has seen as a DM, or that holds an encrypted line, in any spelling of its id. */
-export async function isKnownDmConversation(conversationId: string): Promise<boolean> {
-    return (await knownDmConversationId(conversationId)) !== null;
+export async function isKnownDmConversation(conversationId: string, opts: { pinsMustRead?: boolean } = {}): Promise<boolean> {
+    return (await knownDmConversationId(conversationId, undefined, opts)) !== null;
 }
 
 /**
@@ -5323,9 +5331,10 @@ async function isNodeReadableConversation(conversationId: string): Promise<boole
  */
 async function lockForConversation(conversationId: string, text: string, line: DmLineToSeal): Promise<{ ciphertext: string; nonce: string; metadata?: Record<string, unknown> }> {
     // A DM's key context decides before any group sealing (§3.4 amendment 7 §3 iv): a conversation whose group keys this
-    // phone never held and that it knows as a DM (its pins first) is sealed to its pin or refused, whatever its row or the
-    // node now call it. With the group path asked first, a pinned DM the node relisted as an unlocked group went out readable.
-    if (!(await isHeldGroupChat(conversationId)) && await isKnownDmConversation(conversationId)) {
+    // phone never held and that it knows as a DM (its pins first, which refuse when they can't be read) is sealed to its pin
+    // or refused, whatever its row or the node now call it. With the group path asked first, a pinned DM the node relisted
+    // as an unlocked group went out readable.
+    if (!(await isHeldGroupChat(conversationId)) && await isKnownDmConversation(conversationId, { pinsMustRead: true })) {
         return lockWith(await requireDmKeyContext(conversationId), text, line);
     }
     // A group's chat is locked since group chats step 2 (slice 3 here): sealed under the group's key, with its epoch in the

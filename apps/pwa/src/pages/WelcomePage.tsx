@@ -9,6 +9,7 @@
  * Sign-in:    There, an account comes back with the sign-in it joined with (components/WebRestore.tsx, G11-d)
  */
 
+import { LanguageSwitch } from '../components/LanguageSwitch';
 import React, { useState, useRef, useEffect, useId } from 'react';
 import {
     checkIdentitySave, clearUnsentPendingJoin, completeInviteSent, createIdentityFromMnemonic, generateIdentity, identityFromMnemonic,
@@ -1406,6 +1407,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                 width: '100%',
                 textAlign: 'center',
             }}>
+                {/* The language, before anything else: a switch at the top, never a step (director amendment 2). */}
+                <div className="flex justify-end mb-2">
+                    <LanguageSwitch />
+                </div>
                 <img src="/assets/logo-192x192.png" alt="BeanPool Logo" style={{ width: '4rem', height: '4rem', objectFit: 'contain', margin: '0 auto 1rem' }} />
                 <h2 style={{ fontSize: '1.6rem', fontWeight: 700, marginBottom: '0.5rem' }}>
                     Welcome to BeanPool

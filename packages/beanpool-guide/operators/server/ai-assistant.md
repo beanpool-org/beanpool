@@ -15,7 +15,7 @@ Under Appliance & Data, then Access & Security, **Connected assistants** shows f
 
 - Copy the address: your server's address with /mcp at the end.
 - In Claude or ChatGPT: Settings, Connectors, **Add custom connector**, and paste it.
-- Your assistant opens a page on your server. It says which assistant is asking **and the address its answers go to** (for Claude, claude.ai), and what it will read. Scan the code on that page with the BeanPool app (Manage, then **Manage this community from a computer**). The phone asks "Did you just add this community to an AI assistant?" and shows the same address. Press **Connect**, pass the phone's unlock, and type the phone's two digits on the page.
+- Your assistant opens a page on your server. It says which assistant is asking **and the address its answers go to** (for Claude, claude.ai), and what it will read. Scan the code on that page with the BeanPool app (**Settings**, then **Manage this community from a computer**). The phone asks "Did you just add this community to an AI assistant?" and shows the same address. Press **Connect**, pass the phone's unlock, and type the phone's two digits on the page.
 - Ask it: "what needs me?"
 
 No key or token is shown, and none is stored anywhere you can lose it. The assistant gets a pass that lasts an hour and renews itself; if it isn't used for 30 days, approve it again. It acts as you, with your role: if you stop being an owner or admin, it stops too. Each member can have at most 5 connected this way. Only an owner or an admin can approve one; a moderator's or a member's phone is refused. The phone must be a BeanPool app that can show which assistant is asking: an older one is told to update.
@@ -36,7 +36,7 @@ Under Appliance & Data, then Access & Security, **Connected assistants**:
 
 Admins connect theirs from their assistant, as above: only an owner makes a token. Connecting one is a new key to your server, so from the phone's Manage it is asked as an owner's other changes are: if you unlocked the phone more than 5 minutes ago, Settings says **Confirm it's you first** and you press Manage in the app again. Each member can have at most 5 assistants connected; one whose days are up doesn't count. A server on your own network with its own certificate needs the desktop app told to trust it (for Claude Desktop and Claude Code, the NODE_EXTRA_CA_CERTS setting).
 
-The other owners get a message when anyone connects or disconnects an assistant, and the alerts card shows each day's counts: calls, assistants connected, suggestions made and suggestions approved. Connected counts the ones that can still call: not expired, and their member still an owner or admin.
+The other owners get a message when anyone connects or disconnects an assistant, and the Alerts card shows each day's calls and how many assistants are connected. Connected counts the ones that can still call: not expired, and their member still an owner or admin.
 
 ## What it can read
 
@@ -85,9 +85,9 @@ Each assistant can make 60 calls a minute and 2,000 a day; past either the serve
 
 **Disconnect** beside an assistant stops it at once: its next call is refused. An owner sees every assistant on the server, with the member it acts for, their role, how it was connected (by token, or approved on the phone, with the address its answers go to), when it was last used and its calls today, and can disconnect any of them. An admin sees and disconnects their own. Removing the connector in Claude or ChatGPT disconnects it too.
 
-If the server sees a used pass presented a second time, someone else may hold a copy: it disconnects that assistant at once and tells the owners as an urgent alert. Its member can connect it again from their phone. The rule is strict on purpose: Claude and ChatGPT renew their pass from their own servers, one renewal at a time, so they should not trip it. An assistant that sent two renewals at once, or sent one again after its answer was lost, is disconnected the same way, and the alert can then be a false one: connect it again from the phone.
+If the server sees a used pass presented a second time, someone else may hold a copy: it disconnects that assistant at once and tells the owners, as a high alert. Its member can connect it again from their phone. The rule is strict on purpose: Claude and ChatGPT renew their pass from their own servers, one renewal at a time, so they should not trip it. An assistant that sent two renewals at once, or sent one again after its answer was lost, is disconnected the same way, and the alert can then be a false one: connect it again from the phone.
 
-Assistants connected from the phone belong to this server alone: they are never in a backup or a standby's copy, so after a standby takes over, connect them again.
+Assistants connected from the phone belong to this server alone: they are never in a backup or a standby's copy, so after a standby takes over, connect them again. The same goes for assistants connected with a token. The switch that turns AI assistants off belongs to the server too: after a take-over they are allowed again until an owner turns them off on the new main server.
 
 An assistant also stops on its own when its days are up, or when the member it acts for stops being an owner or admin. An owner who becomes an admin keeps theirs, as an admin's assistant (no backups). If a laptop with a token on it is lost or someone may have copied the token, disconnect that assistant and connect it again.
 

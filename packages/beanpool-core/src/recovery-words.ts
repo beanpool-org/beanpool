@@ -43,8 +43,22 @@ function wordIndex(word: string): number | undefined {
     return indexOf.get(word);
 }
 
+/**
+ * Lower case as the list is written, whatever keyboard typed it. Every place that reads the 12 words lowercases with
+ * this, never with a bare `toLowerCase()`.
+ *
+ * The list is plain ASCII, but a Turkish (or Azerbaijani) keyboard has two letters i: its capital `İ` lowercases to
+ * "i" plus a combining dot (U+0307), and its dotless `ı` stays `ı`. So "İtem", or "ITEM" lowercased the Turkish way
+ * ("ıtem"), would match no word and the member could not get back in. Both fold to "i" and the combining dot goes.
+ * No listed word has any of the three, so a listed word comes out unchanged: the same words make the same key, byte
+ * for byte.
+ */
+export function lowercaseRecoveryWords(text: string): string {
+    return text.replace(/İ/g, 'i').toLowerCase().replace(/ı/g, 'i').replace(/̇/g, '');
+}
+
 function splitWords(text: string): string[] {
-    return text.toLowerCase().split(/\s+/).filter(Boolean);
+    return lowercaseRecoveryWords(text).split(/\s+/).filter(Boolean);
 }
 
 /**

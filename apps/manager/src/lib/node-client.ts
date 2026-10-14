@@ -111,8 +111,13 @@ export interface DiagnosticsResponse {
     activeWsConnections: number;
     p2pActivePeers: number;
     userCount?: number;
-    communityName: string;
-    callsign: string;
+    /**
+     * The name and callsign as stored, null for none (a node from before #1935 sent "BeanPool Community Node" and "admin"
+     * instead). An owner's name box starts from these, never from a display fallback; a screen that shows a name says
+     * its own when there is none.
+     */
+    communityName: string | null;
+    callsign: string | null;
     /** The community's contacts as stored (null for none); absent on a node from before they moved off the public route. */
     contactEmail?: string | null;
     contactPhone?: string | null;

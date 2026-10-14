@@ -28,7 +28,11 @@ export function NodeIdentityPanel({
 }: NodeIdentityPanelProps) {
     // Identity fields
     const [callsign, setCallsign] = useState(typeof diag?.callsign === 'string' ? diag.callsign : '');
+    // The name as stored (the admin diagnostics; null: none), never the public community-info's, which shows the callsign or
+    // "BeanPool Community" for a community with no name: saved back, that stand-in was published as its name (#1935
+    // finding 1). Until the node gives it, Save leaves an empty box out, so it never erases the node's name.
     const [communityName, setCommunityName] = useState(typeof diag?.communityName === 'string' ? diag.communityName : '');
+    const [nameLoaded, setNameLoaded] = useState(typeof diag?.communityName === 'string' || diag?.communityName === null);
     const [contactEmail, setContactEmail] = useState('');
     const [contactPhone, setContactPhone] = useState('');
     // The contacts come from the admin route: the public community-info says each only when it is published. Until they
@@ -78,6 +82,8 @@ export function NodeIdentityPanel({
     const [saveStatus, setSaveStatus] = useState<{ text: string; isError: boolean } | null>(null);
     const [publishingNow, setPublishingNow] = useState(false);
     const [publishStatus, setPublishStatus] = useState<string | null>(null);
+    // The node's reason when Publish Now was refused with 409 (not listed by its own setting): shown under the button.
+    const [publishRefusal, setPublishRefusal] = useState<string | null>(null);
     const publishStatusTimer = useTimeout();
 
     // Leaflet map refs
@@ -106,9 +112,6 @@ export function NodeIdentityPanel({
                 const infoRes = await fetch(infoUrl).catch(() => null);
                 if (infoRes && infoRes.ok && mounted) {
                     const data = await infoRes.json().catch(() => ({}));
-                    if (data.communityName !== undefined) {
-                        setCommunityName(typeof data.communityName === 'string' ? data.communityName : String(data.communityName ?? ''));
-                    }
                     if (data.callsign !== undefined) {
                         setCallsign(typeof data.callsign === 'string' ? data.callsign : String(data.callsign ?? ''));
                     }
@@ -162,15 +165,20 @@ export function NodeIdentityPanel({
             }
         };
 
-        // The contacts, from the admin route (owner or admin), beside the reads above: a slow answer holds up nothing else.
-        // Each is text, or null for none stored; anything else, or no answer, is not the node's contacts.
+        // The stored name and the contacts, from the admin route (owner or admin), beside the reads above: a slow answer
+        // holds up nothing else. Each is text, or null for none stored; anything else, or no answer, is not the node's.
         const loadContacts = async () => {
             try {
                 const admin = await fetchDiagnostics(activeNode.url, nodeCredential(activeNode), getTfaSessionToken(activeNode.id));
                 const text = (v: unknown) => (typeof v === 'string' ? v : v === null ? '' : undefined);
+                const name = text(admin.communityName);
                 const email = text(admin.contactEmail);
                 const phone = text(admin.contactPhone);
                 if (!mounted) return;
+                if (name !== undefined) {
+                    setCommunityName(name);
+                    setNameLoaded(true);
+                }
                 if (email === undefined || phone === undefined) {
                     setContacts('failed');
                     return;
@@ -352,6 +360,8 @@ export function NodeIdentityPanel({
     const handleTriggerPublish = async () => {
         setPublishingNow(true);
         setPublishStatus('⏳ Publishing...');
+        setPublishRefusal(null);
+        let refused = false;
         try {
             const url = resolveNodeApiUrl(activeNode.url, '/api/local/admin/directory/push');
             const res = await fetch(url, {
@@ -364,6 +374,12 @@ export function NodeIdentityPanel({
                 setPublishStatus('✅ Published!');
                 const ts = data.timestamp || Date.now();
                 setLastDirectoryPush(ts);
+            } else if (res.status === 409 && typeof data.error === 'string') {
+                // Not listed by the node's own setting (no name of its own, DIRECTORY_UNLISTED, a profile that is never
+                // listed), not a fault: its reason, under the button, for long enough to read.
+                refused = true;
+                setPublishStatus('⏸️ Not listed');
+                setPublishRefusal(data.error);
             } else {
                 setPublishStatus('❌ Failed');
             }
@@ -373,7 +389,8 @@ export function NodeIdentityPanel({
             setPublishingNow(false);
             publishStatusTimer.schedule(() => {
                 setPublishStatus(null);
-            }, 3000);
+                setPublishRefusal(null);
+            }, refused ? 10000 : 3000);
         }
     };
 
@@ -387,7 +404,7 @@ export function NodeIdentityPanel({
             const identityPayload: Record<string, unknown> = {
                 ...passwordField(nodeCredential(activeNode)),
                 callsign: callsign.trim(),
-                communityName: communityName.trim(),
+                ...(nameLoaded || communityName.trim() ? { communityName: communityName.trim() } : {}),
                 // Only contacts the admin route loaded: boxes that never loaded would erase the node's.
                 ...(contacts === 'loaded' ? { contactEmail: contactEmail.trim(), contactPhone: contactPhone.trim() } : {}),
             };
@@ -710,7 +727,12 @@ export function NodeIdentityPanel({
 
                     {/* The node's own word on why it isn't listed (diagnostics `directoryHeldBack`), never a guess from the
                         box: refreshed after Save, so the line goes once the saved name lists it. */}
-                    {diag?.directoryHeldBack && DIRECTORY_HELD_BACK_LINES[diag.directoryHeldBack] && (
+                    {publishRefusal && (
+                        <p data-testid="directory-publish-refused" role="status" className="text-xs text-bp-ink-warning font-medium m-0 break-words">
+                            {publishRefusal}
+                        </p>
+                    )}
+                    {!publishRefusal && diag?.directoryHeldBack && DIRECTORY_HELD_BACK_LINES[diag.directoryHeldBack] && (
                         <p data-testid="directory-held-back-hint" role="status" className="text-xs text-bp-ink-warning font-medium m-0">
                             {DIRECTORY_HELD_BACK_LINES[diag.directoryHeldBack]}
                         </p>

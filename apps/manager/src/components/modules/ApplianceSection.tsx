@@ -1055,7 +1055,7 @@ export function ApplianceSection({
             {subTab === 'backups' && (
                 <div className="space-y-6">
                     <SectionErrorBoundary sectionName="Who can unlock this community" resetKey={activeNode.id}>
-                        <TakeoverLockPanel activeNode={activeNode} viewer={rolesViewer} communityName={diag?.communityName} />
+                        <TakeoverLockPanel activeNode={activeNode} viewer={rolesViewer} communityName={diag?.communityName || undefined} />
                     </SectionErrorBoundary>
 
                     {/* Owners' "12 words checked" (sealed-keys.md §7). Shown under "Who can unlock this community" (#979). */}

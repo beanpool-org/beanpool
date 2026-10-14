@@ -124,7 +124,7 @@ export function DecideSection({
                 >
                     <span><span aria-hidden="true">🗳️ </span>Open Decisions</span>
                     {openDecisions.length > 0 && (
-                        <span className="bg-emerald-500 text-white text-xs px-2 py-0.5 rounded-full font-extrabold">
+                        <span className="bg-bp-commit-fill text-bp-commit-on text-xs px-2 py-0.5 rounded-full font-extrabold">
                             {openDecisions.length}
                         </span>
                     )}
@@ -178,7 +178,7 @@ export function DecideSection({
                             disabled={!canPropose || hasOpenDecision}
                             className={`w-full sm:w-auto py-2.5 px-5 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95 whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                 canPropose && !hasOpenDecision
-                                    ? 'bg-accent dark:bg-nature-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white'
+                                    ? 'bg-bp-accent-fill hover:bg-bp-accent-hover text-bp-accent-on'
                                     : 'bg-nature-800 text-nature-500 cursor-not-allowed border border-nature-700/50'
                             }`}
                         >
@@ -393,7 +393,7 @@ export function DecideSection({
                                                     type="button"
                                                     onClick={() => handleVote(item, true)}
                                                     disabled={votingId === item.id || buttons.yes.disabled || !!blocker}
-                                                    className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                                                    className="flex-1 py-2.5 px-4 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                                                 >
                                                     <span aria-hidden="true">👍</span>
                                                     <span>{votingId === item.id ? 'Recording...' : buttons.yes.label}</span>
@@ -403,7 +403,7 @@ export function DecideSection({
                                                     type="button"
                                                     onClick={() => handleVote(item, false)}
                                                     disabled={votingId === item.id || buttons.no.disabled || !!blocker}
-                                                    className="flex-1 py-2.5 px-4 rounded-xl bg-red-600 hover:bg-red-500 text-white font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                                                    className="flex-1 py-2.5 px-4 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on font-extrabold text-sm shadow transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
                                                 >
                                                     <span aria-hidden="true">👎</span>
                                                     <span>{votingId === item.id ? 'Recording...' : buttons.no.label}</span>
@@ -433,7 +433,7 @@ export function DecideSection({
                                 onClick={() => setHistoryFilter(f)}
                                 className={`py-1.5 px-3 rounded-xl text-xs font-bold border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                                     historyFilter === f
-                                        ? 'bg-emerald-500 text-white border-emerald-500'
+                                        ? 'bg-bp-commit-fill text-bp-commit-on border-bp-commit-fill'
                                         : 'bg-nature-900 text-nature-400 border-nature-800 hover:border-nature-700'
                                 }`}
                             >

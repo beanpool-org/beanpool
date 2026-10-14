@@ -2858,7 +2858,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                         className="w-full rounded-2xl border border-emerald-500/40 bg-emerald-50/90 hover:bg-emerald-100/90 active:scale-[0.98] dark:bg-emerald-950/40 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-300 font-bold text-base transition-all duration-150 flex items-center justify-center gap-2 mb-3 py-3.5 px-4 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                                     >
                                         <span aria-hidden="true">📲</span> Link with Mobile App (Scan QR)
-                                        <span className="text-[10px] font-extrabold bg-emerald-600 dark:bg-emerald-700 text-white px-2 py-0.5 rounded-full ml-1 uppercase tracking-wider">
+                                        <span className="text-[10px] font-extrabold bg-bp-commit-fill text-bp-commit-on px-2 py-0.5 rounded-full ml-1 uppercase tracking-wider">
                                             FASTEST
                                         </span>
                                     </button>

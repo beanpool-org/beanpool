@@ -367,7 +367,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     setCreateError(null);
                                 }
                             }}
-                            className="bg-accent dark:bg-nature-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
+                            className="bg-bp-accent-fill hover:bg-bp-accent-hover text-bp-accent-on px-4 py-2 rounded-xl font-bold text-sm shadow-md transition-all active:scale-95"
                         >
                             {activeSection === 'groups' ? '+ Create Group' : '+ Propose'}
                         </button>
@@ -429,7 +429,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             <span className="flex items-center gap-1">
                                 <span>{tab.emoji}</span>
                                 {tab.key === 'decide' && openDecisionsCount > 0 && (
-                                    <span className="bg-accent dark:bg-nature-700 text-white text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-bold leading-none">
+                                    <span className="bg-bp-accent-fill text-bp-accent-on text-xs px-1.5 sm:px-2 py-0.5 rounded-full font-bold leading-none">
                                         {openDecisionsCount}
                                     </span>
                                 )}
@@ -458,7 +458,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     onClick={() => setGroupCategoryFilter(option.key)}
                                     className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap transition-colors ${
                                         groupCategoryFilter === option.key
-                                            ? 'bg-emerald-600 dark:bg-emerald-700 text-white shadow-sm'
+                                            ? 'bg-bp-commit-fill text-bp-commit-on shadow-sm'
                                             : 'bg-nature-800 text-nature-300 hover:bg-nature-700'
                                     }`}
                                 >
@@ -518,7 +518,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                             </p>
                             <button
                                 onClick={() => setShowCreateGroupModal(true)}
-                                className="px-4 py-2 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
+                                className="px-4 py-2 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-xs font-bold transition-colors"
                             >
                                 + Create a Group
                             </button>
@@ -556,13 +556,13 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                         {g.viewerRole ? (
                                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${
                                                 g.viewerRole === 'convenor'
-                                                    ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-700/60'
+                                                    ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink'
                                                     : 'bg-nature-800 text-nature-300'
                                             }`}>
                                                 {g.viewerRole}
                                             </span>
                                         ) : g.viewerStatus === 'pending_approval' ? (
-                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-700/60">
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-bp-chip-warn-tint text-bp-chip-warn-ink">
                                                 Pending
                                             </span>
                                         ) : null}
@@ -601,7 +601,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                     setShowNewModal(true);
                                     setCreateError(null);
                                 }}
-                                className="bg-accent dark:bg-nature-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md"
+                                className="bg-bp-accent-fill hover:bg-bp-accent-hover text-bp-accent-on px-5 py-2.5 rounded-xl font-bold text-sm shadow-md"
                             >
                                 + Propose a Project
                             </button>
@@ -759,7 +759,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                             {!isFunded && !pledgeClosedLine(t.status) && (
                                                 <div
                                                     aria-hidden="true"
-                                                    className="w-full mt-2 py-2 px-3 rounded-xl bg-emerald-600 dark:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 pointer-events-none"
+                                                    className="w-full mt-2 py-2 px-3 rounded-xl bg-bp-commit-fill text-bp-commit-on font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 pointer-events-none"
                                                 >
                                                     <span>🌱</span> Pledge Beans
                                                 </div>
@@ -943,7 +943,7 @@ export function ProjectsPage({ identity, onOpenTreasury, initialSection = 'enter
                                 <button
                                     type="submit"
                                     disabled={creating || preparingPhoto}
-                                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-500 dark:hover:bg-emerald-800 text-white font-bold text-sm disabled:opacity-50"
+                                    className="flex-1 py-2.5 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-sm disabled:opacity-50"
                                 >
                                     {creating ? 'Submitting…' : preparingPhoto ? 'Preparing photo…' : 'Propose Enterprise 🌱'}
                                 </button>

@@ -244,7 +244,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                 </span>
             </button>
             {friendPubkeys.has(m.publicKey) ? (
-                <span className="shrink-0 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-900/40 px-2.5 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800">
+                <span className="shrink-0 text-xs font-bold text-bp-chip-ok-ink bg-bp-chip-ok-tint px-2.5 py-1 rounded-lg border border-transparent">
                     ✓ Friend
                 </span>
             ) : (
@@ -252,7 +252,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                     type="button"
                     onClick={() => handleAddFriend(m.publicKey)}
                     aria-label={`Add ${m.callsign} as friend`}
-                    className="shrink-0 min-h-[44px] min-w-[44px] bg-emerald-600 border-none text-white rounded-lg px-3 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                    className="shrink-0 min-h-[44px] min-w-[44px] bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on rounded-lg px-3 text-xs font-bold cursor-pointer shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                 >
                     + Add
                 </button>
@@ -384,7 +384,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                             <button
                                                 type="button"
                                                 onClick={() => handleMessage(f.publicKey)}
-                                                className="bg-emerald-600 dark:bg-emerald-700 border-none text-white rounded-lg px-2.5 py-1 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                                className="bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on rounded-lg px-2.5 py-1 text-xs font-bold cursor-pointer shadow-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                                 title={`Message ${f.callsign}`}
                                                 aria-label={`Message ${f.callsign}`}
                                             >
@@ -519,7 +519,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                             </div>
                                         </div>
                                         {friendPubkeys.has(m.publicKey) ? (
-                                            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/40 px-2.5 py-1 rounded-lg border border-emerald-100 dark:border-emerald-800 shadow-sm">
+                                            <span className="text-xs font-bold text-bp-chip-ok-ink bg-bp-chip-ok-tint px-2.5 py-1 rounded-lg border border-transparent shadow-sm">
                                                 ✓ Friend
                                             </span>
                                         ) : (
@@ -527,7 +527,7 @@ export function PeoplePage({ identity, initialView = 'friends', onNavigate, onOp
                                                 type="button"
                                                 onClick={() => handleAddFriend(m.publicKey)}
                                                 aria-label={`Add ${m.callsign} as friend`}
-                                                className="bg-emerald-600 dark:bg-emerald-700 border-none text-white rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer hover:bg-emerald-700 shadow-sm transition-all hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                                                className="bg-bp-commit-fill hover:bg-bp-commit-hover border-none text-bp-commit-on rounded-lg px-3.5 py-1.5 text-xs font-bold cursor-pointer shadow-sm transition-all hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                                             >
                                                 + Add
                                             </button>

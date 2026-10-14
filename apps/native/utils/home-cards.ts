@@ -24,7 +24,7 @@
 import {
     HOME_CARD_GROUPS, HOME_CARD_TYPES, HOME_FRAME_LIMITS, addCard as frameAddCard, cardsToAsk as frameCardsToAsk, defaultHomeLayout,
     homeCardType, readHomeLayout as frameReadHomeLayout, readSearchSettings, readSkySettings, removeCard as frameRemoveCard, skyPlaceFor,
-    skyToday, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
+    skyToday, formatDate, type HomeAddRefusal, type HomeCardGroup, type HomeCardInstance, type HomeLayoutV2, type HomeSearchKind, type SkySettings,
     type SkyToday, featureModeFor, readTourRecord, starterCards, tourEnded, type TourRecord,
 } from '@beanpool/core';
 import { communityOrigin } from './community-origin';
@@ -1086,14 +1086,11 @@ export function groupLine(g: NonNullable<HomeCards['groups']>['items'][number]):
     return `${g.name} · ${g.unread > 0 ? `${g.unread} new` : 'quiet'}`;
 }
 
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
 /** "Sat 3 Oct", in the phone's own time. */
 export function eventDay(iso: string): string {
     const d = new Date(iso);
     if (!Number.isFinite(d.getTime())) return '';
-    return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+    return formatDate(d, 'weekday-day-month');
 }
 
 export function eventLine(e: HomeEventItem): string {

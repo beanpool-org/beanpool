@@ -1,3 +1,8 @@
+// Brand and status colours come from the one library the phone and the web app use (docs/brand-colours.md):
+// change a value in packages/beanpool-core/src/brand-colours.ts, never here or in a screen. The source path (as
+// vite.config.ts's alias) so the config needs no built dist.
+import { brandCssVariableMap, brandTailwindColours } from '../../packages/beanpool-core/src/brand-colours.ts';
+
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -32,9 +37,18 @@ export default {
         terra: {
           500: '#d96b43',
           600: '#c2532b',
-        }
+        },
+        // bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on, bg-bp-chip-ok-tint text-bp-chip-ok-ink, …
+        ...brandTailwindColours(),
       }
     },
   },
-  plugins: [],
+  plugins: [
+    // The custom properties those names point at: light under :root, dark under :root.dark (index.html sets `dark`).
+    // The same two blocks brandCssVariables() writes.
+    ({ addBase }) => addBase({
+      ':root': brandCssVariableMap('light'),
+      ':root.dark': brandCssVariableMap('dark'),
+    }),
+  ],
 };

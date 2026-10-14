@@ -804,3 +804,29 @@ still WANTED: re-file `test-probation.ts` and its `scripts/server-suites.mjs` li
 - **Why not to re-file:** `apps/native/app/_layout.tsx` exports `ErrorBoundary`, which covers every child route, this one included (#1704, 2026-10-09; #1724). #801 was one screen's case, not a pattern to repeat. Expo: do not file per-screen `ErrorBoundary` exports; the journal's "check screens for missing ErrorBoundary exports" pattern is retired.
 
 Note (#1819, Scout): closed because its exemption checks were vacuous: with the blank-memo, system-account and enterprise exemptions all removed from `apps/server/src/engine/withheld-notes.ts`, `test-withheld-notes.ts` still passed 22/22, since every such check ran where no block existed. The coverage is still WANTED: re-file it once, with each exemption asserted under a `member_blocks` row that would otherwise withhold the note (blank memos after the block; the enterprise as the blocker and as the blocked), and show the suite failing with the exemption removed.
+
+### 2026-10-15 — Flow: loading indicator in AgentSuggestionsPanel (#1957) — CLOSED, NO MEANINGFUL GAIN
+- **Category:** CLAIM FALSE (see #1497, #1670, #1686, #1725, #1820)
+- **Claim:** `apps/manager/src/components/modules/AgentSuggestionsPanel.tsx` returns null while its first read is in flight, so operators get no feedback.
+- **Why not to re-file:** the panel makes one read of the node the operator is signed in to and renders nothing when there are no suggestions (404 on an older node, or an empty list), which is most nodes; the spinner card therefore flashes and vanishes (#1725, #1820). Flow: show a stall an operator can see before filing a loading indicator, and search this register for the component's name first.
+
+### 2026-10-15 — Expo: ErrorBoundary exports in the four auth callback screens, again (#1959) — CLOSED, RE-FILE OF #1704
+- **Category:** CLAIM FALSE (see #1704, #1724, #1823)
+- **Claim:** `apps/native/app/auth/{google,facebook,instagram,tiktok}.tsx` lack an exported `ErrorBoundary`.
+- **Why not to re-file:** the same four screens as #1704 (2026-10-09). `apps/native/app/_layout.tsx` exports `ErrorBoundary` and covers every child route, `app/auth/*` included. Expo: do not file per-screen `ErrorBoundary` exports; grep this register for `ErrorBoundary` first.
+
+### 2026-10-15 — Forge: 400/404 on group member removal and group post delete when nothing changed (#1960) — CLOSED, RE-FILE OF #1621
+- **Category:** DELIBERATE DECISION (see #1621)
+- **Claim:** `DELETE /api/groups/:id/members/:pubkey` and `DELETE /api/groups/:id/posts/:postId` answer 200 `{ success: false }` when `removeGroupMember` / `deleteGroupPost` return false.
+- **Why not to re-file:** those functions return false exactly when the member is not there, was already removed, or the post is already gone; the 200 with `success: false` is the idempotent answer the clients rely on, so a double tap, a stale list or a retried leave does not show an error for something that worked. Forge: search this register for the route before filing.
+
+### 2026-10-15 — Vault: credentials: 'same-origin' on freezeNodeUser, pruneNodeUser and pruneInviteBranch (#1964) — CLOSED, SIXTH FILING
+- **Category:** CLAIM FALSE (see #1294, #1368, #1626, #1658, #1671, #1821)
+- **Claim:** `freezeNodeUser`, `pruneNodeUser` and `pruneInviteBranch` in `apps/manager/src/lib/node-client.ts` omit `credentials: 'same-origin'`, so user-management calls drop cookies.
+- **Why not to re-file:** `same-origin` is fetch's default and every manager call is same-origin (the node, or the manager's own proxy); the calls authenticate with the admin headers they are given. The PR's tests assert the literal option, not a behaviour. Vault: grep this register for `same-origin` before filing anything about `credentials`; a missing option is a defect only for a cross-origin call that needs cookies, shown with its 401.
+
+### 2026-10-15 — Shield: Instagram token as an Authorization: Bearer header in syncChannelVideos (#1967) — CLOSED, UNMEASURABLE
+- **Category:** UNMEASURABLE (needs a live third-party token)
+- **Claim:** `syncChannelVideos` passes the Instagram token as `?access_token=` in the URL.
+- **Why not to re-file as is:** whether graph.instagram.com accepts the token as a Bearer header can't be verified offline, and a rejection there is silent (`if (mediaRes.ok)` else nothing synced, no log, no test). Shield: re-file only with a measured call against the real API and a test that fails when the sync gets nothing.
+

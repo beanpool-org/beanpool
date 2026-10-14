@@ -20,7 +20,7 @@ import { CategoryPickerModal } from '../components/CategoryPickerModal';
 import { MyDealsModal } from '../components/MyDealsModal';
 import { DealsPreviewDialog } from '../components/ShowcasePreviews';
 import { LocalCommunityAction, LocalCommunityLine, DEAL_ACTION_LABEL } from '../components/LocalCommunityMark';
-import { LOCAL_COMMUNITY_LINES } from '@beanpool/core';
+import { LOCAL_COMMUNITY_LINES, t } from '@beanpool/core';
 import { NO_BEANS_TERMS_TEXT } from '../lib/visitor-lobby';
 import { marked, useFeatureMode } from '../lib/features';
 import { ProfileGateModal } from '../components/ProfileGateModal';
@@ -68,7 +68,7 @@ import { VisitorCard, VisitorPostDetail } from '../components/VisitorListing';
 import { VISITOR_LIST_NOTE } from '../lib/visitor-lobby';
 import { shareInterests } from '../lib/home-interests';
 import { accountEpochHolds } from '../lib/account-epoch';
-import { CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, REPORT_REASONS } from '../lib/reportReasons';
+import { CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, REPORT_REASONS, REPORT_WORDS } from '../lib/reportReasons';
 
 /**
  * The Market as a visitor to the global lobby sees it (design G9a §7, G9b): no identity at all, the node's guest view
@@ -468,6 +468,9 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
     useCoversScreen(showReportForm && !!selectedPost);
     const [reportReason, setReportReason] = useState('');
     const [submittingReport, setSubmittingReport] = useState(false);
+    // What became of the last report, said under it (rehearsal 14 Oct N3: it was an alert()); gone with the listing.
+    const [reportNote, setReportNote] = useState<{ sent: boolean; text: string } | null>(null);
+    useEffect(() => setReportNote(null), [selectedPost?.id]);
 
 
 
@@ -1093,7 +1096,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 className="text-xs font-black uppercase tracking-wider"
                                 style={{ color: isPulsePost ? '#d97706' : typeColor }}
                             >
-                                {isPulsePost ? '🗞️ DAILY PULSE' : `${selectedPost.type === 'offer' ? '🔵 Offer' : '🟠 Need'} · ${cat?.label ?? selectedPost.category}`}
+                                {isPulsePost ? '🗞️ DAILY PULSE' : `${selectedPost.type === 'offer' ? '🟢 Offer' : '🟠 Need'} · ${cat?.label ?? selectedPost.category}`}
                             </span>
                         </div>
                         <span className="text-xs font-semibold text-nature-500 dark:text-nature-400">{ago}</span>
@@ -1991,7 +1994,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         })()}
 
                         <button
-                            onClick={() => setShowReportForm(!showReportForm)}
+                            onClick={() => { setShowReportForm(!showReportForm); setReportNote(null); }}
                             className="w-full py-2.5 mt-3 rounded-xl border border-nature-200 bg-transparent text-nature-500 font-semibold text-sm hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30 dark:hover:text-red-300 hover:border-red-200 transition-colors"
                         >
                             🚩 Report
@@ -2015,13 +2018,15 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     onClick={async () => {
                                         if (!identity || !selectedPost || !reportReason) return;
                                         setSubmittingReport(true);
+                                        setReportNote(null);
                                         try {
                                             await reportAbuse(identity.publicKey, selectedPost.authorPublicKey, reportReason, selectedPost.id);
-                                            alert("Report submitted. Your community's moderators will review it.");
+                                            setReportNote({ sent: true, text: t(REPORT_WORDS.sent) });
                                             setShowReportForm(false);
                                             setReportReason('');
                                         } catch (e: any) {
-                                            alert(e.message || 'Failed to submit report');
+                                            // The reason stays picked, so a second tap sends it again.
+                                            setReportNote({ sent: false, text: e?.message || t('Failed to submit report. Please try again.') });
                                         } finally {
                                             setSubmittingReport(false);
                                         }
@@ -2034,6 +2039,12 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     {submittingReport ? 'Sending...' : 'Submit Report'}
                                 </button>
                             </div>
+                        )}
+                        {reportNote && (
+                            <p data-testid="report-note" role={reportNote.sent ? 'status' : 'alert'}
+                                className={`m-0 mt-2 text-sm font-semibold ${reportNote.sent ? 'text-bp-ink-success' : 'text-bp-ink-danger'}`}>
+                                {reportNote.text}
+                            </p>
                         )}
                     </div>
                 )}
@@ -2125,11 +2136,11 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             onClick={() => setEditType(t)}
                                             className={`flex-1 py-2.5 rounded-xl border text-sm font-bold capitalize transition-colors ${
                                                 editType === t
-                                                    ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-bp-action-fill border-bp-action-fill text-bp-action-on shadow-sm')
+                                                    ? (t === 'offer' ? 'bg-bp-commit-fill border-bp-commit-fill text-bp-commit-on shadow-sm' : 'bg-bp-action-fill border-bp-action-fill text-bp-action-on shadow-sm')
                                                     : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-500 dark:text-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 dark:hover:text-nature-300'
                                             }`}
                                         >
-                                            {t === 'offer' ? '🔵 Offer' : '🟠 Need'}
+                                            {t === 'offer' ? '🟢 Offer' : '🟠 Need'}
                                         </button>
                                     ))}
                                 </div>

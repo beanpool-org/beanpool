@@ -2312,7 +2312,7 @@ router.post('/api/friends/remove', async (ctx) => {
 // 1. Lookup identities by callsign (Public, but we rate limit it in practice, handled loosely here)
 router.get('/api/recovery/lookup/:callsign', async (ctx) => {
     if (!rateLimit(ctx)) return; // SRV-4: throttle callsign enumeration
-    const callsign = ctx.params.callsign.trim().toLowerCase();
+    const callsign = ctx.params.callsign.trim(); // folded by the one name rule (engine names.ts), not lower-cased first
     if (!callsign) { ctx.status = 400; ctx.body = { error: 'Missing callsign' }; return; }
 
     // The query lives in engine/members.ts, beside isCallsignAvailable, so the two callsign

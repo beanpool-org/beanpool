@@ -7,7 +7,7 @@ import { migrateProjectsAndCommonsToEnterprises } from './unify-projects-migrati
 import { ripOutLegacyVoting } from './rip-out-legacy-voting-migration.js';
 import { addDecisionScope } from './decision-scope-migration.js';
 import { avatarUrlOf, isSelfAvatarUrl, isSyntheticAccount, replaceLoneSurrogates } from '@beanpool/core';
-import { registerGeoFunctions, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
+import { registerGeoFunctions, installNameFold, foldName, ON_HOLIDAY_SQL, ENTERPRISE_ON_BOARD_SQL, BROKEN_BALANCE_SQL, groupPictureColumnsOf, memberPhotoColumnsOf, setMemberPhoto, closeWashSnapshotHandle } from '@beanpool/engine';
 import { stripImageValue } from '../storage/image-metadata.js';
 import { getNodeRole, assertLedgerWritable } from '../config/node-role.js';
 import { PLAIN_TABLES, plainTableTriggers } from '../engine/replication-manifest.js';
@@ -38,8 +38,52 @@ export const db: Database.Database = new Database(DB_PATH);
 // `haversine_km`, for the posts listing searched by distance (G4). A function lives on the connection, not in the file,
 // and this is the one connection that runs the listing; the read-only handles opened on backups and snapshots never do.
 registerGeoFunctions(db);
+// `name_fold`, the one rule by which two member names are the same name, and the TEMP triggers that write callsign_fold
+// from it (names.ts in the engine); a database from before the column gets them in migrateCallsignFold.
+installNameFold(db);
 
 const pendingPostCommitHooks: (() => void)[] = [];
+
+/**
+ * Names in any alphabet (#1956). `callsign_fold` is `foldName(callsign)` (the engine's names.ts), the one rule by which two
+ * names are the same name. The lower(callsign) index above folds A–Z only, so "Олег" typed as stored matched nothing.
+ *
+ * Two TEMP triggers write it, on INSERT and on any UPDATE OF callsign (an upsert included), on each connection that
+ * installs them (the engine's installNameFold: this one, and the two command-line tools that write members), so no writer
+ * there can forget it: a standby's import and a key move are inserts like any other. TEMP, never in the file: a stored
+ * trigger calling `name_fold` made the previous image crash at boot after a rollback, and the sqlite3 shell unable to add
+ * a member (deciding review of #1956, B1), so the ones an earlier build of this PR stored are dropped here. A handle
+ * without them (an older image, the shell) writes members as before, leaving the fold NULL or stale; every boot re-folds
+ * each row whose fold differs, which repairs those, carries a change of the rule to every row, and fills a node from
+ * before this column. That UPDATE names no column of members_touch_updated_at, so it stamps nothing and sends nothing to
+ * a standby (each server makes its own; replication-manifest.ts). Reads bind foldName(x) from JS, never name_fold(?).
+ *
+ * The index is NOT unique, on purpose. A node may already hold two members whose names fold the same ("Олег" and
+ * "олег", both allowed before this): both are kept, neither is renamed, boot goes on, and one line per such name tells
+ * the operator. A unique index would fail to build there, and on a standby it would refuse the copy of that pair.
+ * isCallsignAvailable (engine/members.ts) refuses a new one at registration and at a member's rename, and better-sqlite3
+ * runs them one at a time. Some writers of names do not ask it (yet): a project's or a crowdfund's title edit, and a
+ * federation visitor's row (review of #1956, N3).
+ */
+export function migrateCallsignFold(conn: Database.Database): void {
+    try {
+        const has = conn.prepare(`SELECT 1 FROM pragma_table_info('members') WHERE name = 'callsign_fold'`).get();
+        if (!has) conn.prepare(`ALTER TABLE members ADD COLUMN callsign_fold TEXT`).run();
+        conn.exec(`DROP TRIGGER IF EXISTS main.members_callsign_fold_insert; DROP TRIGGER IF EXISTS main.members_callsign_fold_rename;`);
+        installNameFold(conn);
+        conn.prepare(`UPDATE members SET callsign_fold = name_fold(callsign) WHERE callsign_fold IS NOT name_fold(callsign)`).run();
+        conn.prepare(`CREATE INDEX IF NOT EXISTS idx_members_callsign_fold ON members(callsign_fold) WHERE status NOT IN ('migrated', 'pruned')`).run();
+        const clashes = conn.prepare(`SELECT json_group_array(callsign) AS names, count(*) AS n FROM members
+            WHERE status NOT IN ('migrated', 'pruned') AND callsign_fold IS NOT NULL
+            GROUP BY callsign_fold HAVING count(*) > 1 ORDER BY callsign_fold`).all() as { names: string; n: number }[];
+        for (const c of clashes) {
+            const names = (JSON.parse(c.names) as string[]).map((n) => JSON.stringify(n)).join(', ');
+            console.warn(`[DB] ⚠️  ${c.n} members hold one name in different cases: ${names}. All are kept and none is renamed; no one else can take it, a sign-in restore by this name is refused as ambiguous until one of them renames, and their 12 words still work.`);
+        }
+    } catch (e) {
+        console.error('[DB] ⚠️  Could not set up callsign_fold; names outside A–Z may not be found or kept unique until the next boot.', e);
+    }
+}
 
 export function afterTransactionCommit(fn: () => void): void {
     if (!(db as any).inTransaction) {
@@ -1911,6 +1955,7 @@ export function initSchema() {
     } catch (e) {
         console.error(`[DB] ⚠️  Could not build unique callsign index — this node has duplicate callsigns. De-duplicate the members table and restart to enforce uniqueness at the DB level. App-level rename checks remain active.`, e);
     }
+    migrateCallsignFold(db);
 
     try { db.prepare(`CREATE INDEX IF NOT EXISTS idx_post_photos_updated_at ON post_photos(updated_at)`).run(); } catch { }
 
@@ -2771,8 +2816,8 @@ export function createCrowdfundProject(
     const now = new Date().toISOString();
     const baseCallsign = (title || 'Project').trim().slice(0, 40) || 'Project';
     const existingCallsign = db.prepare(
-        "SELECT public_key FROM members WHERE lower(callsign) = lower(?) AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
-    ).get(baseCallsign, id) as any;
+        "SELECT public_key FROM members WHERE callsign_fold = ? AND status NOT IN ('migrated', 'pruned') AND public_key != ?"
+    ).get(foldName(baseCallsign), id) as any;
     const callsign = existingCallsign ? `${baseCallsign.slice(0, 33)}-${id.slice(0, 6)}` : baseCallsign;
 
     // A fresh id (isFreshProjectId, above): every row below is new, so a clash throws rather than writing over another's.

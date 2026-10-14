@@ -11,6 +11,7 @@ import { BIP39_ENGLISH } from '../recovery-words.js';
 describe('t() takes a literal or a word() key, never a plain string', () => {
     it('compiles only what it should', () => {
         const recoveryWord: string = BIP39_ENGLISH[0];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- the point: an `any` must not reach t() either
         const anyWord: any = 'abandon';
         const either = BIP39_ENGLISH.length > 2 ? 'Yes' : 'No';
         // @ts-expect-error a plain string (a recovery word, a member's text) is not a sentence

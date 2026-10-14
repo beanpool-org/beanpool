@@ -57,7 +57,7 @@ export function ChannelChips({ channels }: Props) {
                         </span>
                         {channel.isVerified ? (
                             <span
-                                className="w-3.5 h-3.5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] font-black leading-none ml-0.5"
+                                className="w-3.5 h-3.5 rounded-full bg-bp-commit-fill text-bp-commit-on flex items-center justify-center text-[9px] font-black leading-none ml-0.5"
                                 title="Verified account"
                                 aria-label="Verified account"
                             >

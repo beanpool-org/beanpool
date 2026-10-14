@@ -64,7 +64,7 @@ export function TotpModal({ nodeName, onClose, onSubmit, error }: TotpModalProps
                  className="m-auto bg-nature-900 border border-nature-800 rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl">
                 <div className="flex items-center justify-between gap-3 lg:gap-0 border-b border-nature-800 pb-3">
                     <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <div aria-hidden="true" className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-lg font-bold">
+                        <div aria-hidden="true" className="w-8 h-8 rounded-xl bg-bp-chip-warn-tint text-bp-chip-warn-ink flex items-center justify-center text-lg font-bold">
                             🔐
                         </div>
                         <h3 id="totp-title" className="text-base font-bold text-white m-0">Two-Factor Auth Required</h3>
@@ -124,7 +124,7 @@ export function TotpModal({ nodeName, onClose, onSubmit, error }: TotpModalProps
                         <button
                             type="submit"
                             disabled={submitting || !/^\d{6}$/.test(code.replace(/\s/g, ''))}
-                            className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-xs"
+                            className="px-5 py-2 rounded-xl bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on font-bold transition-all shadow-md active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed text-xs"
                         >
                             {submitting ? 'Verifying...' : 'Verify & Connect'}
                         </button>

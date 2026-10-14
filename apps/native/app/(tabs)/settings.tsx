@@ -16,7 +16,7 @@ import {
 } from '../../utils/delete-here';
 import { hapticTick } from '../../utils/haptics';
 import { buildSignedHeaders } from '../../utils/crypto';
-import { updateMemberProfile, getMemberProfile, signedRequest } from '../../utils/db';
+import { updateMemberProfile, getMemberProfile, signedRequest, signedGet } from '../../utils/db';
 import {
     DEFAULT_REMINDER_OFFSETS, REMINDER_OFFSETS, REMINDER_PREF_KEY, normaliseReminderOffsets, parseReminderOffsets,
     reminderOffsetLabel,
@@ -72,6 +72,7 @@ import { useGlobalDoorOpen } from '../../utils/use-global-door-open';
 import { useAccountClosedAtGlobal } from '../../utils/use-account-closed';
 import { OwnerWordsCard } from '../../components/OwnerWordsCard';
 import { OneWayBackCard } from '../../components/OneWayBackCard';
+import { BlockedFriendRemove } from '../../components/BlockedFriendRemove';
 
 
 function getDatabaseFilePaths(dbFilename: string): string[] {
@@ -908,6 +909,18 @@ export default function SettingsScreen() {
     const [appLockEnabled, setAppLockEnabledState] = useState(false);
     const onAppLockTurnedOn = React.useCallback(() => setAppLockEnabledState(true), []);
     const [showBlockedModal, setShowBlockedModal] = useState(false);
+    // "Show me as a connection in common" (server SHOW_AS_CONNECTION_PREF), on unless turned off. null until the node says:
+    // it is served to the member alone, so it is read with a signed request.
+    const [showAsConnection, setShowAsConnection] = useState<boolean | null>(null);
+    useEffect(() => {
+        if (!identity?.publicKey) return;
+        let cancelled = false;
+        signedGet(`/api/members/preferences?publicKey=${identity.publicKey}`)
+            .then(res => (res.ok ? res.json() : null))
+            .then(prefs => { if (!cancelled && prefs && typeof prefs.show_as_connection_in_common === 'string') setShowAsConnection(prefs.show_as_connection_in_common !== 'false'); })
+            .catch(e => console.warn('[Prefs] Could not read the connection-in-common setting:', e));
+        return () => { cancelled = true; };
+    }, [identity?.publicKey]);
     const [blockedUsersList, setBlockedUsersList] = useState<{ pubkey: string; callsign?: string }[]>([]);
     const [loadingBlockedList, setLoadingBlockedList] = useState(false);
 
@@ -1910,6 +1923,26 @@ export default function SettingsScreen() {
                         <Text style={[styles.menuText, { flex: 1 }]}>Manage Blocked Users</Text>
                         <Text style={styles.menuChevron} aria-hidden={true} importantForAccessibility="no">›</Text>
                     </Pressable>
+                    {showAsConnection !== null && (
+                        <View style={styles.menuBtn}>
+                            <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🤝</Text></View>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.menuText}>Show me as a connection in common</Text>
+                                <Text style={styles.menuSub}>When you and two people are friends both ways, each can see your name on the other's profile</Text>
+                            </View>
+                            <Pressable style={[styles.toggle, showAsConnection && styles.toggleOn]} accessibilityRole="switch" accessibilityLabel="Show me as a connection in common" accessibilityState={{ checked: showAsConnection }} onPress={async () => {
+                                const next = !showAsConnection; setShowAsConnection(next);
+                                try {
+                                    if (identity?.publicKey) await signedRequest('/api/members/preferences', { publicKey: identity.publicKey, preferences: { show_as_connection_in_common: next } });
+                                } catch (e: any) {
+                                    setShowAsConnection(!next);
+                                    Alert.alert('Not saved', e?.message || 'Your community could not save that.');
+                                }
+                            }}>
+                                <View style={[styles.toggleThumb, showAsConnection && styles.toggleThumbOn]} />
+                            </Pressable>
+                        </View>
+                    )}
                     <Pressable style={styles.menuBtn} onPress={() => Linking.openURL('https://beanpool.org/privacy.html')} accessibilityRole="button">
                         <View style={styles.menuIconWrap}><Text style={styles.menuIcon}>🛡️</Text></View>
                         <Text style={[styles.menuText, { flex: 1 }]}>Privacy Policy</Text>
@@ -3064,25 +3097,30 @@ export default function SettingsScreen() {
                             <>
                                 <ScrollView style={{ maxHeight: 300, marginBottom: 16 }}>
                                     {blockedUsersList.map(item => (
-                                        <View key={item.pubkey} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
-                                            <View style={{ flex: 1, marginRight: 12 }}>
-                                                <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text.body }} numberOfLines={1}>
-                                                    {item.callsign}
-                                                </Text>
-                                                <Text style={{ fontSize: 11, color: colors.text.muted }} numberOfLines={1}>
-                                                    {item.pubkey.slice(0, 16)}...
-                                                </Text>
+                                        <View key={item.pubkey} style={{ paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.border.default }}>
+                                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                <View style={{ flex: 1, marginRight: 12 }}>
+                                                    <Text style={{ fontSize: 15, fontWeight: '700', color: colors.text.body }} numberOfLines={1}>
+                                                        {item.callsign}
+                                                    </Text>
+                                                    <Text style={{ fontSize: 11, color: colors.text.muted }} numberOfLines={1}>
+                                                        {item.pubkey.slice(0, 16)}...
+                                                    </Text>
+                                                </View>
+                                                <Pressable
+                                                    accessibilityRole="button"
+                                                    style={{ backgroundColor: colors.feedback.danger.bg, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.border }}
+                                                    onPress={async () => {
+                                                        await unblockUser(item.pubkey);
+                                                        setBlockedUsersList(prev => prev.filter(u => u.pubkey !== item.pubkey));
+                                                    }}
+                                                >
+                                                    <Text style={{ color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 12 }}>Unblock</Text>
+                                                </Pressable>
                                             </View>
-                                            <Pressable
-                                                accessibilityRole="button"
-                                                style={{ backgroundColor: colors.feedback.danger.bg, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: colors.feedback.danger.border }}
-                                                onPress={async () => {
-                                                    await unblockUser(item.pubkey);
-                                                    setBlockedUsersList(prev => prev.filter(u => u.pubkey !== item.pubkey));
-                                                }}
-                                            >
-                                                <Text style={{ color: colors.feedback.danger.fg, fontWeight: '700', fontSize: 12 }}>Unblock</Text>
-                                            </Pressable>
+                                            {identity?.publicKey && (
+                                                <BlockedFriendRemove myKey={identity.publicKey} pubkey={item.pubkey} callsign={item.callsign || item.pubkey.slice(0, 8)} />
+                                            )}
                                         </View>
                                     ))}
                                 </ScrollView>

@@ -879,7 +879,7 @@ export function NodeIdentityPanel({
                         id="save-identity-btn"
                         type="submit"
                         disabled={saving}
-                        className="w-full py-3 rounded-xl bg-terra-600 hover:bg-terra-500 text-sm font-bold text-white transition-all shadow-md disabled:opacity-50 active:scale-[0.99]"
+                        className="w-full py-3 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-sm font-bold text-bp-cta-on transition-all shadow-md disabled:opacity-50 active:scale-[0.99]"
                     >
                         {saving ? 'Saving...' : 'Save Identity'}
                     </button>

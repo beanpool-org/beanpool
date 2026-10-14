@@ -145,7 +145,7 @@ export function FleetSidebar({
                 aria-controls={expanded ? listId : undefined}
                 className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl ${inDrawer ? 'min-h-[48px] text-sm' : 'text-xs'} font-semibold transition-all ${
                     isActive
-                        ? 'bg-terra-500/15 text-white border border-terra-500/40 shadow-sm font-bold'
+                        ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm font-bold'
                         : 'text-nature-300 hover:text-white hover:bg-nature-800/50 border border-transparent'
                 }`}
             >
@@ -157,7 +157,7 @@ export function FleetSidebar({
                 <div className="flex items-center gap-1 shrink-0">
                     {counts.critical > 0 && (
                         <span
-                            className="px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[9px] font-mono font-bold animate-pulse shadow-sm flex items-center gap-0.5"
+                            className="px-1.5 py-0.5 rounded-full bg-bp-danger-fill text-bp-danger-on text-[9px] font-mono font-bold animate-pulse shadow-sm flex items-center gap-0.5"
                             title={`${counts.critical} Critical Alerts`}
                         >
                             <span>🚨</span>
@@ -166,7 +166,7 @@ export function FleetSidebar({
                     )}
                     {counts.warning > 0 && (
                         <span
-                            className="px-1.5 py-0.5 rounded-full bg-amber-500 text-black text-[9px] font-mono font-bold shadow-sm flex items-center gap-0.5"
+                            className="px-1.5 py-0.5 rounded-full bg-bp-gold-fill text-bp-gold-on text-[9px] font-mono font-bold shadow-sm flex items-center gap-0.5"
                             title={`${counts.warning} Warnings`}
                         >
                             <span>⚠️</span>
@@ -174,7 +174,7 @@ export function FleetSidebar({
                         </span>
                     )}
                     {item.badge && !hasCounts && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-terra-500/20 text-terra-300 border border-terra-500/30">
+                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/30">
                             {item.badge}
                         </span>
                     )}
@@ -198,7 +198,7 @@ export function FleetSidebar({
                                 onClick={() => onSelectSubTab?.(item.id, sub.id)}
                                 aria-current={current === sub.id ? 'page' : undefined}
                                 className={`w-full text-left min-h-[48px] px-3 rounded-lg text-sm transition-all ${
-                                    current === sub.id ? 'text-terra-300 font-bold bg-terra-500/10' : 'text-nature-300 hover:text-white hover:bg-nature-800/50'
+                                    current === sub.id ? 'text-bp-chip-need-ink font-bold bg-bp-chip-need-tint' : 'text-nature-300 hover:text-white hover:bg-nature-800/50'
                                 }`}
                             >
                                 {sub.label}
@@ -321,7 +321,7 @@ export function FleetSidebar({
                         </span>
                         <button
                             onClick={onOpenAddModal}
-                            className="px-2 py-1 rounded-lg bg-terra-500/20 hover:bg-terra-500/30 text-terra-300 text-[11px] font-bold transition-all border border-terra-500/30"
+                            className="px-2 py-1 rounded-lg bg-bp-chip-need-tint hover:opacity-90 text-bp-chip-need-ink text-[11px] font-bold transition-all border border-terra-500/30"
                             title="Connect New Sovereign Node"
                         >
                             + Add Node
@@ -339,7 +339,7 @@ export function FleetSidebar({
                             </p>
                             <button
                                 onClick={onOpenAddModal}
-                                className="px-3 py-1.5 rounded-lg bg-terra-500 hover:bg-terra-600 text-white font-bold text-xs shadow transition-all active:scale-95"
+                                className="px-3 py-1.5 rounded-lg bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on font-bold text-xs shadow transition-all active:scale-95"
                             >
                                 + Add Sovereign Node
                             </button>
@@ -472,7 +472,7 @@ export function FleetSidebar({
                                                 onSelectNode(p.id);
                                                 onSelectTab('members');
                                             }}
-                                            className="shrink-0 px-1.5 py-0.2 rounded bg-red-900/80 hover:bg-red-800 text-red-200 text-[9px] font-sans font-bold border border-red-700 animate-pulse transition-all cursor-pointer"
+                                            className="shrink-0 px-1.5 py-0.2 rounded bg-bp-chip-danger-tint hover:opacity-90 text-bp-chip-danger-ink text-[9px] font-sans font-bold border border-bp-chip-danger-ink animate-pulse transition-all cursor-pointer"
                                             title="Click to jump directly to Security Threat Inspector"
                                         >
                                             🚨 ALERT (Inspect)
@@ -484,13 +484,13 @@ export function FleetSidebar({
                                                 onSelectNode(p.id);
                                                 onSelectTab('members');
                                             }}
-                                            className="shrink-0 px-1.5 py-0.2 rounded bg-amber-900/80 hover:bg-amber-800 text-amber-200 text-[9px] font-sans font-bold border border-amber-700 transition-all cursor-pointer"
+                                            className="shrink-0 px-1.5 py-0.2 rounded bg-bp-chip-warn-tint hover:opacity-90 text-bp-chip-warn-ink text-[9px] font-sans font-bold border border-bp-chip-warn-ink transition-all cursor-pointer"
                                             title="Click to inspect Node Warnings"
                                         >
                                             ⚠️ WARN (Inspect)
                                         </button>
                                     ) : isSelected && (
-                                        <span className="shrink-0 px-1.5 py-0.2 rounded bg-terra-500/20 text-terra-300 text-[9px] font-sans font-bold">
+                                        <span className="shrink-0 px-1.5 py-0.2 rounded bg-bp-chip-need-tint text-bp-chip-need-ink text-[9px] font-sans font-bold">
                                             ACTIVE
                                         </span>
                                     )}
@@ -639,7 +639,7 @@ function IconRail({ items, activeTab, onSelectTab, countsFor, returnLinks, onOpe
             <div className="flex-1 w-full overflow-y-auto overflow-x-hidden custom-scrollbar py-3 flex flex-col items-center gap-1">
                 {returnLinks && (
                     <nav aria-label="Leave Settings" className="flex flex-col items-center gap-1 pb-2 mb-1 border-b border-nature-800/80">
-                        <a href={returnLinks.back.href} aria-label={returnLinks.back.label} {...bind(returnLinks.back.label)} className={`${cell} text-terra-200 bg-terra-500/10 border border-terra-500/30 hover:bg-terra-500/20`}>
+                        <a href={returnLinks.back.href} aria-label={returnLinks.back.label} {...bind(returnLinks.back.label)} className={`${cell} text-bp-chip-need-ink bg-bp-chip-need-tint border border-terra-500/30 hover:opacity-90`}>
                             <span aria-hidden="true">{returnLinks.back.glyph}</span>
                         </a>
                         {returnLinks.profile && (

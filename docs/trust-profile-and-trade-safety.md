@@ -51,8 +51,30 @@ Good news: most "track record" signals are **already computed** server-side in
 | **Invited by** | graduated: always show the *fact* + inviter's *tier*; show the **name** only when the inviter is the viewer / their friend / a mutual; else "an established member" | Name is only useful when you can actually ask them; otherwise it's pure exposure of the inviter |
 | Reports / flags | never raw counts; moderation **outcomes** only | Defamation + brigading risk |
 
-Opt-outs: per-user "show me as a mutual connection" (default on); inviter "show me as the
-inviter on people I bring in" (default on within community).
+Opt-outs:
+- **"Show me as a connection in common"** (built; default on). Settings → Legal & Privacy, phone and web. Stored as the
+  member's own preference `show_as_connection_in_common` (`member_preferences`), served to them alone. Turned off, the
+  member is never named or counted as anyone's connection in common, so it never turns a band green
+  (`getTrustProfileForViewer`; checked in `test-trust-mutuals` T10).
+- Inviter "show me as the inviter on people I bring in" (default on within community): planned, **not built**.
+
+Adding a friend is visible and bounded, because a connection in common is made of friendships both ways:
+- The person added is told: a quiet line on their People tab, "*name* added you · Add back", phone and web (no push).
+  Only adds made after a server first ran this are shown (no backfill), for 30 days, until they add back or block
+  the adder (an adder's block of them changes nothing they read); 20 named, then "and N more" (`GET /api/friends/added-you`, their own only; engine/friends-added-you.ts).
+- A member adds at most **100 people a day** (`friendAddsPerDay`, config/writer-limits.ts). Removing someone counts
+  too (its tombstone), so removing and adding again frees nothing. The 101st is refused in words, with when it lets up, never silently dropped (the phone no longer
+  writes its own row before the node has answered).
+- You can't add someone you blocked: refused, saying so. If they add you, you aren't told: the add is taken as any add
+  (it counts against their 100), and your "added you" line leaves out anyone you blocked (`member_blocks`, the web's
+  block list; the phone also leaves out its own blocks). Refusing it would tell them of the block, which a block never
+  does (engine/member-blocks.ts). Your friends no longer see you as a connection in common on their profile: a blocker
+  is never counted on the profile of the member they blocked, nor for a viewer who blocked them; the friend rows stay,
+  so the blocked member's own reads don't change (`getTrustProfileForViewer`; `test-trust-mutuals` T11-T14). It does
+  not end the friendship: they still have you as a friend, and if your contact is set to Friends they still see it. To end
+  it too, in one step: Settings → Manage Blocked Users, "Also remove from friends" under a blocked member who is still
+  a friend (phone and web; the same `POST /api/friends/remove` as any removal, so a block kept on the phone alone ends
+  the friendship on the node too; the block stays). They can notice a removal.
 
 ### Suggested "trust at a glance" layout
 1. Tier badge · member since · last active

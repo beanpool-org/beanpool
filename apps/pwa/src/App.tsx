@@ -734,12 +734,12 @@ export function App() {
                                     <span>{tab.label}</span>
                                 </div>
                                 {tab.id === 'messages' && totalUnread > 0 && (
-                                    <span className="bg-terra-600 text-white text-xs font-black px-2 py-0.5 rounded-full shadow-sm">
+                                    <span className="bg-bp-cta-fill text-bp-cta-on text-xs font-black px-2 py-0.5 rounded-full shadow-sm">
                                         {totalUnread > 99 ? '99+' : totalUnread}
                                     </span>
                                 )}
                                 {tab.id === 'marketplace' && pendingDealsCount > 0 && (
-                                    <span className="bg-terra-600 text-white text-xs font-black px-2 py-0.5 rounded-full shadow-sm">
+                                    <span className="bg-bp-cta-fill text-bp-cta-on text-xs font-black px-2 py-0.5 rounded-full shadow-sm">
                                         {pendingDealsCount}
                                     </span>
                                 )}
@@ -801,13 +801,13 @@ export function App() {
                     <div
                         role="alert"
                         aria-live="assertive"
-                        className="w-full bg-amber-600 dark:bg-amber-700 text-white px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-md z-[120] text-sm font-medium border-b border-amber-700 dark:border-amber-800 shrink-0"
+                        className="w-full bg-bp-gold-fill text-bp-gold-on px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 shadow-md z-[120] text-sm font-medium border-b border-bp-gold-fill shrink-0"
                     >
                         <div className="flex items-center gap-2 flex-1 min-w-[200px]">
                             <span className="text-lg shrink-0" aria-hidden="true">⚠️</span>
                             <div className="leading-tight">
                                 <span className="font-bold">BeanPool has been updated: </span>
-                                <span className="text-amber-100 text-xs sm:text-sm">
+                                <span className="text-xs sm:text-sm">
                                     this page is version {__APP_VERSION__} and your community now runs {serverVersionAhead}. Refresh to load it.
                                 </span>
                             </div>

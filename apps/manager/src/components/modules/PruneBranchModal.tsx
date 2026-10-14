@@ -278,7 +278,7 @@ export function PruneBranchModal({
                         id="confirm-prune-branch-btn"
                         onClick={handlePrune}
                         disabled={!isMatch || isPruning || !rootPubkey}
-                        className="min-h-[44px] px-5 py-2.5 rounded-xl bg-red-800 hover:bg-red-700 active:scale-[0.99] text-xs font-bold text-white border border-red-600 shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                        className="min-h-[44px] px-5 py-2.5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover active:scale-[0.99] text-xs font-bold text-bp-danger-on border border-bp-danger-fill shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
                         {isPruning ? (
                             <>

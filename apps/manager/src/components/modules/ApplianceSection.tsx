@@ -677,7 +677,7 @@ export function ApplianceSection({
                         aria-current={subTab === 'diagnostics' ? 'page' : undefined}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'diagnostics'
-                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
@@ -689,7 +689,7 @@ export function ApplianceSection({
                         aria-current={subTab === 'backups' ? 'page' : undefined}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'backups'
-                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
@@ -701,7 +701,7 @@ export function ApplianceSection({
                         aria-current={subTab === 'gateway' ? 'page' : undefined}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'gateway'
-                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
@@ -713,7 +713,7 @@ export function ApplianceSection({
                         aria-current={subTab === 'network' ? 'page' : undefined}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'network'
-                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
@@ -725,7 +725,7 @@ export function ApplianceSection({
                         aria-current={subTab === 'identity' ? 'page' : undefined}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'identity'
-                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
@@ -737,7 +737,7 @@ export function ApplianceSection({
                         aria-current={subTab === 'access' ? 'page' : undefined}
                         className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 whitespace-nowrap min-h-[48px] lg:min-h-0 lg:shrink lg:whitespace-normal ${
                             subTab === 'access'
-                                ? 'bg-terra-500/20 text-terra-300 border border-terra-500/40 shadow-sm'
+                                ? 'bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/40 shadow-sm'
                                 : 'text-nature-400 hover:text-white border border-transparent'
                         }`}
                     >
@@ -756,7 +756,7 @@ export function ApplianceSection({
                             <span className="text-[10px] uppercase font-bold text-nature-400 tracking-wider">Node Version</span>
                             <div className="text-lg font-black text-white font-mono mt-0.5 flex items-center gap-2">
                                 <span>{diag?.callsign ? 'v1.4.2' : 'v1.4.2'}</span>
-                                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-terra-500/20 text-terra-300 border border-terra-500/30">
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-bp-chip-need-tint text-bp-chip-need-ink border border-terra-500/30">
                                     Release
                                 </span>
                             </div>
@@ -858,7 +858,7 @@ export function ApplianceSection({
                             <button
                                 type="button"
                                 onClick={handleOpenCleanModal}
-                                className="px-3.5 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all flex items-center justify-center gap-1.5 shadow-sm shrink-0"
+                                className="px-3.5 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all flex items-center justify-center gap-1.5 shadow-sm shrink-0"
                             >
                                 <span>🧹</span>
                                 <span>Clean Orphaned Media &amp; Compress Logs</span>
@@ -1000,7 +1000,7 @@ export function ApplianceSection({
                             <button
                                 onClick={onRunLedgerAudit}
                                 disabled={auditState.running}
-                                className="px-3.5 py-1.5 rounded-lg bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50"
+                                className="px-3.5 py-1.5 rounded-lg bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all disabled:opacity-50"
                             >
                                 {auditState.running ? 'Auditing...' : 'Run Audit Now'}
                             </button>
@@ -1122,7 +1122,7 @@ export function ApplianceSection({
                                 <button
                                     type="submit"
                                     disabled={!restoreFile || restoring}
-                                    className="w-full py-2.5 rounded-xl bg-red-900/80 hover:bg-red-800 text-xs font-bold text-white border border-red-700 transition-all disabled:opacity-50"
+                                    className="w-full py-2.5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on border border-bp-danger-fill transition-all disabled:opacity-50"
                                 >
                                     {restoring ? 'Restoring Database...' : 'Restore from Backup'}
                                 </button>
@@ -1145,7 +1145,7 @@ export function ApplianceSection({
                             </div>
                             <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
                                 scheduleKnown && scheduleConfig?.enabled
-                                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                    ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-emerald-500/30'
                                     : 'bg-nature-800 text-nature-400'
                             }`}>
                                 {!scheduleKnown || !scheduleConfig ? 'Unknown' : scheduleConfig.enabled ? `Active (${scheduleConfig.intervalHours}h)` : 'Disabled'}
@@ -1214,7 +1214,7 @@ export function ApplianceSection({
                                         <button
                                             type="submit"
                                             disabled={savingSchedule}
-                                            className="px-4 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50 shrink-0"
+                                            className="px-4 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all disabled:opacity-50 shrink-0"
                                         >
                                             {savingSchedule ? 'Saving...' : 'Save'}
                                         </button>
@@ -1287,7 +1287,7 @@ export function ApplianceSection({
                             <button
                                 onClick={handleCreateSnapshot}
                                 disabled={creatingSnapshot}
-                                className="px-3.5 py-1.5 rounded-lg bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50"
+                                className="px-3.5 py-1.5 rounded-lg bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all disabled:opacity-50"
                             >
                                 {creatingSnapshot ? 'Creating...' : '+ Create Snapshot'}
                             </button>
@@ -1484,7 +1484,7 @@ export function ApplianceSection({
                                     <button
                                         type="submit"
                                         disabled={changingPwd}
-                                        className="px-5 py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white transition-all disabled:opacity-50"
+                                        className="px-5 py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on transition-all disabled:opacity-50"
                                     >
                                         {changingPwd ? 'Updating...' : 'Update Password'}
                                     </button>
@@ -1504,7 +1504,7 @@ export function ApplianceSection({
                                         </p>
                                     </div>
                                     <span className={`px-2.5 py-1 rounded-full text-xs font-bold ${
-                                        tfaStatus?.enabled ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-nature-800 text-nature-400'
+                                        tfaStatus?.enabled ? 'bg-bp-chip-ok-tint text-bp-chip-ok-ink border border-emerald-500/30' : 'bg-nature-800 text-nature-400'
                                     }`}>
                                         {tfaStatus?.enabled ? 'Enabled' : 'Disabled'}
                                     </span>
@@ -1535,7 +1535,7 @@ export function ApplianceSection({
                                             <button
                                                 type="button"
                                                 onClick={handleVerify2FA}
-                                                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white"
+                                                className="px-4 py-2 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-xs font-bold text-bp-commit-on"
                                             >
                                                 Verify &amp; Enable
                                             </button>
@@ -1576,7 +1576,7 @@ export function ApplianceSection({
                                         <button
                                             type="button"
                                             onClick={handleDisable2FA}
-                                            className="min-h-[48px] px-5 py-2.5 rounded-xl bg-red-900/80 hover:bg-red-800 text-xs font-bold text-white border border-red-700 transition-all"
+                                            className="min-h-[48px] px-5 py-2.5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on border border-bp-danger-fill transition-all"
                                         >
                                             Disable 2FA
                                         </button>
@@ -1644,7 +1644,7 @@ export function ApplianceSection({
                                     Attributable recovery mechanism when member keys or paired devices are lost
                                 </p>
                             </div>
-                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                            <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-bp-chip-warn-tint text-bp-chip-warn-ink border border-amber-500/30">
                                 Phase 3 Specification
                             </span>
                         </div>
@@ -1707,7 +1707,7 @@ export function ApplianceSection({
                                     <button
                                         type="button"
                                         onClick={handleIssueBreakGlass}
-                                        className="min-h-[48px] w-full py-2.5 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white"
+                                        className="min-h-[48px] w-full py-2.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on"
                                     >
                                         Make a break-glass code
                                     </button>
@@ -1746,7 +1746,7 @@ export function ApplianceSection({
                         <button
                             type="button"
                             onClick={handleResetNode}
-                            className="px-5 py-2.5 rounded-xl bg-red-800 hover:bg-red-700 text-xs font-bold text-white transition-all shadow-md"
+                            className="px-5 py-2.5 rounded-xl bg-bp-danger-fill hover:bg-bp-danger-hover text-xs font-bold text-bp-danger-on transition-all shadow-md"
                         >
                             Wipe &amp; Reset Node
                         </button>
@@ -1897,7 +1897,7 @@ export function ApplianceSection({
                                     type="button"
                                     onClick={handleExecuteClean}
                                     disabled={loadingPreview || cleaningStorage || !cleanPreview}
-                                    className="px-4 py-2 rounded-xl bg-terra-600 hover:bg-terra-500 text-xs font-bold text-white disabled:opacity-50 flex items-center gap-1.5"
+                                    className="px-4 py-2 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover text-xs font-bold text-bp-cta-on disabled:opacity-50 flex items-center gap-1.5"
                                 >
                                     {cleaningStorage ? (
                                         <>

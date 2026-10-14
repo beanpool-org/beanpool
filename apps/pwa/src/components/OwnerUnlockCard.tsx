@@ -87,7 +87,7 @@ export function OwnerUnlockCard({ identity, communityName }: {
             </div>
 
             {!open ? (
-                <button type="button" onClick={() => setOpen(true)} className={`${BTN} w-full bg-emerald-700 text-white hover:bg-emerald-800`}>
+                <button type="button" onClick={() => setOpen(true)} className={`${BTN} w-full bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on`}>
                     Paste a code
                 </button>
             ) : done && look ? (
@@ -129,7 +129,7 @@ export function OwnerUnlockCard({ identity, communityName }: {
                     </p>
                     {error && <p role="alert" className="text-sm text-red-700 dark:text-red-300 break-words">{error}</p>}
                     <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={onUnlock} disabled={busy} className={`${BTN} bg-emerald-700 text-white`}>
+                        <button type="button" onClick={onUnlock} disabled={busy} className={`${BTN} bg-bp-commit-fill text-bp-commit-on`}>
                             {busy ? 'Unlocking…' : takeover ? 'Unlock for the take-over' : 'Unlock the backup'}
                         </button>
                         <button type="button" onClick={reset} disabled={busy} className={`${BTN} border border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-100`}>Not now</button>
@@ -155,7 +155,7 @@ export function OwnerUnlockCard({ identity, communityName }: {
                     />
                     {error && <p role="alert" className="text-sm text-red-700 dark:text-red-300 break-words">{error}</p>}
                     <div className="flex flex-wrap gap-2">
-                        <button type="button" onClick={onCheck} disabled={busy || !text.trim()} className={`${BTN} bg-emerald-700 text-white`}>
+                        <button type="button" onClick={onCheck} disabled={busy || !text.trim()} className={`${BTN} bg-bp-commit-fill text-bp-commit-on`}>
                             {busy ? 'Checking…' : 'Check the code'}
                         </button>
                         <button type="button" onClick={reset} disabled={busy} className={`${BTN} border border-nature-300 dark:border-nature-700 text-nature-800 dark:text-nature-100`}>Close</button>

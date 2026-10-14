@@ -27,6 +27,8 @@ vi.mock('../lib/api', async () => {
         addToBlockList: vi.fn(),
         removeFromBlockList: vi.fn(),
         clearBlockList: vi.fn(),
+        getFriends: vi.fn(async () => []),
+        removeFriendApi: vi.fn(),
     };
 });
 
@@ -48,6 +50,8 @@ beforeEach(() => {
     vi.mocked(api.removeFromBlockList).mockReset();
     vi.mocked(api.clearBlockList).mockReset();
     vi.mocked(api.addToBlockList).mockReset();
+    vi.mocked(api.getFriends).mockReset().mockResolvedValue([]);
+    vi.mocked(api.removeFriendApi).mockReset();
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
 afterEach(() => vi.restoreAllMocks());
@@ -150,5 +154,69 @@ describe('Settings → Manage Blocked Members, kept by the community', () => {
         expect(screen.queryByText('Bo')).toBeNull();
         expect(screen.getByText('Cy')).toBeInTheDocument();
         expect(screen.getByText('Dx')).toBeInTheDocument();
+    });
+});
+
+// A block does not end a friendship, and the web hides a blocked member from your lists (#1913, measured by the Argon
+// shadow): ending it too took unblock, remove, block again. "Also remove from friends" on the blocked list is one step,
+// through the same route as any removal (POST /api/friends/remove), and the block stays.
+describe('Settings → Manage Blocked Members: Also remove from friends', () => {
+    const friend = (publicKey: string, callsign: string) => ({ publicKey, callsign, addedAt: '2026-10-01T00:00:00.000Z', isGuardian: false });
+    const removeFrom = (name: string) => within(rowOf(name)).queryByRole('button', { name: 'Also remove from friends' });
+
+    it('is offered only for a blocked member who is still your friend, and says they can notice', async () => {
+        vi.mocked(api.getFriends).mockResolvedValue([friend(BO, 'Bo')]);
+        await openBlocked();
+        await screen.findByText('Bo');
+        await waitFor(() => expect(removeFrom('Bo')).not.toBeNull());
+        expect(within(rowOf('Bo')).getByText('Still your friend. They can notice a removal.')).toBeInTheDocument();
+        expect(removeFrom('Cy')).toBeNull();
+        expect(within(rowOf('Cy')).queryByText(/Still your friend/)).toBeNull();
+        expect(api.getFriends).toHaveBeenCalledWith(identity.publicKey);
+    });
+
+    it('removes the friend through the friend route and keeps the block', async () => {
+        vi.mocked(api.getFriends).mockResolvedValue([friend(BO, 'Bo'), friend(CY, 'Cy')]);
+        vi.mocked(api.removeFriendApi).mockResolvedValueOnce({ success: true });
+        await openBlocked();
+        await screen.findByText('Bo');
+        await waitFor(() => expect(removeFrom('Bo')).not.toBeNull());
+        fireEvent.click(removeFrom('Bo')!);
+        expect(window.confirm).toHaveBeenLastCalledWith('Remove Bo from your friends? They stay blocked. They can notice a removal.');
+        expect(await within(rowOf('Bo')).findByText('No longer your friend. Still blocked.')).toBeInTheDocument();
+        expect(removeFrom('Bo')).toBeNull();
+        expect(api.removeFriendApi).toHaveBeenCalledTimes(1);
+        expect(api.removeFriendApi).toHaveBeenCalledWith(identity.publicKey, BO);
+        // Still blocked: nothing was asked of the block list, and Bo is still on it, with Unblock.
+        expect(api.removeFromBlockList).not.toHaveBeenCalled();
+        expect(api.clearBlockList).not.toHaveBeenCalled();
+        expect(within(rowOf('Bo')).getByRole('button', { name: 'Unblock' })).toBeInTheDocument();
+        expect(removeFrom('Cy')).not.toBeNull();
+    });
+
+    it('a removal the community did not take is said, and they are still offered; Cancel removes nothing', async () => {
+        vi.mocked(api.getFriends).mockResolvedValue([friend(BO, 'Bo')]);
+        await openBlocked();
+        await screen.findByText('Bo');
+        await waitFor(() => expect(removeFrom('Bo')).not.toBeNull());
+
+        vi.mocked(window.confirm).mockReturnValueOnce(false);
+        fireEvent.click(removeFrom('Bo')!);
+        expect(api.removeFriendApi).not.toHaveBeenCalled();
+
+        vi.mocked(api.removeFriendApi).mockRejectedValueOnce(offline());
+        fireEvent.click(removeFrom('Bo')!);
+        expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t reach your community, so they are still your friend. Check your connection and try again.');
+        expect(removeFrom('Bo')).not.toBeNull();
+        expect(within(rowOf('Bo')).queryByText('No longer your friend. Still blocked.')).toBeNull();
+    });
+
+    it('offers nothing when your friends could not be read', async () => {
+        vi.mocked(api.getFriends).mockRejectedValue(offline());
+        await openBlocked();
+        await screen.findByText('Bo');
+        await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+        expect(removeFrom('Bo')).toBeNull();
+        expect(removeFrom('Cy')).toBeNull();
     });
 });

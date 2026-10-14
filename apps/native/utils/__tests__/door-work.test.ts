@@ -128,49 +128,64 @@ describe('the solver on expo-crypto matches the core vectors', () => {
 });
 
 describe('short batches: the screen breathes while the work runs', () => {
-    /** A digest as slow as an old phone's (about 0.25 ms a try, on top of the real hash). */
-    const slowDigest: DoorWorkDigest = (bytes) => {
-        const until = performance.now() + 0.25;
-        while (performance.now() < until) { /* an old phone's native hash */ }
-        return nodeSha256(bytes);
-    };
+    /** An old phone's native hash takes about 0.25 ms a try. */
+    const TRY_MS = 0.25;
 
-    async function longestHold(sliceMs: number): Promise<{ ticks: number; worstGapMs: number }> {
-        let last = performance.now();
-        let worst = 0;
-        let ticks = 0;
+    /**
+     * The solve on a clock of the test's own, counted in tries, never in this machine's milliseconds (a busy Mac held a
+     * timer 150 ms late in the merge queue, 14 Oct). Each try hashes for real and moves Date.now on by {@link TRY_MS}, so
+     * how many tries one batch holds is the solver's choice alone. The screen is a zero-delay timer that takes every turn the
+     * work gives it: armed before the solve, and again at each of its turns, it is always queued ahead of the timer the
+     * solver pauses on (Node runs timers of one delay in the order they were set), so it runs once at each pause, and never
+     * while the tries run.
+     */
+    async function turnsDuringSolve(sliceMs?: number): Promise<{ tries: number; turns: number; mostTriesBetweenTurns: number }> {
+        let clock = Date.now();
+        const now = vi.spyOn(Date, 'now').mockImplementation(() => clock);
+        let tries = 0;
+        let sinceTurn = 0;
+        let most = 0;
+        let turns = 0;
         let solving = true;
-        // The screen: wants a turn every millisecond while the solve runs.
-        const screen = setInterval(() => {
+        const digest: DoorWorkDigest = (bytes) => {
+            clock += TRY_MS;
+            tries++;
+            sinceTurn++;
+            return nodeSha256(bytes);
+        };
+        const screen = () => {
             if (!solving) return;
-            const t = performance.now();
-            worst = Math.max(worst, t - last);
-            last = t;
-            ticks++;
-        }, 1);
-        const started = performance.now();
-        last = started;
-        await solveOnPhone(DOOR_WORK_VECTORS[0].challenge, { digest: slowDigest, sliceMs });
-        solving = false;
-        clearInterval(screen);
-        worst = Math.max(worst, performance.now() - last);
-        return { ticks, worstGapMs: worst };
+            turns++;
+            most = Math.max(most, sinceTurn);
+            sinceTurn = 0;
+            setTimeout(screen, 0);
+        };
+        setTimeout(screen, 0);
+        try {
+            await solveOnPhone(DOOR_WORK_VECTORS[0].challenge, { digest, sliceMs });
+        } finally {
+            solving = false;
+            now.mockRestore();
+        }
+        return { tries, turns, mostTriesBetweenTurns: Math.max(most, sinceTurn) };
     }
 
     it('with the default batches, the screen gets a turn every few milliseconds', async () => {
-        const { ticks, worstGapMs } = await longestHold(8);
-        expect(ticks).toBeGreaterThan(5);
-        // A batch is 8 ms of tries (9 ms worst here), plus one try that started inside it and a timer's own lateness on a
-        // busy machine: CI's shared runners measured 60 and 74 ms (2026-10-03). 150 ms still sits far below the control's
-        // hold of the whole solve (about 380 ms), which the control below pins above this bound.
-        expect(worstGapMs).toBeLessThan(150);
+        const { tries, turns, mostTriesBetweenTurns } = await turnsDuringSolve();
+        // About 128 tries a part at level 0, eight parts: this vector is 1,384 tries, some 350 ms of an old phone's.
+        expect(tries).toBeGreaterThan(500);
+        // A batch is 8 ms of tries, 32 at 0.25 ms a try (33 when a part is solved on the 32nd: the next part's first try
+        // ends it), then a turn. A busy machine makes a turn come later; it never puts more tries between two of them.
+        expect(mostTriesBetweenTurns).toBeLessThanOrEqual(33);
+        expect(turns).toBeGreaterThanOrEqual(Math.floor(tries / 33));
     });
 
     it('control: without the batches (one endless slice), the screen gets no turn until the work is done', async () => {
-        const { ticks, worstGapMs } = await longestHold(Number.POSITIVE_INFINITY);
-        expect(ticks).toBe(0);
-        // The whole solve holds the screen for longer than the batched bound above, so that bound still tells them apart.
-        expect(worstGapMs).toBeGreaterThan(150);
+        const { tries, turns, mostTriesBetweenTurns } = await turnsDuringSolve(Number.POSITIVE_INFINITY);
+        expect(turns).toBe(0);
+        // The whole solve holds the screen, far past the batched bound above, so that bound still tells them apart.
+        expect(mostTriesBetweenTurns).toBe(tries);
+        expect(tries).toBeGreaterThan(500);
     });
 });
 

@@ -169,6 +169,10 @@ export const INK_GROUNDS: { readonly [T in BrandTheme]: readonly string[] } = {
         '#1d231d', // web --bg-primary (nature-950)
         '#2a322a', // web --bg-card
         '#384038', // web --bg-secondary (nature-900): message rows, consent cards, the radius picker
+        // The manager is dark only (index.html sets `dark`) and has its own deeper sage scale (tailwind.config.js):
+        '#0b110b', // manager page (nature-950)
+        '#151e16', // manager card (nature-900)
+        '#2b422c', // manager raised row and input (nature-800)
     ],
 };
 

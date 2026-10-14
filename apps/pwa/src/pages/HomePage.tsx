@@ -870,7 +870,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     <div role="status" data-testid="home-signed-out" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
                         <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">{HOME_SIGNED_OUT}</p>
                         <button type="button" onClick={() => window.location.reload()}
-                            className="min-h-[44px] px-4 rounded-xl border-0 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
+                            className="min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
                             Reload
                         </button>
                     </div>
@@ -878,7 +878,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                     <div role="alert" data-testid="home-failed" className="bg-white dark:bg-nature-900 rounded-2xl border border-nature-200 dark:border-nature-800 p-4">
                         <p className="m-0 mb-3 text-sm text-nature-800 dark:text-nature-100">{failure}</p>
                         <button type="button" onClick={() => void fetchHome('retry')}
-                            className="min-h-[44px] px-4 rounded-xl border-0 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
+                            className="min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
                             Try again
                         </button>
                     </div>
@@ -1151,7 +1151,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         <div className="flex flex-wrap items-center gap-2">
                             <button type="button" data-testid="home-start-look"
                                 onClick={() => { if (publicKey) startTour(publicKey, tourNode, resumeStep(tourProgress, tourTotal)); }}
-                                className={`${btn} border-0 bg-emerald-700 hover:bg-emerald-800 text-white focus-visible:ring-emerald-400`}>
+                                className={`${btn} border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on focus-visible:ring-emerald-400`}>
                                 {startCardButton(tourProgress, tourTotal)}
                             </button>
                             <button type="button" data-testid="home-start-skip" aria-label="Skip the tour" onClick={() => applyTourEnd('skipped')}
@@ -1174,7 +1174,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                         <div className="flex flex-wrap gap-2">
                             {/* The same element on every tip, so focus stays on it after a tap. */}
                             <button type="button" onClick={tipsNext} aria-label={tipsNextLabel(v)} data-testid="home-tips-next"
-                                className={`${btn} flex-1 min-w-[96px] border-0 bg-emerald-700 hover:bg-emerald-800 text-white focus-visible:ring-emerald-400`}>
+                                className={`${btn} flex-1 min-w-[96px] border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on focus-visible:ring-emerald-400`}>
                                 {v.last ? 'Done' : 'Next'}
                             </button>
                             {slug && page && (
@@ -1202,7 +1202,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                                     return (
                                         <button key={cat.id} type="button" aria-pressed={on} onClick={() => toggleChip(cat.id)} data-testid={`home-interest-${cat.id}`}
                                             className={`min-h-[44px] max-w-full px-3 rounded-full text-sm font-semibold border cursor-pointer break-words text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${on
-                                                ? 'bg-emerald-700 border-emerald-700 text-white'
+                                                ? 'bg-bp-commit-fill border-bp-commit-fill text-bp-commit-on'
                                                 : 'bg-transparent border-nature-300 dark:border-nature-700 text-nature-900 dark:text-nature-100'}`}>
                                             <span aria-hidden="true">{cat.emoji} </span>{cat.label}
                                         </button>
@@ -1385,7 +1385,7 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 return (
                     <HomeCard key={id} {...common}>
                         <button type="button" onClick={() => onNavigate('people-invites')}
-                            className="w-full min-h-[44px] px-4 rounded-xl border-0 bg-emerald-700 hover:bg-emerald-800 text-white text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
+                            className="w-full min-h-[44px] px-4 rounded-xl border-0 bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on text-sm font-bold cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400">
                             Invite someone
                         </button>
                     </HomeCard>

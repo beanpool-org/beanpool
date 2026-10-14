@@ -13,8 +13,11 @@
  *   alone and never reaches the owner, then or after an unblock (engine/withheld-lines.ts); no push of their line or
  *   @mention in a group's chat reaches the owner (the node's own notices, a vote on the owner's convenorship among them,
  *   still do), nor of a new deal request from them, its expiry, their 1-step accept of the owner's Offer or their cancel
- *   of that deal (the trade itself, its escrow and its SYSTEM lines unchanged); and they can't address a listing to the
- *   owner. A shared room (a
+ *   of that deal (the trade itself, its escrow and its SYSTEM lines unchanged); they can't address a listing to the
+ *   owner; and, as the guide says, "Your friends no longer see you as a connection in common on their profile", nor
+ *   does anyone the owner blocked count for the owner (getTrustProfileForViewer). No friend row is touched: "It does
+ *   not end the friendship: they still have you as a friend, and if your contact is set to Friends they still see it. To
+ *   end that too, open Manage Blocked Users … Also remove from friends … They can notice a removal." A shared room (a
  *   group's, an event's or an enterprise's chat) shows everyone the same lines, so the apps hide theirs there.
  * - A blocked key is any key in the one spelling (engine/member-key.ts), a member's or not: the marketplace shows listings
  *   from a connected community's public board straight from that node (MarketplacePage's peer browse), and their author

@@ -1,3 +1,16 @@
+import plugin from 'tailwindcss/plugin';
+import { brandCssVariableMap, brandTailwindColours } from '@beanpool/core/brand-colours';
+
+/*
+ * Brand and status colours come from the shared library (packages/beanpool-core/src/brand-colours.ts, docs/brand-colours.md):
+ * the plugin below writes every role into index.css's @tailwind base as a CSS variable, light under :root and dark under
+ * :root.dark-theme, and brandTailwindColours() names them, so a control writes bg-bp-commit-fill hover:bg-bp-commit-hover
+ * text-bp-commit-on. Change a colour there, never here or in a screen.
+ */
+const brandVariables = plugin(({ addBase }) => {
+  addBase({ ':root': brandCssVariableMap('light'), ':root.dark-theme': brandCssVariableMap('dark') });
+});
+
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: 'selector',
@@ -8,6 +21,7 @@ export default {
   theme: {
     extend: {
       colors: {
+        ...brandTailwindColours(),
         nature: {
           50: '#f6f7f6',
           100: '#eef1ee',
@@ -77,5 +91,5 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [brandVariables],
 }

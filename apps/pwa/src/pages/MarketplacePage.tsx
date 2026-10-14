@@ -1147,7 +1147,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
 
                         <h2 className="text-xl font-bold text-nature-950 dark:text-white mb-3 leading-tight">
                             {selectedPost.status === 'paused' && (
-                                <span className="inline-block align-middle mr-2 px-2 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">⏸ Paused</span>
+                                <span className="inline-block align-middle mr-2 px-2 py-0.5 rounded-full text-[11px] font-extrabold uppercase tracking-wide bg-bp-chip-warn-tint text-bp-chip-warn-ink">⏸ Paused</span>
                             )}
                             {selectedPost.title}
                         </h2>
@@ -1374,10 +1374,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                      }
                                                  }}
                                                  disabled={accepting || (selectedPost.priceType !== 'fixed' && (!completeHours || Number(completeHours) <= 0))}
-                                                 className={`flex-1 py-2.5 rounded-lg font-bold text-white text-sm transition-all shadow-sm ${
+                                                 className={`flex-1 py-2.5 rounded-lg font-bold text-bp-commit-on text-sm transition-all shadow-sm ${
                                                      accepting 
-                                                         ? 'bg-emerald-400 cursor-not-allowed opacity-60' 
-                                                         : 'bg-emerald-600 hover:bg-emerald-700'
+                                                         ? 'bg-bp-commit-fill cursor-not-allowed opacity-60' 
+                                                         : 'bg-bp-commit-fill hover:bg-bp-commit-hover'
                                                  }`}
                                              >
                                                  {accepting ? 'Processing...' : 'Release Credits'}
@@ -1393,8 +1393,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                              }
                                          }}
                                          disabled={accepting}
-                                         className={`w-full py-3.5 rounded-xl font-bold text-white text-[15px] transition-all shadow-md ${
-                                             accepting ? 'bg-emerald-400 cursor-not-allowed opacity-60' : 'bg-emerald-500 hover:bg-emerald-600'
+                                         className={`w-full py-3.5 rounded-xl font-bold text-bp-commit-on text-[15px] transition-all shadow-md ${
+                                             accepting ? 'bg-bp-commit-fill cursor-not-allowed opacity-60' : 'bg-bp-commit-fill hover:bg-bp-commit-hover'
                                          }`}
                                      >
                                          {accepting ? 'Processing...' : '✅ Release Credits'}
@@ -1503,7 +1503,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 }
                                             }}
                                             disabled={accepting}
-                                            className="flex-1 py-1.5 rounded-md bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm transition-colors"
+                                            className="flex-1 py-1.5 rounded-md bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold text-xs shadow-sm transition-colors"
                                         >
                                             Approve & Hold in Trust
                                         </button>
@@ -1527,7 +1527,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 setSelectedPost(null);
                                 onNavigate?.('map-post');
                             }}
-                            className="px-6 py-2.5 bg-amber-700 hover:bg-amber-800 text-white font-bold rounded-xl text-sm transition-colors shadow-md inline-flex items-center gap-2"
+                            className="px-6 py-2.5 bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on font-bold rounded-xl text-sm transition-colors shadow-md inline-flex items-center gap-2"
                         >
                             <span aria-hidden="true">💡</span> Post Your Own Offer →
                         </button>
@@ -1680,10 +1680,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             }
                                         }}
                                         disabled={accepting || isRemotePost || !!authorEnterpriseInactive || (selectedPost.priceType !== 'fixed' && (!acceptHours || Number(acceptHours) <= 0))}
-                                        className={`flex-1 py-2.5 rounded-lg font-bold text-white text-sm transition-all shadow-sm ${
+                                        className={`flex-1 py-2.5 rounded-lg font-bold text-bp-commit-on text-sm transition-all shadow-sm ${
                                             accepting || isRemotePost || !!authorEnterpriseInactive
-                                                ? 'bg-emerald-400 cursor-not-allowed opacity-60'
-                                                : 'bg-emerald-600 hover:bg-emerald-700'
+                                                ? 'bg-bp-commit-fill cursor-not-allowed opacity-60'
+                                                : 'bg-bp-commit-fill hover:bg-bp-commit-hover'
                                         }`}
                                     >
                                         {accepting ? 'Processing...' : 'Confirm'}
@@ -1861,10 +1861,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                     }
                                 }}
                                 disabled={accepting}
-                                className={`w-full py-3.5 rounded-xl font-bold text-white text-[15px] transition-all shadow-md ${
+                                className={`w-full py-3.5 rounded-xl font-bold text-[15px] transition-all shadow-md ${
                                     accepting
-                                        ? 'bg-nature-400 cursor-not-allowed opacity-60'
-                                        : selectedPost.type === 'offer' ? 'bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700' : 'bg-terra-600 hover:bg-terra-700'
+                                        ? 'bg-nature-400 text-white cursor-not-allowed opacity-60'
+                                        : selectedPost.type === 'offer' ? 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on' : 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
                                 }`}
                             >
                                  {accepting ? 'Processing...' : (selectedPost.type === 'offer' ? '🤝 Accept Offer' : '✋ Offer to Fulfill')}
@@ -1973,10 +1973,10 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                     }
                                                 }}
                                                 disabled={myRating < 1 || submittingRating}
-                                                className={`w-full py-2.5 rounded-lg font-bold text-sm text-white transition-colors ${
+                                                className={`w-full py-2.5 rounded-lg font-bold text-sm transition-colors ${
                                                     myRating >= 1 
-                                                        ? (hasExistingRating ? 'bg-emerald-500 hover:bg-emerald-600 shadow-sm' : 'bg-amber-500 hover:bg-amber-600 shadow-sm') 
-                                                        : 'bg-nature-300 cursor-not-allowed'
+                                                        ? (hasExistingRating ? 'bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on shadow-sm' : 'bg-bp-gold-fill hover:bg-bp-gold-hover text-bp-gold-on shadow-sm') 
+                                                        : 'bg-nature-300 text-white cursor-not-allowed'
                                                 }`}
                                             >
                                                 {submittingRating ? 'Submitting...' : myRating < 1 ? 'Tap stars to rate' : (hasExistingRating ? `Update ${myRating}⭐ Rating` : `Submit ${myRating}⭐ Rating`)}
@@ -2024,8 +2024,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         }
                                     }}
                                     disabled={!reportReason || submittingReport}
-                                    className={`w-full py-2.5 rounded-lg font-bold text-sm text-white transition-colors ${
-                                        reportReason ? 'bg-red-600 hover:bg-red-700 shadow-sm' : 'bg-nature-300 cursor-not-allowed'
+                                    className={`w-full py-2.5 rounded-lg font-bold text-sm transition-colors ${
+                                        reportReason ? 'bg-bp-danger-fill hover:bg-bp-danger-hover text-bp-danger-on shadow-sm' : 'bg-nature-300 text-white cursor-not-allowed'
                                     }`}
                                 >
                                     {submittingReport ? 'Sending...' : 'Submit Report'}
@@ -2082,7 +2082,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         setEditPhotos(selectedPost.photos || []);
                                         setEditMode(true);
                                     }}
-                                    className="w-full py-3.5 rounded-xl bg-terra-500 dark:bg-terra-600 hover:bg-terra-600 font-bold text-white text-[15px] transition-all shadow-md"
+                                    className="w-full py-3.5 rounded-xl bg-bp-cta-fill hover:bg-bp-cta-hover font-bold text-bp-cta-on text-[15px] transition-all shadow-md"
                                 >
                                     ✏️ Edit Post
                                 </button>
@@ -2122,7 +2122,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             onClick={() => setEditType(t)}
                                             className={`flex-1 py-2.5 rounded-xl border text-sm font-bold capitalize transition-colors ${
                                                 editType === t
-                                                    ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-orange-600 border-orange-600 text-white shadow-sm')
+                                                    ? (t === 'offer' ? 'bg-blue-600 border-blue-600 text-white shadow-sm' : 'bg-bp-action-fill border-bp-action-fill text-bp-action-on shadow-sm')
                                                     : 'bg-white dark:bg-nature-900 border-nature-200 dark:border-nature-800 text-nature-500 dark:text-nature-400 hover:bg-oat-50 dark:hover:bg-nature-800 dark:hover:text-nature-300'
                                             }`}
                                         >
@@ -2216,7 +2216,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                                 <button
                                                     onClick={() => setEditPhotos(editPhotos.filter((_, j) => j !== i))}
                                                     aria-label="Remove photo"
-                                                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 border-none text-white text-[10px] flex items-center justify-center cursor-pointer shadow-sm hover:bg-red-600 transition-colors focus-visible:ring-2 focus-visible:ring-red-500"
+                                                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-bp-danger-fill hover:bg-bp-danger-hover border-none text-bp-danger-on text-[10px] flex items-center justify-center cursor-pointer shadow-sm transition-colors focus-visible:ring-2 focus-visible:ring-red-500"
                                                 >
                                                     ✕
                                                 </button>
@@ -2291,8 +2291,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             }
                                         }}
                                         disabled={saving || !editTitle.trim()}
-                                        className={`flex-1 py-3 rounded-xl font-bold text-white text-[15px] transition-colors shadow-sm ${
-                                            saving || !editTitle.trim() ? 'bg-nature-300 cursor-not-allowed' : 'bg-terra-500 hover:bg-terra-600'
+                                        className={`flex-1 py-3 rounded-xl font-bold text-[15px] transition-colors shadow-sm ${
+                                            saving || !editTitle.trim() ? 'bg-nature-300 text-white cursor-not-allowed' : 'bg-bp-cta-fill hover:bg-bp-cta-hover text-bp-cta-on'
                                         }`}
                                     >
                                         {saving ? 'Saving...' : '💾 Save'}
@@ -2402,7 +2402,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     >
                         🤝 My Deals
                         {pendingDealsCount > 0 && (
-                            <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
+                            <span className="bg-bp-danger-fill text-bp-danger-on text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-sm">
                                 {pendingDealsCount}
                             </span>
                         )}
@@ -2442,8 +2442,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                     {(['all', 'for-you', 'offer', 'need', 'event', 'poll'] as const).map((t) => {
                         const isSelected = typeFilter === t;
                         let activeStyles = 'bg-nature-800 dark:bg-white text-white dark:text-nature-900 border border-nature-900/10 shadow-sm scale-[1.01]';
-                        if (t === 'offer') activeStyles = 'bg-emerald-600 dark:bg-emerald-700 text-white border border-emerald-700/25 shadow-sm scale-[1.01]';
-                        if (t === 'need') activeStyles = 'bg-terra-600 dark:bg-terra-600 text-white border border-terra-700/25 shadow-sm scale-[1.01]';
+                        if (t === 'offer') activeStyles = 'bg-bp-commit-fill text-bp-commit-on border border-emerald-700/25 shadow-sm scale-[1.01]';
+                        if (t === 'need') activeStyles = 'bg-bp-cta-fill text-bp-cta-on border border-terra-700/25 shadow-sm scale-[1.01]';
                         if (t === 'poll') activeStyles = 'bg-purple-600 dark:bg-purple-600 text-white border border-purple-700/25 shadow-sm scale-[1.01]';
                         if (t === 'event') activeStyles = 'bg-violet-700 dark:bg-violet-600 text-white border border-violet-800/25 shadow-sm scale-[1.01]';
                         if (t === 'for-you') activeStyles = 'bg-violet-600 dark:bg-violet-600 text-white border border-violet-700/25 shadow-sm scale-[1.01]';
@@ -2479,7 +2479,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         aria-pressed={beansOnly}
                         className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
                             beansOnly
-                                ? 'bg-emerald-600 dark:bg-emerald-700 text-white border-emerald-700/25 shadow-sm'
+                                ? 'bg-bp-commit-fill text-bp-commit-on border-emerald-700/25 shadow-sm'
                                 : 'bg-transparent text-nature-500 dark:text-nature-400 border-nature-200 dark:border-nature-800 hover:text-nature-800 dark:hover:text-nature-200'
                         }`}
                         title="Hide listings that also need cash for fuel or materials"
@@ -2518,7 +2518,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 onChange={(e) => setGroupFilter(e.target.value)}
                                 className={`px-2.5 py-1 rounded-xl text-[11px] font-black transition-all cursor-pointer border ${
                                     groupFilter !== 'all'
-                                        ? 'bg-emerald-600 dark:bg-emerald-700 text-white border-emerald-700/25 shadow-sm'
+                                        ? 'bg-bp-commit-fill text-bp-commit-on border-emerald-700/25 shadow-sm'
                                         : 'bg-white dark:bg-nature-900 text-nature-600 dark:text-nature-400 border-nature-200 dark:border-nature-600'
                                 }`}
                                 aria-label="Filter feed by group"
@@ -2598,7 +2598,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         onClick={() => setShowRadiusPicker(true)}
                         className={`w-full py-2 rounded-2xl border text-xs font-black transition-all duration-300 flex items-center justify-center gap-1.5 cursor-pointer hover:shadow-sm ${
                             radiusSettings
-                                ? 'bg-amber-600 border-amber-700 text-white shadow-soft dark:bg-amber-700 dark:border-amber-500'
+                                ? 'bg-bp-gold-fill border-bp-gold-fill text-bp-gold-on shadow-soft'
                                 : 'bg-white dark:bg-nature-950 border-nature-200 dark:border-nature-700 text-nature-600 dark:text-nature-300 hover:bg-oat-50 dark:hover:bg-nature-900/60'
                         }`}
                     >
@@ -2929,7 +2929,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                         </span>
                                     </div>
                                 </div>
-                                <span className="text-[10px] font-bold text-orange-700 bg-orange-100 dark:bg-orange-900/40 dark:text-orange-300 px-2 py-0.5 rounded-full">
+                                <span className="text-[10px] font-bold text-bp-chip-need-ink bg-bp-chip-need-tint px-2 py-0.5 rounded-full">
                                     LIVE
                                 </span>
                             </div>
@@ -3263,8 +3263,8 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                             setSubmittingReview(false);
                                         }
                                     }}
-                                    className={`flex-[1.5] py-3 text-white text-sm font-bold rounded-xl shadow-[0_4px_15px_rgb(203,83,38,0.4)] transition-all ${
-                                        submittingReview ? 'bg-terra-400 opacity-75 cursor-not-allowed' : 'bg-gradient-to-r from-terra-500 to-amber-500 hover:-translate-y-0.5'
+                                    className={`flex-[1.5] py-3 text-bp-gold-on text-sm font-bold rounded-xl shadow-[0_4px_15px_rgb(203,83,38,0.4)] transition-all ${
+                                        submittingReview ? 'bg-bp-gold-fill opacity-75 cursor-not-allowed' : 'bg-bp-gold-fill hover:bg-bp-gold-hover hover:-translate-y-0.5'
                                     }`}
                                 >
                                     {submittingReview ? 'Submitting...' : 'Submit Rating'}
@@ -3348,7 +3348,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                         </p>
                         <button
                             onClick={() => { setShowContributionRequired(false); onNavigate?.('map-post'); }}
-                            className="w-full py-3 rounded-xl bg-emerald-600 dark:bg-emerald-700 hover:bg-emerald-700 text-white font-bold transition-colors mb-2"
+                            className="w-full py-3 rounded-xl bg-bp-commit-fill hover:bg-bp-commit-hover text-bp-commit-on font-bold transition-colors mb-2"
                         >
                             ➕ Create an Offer
                         </button>

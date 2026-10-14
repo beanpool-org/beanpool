@@ -12,8 +12,9 @@
  * (pruneStaleRsvps) takes RSVPs for dates a month gone, with their tombstones and the chat's participant mirror, so a
  * regular who stops coming leaves the chat a month after their last date. The host never leaves.
  *
- * A series with no date left (its last date passed, or every date left cancelled) ends as a one-off does: it stays where it
- * is, ended, and the 30-day scrub (engine/posts.ts scrubEndedEvents) takes it. Its `until` is set to its last date so the
+ * A series ends on its final date (the last on or before its `until`), which can't be cancelled (setSeriesDateSkipped), so
+ * cancelled dates never end it early. Once that date has passed it ends as a one-off does: it stays where it is, ended,
+ * and the 30-day scrub (engine/posts.ts scrubEndedEvents) takes it. Its `until` is set to that date (the same dates) so the
  * roll never looks at it again. (The design said status 'completed'; the scrub skips completed rows, so it never would.)
  */
 
@@ -23,6 +24,7 @@ import {
     isEventHost,
     isLocalDate,
     isSeriesDate,
+    lastSeriesDate,
     latestUntil,
     nextOccurrence,
     occurrenceOn,
@@ -34,14 +36,13 @@ import {
     repeatSkipsCell,
     shortestGapMinutes,
     wallMinutesBetween,
-    weekdayOf,
     EVENT_REPEAT_SKIPS_MAX,
     REPEAT_ERRORS,
     type EventRepeatPattern,
     type EventRepeatRule,
     type MarketplacePost,
 } from '@beanpool/engine';
-import type { PushNoticeKind } from '@beanpool/core';
+import { formatDate, type PushNoticeKind } from '@beanpool/core';
 import { db, deletePlainRows, writeTombstone } from '../db/db.js';
 import { getNodeRole } from '../config/node-role.js';
 import { bumpPostsVersion } from './versions.js';
@@ -67,7 +68,7 @@ export const STALE_RSVP_PRUNE_AFTER_MS = 30 * 24 * 60 * 60 * 1000;
 
 export const SERIES_NOT_REPEATING = 'This event does not repeat';
 export const SKIP_HOST_ONLY = 'Only the host can cancel or restore a date';
-export const SKIP_LAST_DATE = 'This is the last date left: cancel the event instead';
+export const SKIP_LAST_DATE = 'This is the last date: change when the event ends, or cancel the event';
 export const SKIPS_TOO_MANY = `At most ${EVENT_REPEAT_SKIPS_MAX} dates can be cancelled`;
 export const DATE_CANCELLED_PUSH_TITLE = 'Date cancelled';
 
@@ -80,11 +81,12 @@ export interface SeriesCells {
 
 const NO_SERIES: SeriesCells = { repeat: null, until: null, skips: null };
 
-/** "YYYY-MM-DD" → "Fri 16 Oct", from the date alone (no zone: the date is already the event's own). */
+/**
+ * "YYYY-MM-DD" → "Fri 16 Oct", from the date alone (no zone: the date is already the event's own), in the words library's
+ * date (@beanpool/core formatDate). English until the server's push words carry the member's language (words S4).
+ */
 export function localDateWords(date: string): string {
-    const DAYS: Record<string, string> = { SU: 'Sun', MO: 'Mon', TU: 'Tue', WE: 'Wed', TH: 'Thu', FR: 'Fri', SA: 'Sat' };
-    const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${DAYS[weekdayOf(date)]} ${+date.slice(8, 10)} ${MONTHS[+date.slice(5, 7) - 1]}`;
+    return formatDate(new Date(`${date}T00:00:00Z`), 'weekday-day-month', { utc: true, lang: 'en' });
 }
 
 function cleanUntil(raw: unknown, firstDate: string): string | null {
@@ -132,15 +134,38 @@ export function seriesOnEdit(
     if (!pattern) return kept ? NO_SERIES : undefined;
     if (!repeatSent && !untilSent && !next.timeChanged) return undefined;
     const firstDate = next.startLocal.slice(0, 10);
-    const time = asked.start ? asked.start.slice(11) : (kept?.time ?? next.startLocal.slice(11));
-    const minutes = asked.start || asked.end
-        ? wallMinutesBetween(asked.start ?? `${firstDate}T${time}`, asked.end ?? next.endLocal)
+    // A clock sent back as the row holds it is no new clock: on a DST gap day the row reads 03:30 where the host set 02:30,
+    // and a form that re-saves it (a title fix) must not move every later date to 03:30. The rule keeps its own then.
+    const askedStart = kept && asked.start === existing.eventStartLocal ? null : asked.start;
+    const askedEnd = kept && asked.end === existing.eventEndLocal ? null : asked.end;
+    const time = askedStart ? askedStart.slice(11) : (kept?.time ?? next.startLocal.slice(11));
+    const minutes = askedStart || askedEnd
+        ? wallMinutesBetween(askedStart ?? `${firstDate}T${time}`, askedEnd ?? next.endLocal)
         : (kept?.minutes ?? wallMinutesBetween(next.startLocal, next.endLocal));
     const rule = ruleOf(pattern, time, minutes, firstDate);
     const until = untilSent ? cleanUntil(rawUntil, firstDate) : cleanUntil(existing.eventRepeatUntil ?? null, firstDate);
     const walk = { rule, anchorDate: firstDate, tz: next.tz, until };
-    const skips = (existing.eventRepeatSkips ?? []).filter(d => d >= firstDate && isSeriesDate(walk, d));
+    // The final date is always held (setSeriesDateSkipped): an `until` moved onto a cancelled date takes it back.
+    const final = lastSeriesDate(walk);
+    const skips = (existing.eventRepeatSkips ?? []).filter(d => d >= firstDate && d !== final && isSeriesDate(walk, d));
     return { repeat: repeatRuleCell(rule), until, skips: repeatSkipsCell(skips) };
+}
+
+/**
+ * RSVPs from before occurrence_at (NULL, as the ALTER left every one) on an event an edit leaves repeating: stamped with
+ * the date they are for, the event's current one, so the roll leaves them on it, as it leaves every dated RSVP, and the
+ * 30-day prune can take them. Without it an undated RSVP counted for every date of the series, for good (the deciding
+ * review of #1945, finding 1). Each is stamped after its last write, so a standby's last-write-wins takes it. Inside the
+ * edit's transaction.
+ */
+export function stampUndatedRsvps(postId: string, startAt: string): void {
+    const nowIso = new Date().toISOString();
+    const rows = db.prepare(`SELECT member_pubkey, updated_at FROM event_rsvps WHERE post_id = ? AND occurrence_at IS NULL`).all(postId) as { member_pubkey: string; updated_at: string | null }[];
+    const restamp = db.prepare(`UPDATE event_rsvps SET occurrence_at = ?, updated_at = ? WHERE post_id = ? AND member_pubkey = ?`);
+    for (const r of rows) {
+        const writeAt = r.updated_at && r.updated_at >= nowIso ? new Date(Date.parse(r.updated_at) + 1).toISOString() : nowIso;
+        restamp.run(startAt, writeAt, postId, r.member_pubkey);
+    }
 }
 
 /**
@@ -266,8 +291,8 @@ export function rollDueSeries(broadcast?: BroadcastFn, nowMs = Date.now()): numb
 /**
  * "Cancel this date" and its undo (§8): `POST /api/events/:id/skip { date }` and `DELETE` the same, the host only. A
  * cancelled current date rolls the series on at once, and Going for it are told "Fri 16 Oct is cancelled. Next: Fri 23
- * Oct". Restoring a date the roll had passed for its cancelling moves the series back to it. The only date left can't
- * be cancelled: that is cancelling the event, which has its own way.
+ * Oct". Restoring a date the roll had passed for its cancelling moves the series back to it. The final date can't be
+ * cancelled (SKIP_LAST_DATE): the host moves the end, or cancels the event, which has its own way.
  */
 export function setSeriesDateSkipped(
     broadcast: BroadcastFn | undefined,
@@ -291,6 +316,9 @@ export function setSeriesDateSkipped(
     const occ = isLocalDate(date) && isSeriesDate(walk, date) ? occurrenceOn(rule, date, tz) : null;
     if (!occ || Date.parse(occ.endAt) <= nowMs) throw new Error(REPEAT_ERRORS.skipDate);
     const day = occ.date;
+    // A series' final date is never cancelled: it ends there, keeping its `until`, so a date cancelled before it can still
+    // be restored up to the end (the deciding review of #1945, finding 7). Moving the end is an edit of `until`.
+    if (skipped && day === lastSeriesDate(walk)) throw new Error(SKIP_LAST_DATE);
 
     const skips = readRepeatSkips(row.event_repeat_skips).filter(d => d >= currentDate || d === day);
     const nextSkips = skipped ? [...new Set([...skips, day])].sort() : skips.filter(d => d !== day);

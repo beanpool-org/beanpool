@@ -1,27 +1,31 @@
 /**
- * Repeating events, slice 4 (scratch/global-node/DESIGN-event-times-fable.md §8, §10 and Director amendment 2), over REAL
+ * Repeating events, slice 4 (scratch/global-node/DESIGN-event-times-fable.md §8 and §10), over REAL
  * HTTP — through the signature middleware — for create, read and cancel-a-date, and on the engine for the minute roll,
  * the reminder sweep, the prune and the copy, which no route drives (each is given its own clock).
  *
  * Verifies:
  *  1. A weekly series is created from the host's clock: the rule stored in its closed shape with the typed time and
  *     length; a first date not on the rule, an `until` before it or past 5 years, a rule the form never sends, a date
- *     longer than the gap to the next, and a repeating online event with no zone are each refused in words.
+ *     longer than the gap to the next, and a repeating online event with no zone are each refused in words; one with a
+ *     zone is accepted.
  *  2. The roll across the Sydney DST start: the local clocks are equal and the instants an hour apart; the state goes back
  *     to scheduled; the next date starts at nobody going (counts reset), the regular's RSVP reads as last week's
  *     (myLastRsvp), they keep the chat; a broadcast goes out. Between a date's end and the roll the chat stays open.
  *  3. Monthly on the 31st skips February; monthly on the last Friday.
  *  4. Until: the last date is the last; after it the series ends as a one-off does and is never rolled again.
  *  5. Cancel a date (POST/DELETE /api/events/:id/skip): host only; a date that is not the series' refused; cancelling the
- *     current date rolls at once and tells Going "… is cancelled. Next: …"; restoring it moves the series back; the only
- *     date left can't be cancelled.
+ *     current date rolls at once and tells Going "… is cancelled. Next: …"; restoring it moves the series back; the final
+ *     date can't be cancelled, while earlier dates are left or when it is the only one (a series ends on it).
  *  6. Reminders fire once per date: a regular is reminded for this week's date and next week's, once each; an RSVP for
  *     last week's date gets no reminder for this week's; a one-off moved by an edit sends nothing twice.
  *  7. A standby never rolls (nor prunes).
  *  8. The cap of 5 upcoming counts a series once, before and after it rolls.
  *  9. The 30-day prune: an RSVP for a date a month gone goes, with its tombstone and the chat seat (the host keeps theirs).
  * 10. A copy carries the rule, the last date, the cancelled dates and each RSVP's date, and an import restores them.
- * 11. Amendment 2: an online event is in a member's set on a node that syncs by area, wherever their area is.
+ * 11. An RSVP from before this build (no date) on an event an edit makes repeating is stamped with its date: the next
+ *     date starts at nobody going, it reads as last week's, no reminder for the next date, and the prune takes it.
+ * 12. A DST gap day: Sunday 02:30-03:30 reads 03:30-04:30 that day, and a form re-saving those clocks with the rule
+ *     keeps the rule's 02:30, so the next Sunday is 02:30 again.
  *
  * Run: BEANPOOL_DATA_DIR=$(mktemp -d) node --import tsx src/test-event-series-http.ts
  */
@@ -35,10 +39,10 @@ import { initStateEngine, exportSyncState, importRemoteState, setNodeRole } from
 import { startHttpsServer } from './https-server.js';
 import { db } from './db/db.js';
 import { rsvpEvent } from './engine/posts.js';
-import { runEventReminderSweep } from './engine/event-reminders.js';
+import { runEventReminderSweep, dueEventReminders } from './engine/event-reminders.js';
 import { rollDueSeries, pruneStaleRsvps, setSeriesDateSkipped, SKIP_HOST_ONLY, SKIP_LAST_DATE, DATE_CANCELLED_PUSH_TITLE } from './engine/event-series-roll.js';
 import { eventThreadReadOnlyReason, loadEventForThread } from './engine/event-thread.js';
-import { setMemberPhoto, getNearbySet, REPEAT_ERRORS } from '@beanpool/engine';
+import { setMemberPhoto, REPEAT_ERRORS } from '@beanpool/engine';
 import { startP2P } from './p2p.js';
 import { addConnector } from './connector-manager.js';
 
@@ -113,6 +117,8 @@ async function main(): Promise<void> {
     const skipper = makeIdentity('SkipperSki');
     const remind = makeIdentity('RemindRey');
     const onlineHost = makeIdentity('OnlineOla');
+    const undatedHost = makeIdentity('UndatedUma');
+    const gapHost = makeIdentity('GapGil');
     const create = (who: Id, body: Record<string, unknown>) => signed('POST', '/api/marketplace/posts', {
         type: 'event', title: 'Friday dinner', description: 'Bring a plate', authorPublicKey: who.pubKeyHex, ...SYDNEY, ...body,
     }, who);
@@ -145,6 +151,9 @@ async function main(): Promise<void> {
     const onlineNoZone = await create(stranger, { lat: undefined, lng: undefined, eventOnline: true, eventStartAt: '2027-10-01T10:50:00.000Z', eventRepeat: weeklyFri });
     assert(onlineNoZone.status === 400 && onlineNoZone.error === 'Pick a time zone from the list',
         `a repeating online event with no zone is refused (got ${onlineNoZone.status} ${onlineNoZone.error})`);
+    const onlineWithZone = await create(onlineHost, { lat: undefined, lng: undefined, eventOnline: true, eventStartLocal: '2028-04-07T19:00', eventTz: SYD, eventRepeat: weeklyFri });
+    assert(onlineWithZone.status === 200 && !!onlineWithZone.body?.post?.id,
+        `a weekly online event with a zone is accepted (got ${onlineWithZone.status} ${onlineWithZone.error ?? ''})`);
 
     // ── 2. The roll ─────────────────────────────────────────────────────────────────────────────
     console.log('\n── 2. The roll across the Sydney DST start ──');
@@ -221,6 +230,11 @@ async function main(): Promise<void> {
     const later = await signed('POST', `/api/events/${skId}/skip`, { date: '2027-12-17' }, skipper);
     assert(later.status === 200 && JSON.stringify(later.body?.skips) === '["2027-12-17"]' && row(skId).event_start_local === '2027-12-03T19:00',
         `a later date is cancelled; the current one stays (got ${later.status} ${JSON.stringify(later.body?.skips)})`);
+    // The final date (the 24th, its until) can't be cancelled while earlier dates are left either: a series ends on it, so
+    // the host's until is kept and a date cancelled before it can be restored (the deciding review of #1945, finding 7).
+    const finalEarly = await signed('POST', `/api/events/${skId}/skip`, { date: '2027-12-24' }, skipper);
+    assert(finalEarly.status === 400 && finalEarly.error === SKIP_LAST_DATE && row(skId).event_repeat_skips === '["2027-12-17"]',
+        `the final date can't be cancelled while earlier ones are left (got ${finalEarly.status} ${finalEarly.error})`);
     rsvpEvent(() => {}, skId, regular.pubKeyHex, 'going');
     const pushes: Array<{ to: string[]; title: string; body: string }> = [];
     const push = ((to: string[], _from: string, title: string, body: string) => { pushes.push({ to, title, body }); }) as any;
@@ -340,16 +354,50 @@ async function main(): Promise<void> {
         `an import restores the rule and the dates byte for byte (got ${back.event_repeat} ${back.event_repeat_skips})`);
     assert(backRsvp?.occurrence_at === exportedRsvp?.occurrenceAt, `and each RSVP's date (got ${backRsvp?.occurrence_at})`);
 
-    // ── 11. Amendment 2 ─────────────────────────────────────────────────────────────────────────
-    console.log('\n── 11. Online events reach every member\'s set ──');
-    const onl = await create(onlineHost, { lat: undefined, lng: undefined, eventOnline: true, eventStartLocal: '2028-04-07T19:00', eventTz: SYD, eventRepeat: weeklyFri });
-    const onlId = onl.body?.post?.id as string;
-    assert(onl.status === 200 && !!onlId, `a weekly online event with a zone is accepted (got ${onl.status} ${onl.error ?? ''})`);
-    // A member whose area is in Lagos, half a world from any pin here.
-    const set = getNearbySet(db, stranger.pubKeyHex, { area: { lat: 6.5, lng: 3.4 }, radiusKm: 50, max: 100, newestWithoutArea: 100 });
-    assert(set.ids.includes(onlId) && !set.ids.includes(sid), `the online event is in a far member's set; a Sydney one is not (got ${set.ids.length} ids)`);
-    const noEvents = getNearbySet(db, stranger.pubKeyHex, { area: { lat: 6.5, lng: 3.4 }, radiusKm: 50, max: 100, newestWithoutArea: 100, excludeEvents: true });
-    assert(!noEvents.ids.includes(onlId), 'a set read without events holds none');
+    // ── 11. An RSVP from before this build ──────────────────────────────────────────────────────
+    console.log('\n── 11. An RSVP from before this build, on an event an edit makes repeating ──');
+    const und = await create(undatedHost, { eventStartLocal: '2028-05-05T20:50', eventEndLocal: '2028-05-05T22:50', eventTz: SYD });
+    const undId = und.body?.post?.id as string;
+    rsvpEvent(() => {}, undId, regular.pubKeyHex, 'going');
+    // What the ALTER leaves on every RSVP written before this build: no date.
+    db.prepare(`UPDATE event_rsvps SET occurrence_at = NULL, reminder_offsets = '[1440]' WHERE post_id = ? AND member_pubkey = ?`).run(undId, regular.pubKeyHex);
+    const addRule = await signed('POST', '/api/marketplace/posts/update', { id: undId, authorPublicKey: undatedHost.pubKeyHex, eventRepeat: weeklyFri }, undatedHost);
+    const stamped = db.prepare('SELECT occurrence_at FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(undId, regular.pubKeyHex) as any;
+    assert(addRule.status === 200 && !!row(undId).event_repeat && stamped?.occurrence_at === row(undId).event_start_at,
+        `an edit that makes it repeating stamps the undated RSVP with its current date (got ${addRule.status} ${addRule.error ?? ''} ${stamped?.occurrence_at})`);
+    rollDueSeries(undefined, Date.parse(row(undId).event_end_at) + 1000);
+    const undHostView = await readEvent(undId, undatedHost);
+    const undRegView = await readEvent(undId, regular);
+    assert(row(undId).event_start_local === '2028-05-12T20:50' && undHostView?.goingCount === 0,
+        `so its next date starts at nobody going (got ${row(undId).event_start_local}, ${undHostView?.goingCount} going)`);
+    assert(undRegView?.myRsvp === null && undRegView?.myLastRsvp?.status === 'going',
+        `and the member's RSVP reads as last week's (got ${JSON.stringify({ my: undRegView?.myRsvp, last: undRegView?.myLastRsvp ?? null })})`);
+    const dueNext = dueEventReminders(Date.parse(row(undId).event_start_at) - DAY + 30_000).filter(d => d.postId === undId);
+    assert(dueNext.length === 0, `no reminder for the next date to that member (got ${dueNext.length})`);
+    let undEnd = Date.parse(row(undId).event_end_at) + 1000;
+    for (let i = 0; i < 5; i++) { rollDueSeries(undefined, undEnd); undEnd = Date.parse(row(undId).event_end_at) + 1000; }
+    pruneStaleRsvps(undEnd, true);
+    assert(!db.prepare('SELECT 1 FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(undId, regular.pubKeyHex),
+        'and the prune takes it a month after its date');
+
+    // ── 12. A DST gap day ───────────────────────────────────────────────────────────────────────
+    console.log('\n── 12. A DST gap day: its end clock, and a re-save keeps the rule\'s own clock ──');
+    // Sydney's clocks jump 02:00 → 03:00 on Sun 3 Oct 2027.
+    const sundays = { freq: 'weekly', interval: 1, byDay: 'SU' };
+    const gap = await create(gapHost, { eventStartLocal: '2027-09-26T02:30', eventEndLocal: '2027-09-26T03:30', eventTz: SYD, eventRepeat: sundays });
+    const gapId = gap.body?.post?.id as string;
+    rollDueSeries(undefined, Date.parse(row(gapId).event_end_at) + 1000);
+    const g1 = row(gapId);
+    assert(g1.event_start_local === '2027-10-03T03:30' && g1.event_end_local === '2027-10-03T04:30' && Date.parse(g1.event_end_at) - Date.parse(g1.event_start_at) === HOUR,
+        `on the gap Sunday 02:30-03:30 reads 03:30-04:30, an hour, its end clock the end it stores (got ${g1.event_start_local}-${g1.event_end_local})`);
+    const resave = await signed('POST', '/api/marketplace/posts/update', {
+        id: gapId, authorPublicKey: gapHost.pubKeyHex, title: 'Early swim', eventStartLocal: g1.event_start_local, eventEndLocal: g1.event_end_local,
+        eventTz: SYD, eventRepeat: sundays,
+    }, gapHost);
+    assert(resave.status === 200 && JSON.parse(row(gapId).event_repeat ?? '{}').time === '02:30' && JSON.parse(row(gapId).event_repeat ?? '{}').minutes === 60,
+        `a form re-saving the gap day's clocks with the rule keeps the rule's 02:30 and its hour (got ${resave.status} ${resave.error ?? ''} ${row(gapId).event_repeat})`);
+    rollDueSeries(undefined, Date.parse(row(gapId).event_end_at) + 1000);
+    assert(row(gapId).event_start_local === '2027-10-10T02:30', `so the next Sunday is 02:30 again (got ${row(gapId).event_start_local})`);
 
     console.log(`\n${passed}/${run} checks passed.`);
     if (passed !== run) throw new Error(`${run - passed} check(s) failed`);

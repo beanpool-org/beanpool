@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
     isSeriesDate,
+    lastSeriesDate,
+    occurrenceOn,
     nextOccurrence,
     parseRepeatPattern,
     patternFallsOn,
@@ -32,6 +34,14 @@ describe('nextOccurrence — DESIGN-event-times §8, §10 slice 4', () => {
         const rule: EventRepeatRule = { freq: 'weekly', interval: 1, byDay: 'SU', time: '02:30', minutes: 60 };
         const dates = upcoming({ rule, anchorDate: '2026-09-27', tz: SYD }, 3, '2026-09-01T00:00:00.000Z');
         expect(dates.map(d => d.startLocal)).toEqual(['2026-09-27T02:30', '2026-10-04T03:30', '2026-10-11T02:30']);
+    });
+
+    it('on the gap day a date that ends where its start was moved keeps its hour, and its end clock is that end (review #1945, 5)', () => {
+        const rule: EventRepeatRule = { freq: 'weekly', interval: 1, byDay: 'SU', time: '02:30', minutes: 60 };
+        expect(occurrenceOn(rule, '2026-10-04', SYD)).toEqual({
+            date: '2026-10-04', startLocal: '2026-10-04T03:30', endLocal: '2026-10-04T04:30',
+            startAt: '2026-10-03T16:30:00.000Z', endAt: '2026-10-03T17:30:00.000Z',
+        });
     });
 
     it('monthly on the 31st skips the months without one (February, April …)', () => {
@@ -106,6 +116,12 @@ describe('the rule is a closed shape', () => {
         expect(readRepeatRule('{"freq":"weekly","interval":1,"byDay":"FR"}')).toBeNull();
         expect(readRepeatRule('not json')).toBeNull();
         expect(readRepeatSkips('["2026-10-30","2026-10-23","2026-02-30","x"]')).toEqual(['2026-10-23', '2026-10-30']);
+    });
+
+    it('a series\' final date: the last on or before until; none without one', () => {
+        expect(lastSeriesDate({ rule: weeklyFri, anchorDate: '2027-12-03', tz: SYD, until: '2027-12-26' })).toBe('2027-12-24');
+        expect(lastSeriesDate({ rule: weeklyFri, anchorDate: '2027-12-03', tz: SYD, until: '2027-12-03' })).toBe('2027-12-03');
+        expect(lastSeriesDate({ rule: weeklyFri, anchorDate: '2027-12-03', tz: SYD, until: null })).toBeNull();
     });
 
     it('which dates belong to a series, either side of the current one', () => {

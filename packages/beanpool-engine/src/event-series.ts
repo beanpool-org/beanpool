@@ -17,7 +17,7 @@
  * 5545's rule). A walk is bounded (MAX_STEPS): a rule and its skips can never spin the tick.
  */
 
-import { zonedToInstant } from './event-time.js';
+import { instantToLocal, zonedToInstant } from './event-time.js';
 
 /** Index = the UTC weekday of a date (Date.getUTCDay): Sunday first. */
 export const EVENT_REPEAT_WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'] as const;
@@ -204,11 +204,13 @@ export function occurrenceOn(rule: EventRepeatRule, date: string, tz: string): E
     const start = zonedToInstant(askedStart, tz);
     const end = zonedToInstant(addWallMinutes(askedStart, rule.minutes), tz);
     if (!start || !end) return null;
-    // A date that starts in a gap and ends just past it can't end before it starts; it keeps its length then.
-    const endAt = Date.parse(end.instant) > Date.parse(start.instant)
-        ? end.instant
-        : new Date(Date.parse(start.instant) + rule.minutes * 60_000).toISOString();
-    return { date, startLocal: start.local, endLocal: end.local, startAt: start.instant, endAt };
+    // A date that starts in a gap and ends just past it can't end before it starts; it keeps its length then, and its end
+    // clock is that end's (Sunday 02:30–03:30 Sydney on the gap day reads 03:30–04:30, not 03:30–03:30).
+    if (Date.parse(end.instant) > Date.parse(start.instant)) {
+        return { date, startLocal: start.local, endLocal: end.local, startAt: start.instant, endAt: end.instant };
+    }
+    const endAt = new Date(Date.parse(start.instant) + rule.minutes * 60_000).toISOString();
+    return { date, startLocal: start.local, endLocal: instantToLocal(endAt, tz), startAt: start.instant, endAt };
 }
 
 /**
@@ -290,6 +292,21 @@ export function isSeriesDate(walk: SeriesWalk, date: string): boolean {
     if (walk.rule.freq === 'weekly') return Math.round((d.getTime() - a.getTime()) / DAY_MS) % (7 * walk.rule.interval) === 0;
     const months = (d.getUTCFullYear() - a.getUTCFullYear()) * 12 + (d.getUTCMonth() - a.getUTCMonth());
     return months % walk.rule.interval === 0;
+}
+
+/**
+ * A series' final date: the last of its dates on or before `until`, from the anchor on; null with no `until` (it goes on
+ * until cancelled). It can't be cancelled (apps/server engine/event-series-roll.ts): a series ends on it, so the host's
+ * `until` is never lost to dates cancelled before it.
+ */
+export function lastSeriesDate(walk: SeriesWalk): string | null {
+    if (!walk.until) return null;
+    let last: string | null = null;
+    for (const date of patternDates(walk.rule, walk.anchorDate)) {
+        if (date > walk.until) break;
+        last = date;
+    }
+    return last;
 }
 
 /** The latest `until` a series whose first date is `firstDate` may have. */

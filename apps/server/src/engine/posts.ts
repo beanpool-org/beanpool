@@ -17,7 +17,7 @@ import { isAcceptablePhotoValue } from './avatar.js';
 import { getImageStore, isKeySafeId, postPhotoKey } from '../storage/image-store.js';
 import { hasBlocked } from './member-blocks.js';
 import { zoneOfPin } from './event-zone.js';
-import { seriesOnCreate, seriesOnEdit, moveOccurrence, RSVP_IS_CURRENT } from './event-series-roll.js';
+import { seriesOnCreate, seriesOnEdit, moveOccurrence, stampUndatedRsvps, RSVP_IS_CURRENT } from './event-series-roll.js';
 import { readMemberArea } from './member-area.js';
 import { getProfileSwitches } from '../config/node-profile.js';
 import { deleteStoredObjects, photoDataOf, storeUploadedPhotoColumns, type PhotoColumns } from '../storage/image-columns.js';
@@ -1028,6 +1028,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     let eventTimeOrPlaceChanged = false;
     // The event's date moved: its RSVPs and reminder marks go with it (engine/event-series-roll.ts moveOccurrence).
     let occurrenceMove: { from: string; to: string } | null = null;
+    // The edit leaves the event repeating: its undated RSVPs (from before occurrence_at) get its date (stampUndatedRsvps).
+    let stampSeriesAt: string | null = null;
     if (existingPost.type === 'event') {
         delete updates.credits;
         delete updates.category;
@@ -1139,6 +1141,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             eventValues.push(seriesCells.repeat, seriesCells.until, seriesCells.skips);
         }
         if (nextStart !== prevStart) occurrenceMove = { from: prevStart, to: nextStart };
+        if (seriesCells ? !!seriesCells.repeat : !!existingPost.eventRepeat) stampSeriesAt = nextStart;
         noteTimeAdjusted(out, startAdjusted, endAdjusted);
         eventFields.push('event_start_at = ?', 'event_end_at = ?'); eventValues.push(nextStart, nextEnd);
         if (timeChanged || placeChanged) {
@@ -1272,6 +1275,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     db.transaction(() => {
         db.prepare(`UPDATE posts SET ${fields.join(', ')} WHERE id = ? AND author_pubkey = ?`).run(...values);
         if (occurrenceMove) moveOccurrence(id, occurrenceMove.from, occurrenceMove.to);
+        if (stampSeriesAt) stampUndatedRsvps(id, stampSeriesAt);
 
         if (nextPhotoColumns) {
             // Tombstones before caches (storage design §7): the row goes inside the transaction and the

@@ -16,7 +16,7 @@
  * screen: a filter the member cannot see never hides a post.
  */
 
-import { foldApostrophes, HOME_SEARCH_MAX_CHARS, searchTermsFor, tierIndexForCredit } from '@beanpool/core';
+import { foldApostrophes, HOME_SEARCH_MAX_CHARS, readSearchSettings, searchFromMarket, searchTermsFor, tierIndexForCredit, type HomeSearchSettings } from '@beanpool/core';
 import { CATEGORY_META, normalizeCategory } from '../constants/categories';
 import { EVENT_WINDOWS, eventInWindow, isEventInFeed, type EventWindow } from './events';
 import type { FilterChip } from './filter-chips';
@@ -48,6 +48,34 @@ export function marketFilterFromLink(value: string | string[] | undefined): Extr
 export function marketSearchFromLink(value: string | string[] | undefined): string | null {
     const v = (Array.isArray(value) ? value[0] : value)?.trim().slice(0, HOME_SEARCH_MAX_CHARS).trim();
     return v ? v : null;
+}
+
+/**
+ * "Save this search to Home" (core home-save-search.ts): the Market's search as a saved search's settings, or null where
+ * there is none to save: no words, or the Events or Polls pill (a saved search is Offers and Needs). Offers or Needs from
+ * the pill (All and For You are both); the category only while its chip is on screen, as it filters; the Distance chip's
+ * radius as the card's smallest distance that holds it.
+ */
+export function marketSearchToSave(state: Pick<MarketFilterState, 'type' | 'category' | 'radiusKm'>, search: string): HomeSearchSettings | null {
+    if (state.type === 'events' || state.type === 'polls') return null;
+    const row = marketSecondRow(state.type);
+    const category = row.kind === 'filters' && row.category && state.category !== 'all' ? state.category : null;
+    return searchFromMarket({ q: search, kind: state.type === 'offers' ? 'offer' : state.type === 'needs' ? 'need' : 'any', category, radiusKm: state.radiusKm });
+}
+
+/** The search Save to Home hands to Home, as Home's route param (`/(tabs)?saveSearch=…`) carries it. */
+export const saveSearchParam = (s: HomeSearchSettings): string => JSON.stringify(s);
+
+/** Home's `saveSearch` param read back, tolerantly: the saved search's settings, or null for none or anything else. */
+export function readSaveSearchParam(value: string | string[] | undefined): HomeSearchSettings | null {
+    const v = Array.isArray(value) ? value[0] : value;
+    if (!v) return null;
+    try {
+        const s = readSearchSettings(JSON.parse(v));
+        return s.q ? s : null;
+    } catch {
+        return null;
+    }
 }
 
 /**

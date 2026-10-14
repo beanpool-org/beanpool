@@ -2266,3 +2266,60 @@ describe('Getting started in the web app: a newcomer\'s Home is the card alone, 
         expect(tourStore.currentTour()).toMatchObject({ publicKey: ME.publicKey, step: 0 });
     });
 });
+
+describe('Save this search to Home from the Market: the saved search\'s dialog opens filled in, or Home says why not (Marty, 7 Oct)', () => {
+    const EGGS = { q: 'eggs', kind: 'offer' as const, category: 'food', km: 5 as const };
+    const withArea = () => answer({ me: { ...answer().me!, area: { lat: -28.55, lng: 153.5 } } });
+    const posts = (log: string[]) => log.filter(l => l === 'POST').length;
+
+    it('opens the dialog with the Market\'s words, Offers, Food and 5 km; Add to Home puts the search first, once taken', async () => {
+        const node = nodeKeeping(withArea(), v2(['market', 'events']));
+        const taken = vi.fn();
+        render(<HomePage identity={ME} onNavigate={vi.fn()} saveSearch={EGGS} onSaveSearchTaken={taken} />);
+        const dialog = await screen.findByTestId('home-settings-dialog');
+        expect(taken).toHaveBeenCalledTimes(1);
+        expect((within(dialog).getByTestId('home-settings-q') as HTMLInputElement).value).toBe('eggs');
+        expect(within(within(dialog).getByTestId('home-settings-kind')).getByRole('button', { pressed: true })).toHaveTextContent('Offers');
+        expect((within(dialog).getByTestId('home-settings-category') as HTMLSelectElement).value).toBe('food');
+        expect(within(within(dialog).getByTestId('home-settings-km')).getByRole('button', { pressed: true })).toHaveTextContent('5 km');
+        expect(within(dialog).getByTestId('home-settings-submit')).toHaveTextContent('Add to Home');
+        expect(posts(node.log)).toBe(0);
+        fireEvent.click(within(dialog).getByTestId('home-settings-submit'));
+        await pause(100);
+        expect(posts(node.log)).toBe(1);
+        expect(node.account().cards[0]).toMatchObject({ type: 'search', settings: EGGS });
+        expect(cardIds()[0]).toMatch(/^search-/);
+        expect(screen.queryByTestId('home-save-search-note')).toBeNull();
+    });
+
+    it('Cancel adds nothing and sends nothing', async () => {
+        const node = nodeKeeping(withArea(), v2(['market', 'events']));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} saveSearch={EGGS} onSaveSearchTaken={vi.fn()} />);
+        const dialog = await screen.findByTestId('home-settings-dialog');
+        fireEvent.keyDown(dialog, { key: 'Escape' });
+        await pause(100);
+        expect(screen.queryByTestId('home-settings-dialog')).toBeNull();
+        expect(posts(node.log)).toBe(0);
+        expect(cardIds().some(id => id.startsWith('search-'))).toBe(false);
+    });
+
+    it('the same search on Home already: no dialog, no second copy, and Home says so', async () => {
+        const node = nodeKeeping(withArea(), v2(['market'], AT, [{ id: 'search-k7mq', type: 'search', settings: { ...EGGS, q: 'Eggs' } }]));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} saveSearch={EGGS} onSaveSearchTaken={vi.fn()} />);
+        expect(await screen.findByTestId('home-save-search-note')).toHaveTextContent('"eggs" is on your Home already.');
+        expect(screen.getByTestId('home-live')).toHaveTextContent('"eggs" is on your Home already.');
+        expect(screen.queryByTestId('home-settings-dialog')).toBeNull();
+        expect(posts(node.log)).toBe(0);
+        fireEvent.click(screen.getByRole('button', { name: 'Close this note' }));
+        expect(screen.queryByTestId('home-save-search-note')).toBeNull();
+    });
+
+    it('five searches there: no dialog and no silent no, Home says how to make room', async () => {
+        const five = ['a', 'b', 'c', 'd', 'e'].map(k => ({ id: `search-${k}aaa`, type: 'search', settings: { q: k, kind: 'any' } }));
+        const node = nodeKeeping(answer(), v2(['market'], AT, five));
+        render(<HomePage identity={ME} onNavigate={vi.fn()} saveSearch={EGGS} onSaveSearchTaken={vi.fn()} />);
+        expect(await screen.findByTestId('home-save-search-note')).toHaveTextContent('Home holds 5 saved searches. Remove one, then save "eggs" again.');
+        expect(screen.queryByTestId('home-settings-dialog')).toBeNull();
+        expect(posts(node.log)).toBe(0);
+    });
+});

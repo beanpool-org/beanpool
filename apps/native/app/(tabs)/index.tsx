@@ -9,7 +9,9 @@ import {
     TIPS_ALL_SEEN, dismissTips, emptyTipsRecord, homeCardType, localDay, nextTip, normalizeCategory, allTipsSeen, restartTips, tipNow, tipOnLanding,
     tipsCaption, tipsFor, type TipsRecord,
     START_CARD_WORDS, endTourLayout, resumeStep, startCardButton, tourChips, tourEnded, tourRecord, tourSteps, type TourProgress,
+    SAVE_SEARCH_NOT_NOW, saveSearchLine, saveSearchState, type HomeAddRefusal,
 } from '@beanpool/core';
+import { readSaveSearchParam } from '../../utils/market-filters';
 import { closeTour, lendTourHome, readProgress, resendTourRecord, saveTourRecord, startTour, useTour } from '../../utils/tour-store';
 import { useTheme } from '../ThemeContext';
 import { useIdentity } from '../IdentityContext';
@@ -103,10 +105,13 @@ function clearPhoneOnly(mark: { current: string | null }, sent: { current: MarkS
 }
 
 /** A sheet opened as another closes: iOS can't present one modal while the last is still going (Android can). */
+/** core's addCard refusal as Save to Home says it; a refusal it can't meet (unknown, fixed) as Home being full. */
+const refusalState = (r: HomeAddRefusal): 'on-home' | 'type-full' | 'home-full' => (r === 'on-home' || r === 'type-full' ? r : 'home-full');
 const afterModal = (fn: () => void) => (Platform.OS === 'ios' ? void setTimeout(fn, 350) : fn());
 
 /** The settings sheet's subject: a card about to be added, or one on Home being changed in place. */
-type SettingsFor = { type: string; mode: 'add' } | { type: string; mode: 'save'; id: string; settings?: Record<string, unknown> };
+/** A card's settings sheet: Add (from the picker, or a search the Market saves, its settings filled in) or Settings…. */
+type SettingsFor = { type: string; mode: 'add'; settings?: Record<string, unknown> } | { type: string; mode: 'save'; id: string; settings?: Record<string, unknown> };
 
 /**
  * A town the member typed in "Find your community" (utils/typed-place.ts), which they chose, so it comes first; else the
@@ -144,7 +149,7 @@ export default function HomeScreen() {
     const manage = useManageNode();
 
     // The map's "My deals" (app/(tabs)/map.tsx, left as it is) links to `/` with the deals: passed on to the Market.
-    const params = useLocalSearchParams<{ tab?: string; dealsTab?: string }>();
+    const params = useLocalSearchParams<{ tab?: string; dealsTab?: string; saveSearch?: string }>();
     useEffect(() => {
         const forward = marketForward(params);
         if (!forward) return;
@@ -176,6 +181,9 @@ export default function HomeScreen() {
     const [pollModal, setPollModal] = useState(false);
     const [eventModal, setEventModal] = useState(false);
     const [hint, setHint] = useState(false);
+    // Why a search the Market saved isn't on Home (the same one there, five there, Home full, Home not answered): said,
+    // and shown until closed, never a silent no.
+    const [saveNote, setSaveNote] = useState<string | null>(null);
     /** The tour ended on this phone (Done or Skip) before the account's answer says so (DESIGN-getting-started-fable.md §2). */
     const [tourOver, setTourOver] = useState(false);
     /** A tour part way on this phone, for "Pick up the tour at step n ›". */
@@ -597,19 +605,34 @@ export default function HomeScreen() {
     }, [keepTips]);
 
     // ── Adding, removing, and a card's settings (CARD-FRAME §1.3) ──
+    // The search the Market sent that this screen has taken (or null), so a param that outlives its read opens nothing twice.
+    const savedFromMarket = useRef<string | null>(null);
+    // Said and shown when a search the Market saved can't go on Home.
+    const noteSaveSearch = useCallback((state: ReturnType<typeof saveSearchState> | 'not-now', settings?: Record<string, unknown>) => {
+        const words = typeof settings?.q === 'string' ? settings.q : '';
+        const line = state === 'not-now' ? SAVE_SEARCH_NOT_NOW : saveSearchLine(state, words);
+        if (!line) return;
+        setSaveNote(line);
+        AccessibilityInfo.announceForAccessibility(line);
+    }, []);
     const addNow = useCallback((type: string, settings?: Record<string, unknown>) => {
         const ans = storedRef.current?.answer;
         const added = addCard(layoutRef.current, type, Date.now(), { settings, pinned: pinnedCards(ans, Date.now()) });
         setAddOpen(false);
         setSettingsFor(null);
-        if (!added.ok) return;
+        if (!added.ok) {
+            // The picker offers no Add it would refuse, but a search saved from the Market can meet a Home that filled
+            // while its sheet was open: said, never a silent no.
+            if (type === 'search') noteSaveSearch(refusalState(added.refused), settings);
+            return;
+        }
         setHint(false);
         if (type === 'tips') onTipsOn();
         // Read once the save is answered (§2.4); sun and moon is worked out here and needs nothing from the node.
         changeLayout(added.layout, { reread: type !== 'sky' });
         scrollRef.current?.scrollTo({ y: 0, animated: true });
         AccessibilityInfo.announceForAccessibility(addedLine(cardLabelName({ type, settings }, ans?.profile)));
-    }, [changeLayout, onTipsOn]);
+    }, [changeLayout, onTipsOn, noteSaveSearch]);
     const onPick = useCallback((row: PickerRow) => {
         if (!row.hasSettings) { addNow(row.type); return; }
         setAddOpen(false);
@@ -621,6 +644,24 @@ export default function HomeScreen() {
         changeLayout(removeCard(layoutRef.current, c.id, Date.now(), pinnedCards(storedRef.current?.answer, Date.now())));
         AccessibilityInfo.announceForAccessibility(removedLine(cardLabelName(c, storedRef.current?.answer.profile)));
     }, [changeLayout, onTipsDontShow]);
+    // "Save this search to Home" on the Market (Marty, 7 Oct): the search comes as the `saveSearch` param. Once Home knows
+    // the member's list, the saved search's sheet opens with it filled in, Add to Home its last button; or Home says why
+    // not (the same search there, five there, Home full). Read once, then the param is cleared.
+    useEffect(() => {
+        const sent = params.saveSearch;
+        if (!sent) { savedFromMarket.current = null; return; }
+        if (status === 'loading' || savedFromMarket.current === sent) return;
+        savedFromMarket.current = sent;
+        router.setParams({ saveSearch: '' });
+        const asked = readSaveSearchParam(sent);
+        if (!asked) return;
+        setSaveNote(null);
+        if (!canTailor(storedRef.current?.answer)) { noteSaveSearch('not-now', asked); return; }
+        const state = saveSearchState(layoutRef.current, asked);
+        if (state !== 'add') { noteSaveSearch(state, asked); return; }
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
+        afterModal(() => setSettingsFor({ type: 'search', mode: 'add', settings: asked }));
+    }, [params.saveSearch, status, noteSaveSearch]);
     const openSettings = useCallback((c: HomeCardInstance) => {
         afterModal(() => setSettingsFor({ type: c.type, mode: 'save', id: c.id, settings: c.settings }));
     }, []);
@@ -983,6 +1024,14 @@ export default function HomeScreen() {
                             Couldn't reach your community; showing what we had.
                         </Text>
                     )}
+                    {saveNote && (
+                        <View style={[st.hint, { marginTop: 0, borderColor: colors.accent.border, backgroundColor: colors.accent.tint }]} testID="home-save-search-note">
+                            <Text style={[st.hintText, { color: colors.text.body }]}>{saveNote}</Text>
+                            <Pressable onPress={() => setSaveNote(null)} style={st.hintClose} accessibilityRole="button" accessibilityLabel="Close this note">
+                                <Text style={{ fontSize: 16, fontWeight: '700', color: colors.accent.primary }}>✕</Text>
+                            </Pressable>
+                        </View>
+                    )}
                     {answer?.me?.standing === 'suspended' && (
                         <Text style={[st.offline, { color: colors.text.body }]} testID="home-suspended-note">
                             Your account here is paused for now. You can still read your own messages, deals and Beans.
@@ -1068,7 +1117,7 @@ export default function HomeScreen() {
                 <CardSettingsSheet
                     visible={!!settingsFor && tailor}
                     type={settingsFor?.type ?? null}
-                    settings={settingsFor?.mode === 'save' ? settingsFor.settings : undefined}
+                    settings={settingsFor?.settings}
                     mode={settingsFor?.mode ?? 'add'}
                     // A distance needs a point the node measures from: the member's area, or the phone's place (global only).
                     hasPoint={!!place || !!answer?.me?.area}

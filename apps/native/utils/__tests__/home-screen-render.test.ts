@@ -2393,6 +2393,88 @@ describe('a saved search shows its listings (CARD-FRAME §4, §5.2 item 20; slic
     });
 });
 
+describe('Save this search to Home from the Market: the saved search\'s sheet opens filled in, or Home says why not (Marty, 7 Oct)', () => {
+    const EGGS = { q: 'eggs', kind: 'offer', category: 'food', km: 5 };
+    const withArea = () => { node.answer = { ...localMember(), me: { ...localMember().me!, area: { lat: -28.55, lng: 153.5 } } }; };
+    const withSearches = (settings: Record<string, unknown>[]) => {
+        const mine = { v: 2, cards: [{ id: 'steps', type: 'steps' }, ...settings.map((st, i) => ({ id: `search-k${i}x7`, type: 'search', settings: st }))],
+            dismissed: {}, updatedAt: iso(Date.now() - 72 * H) };
+        node.answer = { ...node.answer, layout: mine as never };
+        mem.store.set(homeLayoutStoreKey(who.identity.publicKey, NODE), JSON.stringify(mine));
+    };
+    const chosen = (id: string) => Array.from(document.querySelectorAll(`[data-testid="card-settings-${id}"] [aria-selected="true"]`), e => e.textContent);
+    const posts = () => node.requests.filter(r => r.method === 'POST' && new URL(r.url).pathname === '/api/members/preferences');
+
+    it('opens the sheet with the Market\'s words, Offers, Food and 5 km; Add to Home puts the search first and clears the param', async () => {
+        withArea();
+        nav.params = { saveSearch: JSON.stringify(EGGS) };
+        await render();
+        await settle(2);
+        expect(nav.router.setParams).toHaveBeenCalledWith({ saveSearch: '' });
+        expect(document.querySelector('[data-testid="card-settings-sheet"]')).not.toBeNull();
+        expect((document.querySelector('[data-testid="card-settings-words"]') as HTMLInputElement).value).toBe('eggs');
+        expect(chosen('kind')).toEqual(['Offers']);
+        expect(chosen('km')).toEqual(['5 km']);
+        expect(chosen('category')).toHaveLength(1);
+        expect(document.querySelector('[data-testid="card-settings-category-food"]')!.getAttribute('aria-selected')).toBe('true');
+        expect(document.querySelector('[data-testid="card-settings-done"]')!.textContent).toBe('Add to Home');
+        expect(posts()).toHaveLength(0);
+        await act(async () => { (document.querySelector('[data-testid="card-settings-done"]') as HTMLElement).click(); });
+        await settle();
+        expect(JSON.parse(posts()[0].body).preferences['home.layout'].cards[0]).toMatchObject({ type: 'search', settings: EGGS });
+        expect(cards()[0]).toMatch(/^search-/);
+        expect(document.querySelector('[data-testid="home-save-search-note"]')).toBeNull();
+    });
+
+    it('Cancel adds nothing and sends nothing', async () => {
+        nav.params = { saveSearch: JSON.stringify(EGGS) };
+        await render();
+        await settle(2);
+        await act(async () => { (document.querySelector('[data-testid="card-settings-cancel"]') as HTMLElement).click(); });
+        await settle();
+        expect(document.querySelector('[data-testid="card-settings-sheet"]')).toBeNull();
+        expect(posts()).toHaveLength(0);
+        expect(cards().some(id => id.startsWith('search-'))).toBe(false);
+    });
+
+    it('the same search on Home already: no sheet, no second copy, and Home says so', async () => {
+        withArea();
+        withSearches([{ ...EGGS, q: 'Eggs' }]);
+        nav.params = { saveSearch: JSON.stringify(EGGS) };
+        await render();
+        await settle(2);
+        expect(document.querySelector('[data-testid="card-settings-sheet"]')).toBeNull();
+        expect(document.querySelector('[data-testid="home-save-search-note"]')!.textContent).toContain('"eggs" is on your Home already.');
+        expect(posts()).toHaveLength(0);
+        await act(async () => { byLabel('Close this note')!.click(); });
+        expect(document.querySelector('[data-testid="home-save-search-note"]')).toBeNull();
+    });
+
+    it('five searches there: no sheet and no silent no, Home says how to make room', async () => {
+        withSearches(['a', 'b', 'c', 'd', 'e'].map(q => ({ q, kind: 'any' })));
+        nav.params = { saveSearch: JSON.stringify(EGGS) };
+        await render();
+        await settle(2);
+        expect(document.querySelector('[data-testid="card-settings-sheet"]')).toBeNull();
+        expect(document.querySelector('[data-testid="home-save-search-note"]')!.textContent).toContain('Home holds 5 saved searches. Remove one, then save "eggs" again.');
+        expect(posts()).toHaveLength(0);
+    });
+
+    it('a param that is no search (no words, not JSON) opens nothing and says nothing', async () => {
+        for (const bad of ['{', JSON.stringify({ q: '   ' }), 'eggs']) {
+            nav.params = { saveSearch: bad };
+            await render();
+            await settle(2);
+            expect(document.querySelector('[data-testid="card-settings-sheet"]')).toBeNull();
+            expect(document.querySelector('[data-testid="home-save-search-note"]')).toBeNull();
+            await act(async () => { root!.unmount(); });
+            host!.remove();
+            root = null;
+            host = null;
+        }
+    });
+});
+
 describe('the frame on screen: the fewer-cards line, the standby tie, a newer app\'s card, Settings… (CARD-FRAME §1.3, §2.6; review of #1697)', () => {
     const DAY = 24 * H;
     const phoneKey = () => homeLayoutStoreKey(who.identity.publicKey, NODE);

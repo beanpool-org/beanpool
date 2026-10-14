@@ -276,6 +276,11 @@ async function readStoredPins(storage: Pick<PinStorage, 'getItem'>, myPubkey: st
     } catch {
         throw new DmPinStoreError();
     }
+    return storedPinsOf(raw);
+}
+
+/** {@link readStoredPins} on a value already read. */
+function storedPinsOf(raw: string | null): StoredPins {
     if (raw == null) return { pins: null };
     let parsed: unknown;
     try {
@@ -297,6 +302,35 @@ async function readStoredPins(storage: Pick<PinStorage, 'getItem'>, myPubkey: st
         if (pin) setPin(pins, dmPinId(id), pin);
     }
     return { pins };
+}
+
+/**
+ * The stored value's own member names: object keys that are never a conversation's id ({@link salvagePinIds} skips them).
+ * The four the case 14 rule names (`pins`, `offered`, `heard`, `nodeSays`), and the rest of the format's (a pin's, an
+ * offer's, a first sight's, what the listing said, the reset's marker), which would otherwise come back as inert ids.
+ */
+const PIN_FORMAT_NAMES = new Set([
+    'pins', 'offered', 'heard', 'nodeSays',
+    'peer', 'since', 'by', 'former', 'checked', 'at', 'firstSight', 'afterReset', 'rekeyedAt', 'tryKeys',
+    'unplaced', 'listed', 'stale', 'heldLost', 'reset',
+]);
+
+/**
+ * The conversation ids the member's reset salvages from a stored value it can't read as pins (§3.4 amendment 8a, case 14
+ * Q2 (ii)), for the guard list's `keep`: each JSON string literal standing as an object key (after `{` or `,`, before
+ * `:`), parsed so a damaged one costs only itself, lower-cased, at most {@link DM_PIN_ID_MAX} characters, never one of the
+ * format's own member names. A value (a peer's key, a date) is never a key, so never an id. It can only add DM-ness.
+ */
+export function salvagePinIds(raw: string): string[] {
+    const out = new Set<string>();
+    for (const m of raw.matchAll(/[{,]\s*("(?:[^"\\]|\\.)*")\s*:/g)) {
+        let key: unknown;
+        try { key = JSON.parse(m[1]); } catch { continue; }
+        if (typeof key !== 'string' || !key || PIN_FORMAT_NAMES.has(key)) continue;
+        const id = dmPinId(key);
+        if (id.length <= DM_PIN_ID_MAX) out.add(id);
+    }
+    return [...out];
 }
 
 /** The member's reset's marker (§3.4 amendment 7 §2): a value with no `pins` and `reset` a 24-character ISO date. */
@@ -558,17 +592,7 @@ export function createDmPinBook<H>(
     async function reset(myPubkey: string, file: string, before?: (pinIds: string[] | null) => Promise<unknown>): Promise<DmPinsReset> {
         const key = dmPeerPinsStoreKey(myPubkey, file);
         return inTurn(key, async () => {
-            if (before) {
-                let ids: string[] | null;
-                try {
-                    const held = copies.get(key);
-                    const stored = held ? await held : await readStoredPins(storage, myPubkey, file);
-                    ids = stored.pins ? Object.keys(stored.pins) : [];
-                } catch {
-                    ids = null;
-                }
-                await before(ids);
-            }
+            // The value as stored, read once: the guard list's ids come from it, and it is what is set aside.
             let raw: string | null = null;
             let readable = true;
             try {
@@ -576,6 +600,21 @@ export function createDmPinBook<H>(
             } catch (e) {
                 readable = false;
                 console.warn('[DM pins] The chat memory being reset could not be read, so none of it is set aside', e);
+            }
+            if (before) {
+                let ids: string[] | null;
+                try {
+                    const held = copies.get(key);
+                    if (!held && !readable) throw new DmPinStoreError();
+                    const stored = held ? await held : storedPinsOf(raw);
+                    ids = stored.pins ? Object.keys(stored.pins) : [];
+                } catch {
+                    // A value storage returned but that isn't pins: its keys still name the DMs it pinned (case 14 Q2 (ii)).
+                    // One storage can't return keeps nothing (null), the stated residual.
+                    ids = raw != null ? salvagePinIds(raw) : null;
+                    if (ids) console.warn(`[DM pins] The chat memory being reset could not be read as pins; ${ids.length} ids salvaged from it for the DM guard list`);
+                }
+                await before(ids);
             }
             // A marker already there (reset again before a seed) has nothing to keep: the copy set aside before it stays.
             const marked = raw != null && isResetMarker(raw);

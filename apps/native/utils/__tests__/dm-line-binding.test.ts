@@ -4563,6 +4563,57 @@ describe('the DM guard list: one bounded list per community file, never read as 
         expect(await dbPort.isKnownDmConversation(damaged)).toBe(false);
     }, 120_000);
 
+    // GRB (#1938 confirmation 9, finding 2; case 14 Q2 (ii), adopted): the double fault. Ben's DM sent in and pinned, pruned
+    // while everything read (no row, no line), then the list damaged with no id intact AND the pins unreadable at the tap;
+    // the node relists the id as an unlocked group with PUPPET. With the pins' value returned and Ben's key intact in it,
+    // the reset salvages the id for the list's keep, so it stays a DM. With no id left in the value, or a value storage
+    // can't return, nothing names it: the stated residual (the confirmation's words), asserted so a change is deliberate.
+    for (const [form, damage, staysDm] of [
+        ['the pins corrupt but returned, Ben\'s entry intact (the tail cut off)', (honest: string) => honest.slice(0, -3), true],
+        ['the pins corrupt but returned, no id left in them', () => '{"pins": {corrupt', false],
+        ['the pins unreturnable (every read throws)', 'throw', false],
+    ] as const) {
+        it(`GRB (${form}) the double fault: the list and the pins unreadable at the tap; relisted as an unlocked group, ${staysDm ? 'it stays a DM and nothing goes readable' : 'it comes back as a group (the stated residual)'}`, async () => {
+            const { first, pin } = await anaHasSentToBen();
+            expect(first).toEqual(sealedToBen);
+            expect(pin).toMatchObject({ peer: ben.publicKey, checked: true });
+            node.convs = [];
+            await syncMessages(ana.publicKey);   // the prune, everything readable
+            node.lines = node.lines.filter((l) => l.conversationId !== dm.id);
+            expect(typeOf(dm.id)).toBe(null);
+            h.store.set(seenKey(), '{"garbage');
+            const honest = h.store.get(PINS_A())!;
+            const getItem = vi.mocked(AsyncStorage.getItem);
+            const real = getItem.getMockImplementation()!;
+            const unreturnable = 'x'.repeat(16);
+            if (damage === 'throw') {
+                h.store.set(PINS_A(), unreturnable);
+                getItem.mockImplementation(async (k: string) => { if (k === PINS_A() && h.store.get(k) === unreturnable) throw new Error('Row too big to fit into CursorWindow'); return real(k); });
+            } else h.store.set(PINS_A(), damage(honest));
+            restarted();
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            let reset: unknown;
+            try { reset = await dbPort.resetDmChatMemory(ANCHOR); } finally { getItem.mockImplementation(real); warn.mockRestore(); }
+            const keep = JSON.parse(h.store.get(seenKey())!).keep;
+            unlocked.add(dm.id);
+            node.convs = [relistedAsGroup()];
+            await syncMessages(ana.publicKey);
+            await syncMessages(ana.publicKey);
+            const r = { reset, keep, row: typeOf(dm.id), knownDm: await dbPort.isKnownDmConversation(dm.id) };
+            console.log(`GRB (${form}) ${JSON.stringify(r)}`);
+            if (!staysDm) {
+                expect(r).toEqual({ reset: damage === 'throw' ? 'unreadable-removed' : 'set-aside', keep: [], row: 'group_thread', knownDm: false });
+                return;
+            }
+            expect(r).toEqual({ reset: 'set-aside', keep: [dm.id.toLowerCase()], row: 'dm', knownDm: true });
+            const took = readableTaken();
+            const groupScreen = await onScreen(took, () => dbPort.postGroupChatMessage(dm.id, 'The code is 4821 (group screen)', randomUUID()));
+            expect(groupScreen).toEqual(refusedAsDm);
+            expect(took).toEqual([]);
+            expect(node.lines.filter((l) => l.nonce === 'plaintext-v1')).toEqual([]);
+        }, 120_000);
+    }
+
     it('GR5 the marker: its write throws, the reset fails and nothing else changes; reset twice before a seed keeps the first copy set aside and the first keep; the seed\'s write throws once, the marker outlives it and the next read seeds; a transient throw with no tap changes nothing', async () => {
         await anaHasSentToBen();
         const corrupt = '["' + dm.id + '", {';
@@ -4650,7 +4701,7 @@ describe('the DM guard list: one bounded list per community file, never read as 
         expect(CHAT_MEMORY_RESET_WORDS).toEqual({
             rowSub: 'Who your chats are with, and which are private.',
             body: "This phone remembers who each of your chats in a community is with, and which chats there are private, so the community can't quietly swap the person behind a chat or turn a private chat into a group one. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.",
-            confirm: "A chat that was paused because its key changed may open with the new key. A private chat you never sent in may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.",
+            confirm: "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.",
         });
     });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { readDmPeerPins, writeDmPeerPins, applyDmListings, pinAtFirstSight, dmPinFor, dmSightFor, judgeFirstSight, applySightVerdict, settleFirstSight, dmOpenPeers, createDmPinBook, DmPinStoreError, DM_PIN_STORE_UNREAD_TEXT, markHeldLost, noRoomForFirstSight, rekeyDateOf, DmPinsFullError, DM_PINS_MAX_BYTES, FORMER_MAX, type DmPeerPins, type DmPeerPin } from '../dm-peer-pins';
+import { readDmPeerPins, writeDmPeerPins, applyDmListings, pinAtFirstSight, dmPinFor, dmSightFor, judgeFirstSight, applySightVerdict, settleFirstSight, dmOpenPeers, createDmPinBook, DmPinStoreError, DM_PIN_STORE_UNREAD_TEXT, markHeldLost, noRoomForFirstSight, rekeyDateOf, DmPinsFullError, DM_PINS_MAX_BYTES, FORMER_MAX, salvagePinIds, type DmPeerPins, type DmPeerPin } from '../dm-peer-pins';
 import { dmPeerPinsStoreKey, dmPeerPinsSetAsideStoreKey } from '../storage-keys';
 
 // The pin store itself (utils/dm-peer-pins.ts): what a listing may do to a pin, and what an unreadable store does. The
@@ -492,5 +492,83 @@ describe('the caps: a node can\'t make the phone keep unbounded pins (§3.4 amen
         await tb.read(ME, FA);
         expect(handedT).toHaveLength(1);
         expect(handedT[0]).toMatch(/^\d{4}-\d\d-\d\dT/);
+    });
+});
+
+// #1938 case 14, Q2 (ii) (adopted): a stored value the member's reset can't read as pins still names the DMs it pinned. The
+// reset hands the guard list the ids salvaged from it (each JSON string literal standing as an object key, parsed so a
+// damaged one costs only itself, lower-cased, at most 64 characters, never one of the format's own member names), where
+// it handed nothing before; a value storage can't return still hands null (the stated residual).
+describe('salvagePinIds and the reset\'s ids for the guard list (#1938 case 14 Q2 (ii))', () => {
+    const [I1, I2, I3] = ['6F9619FF-8B86-D011-B42D-00C04FC964FF', '7c9e6679-7425-40de-944b-e07fc1f90ae7', '1b9d6bcd-bbfd-4b2d-9b5d-ab8dfbbd4bed'];
+    /** Every shape the format writes: a checked pin with an offer and what the listing said, a member's pin, a first sight's record. */
+    const honest = () => record({
+        [I1]: { peer: BEN, since: NOW, by: 'first-seen', checked: true, former: [OTHER], offered: { peer: PUPPET, at: NOW, nodeSays: { rekeyedAt: NOW }, firstSight: true, afterReset: true }, heard: { tryKeys: [PUPPET], rekeyedAt: NOW } },
+        [I2]: { peer: BEN, since: NOW, by: 'member' },
+        [I3]: { unplaced: true, since: NOW, listed: PUPPET, heard: { tryKeys: [BEN] }, stale: true, heldLost: true },
+    });
+
+    it('a value whose tail is cut: every id, lower-cased, in order; never a format name, never a key or a date from a value', () => {
+        const raw = honest();
+        expect(salvagePinIds(raw)).toEqual([I1.toLowerCase(), I2, I3]);
+        expect(salvagePinIds(raw.slice(0, -5))).toEqual([I1.toLowerCase(), I2, I3]);
+    });
+
+    it('the middle entry\'s id damaged (a raw control character, a bad escape): it alone is lost, the ids around it kept', () => {
+        for (const bad of [`${I2.slice(0, 8)}\u0001${I2.slice(8)}`, `${I2.slice(0, 8)}\\q${I2.slice(8)}`]) {
+            const raw = honest().replace(I2, bad).slice(0, -2);
+            expect(salvagePinIds(raw)).toEqual([I1.toLowerCase(), I3]);
+        }
+    });
+
+    it('junk adds no id: no pins, a value with no key left, keys only the format names, a key over 64 characters, a reset marker', () => {
+        expect(salvagePinIds('{"pins":{}}')).toEqual([]);
+        expect(salvagePinIds('{"pins": {corrupt')).toEqual([]);
+        expect(salvagePinIds('{"garbage')).toEqual([]);
+        expect(salvagePinIds(JSON.stringify({ reset: NOW }))).toEqual([]);
+        expect(salvagePinIds('{"pins":{"x":{"peer":"' + BEN + '","since":"' + NOW + '","by":"member","checked":true,"former":[],"offered":{"peer":null,"at":"","nodeSays":{"rekeyedAt":""},"firstSight":true,"afterReset":true},"heard":{"tryKeys":[],"rekeyedAt":""},"unplaced":true,"listed":null,"stale":true,"heldLost":true')).toEqual(['x']);
+        const long = 'e'.repeat(65);
+        expect(salvagePinIds(`{"pins":{"${'d'.repeat(64)}":{},"${long}":{},"${I2}":{`)).toEqual(['d'.repeat(64), I2]);
+        // A value is never a key: a peer's key, a date, a string with a colon in it.
+        expect(salvagePinIds(`{"pins":{"${I2}":{"peer":"${BEN}","since":"a:b","by":"x:"`)).toEqual([I2]);
+    });
+
+    it('nine adversarial values of 1-2 MiB: each salvaged quickly (measured, logged)', () => {
+        const MiB = 1024 * 1024;
+        const values = [
+            '{"' + 'a'.repeat(2 * MiB),
+            '{' + '"x":'.repeat(MiB / 4),
+            '{' + '",'.repeat(MiB / 2),
+            '{"' + '\\"'.repeat(MiB / 2),
+            '{' + '"a",'.repeat(MiB / 4),
+            ',"'.repeat(MiB / 2) + ':',
+            '{"pins":{' + Array.from({ length: 28_000 }, (_, i) => `"${i.toString(16).padStart(36, '0')}":{"peer":"${BEN}"},`).join(''),
+            '{' + ' '.repeat(2 * MiB) + '"x"',
+            '{"' + '\\u12'.repeat(MiB / 3),
+        ];
+        const took = values.map((v) => { const t = performance.now(); salvagePinIds(v); return Math.round(performance.now() - t); });
+        console.log(`salvagePinIds adversarial ms: ${JSON.stringify(took)}`);
+        for (const ms of took) expect(ms).toBeLessThan(1000);
+    });
+
+    it('the reset hands the guard list: a corrupt value\'s salvage; a readable value\'s pins; a marker nothing; a value storage can\'t return null', async () => {
+        const handedFor = async (s: ReturnType<typeof memory> | Parameters<typeof createDmPinBook>[0]) => {
+            const handed: Array<string[] | null> = [];
+            const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+            try { await createDmPinBook<string>(s, (f) => f).reset(ME, FA, async (ids) => { handed.push(ids); }); } finally { warn.mockRestore(); }
+            return handed;
+        };
+        expect(await handedFor(memory({ [dmPeerPinsStoreKey(ME, FA)]: honest().slice(0, -5) }))).toEqual([[I1.toLowerCase(), I2, I3]]);
+        expect(await handedFor(memory({ [dmPeerPinsStoreKey(ME, FA)]: honest() }))).toEqual([[I1.toLowerCase(), I2, I3]]);
+        expect(await handedFor(memory({ [dmPeerPinsStoreKey(ME, FA)]: JSON.stringify({ reset: NOW }) }))).toEqual([[]]);
+        expect(await handedFor(memory())).toEqual([[]]);
+        const t = memory({ [dmPeerPinsStoreKey(ME, FA)]: honest() });
+        expect(await handedFor({ ...t, getItem: async () => { throw new Error('Row too big to fit into CursorWindow'); } })).toEqual([null]);
+        // The value is read once: what is set aside is the value the ids came from.
+        const s = memory({ [dmPeerPinsStoreKey(ME, FA)]: honest().slice(0, -5) });
+        let reads = 0;
+        await handedFor({ ...s, getItem: async (k: string) => { reads++; return s.getItem(k); } });
+        expect(reads).toBe(1);
+        expect(s.data.get(dmPeerPinsSetAsideStoreKey(ME, FA))).toBe(honest().slice(0, -5));
     });
 });

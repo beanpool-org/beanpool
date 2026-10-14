@@ -50,7 +50,7 @@ export const DM_GUARD_UNREAD_TEXT = "This phone couldn't read which chats here a
 export const CHAT_MEMORY_RESET_WORDS = {
     rowSub: 'Who your chats are with, and which are private.',
     body: "This phone remembers who each of your chats in a community is with, and which chats there are private, so the community can't quietly swap the person behind a chat or turn a private chat into a group one. If this phone can't read that memory, chats in that community can't send. Resetting it re-checks every chat there from the start.",
-    confirm: "A chat that was paused because its key changed may open with the new key. A private chat you never sent in may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.",
+    confirm: "A chat that was paused because its key changed may open with the new key. A private chat that had disappeared from Talk may come back as a group chat the community can read. Check the key code, or who's in a chat, before you send.",
 } as const;
 
 export class DmGuardUnreadError extends Error {

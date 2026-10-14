@@ -3357,8 +3357,9 @@ async function keepPostsNearby(
             await txn.runAsync(`INSERT OR IGNORE INTO nearby_tied (id) VALUES ${batch.map(() => '(?)').join(',')}`, batch);
         }
     }
-    const rows = await txn.getAllAsync<{ id: string; lat: number | null; lng: number | null; at: string | null; kept: number; off: number }>(
+    const rows = await txn.getAllAsync<{ id: string; lat: number | null; lng: number | null; at: string | null; kept: number; off: number; online: number }>(
         `SELECT p.id, p.lat, p.lng, COALESCE(p.updated_at, p.created_at) AS at, (p.active = 0 OR p.status = 'cancelled') AS off,
+                (p.type = 'event' AND COALESCE(p.event_online, 0) = 1) AS online,
                 (p.author_pubkey = ? OR p.accepted_by = ?
                  OR EXISTS (SELECT 1 FROM marketplace_transactions t WHERE t.post_id = p.id)
                  OR EXISTS (SELECT 1 FROM conversations c WHERE c.post_id = p.id)
@@ -3367,7 +3368,7 @@ async function keepPostsNearby(
                  OR EXISTS (SELECT 1 FROM nearby_tied n WHERE n.id = p.id)) AS kept
          FROM posts p`,
         [selfPubkey, selfPubkey, selfPubkey, selfPubkey]);
-    const held: NearbyHeld[] = rows.map(r => ({ id: r.id, lat: r.lat, lng: r.lng, at: r.at, kept: !!r.kept, off: !!r.off }));
+    const held: NearbyHeld[] = rows.map(r => ({ id: r.id, lat: r.lat, lng: r.lng, at: r.at, kept: !!r.kept, off: !!r.off, online: !!r.online }));
     const gone = new Set(set ? nearbyReconcile(held, set, fresh).drop : []);
     if (max !== null) for (const id of nearbyPrune(held.filter(h => !gone.has(h.id)), nearby.area ?? null, max)) gone.add(id);
     const ids = [...gone];

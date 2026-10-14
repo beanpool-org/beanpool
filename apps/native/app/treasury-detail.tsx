@@ -32,7 +32,8 @@ import { groupKindLine, keeperWords } from '@beanpool/core';
 import { loadIdentity } from '../utils/identity';
 import { MemberAvatar } from '../components/MemberAvatar';
 import { EnterpriseDecisions } from '../components/EnterpriseDecisions';
-import { ReportReasonBox, ReportWordsLeftOut } from '../components/ReportReasonBox';
+import { ReportReasonBox } from '../components/ReportReasonBox';
+import { reportedAlertBody } from '../utils/reportReasons';
 import { pledgeClosedLine } from '../utils/enterprise-pledge';
 import { useTheme, useStyles } from './ThemeContext';
 
@@ -77,9 +78,6 @@ export default function TreasuryDetailScreen() {
     const [pledging, setPledging] = useState(false);
     const [cancelling, setCancelling] = useState(false);
     const [showReportForm, setShowReportForm] = useState(false);
-    // The report went with the reason picked but not the member's words (reportAbuse says so): the line under Report,
-    // until the box opens again.
-    const [reportWordsLeftOut, setReportWordsLeftOut] = useState(false);
     const [identity, setIdentity] = useState<any>(null);
 
     // Keeper Join Request State
@@ -1834,7 +1832,7 @@ export default function TreasuryDetailScreen() {
 
                         {/* Report Enterprise Action */}
                         <View style={{ marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.border.default, marginBottom: 20 }}>
-                            <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => { setReportWordsLeftOut(false); setShowReportForm(!showReportForm); }} accessibilityRole="button" accessibilityLabel={`Report ${kw.Kind}`}>
+                            <Pressable style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }} onPress={() => setShowReportForm(!showReportForm)} accessibilityRole="button" accessibilityLabel={`Report ${kw.Kind}`}>
                                 <MaterialCommunityIcons name="shield-alert-outline" size={18} color={colors.feedback.danger.fg} />
                                 <Text style={{ color: colors.feedback.danger.fg, fontSize: 14, fontWeight: '600' }}>Report {kw.Kind}</Text>
                             </Pressable>
@@ -1847,8 +1845,8 @@ export default function TreasuryDetailScreen() {
                                         try {
                                             const sent = await reportAbuse(identity.publicKey, treasuryKey, reason, treasuryKey);
                                             setShowReportForm(false);
-                                            setReportWordsLeftOut(sent?.wordsLeftOut === true);
-                                            Alert.alert('Reported', `This ${kw.kind} has been flagged for review.`);
+                                            // The thanks, and why the member's words were left out when they were (case 14).
+                                            Alert.alert('Reported', reportedAlertBody(sent?.wordsLeftOut, reason));
                                         } catch (e: any) {
                                             Alert.alert('Error', e.message || 'Could not submit report.');
                                             throw e; // the box keeps the choice and the words
@@ -1856,7 +1854,6 @@ export default function TreasuryDetailScreen() {
                                     }}
                                 />
                             )}
-                            {reportWordsLeftOut && <ReportWordsLeftOut />}
                         </View>
                     </ScrollView>
                 </KeyboardAvoidingView>

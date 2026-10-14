@@ -31,7 +31,6 @@ import { blockUser } from '../../utils/blocklist';
 import { palette } from '../../constants/colors';
 import { useTheme, useStyles } from '../ThemeContext';
 import { EventDetail } from '../../components/EventDetail';
-import { ReportWordsLeftOut } from '../../components/ReportReasonBox';
 import { isHiddenAuthor } from '../../utils/posts-view';
 import { shownPostAfterReload } from '../../utils/shown-post';
 import { useNodeProfile } from '../../utils/use-node-profile';
@@ -41,7 +40,7 @@ import { LocalCommunityMark } from '../../components/showcase/LocalCommunityMark
 import { LOCAL_COMMUNITY_LINES, LOCAL_COMMUNITY_EMOJI } from '@beanpool/core';
 import { marketShowsBeans, NO_BEANS_TERMS, NO_BEANS_EDIT_NOTE, noBeansTermsNote } from '../../utils/market-global';
 import { isDmNotLocked, dmNotLockedLine } from '../../utils/dm-lock';
-import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT } from '../../utils/reportReasons';
+import { REPORT_REASONS, CHILD_SAFETY_REASON, CHILD_SAFETY_HINT, reportedAlertBody } from '../../utils/reportReasons';
 
 // Turn a server trade-gate rejection into a friendly title + message. The covenant / contribution
 // / holiday gates carry a stable "PREFIX: <human text>" so we can give them a helpful heading.
@@ -416,9 +415,6 @@ export default function PostDetailModal() {
     const [showReportForm, setShowReportForm] = useState(false);
     const [reportReason, setReportReason] = useState('');
     const [reportDetails, setReportDetails] = useState('');
-    // The report went with the reason picked but not the member's words (reportAbuse says so): the line under Report,
-    // until the box opens again.
-    const [reportWordsLeftOut, setReportWordsLeftOut] = useState(false);
     const [submittingReport, setSubmittingReport] = useState(false);
     const [isBlocking, setIsBlocking] = useState(false);
     const [promptReviewForTx, setPromptReviewForTx] = useState<{ txId: string; targetPubkey: string; targetCallsign: string } | null>(null);
@@ -1700,7 +1696,6 @@ export default function PostDetailModal() {
                                 hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
                                 onPress={() => {
                                     const next = !showReportForm;
-                                    setReportWordsLeftOut(false);
                                     setShowReportForm(next);
                                     if (next) {
                                         setTimeout(() => {
@@ -1811,10 +1806,10 @@ export default function PostDetailModal() {
                                             const finalReason = reportDetails ? `${reportReason}: ${reportDetails}` : reportReason;
                                             const sent = await reportAbuse(identity.publicKey, post.author_pubkey, finalReason, post.id);
                                             setShowReportForm(false);
-                                            setReportWordsLeftOut(sent?.wordsLeftOut === true);
                                             setReportDetails('');
                                             setReportReason('');
-                                            Alert.alert('Reported', "Thanks. Your community's moderators will review it.");
+                                            // The thanks, and why the member's words were left out when they were (case 14).
+                                            Alert.alert('Reported', reportedAlertBody(sent?.wordsLeftOut, finalReason));
                                         } catch (e: any) {
                                             Alert.alert('Error', e.message);
                                         } finally {
@@ -1826,7 +1821,6 @@ export default function PostDetailModal() {
                                 </Pressable>
                             </View>
                         )}
-                        {reportWordsLeftOut && <ReportWordsLeftOut />}
                     </View>
                 )}
             </ScrollView>

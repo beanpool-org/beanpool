@@ -56,33 +56,34 @@ describe('reportAbuse (native)', () => {
         expect(err.status).toBe(400);
     });
 
-    it('a report the node takes answers as before, saying the words were not left out', async () => {
+    it('a report the node takes answers as before', async () => {
         fetchMock.mockResolvedValueOnce(reply(200, { success: true, report: { id: 'r1' } }));
-        expect(await reportAbuse('me-pub', 'them-pub', 'Spam or scam', 'post-1')).toEqual({ success: true, report: { id: 'r1' }, wordsLeftOut: false });
+        expect(await reportAbuse('me-pub', 'them-pub', 'Spam or scam', 'post-1')).toEqual({ success: true, report: { id: 'r1' } });
     });
 
     // #1938 confirmation 9: a report naming a post's, an event's or an enterprise's id goes with the member's words only
     // where refuseReadableIntoDm lets readable words through; this file's phone has no database, so the guard can't tell,
-    // and the reason picked goes alone. A report is never held up. dm-line-binding's GXR measures the known DM's id.
+    // and the reason picked goes alone, saying why ('unread'). A report is never held up. dm-line-binding's GXR measures
+    // the known DM's id ('private').
     const sentReason = () => JSON.parse(fetchMock.mock.calls.at(-1)![1].body).reason;
-    it('words with an id the guard can\'t tell: the reason picked goes alone, and the answer says the words were left out', async () => {
+    it('words with an id the guard can\'t tell: the reason picked goes alone, and the answer says why (unread)', async () => {
         fetchMock.mockResolvedValue(reply(201, { success: true }));
-        expect(await reportAbuse('me-pub', 'them-pub', 'Child safety: he asked my son for photos', 'ev-1')).toEqual({ success: true, wordsLeftOut: true });
+        expect(await reportAbuse('me-pub', 'them-pub', 'Child safety: he asked my son for photos', 'ev-1')).toEqual({ success: true, wordsLeftOut: 'unread' });
         expect(sentReason()).toBe('Child safety');
-        expect(await reportAbuse('me-pub', 'them-pub', 'Spam or scam: the code is 4821', 'ent-1')).toEqual({ success: true, wordsLeftOut: true });
+        expect(await reportAbuse('me-pub', 'them-pub', 'Spam or scam: the code is 4821', 'ent-1')).toEqual({ success: true, wordsLeftOut: 'unread' });
         expect(sentReason()).toBe('Spam or scam');
         // Words with no reason the list knows: "Other", never the words.
-        expect(await reportAbuse('me-pub', 'them-pub', 'the code is 4821', 'post-1')).toEqual({ success: true, wordsLeftOut: true });
+        expect(await reportAbuse('me-pub', 'them-pub', 'the code is 4821', 'post-1')).toEqual({ success: true, wordsLeftOut: 'unread' });
         expect(sentReason()).toBe('Other');
     });
 
     it('a reason with no words (or only spaces) and a member report with no id go as they are, never asking the guard', async () => {
         fetchMock.mockResolvedValue(reply(201, { success: true }));
-        expect(await reportAbuse('me-pub', 'them-pub', 'Child safety', 'ev-1')).toEqual({ success: true, wordsLeftOut: false });
+        expect(await reportAbuse('me-pub', 'them-pub', 'Child safety', 'ev-1')).toEqual({ success: true });
         expect(sentReason()).toBe('Child safety');
-        expect(await reportAbuse('me-pub', 'them-pub', 'Other:   ', 'post-1')).toEqual({ success: true, wordsLeftOut: false });
+        expect(await reportAbuse('me-pub', 'them-pub', 'Other:   ', 'post-1')).toEqual({ success: true });
         expect(sentReason()).toBe('Other:   ');
-        expect(await reportAbuse('me-pub', 'them-pub', 'Offensive content: shouted at the market')).toEqual({ success: true, wordsLeftOut: false });
+        expect(await reportAbuse('me-pub', 'them-pub', 'Offensive content: shouted at the market')).toEqual({ success: true });
         expect(sentReason()).toBe('Offensive content: shouted at the market');
     });
 

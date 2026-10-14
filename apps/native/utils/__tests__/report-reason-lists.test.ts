@@ -10,7 +10,10 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { CHILD_SAFETY_REASON, REPORT_REASONS, REPORT_WORDS_LEFT_OUT, reportReasonWithWords } from '../reportReasons';
+import {
+    CHILD_SAFETY_REASON, REPORT_REASONS, reportReasonWithWords, reportedAlertBody, pickedChildSafety, REPORT_SENT_TEXT,
+    REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT, REPORT_WORDS_LEFT_OUT_UNREAD_TEXT, REPORT_CHILD_SAFETY_ALERTED_TEXT, CHILD_IN_DANGER_TEXT,
+} from '../reportReasons';
 
 const APP = path.join(__dirname, '..', '..');
 const read = (rel: string) => fs.readFileSync(path.join(APP, rel), 'utf8');
@@ -89,38 +92,48 @@ describe('the phone\'s report lists', () => {
         expect(src).toMatch(/Alert\.alert\('Error', e\.message \|\| 'Could not submit report\.'\);\s*throw e;/);
     });
 
-    // #1938 confirmation 9: a report naming a known DM's id (or one the guard can't tell) goes with the reason picked alone,
-    // and reportAbuse says so (`wordsLeftOut`). Each screen keeps that answer and, once its box has closed, shows the one
-    // shared line (REPORT_WORDS_LEFT_OUT, ReportWordsLeftOut) until the box opens again. The event screen's side is
-    // drawn in event-report-render.test.ts; these two screens can't be drawn here, so their wiring is read.
-    for (const [rel, imports, flag, open] of [
-        ['app/treasury-detail.tsx', "'../components/ReportReasonBox'", 'reportWordsLeftOut', 'showReportForm'],
-        ['app/post/[id].tsx', "'../../components/ReportReasonBox'", 'reportWordsLeftOut', 'showReportForm'],
+    // #1938 case 14 (adopted): every accepted report says the same thanks in the "Reported" dialog, and when the member's
+    // words were left out (reportAbuse's `wordsLeftOut`), why, with the Child safety pair when that was picked. One helper
+    // builds the body for all three screens. The event screen's dialog is drawn in event-report-render.test.ts; these
+    // two screens can't be drawn here, so their call is read: the body from what reportAbuse answered and the reason sent.
+    for (const [rel, reasonSent] of [
+        ['components/EventDetail.tsx', 'reason'],
+        ['app/treasury-detail.tsx', 'reason'],
+        ['app/post/[id].tsx', 'finalReason'],
     ] as const) {
-        it(`${rel} shows the words-left-out line only after a report that left them out, until the box opens again`, () => {
+        it(`${rel} says the shared thanks, and why the words were left out, in its one "Reported" dialog`, () => {
             const src = read(rel);
-            expect(src).toMatch(new RegExp(`import \\{[^}]*\\bReportWordsLeftOut\\b[^}]*\\} from ${imports.replace(/[./[\]]/g, '\\$&')};`));
-            const setter = `set${flag[0].toUpperCase()}${flag.slice(1)}`;
-            // Set from what reportAbuse answered, right after the send; cleared when the member opens the box again.
-            expect(src).toMatch(new RegExp(`const sent = await reportAbuse\\([^)]*\\);[\\s\\S]{0,120}${setter}\\(sent\\?\\.wordsLeftOut === true\\);`));
-            expect(src.match(new RegExp(`${setter}\\(sent\\?\\.wordsLeftOut === true\\)`, 'g'))).toHaveLength(1);
-            expect(src).toMatch(new RegExp(`${setter}\\(false\\);\\s*set${open[0].toUpperCase()}${open.slice(1)}\\(`));
-            expect(src).toContain(`{${flag} && <ReportWordsLeftOut />}`);
+            expect(src).toMatch(/import \{[^}]*\breportedAlertBody\b[^}]*\} from '(\.\.\/)+utils\/reportReasons';/);
+            expect(src).toMatch(new RegExp(`const sent = await reportAbuse\\([^)]*\\b${reasonSent}\\b[^)]*\\);[\\s\\S]{0,480}Alert\\.alert\\('Reported', reportedAlertBody\\(sent\\?\\.wordsLeftOut, ${reasonSent}\\)\\);`));
+            expect(src.match(/Alert\.alert\('Reported'/g)).toHaveLength(1);
+            for (const old of ["moderators will review it", 'has been flagged for review', "Thanks. This community's moderators will take a look."]) expect(src).not.toContain(old);
         });
     }
 
-    it('the line is the one shared sentence, said by one component', () => {
-        const box = read('components/ReportReasonBox.tsx');
-        expect(box).toMatch(/export function ReportWordsLeftOut\(\)/);
-        expect(box).toContain('{REPORT_WORDS_LEFT_OUT}');
-        // Its longest stretch with no quote in it, as a source spells it (an apostrophe is escaped there).
-        const piece = REPORT_WORDS_LEFT_OUT.split(/['"`\\]/).reduce((a, b) => (b.length > a.length ? b : a), '');
-        expect(piece.length).toBeGreaterThan(20);
-        const own = ['app', 'components', 'utils']
-            .flatMap((d) => sourceFiles(path.join(APP, d)))
-            .filter((f) => fs.readFileSync(f, 'utf8').includes(piece))
-            .map((f) => path.relative(APP, f));
-        expect(own).toEqual([path.join('utils', 'reportReasons.ts')]);
+    it('the dialog\'s words, one whole sentence each, joined with one space: the thanks; why the words were left out; Child safety still alerts', () => {
+        expect(REPORT_SENT_TEXT).toBe("Thanks. This community's moderators will take a look.");
+        expect(REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT).toBe('Your words were not sent, because this phone knows this as a private chat.');
+        expect(REPORT_WORDS_LEFT_OUT_UNREAD_TEXT).toBe("Your words were not sent, because this phone couldn't read which chats here are private.");
+        expect(REPORT_CHILD_SAFETY_ALERTED_TEXT).toBe("Because you chose Child safety, the people who run this community's server are alerted even without your words.");
+        expect(CHILD_IN_DANGER_TEXT).toBe('If a child is in danger right now, call your local emergency number first.');
+        const both = `${REPORT_CHILD_SAFETY_ALERTED_TEXT} ${CHILD_IN_DANGER_TEXT}`;
+        // private / unread / words went, x Child safety or not, x words typed or not (none typed: nothing is left out).
+        expect(reportedAlertBody(undefined, 'Child safety')).toBe(REPORT_SENT_TEXT);
+        expect(reportedAlertBody(undefined, 'Child safety: he asked my son for photos')).toBe(REPORT_SENT_TEXT);
+        expect(reportedAlertBody(undefined, 'Other: loud music')).toBe(REPORT_SENT_TEXT);
+        expect(reportedAlertBody('private', 'Other: loud music')).toBe(`${REPORT_SENT_TEXT} ${REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT}`);
+        expect(reportedAlertBody('unread', 'Spam or scam: the code is 4821')).toBe(`${REPORT_SENT_TEXT} ${REPORT_WORDS_LEFT_OUT_UNREAD_TEXT}`);
+        expect(reportedAlertBody('private', 'Child safety: he asked my son for photos')).toBe(`${REPORT_SENT_TEXT} ${REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT} ${both}`);
+        expect(reportedAlertBody('unread', 'Child safety: he asked my son for photos')).toBe(`${REPORT_SENT_TEXT} ${REPORT_WORDS_LEFT_OUT_UNREAD_TEXT} ${both}`);
+        // As the server reads it, by the prefix: a reason that only mentions it is not Child safety.
+        expect(pickedChildSafety('Child safety')).toBe(true);
+        expect(pickedChildSafety('Child safety: x')).toBe(true);
+        expect(pickedChildSafety('Other: Child safety')).toBe(false);
+        expect(reportedAlertBody('unread', 'Other: Child safety')).toBe(`${REPORT_SENT_TEXT} ${REPORT_WORDS_LEFT_OUT_UNREAD_TEXT}`);
+        for (const said of [REPORT_SENT_TEXT, REPORT_WORDS_LEFT_OUT_PRIVATE_TEXT, REPORT_WORDS_LEFT_OUT_UNREAD_TEXT, REPORT_CHILD_SAFETY_ALERTED_TEXT, CHILD_IN_DANGER_TEXT]) {
+            expect(said).toMatch(/^[A-Z].*\.$/);
+            expect(said).not.toMatch(/fail|try again|report again/i);
+        }
     });
 
     it('what a report sends: the picked reason first, then any words', () => {

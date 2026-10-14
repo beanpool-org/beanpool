@@ -8,7 +8,7 @@
  * they checked the code with the person (pick 1). What the node says about a re-key is only a line of words here, never
  * a reason to continue (pick 4).
  */
-import { t, word } from '@beanpool/core';
+import { t, word, formatDate } from '@beanpool/core';
 import { type AppColors } from '../constants/colors';
 
 /** The name as the banner says it: the node's callsign, or "this person" while it is unknown. */
@@ -17,14 +17,13 @@ function nameOf(peerName?: string | null): string {
     return n && n !== 'Loading...' ? n : 'this person';
 }
 
-/** "3 Oct 2026" for an ISO date, or null for anything that isn't one. */
+/** "3 Oct 2026" (in en) for an ISO date, or null for anything that isn't one. */
 export function rekeyedOnText(iso?: string | null): string | null {
     if (!iso) return null;
-    const t = Date.parse(iso);
-    if (!Number.isFinite(t)) return null;
-    const d = new Date(t);
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${d.getUTCDate()} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+    const ms = Date.parse(iso);
+    if (!Number.isFinite(ms)) return null;
+    // The words layer's one table of month names (core words.ts), read in UTC as the node fixed it: "3 Oct 2026" in en.
+    return formatDate(new Date(ms), 'day-month-year', { utc: true });
 }
 
 export interface DmKeyChangeCopyInput {

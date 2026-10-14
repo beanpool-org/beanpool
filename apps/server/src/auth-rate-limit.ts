@@ -2,17 +2,35 @@ import type Koa from 'koa';
 import { clientLimiterKey } from './client-ip.js';
 
 /**
- * Rate limiter for auth endpoints (15 attempts per minute per IP): verify-password, recovery lookup, pairing,
- * callsign checks (but not the open door's: `doorRateLimit` below). Chat lines do NOT come through here — they have their own per-member bucket
+ * Rate limiter for auth endpoints (15 attempts per minute per IP), one bucket per route (the privacy review's S8,
+ * 2026-10-14): until then one bucket per address served pairing, the recovery lookup, the callsign check and the
+ * password check together, so a hall's first few people on one Wi-Fi (or a carrier's NAT) spent it and "Already have
+ * BeanPool?" and the name check answered 429 to everyone behind the address. Each bucket is its own 15 a minute now.
+ *
+ * `admin`, the default, is every route that takes the admin password, a 2FA code, a claim proof or an admin session
+ * (verify-password, change-password, the 2FA routes, owner unlock, the admin pairing, reset, the connectors...): they
+ * still share one bucket, so a guesser gets exactly the 15 a minute per address it got before, across all of them. A
+ * route that guards nothing a guess can win has its own. The open door's own name check is not here at all
+ * (`doorRateLimit` below). Chat lines do NOT come through here — they have their own per-member bucket
  * (chat-rate-limit.ts), so members chatting behind one NAT cannot lock each other out of recovery.
  *
  * Keyed on the real client (client-ip.ts), never Koa's ctx.ip: with app.proxy on that is the leftmost
  * X-Forwarded-For, which any client can set to a fresh value per attempt. An IPv6 client is counted by its
  * /64 (limiterKeyForIp), or it could rotate through its own prefix the same way.
  */
+export const AUTH_RATE_LIMIT = { perAddress: 15, windowMs: 60_000 } as const;
+export type AuthLimitBucket =
+    | 'admin'
+    | 'pairing'           // QR pairing: /api/pair/init and /api/pair/transfer, one pairing's two calls
+    | 'recovery-lookup'   // /api/recovery/lookup/:callsign
+    | 'callsign-check'    // /api/members/callsign-available/:callsign, unless a key joining at the open door signs it
+    | 'funnel-event'      // the wizard's three counted steps, every newcomer's
+    | 'knock'             // /api/join/knock (and its own daily caps, engine/knocks.ts)
+    | 'pricing-guide'     // the pricing guide's read and its anonymous report
+    | 'sign-in-recovery'; // a restore by sign-in: /api/recovery/collect*, /api/recovery/sso-nonce, /api/recovery/shares/sso
 const authAttempts = new Map<string, { count: number; resetAt: number }>();
-export function authRateLimit(ctx: Koa.Context): boolean {
-    const ip = clientLimiterKey(ctx);
+export function authRateLimit(ctx: Koa.Context, bucket: AuthLimitBucket = 'admin'): boolean {
+    const ip = `${bucket} ${clientLimiterKey(ctx)}`;
     const now = Date.now();
     if (authAttempts.size > 200) {
         for (const [k, v] of authAttempts) {
@@ -21,7 +39,7 @@ export function authRateLimit(ctx: Koa.Context): boolean {
     }
     const entry = authAttempts.get(ip);
     if (entry && now < entry.resetAt) {
-        if (entry.count >= 15) {
+        if (entry.count >= AUTH_RATE_LIMIT.perAddress) {
             const waitSec = Math.ceil((entry.resetAt - now) / 1000);
             ctx.status = 429;
             ctx.body = { error: `Too many attempts. Try again in ${waitSec}s` };
@@ -29,7 +47,7 @@ export function authRateLimit(ctx: Koa.Context): boolean {
         }
         entry.count++;
     } else {
-        authAttempts.set(ip, { count: 1, resetAt: now + 60_000 });
+        authAttempts.set(ip, { count: 1, resetAt: now + AUTH_RATE_LIMIT.windowMs });
     }
     return true;
 }

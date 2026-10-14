@@ -35,7 +35,7 @@ import {
 import type { BeanPoolIdentity } from '../lib/identity';
 import { getHome, getNodeApiUrl, markNoticesSeen, saveHomePreferences } from '../lib/api';
 import {
-    NOTICES_SEEN_EVENT, beansLines, cardTitle, closesWords, communityFacts, communityLine, communityName, dayLabel, dealsLine,
+    NOTICES_SEEN_EVENT, beansLines, cardTitle, closesWords, communityFacts, communityLine, communityName, homeEventWhen, dealsLine,
     decideLine, distanceText, findBody, frameOf, isHomeCardId, joinedLine, nearbyLine, probationSentence, shownFrame, shownLayout, starredFirst,
     SKY_NO_PLACE_LINE, searchCardFor, skyOf, stepLines, toggleInterest,
     type HomeAnswer, type HomeCardId, type HomeMarketItem, type NeedsItem, type StepLine,
@@ -1240,13 +1240,15 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                 return (
                     <HomeCard key={id} {...common} title={ev.radiusKm ? `${title} · within ${ev.radiusKm} km` : title}>
                         {ev.items.map(item => {
-                            const where = item.place ?? (isVisitor ? PLACE_AFTER_JOIN : null);
+                            // An online event has no place and no distance (DESIGN-event-times §4).
+                            const where = item.online ? 'Online' : item.place ?? (isVisitor ? PLACE_AFTER_JOIN : null);
                             const rsvp = item.rsvp === 'going' ? 'Going' : item.rsvp === 'interested' ? 'Interested' : null;
-                            const km = distanceText(item.distanceKm);
-                            const text = [dayLabel(item.startsAt), item.title].filter(Boolean).join('  ');
+                            const km = item.online ? null : distanceText(item.distanceKm);
+                            const when = homeEventWhen(item);
+                            const text = [when, item.title].filter(Boolean).join('  ');
                             return (
                                 <HomeLine key={item.id} onClick={() => onNavigate('marketplace', item.id)} testId="home-event"
-                                    label={[dayLabel(item.startsAt), item.title, where, km, rsvp].filter(Boolean).join(', ')}>
+                                    label={[when, item.title, where, km, rsvp].filter(Boolean).join(', ')}>
                                     <span className="min-w-0 flex-1">
                                         <span className="block break-words font-semibold">{text}</span>
                                         {(where || km) && <span className="block text-xs text-nature-600 dark:text-nature-300 break-words">{[where, km].filter(Boolean).join(' · ')}</span>}

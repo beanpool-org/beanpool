@@ -132,3 +132,15 @@ describe('the calendar entry (§4, director amendment 1.5)', () => {
         expect(new URL(googleCalendarUrl({ id: 'x', title: 't', startAt: LAGOS.eventStartAt! }, link)).searchParams.has('ctz')).toBe(false);
     });
 });
+
+describe('Home\'s "Coming up" line (§4)', () => {
+    it('the place clock; its zone named only when it is not the reader\'s; online in the reader\'s time', async () => {
+        const { homeEventWhen } = await import('./home-cards');
+        expect(homeEventWhen({ startsAt: LAGOS.eventStartAt!, startLocal: LAGOS.eventStartLocal, tz: LAGOS.eventTz })).toBe('SAT 17 OCT · 20:50 · Lagos time');
+        expect(homeEventWhen({ startsAt: '2026-10-17T00:50:00.000Z', startLocal: '2026-10-16T20:50', tz: 'America/New_York' })).toBe('FRI 16 OCT · 20:50');
+        expect(homeEventWhen({ startsAt: ONLINE_SYDNEY.eventStartAt!, startLocal: ONLINE_SYDNEY.eventStartLocal, tz: ONLINE_SYDNEY.eventTz, online: true }))
+            .toBe('FRI 16 OCT · 5:50 your time');
+        // A node before clocks: the reader's own.
+        expect(homeEventWhen({ startsAt: LAGOS.eventStartAt! })).toBe('SAT 17 OCT · 15:50');
+    });
+});

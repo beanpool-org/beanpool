@@ -24,6 +24,7 @@
  * read from storage once, and every change goes through one queue that writes it through.
  */
 
+import { t, word } from '@beanpool/core';
 import { dmPeerPinsStoreKey, dmPeerPinsSetAsideStoreKey } from './storage-keys';
 
 export interface PinStorage {
@@ -156,14 +157,14 @@ export const FORMER_MAX = 4;
  * The phone couldn't read who one community's chats are with: nothing is sealed (fail closed), and the member is told so,
  * and where the way out is (§3.4 amendment 6 §3: the member's reset, never the phone's on its own).
  */
-export const DM_PIN_STORE_UNREAD_TEXT = "This phone couldn't read who this community's chats are with, so nothing was sent. Try again; if it keeps failing, Settings → Account → Chat memory can reset this community's, which re-checks every chat here from the start.";
+export const DM_PIN_STORE_UNREAD_TEXT = word("This phone couldn't read who this community's chats are with, so nothing was sent. Try again; if it keeps failing, Settings → Account → Chat memory can reset this community's, which re-checks every chat here from the start.");
 
 /** What a DM line shows in its place while the pins can't be read: it may be anyone's, so none is shown (never "update your app"). */
-export const DM_PINS_UNREAD_LINE = "Can't be shown until this phone can read who this chat is with.";
+export const DM_PINS_UNREAD_LINE = word("Can't be shown until this phone can read who this chat is with.");
 
 export class DmPinStoreError extends Error {
     constructor() {
-        super(DM_PIN_STORE_UNREAD_TEXT);
+        super(t(DM_PINS_WORDS.storeUnread));
         this.name = 'DmPinStoreError';
     }
 }
@@ -173,7 +174,10 @@ export function isDmPinStoreError(e: unknown): e is DmPinStoreError {
 }
 
 /** The one line under the box when a DM with nothing kept can't be pinned because its community's pins value is full. */
-export const DM_PINS_FULL_TEXT = "This community lists more chats than this phone can keep track of, so a chat you haven't sent in yet can't send. Your other chats here still can.";
+export const DM_PINS_FULL_TEXT = word("This community lists more chats than this phone can keep track of, so a chat you haven't sent in yet can't send. Your other chats here still can.");
+
+/** The three sentences above as one table, so each is put through t() where it is shown (words:check reads `t(X.key)`). */
+export const DM_PINS_WORDS = { storeUnread: DM_PIN_STORE_UNREAD_TEXT, unreadLine: DM_PINS_UNREAD_LINE, full: DM_PINS_FULL_TEXT } as const;
 
 /**
  * A file's pins value is at its cap ({@link DM_PINS_MAX_BYTES}, §3.4 amendment 6 §2): a write still over it is refused as
@@ -181,7 +185,7 @@ export const DM_PINS_FULL_TEXT = "This community lists more chats than this phon
  */
 export class DmPinsFullError extends Error {
     constructor() {
-        super(DM_PINS_FULL_TEXT);
+        super(t(DM_PINS_WORDS.full));
         this.name = 'DmPinsFullError';
     }
 }

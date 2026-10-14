@@ -15,13 +15,13 @@ export function MyKeyCodeCard({ publicKey }: { publicKey?: string | null }) {
     const code = keyCodeOf(publicKey);
     return (
         <View style={styles.myCodeCard}>
-            <Text style={styles.myCodeTitle} accessibilityRole="header">{MY_KEY_CODE_COPY.title}</Text>
+            <Text style={styles.myCodeTitle} accessibilityRole="header">{t(MY_KEY_CODE_COPY.title)}</Text>
             {code ? (
                 <View style={styles.codeBox}>
                     <Text style={styles.myCode} accessibilityLabel={t('My key code: {code}', { code: keyCodeSpoken(code) })} selectable>{code}</Text>
                 </View>
             ) : null}
-            <Text style={styles.myCodeBody}>{code ? MY_KEY_CODE_COPY.body : MY_KEY_CODE_COPY.unknown}</Text>
+            <Text style={styles.myCodeBody}>{code ? t(MY_KEY_CODE_COPY.body) : t(MY_KEY_CODE_COPY.unknown)}</Text>
         </View>
     );
 }

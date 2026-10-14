@@ -14,7 +14,7 @@ import { DmNotLockedError, DmKeyChangedError, isNodeReadableChatType } from './d
 import {
     createDmPinBook, dmPinFor, dmSightFor, dmPinId, pinKeyOf, pinAtFirstSight, applyDmListings, applySightVerdict, applyResetVerdict, judgeFirstSight,
     settleFirstSight, isUnplacedSight, isHeldLostSight, markHeldLost, isDmPinStoreError, isDmPinsFullError, DmPinsFullError, isPinnableId,
-    noRoomForFirstSight, rekeyDateOf, DM_PINS_UNREAD_LINE, acceptOffer, type DmPeerPins, type DmPinEntry, type DmHeard, type SightVerdict,
+    noRoomForFirstSight, rekeyDateOf, DM_PINS_WORDS, acceptOffer, type DmPeerPins, type DmPinEntry, type DmHeard, type SightVerdict,
     type DmPinsReset, type DmPeerOffer,
 } from './dm-peer-pins';
 import { dmLinesAtUpdateStoreKey } from './storage-keys';
@@ -30,7 +30,7 @@ import { emitAppEvent } from './app-events';
 import { postsViewRefusal, viewOf } from './posts-view';
 import { postsTheNodeNoLongerHas, type HeldListing } from './posts-replace';
 import { nearbyPrune, nearbyReconcile, type NearbyHeld } from './posts-nearby';
-import { reportKind } from '@beanpool/core';
+import { reportKind, t } from '@beanpool/core';
 import { parseArchetype, TIER_LEVELS, isServableAvatarValue, onboardingEventKey, oncePerPersonVariant, pushedPostIsStale, verifyKeySuccession, type FormerKey, type LivePostChange, type ScopedDecisionList, type ScopedEffect, type GroupEffect } from '@beanpool/core';
 // expo-file-system 55.x defaults to the new File/Paths API; the classic cacheDirectory +
 // writeAsStringAsync helpers we use live under the /legacy entrypoint.
@@ -5645,7 +5645,7 @@ export async function getMessages(conversationId: string, opts?: { limit?: numbe
     // The pins unreadable: no line can be shown as anyone's, and each says why (§3.4 amendment 6 §3), not "update your app".
     let pinsUnread = false;
     try { dmCtx = await getDmKeyContext(conversationId, 'open'); } catch (e) { dmCtx = null; pinsUnread = isDmPinStoreError(e); }
-    const encryptedUnshown = pinsUnread ? DM_PINS_UNREAD_LINE : '[Encrypted — update your app to read]';
+    const encryptedUnshown = pinsUnread ? t(DM_PINS_WORDS.unreadLine) : '[Encrypted — update your app to read]';
     // A direct message: every conversation the node doesn't read by design (utils/dm-lock.ts). Its rows are judged by
     // the thread check below, whether or not this phone has the other person's key yet. Fails closed: a conversation
     // this phone has no row for yet (a chat opened from a push or a link, before the first full sync has written it) is

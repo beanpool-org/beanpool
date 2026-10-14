@@ -8,6 +8,7 @@
  * they checked the code with the person (pick 1). What the node says about a re-key is only a line of words here, never
  * a reason to continue (pick 4).
  */
+import { t, word } from '@beanpool/core';
 import { type AppColors } from '../constants/colors';
 
 /** The name as the banner says it: the node's callsign, or "this person" while it is unknown. */
@@ -57,42 +58,49 @@ export interface DmKeyChangeCopy {
 }
 
 /** The first-sight banner's opening sentence (design §3.4 amendment), true after a restore and after an update alike. */
-export const DM_FIRST_SIGHT_LEAD = 'This phone is checking this chat from the start, as it does after you restore it or update the app.';
+export const DM_FIRST_SIGHT_LEAD = word('This phone is checking this chat from the start, as it does after you restore it or update the app.');
 
 /** The opening sentence when the member's reset of this community's chat memory made the pause (§3.4 amendment 7 §1). */
-export const DM_RESET_LEAD = "This community's chat memory was reset, so this phone is checking this chat from the start.";
+export const DM_RESET_LEAD = word("This community's chat memory was reset, so this phone is checking this chat from the start.");
+
+const LEADS = { firstSight: DM_FIRST_SIGHT_LEAD, reset: DM_RESET_LEAD } as const;
 
 /** The banner's words. */
 export function dmKeyChangeCopy({ peerName, code, firstSight, afterReset, rekeyedAt }: DmKeyChangeCopyInput): DmKeyChangeCopy {
     const name = nameOf(peerName);
-    const title = `The key behind "${name}" changed.`;
+    const title = t('The key behind "{name}" changed.', { name });
     const on = rekeyedOnText(rekeyedAt);
-    const dateLine = on ? `This community says the account was re-keyed on ${on}.` : null;
+    const dateLine = on ? t('This community says the account was re-keyed on {on}.', { on }) : null;
     if (!code) {
         return {
             title,
-            body: `This community now lists more than one other key in this chat, so there is no one key to continue with. Nothing will be sent here. To keep talking with ${name}, start a new chat with them.`,
-            dateLine, confirm: null, continueLabel: null, notNowLabel: 'Not now',
+            body: t('This community now lists more than one other key in this chat, so there is no one key to continue with. Nothing will be sent here. To keep talking with {name}, start a new chat with them.', { name }),
+            dateLine, confirm: null, continueLabel: null, notNowLabel: t('Not now'),
         };
     }
     // The first-sight case opens with the amendment's sentence, worded so it is true after an update too (P17), not only
-    // after a restore.
-    const body = firstSight
-        ? `${afterReset ? DM_RESET_LEAD : DM_FIRST_SIGHT_LEAD} The earlier messages here came from a different key than the one this community now gives for ${name}. Anything you send now would go to the new key. Check with ${name} first, in person or on a call: their key code should be`
-        : `Anything you send now would go to the new key. If ${name} got a new phone and re-keyed, check with them first, in person or on a call: their key code should be`;
+    // after a restore. Each sentence is translated whole; the lead and the rest are joined with one space.
+    const said: string[] = [];
+    if (firstSight) {
+        if (afterReset) said.push(t(LEADS.reset));
+        else said.push(t(LEADS.firstSight));
+        said.push(t('The earlier messages here came from a different key than the one this community now gives for {name}. Anything you send now would go to the new key. Check with {name} first, in person or on a call: their key code should be', { name }));
+    } else {
+        said.push(t('Anything you send now would go to the new key. If {name} got a new phone and re-keyed, check with them first, in person or on a call: their key code should be', { name }));
+    }
     return {
-        title, body, dateLine,
-        confirm: `I checked with ${name}: the key code in their Settings matches this one.`,
-        continueLabel: 'Continue with the new key',
-        notNowLabel: 'Not now',
+        title, body: said.join(' '), dateLine,
+        confirm: t('I checked with {name}: the key code in their Settings matches this one.', { name }),
+        continueLabel: t('Continue with the new key'),
+        notNowLabel: t('Not now'),
     };
 }
 
 /** Settings → "My key code": what the member reads next to their own code. */
 export const MY_KEY_CODE_COPY = {
-    title: 'My key code',
-    body: 'If a chat with you ever says your key changed, the other person can check this code against the one their phone shows. It isn\'t secret: it\'s safe to read out.',
-    unknown: 'Your key code shows here once this phone has your key.',
+    title: word('My key code'),
+    body: word("If a chat with you ever says your key changed, the other person can check this code against the one their phone shows. It isn't secret: it's safe to read out."),
+    unknown: word('Your key code shows here once this phone has your key.'),
 } as const;
 
 /** What you press. Each has minHeight ≥ 48. */

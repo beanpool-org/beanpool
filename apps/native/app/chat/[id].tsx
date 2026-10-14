@@ -34,7 +34,7 @@ import { ChatMessageRow } from '../../components/chat/ChatMessageRow';
 import { ChatEditBanner, ChatMenuSheet, ChatReplyBanner, type ChatMenuItem } from '../../components/chat/ChatBanners';
 import { ChatComposer, type ChatComposerHandle } from '../../components/chat/ChatComposer';
 import { useChatSoftInputMode } from '../../components/chat/useChatSoftInputMode';
-import { refusedSendNotice, restoredDraft, dmKeyChangedLine, dmLineSlotText, DM_UNPLACED_LINE } from '../../utils/dm-lock';
+import { refusedSendNotice, restoredDraft, dmKeyChangedLine, dmLineSlotText, DM_LOCK_WORDS } from '../../utils/dm-lock';
 import {
     buildChatListItems, chatActionErrorMessage, dmQuoteFor, hasAnyAction, isTombstone, messageActions, tombstoneText,
     shouldFollowNewMessages, shouldShowChatLoadError, type ChatViewer,
@@ -1443,7 +1443,7 @@ function ChatScreen({ id }: { id: string }) {
                         onSend={handleSend}
                         canSend={canSendNow}
                         disabled={keyChangePending || unplaced}
-                        notice={keyChangePending ? dmKeyChangedLine(keyChange?.name) : unplaced ? DM_UNPLACED_LINE : lockNotice}
+                        notice={keyChangePending ? dmKeyChangedLine(keyChange?.name) : unplaced ? t(DM_LOCK_WORDS.unplaced) : lockNotice}
                         placeholder="Message..."
                         accessibilityLabel="Message"
                         bottomPadding={keyboardVisible ? 8 : Math.max(insets.bottom, 12)}

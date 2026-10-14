@@ -225,7 +225,7 @@ describe('the DM screen: the rule-5 line, the banner\'s name and its height', ()
         const src = readFileSync(join(process.cwd(), 'app', 'chat', '[id].tsx'), 'utf8');
         expect(src).toMatch(/getDmKeyChange\(id as string\)\.then\(async \(change\) => \{\s*setKeyChange\(change\);\s*setUnplaced\(change \? false : await isDmUnplaced\(id as string\)\);/);
         expect(src).toMatch(/disabled=\{keyChangePending \|\| unplaced\}/);
-        expect(src).toMatch(/notice=\{keyChangePending \? dmKeyChangedLine\(keyChange\?\.name\) : unplaced \? DM_UNPLACED_LINE : lockNotice\}/);
+        expect(src).toMatch(/notice=\{keyChangePending \? dmKeyChangedLine\(keyChange\?\.name\) : unplaced \? t\(DM_LOCK_WORDS\.unplaced\) : lockNotice\}/);
         expect(src).toMatch(/const canSendNow = \(\) => [^;]*!unplaced/);
         // The banner is named from the key's member row (getDmKeyChange), never the screen's id-fragment fallback.
         expect(src).toMatch(/peerName=\{keyChange\.name\}/);

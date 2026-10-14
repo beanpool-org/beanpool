@@ -12,6 +12,7 @@
  * so): its lines stay `plaintext-v1`.
  */
 
+import { t, word } from '@beanpool/core';
 import { isDmPinStoreError, isDmPinsFullError } from './dm-peer-pins';
 import { isDmGuardUnreadError } from './dm-guard-list';
 
@@ -68,17 +69,20 @@ export function dmKeyChangedLine(peerName?: string | null): string {
  * read are the listed key's, and the person's own history is the part that "couldn't be verified" (#1872 handover 4).
  * A new chat is the first-sight path, where no code is shown, so the line says to check with them first (amendment 4 §3).
  */
-export const DM_UNPLACED_LINE = "This phone can't match this chat to one key, so sending is off. What you can read here may not be from them. Check with them in person or on a call, then start a new chat.";
+export const DM_UNPLACED_LINE = word("This phone can't match this chat to one key, so sending is off. What you can read here may not be from them. Check with them in person or on a call, then start a new chat.");
 
 /**
  * The fixed line drawn in the slot of a DM line that opens only under the key offered in the pinned one's place (design
  * §3.4 amendment 2, item 3; db.ts getMessages fromOfferedKey): for every offer, first sight or not, never the line's words.
  */
-export const DM_OFFERED_KEY_LINE = 'Sent from the new key. Shown after you continue.';
+export const DM_OFFERED_KEY_LINE = word('Sent from the new key. Shown after you continue.');
+
+/** The two lines above as one table, so each is put through t() where it is shown (words:check reads `t(X.key)`). */
+export const DM_LOCK_WORDS = { unplaced: DM_UNPLACED_LINE, offeredKey: DM_OFFERED_KEY_LINE } as const;
 
 /** What the DM screen draws in a line's slot: the fixed line for a line from the offered key, else its shown text. */
 export function dmLineSlotText(line: { text?: string | null; fromOfferedKey?: boolean }): string {
-    return line.fromOfferedKey ? DM_OFFERED_KEY_LINE : (line.text ?? '');
+    return line.fromOfferedKey ? t(DM_LOCK_WORDS.offeredKey) : (line.text ?? '');
 }
 
 /**

@@ -4164,6 +4164,72 @@ describe('the DM guard list: one bounded list per community file, never read as 
     }
     const ROUTE_ASKS_GX = { isHeldGroupChat, knownDmConversationId, getConversationKind };
 
+    // GXD (#1938 confirmation 7, finding 2): the two vote forms (GroupDetailModal's GroupDecisions, treasury-detail's
+    // EnterpriseDecisions) post a title, a why and a pay-out's memo the node reads, for the id the screen was opened on. From
+    // GX1's state, both now ask refuseReadableIntoDm first (a held group skips it: group-chat-dm-guard-case's GXDh). The form
+    // shows the error's own message, so the member reads the pins sentence, or the DM sentence once the pins read.
+    /** Every vote the node took (its title, why and memo), answered as the node opens one. */
+    function votesTaken(): string[] {
+        const took: string[] = [];
+        const before = (globalThis as any).fetch;
+        (globalThis as any).fetch = async (url: string, init: any = {}) => {
+            const u = new URL(url);
+            if ((init.method ?? 'GET') === 'POST' && /^\/api\/(groups|enterprise)\/[^/]+\/decisions$/.test(u.pathname)) {
+                const b = JSON.parse(init.body ?? 'null');
+                took.push(...[b?.title, b?.description, b?.params?.memo].filter((x): x is string => typeof x === 'string'));
+                return answer(201, { success: true, decision: { id: randomUUID() } });
+            }
+            return before(url, init);
+        };
+        return took;
+    }
+    const VOTE_FORMS: Record<string, (id: string, words: string) => Promise<unknown>> = {
+        'group vote': (id, words) => dbPort.proposeGroupDecision(id, { title: `${words} (vote title)`, description: `${words} (why)`, effect: 'close_group' } as any),
+        'enterprise vote': (id, words) => dbPort.proposeEnterpriseDecision(id, { title: `${words} (vote title)`, description: `${words} (why)`, effect: 'pay_out', params: { to: puppet.publicKey, amount: 1, memo: `${words} (memo)` } } as any),
+    };
+    for (const how of ['a read that throws', 'a corrupt value'] as const) {
+        it(`GXD (${how}) the list full when the DM is met; pruned, then relisted as an unlocked group while the pins can't be read: both vote forms are refused with the pins sentence and the node reads nothing; the pins back and after the sync, refused as a DM; a true group's and enterprise's votes wait for the pins too, then go`, async () => {
+            const filler = Array.from({ length: 26_886 }, () => randomUUID());
+            h.store.set(seenKey(), JSON.stringify(filler));
+            const { first, pin } = await anaHasSentToBen();
+            expect(first).toEqual(sealedToBen);
+            expect(pin).toMatchObject({ peer: ben.publicKey, checked: true });
+            expect((seenIn() as string[]).includes(dm.id)).toBe(false);
+            node.convs = [];
+            await syncMessages(ana.publicKey);   // the prune
+            node.lines = node.lines.filter((l) => l.conversationId !== dm.id);
+            const trulyGroup: Conv = { id: randomUUID(), type: 'group_thread', participants: [ana.publicKey, puppet.publicKey] };
+            const trulyEnterprise: Conv = { id: randomUUID(), type: 'enterprise_thread', participants: [ana.publicKey, puppet.publicKey] };
+            unlocked.add(dm.id);
+            unlocked.add(trulyGroup.id);
+            node.convs = [relistedAsGroup(), trulyGroup, trulyEnterprise];
+            const took = votesTaken();
+            const both = async (words: string) => ({ group: await onScreen(took, () => VOTE_FORMS['group vote'](dm.id, words)), enterprise: await onScreen(took, () => VOTE_FORMS['enterprise vote'](dm.id, words)) });
+            const truly = async (words: string) => ({ group: await onScreen(took, () => VOTE_FORMS['group vote'](trulyGroup.id, words)), enterprise: await onScreen(took, () => VOTE_FORMS['enterprise vote'](trulyEnterprise.id, words)) });
+            const unread = await whilePinsUnread(how, async () => {
+                await syncMessages(ana.publicKey);
+                return { row: typeOf(dm.id), view: (await routeChat(ROUTE_ASKS_GX, dm.id, {})).view, votes: await both('The code is 4821'), truly: await truly('Hello') };
+            });
+            const back = { view: (await routeChat(ROUTE_ASKS_GX, dm.id, {})).view, votes: await both('The code is 4822') };
+            await syncMessages(ana.publicKey);
+            const after = { row: typeOf(dm.id), votes: await both('The code is 4823'), truly: await truly('Hello again') };
+            console.log(`GXD (${how}) ${JSON.stringify({ unread, back, after, took })}`);
+            expect(unread).toEqual({
+                row: 'group_thread', view: 'group_thread',
+                votes: { group: refusedUnread, enterprise: refusedUnread }, truly: { group: refusedUnread, enterprise: refusedUnread },
+            });
+            expect(back).toEqual({ view: 'dm', votes: { group: refusedAsDm, enterprise: refusedAsDm } });
+            expect(after).toEqual({
+                row: 'dm', votes: { group: refusedAsDm, enterprise: refusedAsDm },
+                truly: {
+                    group: { err: null, says: null, nodeReads: ['Hello again (vote title)', 'Hello again (why)'] },
+                    enterprise: { err: null, says: null, nodeReads: ['Hello again (vote title)', 'Hello again (why)', 'Hello again (memo)'] },
+                },
+            });
+            expect(took.filter((w) => w.includes('code'))).toEqual([]);
+        }, 180_000);
+    }
+
     it('GD3 the caps: 30,000 UUID DMs in one listing; then, in another community, 22 ids of 100,000 characters and one each of 64 and 65: the value stays within 1 MiB, every id read before is still there, the newest are refused and logged; the long ids are never remembered', async () => {
         await phoneOf(ana);
         const before = seenIn() as string[];

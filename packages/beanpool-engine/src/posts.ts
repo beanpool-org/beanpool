@@ -1810,7 +1810,8 @@ export function getPostsRankedBy(db: Db, filter: PostFilter | undefined, rowsNea
             // A visitor's row reads an event as a key with no row does, whatever it hosts or is Going to from before visitors
             // were refused both: no note, nobody's RSVP (the server's canReadEventThread, for the chat).
             const host = !viewerIsVisitor && isEventHost(db, r, viewer);
-            const going = !viewerIsVisitor && mine?.status === 'going';
+            // Going for any of a series' dates: the note and the link are the series', like its chat, until the prune (§8).
+            const going = !viewerIsVisitor && (mine?.status === 'going' || myStale?.status === 'going');
             // An ended event is readable by id to its host and Going only, and to nobody once the 30-day
             // window has passed. Internal lookups (includeAllScopes) and sync are not reader views.
             // A cancelled event read by id follows the same rule: host and Going only.

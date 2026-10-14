@@ -443,6 +443,7 @@ export {
     dueEventReminders, runEventReminderSweep, reminderPushTitle, reminderPushBody,
     type MyEvent,
 } from './engine/event-reminders.js';
+import { rollDueSeries, pruneStaleRsvps, setSeriesDateSkipped } from './engine/event-series-roll.js';
 import { HOME_PREFERENCE_KEYS, HOME_MEMBERS_ONLY_MESSAGE, homePreferenceWrites, ownHomePreferences, type HomeLayout } from './engine/home-preferences.js';
 export {
     HOME_PREFERENCE_KEYS, HOME_CARD_IDS, INTEREST_IDS, getHomeLayout, getInterests, ownHomePreferences, homePreferencesNamed,
@@ -1031,6 +1032,10 @@ function armMainServerTimers(): void {
         // Polls past their closing time, closed for good: a phone's next delta then brings the closed result, and with it
         // where an anonymous poll's votes came from, which it says only once closed (engine/posts.ts closeExpiredPolls).
         try { closeExpiredPolls(); } catch (e) { console.warn('[Polls] Closing sweep failed:', e); }
+        // Repeating events whose date has ended move to their next date (DESIGN-event-times §8), and RSVPs for dates a
+        // month gone are pruned, hourly, inside this tick (engine/event-series-roll.ts). Main server only, like the rest.
+        try { rollDueSeries(broadcast); } catch (e) { console.warn('[Events] Series roll failed:', e); }
+        try { pruneStaleRsvps(); } catch (e) { console.warn('[Events] Stale RSVP prune failed:', e); }
     }), 60 * 1000);
 }
 
@@ -5171,6 +5176,9 @@ export function createPost(
         eventTz?: unknown;
         eventOnline?: unknown;
         eventLink?: unknown;
+        /** A repeating event's rule and its last date (engine/event-series-roll.ts). */
+        eventRepeat?: unknown;
+        eventRepeatUntil?: unknown;
         /** Filled when a clock the host set was adjusted (engine/posts.ts EventTimeOut). */
         out?: EventTimeOut;
         /** A caller's own limit, run after every refusal and before anything is stored (engine/posts.ts). */
@@ -6110,6 +6118,11 @@ export function rsvpEvent(
     signature?: string
 ): { success: boolean; post: MarketplacePost } {
     return rsvpEventEngine(broadcast, postId, memberPublicKey, status, signature);
+}
+
+/** "Cancel this date" of a repeating event, or its undo (engine/event-series-roll.ts): the host only. */
+export function skipEventDate(postId: string, actorPubkey: string, date: unknown, skipped: boolean): { post: MarketplacePost; skips: string[] } {
+    return setSeriesDateSkipped(broadcast, dispatchPushNotification, postId, actorPubkey, date, skipped);
 }
 // ===================== MARKETPLACE TRANSACTIONS =====================
 

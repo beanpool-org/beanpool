@@ -49,6 +49,7 @@ export function createEventFromBody(body: any, author: string, createdBy?: strin
             eventPlaceName: b.eventPlaceName, eventPrivateNote: b.eventPrivateNote,
             eventStartLocal: b.eventStartLocal, eventEndLocal: b.eventEndLocal, eventTz: b.eventTz,
             eventOnline: b.eventOnline, eventLink: b.eventLink,
+            eventRepeat: b.eventRepeat, eventRepeatUntil: b.eventRepeatUntil,
             createdBy,
             beforeWrite,
             out,

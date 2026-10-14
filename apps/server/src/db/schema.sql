@@ -385,6 +385,10 @@ CREATE INDEX IF NOT EXISTS idx_posts_event_author ON posts(author_pubkey, event_
 -- "Coming up" on Home (engine posts.ts PostFilter.upcomingUntil): the events in start order, so the soonest few are read
 -- without sorting every event the node holds.
 CREATE INDEX IF NOT EXISTS idx_posts_event_start ON posts(event_start_at, id) WHERE type = 'event';
+-- The minute roll (engine/event-series-roll.ts rollDueSeries): the repeating events whose date has ended, and only them.
+CREATE INDEX IF NOT EXISTS idx_posts_event_series ON posts(event_end_at) WHERE type = 'event' AND event_repeat IS NOT NULL;
+-- The 30-day prune of old dates' reminder marks (pruneStaleRsvps).
+CREATE INDEX IF NOT EXISTS idx_event_reminders_sent_occurrence ON event_reminders_sent(occurrence_at);
 
 -- The pull serves one peer at a time and asks for active, locally-authored, travelling listings. Partial
 -- so the index holds only rows that can ever be served: 'local' is the overwhelming majority and would

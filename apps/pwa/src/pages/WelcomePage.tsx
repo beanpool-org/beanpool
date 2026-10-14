@@ -2252,8 +2252,10 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                 <h3 style={{ fontSize: '1rem', marginBottom: '0.5rem', textAlign: 'left' }}>
                                     {t('🔑 Recover with 12 Words')}
                                 </h3>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, lineHeight: 1.5, textAlign: 'left' }}>
+                                {/* Wraps: a translated "Paste Words" (ru, de, el…) is wider than the English and went off a 320 px screen at
+                                    1.3× text (#1947 review B1). The sentence takes the room; the button goes below it when both can't fit. */}
+                                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: 0, lineHeight: 1.5, textAlign: 'left', flex: '1 1 10em', minWidth: 0 }}>
                                         {t('Enter your 12 recovery words.')}
                                     </p>
                                     <button

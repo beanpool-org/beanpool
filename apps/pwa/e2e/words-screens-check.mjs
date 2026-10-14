@@ -1,8 +1,9 @@
 /**
  * The first screens in other languages at 320 px with 1.3× text, light and dark (translation slice S2; director
- * amendment 1 item 7): the welcome page on a local community, and the guest lobby's Home on the worldwide one (HomePage
- * as a visitor sees it), each opened with `?lang=` in the pseudo-locale `xx` (every sentence accented and padded
- * ~35 %), Russian, French and Simplified Chinese.
+ * amendment 1 item 7): the welcome page on a local community, the guest lobby's Home on the worldwide one (HomePage
+ * as a visitor sees it), and the 12-word restore screen (welcome → Restore existing identity → 🔑 Recover with 12
+ * Words: #1947 review B1, where a translated "Paste Words" ran off the edge), each opened with `?lang=` in the
+ * pseudo-locale `xx` (every sentence accented and padded ~35 %), Russian, French and Simplified Chinese.
  *
  * Builds the web app as it ships and serves it under the app document's Content-Security-Policy; /api is answered here,
  * every other host is refused. For each screen it fails on:
@@ -17,35 +18,61 @@
  * Nothing here talks to a node.
  *
  * Run: pnpm --filter @beanpool/pwa words-screens-check [out-dir]
+ *   WORDS_SCREENS_PWA=<dir>       check another checkout's apps/pwa (a fail-first on an older commit; its node_modules linked)
+ *   WORDS_SCREENS_ONLY=restore    only these screens (comma-separated names)
+ *   WORDS_SCREENS_LANGS=xx,ru,fr  only these languages
  * Needs Chromium for Playwright once: pnpm --filter @beanpool/pwa exec playwright install --only-shell chromium
  */
 /* global Buffer, URL, console, process, document, window, localStorage, getComputedStyle, Node, NodeFilter -- Node, and the page's side of evaluate() */
 import { build, preview, transformWithEsbuild } from 'vite';
 import { chromium } from 'playwright';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const PWA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const SCRIPT_PWA_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PWA_DIR = process.env.WORDS_SCREENS_PWA ? path.resolve(process.env.WORDS_SCREENS_PWA) : SCRIPT_PWA_DIR;
+const CORE_DIST = path.resolve(SCRIPT_PWA_DIR, '../../packages/beanpool-core/dist');
 const POLICY_SOURCE = path.resolve(PWA_DIR, '../server/src/app-document-csp.ts');
 process.chdir(PWA_DIR);
 
 const SHOTS_DIR = process.argv[2] || path.join(process.env.TMPDIR || os.tmpdir(), 'bp-words-screens');
-const LANGS = [
-    { lang: 'xx', html: 'en-XA', name: 'English' },
-    { lang: 'ru', html: 'ru', name: 'Русский' },
-    { lang: 'fr', html: 'fr', name: 'Français' },
-    { lang: 'zh-Hans', html: 'zh-Hans', name: '简体中文' },
-];
+const only = (env) => (process.env[env] ? process.env[env].split(',').map((x) => x.trim()) : null);
+/** The four the check runs by default; WORDS_SCREENS_LANGS may name any of the others (the longest: de, el, uk, fil, ta). */
+const DEFAULT_LANGS = ['xx', 'ru', 'fr', 'zh-Hans'];
+const LANG_NAMES = {
+    xx: 'English', ru: 'Русский', fr: 'Français', 'zh-Hans': '简体中文', de: 'Deutsch', el: 'Ελληνικά', uk: 'Українська',
+    fil: 'Filipino', ta: 'தமிழ்', es: 'Español', pt: 'Português', it: 'Italiano', tr: 'Türkçe', ml: 'മലയാളം', sw: 'Kiswahili',
+};
+const LANGS = (only('WORDS_SCREENS_LANGS') ?? DEFAULT_LANGS)
+    .filter((lang) => LANG_NAMES[lang])
+    .map((lang) => ({ lang, html: lang === 'xx' ? 'en-XA' : lang, name: LANG_NAMES[lang] }));
 const VIEW = { viewport: { width: 320, height: 568 }, textScale: 1.3 };
 
 const LOCAL_INFO = { memberCount: 40, postCount: 4, transactionCount: 0, commonsBalance: 0, profile: 'local', features: { openJoin: false } };
 const GLOBAL_INFO = { memberCount: 40, postCount: 0, transactionCount: 0, commonsBalance: 0, profile: 'global', features: { openJoin: true, guestListingsOnly: true, beans: false } };
+const { pseudoLocalise } = await import(pathToFileURL(path.join(CORE_DIST, 'words.js')).href);
+/** A sentence as the screen shows it in `lang`: the pseudo-locale's form, the catalog's, or the English (the key). */
+function wordIn(lang, key) {
+    if (lang === 'xx') return pseudoLocalise(key);
+    const file = path.join(PWA_DIR, 'words', `${lang}.json`);
+    const catalog = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+    return typeof catalog[key] === 'string' ? catalog[key] : key;
+}
 const SCREENS = [
     { name: 'welcome', info: LOCAL_INFO, ready: 'h2' },
     { name: 'lobby-home', info: GLOBAL_INFO, ready: '[data-testid="guest-lobby"]' },
-];
+    {
+        name: 'restore', info: LOCAL_INFO, ready: '#recoveryWord-0',
+        // Each button found by the name a member reads in that language (the 🔑 is aria-hidden).
+        open: async (page, lang) => {
+            await page.waitForSelector('h2', { timeout: 15_000 });
+            await page.getByRole('button', { name: wordIn(lang, 'Restore existing identity'), exact: true }).click();
+            await page.getByRole('button', { name: wordIn(lang, 'Recover with 12 Words'), exact: true }).click();
+        },
+    },
+].filter((sc) => !only('WORDS_SCREENS_ONLY') || only('WORDS_SCREENS_ONLY').includes(sc.name));
 
 async function loadPolicy() {
     const source = fs.readFileSync(POLICY_SOURCE, 'utf8');
@@ -160,6 +187,7 @@ async function main() {
             const page = await context.newPage();
             try {
                 await page.goto(`${origin}/?lang=${encodeURIComponent(lang)}`, { waitUntil: 'networkidle' });
+                if (screen.open) await screen.open(page, lang);
                 await page.waitForSelector(screen.ready, { timeout: 15_000 });
                 await page.waitForTimeout(400);
                 const m = await page.evaluate(measure);

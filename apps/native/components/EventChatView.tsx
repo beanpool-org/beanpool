@@ -33,7 +33,7 @@ import { hapticTick } from '../utils/haptics';
 import { EVENT_ACCENT } from './EventCard';
 import { ChatOwnerHeader } from './ChatOwnerHeader';
 import { yourGroupsStore } from './useYourGroups';
-import { decodeEventChatText, trimEventChatDraft, EVENT_CHAT_MESSAGE_MAX, EVENT_CHAT_WAITING_TEXT, isWaitingForHost } from '../utils/events';
+import { decodeEventChatText, trimEventChatDraft, EVENT_CHAT_MESSAGE_MAX, eventChatWaitingText, eventChatSystemText, isWaitingForHost } from '../utils/events';
 import {
     buildChatListItems, hasAnyAction, messageActions, normaliseThreadMessage, shouldFollowNewMessages,
     showsAuthorName, type ChatMessage, type ChatViewer,
@@ -85,7 +85,7 @@ export function EventChatView({ eventId }: Props) {
             yourGroupsStore.markRead(eventId);
         } catch (e: any) {
             // Going, and the host hasn't let them in: said as that, never as "only the host and people going".
-            setError(isWaitingForHost(e) ? EVENT_CHAT_WAITING_TEXT : (e?.message || 'Could not open this event chat.'));
+            setError(isWaitingForHost(e) ? eventChatWaitingText() : (e?.message || 'Could not open this event chat.'));
         }
     }, [eventId, identity?.publicKey]);
 
@@ -198,7 +198,7 @@ export function EventChatView({ eventId }: Props) {
         if (item.type === 'system' || item.senderId === 'SYSTEM') {
             return (
                 <View style={styles.systemWrap}>
-                    <Text style={styles.systemText}>{item.text}</Text>
+                    <Text style={styles.systemText}>{eventChatSystemText(item.systemType, item.text)}</Text>
                 </View>
             );
         }

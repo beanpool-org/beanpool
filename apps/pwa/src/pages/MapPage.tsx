@@ -52,7 +52,7 @@ import { LOCAL_COMMUNITY_LINES, postRulesFor } from '@beanpool/core';
 import {
     CLIENT_POST_TYPES, EVENT_WINDOWS, buildEventCopy, eventEditBlockedReason, eventEditForm, eventEditNotifies, eventEditPayload, formatDistance,
     eventInWindow, isEventHostView, isEventOpen, localInputToIso, type EventEditForm, type EventWindow,
-    HOST_LETS_IN_LABEL, HOST_LETS_IN_HINT, hostLetsInDefault, privateNoteHelper,
+    hostLetsInLabel, hostLetsInHint, hostLetsInOffWarning, hostLetsInDefault, privateNoteHelper,
 } from '../lib/events';
 
 // The map's list read, and whether a listing pushed over the live feed belongs on it (lib/live-posts).
@@ -2307,10 +2307,16 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                                     className="mt-1 h-5 w-5 flex-shrink-0 accent-violet-700"
                                 />
                                 <span className="min-w-0">
-                                    <span className="block text-sm font-bold text-nature-900 dark:text-white">{HOST_LETS_IN_LABEL}</span>
-                                    <span className="block text-xs text-nature-500 dark:text-nature-400">{HOST_LETS_IN_HINT}</span>
+                                    <span className="block text-sm font-bold text-nature-900 dark:text-white">{hostLetsInLabel()}</span>
+                                    <span className="block text-xs text-nature-500 dark:text-nature-400">{hostLetsInHint()}</span>
                                 </span>
                             </label>
+                            {/* Unticked on this edit: the chat so far opens too, said before saving (the #1953 review's N1). */}
+                            {eventEdit && hostLetsInOffWarning(eventEdit.before.hostLetsIn, eventHostLetsIn) && (
+                                <p data-testid="event-host-lets-in-off" role="status" className="m-0 mt-1 text-sm font-semibold text-nature-800 dark:text-nature-200 break-words">
+                                    {hostLetsInOffWarning(eventEdit.before.hostLetsIn, eventHostLetsIn)}
+                                </p>
+                            )}
                         </div>
                         {eventEdit && eventEditNotifies(eventEditPayload(eventEdit.before, currentEventForm())) && (
                             <p data-testid="event-edit-notifies" className="m-0 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-sm text-amber-900 dark:text-amber-100">

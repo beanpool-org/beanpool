@@ -6,7 +6,8 @@
 import { describe, it, expect } from 'vitest';
 import {
     buildEventDraft, buildEventEditPatch, eventEditValues, hostLetsInDefault, privateNoteHelper, eventLetInState, eventLetInLine,
-    eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, canOpenEventChat, isWaitingForHost, EVENT_CHAT_WAITING_TEXT,
+    eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, canOpenEventChat, isWaitingForHost, eventChatWaitingText,
+    hostLetsInOffWarning, eventChatSystemText, letInButtonLabel, EVENT_CHAT_OPENED_SYSTEM_TYPE,
     type EventFormInput,
 } from '../events';
 
@@ -44,6 +45,22 @@ describe('the form', () => {
         expect(off.ok && off.notifies).toBe(false);
         expect(eventEditValues({ title: 'x' }).hostLetsIn).toBe(false);
     });
+    // Marty, 15 Oct (board card privacy-global-calls): a host may untick; the form says what that opens, before saving.
+    it('says, before saving, that unticking opens the note and the chat so far, and only on that change', () => {
+        expect(hostLetsInOffWarning(true, false)).toBe('Everyone going will see the note and the chat so far.');
+        expect(hostLetsInOffWarning(true, true)).toBeNull();
+        expect(hostLetsInOffWarning(false, false)).toBeNull();
+        expect(hostLetsInOffWarning(false, true)).toBeNull();
+    });
+});
+
+describe("the chat's line when the host opens it", () => {
+    it("words the node's opened line in the app's language, and leaves any other system line as the node wrote it", () => {
+        expect(EVENT_CHAT_OPENED_SYSTEM_TYPE).toBe('event_opened_to_going');
+        expect(eventChatSystemText('event_opened_to_going', 'whatever the node said')).toBe('The host opened this chat to everyone going.');
+        expect(eventChatSystemText(null, 'A line from the node')).toBe('A line from the node');
+        expect(eventChatSystemText('something_new', 'A newer line')).toBe('A newer line');
+    });
 });
 
 describe("the member's states", () => {
@@ -67,7 +84,7 @@ describe("the member's states", () => {
         expect(canOpenEventChat({ ...ev, myRsvp: 'going', myLetIn: true })).toBe(true);
         expect(canOpenEventChat({ type: 'event', myRsvp: 'going' })).toBe(true);
         expect(canOpenEventChat({ ...ev, eventRsvps: [] })).toBe(true);
-        expect(EVENT_CHAT_WAITING_TEXT).toBe('Chat opens when the host lets you in.');
+        expect(eventChatWaitingText()).toBe('Chat opens when the host lets you in.');
     });
     it("the node's waiting_for_host refusal is told apart from every other", () => {
         expect(isWaitingForHost(Object.assign(new Error("The host hasn't let you in yet: the chat opens when they do."), { code: 'waiting_for_host' }))).toBe(true);
@@ -86,5 +103,8 @@ describe('the host', () => {
         expect(eventWaitingCount(undefined)).toBe(0);
         expect(eventWaitingLine(3)).toBe('3 waiting to be let in');
         expect(letEveryoneInQuestion(23)).toBe('Let all 23 in? People who tap Going later still wait.');
+        expect(letInButtonLabel(false, 'Sam')).toBe('Let Sam in');
+        expect(letInButtonLabel(true, 'Fred')).toBe('Let in. Tap to take it back from Fred');
+        expect(letInButtonLabel(false, undefined)).toBe('Let them in');
     });
 });

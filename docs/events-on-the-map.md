@@ -164,6 +164,11 @@ the note never leaves a stale copy.
 > `code: 'waiting_for_host'`. The member is pushed on let-in; the host at most once an hour per event that people wait.
 > One rule for both readers: `mayReadEventPrivate` (@beanpool/engine). The chat's participants are only those who may read
 > it.
+>
+> **Marty, 2026-10-15 (board card privacy-global-calls, "All four as recommended"):** a global host MAY untick it. On an edit
+> from ticked to unticked the form says, before saving, "Everyone going will see the note and the chat so far.", and the
+> chat gets one system line, "The host opened this chat to everyone going." (`system_type` `event_opened_to_going`; the
+> apps word it by that type). Only a member who can see the event is let in, never a visitor (#1953 review N2).
 
 **Create** goes through `createPost` (`posts.ts:101`) with a `type === 'event'` branch beside the poll branch
 (`posts.ts:190-232`):

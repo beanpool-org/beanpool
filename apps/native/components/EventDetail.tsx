@@ -33,7 +33,7 @@ import { ReportReasonBox } from './ReportReasonBox';
 import {
     formatEventWhen, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
     canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, isOwnEvent, eventEditBlockedReason, eventEditValues,
-    eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, EVENT_CHAT_WAITING_TEXT,
+    eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
     type EventRsvpStatus, type RsvpCounts, type EventCopy, type EventEditValues,
 } from '../utils/events';
 
@@ -120,8 +120,8 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
         }
     };
     const letEveryoneIn = () => Alert.alert(t('Let everyone in'), letEveryoneInQuestion(waiting), [
-        { text: 'Not now', style: 'cancel' },
-        { text: 'Let them in', onPress: () => { saveLetIn('everyone', { everyone: true }, true); } },
+        { text: t('Not now'), style: 'cancel' },
+        { text: t('Let them in'), onPress: () => { saveLetIn('everyone', { everyone: true }, true); } },
     ]);
     const hostName = p.authorCallsign || p.author_callsign || (p.author_pubkey || p.authorPublicKey || '').slice(0, 6) || 'Unknown';
     const groupName = p.targetGroupName || p.target_group_name;
@@ -286,8 +286,8 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
 
                 {letInState === 'waiting' && (
                     <View style={[styles.chatBtn, styles.chatBtnDisabled]} accessibilityRole="button" accessibilityState={{ disabled: true }}
-                        accessibilityLabel={EVENT_CHAT_WAITING_TEXT} testID="event-chat-waiting">
-                        <Text style={styles.chatBtnWaitingText} numberOfLines={2}>💬 {EVENT_CHAT_WAITING_TEXT}</Text>
+                        accessibilityLabel={eventChatWaitingText()} testID="event-chat-waiting">
+                        <Text style={styles.chatBtnWaitingText} numberOfLines={2}>💬 {eventChatWaitingText()}</Text>
                     </View>
                 )}
                 {canOpenEventChat({ ...p, type: 'event', myRsvp: counts.mine, eventRsvps: rsvps }) && (
@@ -364,9 +364,9 @@ export function EventDetail({ post, openMembership = false }: EventDetailProps) 
                                             style={[styles.letInBtn, r.letInAt && styles.letInBtnOn]}
                                             accessibilityRole="button"
                                             accessibilityState={{ selected: !!r.letInAt, busy: letting === r.memberPubkey }}
-                                            accessibilityLabel={r.letInAt ? `Let in. Tap to take it back from ${r.memberCallsign || 'them'}` : `Let ${r.memberCallsign || 'them'} in`}
+                                            accessibilityLabel={letInButtonLabel(!!r.letInAt, r.memberCallsign)}
                                         >
-                                            <Text style={[styles.letInText, r.letInAt && styles.letInTextOn]} numberOfLines={1}>{r.letInAt ? 'Let in ✓' : 'Let in'}</Text>
+                                            <Text style={[styles.letInText, r.letInAt && styles.letInTextOn]} numberOfLines={1}>{r.letInAt ? t('Let in ✓') : t('Let in')}</Text>
                                         </Pressable>
                                     ) : (
                                         <Text style={styles.rsvpStatus} numberOfLines={1}>{r.status === 'going' ? 'Going' : 'Interested'}</Text>

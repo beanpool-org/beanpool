@@ -8,7 +8,7 @@ import { getNodeRole, assertPlainTablesWritable } from '../config/node-role.js';
 import { recordActivity } from '../db/activity-feed-db.js';
 import crypto from 'node:crypto';
 import { bumpPostsVersion } from './versions.js';
-import { ensureEventThread, syncEventThreadMembership, eventUnknownTo, loadEventForThread } from './event-thread.js';
+import { ensureEventThread, syncEventThreadMembership, eventUnknownTo, loadEventForThread, writeEventOpenedLine, broadcastEventThreadMessage, type EventThreadMessage } from './event-thread.js';
 import { assertNotMuted } from './auto-moderation.js';
 import { pollVoterNewOrWords } from './probation.js';
 import { assertNodeMember } from './members.js';
@@ -893,6 +893,8 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
     let eventTimeOrPlaceChanged = false;
     // Set when the host ticked or unticked "Only people I let in": who sits in the chat follows (syncEventThreadMembership).
     let hostLetsInChanged = false;
+    // Set when it went from ticked to unticked: the chat so far opens to everyone Going, and a line in it says so.
+    let hostOpenedChat = false;
     if (existingPost.type === 'event') {
         delete updates.credits;
         delete updates.category;
@@ -944,6 +946,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         if (nextLetsIn !== null) {
             eventFields.push('event_host_lets_in = ?'); eventValues.push(nextLetsIn);
             hostLetsInChanged = nextLetsIn !== (existingPost.eventHostLetsIn ? 1 : 0);
+            hostOpenedChat = hostLetsInChanged && nextLetsIn === 0;
         }
         const timeChanged = nextStart !== prevStart || nextEnd !== prevEnd;
         eventFields.push('event_start_at = ?', 'event_end_at = ?'); eventValues.push(nextStart, nextEnd);
@@ -1075,6 +1078,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
         ? storedPhotoColumns(id, updates.photos.slice(0, 5))
         : null;
 
+    let openedLine: EventThreadMessage | null = null;
     db.transaction(() => {
         db.prepare(`UPDATE posts SET ${fields.join(', ')} WHERE id = ? AND author_pubkey = ?`).run(...values);
         if (hostLetsInChanged) {
@@ -1082,6 +1086,9 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             const going = db.prepare("SELECT member_pubkey FROM event_rsvps WHERE post_id = ? AND status = 'going'").all(id) as { member_pubkey: string }[];
             for (const g of going) syncEventThreadMembership(id, g.member_pubkey, 'going');
         }
+        // Everyone Going now reads every line so far, including ones written under the let-in notice: the chat says so
+        // (Marty, 15 Oct, board card privacy-global-calls; the #1953 review's N1).
+        if (hostOpenedChat) openedLine = writeEventOpenedLine(id);
 
         if (nextPhotoColumns) {
             // Tombstones before caches (storage design §7): the row goes inside the transaction and the
@@ -1107,6 +1114,7 @@ export function updatePost(broadcast: BroadcastFn, id: string, authorPublicKey: 
             if (doomed.length > 0) afterTransactionCommit(() => deleteStoredObjects(db, doomed));
         }
     })();
+    if (openedLine) broadcastEventThreadMessage({ broadcast }, id, openedLine);
 
     // getPosts appends `AND p.id = ?` and posts.id is the primary key, so the row is unique and
     // the old `.find(p => p.id === id)` only re-checked what the SQL already guaranteed.
@@ -1320,6 +1328,7 @@ function notifyHostWaiting(push: PushFn | undefined, row: { id: string; title?: 
 export const LET_IN_NOT_GOING = "They haven't tapped Going";
 export const LET_IN_ONLY_HOST = 'Only the host can let people in';
 export const LET_IN_NOT_ASKED = "This event doesn't wait for the host: everyone going is already in";
+export const LET_IN_OUT_OF_SIGHT = "They can't see this event, so they can't be let in";
 
 /**
  * The host lets a Going member in to the note and the chat, or takes it back (`letIn` false), on an event whose host lets
@@ -1350,15 +1359,22 @@ export function letInEvent(
     if (row.event_end_at && row.event_end_at <= nowIso) throw new Error('This event has ended');
     if (row.event_host_lets_in !== 1) throw new Error(LET_IN_NOT_ASKED);
 
+    // A let-in goes only to someone who can see the event, and never to a visitor, as eventWaitingCount counts them (the
+    // #1953 review's N2): a member removed from an invite-only group keeps their Going row, and a let-in would push them
+    // the title of an event they can no longer see. A take-back goes to anyone let in: it opens nothing.
+    const mayBeLetIn = (pk: string) => !letIn || (!isVisitorKey(db, pk) && !!db.prepare(
+        `SELECT 1 FROM event_rsvps r JOIN posts p ON p.id = r.post_id WHERE r.post_id = ? AND r.member_pubkey = ? AND ${postInSightSql('p', 'r.member_pubkey')}`,
+    ).get(postId, pk));
     let members: string[];
     if (target.everyone === true) {
         members = (db.prepare(`SELECT member_pubkey FROM event_rsvps WHERE post_id = ? AND status = 'going' AND let_in_at IS ${letIn ? 'NULL' : 'NOT NULL'}`)
-            .all(postId) as { member_pubkey: string }[]).map(r => r.member_pubkey);
+            .all(postId) as { member_pubkey: string }[]).map(r => r.member_pubkey).filter(mayBeLetIn);
     } else {
         const who = target.memberPublicKey;
         if (typeof who !== 'string' || !who) throw new Error('memberPublicKey or everyone is required');
         const rsvp = db.prepare('SELECT status FROM event_rsvps WHERE post_id = ? AND member_pubkey = ?').get(postId, who) as { status: string } | undefined;
         if (rsvp?.status !== 'going') throw new Error(LET_IN_NOT_GOING);
+        if (!mayBeLetIn(who)) throw new Error(LET_IN_OUT_OF_SIGHT);
         members = [who];
     }
 

@@ -9,7 +9,7 @@ import { EventDetail } from './EventCard';
 import { EventChat } from './EventChat';
 import * as api from '../lib/api';
 import {
-    eventEditForm, eventEditPayload, hostLetsInDefault, privateNoteHelper, eventLetInState, eventWaitingCount,
+    eventEditForm, eventEditPayload, hostLetsInDefault, privateNoteHelper, eventLetInState, eventWaitingCount, hostLetsInOffWarning,
 } from '../lib/events';
 
 vi.mock('../lib/api', async () => {
@@ -118,7 +118,35 @@ describe('the chat, refused while waiting', () => {
     });
 });
 
+// Marty, 15 Oct (board card privacy-global-calls): when the host opens the chat to everyone going, the chat says so.
+describe("the chat's line when the host opens it to everyone going", () => {
+    it('is a small centred line in the reader\'s words, with no author and nothing for the host to remove', async () => {
+        const base64 = (s: string) => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+        vi.mocked(api.getEventChat).mockResolvedValue({
+            conversation: { id: 'ev-1', type: 'event_thread', participants: ['host-pk', 'me-pk'] } as any,
+            messages: [
+                { id: 'm1', conversationId: 'ev-1', authorPubkey: 'sam-pk', authorCallsign: 'Sam', ciphertext: base64('Gate is blue'), nonce: 'plaintext-v1', type: 'text', timestamp: new Date().toISOString() },
+                { id: 'm2', conversationId: 'ev-1', authorPubkey: 'SYSTEM', authorCallsign: 'System', ciphertext: 'The host opened this chat to everyone going.', nonce: '00000', type: 'system', systemType: 'event_opened_to_going', timestamp: new Date().toISOString() },
+            ],
+            readOnly: false, readOnlyReason: null, canPost: true, isHost: true, title: 'Garden dinner', eventEndAt: null, eventState: 'scheduled',
+            privateNote: null, notice: "Visible to the host, everyone going, and this node's operator.",
+        });
+        renderAt320(<EventChat postId="ev-1" identity={identity} refreshMs={0} />);
+        const line = await screen.findByTestId('event-chat-system-line');
+        expect(line).toHaveTextContent('The host opened this chat to everyone going.');
+        expect(within(line).queryByRole('button')).toBeNull();
+        expect(screen.getAllByRole('button', { name: /Remove message from/ }).map(b => b.getAttribute('aria-label'))).toEqual(['Remove message from Sam']);
+        expect(document.body.textContent).not.toContain('SYSTEM');
+    });
+});
+
 describe('the form', () => {
+    it('says, on an edit from ticked to unticked, that everyone going will see the note and the chat so far', () => {
+        expect(hostLetsInOffWarning(true, false)).toBe('Everyone going will see the note and the chat so far.');
+        expect(hostLetsInOffWarning(true, true)).toBeNull();
+        expect(hostLetsInOffWarning(false, false)).toBeNull();
+    });
+
     it('ticks by default where anyone can join in a minute, and says who reads the note', () => {
         expect(hostLetsInDefault({ openMembership: true })).toBe(true);
         expect(hostLetsInDefault(undefined)).toBe(false);

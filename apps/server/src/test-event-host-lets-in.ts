@@ -13,8 +13,11 @@
  *      the chat with the let-in notice, a seat, a push to the member; take back → waiting again; Interested → Going keeps
  *      it; Not going loses it; `everyone` lets in only those Going now; a member not Going is 400, a non-host 403, an
  *      outsider to a group's event 404, an ended event 410, a cancelled one 409. The chat's participants are only those who
- *      may read it (the #1939 review's N6). Unticking on edit lets everyone Going in, silently; ticking again takes the
- *      waiting out of the chat.
+ *      may read it (the #1939 review's N6). Unticking on edit lets everyone Going in, with no push, and leaves one system
+ *      line in the chat, "The host opened this chat to everyone going." (Marty, 15 Oct), which the host can't remove;
+ *      ticking again takes the waiting out of the chat and writes no line. The generic GET /api/messages/:id answers
+ *      someone waiting with the same words and code (the #1953 review's N5). A member removed from a group's event's
+ *      group is never let in, alone or with everyone, and is not pushed (N2).
  *   3. The operator's override `nodeProfile.openMembership = false` on the global node: a new event does not wait.
  *
  * Run: via scripts/run-server-suites.mjs (SERVER_SUITES_ONLY=test-event-host-lets-in)
@@ -84,7 +87,7 @@ async function main() {
     const { updateGatewayConfig, DEFAULT_GATEWAY_CONFIG } = await import('./config/local-config.js');
     const { putPushTokenRow } = await import('./services/push-token-seal.js');
     const { setMemberPhoto } = await import('@beanpool/engine');
-    const { EVENT_THREAD_NOTICE, EVENT_THREAD_NOTICE_LET_IN } = await import('./engine/event-thread.js');
+    const { EVENT_THREAD_NOTICE, EVENT_THREAD_NOTICE_LET_IN, EVENT_CHAT_OPENED_TEXT, EVENT_CHAT_OPENED_SYSTEM_TYPE } = await import('./engine/event-thread.js');
     const { resetEventWaitingPushes, scrubEndedEvents } = await import('./engine/posts.js');
 
     await initTls();
@@ -249,6 +252,9 @@ async function main() {
     await rsvp(ev, sam, null);
     await rsvp(ev, sam, 'going');
     assert(letInAtOf(ev, sam) === null && (await chat(ev, sam)).body?.code === 'waiting_for_host', 'Not going loses it: Going again waits');
+    const generic = await call('GET', `/api/messages/${ev}`, sam);
+    assert(generic.status === 403 && generic.body?.code === 'waiting_for_host' && generic.body?.error !== FORBIDDEN,
+        `the generic messages route says they wait too, with the code (${JSON.stringify(generic.body)})`);
 
     const all = await letIn(ev, hana, { everyone: true });
     assert(all.status === 200 && all.body?.changed === 2 && letInAtOf(ev, sam) && letInAtOf(ev, tia), '"Let everyone in" lets in the two waiting');
@@ -261,10 +267,18 @@ async function main() {
     assert(untick.status === 200 && flagOf(ev) === 0, 'the host unticks it on edit');
     assert((await chat(ev, uma)).status === 200 && seat(ev, uma), 'everyone Going reads the chat now, with a seat');
     const state = (db.prepare('SELECT event_state FROM posts WHERE id = ?').get(ev) as any)?.event_state;
-    assert(state === 'scheduled' && sent.length === 0, 'the edit is silent: no UPDATED, no push');
+    assert(state === 'scheduled' && sent.length === 0, 'the edit sends no UPDATED and no push');
+    const opened = ((await chat(ev, uma)).body?.messages ?? []).filter((m: any) => m.type === 'system');
+    assert(opened.length === 1 && opened[0].ciphertext === EVENT_CHAT_OPENED_TEXT && opened[0].systemType === EVENT_CHAT_OPENED_SYSTEM_TYPE
+        && opened[0].authorPubkey === 'SYSTEM' && EVENT_CHAT_OPENED_TEXT === 'The host opened this chat to everyone going.',
+        `the chat says the host opened it to everyone going, one system line (${JSON.stringify(opened)})`);
+    const removeOpened = await call('POST', `/api/marketplace/posts/${ev}/chat/remove`, hana, { messageId: opened[0]?.id });
+    assert(removeOpened.status >= 400 && ((await chat(ev, uma)).body?.messages ?? []).some((m: any) => m.id === opened[0]?.id && m.type === 'system'),
+        `the host can't remove that line (${removeOpened.status})`);
     await call('POST', '/api/marketplace/posts/update', hana, { id: ev, authorPublicKey: hana.pubKeyHex, eventHostLetsIn: true });
     assert(flagOf(ev) === 1 && !seat(ev, uma) && (await chat(ev, uma)).body?.code === 'waiting_for_host' && seat(ev, sam),
         'ticked again: Uma, not let in, waits and loses the seat; Sam keeps it');
+    assert(((await chat(ev, sam)).body?.messages ?? []).filter((m: any) => m.type === 'system').length === 1, 'ticking again writes no line');
 
     // A group's event, to someone outside the group: as an id nobody has.
     const group = se.createGroup({ name: 'Quiet Circle', slug: 'quiet-circle-lets-in', description: 'Invite only', joinPolicy: 'invite_only', createdBy: hana.pubKeyHex });
@@ -272,6 +286,20 @@ async function main() {
     const gid = gev.body?.post?.id ?? gev.body?.id;
     const outsider = await letIn(gid, omar, { memberPublicKey: sam.pubKeyHex });
     assert(!!gid && outsider.status === 404, `an outsider to a group's event gets 404 (${outsider.status})`);
+    // N2: Tia and Uma are in the group and Going; Tia is removed from the group and keeps her Going row.
+    for (const m of [tia, uma]) db.prepare("INSERT INTO group_members (group_id, member_pubkey, role, status) VALUES (?, ?, 'member', 'active')").run(group.id, m.pubKeyHex);
+    await rsvp(gid, tia, 'going');
+    await rsvp(gid, uma, 'going');
+    db.prepare("UPDATE group_members SET status = 'removed' WHERE group_id = ? AND member_pubkey = ?").run(group.id, tia.pubKeyHex);
+    sent.length = 0;
+    const removedOne = await letIn(gid, hana, { memberPublicKey: tia.pubKeyHex });
+    assert(removedOne.status === 400 && /can't see this event/.test(removedOne.body?.error || '') && letInAtOf(gid, tia) === null,
+        `a member removed from the group can't be let in (${removedOne.status} ${removedOne.body?.error})`);
+    const groupAll = await letIn(gid, hana, { everyone: true });
+    assert(groupAll.status === 200 && groupAll.body?.changed === 1 && letInAtOf(gid, uma) !== null && letInAtOf(gid, tia) === null,
+        `"Let everyone in" lets in Uma, not Tia, who was removed (${groupAll.body?.changed})`);
+    assert(sent.some(p => p.to === 'ExponentPushToken[Uma]') && !sent.some(p => p.to === 'ExponentPushToken[Tia]'),
+        `Tia is not pushed the title of an event she can't see (${sent.map(p => p.to).join(', ')})`);
 
     // Ended and cancelled.
     db.prepare('UPDATE posts SET event_end_at = ? WHERE id = ?').run(new Date(Date.now() - HOUR).toISOString(), evOpen);

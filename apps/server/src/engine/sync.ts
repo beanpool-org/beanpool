@@ -98,8 +98,12 @@ export { getNodeRole, setNodeRole, type NodeRole } from '../config/node-role.js'
  *     rows a copy made by format 8 or older gave it with tokens in the clear (it has no key to lock them), and its main
  *     server's locked rows, stamped when that server locked them, may be behind this standby's cursor already: the re-seed
  *     brings them all.
+ * 10. An event's "host lets people in" and each RSVP's let-in are the main server's (posts.event_host_lets_in,
+ *     event_rsvps.let_in_at and let_in_by; DESIGN-global-member-privacy-fable.md §2.4). An importer before this one drops
+ *     them, under stamps no later copy moves past, and the state hash reads no flag: promoted, such a standby would open an
+ *     event's note and chat to everyone Going. The re-seed brings them.
  */
-export const REPLICA_FORMAT = 9;
+export const REPLICA_FORMAT = 10;
 
 /** The format a standby must say it reads for its main server to send it a copy (routes/backup.ts sync-copy): photos by reference. */
 export const PHOTOS_BY_REFERENCE_FORMAT = 8;

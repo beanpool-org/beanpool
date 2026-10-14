@@ -46,6 +46,8 @@ import {
     getGatewayConfig, updateGatewayConfig,
 } from '../config/local-config.js';
 import { getConnectors } from '../connector-manager.js';
+import { gatewayAllowlistRefusal } from '../config/gateway.js';
+import { clientIp } from '../client-ip.js';
 import { logger } from '../logger.js';
 import { admitSuggestion, settleSuggestion, suggestionAuditSuffix } from '../agent/suggestions.js';
 import { noteSecurityEvent } from '../services/security-signal.js';
@@ -56,7 +58,7 @@ import { expoAccessTokenStatus } from '../config/expo-access-token.js';
 import { getWebVisits, clampVisitDays, VISIT_RETENTION_DAYS } from '../engine/web-visits.js';
 import { getAppVersionCounts } from '../app-version-counts.js';
 import { APP_PLATFORMS, getMinAppVersion, getMinAppVersionFrom, getPlatformFloorDetail, getAppStoreVersions } from '../app-store-versions.js';
-import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING, passwordSessionNeedsTotpSetup, TOKEN_REFUSED_CODE, refusePasswordRetired, lookTokenOf } from '../admin-auth.js';
+import { issueCsrfToken, issueWsTicket, requireAdminRole, requirePhoneStepUp, requireFreshProof, checkAdminPasswordAuth, revoke2faSession, PASSWORD_CSRF_BINDING, passwordSessionNeedsTotpSetup, TOKEN_REFUSED_CODE, refusePasswordRetired, lookTokenOf } from '../admin-auth.js';
 import { isMemberKeySpelling, provenKeySpelling, BAD_KEY_CODE, BAD_KEY_ERROR } from '../engine/member-key.js';
 import { NonceStore, verifyMemberSignature } from '../engine/member-signature.js';
 import { SIGNED_FOR_HEADER, avatarUrlOf } from '@beanpool/core';
@@ -511,6 +513,12 @@ router.post('/api/local/admin/auth/logout', async (ctx) => {
  * change from the phone's Manage hand-off asks for its unlock again (admin-auth.ts requirePhoneStepUp), as every
  * owner-only route does; an admin appointing or removing a moderator is not asked.
  */
+/** requireAdminRole(owner) then requireFreshProof: 403 for an admin in words, before any code is looked at. */
+async function ownerWithFreshProof(ctx: any, code: unknown, action: string): Promise<boolean> {
+    if (!requireAdminRole(ctx, ['owner'], `Only an owner of this node can ${action}`)) return false;
+    return requireFreshProof(ctx, code, action);
+}
+
 function roleChangeNeedsOwner(targetPubkey: string, role: string): boolean {
     if (role === 'owner' || role === 'admin') return true;
     const held = heldNodeRoleOf(targetPubkey);
@@ -563,7 +571,20 @@ const handleEnrol = async (ctx: any) => {
         ctx.body = { error: 'Only a node owner can enrol an owner key or generate break-glass credentials' };
         return;
     }
-    if (roleChangeNeedsOwner(targetPubkey, requestedRole) && !requirePhoneStepUp(ctx)) return;
+    // An owner's or admin's key, by an owner: the fresh proof every time (design case 18, C6), so a stolen session cannot
+    // leave a key of its own behind. A break-glass code is the factor itself: unchanged.
+    if (roleChangeNeedsOwner(targetPubkey, requestedRole)) {
+        if (isBreakGlass) {
+            if (!requirePhoneStepUp(ctx)) return;
+        } else {
+            if (callerRole !== 'owner') {
+                ctx.status = 403;
+                ctx.body = { error: 'Only a node owner can enrol an owner or admin key' };
+                return;
+            }
+            if (!(await requireFreshProof(ctx, body.code, 'enrol an owner or admin key'))) return;
+        }
+    }
 
     try {
         const res = enrolAdminOwnerKey({
@@ -607,6 +628,8 @@ router.post('/api/local/admin/auth/break-glass/issue', async (ctx) => {
     if (!requireAdminRole(ctx, ['owner'], 'Only a node owner can make a break-glass code')) return;
     const state = ctx.state as any;
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    // A break-glass code is a full owner credential for one enrolment: the fresh proof every time (design case 18, C7).
+    if (!(await requireFreshProof(ctx, body.code, 'make a break-glass code'))) return;
     let target: string;
     if (state.isKeySession) {
         target = state.actor;
@@ -654,9 +677,10 @@ router.post('/api/local/admin/auth/break-glass-mode', async (ctx) => {
         ctx.body = { error: 'Only node owners can toggle break-glass mode' };
         return;
     }
-    // Owner-only, checked here rather than by requireAdminRole: from the phone it asks for its unlock again too.
-    if (!requirePhoneStepUp(ctx)) return;
+    // On, the password reaches key enrolment only, so a password-only co-owner is shut out of Settings: the fresh proof
+    // every time (design case 18, C5).
     const body = (ctx as any).requestBody || (ctx.request as any)?.body || {};
+    if (!(await requireFreshProof(ctx, body.code, 'turn break-glass mode on or off'))) return;
     if (typeof body.enabled !== 'boolean') {
         ctx.status = 400;
         ctx.body = { error: 'enabled (boolean) is required' };
@@ -730,7 +754,8 @@ router.post('/api/local/admin/auth/retire-password', async (ctx) => {
         };
         return;
     }
-    if (!requirePhoneStepUp(ctx)) return;
+    // Every password holder is shut out for good: Manage pressed within the last 90 seconds (design case 18, C4).
+    if (!(await requireFreshProof(ctx, undefined, 'retire the admin password'))) return;
     if (isPasswordRetired()) {
         ctx.status = 409;
         ctx.body = { error: 'The admin password is already retired', code: 'password_retired', ...passwordRetirementView(state.actor) };
@@ -808,6 +833,8 @@ router.post('/api/local/admin/ledger-audit', async (ctx) => {
 
 router.post('/api/local/admin/ledger-rebaseline', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
+    // A new baseline hides drift, and the audit is the owners' (design case 18, D2).
+    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can set a new ledger baseline')) return;
     // #129: Rebaseline MUST include a written explanation so drift is documented,
     // not silently accepted. "I rebaselined" with no context is not acceptable.
     const { reason } = (ctx as any).requestBody || {};
@@ -1615,6 +1642,10 @@ router.post('/api/local/admin/members/:pubkey/burst/remove', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
     if (!burstsHere(ctx)) return;
     if (!requireAdminRole(ctx, ['owner', 'admin'], 'Removing accounts is for the owners and admins. Hide their posts, and tell them.')) return;
+    // Established accounts too is a mass removal, an owner's (amendment 1 to design case 18); an admin removes the brand-new
+    // accounts of a burst, the spam it is for.
+    if ((ctx as any).requestBody?.includeEstablished === true
+        && !requireAdminRole(ctx, ['owner'], 'Only an owner of this node can remove established accounts with a burst')) return;
     const actor = resolveAdminActor(ctx);
     const role = burstActorRole(ctx);
     if (!actor || !role) return;
@@ -1782,6 +1813,8 @@ router.post('/api/local/admin/users/:pubkey/prune', async (ctx) => {
 
 router.post('/api/local/admin/branches/:pubkey/prune', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
+    // A whole branch is a mass removal: an owner's always (design case 18, D3), whoever is inside it.
+    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can remove a whole invite branch')) return;
     const actor = resolveAdminActor(ctx);
     if (!actor) return;
     if (!stepUpIfOwnerOnly(ctx, 'prune-branch', ctx.params.pubkey, actor)) return;
@@ -1947,6 +1980,8 @@ router.post('/api/local/admin/reports/:id/action', async (ctx) => {
 
 router.post('/api/local/admin/posts/bulk-delete', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
+    // Content loss at scale: an owner's (design case 18, D1). Admins and moderators delete one post, or hide a burst.
+    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can delete posts in bulk')) return;
     const { postIds } = (ctx as any).requestBody || {};
     if (!Array.isArray(postIds) || postIds.length === 0) {
         ctx.status = 400;
@@ -2138,9 +2173,19 @@ router.get('/api/local/admin/gateway', async (ctx) => {
     ctx.body = getGatewayConfig();
 });
 
+// The gateway can switch node features off and set the admin IP allow-list: an owner's with the fresh proof (amendment 1
+// to design case 18), and a new allow-list must hold the address this request comes from, so nobody shuts themselves out.
 router.post('/api/local/admin/gateway', async (ctx) => {
     if (!(await checkAdminAuth(ctx as any))) return;
-    const body = (ctx as any).requestBody || {};
+    if (!requireAdminRole(ctx, ['owner'], 'Only an owner of this node can change its gateway settings')) return;
+    const { code, ...body } = (ctx as any).requestBody || {};
+    if (!(await requireFreshProof(ctx, code, 'change the gateway settings'))) return;
+    const allowlistRefusal = gatewayAllowlistRefusal(body.adminIpAllowlist, clientIp(ctx));
+    if (allowlistRefusal) {
+        ctx.status = 400;
+        ctx.body = { error: allowlistRefusal, code: 'allowlist_excludes_you' };
+        return;
+    }
     const updated = updateGatewayConfig(body);
     ctx.body = { success: true, gateway: updated };
 });
@@ -2330,8 +2375,8 @@ router.post('/api/local/admin/node-roles', async (ctx) => {
         ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
-    // A change that needs an owner, from the phone, asks for its unlock again (roleChangeNeedsOwner).
-    if (roleChangeNeedsOwner(targetPubkey, role) && !requirePhoneStepUp(ctx)) return;
+    // Granting or taking owner or admin: an owner, with the fresh proof every time (design case 18, C8).
+    if (roleChangeNeedsOwner(targetPubkey, role) && !(await ownerWithFreshProof(ctx, body.code, 'change who is an owner or admin'))) return;
     // No spelling rule here, unlike the enrol route above: grantNodeRole grants only to a member row under exactly this
     // key, no door makes a row under any other spelling now (engine/member-key.ts), and a role on one a door made before
     // opens no session (authorizeKeySigner) and signs nothing (the signature middleware). test-node-roles drives this
@@ -2359,8 +2404,10 @@ router.delete('/api/local/admin/node-roles/:pubkey/:role', async (ctx) => {
         ctx.body = { error: "role must be 'owner', 'admin', or 'moderator'" };
         return;
     }
-    // Taking an owner's or an admin's role, from the phone, asks for its unlock again (roleChangeNeedsOwner).
-    if (roleChangeNeedsOwner(pubkey, role) && !requirePhoneStepUp(ctx)) return;
+    // Taking an owner's or an admin's role: an owner, with the fresh proof every time (design case 18, C8). A DELETE has
+    // no body, so the code may come as the X-Fresh-Proof header.
+    const code = (ctx as any).requestBody?.code ?? ctx.get('x-fresh-proof');
+    if (roleChangeNeedsOwner(pubkey, role) && !(await ownerWithFreshProof(ctx, code, 'change who is an owner or admin'))) return;
 
     try {
         // The role the row holds, acting or not: an owner takes away a visitor's row's role too (heldNodeRoleOf).

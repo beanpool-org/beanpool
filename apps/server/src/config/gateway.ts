@@ -51,3 +51,32 @@ export const DEFAULT_GATEWAY_CONFIG: GatewayConfig = {
         maxRequestsPerMinute: 120,
     },
 };
+
+/**
+ * Whether the admin IP allow-list lets `ip` reach the admin surface (https-server.ts enforces it): an exact address, `*`,
+ * 127.0.0.1 or localhost for the loopback, or a prefix ending in `*`. An empty list lets everyone.
+ */
+export function adminIpAllowed(list: readonly string[], ip: string): boolean {
+    if (list.length === 0) return true;
+    return list.some(allowedIp => {
+        const norm = String(allowedIp).trim();
+        if (ip === norm || norm === '*') return true;
+        if ((norm === '127.0.0.1' || norm === 'localhost') && (ip === '127.0.0.1' || ip === '::1')) return true;
+        if (norm.endsWith('*') && ip.startsWith(norm.slice(0, -1))) return true;
+        return false;
+    });
+}
+
+/**
+ * Why a new admin IP allow-list is refused, or null (amendment 1 to design case 18): it must be a list of addresses, and
+ * one that would shut out the address the change comes from is refused, so an owner never locks themselves out of
+ * Settings. Left out (undefined) changes nothing and is never refused.
+ */
+export function gatewayAllowlistRefusal(list: unknown, callerIp: string): string | null {
+    if (list === undefined) return null;
+    if (!Array.isArray(list) || !list.every(v => typeof v === 'string')) return 'adminIpAllowlist must be a list of addresses';
+    if (!adminIpAllowed(list, callerIp)) {
+        return `That allow-list would shut out the address you are using now (${callerIp}). Add it to the list, or leave the list empty.`;
+    }
+    return null;
+}

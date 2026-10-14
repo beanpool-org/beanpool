@@ -1187,6 +1187,12 @@ export function authorsBlockedBy(db: Db, member: string): string[] {
     }
 }
 
+/**
+ * The most online events a member's set holds (getNearbySet, DESIGN-event-times §9): they come first, soonest first, and
+ * the near listings give way to them, so the set stays within the node's `max`.
+ */
+export const NEARBY_SET_ONLINE_EVENTS = 50;
+
 /** What a member's set is worked out from (getNearbySet). */
 export interface NearbySetQuery {
     /** The member's stored coarse area (members.area_lat / area_lng), or null when they have none. */
@@ -1307,23 +1313,30 @@ export function getNearbySet(db: Db, member: string, q: NearbySetQuery): NearbyS
 
     // Online events (DESIGN-event-times §9, director amendment 2): no pin, so near nobody, and an event is never put at its
     // author's area (placelessListingArea). Without this an online event on a node that syncs by area reaches only its
-    // host. The soonest `max` open ones are in every member's set, under the listing's own rules for this reader (open,
-    // not ended, the audience, hidden by reports out, an author on the board and not blocked), wherever the member is.
+    // host. The soonest NEARBY_SET_ONLINE_EVENTS open ones are in every member's set, under the listing's own rules for
+    // this reader (open, not ended, the audience, hidden by reports out, an author on the board and not blocked), wherever
+    // the member is. The author's half of the board rule is tested on the key, as rankNear's is.
     let online: typeof ranked = [];
-    if (!q.excludeEvents && (!q.types || q.types.length === 0 || q.types.includes('event'))) {
-        const pickOnline: RowsNear = (d, _near, where, whereParams) => {
-            const notBlocked = blocked.length > 0 ? ' AND p.author_pubkey NOT IN (SELECT value FROM json_each(?))' : '';
+    const onlineMax = Math.min(NEARBY_SET_ONLINE_EVENTS, Math.max(0, Math.floor(q.max)));
+    if (onlineMax > 0 && !q.excludeEvents && (!q.types || q.types.length === 0 || q.types.includes('event'))) {
+        const pickOnline: RowsNear = (d, _near, listingWhere, listingParams) => {
+            const where = listingWhere.replace(ENTERPRISE_ON_BOARD_SQL, () => ENTERPRISE_ON_BOARD_BY_KEY_SQL)
+                + (blocked.length > 0 ? ' AND p.author_pubkey NOT IN (SELECT value FROM json_each(?))' : '');
             online = prepared(d, `
         SELECT p.id, p.updated_at, p.author_pubkey FROM posts p
         LEFT JOIN members m ON p.author_pubkey = m.public_key
-        WHERE 1=1${where}${notBlocked} ORDER BY p.event_start_at, p.id LIMIT ?`)
-                .all(...whereParams, ...(blocked.length > 0 ? [JSON.stringify(blocked)] : []), q.max) as typeof online;
+        WHERE 1=1${where} ORDER BY p.event_start_at, p.id LIMIT ?`)
+                .all(...listingParams, ...(blocked.length > 0 ? [JSON.stringify(blocked)] : []), onlineMax) as typeof online;
             return [];
         };
         getPostsRankedBy(db, { ...base, eventOnline: true, near: { lat: 0, lng: 0 } }, pickOnline);
     }
-    const inRanked = new Set(ranked.map(r => r.id));
-    for (const r of online) if (!inRanked.has(r.id)) ranked.push(r);
+    // The set never holds more than `max`: a phone keeps at most that many and drops a listing with no place first
+    // (apps/native/utils/posts-nearby.ts nearbyPrune), so a set past it would lose every online event on the phone. The
+    // online events go in first, and the near list gives way to them from its far end.
+    const onlineIds = new Set(online.map(r => r.id));
+    ranked = ranked.filter(r => !onlineIds.has(r.id)).slice(0, Math.max(0, Math.floor(q.max) - online.length));
+    ranked.push(...online);
     const near = ranked.map(r => r.id);
 
     // own and ties, kept to a sync read's rules for this reader.

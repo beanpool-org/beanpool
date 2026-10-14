@@ -411,6 +411,7 @@ export const SUITES = [
     'test-enterprise-event-http',
     'test-event-times-http',
     'test-online-events-nearby',
+    'test-online-events-set-cap',
     'test-project-deadline-http',
     'test-enterprise-text',
     'test-event-chat',

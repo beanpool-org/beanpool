@@ -1245,12 +1245,17 @@ export function HomePage({ identity, visitor, onNavigate, onSeeWords, saveSearch
                             const rsvp = item.rsvp === 'going' ? 'Going' : item.rsvp === 'interested' ? 'Interested' : null;
                             const km = item.online ? null : distanceText(item.distanceKm);
                             const when = homeEventWhen(item);
-                            const text = [when, item.title].filter(Boolean).join('  ');
                             return (
                                 <HomeLine key={item.id} onClick={() => onNavigate('marketplace', item.id)} testId="home-event"
                                     label={[when, item.title, where, km, rsvp].filter(Boolean).join(', ')}>
                                     <span className="min-w-0 flex-1">
-                                        <span className="block break-words font-semibold">{text}</span>
+                                        {/* The time on a line of its own (with a zone named, run into the title it read as one phrase), each piece whole. */}
+                                        {when && (
+                                            <span data-testid="home-event-when" className="flex flex-wrap gap-x-1 text-sm font-bold text-nature-700 dark:text-nature-200">
+                                                {when.split(' · ').map((piece, i, all) => <span key={i} className="whitespace-nowrap">{piece}{i < all.length - 1 ? ' ·' : ''}</span>)}
+                                            </span>
+                                        )}
+                                        <span className="block break-words font-semibold">{item.title}</span>
                                         {(where || km) && <span className="block text-xs text-nature-600 dark:text-nature-300 break-words">{[where, km].filter(Boolean).join(' · ')}</span>}
                                     </span>
                                     {rsvp && <span className="shrink-0 text-xs font-bold text-emerald-800 dark:text-emerald-300">{rsvp}</span>}

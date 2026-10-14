@@ -165,7 +165,16 @@ function EventWhen({ post, className, testId, hostLine = false }: { post: Market
                     {parts && (
                         <>
                             <span className={`whitespace-nowrap ${className}`}>{parts.first}{parts.sep === ' · ' ? ' ·' : ' –'}</span>
-                            <span className={`whitespace-nowrap ${className}`}>{parts.second}</span>
+                            {/* Online, "your time" is a whole piece of its own: "4:50–6:50 your time" in the page's large text is wider
+                                than a 320px card. */}
+                            {parts.second.endsWith(YOUR_TIME) ? (
+                                <>
+                                    <span className={`whitespace-nowrap ${className}`}>{parts.second.slice(0, -YOUR_TIME.length)}</span>
+                                    <span className={`whitespace-nowrap ${className}`}>{YOUR_TIME.trim()}</span>
+                                </>
+                            ) : (
+                                <span className={`whitespace-nowrap ${className}`}>{parts.second}</span>
+                            )}
                         </>
                     )}
                 </span>
@@ -190,6 +199,8 @@ function EventWhen({ post, className, testId, hostLine = false }: { post: Market
         </>
     );
 }
+
+const YOUR_TIME = ' your time';
 
 /** A join link the page may open: the node takes http(s) only, and this is the second lock. */
 function joinHref(link: string | undefined): string | null {

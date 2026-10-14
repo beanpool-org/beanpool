@@ -474,6 +474,10 @@ describe('Event times on the card and the detail (DESIGN-event-times §4, slice 
     it("online: the reader's own time, \"your time\", and Online where the place goes", () => {
         renderAt320(<EventCard post={online} identity={identity} distanceKm={3} />);
         expect(screen.getByTestId('event-when').getAttribute('aria-label')).toBe('FRI 18 OCT · 5:50–7:50 your time');
+        // "your time" is a whole piece of its own, so the line can wrap before it at 320px in the page's large text.
+        expect(Array.from(screen.getByTestId('event-when').children).map(c => [c.textContent, /whitespace-nowrap/.test(c.className)])).toEqual([
+            ['FRI 18 OCT ·', true], ['5:50–7:50', true], ['your time', true],
+        ]);
         const card = screen.getByTestId('event-card');
         expect(within(card).getByText('Online').textContent).toBe('🌐 Online');
         expect(within(card).queryByText(/km/)).not.toBeInTheDocument();

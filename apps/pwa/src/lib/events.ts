@@ -6,7 +6,7 @@
  * taken from `toLocaleDateString`, so a card reads the same on every browser at 320px.
  */
 
-import { formatDate } from '@beanpool/core';
+import { formatDate, t, tn } from '@beanpool/core';
 import type { MarketplacePost } from './api';
 
 /** Every post type this client can render. Sent as `types=` so the node includes events (§2.6). */
@@ -284,10 +284,27 @@ export function eventEditPayload(before: EventEditForm, after: EventEditForm): E
 
 /** The node's refusal code for "Going, and the host hasn't let you in yet" (403 on the chat). */
 export const EVENT_CHAT_WAITING_CODE = 'waiting_for_host';
-export const HOST_LETS_IN_LABEL = 'Only people I let in see the note and chat';
-export const HOST_LETS_IN_HINT = 'Tick this if the note is your home address or a gate code.';
+/** The tickbox's label and the line under it. */
+export const hostLetsInLabel = (): string => t('Only people I let in see the note and chat');
+export const hostLetsInHint = (): string => t('Tick this if the note is your home address or a gate code.');
 /** What the chat entry says, disabled, while the host hasn't let this member in. */
-export const EVENT_CHAT_WAITING_TEXT = 'Chat opens when the host lets you in.';
+export const eventChatWaitingText = (): string => t('Chat opens when the host lets you in.');
+
+/**
+ * An edit from ticked to unticked opens the note and every chat line so far to everyone Going: the form says so before
+ * saving (Marty, 15 Oct, board card privacy-global-calls; the #1953 review's N1). Never a hard gate.
+ */
+export function hostLetsInOffWarning(before: boolean, after: boolean): string | null {
+    return before && !after ? t('Everyone going will see the note and the chat so far.') : null;
+}
+
+/** The node's system line when the host opens the chat to everyone going (server engine/event-thread.ts). */
+export const EVENT_CHAT_OPENED_SYSTEM_TYPE = 'event_opened_to_going';
+
+/** A system line in an event chat, in the reader's language where the app knows its kind; the node's text otherwise. */
+export function eventChatSystemText(systemType: string | null | undefined, nodeText: string): string {
+    return systemType === EVENT_CHAT_OPENED_SYSTEM_TYPE ? t('The host opened this chat to everyone going.') : nodeText;
+}
 
 /** A new event's tickbox: ticked where anyone can join in a minute (`features.openMembership`), unticked elsewhere. */
 export function hostLetsInDefault(features: { openMembership?: boolean } | null | undefined): boolean {
@@ -298,12 +315,12 @@ export function hostLetsInDefault(features: { openMembership?: boolean } | null 
 export function privateNoteHelper(hostLetsIn: boolean, openMembership: boolean): string {
     if (hostLetsIn) {
         return openMembership
-            ? "Anyone can join this community in a minute. Only the people you let in will see this note and the event chat. You let people in from Who's going."
-            : 'Only the people you let in see this.';
+            ? t("Anyone can join this community in a minute. Only the people you let in will see this note and the event chat. You let people in from Who's going.")
+            : t('Only the people you let in see this.');
     }
     return openMembership
-        ? 'Everyone who taps Going sees this. Anyone can join this community in a minute.'
-        : 'Everyone who taps Going sees this.';
+        ? t('Everyone who taps Going sees this. Anyone can join this community in a minute.')
+        : t('Everyone who taps Going sees this.');
 }
 
 /** Where a member stands on an event: 'open' where the host doesn't let people in (and for the host). */
@@ -317,8 +334,8 @@ export function eventLetInState(post: Pick<MarketplacePost, 'eventHostLetsIn' | 
 
 /** The line the event shows a member who isn't let in yet; null otherwise. */
 export function eventLetInLine(state: EventLetInState): string | null {
-    if (state === 'before') return 'The host lets people in. Tap Going, and the note and the chat open once they do.';
-    if (state === 'waiting') return "You're going. The host hasn't let you in yet: the note and the chat open when they do.";
+    if (state === 'before') return t('The host lets people in. Tap Going, and the note and the chat open once they do.');
+    if (state === 'waiting') return t("You're going. The host hasn't let you in yet: the note and the chat open when they do.");
     return null;
 }
 
@@ -328,11 +345,17 @@ export function eventWaitingCount(rsvps: MarketplacePost['eventRsvps']): number 
 }
 
 export function eventWaitingLine(n: number): string {
-    return `${n} waiting to be let in`;
+    return tn(n, '{n} waiting to be let in', '{n} waiting to be let in');
+}
+
+/** The host's Let in button, read aloud: whom it lets in, or that a click takes it back. */
+export function letInButtonLabel(letIn: boolean, name: string | null | undefined): string {
+    if (name) return letIn ? t('Let in. Take it back from {name}', { name }) : t('Let {name} in', { name });
+    return letIn ? t('Let in. Take it back') : t('Let them in');
 }
 
 export function letEveryoneInQuestion(n: number): string {
-    return `Let all ${n} in? People who tap Going later still wait.`;
+    return tn(n, 'Let {n} in? People who tap Going later still wait.', 'Let all {n} in? People who tap Going later still wait.');
 }
 
 /** Whether a node refusal is "you're going, the host hasn't let you in" — never shown as "only the host and people going". */

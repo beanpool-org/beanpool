@@ -17,12 +17,13 @@
  */
 
 import { useEffect, useState } from 'react';
+import { t } from '@beanpool/core';
 import { getMarketplacePosts, rsvpEvent, removeMarketplacePost, letInToEvent, type EventRsvpStatus, type MarketplacePost } from '../lib/api';
 import type { BeanPoolIdentity } from '../lib/identity';
 import {
     CLIENT_POST_TYPES, EVENT_CHAT_ENTRY_LABEL, eventEditBlockedReason, eventWhenParts, formatDistance, formatEventWhen,
     isEventHostView, isEventOpen,
-    eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, EVENT_CHAT_WAITING_TEXT,
+    eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
 } from '../lib/events';
 import { EventReminder, EventShareAndCalendar } from './EventExtras';
 import { visitorDistanceText } from '../lib/visitor-lobby';
@@ -323,7 +324,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
             const res = await letInToEvent(p.id, who, on);
             if (res?.post) rsvp.setLivePost(res.post);
         } catch (e: any) {
-            setLetInError(e?.message || 'Could not reach the node.');
+            setLetInError(e?.message || t('Could not reach the node.'));
         } finally {
             setLetting(null);
         }
@@ -422,7 +423,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                         data-testid="event-chat-waiting"
                         className="min-h-[48px] w-full px-3 rounded-xl border border-nature-200 dark:border-nature-700 text-sm font-semibold text-nature-700 dark:text-nature-300 bg-nature-50 dark:bg-nature-900 text-left break-words cursor-not-allowed"
                     >
-                        💬 {EVENT_CHAT_WAITING_TEXT}
+                        💬 {eventChatWaitingText()}
                     </button>
                 )}
                 {onOpenChat && (isHost || (p.myRsvp === 'going' && letInState !== 'waiting')) && (
@@ -461,7 +462,7 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                 disabled={!!letting}
                                 className="min-h-[48px] px-3 rounded-xl border border-violet-300 dark:border-violet-800 text-sm font-bold text-violet-800 dark:text-violet-200 bg-transparent disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1"
                             >
-                                Let everyone in
+                                {t('Let everyone in')}
                             </button>
                         )}
                         {going.length === 0 && interested.length === 0 ? (
@@ -480,12 +481,12 @@ export function EventDetail({ post, identity, distanceKm, onShowOnMap, onOpenPro
                                                 onClick={() => saveLetIn(r.memberPubkey, { memberPublicKey: r.memberPubkey }, !r.letInAt)}
                                                 disabled={!!letting}
                                                 aria-pressed={!!r.letInAt}
-                                                aria-label={r.letInAt ? `Let in. Take it back from ${r.memberCallsign || 'them'}` : `Let ${r.memberCallsign || 'them'} in`}
+                                                aria-label={letInButtonLabel(!!r.letInAt, r.memberCallsign)}
                                                 className={`flex-shrink-0 min-h-[44px] min-w-[88px] px-3 rounded-xl border text-sm font-bold disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-1 ${r.letInAt
                                                     ? 'border-violet-700 dark:border-violet-400 bg-violet-700 dark:bg-violet-600 text-white'
                                                     : 'border-violet-300 dark:border-violet-800 bg-transparent text-violet-800 dark:text-violet-200'}`}
                                             >
-                                                {r.letInAt ? 'Let in ✓' : 'Let in'}
+                                                {r.letInAt ? t('Let in ✓') : t('Let in')}
                                             </button>
                                         ) : (
                                             <span className="flex-shrink-0 text-xs font-bold text-nature-500 dark:text-nature-400">

@@ -21,7 +21,7 @@ import { imageFromTransfer, dragCarriesFile } from '../lib/chat-image-transfer';
 import type { BeanPoolIdentity } from '../lib/identity';
 import { sendRouteOf, GROUP_HOLD_EVENT_TEXT, GROUP_HOLD_UNREAD_TEXT } from '../lib/group-hold';
 import { ACCOUNT_DELETED_TEXT, blankedWithAccount } from '../lib/chat-tombstone';
-import { EVENT_CHAT_WAITING_TEXT, isWaitingForHost } from '../lib/events';
+import { eventChatWaitingText, eventChatSystemText, isWaitingForHost } from '../lib/events';
 
 /**
  * Messages are stored base64 `plaintext-v1`: node-readable by design, not end-to-end encrypted. A removed one is the
@@ -79,7 +79,7 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
             setLoadError(null);
         } catch (e: any) {
             // Going, and the host hasn't let them in: said as that, never as "only the host and people going".
-            setLoadError(isWaitingForHost(e) ? EVENT_CHAT_WAITING_TEXT : (e?.message || 'Could not open this event chat.'));
+            setLoadError(isWaitingForHost(e) ? eventChatWaitingText() : (e?.message || 'Could not open this event chat.'));
         }
     }, [postId]);
 
@@ -232,6 +232,15 @@ export function EventChat({ postId, identity, onBack, onOpenEvent, refreshMs = 1
                 ) : (
                     <ul className="m-0 p-0 list-none divide-y divide-nature-100 dark:divide-nature-800">
                         {view.messages.map(m => {
+                            // The node's own line (the host opened the chat to everyone going): small, grey and centred, as
+                            // the phone draws it, with no author and nothing to remove.
+                            if (m.type === 'system' || m.authorPubkey === 'SYSTEM') {
+                                return (
+                                    <li key={m.id} data-testid="event-chat-system-line" className="py-2 text-center text-xs text-nature-500 dark:text-nature-400 break-words">
+                                        {eventChatSystemText(m.systemType, m.ciphertext)}
+                                    </li>
+                                );
+                            }
                             const isRemoved = m.type === 'removed';
                             const author = m.authorCallsign || m.authorPubkey?.slice(0, 8) || 'Member';
                             const avatar = resolveAvatarUrl(m.authorAvatar);

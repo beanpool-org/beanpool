@@ -2434,6 +2434,8 @@ export interface EventThreadMessage {
     metadata?: string;
     timestamp: string;
     editedAt?: string | null;
+    /** A system line's kind, e.g. 'event_opened_to_going' (lib/events.ts eventChatSystemText). */
+    systemType?: string;
 }
 
 export interface EventThreadView {

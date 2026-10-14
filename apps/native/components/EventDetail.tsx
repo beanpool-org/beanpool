@@ -24,6 +24,7 @@ import { useTheme, useStyles, type ThemeContextType } from '../app/ThemeContext'
 import { useIdentity } from '../app/IdentityContext';
 import { fetchEventDetail, rsvpEvent, deletePost, reportAbuse, letInToEvent } from '../utils/db';
 import { hapticTick } from '../utils/haptics';
+import { t } from '@beanpool/core';
 import { PhotoCarousel } from './PhotoCarousel';
 import { EVENT_ACCENT } from './EventCard';
 import { NewEventModal } from './NewEventModal';
@@ -32,7 +33,7 @@ import { ReportReasonBox } from './ReportReasonBox';
 import {
     formatEventWhen, eventBadge, eventStateOf, isEventEnded, nextRsvp, applyRsvp, formatRsvpCounts,
     canOpenEventChat, eventChatEntryLabel, buildEventCopy, isEventHostView, isOwnEvent, eventEditBlockedReason, eventEditValues,
-    eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, EVENT_CHAT_WAITING_TEXT,
+    eventLetInState, eventLetInLine, eventWaitingCount, eventWaitingLine, letEveryoneInQuestion, eventChatWaitingText, letInButtonLabel,
     type EventRsvpStatus, type RsvpCounts, type EventCopy, type EventEditValues,
 } from '../utils/events';
 
@@ -111,14 +112,14 @@ export function EventDetail({ post }: EventDetailProps) {
             const res = await letInToEvent(post.id, who, on);
             if (res?.post) setView(res.post);
         } catch (err: any) {
-            Alert.alert('Not saved', err?.message || 'Could not reach the node. Try again when you have signal.');
+            Alert.alert(t('Not saved'), err?.message || t('Could not reach the node. Try again when you have signal.'));
         } finally {
             setLetting(null);
         }
     };
-    const letEveryoneIn = () => Alert.alert('Let everyone in', letEveryoneInQuestion(waiting), [
-        { text: 'Not now', style: 'cancel' },
-        { text: 'Let them in', onPress: () => { saveLetIn('everyone', { everyone: true }, true); } },
+    const letEveryoneIn = () => Alert.alert(t('Let everyone in'), letEveryoneInQuestion(waiting), [
+        { text: t('Not now'), style: 'cancel' },
+        { text: t('Let them in'), onPress: () => { saveLetIn('everyone', { everyone: true }, true); } },
     ]);
     const hostName = p.authorCallsign || p.author_callsign || (p.author_pubkey || p.authorPublicKey || '').slice(0, 6) || 'Unknown';
     const groupName = p.targetGroupName || p.target_group_name;
@@ -283,8 +284,8 @@ export function EventDetail({ post }: EventDetailProps) {
 
                 {letInState === 'waiting' && (
                     <View style={[styles.chatBtn, styles.chatBtnDisabled]} accessibilityRole="button" accessibilityState={{ disabled: true }}
-                        accessibilityLabel={EVENT_CHAT_WAITING_TEXT} testID="event-chat-waiting">
-                        <Text style={styles.chatBtnWaitingText} numberOfLines={2}>💬 {EVENT_CHAT_WAITING_TEXT}</Text>
+                        accessibilityLabel={eventChatWaitingText()} testID="event-chat-waiting">
+                        <Text style={styles.chatBtnWaitingText} numberOfLines={2}>💬 {eventChatWaitingText()}</Text>
                     </View>
                 )}
                 {canOpenEventChat({ ...p, type: 'event', myRsvp: counts.mine, eventRsvps: rsvps }) && (
@@ -341,8 +342,8 @@ export function EventDetail({ post }: EventDetailProps) {
                         )}
                         {hostView && showRsvps && waiting >= 2 && !closed && (
                             <Pressable onPress={letEveryoneIn} disabled={!!letting} style={styles.letAllBtn} accessibilityRole="button"
-                                accessibilityLabel="Let everyone in" testID="event-let-everyone-in">
-                                <Text style={styles.letAllText} numberOfLines={1}>Let everyone in</Text>
+                                accessibilityLabel={t('Let everyone in')} testID="event-let-everyone-in">
+                                <Text style={styles.letAllText} numberOfLines={1}>{t('Let everyone in')}</Text>
                             </Pressable>
                         )}
                         {hostView && showRsvps && (rsvps!.length === 0
@@ -357,9 +358,9 @@ export function EventDetail({ post }: EventDetailProps) {
                                             style={[styles.letInBtn, r.letInAt && styles.letInBtnOn]}
                                             accessibilityRole="button"
                                             accessibilityState={{ selected: !!r.letInAt, busy: letting === r.memberPubkey }}
-                                            accessibilityLabel={r.letInAt ? `Let in. Tap to take it back from ${r.memberCallsign || 'them'}` : `Let ${r.memberCallsign || 'them'} in`}
+                                            accessibilityLabel={letInButtonLabel(!!r.letInAt, r.memberCallsign)}
                                         >
-                                            <Text style={[styles.letInText, r.letInAt && styles.letInTextOn]} numberOfLines={1}>{r.letInAt ? 'Let in ✓' : 'Let in'}</Text>
+                                            <Text style={[styles.letInText, r.letInAt && styles.letInTextOn]} numberOfLines={1}>{r.letInAt ? t('Let in ✓') : t('Let in')}</Text>
                                         </Pressable>
                                     ) : (
                                         <Text style={styles.rsvpStatus} numberOfLines={1}>{r.status === 'going' ? 'Going' : 'Interested'}</Text>

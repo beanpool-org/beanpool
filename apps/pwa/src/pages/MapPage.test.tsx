@@ -905,6 +905,23 @@ describe('Edit event (events round 2, A1–A3, decision 29)', () => {
         });
     });
 
+    // Marty, 15 Oct (board card privacy-global-calls): a host may untick "Only people I let in"; the form says, before
+    // saving, what that opens. Not shown while it stays ticked, nor on a new event.
+    it('unticking "Only people I let in" on an edit says everyone going will see the note and the chat so far', async () => {
+        const letsIn = { ...hosted, id: 'ev-lets-in', eventHostLetsIn: true };
+        setup(letsIn);
+        const view = await openEdit(letsIn);
+        await waitFor(() => expect(view.getByTestId('map-new-post-panel')).toBeTruthy());
+        const panel = view.getByTestId('map-new-post-panel');
+        const box = within(panel).getByTestId('event-host-lets-in') as HTMLInputElement;
+        await waitFor(() => expect(box).toBeChecked());
+        expect(within(panel).queryByTestId('event-host-lets-in-off')).toBeNull();
+        fireEvent.click(box);
+        expect(within(panel).getByTestId('event-host-lets-in-off').textContent).toBe('Everyone going will see the note and the chat so far.');
+        await act(async () => { fireEvent.click(within(panel).getByRole('button', { name: 'Save changes' })); });
+        expect(api.updateMarketplacePost).toHaveBeenCalledWith('ev-lets-in', 'user-alice-pubkey', { eventHostLetsIn: false });
+    });
+
     it('is refused for an event that has ended, and says so (A3)', async () => {
         const ended = { ...hosted, id: 'ev-ended', eventStartAt: '2020-01-01T09:00:00.000Z', eventEndAt: '2020-01-01T11:00:00.000Z' };
         setup(ended);

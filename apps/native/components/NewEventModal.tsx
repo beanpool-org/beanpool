@@ -37,7 +37,7 @@ import { pageSheetTopInset } from '../utils/modal-safe-area';
 import {
     buildEventDraft, buildEventEditPatch, approximatePin, defaultEventEnd, formatPickerValue,
     EVENT_PIN_WARNING, EVENT_PIN_HINT, EVENT_PLACE_NAME_MAX, EVENT_PRIVATE_NOTE_MAX, EVENT_TITLE_MAX,
-    HOST_LETS_IN_LABEL, HOST_LETS_IN_HINT, hostLetsInDefault, privateNoteHelper,
+    hostLetsInLabel, hostLetsInHint, hostLetsInOffWarning, hostLetsInDefault, privateNoteHelper,
     type EventCopy, type EventEditValues,
 } from '../utils/events';
 import { effectiveEventAudience } from '../utils/event-extras';
@@ -630,15 +630,21 @@ export function NewEventModal({ visible, onClose, onSuccess, prefill, initialPin
                                 style={styles.tickRow}
                                 accessibilityRole="checkbox"
                                 accessibilityState={{ checked: hostLetsIn }}
-                                accessibilityLabel={HOST_LETS_IN_LABEL}
+                                accessibilityLabel={hostLetsInLabel()}
                                 testID="event-host-lets-in"
                             >
                                 <Text style={styles.tickBox}>{hostLetsIn ? '☑' : '☐'}</Text>
                                 <View style={styles.tickTextCol}>
-                                    <Text style={styles.tickTitle}>{HOST_LETS_IN_LABEL}</Text>
-                                    <Text style={styles.helper}>{HOST_LETS_IN_HINT}</Text>
+                                    <Text style={styles.tickTitle}>{hostLetsInLabel()}</Text>
+                                    <Text style={styles.helper}>{hostLetsInHint()}</Text>
                                 </View>
                             </Pressable>
+                            {/* Unticked on this edit: the chat so far opens too, said before saving (the #1953 review's N1). */}
+                            {editOf && hostLetsInOffWarning(editOf.values.hostLetsIn, hostLetsIn) && (
+                                <Text style={styles.letInOffWarning} accessibilityLiveRegion="polite" testID="event-host-lets-in-off">
+                                    {hostLetsInOffWarning(editOf.values.hostLetsIn, hostLetsIn)}
+                                </Text>
+                            )}
                         </View>
 
                         {editOf && editCheck?.ok && editCheck.notifies && (
@@ -739,6 +745,7 @@ const makeStyles = ({ colors, theme }: ThemeContextType) => {
         tickBox: { fontSize: 22, color: colors.text.body, marginRight: 8, lineHeight: 26 },
         tickTextCol: { flex: 1, minWidth: 0 },
         tickTitle: { fontSize: 14, fontWeight: '700', color: colors.text.body, lineHeight: 19 },
+        letInOffWarning: { fontSize: 13, fontWeight: '600', color: colors.text.body, lineHeight: 18, marginTop: 6 },
         copyNote: {
             fontSize: 13, color: colors.text.secondary, lineHeight: 18, marginBottom: 12,
             padding: 10, borderRadius: 10, backgroundColor: colors.surface.subtle,

@@ -2567,7 +2567,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 ✕
                             </span>
                         ) : (
-                            <span className="text-[8px] text-nature-450 ml-0.5">▼</span>
+                            <span className="text-[8px] text-nature-600 dark:text-nature-400 ml-0.5">▼</span>
                         )}
                     </button>
 
@@ -2596,7 +2596,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 ✕
                             </span>
                         ) : (
-                            <span className="text-[8px] text-nature-450 ml-0.5">▼</span>
+                            <span className="text-[8px] text-nature-600 dark:text-nature-400 ml-0.5">▼</span>
                         )}
                     </button>
                 </div>
@@ -3077,7 +3077,7 @@ export function MarketplacePage({ identity, marketClickCount = 0, openPostId, on
                                 return (
                                     <div key={title} className="flex flex-col gap-1.5 mb-2">
                                         <div className="flex items-center gap-3 mt-2 mb-1">
-                                            <span className="text-xs font-black uppercase tracking-widest text-nature-450 dark:text-nature-400 whitespace-nowrap">
+                                            <span className="text-xs font-black uppercase tracking-widest text-nature-700 dark:text-nature-400 whitespace-nowrap">
                                                 {title}
                                             </span>
                                             <div className="h-[1px] w-full bg-nature-200 dark:bg-nature-800" />

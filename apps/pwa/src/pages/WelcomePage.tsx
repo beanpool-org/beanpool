@@ -1876,7 +1876,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     <div className="flex gap-3 items-start">
                                         <span className="text-lg leading-none">🤝</span>
                                         <div>
-                                            <h5 className="font-bold text-xs text-nature-850 dark:text-nature-300">Trust-Backed Credit</h5>
+                                            <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">Trust-Backed Credit</h5>
                                             <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
                                                 Everyone starts with a 0 Bean limit. Complete your first real marketplace trade and your community credit line opens — then it deepens steadily with the value you trade and the people you trade with, up to -2000 Beans. No interest, no bank fees.
                                             </p>
@@ -1886,7 +1886,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     <div className="flex gap-3 items-start border-t border-nature-100 dark:border-nature-900 pt-3">
                                         <span className="text-lg leading-none">🌾</span>
                                         <div>
-                                            <h5 className="font-bold text-xs text-nature-850 dark:text-nature-300">Community Commons Pool</h5>
+                                            <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">Community Commons Pool</h5>
                                             <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
                                                 Positive balances above 200 Beans contribute 1.0% to 2.5% monthly across progressive brackets (the first 200 is fee-free). This prevents hoarding and circulates surplus to fund the Community Commons.
                                             </p>
@@ -1896,7 +1896,7 @@ export function WelcomePage({ onComplete, start, onBack, initialInfo }: Props) {
                                     <div className="flex gap-3 items-start border-t border-nature-100 dark:border-nature-900 pt-3">
                                         <span className="text-lg leading-none">⏱️</span>
                                         <div>
-                                            <h5 className="font-bold text-xs text-nature-850 dark:text-nature-300">Reference Rate</h5>
+                                            <h5 className="font-bold text-xs text-nature-900 dark:text-nature-300">Reference Rate</h5>
                                             <p className="text-[11px] text-nature-500 dark:text-nature-400 leading-relaxed">
                                                 40 Beans represents roughly 1 hour of community service or time, helping you easily value what you offer or need.
                                             </p>

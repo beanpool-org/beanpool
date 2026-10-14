@@ -9,6 +9,7 @@
  *  - User location marker (pulsing purple dot)
  */
 
+import { offerNeedSubmit } from '../lib/offer-need-submit';
 import { placelessListingNote } from '@beanpool/core';
 import { useMyArea, useNearbyLimits } from '../lib/member-area';
 import { useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
@@ -1625,7 +1626,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
         ? (posting || !newPostTitle.trim() || !eventStart || postLat == null)
         : newPostType === 'poll'
             ? (posting || !newPostTitle.trim() || pollOptions.filter(o => o.trim()).length < 2)
-            : (needBlocked || posting || !newPostTitle.trim() || !newPostDescription.trim() || newPostCredits === '' || postLat == null || newPostPhotos.length === 0);
+            : offerNeedSubmit({ type: newPostType === 'need' ? 'need' : 'offer', title: newPostTitle, description: newPostDescription, credits: newPostCredits, priceMarked, hasLocation: postLat != null, photoCount: newPostPhotos.length, needBlocked, posting }).disabled;
 
 
     return (
@@ -2639,10 +2640,7 @@ export function MapPage({ identity, openNewPost, initialGroupId, onOpenNewPostHa
                     {posting ? 'Posting...' :
                      newPostType === 'event' ? (postLat == null ? '📍 Map location required' : !newPostTitle.trim() || !eventStart ? '✏️ Add a title and start time' : eventEdit ? 'Save changes' : 'Create Event') :
                      newPostType === 'poll' ? '🗳️ Create Poll' :
-                     needBlocked ? '🔵 List an Offer first to post Needs' :
-                     postLat == null ? '📍 Map location required' :
-                     !newPostTitle.trim() || !newPostDescription.trim() || newPostCredits === '' ? '✏️ Fill required fields' :
-                     `Post ${newPostType === 'offer' ? 'Offer' : 'Need'}`}
+                     offerNeedSubmit({ type: newPostType === 'need' ? 'need' : 'offer', title: newPostTitle, description: newPostDescription, credits: newPostCredits, priceMarked, hasLocation: postLat != null, photoCount: newPostPhotos.length, needBlocked, posting }).label}
                 </button>
             </div>
         )}
